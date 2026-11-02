@@ -262,7 +262,7 @@ Code approves only when all these rules hold. Otherwise the draft waits for a pe
 - The source of the article sets `officeOf`, and the draft has that person as its one speaker. The draft names no other speaker.
 - The latest gate run is a pass. A failed-open or over-cap gate gives `StatementGateCarryOver.None`, so it never passes. Each issue of the draft has a verified gate quote.
 - Every quote occurs exactly once in the article text. `StatementDraftResolver` already enforces this.
-- The statement date is null. Or its quote states it, and it lies on the capture day or up to 7 days before it. `StatementDraftResolver` checks the quote with `AnalysisAnswerRules.StatesDate`. `StatementCodeApproval` owns this window and passes `dateReadByCode` to `RequireApprovable`. A person approval never passes it, so a person still needs a confirmed date. The public page then says "Date read from the release by code".
+- The statement date is null. Or its quote states it, and it lies on the capture day or up to 7 days before it. `StatementDraftResolver` checks the quote with `AnalysisAnswerRules.StatesDate`. `StatementCodeApproval` owns this window and passes `dateReadByCode` to `RequireApprovable`. A person approval never passes it, so a person still needs a confirmed date. The public page then says "Date found by an AI model and checked by code against the quote".
 - A gate pass about a bill or vote with no tracked issue can be code-approved. The draft then has an empty issue list.
 - The approval rules of a person pass: `StatementAllowedSelections.RequireApprovable`.
 

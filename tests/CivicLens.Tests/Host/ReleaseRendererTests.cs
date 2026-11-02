@@ -1,6 +1,8 @@
+using CivicLens.Application.Statements;
 using CivicLens.Core.ExecutiveActions;
 using CivicLens.Application.Issues;
 using System.Text.RegularExpressions;
+using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Publication;
@@ -211,6 +213,79 @@ public sealed class ReleaseRendererTests
         foreach (var (recordId, revision, html) in pages)
             Assert.Equal($"../report.html?recordId={recordId}&revision={revision}",
                 new HtmlParser().ParseDocument(html).QuerySelector("a[href^='../report.html']")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task ARecordPageOffersTheReportLinkAboveAndBelowTheRecordSoAReaderFindsItWithoutScrolling()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var links = document.QuerySelectorAll("main a[href^='../report.html']");
+
+        Assert.Equal(2, links.Length);
+        Assert.All(links, link => Assert.Equal(PublishedRecordLabels.ReportRecordLink, link.TextContent));
+        Assert.True(document.QuerySelector("main h1")!.CompareDocumentPosition(links[0]).HasFlag(DocumentPositions.Preceding));
+        Assert.True(document.QuerySelector("main .facts, main dl")!.CompareDocumentPosition(links[1]).HasFlag(DocumentPositions.Following));
+    }
+
+    [Fact]
+    public async Task TheReportPageWithNoRecordSaysWhichLinkToUseAndGivesTheSiteContactAddressInEveryState()
+    {
+        var html = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var panel = document.QuerySelector("[data-report-missing]")!;
+
+        Assert.Equal("Choose the record first", panel.QuerySelector("h3")!.TextContent);
+        Assert.Contains($"use the link \"{PublishedRecordLabels.ReportRecordLink}\"", panel.TextContent, StringComparison.Ordinal);
+        Assert.Equal($"mailto:{PublishedRecordLabels.ContactEmail}", document.QuerySelector("main a[href^='mailto:']")!.GetAttribute("href"));
+        AssertMailtoPanelIsAlwaysShown(document);
+        AssertMailtoPanelIsAlwaysShown(new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderReportAsync(CancellationToken.None)));
+    }
+
+    private static void AssertMailtoPanelIsAlwaysShown(AngleSharp.Dom.IDocument document)
+    {
+        var panel = document.QuerySelector($"main a[href='mailto:{PublishedRecordLabels.ContactEmail}']")!.Closest("section")!;
+        Assert.False(panel.HasAttribute("hidden"));
+        Assert.False(panel.HasAttribute("data-report-missing"));
+    }
+
+    [Fact]
+    public async Task AboutNamesStatementsAmongTheRecordsThatCodeApprovesBecauseStatementCodeApprovalDoesApproveThem()
+    {
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAboutAsync(CancellationToken.None)).QuerySelector("main")!.ShownText();
+
+        Assert.Contains("Here, code means software that we wrote. It follows fixed rules. No AI decides an approval.", text, StringComparison.Ordinal);
+        Assert.Contains("Code also approves a statement when the statement comes from the own website of the office of that official and names no other speaker. An AI model drafts these statements, finds their issues, and proposes their date. Code then checks the quote and the date against the saved page.", text, StringComparison.Ordinal);
+        Assert.Contains("On a statement page, a summary that a model wrote has the label \"An AI summary of this release.\"", text, StringComparison.Ordinal);
+        Assert.Contains($"within {StatementCodeApproval.DateWindowDays} days before Civic Lens saved the page", text, StringComparison.Ordinal);
+        Assert.Contains("and each statement that code does not approve", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheMethodPageSaysThatNoPersonChecksTheIssuesOfACodeApprovedStatementAndThatCodeChecksOnlyTheQuote()
+    {
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None)).QuerySelector("main")!.ShownText();
+
+        Assert.Contains("For the other statements, an AI model finds the issues and quotes the article. Code checks that the quote is in the article. No person checks that pick.", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheMethodPageGivesAWorkedExampleOfTheVotesWithTheirPartyCountAndEveryPageLinksItByItsTitle()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var method = new HtmlParser().ParseDocument(await renderer.RenderMethodAsync(CancellationToken.None));
+        var about = new HtmlParser().ParseDocument(await renderer.RenderAboutAsync(CancellationToken.None));
+
+        Assert.Contains("votes with most of their party on 45. The page shows 45 of 48.", method.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal("How the counts work", method.QuerySelector("h1")!.TextContent);
+        Assert.Equal("Yea", method.QuerySelectorAll("main section").Single(panel => panel.QuerySelector("h2")!.TextContent == "Votes with their party")
+            .QuerySelectorAll("p")[1].QuerySelector("button.term")!.TextContent);
+        Assert.Equal("statement", about.QuerySelectorAll("main section").Single(panel => panel.QuerySelector("h2")!.TextContent == "Who approves a record")
+            .QuerySelector("button.term")!.TextContent);
+        Assert.Equal("How the counts work", method.QuerySelector(".public-footer-nav a[href='method.html']")!.TextContent);
+        Assert.Equal("How the counts work", about.QuerySelector("main a[href='method.html']")!.TextContent);
     }
 
     [Fact]
@@ -494,7 +569,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task ACodeApprovedStatementWithADateSaysCodeReadItBecauseAReaderMustKnowNoPersonConfirmedTheDate()
+    public async Task ACodeApprovedStatementWithADateSaysAModelFoundItAndCodeCheckedItBecauseAReaderMustKnowNoPersonConfirmedTheDate()
     {
         var statement = Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Code };
 
@@ -503,7 +578,7 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
-        Assert.Equal("1 May 2026. " + PublishedRecordLabels.CodeReadDate + ".", facts["Statement date"]);
+        Assert.Equal("1 May 2026. " + PublishedRecordLabels.ModelDateCheckedByCode + ".", facts["Statement date"]);
     }
 
     [Fact]
@@ -511,7 +586,7 @@ public sealed class ReleaseRendererTests
     {
         var html = await new ReleaseRenderer(null, null).RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.DoesNotContain(PublishedRecordLabels.CodeReadDate, html, StringComparison.Ordinal);
+        Assert.DoesNotContain(PublishedRecordLabels.ModelDateCheckedByCode, html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2576,7 +2651,7 @@ public sealed class ReleaseRendererTests
         AssertTrail(pages["search"], ["Home|index.html", "Search records"]);
         AssertTrail(pages["officials"], ["Home|index.html", "Officials"]);
         AssertTrail(pages["board"], ["Home|index.html", "Officials|officials.html", "House Democrats"]);
-        AssertTrail(pages["method"], ["Home|index.html", "How the official page counts work"]);
+        AssertTrail(pages["method"], ["Home|index.html", "How the counts work"]);
         AssertTrail(pages["report"], ["Home|index.html", "Report a problem"]);
         AssertTrail(pages["briefs"], ["Home|index.html", "Briefs"]);
         AssertTrail(pages["about"], ["Home|index.html", "About"]);
