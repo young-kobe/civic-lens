@@ -17,8 +17,8 @@ internal sealed class VoteMemberListEntryRowConfiguration : IEntityTypeConfigura
         builder.HasKey(row => new { row.ListId, row.Position });
         builder.Property(row => row.ListId).HasColumnName("list_id").HasMaxLength(64);
         builder.Property(row => row.Position).HasColumnName("position");
-        builder.Property(row => row.PersonId).HasColumnName("person_id").HasMaxLength(128).IsRequired();
-        builder.Property(row => row.BioguideId).HasColumnName("bioguide_id").HasMaxLength(16).IsRequired();
+        builder.Property(row => row.PersonId).HasColumnName("person_id").HasMaxLength(VoteDraftRevision.MaximumPersonIdLength).IsRequired();
+        builder.Property(row => row.BioguideId).HasColumnName("bioguide_id").HasMaxLength(VoteDraftRevision.MaximumBioguideIdLength).IsRequired();
         builder.Property(row => row.VoteCast).HasColumnName("vote_cast").HasMaxLength(VoteDraftRevision.MaximumCastLength).IsRequired();
         VoteCitationColumns.Configure(builder, "vote_member_list_entries", "Citation", "citation", optional: false);
         builder.HasOne<VoteMemberListRow>().WithMany().HasForeignKey(row => row.ListId).OnDelete(DeleteBehavior.Restrict);

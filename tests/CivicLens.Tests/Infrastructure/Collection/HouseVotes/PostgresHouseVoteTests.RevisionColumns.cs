@@ -180,6 +180,18 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, failure.SqlState);
     }
 
+    // The record ID is the key, so the chamber and the roll alone fix the identity. The source ID is a label and never part of the key.
+    [Fact]
+    public async Task ARevisionWithAnotherSourceIdKeepsTheRollIdentityOfItsRecordBecauseTheSourceIsNotPartOfTheKey()
+    {
+        var candidate = await PendingCandidateAsync();
+        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
+
+        await ExecuteAsync("UPDATE vote_revisions SET source_id = 'another-source'");
+
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_revisions r JOIN vote_drafts d USING (record_id, chamber, congress, session_number, roll_call_number) WHERE r.source_id <> d.source_id"));
+    }
+
     private async Task AssertColumnsEqualAsync(VoteDraftRevision revision)
     {
         var key = $"record_id = '{revision.RecordId}' AND revision_number = {revision.RevisionNumber}";

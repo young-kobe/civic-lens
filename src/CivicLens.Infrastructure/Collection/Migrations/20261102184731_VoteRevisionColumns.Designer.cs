@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CivicLens.Infrastructure.Collection.Migrations
 {
     [DbContext(typeof(CollectionAttemptDbContext))]
-    [Migration("20261102170325_VoteRevisionColumns")]
+    [Migration("20261102184731_VoteRevisionColumns")]
     partial class VoteRevisionColumns
     {
         /// <inheritdoc />
@@ -5183,7 +5183,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("RecordId");
 
-                    b.HasAlternateKey("RecordId", "SourceId", "Chamber", "Congress", "SessionNumber", "RollCallNumber")
+                    b.HasAlternateKey("RecordId", "Chamber", "Congress", "SessionNumber", "RollCallNumber")
                         .HasName("ux_vote_drafts_record_roll");
 
                     b.HasIndex("CandidateId");
@@ -5643,7 +5643,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("VotedOnCitationExtractionId");
 
-                    b.HasIndex("RecordId", "SourceId", "Chamber", "Congress", "SessionNumber", "RollCallNumber");
+                    b.HasIndex("RecordId", "Chamber", "Congress", "SessionNumber", "RollCallNumber");
 
                     b.ToTable("vote_revisions", null, t =>
                         {
@@ -6624,8 +6624,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasOne("CivicLens.Infrastructure.Votes.Persistence.VoteDraftRow", null)
                         .WithMany()
-                        .HasForeignKey("RecordId", "SourceId", "Chamber", "Congress", "SessionNumber", "RollCallNumber")
-                        .HasPrincipalKey("RecordId", "SourceId", "Chamber", "Congress", "SessionNumber", "RollCallNumber")
+                        .HasForeignKey("RecordId", "Chamber", "Congress", "SessionNumber", "RollCallNumber")
+                        .HasPrincipalKey("RecordId", "Chamber", "Congress", "SessionNumber", "RollCallNumber")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

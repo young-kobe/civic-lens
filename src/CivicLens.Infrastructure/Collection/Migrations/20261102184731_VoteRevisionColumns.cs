@@ -204,7 +204,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             migrationBuilder.AddUniqueConstraint(
                 name: "ux_vote_drafts_record_roll",
                 table: "vote_drafts",
-                columns: new[] { "record_id", "source_id", "chamber", "congress", "session_number", "roll_call_number" });
+                columns: new[] { "record_id", "chamber", "congress", "session_number", "roll_call_number" });
 
             migrationBuilder.CreateTable(
                 name: "vote_member_lists",
@@ -326,9 +326,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 column: "member_list_id");
 
             migrationBuilder.CreateIndex(
-                name: "IX_vote_revisions_record_id_source_id_chamber_congress_session~",
+                name: "IX_vote_revisions_record_id_chamber_congress_session_number_ro~",
                 table: "vote_revisions",
-                columns: new[] { "record_id", "source_id", "chamber", "congress", "session_number", "roll_call_number" });
+                columns: new[] { "record_id", "chamber", "congress", "session_number", "roll_call_number" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_vote_revisions_suggestion_run_id",
@@ -468,11 +468,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 onDelete: ReferentialAction.Restrict);
 
             migrationBuilder.AddForeignKey(
-                name: "FK_vote_revisions_vote_drafts_record_id_source_id_chamber_cong~",
+                name: "FK_vote_revisions_vote_drafts_record_id_chamber_congress_sessi~",
                 table: "vote_revisions",
-                columns: new[] { "record_id", "source_id", "chamber", "congress", "session_number", "roll_call_number" },
+                columns: new[] { "record_id", "chamber", "congress", "session_number", "roll_call_number" },
                 principalTable: "vote_drafts",
-                principalColumns: new[] { "record_id", "source_id", "chamber", "congress", "session_number", "roll_call_number" },
+                principalColumns: new[] { "record_id", "chamber", "congress", "session_number", "roll_call_number" },
                 onDelete: ReferentialAction.Restrict);
 
             migrationBuilder.AddForeignKey(
@@ -504,7 +504,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 table: "vote_revisions");
 
             migrationBuilder.DropForeignKey(
-                name: "FK_vote_revisions_vote_drafts_record_id_source_id_chamber_cong~",
+                name: "FK_vote_revisions_vote_drafts_record_id_chamber_congress_sessi~",
                 table: "vote_revisions");
 
             migrationBuilder.DropForeignKey(
@@ -536,7 +536,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 table: "vote_revisions");
 
             migrationBuilder.DropIndex(
-                name: "IX_vote_revisions_record_id_source_id_chamber_congress_session~",
+                name: "IX_vote_revisions_record_id_chamber_congress_session_number_ro~",
                 table: "vote_revisions");
 
             migrationBuilder.DropIndex(

@@ -74,6 +74,23 @@ public sealed class VoteDraftRevisionTests
         Assert.Throws<ArgumentException>(() => (Revision() with { BillType = new string('H', VoteDraftRevision.MaximumBillTypeLength + 1), BillNumber = 1 }).ValidateShape());
     }
 
+    // The columns hold at most 128, 16 and 128 characters, so a longer value must be invalid input and not a database error.
+    [Fact]
+    public void APersonBioguideOrIssueIdOverTheColumnLimitIsRefusedAsInvalidInputBecauseTheDatabaseWouldRefuseItAsAFailure()
+    {
+        Assert.Throws<ArgumentException>(() => (Revision() with { Members = [Member() with { PersonId = new string('p', VoteDraftRevision.MaximumPersonIdLength + 1) }] }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Revision() with { Members = [Member() with { BioguideId = new string('B', VoteDraftRevision.MaximumBioguideIdLength + 1) }] }).ValidateShape());
+        var longId = new string('i', VoteDraftRevision.MaximumIssueIdLength + 1);
+        Assert.Throws<ArgumentException>(() => (Revision() with { TrackedIssueIds = [longId], IssueCandidateIds = [longId] }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Revision() with { TrackedIssueIds = [], IssueCandidateIds = [" "] }).ValidateShape());
+        (Revision() with
+        {
+            Members = [Member() with { PersonId = new string('p', VoteDraftRevision.MaximumPersonIdLength), BioguideId = new string('B', VoteDraftRevision.MaximumBioguideIdLength) }],
+            TrackedIssueIds = [],
+            IssueCandidateIds = [new string('i', VoteDraftRevision.MaximumIssueIdLength)]
+        }).ValidateShape();
+    }
+
     [Fact]
     public void EveryCitationMustBeABoundedSpanOfAnExtractionSoTheReviewerCanOpenTheLine()
     {

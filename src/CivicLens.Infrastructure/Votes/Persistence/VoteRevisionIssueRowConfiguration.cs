@@ -1,3 +1,4 @@
+using CivicLens.Core.Votes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -15,7 +16,7 @@ internal sealed class VoteRevisionIssueRowConfiguration : IEntityTypeConfigurati
         builder.HasKey(row => new { row.RecordId, row.RevisionNumber, row.IssueId });
         builder.Property(row => row.RecordId).HasColumnName("record_id").HasMaxLength(64);
         builder.Property(row => row.RevisionNumber).HasColumnName("revision_number");
-        builder.Property(row => row.IssueId).HasColumnName("issue_id").HasMaxLength(128);
+        builder.Property(row => row.IssueId).HasColumnName("issue_id").HasMaxLength(VoteDraftRevision.MaximumIssueIdLength);
         builder.Property(row => row.Position).HasColumnName("position");
         builder.Property(row => row.IsTracked).HasColumnName("is_tracked");
     }

@@ -78,8 +78,8 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
         builder.HasOne<VoteCandidateRow>().WithMany().HasForeignKey(row => row.CandidateId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<VoteMemberListRow>().WithMany().HasForeignKey(row => row.MemberListId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<VoteDraftRow>().WithMany()
-            .HasForeignKey(row => new { row.RecordId, row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber })
-            .HasPrincipalKey(draft => new { draft.RecordId, draft.SourceId, draft.Chamber, draft.Congress, draft.SessionNumber, draft.RollCallNumber }).OnDelete(DeleteBehavior.Restrict);
+            .HasForeignKey(row => new { row.RecordId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber })
+            .HasPrincipalKey(draft => new { draft.RecordId, draft.Chamber, draft.Congress, draft.SessionNumber, draft.RollCallNumber }).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.Facts).WithOne().HasForeignKey(fact => new { fact.RecordId, fact.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.Issues).WithOne().HasForeignKey(issue => new { issue.RecordId, issue.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
     }

@@ -11,7 +11,7 @@ namespace CivicLens.Tests.Infrastructure.Votes;
 [Trait("Category", "Postgres")]
 public sealed class VoteRevisionColumnsMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private const string Migration = "20261102170325_VoteRevisionColumns";
+    private const string Migration = "20261102184731_VoteRevisionColumns";
     private static readonly string RecordId = new('a', 64);
     private static readonly string[] NewTables = ["vote_member_list_entries", "vote_member_lists", "vote_revision_facts", "vote_revision_issues"];
     private const string NewColumnCount = """
