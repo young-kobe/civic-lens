@@ -64,9 +64,9 @@
             const params = formParams();
             const mine = ++running;
             if (append) params.set("cursor", nextCursor); else reset();
-            hint.hidden = params.size > 0;
+            hint.hidden = params.toString() !== "";
             none.hidden = true;
-            if (params.size === 0) { status.textContent = ""; return; }
+            if (params.toString() === "") { status.textContent = ""; return; }
             status.textContent = "Searching.";
             let response;
             try { response = await fetch(`${api}/v1/search?${params}`); }
@@ -80,7 +80,7 @@
             nextCursor = page.nextCursor;
             more.hidden = nextCursor === null;
             none.hidden = results.children.length > 0;
-            status.textContent = results.children.length === 0 ? "" : `Showing ${results.children.length} records from release ${page.release}.`;
+            status.textContent = results.children.length === 0 ? "No records match." : `Showing ${results.children.length} records from release ${page.release}.`;
         };
         let address = location.search;
         const writeAddress = (params, replace) => {
@@ -104,7 +104,7 @@
         writeAddress(formParams(), true);
         window.addEventListener("popstate", () => { if (location.search !== address) restoreFromAddress(); });
         form.addEventListener("submit", event => { event.preventDefault(); writeAddress(formParams()); run(false); });
-        form.addEventListener("input", dropCursor);
+        form.addEventListener("input", () => { running++; dropCursor(); });
         more.addEventListener("click", () => run(true));
     };
 
