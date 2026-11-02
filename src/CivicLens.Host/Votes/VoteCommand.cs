@@ -41,12 +41,13 @@ internal sealed class VoteCommand(AnalysisQueueCommands<VoteDraftRun, VoteDraftV
                     CommandOutput.Write(new { requeued = await redraft.ExecuteAsync(owner, cancellationToken) });
                     return 0;
                 case ["votes", "revisions", "backfill", var limit]:
-                    CommandOutput.Write(await backfill.ExecuteAsync(owner, OwnerCommand.ParseLimit(limit, Usage), cancellationToken));
-                    return 0;
+                    var backfilled = await backfill.ExecuteAsync(owner, OwnerCommand.ParseLimit(limit, Usage), cancellationToken);
+                    CommandOutput.Write(backfilled);
+                    return backfilled.Skipped == 0 ? 0 : 1;
                 case ["votes", "revisions", "verify"]:
                     var verification = await verify.ExecuteAsync(owner, cancellationToken);
                     CommandOutput.Write(verification);
-                    return verification.Mismatched == 0 ? 0 : 1;
+                    return verification.Mismatched == 0 && verification.Legacy == 0 ? 0 : 1;
                 case ["votes", "draft", "requeue", "--blocked", ..]:
                     Console.Error.WriteLine(Usage);
                     return 2;

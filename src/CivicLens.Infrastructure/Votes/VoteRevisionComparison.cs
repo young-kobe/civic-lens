@@ -1,61 +1,38 @@
-using System.Globalization;
-using CivicLens.Core.Documents;
+using System.Text.Json.Nodes;
 using CivicLens.Core.Votes;
+using CivicLens.Infrastructure.Review;
 
 namespace CivicLens.Infrastructure.Votes;
 
-/// <summary>Owns the semantic comparison of two vote revisions. It names the fields that differ and never returns a field value, because the text can be private.</summary>
+/// <summary>Owns the comparison of a rebuilt vote revision with its stored JSON, as trees. It names the top-level keys that differ and never
+/// returns a value, because the text can be private. The one allowed absence is the <c>source</c> key of a revision from a source that
+/// never wrote it. Every other key must match, so an absent <c>issueCandidateIds</c> or <c>subjectsHash</c> equals a rebuilt revision that has none.</summary>
 internal static class VoteRevisionComparison
 {
-    private const char Separator = '\u001F';
+    public const string SourceKey = "source";
+    public const string RevisionJson = "revisionJson";
 
-    /// <summary>A stored JSON can lack a part that the type requires. Such a JSON cannot be compared.</summary>
-    public static bool IsComparable(VoteDraftRevision revision) =>
-        !revision.Facts.IsDefault && !revision.Members.IsDefault && !revision.TrackedIssueIds.IsDefault &&
-        new[] { revision.RecordId, revision.AuthorSubject, revision.Headline, revision.Summary, revision.SourceId, revision.CandidateId, revision.IssueRevisionId }.All(text => text is not null) &&
-        revision.VotedOnCitation is not null && revision.Facts.All(fact => fact is { Text: not null, Citation: not null }) &&
-        revision.Members.All(member => member is { PersonId: not null, BioguideId: not null, Cast: not null, Citation: not null });
+    private const string SourceIdKey = "sourceId";
+    private const string SourceIdWithoutSourceKey = "congress-house-votes";
 
-    public static IReadOnlyList<string> DifferingFields(VoteDraftRevision stored, VoteDraftRevision rebuilt) =>
-        [.. Fields(stored).Zip(Fields(rebuilt)).Where(pair => pair.First.Value != pair.Second.Value).Select(pair => pair.First.Name)];
+    /// <summary>Revisions of this source before the Senate had no source key. Every other revision of the source says CongressGov, so the source ID proves the value.</summary>
+    public static bool MayOmitSource(JsonObject stored) =>
+        stored[SourceIdKey] is JsonValue id && id.TryGetValue<string>(out var text) && text == SourceIdWithoutSourceKey;
 
-    private static IEnumerable<(string Name, string Value)> Fields(VoteDraftRevision revision)
+    public static IReadOnlyList<string> DifferingKeys(string storedJson, VoteDraftRevision rebuilt)
     {
-        yield return (nameof(revision.RecordId), revision.RecordId);
-        yield return (nameof(revision.RevisionNumber), Text(revision.RevisionNumber));
-        yield return (nameof(revision.AuthorSubject), revision.AuthorSubject);
-        yield return (nameof(revision.CreatedAtUtc), Text(revision.CreatedAtUtc.UtcTicks));
-        yield return (nameof(revision.Headline), revision.Headline);
-        yield return (nameof(revision.Summary), revision.Summary);
-        yield return (nameof(revision.TextOrigin), Text(revision.TextOrigin));
-        yield return (nameof(revision.Suggestion), revision.Suggestion is { } suggestion ? Join(suggestion.Headline, suggestion.Summary, suggestion.RunId, suggestion.Fingerprint) : "");
-        yield return (nameof(revision.SourceId), revision.SourceId);
-        yield return (nameof(revision.Source), Text(revision.Source));
-        yield return (nameof(revision.Chamber), Text(revision.Chamber));
-        yield return (nameof(revision.Congress), Text(revision.Congress));
-        yield return (nameof(revision.SessionNumber), Text(revision.SessionNumber));
-        yield return (nameof(revision.RollCallNumber), Text(revision.RollCallNumber));
-        yield return (nameof(revision.BillType), revision.BillType ?? "");
-        yield return (nameof(revision.BillNumber), revision.BillNumber is { } number ? Text(number) : "");
-        yield return (nameof(revision.CandidateId), revision.CandidateId);
-        yield return (nameof(revision.CandidateUpdateDate), Text(revision.CandidateUpdateDate.UtcTicks));
-        yield return (nameof(revision.Facts), Join(revision.Facts.Select(fact => Join(fact.Text, Span(fact.Citation)))));
-        yield return (nameof(revision.VotedOn), Text(revision.VotedOn));
-        yield return (nameof(revision.VotedOnCitation), Span(revision.VotedOnCitation));
-        yield return (nameof(revision.Kind), Text(revision.Kind));
-        yield return (nameof(revision.KindCitation), revision.KindCitation is { } kind ? Span(kind) : "");
-        yield return (nameof(revision.Members), VoteMemberLists.IdOf(revision.Members));
-        yield return (nameof(revision.TrackedIssueIds), Join(revision.TrackedIssueIds));
-        yield return (nameof(revision.IssueCandidateIds), revision.IssueCandidateIds.IsDefault ? "unrecorded" : Join(revision.IssueCandidateIds));
-        yield return (nameof(revision.IssueRevisionId), revision.IssueRevisionId);
-        yield return (nameof(revision.SubjectsHash), revision.SubjectsHash ?? "");
+        JsonObject stored;
+        try
+        {
+            stored = JsonNode.Parse(storedJson) as JsonObject ?? throw new InvalidDataException("A stored vote revision is no JSON object.");
+        }
+        catch (Exception exception) when (ReviewJson.IsUnreadableStoredData(exception))
+        {
+            return [RevisionJson];
+        }
+        var expected = ReviewJson.ToObject(rebuilt);
+        var sourceMayBeAbsent = !stored.ContainsKey(SourceKey) && MayOmitSource(stored);
+        return [.. stored.Select(property => property.Key).Union(expected.Select(property => property.Key), StringComparer.Ordinal)
+            .Where(key => !(key == SourceKey && sourceMayBeAbsent) && !JsonNode.DeepEquals(stored[key], expected[key]))];
     }
-
-    private static string Span(SourceSpan span) => Join(span.ExtractionId, Text(span.Start), Text(span.Length));
-
-    private static string Join(params string[] parts) => string.Join(Separator, parts);
-
-    private static string Join(IEnumerable<string> parts) => string.Join(Separator, parts);
-
-    private static string Text<T>(T value) where T : IFormattable => value.ToString(null, CultureInfo.InvariantCulture);
 }

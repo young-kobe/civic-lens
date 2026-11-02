@@ -689,11 +689,11 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- vo
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes revisions verify
 ```
 
-`backfill <limit>` examines at most `limit` legacy revisions, in key order, in batches of 25. Each batch is one short transaction that holds the vote review lock, so reviewers and the worker wait for one batch at most. It prints `examined`, `moved`, `skipped`, `skippedByReason` (a count for each reason), and the first 50 skipped revisions as record ID, revision number, and reason. A skipped row is not changed. The JSON of every revision stays as it is. A rerun moves nothing that it moved before, and a stopped run resumes with the next run. The [votes doc](architecture/votes.md#invariants) lists the reasons.
+`backfill <limit>` moves at most `limit` legacy revisions. It walks the table in key order to the end in batches of 25, and a skipped row does not count against the limit. Each batch is one short transaction that holds the vote review lock, so reviewers and the worker wait for one batch at most. For each row it writes the columns, reads the row back, rebuilds the revision, and compares it to the stored JSON. A row that differs is skipped with `RebuildMismatch`. It prints `examined`, `moved`, `skipped`, `skippedByReason` (a count for each reason), and the first 50 skipped revisions as record ID, revision number, and reason. A skipped row is not changed. The JSON of every revision stays as it is. A rerun moves nothing that it moved before. The exit code is 1 when any row was skipped, and the counts still print. The [votes doc](architecture/votes.md#invariants) lists the reasons.
 
-`verify` rebuilds every revision from its rows and compares it to its JSON. It writes nothing and takes no lock. It prints `checked`, `legacy`, `mismatched`, and the first 20 mismatches as record ID, revision number, and field names. It never prints text. The exit code is 1 when `mismatched` is above 0.
+`verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. It prints `checked`, `legacy`, `mismatched`, and the first 20 mismatches as record ID, revision number, and JSON key names. It never prints text. The exit code is 1 while `legacy` or `mismatched` is above 0. One absence passes: a missing `source` key on a revision of the source `congress-house-votes`. Any other difference fails.
 
-Run order: `backfill`, then `verify`. Step 3 of the pilot starts only when `legacy` and `mismatched` are both 0, or when each skipped row has an agreed cause. Production held 1,710 revisions when the pilot was measured, so expect shared member lists.
+Run order: `backfill`, then `verify`. Step 3 of the pilot starts only when `verify` exits 0, so `legacy` and `mismatched` are both 0. Production held 1,717 revisions when the pilot was measured, so expect shared member lists.
 
 ## Relationship drafting
 

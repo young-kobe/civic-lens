@@ -75,18 +75,21 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task TheLimitBoundsTheRevisionsOfOneRunAndTheNextRunResumesWhereTheLastStoppedBecauseARunMayStopAnywhere()
+    public async Task TheLimitCountsMovedRowsOnlyAndASkippedRowNeverUsesItBecauseABadRowMustNotStallTheRun()
     {
         var first = await SettledLegacyAsync(basis => basis);
         var second = await AddRevisionAsync(first, 2, legacy: true);
         await AddRevisionAsync(second, 3, legacy: true);
+        await RewriteJsonAsync(1, json => json["members"] = new JsonArray());
 
-        var one = await BackfillAsync(2);
-        var two = await BackfillAsync(2);
+        var one = await BackfillAsync(1);
+        var two = await BackfillAsync(1);
+        var three = await BackfillAsync(1);
 
-        Assert.Equal((2, 2), (one.Examined, one.Moved));
-        Assert.Equal((1, 1), (two.Examined, two.Moved));
-        Assert.Equal(3, (await VerifyAsync()).Checked);
+        Assert.Equal((2, 1, 1), (one.Examined, one.Moved, one.Skipped));
+        Assert.Equal((2, 1, 1), (two.Examined, two.Moved, two.Skipped));
+        Assert.Equal((1, 0, 1), (three.Examined, three.Moved, three.Skipped));
+        Assert.Equal((2, 1), ((await VerifyAsync()).Checked, (await VerifyAsync()).Legacy));
     }
 
     [Fact]
@@ -149,7 +152,7 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task TrackedIssuesOutOfOrderAreSkippedBecauseTheRowsReadBackInOrdinalOrderAndWouldChangeTheRevision()
+    public async Task TrackedIssuesOutOfOrderAreSkippedBecauseTheRowsReadBackInOrdinalOrderAndTheRebuildWouldDiffer()
     {
         await SettledLegacyAsync(basis => basis);
         await RewriteJsonAsync(1, json =>
@@ -160,7 +163,8 @@ public sealed partial class PostgresHouseVoteTests
 
         var result = await BackfillAsync(10);
 
-        Assert.Equal("TrackedIssueOrder", Assert.Single(result.SkippedRevisions).Reason);
+        Assert.Equal("RebuildMismatch", Assert.Single(result.SkippedRevisions).Reason);
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM vote_revision_issues"));
     }
 
     [Theory]
@@ -224,7 +228,7 @@ public sealed partial class PostgresHouseVoteTests
 
     [Theory]
     [InlineData("x", "UnreadableJson")]
-    [InlineData("""{"a":1}""", "HeaderMismatch")]
+    [InlineData("""{"a":1}""", "UnprovenSource")]
     public async Task JsonThatIsNoRevisionIsSkippedWithAReasonBecauseTheBackfillNeverGuessesAFieldFromIt(string json, string reason)
     {
         await SettledLegacyAsync(basis => basis);
@@ -236,12 +240,25 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task ARevisionJsonThatNamesAnotherKeyIsSkippedBecauseTheRowKeyAndTheJsonMustAgree()
+    public async Task ARevisionJsonThatNamesAnotherKeyIsSkippedBecauseTheRebuildMustEqualTheStoredJson()
     {
         await SettledLegacyAsync(basis => basis);
         await RewriteJsonAsync(1, json => json["revisionNumber"] = 7);
 
-        Assert.Equal("HeaderMismatch", Assert.Single((await BackfillAsync(10)).SkippedRevisions).Reason);
+        var skipped = Assert.Single((await BackfillAsync(10)).SkippedRevisions);
+
+        Assert.Equal("RebuildMismatch", skipped.Reason);
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_revisions WHERE headline IS NULL"));
+    }
+
+    [Fact]
+    public async Task AKeyThatTheRebuildCannotHoldIsSkippedBecauseOnlyNamedAbsencesPassTheProof()
+    {
+        await SettledLegacyAsync(basis => basis);
+        await RewriteJsonAsync(1, json => json["unexpected"] = 1);
+
+        Assert.Equal("RebuildMismatch", Assert.Single((await BackfillAsync(10)).SkippedRevisions).Reason);
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM vote_revision_facts"));
     }
 
     [Fact]
@@ -302,9 +319,9 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal(2L, await ScalarAsync("SELECT count(DISTINCT member_list_id) FROM vote_revisions"));
     }
 
-    // 16 production revisions have no source key. A reader gets the first enum value, CongressGov, so the column must hold the same value.
+    // 16 production revisions of the source congress-house-votes have no source key, and every other revision of that source says CongressGov.
     [Fact]
-    public async Task ARevisionWithNoSourceKeyGetsTheValueThatReadersAlreadyGetFromTheJsonBecauseTheEnumDefaultIsCongressGov()
+    public async Task ARevisionOfTheHouseSourceWithNoSourceKeyGetsCongressGovBecauseTheSourceIdProvesIt()
     {
         await SettledLegacyAsync(basis => basis);
         await RewriteJsonAsync(1, json => json.Remove("source"));
@@ -317,16 +334,19 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task ASenateRevisionWithNoSourceKeyIsSkippedBecauseTheDefaultSourceContradictsItsChamber()
+    public async Task ARevisionOfAnotherSourceWithNoSourceKeyIsSkippedBecauseNothingProvesItsSource()
     {
         await SettledLegacyAsync(basis => basis);
         await RewriteJsonAsync(1, json =>
         {
             json.Remove("source");
-            json["chamber"] = "Senate";
+            json["sourceId"] = "another-source";
         });
 
-        Assert.Equal("InvalidShape", Assert.Single((await BackfillAsync(10)).SkippedRevisions).Reason);
+        var result = await BackfillAsync(10);
+
+        Assert.Equal("UnprovenSource", Assert.Single(result.SkippedRevisions).Reason);
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_revisions WHERE headline IS NULL"));
     }
 
     [Fact]
@@ -341,28 +361,47 @@ public sealed partial class PostgresHouseVoteTests
 
         var result = await BackfillAsync(10);
 
-        Assert.Equal(new Dictionary<string, int> { ["InvalidShape"] = 2, ["HeaderMismatch"] = 1 }, result.SkippedByReason);
+        Assert.Equal(new Dictionary<string, int> { ["InvalidShape"] = 2, ["RebuildMismatch"] = 1 }, result.SkippedByReason);
     }
 
     [Theory]
-    [InlineData("{}")]
     [InlineData("facts")]
     [InlineData("members")]
     [InlineData("trackedIssueIds")]
     [InlineData("votedOnCitation")]
-    public async Task VerifyReportsAMovedRowWhoseJsonLacksAPartAsARevisionJsonMismatchAndKeepsGoingBecauseItMustNeverCrash(string missing)
+    public async Task VerifyNamesTheKeyThatAMovedRowsJsonLacksAndKeepsGoingBecauseItMustNeverCrash(string missing)
     {
         await SettledLegacyAsync(basis => basis);
         await BackfillAsync(10);
-        await RewriteJsonAsync(1, json =>
-        {
-            if (missing == "{}") json.Clear();
-            else json.Remove(missing);
-        });
+        await RewriteJsonAsync(1, json => json.Remove(missing));
 
-        var verification = await VerifyAsync();
+        Assert.Equal([missing], Assert.Single((await VerifyAsync()).FirstMismatches).Fields);
+    }
 
-        Assert.Equal(["RevisionJson"], Assert.Single(verification.FirstMismatches).Fields);
+    [Fact]
+    public async Task VerifyNamesEveryKeyOfAnEmptyJsonObjectBecauseNothingInTheRowsIsInTheJson()
+    {
+        await SettledLegacyAsync(basis => basis);
+        await BackfillAsync(10);
+        await RewriteJsonAsync(1, json => json.Clear());
+
+        var fields = Assert.Single((await VerifyAsync()).FirstMismatches).Fields;
+
+        Assert.Contains("recordId", fields);
+        Assert.Contains("members", fields);
+    }
+
+    [Fact]
+    public async Task VerifyAllowsAMissingSourceKeyOnlyForTheHouseSourceBecauseOnlyItsSourceIdProvesTheValue()
+    {
+        await SettledLegacyAsync(basis => basis);
+        await BackfillAsync(10);
+        await ExecuteAsync("UPDATE vote_revisions SET revision_json = (revision_json::jsonb - 'source')::text");
+        Assert.Equal(0, (await VerifyAsync()).Mismatched);
+
+        await ExecuteAsync("UPDATE vote_revisions SET source_id = 'another-source', revision_json = jsonb_set(revision_json::jsonb, '{sourceId}', '\"another-source\"')::text");
+
+        Assert.Equal(["source"], Assert.Single((await VerifyAsync()).FirstMismatches).Fields);
     }
 
     [Fact]
@@ -376,26 +415,26 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Theory]
-    [InlineData("UPDATE vote_revisions SET headline = 'Private changed headline'", "Headline")]
-    [InlineData("UPDATE vote_revisions SET summary = 'Private changed summary.'", "Summary")]
-    [InlineData("UPDATE vote_revisions SET source_id = 'other-source'", "SourceId")]
-    [InlineData("UPDATE vote_revisions SET voted_on_citation_start = 4", "VotedOnCitation")]
-    [InlineData("UPDATE vote_revisions SET kind = 'Passage', kind_citation_extraction_id = voted_on_citation_extraction_id, kind_citation_start = 0, kind_citation_length = 1", "Kind")]
-    [InlineData("UPDATE vote_revision_facts SET fact_text = 'Private changed fact'", "Facts")]
-    [InlineData("UPDATE vote_revision_issues SET is_tracked = NOT is_tracked WHERE issue_id = 'issue-a'", "TrackedIssueIds")]
-    [InlineData("DELETE FROM vote_revision_issues WHERE issue_id = 'issue-b'", "IssueCandidateIds")]
-    [InlineData("UPDATE vote_member_list_entries SET vote_cast = 'Nay'", "Members")]
-    [InlineData("UPDATE vote_revisions SET issue_candidates_recorded = false", "IssueCandidateIds")]
-    [InlineData("UPDATE vote_revisions SET suggestion_headline = 'Private s', suggestion_summary = 'Private s.', suggestion_run_id = run_id, suggestion_fingerprint = repeat('f', 64)", "Suggestion")]
-    [InlineData("UPDATE vote_revisions SET candidate_update_utc_ticks = candidate_update_utc_ticks + 1", "CandidateUpdateDate")]
-    [InlineData("UPDATE vote_revisions SET bill_type = bill_type || 'x'", "BillType")]
-    [InlineData("UPDATE vote_revisions SET bill_number = bill_number + 1", "BillNumber")]
-    [InlineData("UPDATE vote_revisions SET subjects_hash = repeat('a', 64)", "SubjectsHash")]
-    [InlineData("UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{congress}', '118')::text", "Congress")]
-    [InlineData("UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{sessionNumber}', '2')::text", "SessionNumber")]
-    [InlineData("UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{rollCallNumber}', '999')::text", "RollCallNumber")]
-    [InlineData("UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{chamber}', '\"Senate\"')::text", "Chamber")]
-    [InlineData("UPDATE vote_member_lists SET member_count = 2", "MemberCount")]
+    [InlineData("UPDATE vote_revisions SET headline = 'Private changed headline'", "headline")]
+    [InlineData("UPDATE vote_revisions SET summary = 'Private changed summary.'", "summary")]
+    [InlineData("UPDATE vote_revisions SET source_id = 'other-source'", "sourceId")]
+    [InlineData("UPDATE vote_revisions SET voted_on_citation_start = 4", "votedOnCitation")]
+    [InlineData("UPDATE vote_revisions SET kind = 'Passage', kind_citation_extraction_id = voted_on_citation_extraction_id, kind_citation_start = 0, kind_citation_length = 1", "kind")]
+    [InlineData("UPDATE vote_revision_facts SET fact_text = 'Private changed fact'", "facts")]
+    [InlineData("UPDATE vote_revision_issues SET is_tracked = NOT is_tracked WHERE issue_id = 'issue-a'", "trackedIssueIds")]
+    [InlineData("DELETE FROM vote_revision_issues WHERE issue_id = 'issue-b'", "issueCandidateIds")]
+    [InlineData("UPDATE vote_member_list_entries SET vote_cast = 'Nay'", "members")]
+    [InlineData("UPDATE vote_revisions SET issue_candidates_recorded = false", "issueCandidateIds")]
+    [InlineData("UPDATE vote_revisions SET suggestion_headline = 'Private s', suggestion_summary = 'Private s.', suggestion_run_id = run_id, suggestion_fingerprint = repeat('f', 64)", "suggestion")]
+    [InlineData("UPDATE vote_revisions SET candidate_update_utc_ticks = candidate_update_utc_ticks + 1", "candidateUpdateDate")]
+    [InlineData("UPDATE vote_revisions SET bill_type = bill_type || 'x'", "billType")]
+    [InlineData("UPDATE vote_revisions SET bill_number = bill_number + 1", "billNumber")]
+    [InlineData("UPDATE vote_revisions SET subjects_hash = repeat('a', 64)", "subjectsHash")]
+    [InlineData("UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{congress}', '118')::text", "congress")]
+    [InlineData("UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{sessionNumber}', '2')::text", "sessionNumber")]
+    [InlineData("UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{rollCallNumber}', '999')::text", "rollCallNumber")]
+    [InlineData("UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{chamber}', '\"Senate\"')::text", "chamber")]
+    [InlineData("UPDATE vote_member_lists SET member_count = 2", "memberCount")]
     public async Task VerifyFailsWhenAColumnDiffersFromTheJsonAndNamesTheFieldButNeverItsTextBecauseTheTextIsPrivate(string change, string field)
     {
         await SettledLegacyAsync(basis => basis with { IssueCandidateIds = ["issue-a", "issue-b"], TrackedIssueIds = ["issue-a"] });
@@ -432,7 +471,7 @@ public sealed partial class PostgresHouseVoteTests
 
         var mismatch = Assert.Single((await VerifyAsync()).FirstMismatches);
 
-        Assert.Equal(["RevisionJson"], mismatch.Fields);
+        Assert.Equal(["revisionJson"], mismatch.Fields);
     }
 
     private async Task<VoteDraftRevision> SettledLegacyAsync(Func<VoteDraftRevision, VoteDraftRevision> shape)

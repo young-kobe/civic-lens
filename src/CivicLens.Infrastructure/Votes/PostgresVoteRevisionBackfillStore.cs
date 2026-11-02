@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Data;
+using System.Text.Json.Nodes;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
@@ -12,14 +13,15 @@ using Npgsql;
 namespace CivicLens.Infrastructure.Votes;
 
 /// <summary>Moves legacy vote revisions into columns and child rows, and checks each moved revision against its JSON.
-/// The backfill takes the vote review lock, and only that lock, for each batch. It writes only rows whose columns are null.</summary>
+/// The backfill takes the vote review lock, and only that lock, for each batch. It writes only rows whose columns are null.
+/// It proves each row inside its savepoint: it reads the row back, rebuilds the revision, and compares it to the stored JSON.</summary>
 public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IVoteRevisionBackfillStore
 {
     private const string UnreadableJson = "UnreadableJson";
-    private const string HeaderMismatch = "HeaderMismatch";
+    private const string UnprovenSource = "UnprovenSource";
     private const string InvalidShape = "InvalidShape";
     private const string DuplicateIssueId = "DuplicateIssueId";
-    private const string TrackedIssueOrder = "TrackedIssueOrder";
+    private const string RebuildMismatch = "RebuildMismatch";
     private const string DatabasePrefix = "database:";
 
     private const string Savepoint = "vote_revision_backfill";
@@ -44,7 +46,7 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
         int checkedCount = 0, legacy = 0, mismatched = 0;
         var first = new List<VoteRevisionMismatch>();
         VoteRevisionKey? after = null;
-        while (await ReadPageAsync(db, after, cancellationToken) is { Rows.Count: > 0 } page)
+        while (await ReadVerifyPageAsync(db, after, cancellationToken) is { Rows.Count: > 0 } page)
         {
             foreach (var row in page.Rows)
             {
@@ -74,35 +76,51 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
         await transaction.CreateSavepointAsync(Savepoint, cancellationToken);
         try
         {
-            db.Attach(row);
-            VoteRevisionRows.FillColumns(row, revision);
-            await VoteMemberLists.EnsureAsync(db, revision, cancellationToken);
-            await db.SaveChangesAsync(cancellationToken);
-            await transaction.ReleaseSavepointAsync(Savepoint, cancellationToken);
-            return null;
+            refusal = await WriteAndProveAsync(db, row, revision, cancellationToken);
         }
         catch (Exception exception) when (RefusalOf(exception) is { } refusedBy)
         {
-            await transaction.RollbackToSavepointAsync(Savepoint, cancellationToken);
-            db.ChangeTracker.Clear();
-            return DatabasePrefix + refusedBy;
+            refusal = DatabasePrefix + refusedBy;
         }
+        if (refusal is null)
+        {
+            await transaction.ReleaseSavepointAsync(Savepoint, cancellationToken);
+            return null;
+        }
+        await transaction.RollbackToSavepointAsync(Savepoint, cancellationToken);
+        db.ChangeTracker.Clear();
+        return refusal;
+    }
+
+    private static async Task<string?> WriteAndProveAsync(CollectionAttemptDbContext db, VoteRevisionRow row, VoteDraftRevision revision,
+        CancellationToken cancellationToken)
+    {
+        db.Attach(row);
+        VoteRevisionRows.FillColumns(row, revision);
+        await VoteMemberLists.EnsureAsync(db, revision, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        var stored = await ReadPageAsync(db, Rows(db).Where(candidate => candidate.RecordId == row.RecordId && candidate.RevisionNumber == row.RevisionNumber), cancellationToken);
+        return DifferingFields(stored.Rows.Single(), stored).Count == 0 ? null : RebuildMismatch;
     }
 
     private static (VoteDraftRevision? Revision, string? Refusal) ReadMovable(VoteRevisionRow row)
     {
+        JsonObject stored;
         VoteDraftRevision revision;
         try
         {
+            stored = JsonNode.Parse(row.RevisionJson) as JsonObject ?? throw new InvalidDataException("A stored vote revision is no JSON object.");
             revision = ReviewJson.Deserialize<VoteDraftRevision>(row.RevisionJson, "vote revision");
         }
         catch (Exception exception) when (ReviewJson.IsUnreadableStoredData(exception))
         {
             return (null, UnreadableJson);
         }
-        if (revision.RecordId != row.RecordId || revision.RevisionNumber != row.RevisionNumber || revision.AuthorSubject != row.AuthorSubject ||
-            revision.CreatedAtUtc.UtcTicks != row.CreatedAtUtcTicks)
-            return (null, HeaderMismatch);
+        if (!stored.ContainsKey(VoteRevisionComparison.SourceKey))
+        {
+            if (!VoteRevisionComparison.MayOmitSource(stored)) return (null, UnprovenSource);
+            revision = revision with { Source = VoteSource.CongressGov };
+        }
         try
         {
             revision.ValidateShape();
@@ -113,8 +131,6 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
         }
         if (HasDuplicates(revision.TrackedIssueIds) || !revision.IssueCandidateIds.IsDefault && HasDuplicates(revision.IssueCandidateIds))
             return (null, DuplicateIssueId);
-        if (!revision.IssueCandidateIds.IsDefault && !revision.TrackedIssueIds.SequenceEqual(revision.TrackedIssueIds.Order(StringComparer.Ordinal)))
-            return (null, TrackedIssueOrder);
         return (revision, null);
     }
 
@@ -128,38 +144,36 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
             : null;
     }
 
-    private static async Task<VerifyPage> ReadPageAsync(CollectionAttemptDbContext db, VoteRevisionKey? after, CancellationToken cancellationToken)
+    private static IQueryable<VoteRevisionRow> Rows(CollectionAttemptDbContext db) =>
+        db.Set<VoteRevisionRow>().AsNoTracking().Include(row => row.Facts).Include(row => row.Issues);
+
+    private static async Task<VerifyPage> ReadVerifyPageAsync(CollectionAttemptDbContext db, VoteRevisionKey? after, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var rows = await InKeyOrderAfter(db.Set<VoteRevisionRow>().AsNoTracking().Include(row => row.Facts).Include(row => row.Issues), after)
-            .Take(VerifyPageSize).ToListAsync(cancellationToken);
+        var page = await ReadPageAsync(db, InKeyOrderAfter(Rows(db), after).Take(VerifyPageSize), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return page;
+    }
+
+    private static async Task<VerifyPage> ReadPageAsync(CollectionAttemptDbContext db, IQueryable<VoteRevisionRow> query, CancellationToken cancellationToken)
+    {
+        var rows = await query.ToListAsync(cancellationToken);
         var listIds = rows.Select(row => row.MemberListId).OfType<string>().Distinct().ToArray();
         var lists = await db.Set<VoteMemberListRow>().AsNoTracking().Where(list => listIds.Contains(list.ListId))
             .ToDictionaryAsync(list => list.ListId, list => list.MemberCount, StringComparer.Ordinal, cancellationToken);
         var entries = (await db.Set<VoteMemberListEntryRow>().AsNoTracking().Where(entry => listIds.Contains(entry.ListId))
             .OrderBy(entry => entry.ListId).ThenBy(entry => entry.Position).ToListAsync(cancellationToken)).ToLookup(entry => entry.ListId, StringComparer.Ordinal);
-        await transaction.CommitAsync(cancellationToken);
         return new(rows, lists, entries);
     }
 
     private static IReadOnlyList<string> DifferingFields(VoteRevisionRow row, VerifyPage page)
     {
-        var entries = page.Entries[row.MemberListId!];
-        var members = entries.Select(entry => new MemberVote(entry.PersonId, entry.BioguideId, entry.VoteCast,
+        var members = page.Entries[row.MemberListId!].Select(entry => new MemberVote(entry.PersonId, entry.BioguideId, entry.VoteCast,
             new(entry.CitationExtractionId, entry.CitationStart, entry.CitationLength))).ToImmutableArray();
-        try
-        {
-            var stored = ReviewJson.Deserialize<VoteDraftRevision>(row.RevisionJson, "vote revision");
-            if (!VoteRevisionComparison.IsComparable(stored)) return [nameof(VoteRevisionRow.RevisionJson)];
-            var fields = VoteRevisionComparison.DifferingFields(stored, VoteRevisionRows.Rebuild(row, members)).ToList();
-            if (row.MemberListId != VoteMemberLists.IdOf(members)) fields.Add("MemberListId");
-            if (page.MemberCounts.GetValueOrDefault(row.MemberListId!) != members.Length) fields.Add("MemberCount");
-            return fields;
-        }
-        catch (Exception exception) when (ReviewJson.IsUnreadableStoredData(exception))
-        {
-            return [nameof(VoteRevisionRow.RevisionJson)];
-        }
+        var fields = VoteRevisionComparison.DifferingKeys(row.RevisionJson, VoteRevisionRows.Rebuild(row, members)).ToList();
+        if (row.MemberListId != VoteMemberLists.IdOf(members)) fields.Add("memberListId");
+        if (page.MemberCounts.GetValueOrDefault(row.MemberListId!) != members.Length) fields.Add("memberCount");
+        return fields;
     }
 
     private sealed record VerifyPage(IReadOnlyList<VoteRevisionRow> Rows, IReadOnlyDictionary<string, short> MemberCounts,

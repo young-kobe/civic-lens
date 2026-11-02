@@ -15,18 +15,19 @@ public sealed class BackfillVoteRevisions(IVoteRevisionBackfillStore store)
     {
         ReviewAuthorization.RequireOwner(actor);
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
-        var examined = 0;
+        int examined = 0, moved = 0;
         var skipped = new List<SkippedVoteRevision>();
         VoteRevisionKey? after = null;
-        while (examined < limit)
+        while (moved < limit)
         {
-            var batch = await store.BackfillBatchAsync(after, Math.Min(BatchSize, limit - examined), cancellationToken);
+            var batch = await store.BackfillBatchAsync(after, Math.Min(BatchSize, limit - moved), cancellationToken);
             if (batch.Last is null) break;
             examined += batch.Examined;
+            moved += batch.Examined - batch.Skipped.Length;
             skipped.AddRange(batch.Skipped);
             after = batch.Last;
         }
         var byReason = skipped.GroupBy(revision => revision.Reason).ToDictionary(group => group.Key, group => group.Count());
-        return new(examined, examined - skipped.Count, skipped.Count, byReason, [.. skipped.Take(ReportedSkips)]);
+        return new(examined, moved, skipped.Count, byReason, [.. skipped.Take(ReportedSkips)]);
     }
 }
