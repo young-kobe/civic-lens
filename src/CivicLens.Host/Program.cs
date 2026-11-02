@@ -258,7 +258,10 @@ try
         var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
         if (string.IsNullOrWhiteSpace(connectionString)) throw new ArgumentException("worker health requires CIVIC_LENS_DATABASE.");
         executing = true;
-        return await WorkerHealthCommand.ExecuteAsync(PostgresWorkerHeartbeatStore.FromConnectionString(connectionString), Console.Out, cancellation.Token);
+        var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
+        var capacity = string.IsNullOrWhiteSpace(releaseRoot) ? null
+            : new ReadReleaseCapacity(PostgresPublicationStore.FromConnectionString(connectionString), new FileReleaseDirectory(releaseRoot));
+        return await WorkerHealthCommand.ExecuteAsync(PostgresWorkerHeartbeatStore.FromConnectionString(connectionString), capacity, Console.Out, cancellation.Token);
     }
 
     if (AnalysisCommand.Matches(args))

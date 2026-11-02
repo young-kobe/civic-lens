@@ -1,14 +1,26 @@
 using CivicLens.Application;
+using CivicLens.Application.Publication;
 
 namespace CivicLens.Host.Collection;
 
-internal static class WorkerHealthCommand
+public static class WorkerHealthCommand
 {
     private static readonly TimeSpan MaximumAge = TimeSpan.FromMinutes(10);
 
     public static bool Matches(string[] arguments) => arguments is ["worker", "health"];
 
-    public static async Task<int> ExecuteAsync(IWorkerHeartbeatStore heartbeats, TextWriter output, CancellationToken cancellationToken)
+    public static async Task<int> ExecuteAsync(IWorkerHeartbeatStore heartbeats, ReadReleaseCapacity? capacity, TextWriter output,
+        CancellationToken cancellationToken)
+    {
+        var exitCode = await CheckHeartbeatsAsync(heartbeats, output, cancellationToken);
+        if (capacity is null) return exitCode;
+        var release = await capacity.ExecuteAsync(cancellationToken);
+        if (release.WaitingForRoom == 0) return exitCode;
+        output.WriteLine($"Unhealthy: The release holds {release.Held} records. {release.WaitingForRoom} new records wait for room.");
+        return 1;
+    }
+
+    private static async Task<int> CheckHeartbeatsAsync(IWorkerHeartbeatStore heartbeats, TextWriter output, CancellationToken cancellationToken)
     {
         var beats = await heartbeats.ListAsync(cancellationToken);
         if (beats.Count == 0)

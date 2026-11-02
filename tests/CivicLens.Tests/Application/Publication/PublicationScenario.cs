@@ -559,6 +559,10 @@ internal sealed class FakePublicationStore : IPublicationStore
 
     public Task<TimeSpan?> ReadAgeOfNewestReleaseAsync(CancellationToken cancellationToken) => Task.FromResult(AgeOfNewestRelease);
 
+    public int ApprovedOutsideActiveRelease { get; set; }
+
+    public Task<int> CountApprovedOutsideActiveReleaseAsync(CancellationToken cancellationToken) => Task.FromResult(ApprovedOutsideActiveRelease);
+
     public Task<PublicationState> GetStateAsync(CancellationToken cancellationToken) =>
         Task.FromResult(new PublicationState(Committed.Select(item => item.ReleaseNumber).DefaultIfEmpty().Max(),
             Committed.SingleOrDefault(item => item.ReleaseNumber == ActiveReleaseNumber)));

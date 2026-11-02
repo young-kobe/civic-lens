@@ -157,6 +157,29 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         Assert.Equal([replacement, oldest, newer], listed.Select(item => item.Action.RecordId));
     }
 
+    [Fact]
+    public async Task ReplacementsTakeAtMostHalfTheBatchWhileNewRecordsWaitBecauseCorrectionsMustNotHoldBackNewRecords()
+    {
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenNotice, "joe-biden");
+        var ids = (await ScalarAsync("SELECT string_agg(record_id, ',' ORDER BY record_id) FROM executive_action_drafts"))!.Split(',');
+        await ExecuteAsync($"""
+            UPDATE executive_action_drafts SET created_at_utc_ticks = CASE record_id WHEN '{ids[0]}' THEN 10 WHEN '{ids[1]}' THEN 20 ELSE 30 END;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES (1, '000001-' || md5('half'), 'owner', 0, 2, true);
+            INSERT INTO publication_record_states (kind, record_id, revision_number, first_release)
+            VALUES ('executiveAction', '{ids[0]}', 0, 1), ('executiveAction', '{ids[1]}', 0, 1);
+            """);
+
+        var batch = await store.ListUnpublishedApprovedAsync(2, [], default);
+        var replacementsOnly = await store.ListUnpublishedApprovedAsync(2, [ids[2]], default);
+
+        Assert.Equal([ids[0], ids[2]], batch.Select(item => item.Action.RecordId));
+        Assert.Equal([ids[0], ids[1]], replacementsOnly.Select(item => item.Action.RecordId));
+        Assert.Equal(1, await PostgresPublicationStore.FromConnectionString(connectionString).CountApprovedOutsideActiveReleaseAsync(default));
+    }
+
     private Task<string?> HeldReasonAsync() => ScalarAsync("SELECT held_reason FROM executive_action_drafts");
 
     private async Task<string?> ScalarAsync(string sql)
