@@ -7,7 +7,9 @@ internal static class CommandOutput
 {
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
-    public static void Write(object value) => Console.WriteLine(JsonSerializer.Serialize(value, JsonOptions));
+    public static void Write(object value) => Write(Console.Out, value);
+
+    public static void Write(TextWriter output, object value) => output.WriteLine(JsonSerializer.Serialize(value, JsonOptions));
 
     private static JsonSerializerOptions CreateJsonOptions()
     {

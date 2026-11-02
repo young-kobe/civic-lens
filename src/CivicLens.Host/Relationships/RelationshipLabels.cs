@@ -1,6 +1,8 @@
 using CivicLens.Core.Relationships;
 using CivicLens.Host.Actions;
+using CivicLens.Host.Publication;
 using CivicLens.Host.Votes;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Host.Relationships;
 
@@ -37,7 +39,7 @@ internal static class RelationshipLabels
 
     public static string TargetName(RelationshipRecordKind kind) => kind switch
     {
-        RelationshipRecordKind.Action => "Action",
+        RelationshipRecordKind.Action => PublishedRecordLabels.Kind(PublishedRecordKind.Action),
         RelationshipRecordKind.Vote => "Vote",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Relationship target kind has no name.")
     };

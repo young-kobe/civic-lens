@@ -51,10 +51,14 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
         votes.ReadMembersAsync([.. entries.Where(entry => entry.Kind == Kind).Select(PublishedRevisionBinding.Of)],
             cancellationToken);
 
-    public async Task<IReadOnlySet<string>> FindOnBillsOfActionsAsync(IEnumerable<string> actionRecordIds, CancellationToken cancellationToken)
+    public async Task<IReadOnlySet<string>> FindOnBillsOfActionsAsync(IEnumerable<string> actionRecordIds,
+        IEnumerable<PublishedRevisionBinding> releaseRecords, CancellationToken cancellationToken)
     {
-        ImmutableArray<string> ids = [.. actionRecordIds];
-        return ids.IsEmpty ? new HashSet<string>() : await votes.FindVoteRecordIdsOnBillsOfActionsAsync(ids, cancellationToken);
+        var actionIds = actionRecordIds.ToHashSet(StringComparer.Ordinal);
+        ImmutableArray<PublishedRevisionBinding> releaseVotes = [.. releaseRecords.Where(record => record.Kind == Kind)];
+        if (actionIds.Count == 0 || releaseVotes.IsEmpty) return new HashSet<string>();
+        var billActions = await BillActionRecordIdsAsync(releaseVotes, cancellationToken);
+        return billActions.Where(vote => vote.Value.Any(actionIds.Contains)).Select(vote => vote.Key).ToHashSet(StringComparer.Ordinal);
     }
 
     public Task<IReadOnlyDictionary<string, ImmutableArray<string>>> BillActionRecordIdsAsync(ImmutableArray<PublishedRevisionBinding> revisions,

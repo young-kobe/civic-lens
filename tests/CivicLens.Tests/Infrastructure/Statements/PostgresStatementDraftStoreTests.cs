@@ -117,7 +117,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         Assert.Equal("Approved", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
         Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM statement_drafts WHERE candidate_id = '{candidate}' AND held_reason IS NULL"));
         Assert.Equal(("civic-lens:code", "Approve", 1L), (
-            await TextAsync($"SELECT decision_json::jsonb->>'actorSubject' FROM statement_review_decisions WHERE candidate_id = '{candidate}'"),
+            await TextAsync($"SELECT actor_subject FROM statement_review_decisions WHERE candidate_id = '{candidate}'"),
             await TextAsync($"SELECT kind FROM statement_review_decisions WHERE candidate_id = '{candidate}'"),
             await ScalarAsync($"SELECT revision_number FROM statement_review_decisions WHERE candidate_id = '{candidate}'")));
     }

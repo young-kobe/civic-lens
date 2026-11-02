@@ -500,7 +500,7 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 - `statement_drafts` also has `last_revised_at_utc_ticks` and the nullable `held_reason`; see [review](review.md#storage-and-contracts).
 - `statement_drafts` also has `review_state_version` and `review_status`. The store computes both with `ReviewPolicy` under the lock.
 - A draft with no revision has the status `NotDrafted`.
-- `statement_review_decisions` holds the immutable decision JSON and the same decision as columns. `statement_review_decision_resolutions` holds the concerns that an approval resolves; see [review](review.md#invariants).
+- `statement_review_decisions` holds the immutable decisions as columns. `statement_review_decision_resolutions` holds the concerns that an approval resolves; see [review](review.md#invariants).
 - The commands reuse the replay receipt table with the operations `statement-create`, `statement-save`, and `statement-decide`.
 - `statement_gate_labels` holds the gate labels. Its key is a 32-character label ID. A row names the candidate and the extraction. It also holds the author subject, the author kind (`Person` or `Analysis`), the run ID, the label JSON, and the creation time. `ck_statement_gate_labels_run` ties the run ID to the `Analysis` kind. The run ID has a foreign key to `statement_analysis_runs` and a unique index, so one run labels one release.
 - Seven tables hold relationship drafting: `relationship_analysis`, `relationship_analysis_runs`, `relationship_analysis_budget`, `relationship_drafts`, `relationship_revisions`, `relationship_review_decisions`, and `relationship_review_decision_resolutions`. The review store writes the last two.

@@ -33,7 +33,7 @@
     </form>
 
     <form class="list-filter" method="get" action="/Review" role="search" aria-label="Search approved records by headline">
-        <Field Label="Search approved records" For="q" Hint="Words from the headline of an approved action, vote, statement, weekly brief, executive action, or document change. A relationship has no headline of its own, so search for its statement.">
+        <Field Label="Search approved records" For="q" Hint="Words from the headline of an approved bill or resolution, vote, statement, weekly brief, executive action, or document change. A relationship has no headline of its own, so search for its statement.">
             <input id="q" name="q" value="@Search" maxlength="@SearchApprovedRecords.MaximumQueryLength" aria-describedby="q-hint" />
         </Field>
         <Button Variant="ButtonVariant.Primary" Small="true" Type="submit">Search</Button>
@@ -121,7 +121,7 @@
                                 }
                                 else
                                 {
-                                    <EmptyState Title="No record needs a person" Text="Code approves an action, a vote, a statement, or an executive action when its checks pass. A record shows here when a check refuses it or a person must decide. To open an approved record, type words from its headline in Search approved records." />
+                                    <EmptyState Title="No record needs a person" Text="Code approves a bill or resolution, a vote, a statement, or an executive action when its checks pass. A record shows here when a check refuses it or a person must decide. To open an approved record, type words from its headline in Search approved records." />
                                 }
                             </Empty>
                         </DataTable>

@@ -160,8 +160,7 @@ public sealed class PublishRelease
             SchemaVersion = PublicationProtocol.SchemaVersion,
             ReleaseNumber = number,
             PublishedAtUtc = now,
-            Records = [.. entries.OrderByDescending(entry => entry.FirstPublishedAtUtc)
-                .ThenBy(entry => entry.RecordId, StringComparer.Ordinal)],
+            Records = [.. ReleaseRecordOrder.NewestFirst(entries, ReleaseRecordOrder.Day, entry => entry.FirstPublishedAtUtc, entry => entry.RecordId)],
             Withdrawals = [.. withdrawals.OrderByDescending(withdrawal => withdrawal.WithdrawnAtUtc)
                 .ThenBy(withdrawal => withdrawal.RecordId, StringComparer.Ordinal)]
         };

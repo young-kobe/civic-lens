@@ -27,6 +27,27 @@ public sealed class PublishEntryRewriteTests
     }
 
     [Fact]
+    public async Task TheHomeAndAllRecordsPagesFollowTheEventDayThenTheFirstPublicationDay()
+    {
+        var scenario = new PublicationScenario();
+        var newerEventPublishedEarlier = scenario.AddStatement('c', statementDate: new DateOnly(2026, 1, 20));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Statement, newerEventPublishedEarlier)));
+        scenario.Clock.Now = scenario.Clock.Now.AddDays(1);
+        var olderEventPublishedLater = scenario.AddStatement('d', statementDate: new DateOnly(2025, 5, 5));
+        var undated = scenario.AddStatement('e');
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
+            new PublishedRecordReference(PublishedRecordKind.Statement, olderEventPublishedLater),
+            new PublishedRecordReference(PublishedRecordKind.Statement, undated)));
+
+        var records = Manifest(scenario, second).Records;
+        Assert.Equal([undated, newerEventPublishedEarlier, olderEventPublishedLater], records.Select(entry => entry.RecordId));
+        Assert.Null(records[0].EventDate);
+        Assert.Equal(new DateOnly(2026, 2, 2), ReleaseRecordOrder.Day(records[0]));
+    }
+
+    [Fact]
     public async Task TheRewriteOptionFillsTheNewFieldsFromTheRecordFilesAndLeavesEveryOtherFieldAndEveryRecordFileAsItWas()
     {
         var scenario = new PublicationScenario();
