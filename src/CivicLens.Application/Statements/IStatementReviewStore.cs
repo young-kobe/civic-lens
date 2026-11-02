@@ -12,7 +12,8 @@ public interface IStatementReviewStore
         string payloadHash, CancellationToken cancellationToken);
 
     Task<StatementDraftRevision> SaveRevisionAsync(string actorSubject, StatementDraftRevision revision, int expectedRevisionNumber,
-        bool statementDateChecked, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
+        bool statementDateChecked, ReviewDecision? approval,
+        StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
 
     Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash,

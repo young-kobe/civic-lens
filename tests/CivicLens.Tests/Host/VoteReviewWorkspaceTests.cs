@@ -107,6 +107,28 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
         Assert.Contains("Say what the Senate voted on.", page.Body!.InnerHtml, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task SaveAndApproveSavesTheTypedWordingAndApprovesItBecauseOneButtonIsFewerClicksThanTwo()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|owner"));
+        var recordId = await SeedVoteDraftAsync();
+        var page = await host.GetDocumentAsync($"/Review/Votes/{recordId}");
+        Assert.Equal("edit", page.QuerySelector("[data-tabset]")!.GetAttribute("data-selected"));
+        Assert.Equal("Save and approve", page.QuerySelector("#save-and-approve button[name='approve']")!.TextContent.Trim());
+        Assert.Null(page.QuerySelector("#decision-form button[value='Approve']"));
+        var fields = Fields(page.QuerySelector("#draft-form")!);
+        Set(fields, "Input.Headline", "The House passed the measure");
+        Set(fields, "Input.Summary", "The House voted on passage.");
+        fields.Add(new("approve", "true"));
+
+        using var response = await host.Client.PostAsync($"/Review/Votes/{recordId}", new FormUrlEncodedContent(fields));
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var after = await host.GetDocumentAsync($"/Review/Votes/{recordId}");
+        Assert.Contains("Approved", after.QuerySelector(".page-header .badge")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal("The House passed the measure", after.QuerySelector("#Input_Headline")!.GetAttribute("value"));
+    }
+
     private async Task<string> SeedVoteDraftAsync(int session = 1, int roll = 100, int? billNumber = null, Chamber chamber = Chamber.House, VoteKind kind = VoteKind.Passage)
     {
         const string question = "Question: On Passage";

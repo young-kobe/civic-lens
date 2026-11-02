@@ -28,7 +28,8 @@ public sealed class SaveVoteDraft(IVoteReviewStore store)
             Suggestion = request.Suggestion == SuggestionChoice.Keep ? expected.Suggestion : null
         };
         revision.ValidatePersonEditOf(expected);
-        return await store.SaveRevisionAsync(actor.Subject, revision, request.ExpectedRevisionNumber, request.IdempotencyKey,
+        return await store.SaveRevisionAsync(actor.Subject, revision, request.ExpectedRevisionNumber,
+            ReviewValidation.CreateApprovalOf(actor, recordId, revision.RevisionNumber, request.Approval), request.IdempotencyKey,
             ReviewValidation.HashPayload(request), cancellationToken);
     }
 }

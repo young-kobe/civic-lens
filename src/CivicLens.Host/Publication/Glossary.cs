@@ -32,7 +32,7 @@ public static class Glossary
             new("votes-against-their-party", "Votes against their party",
                 "The member voted yes when more members of their party voted no, or the reverse.",
                 "It shows when a member breaks from most party colleagues on a contested vote. It does not show disagreement with an official party position.",
-                "Our method page")
+                "Our page How the counts work")
         ]),
         new("Kinds of votes",
         [
