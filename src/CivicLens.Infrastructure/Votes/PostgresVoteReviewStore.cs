@@ -149,6 +149,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         if (revisions.IsEmpty) return ImmutableDictionary<string, ImmutableArray<string>>.Empty;
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var requested = revisions.Distinct().ToArray();
+        CitedRevisions.RequireKind(PublishedRecordKind.Vote, requested, nameof(revisions));
         var stored = await db.Database.SqlQueryRaw<StoredVoteBill>("""
                 SELECT r.record_id AS "VoteRecordId", (r.revision_json::jsonb ->> 'congress')::int AS "Congress",
                        r.revision_json::jsonb ->> 'billType' AS "BillType", (r.revision_json::jsonb ->> 'billNumber')::int AS "BillNumber"

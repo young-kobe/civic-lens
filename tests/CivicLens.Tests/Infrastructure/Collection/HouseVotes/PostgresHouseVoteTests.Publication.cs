@@ -242,6 +242,8 @@ public sealed partial class PostgresHouseVoteTests
 
         await Assert.ThrowsAsync<ArgumentException>(() => VoteReviews().ReadMembersAsync(
             [new(PublishedRecordKind.Vote, recordId, 1), new(PublishedRecordKind.Statement, recordId, 1)], default));
+        await Assert.ThrowsAsync<ArgumentException>(() => VoteReviews().FindBillActionRecordIdsOfVotesAsync(
+            [new(PublishedRecordKind.Vote, recordId, 1), new(PublishedRecordKind.Statement, recordId, 1)], default));
     }
 
     [Fact]
