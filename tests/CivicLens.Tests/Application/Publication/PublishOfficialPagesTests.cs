@@ -14,6 +14,83 @@ public sealed class PublishOfficialPagesTests
     private static readonly string ChairPage = PublicationProtocol.OfficialPagePath("chair");
 
     [Fact]
+    public async Task AChangedBillStatusRewritesTheCurrentPageOfTheSponsorOnlySoTheLineNeverShowsAnOldStatus()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c');
+        var statement = scenario.AddStatement('b', speakerIds: ["chair"]);
+        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Action, action), new PublishedRecordReference(PublishedRecordKind.Statement, statement)));
+        scenario.Actions.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.");
+        scenario.OfficialPages.Clear();
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
+
+        var rewritten = Assert.Single(scenario.OfficialPages);
+        Assert.Equal(("mayor", true), (rewritten.Profile.Id, rewritten.IsCurrent));
+        Assert.Equal("Became Public Law No: 119-1.", rewritten.BillStatuses![action].Status.Text);
+        Assert.Contains("statuses [c:Became Public Law No: 119-1.]", Page(scenario.Releases.Directories[summary.DirectoryName], MayorPage));
+    }
+
+    [Fact]
+    public async Task AStatusCheckThatChangesNeitherTextNorDateLeavesTheSponsorPageLinked()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c');
+        var other = scenario.AddAction('d', sponsorId: "chair");
+        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
+        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.") with { ObservedAtUtc = Observed.AddDays(2) };
+        scenario.OfficialPages.Clear();
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", new PublishedRecordReference(PublishedRecordKind.Action, other)));
+
+        Assert.DoesNotContain(scenario.OfficialPages, page => page.Profile.Id == "mayor");
+    }
+
+    [Fact]
+    public async Task AChangedBillStatusRewritesThePageOfEverySponsorOfTheBill()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c', cosponsorWithdrawn: false, chairSponsors: true);
+        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
+        scenario.Actions.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.");
+        scenario.OfficialPages.Clear();
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
+
+        Assert.Equal(["chair", "mayor"], scenario.OfficialPages.Where(page => page.IsCurrent).Select(page => page.Profile.Id).Order().ToArray());
+    }
+
+    [Fact]
+    public async Task ARewrittenSponsorPageKeepsTheFirstReadTimeOfAnUnchangedBillSoOnlyTheMovedBillShowsANewTime()
+    {
+        var scenario = new PublicationScenario();
+        var moved = scenario.AddAction('c');
+        var steady = scenario.AddAction('d');
+        scenario.Actions.BillStatuses[moved] = Status(moved, "Passed House.");
+        scenario.Actions.BillStatuses[steady] = Status(steady, "Passed House.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Action, moved), new PublishedRecordReference(PublishedRecordKind.Action, steady)));
+        scenario.Actions.BillStatuses[moved] = Status(moved, "Became Public Law No: 119-1.") with { ObservedAtUtc = Observed.AddDays(3) };
+        scenario.Actions.BillStatuses[steady] = Status(steady, "Passed House.") with { ObservedAtUtc = Observed.AddDays(3) };
+        scenario.OfficialPages.Clear();
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
+
+        var page = Assert.Single(scenario.OfficialPages, page => page.Profile.Id == "mayor" && page.IsCurrent);
+        Assert.Equal(Observed.AddDays(3), page.BillStatuses![moved].Status.ObservedAtUtc);
+        Assert.Equal(Observed, page.BillStatuses[steady].Status.ObservedAtUtc);
+    }
+
+    private static readonly DateTimeOffset Observed = new(2026, 1, 30, 9, 0, 0, TimeSpan.Zero);
+
+    private static PublishedBillStatus Status(string recordId, string text) =>
+        new() { RecordId = recordId, Text = text, Date = new DateOnly(2026, 1, 28), ObservedAtUtc = Observed };
+
+    [Fact]
     public async Task AnOfficialWithNoPublishedRecordGetsNoPageSoNoEmptyProfileExists()
     {
         var scenario = new PublicationScenario();

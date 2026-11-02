@@ -1,3 +1,4 @@
+using CivicLens.Application.Actions;
 using CivicLens.Application.Issues;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Publication;
@@ -25,6 +26,55 @@ public sealed class PublishedOfficialPageTests
         Assert.Contains("House roll call 100, Congress 119, session 1, HR 7, Congress 119. Result of the vote: Passed", records.TextContent, StringComparison.Ordinal);
         Assert.Contains("Yea", records.TextContent, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task ASponsoredBillRowShowsTheActionDateTheReadDateAndThePlainMeaningOfItsLatestAction()
+    {
+        var bill = Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1));
+        var page = Current([bill], []) with { BillStatuses = Statuses(bill, "Referred to the Committee on Armed Services.", "hr") };
+
+        var records = await PanelAsync(page, "panel-records");
+
+        Assert.Equal("Latest official action on 28 Jan 2026 (read from Congress.gov on 30 Jan 2026): In committee: sent to the Committee on Armed Services.",
+            records.QuerySelector("tbody .muted.small")!.TextContent);
+    }
+
+    [Theory]
+    [InlineData("Received in the Senate.", "hr", "Passed the House. Now in the Senate.")]
+    [InlineData("Received in the House.", "s", "Passed the Senate. Now in the House.")]
+    public async Task AReceivedActionNamesTheChamberThatPassedTheBillFromTheBillTypeOfTheRowSoTheLineSaysWhereTheBillIs(string text, string billType, string meaning)
+    {
+        var bill = Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1));
+        var page = Current([bill], []) with { BillStatuses = Statuses(bill, text, billType) };
+
+        var records = await PanelAsync(page, "panel-records");
+
+        Assert.Equal($"Latest official action on 28 Jan 2026 (read from Congress.gov on 30 Jan 2026): {meaning}", records.QuerySelector("tbody .muted.small")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ABillWithNoKnownMeaningShowsTheOfficialTextOnceAfterTheLeadSoTheLeadIsNotSaidTwice()
+    {
+        var bill = Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1));
+        var page = Current([bill], []) with { BillStatuses = Statuses(bill, "Introduced in House", "hr") };
+
+        var records = await PanelAsync(page, "panel-records");
+
+        Assert.Equal("Latest official action on 28 Jan 2026 (read from Congress.gov on 30 Jan 2026): Introduced in House.", records.QuerySelector("tbody .muted.small")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ABillWithNoStoredStatusAndOtherRecordsShowNoStatusLine()
+    {
+        var page = Current([Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1)), Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []);
+
+        var records = await PanelAsync(page, "panel-records");
+
+        Assert.DoesNotContain("Latest official action", records.TextContent, StringComparison.Ordinal);
+    }
+
+    private static Dictionary<string, ActionBillStatus> Statuses(PublishedRecordEntry bill, string text, string billType) =>
+        new() { [bill.RecordId] = new(new() { RecordId = bill.RecordId, Text = text, Date = new DateOnly(2026, 1, 28), ObservedAtUtc = new DateTimeOffset(2026, 1, 30, 9, 0, 0, TimeSpan.Zero) }, billType) };
 
     [Fact]
     public async Task AnExecutiveActionRowShowsItsSpecificTypeAndOtherRowsShowTheirKind()

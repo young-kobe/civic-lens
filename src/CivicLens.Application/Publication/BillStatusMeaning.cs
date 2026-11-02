@@ -16,13 +16,19 @@ public static partial class BillStatusMeaning
     private const string SpeakerTail = ", for a period to be subsequently determined by the Speaker, in each case for consideration of such provisions as fall within the jurisdiction of the committee concerned";
     private const string ChamberReferral = @"(?: and (?:Read twice and )?referred to the .+| ?\. Read twice\. Placed on .+|\.)?";
 
-    public static string Of(string text, string billType)
+    public static string Of(string text, string billType) => Known(text, billType) ?? UnmatchedPrefix + Sentence(text);
+
+    /// <summary>The meaning of a known text, or the official text as a sentence when no rule matches. It never adds the unmatched prefix.</summary>
+    public static string Plain(string text, string billType) => Known(text, billType) ?? Sentence(text);
+
+    private static string? Known(string text, string billType)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
         ArgumentException.ThrowIfNullOrWhiteSpace(billType);
-        return Subcommittee(text) ?? Committee(text) ?? Chamber(text, billType) ?? Calendar(text) ?? Reported(text, billType) ?? Law(text)
-            ?? UnmatchedPrefix + (text.EndsWith('.') ? text : text + ".");
+        return Subcommittee(text) ?? Committee(text) ?? Chamber(text, billType) ?? Calendar(text) ?? Reported(text, billType) ?? Law(text);
     }
+
+    private static string Sentence(string text) => text.EndsWith('.') ? text : text + ".";
 
     private static string? Subcommittee(string text) =>
         SubcommitteeText().Match(text) is { Success: true } match ? $"In committee: sent to the Subcommittee on {match.Groups["name"].Value}." : null;
