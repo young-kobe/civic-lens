@@ -360,6 +360,7 @@ This is an owner command. It prints the count of entries that it queued or moved
 
 ## Limits and planned work
 
+- A check in RetryWaiting does not requeue on a new revision. Its retry reads the current revision but keeps the old rejection reasons. This is rare, and the result is advice only.
 - A Blocked `noCitableRecords` week has no brief text for the new records, so nothing exists to approve or publish for it.
 - The manifest times of a release come from the build, not from the commit. See [publication](publication.md#invariants).
 - Records that changed after the week started are not new, so a brief never shows a later revision of an older record.
