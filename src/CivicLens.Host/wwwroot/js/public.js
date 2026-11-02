@@ -17,7 +17,11 @@
         const status = form.querySelector("[data-search-status]");
         const results = form.querySelector("[data-search-results]");
         const more = form.querySelector("[data-search-more]");
-        const kindLabels = new Map(Array.from(form.elements.namedItem("kind").options, option => [option.value, option.text]));
+        const hint = form.querySelector("[data-search-hint]");
+        const none = form.querySelector("[data-search-none]");
+        const optionLabels = name => new Map(Array.from(form.elements.namedItem(name).options, option => [option.value, option.text]));
+        const kindLabels = optionLabels("kind");
+        const issueLabels = optionLabels("issue");
         let nextCursor = null;
         let running = 0;
         const resultItem = hit => {
@@ -28,7 +32,7 @@
             link.textContent = hit.headline;
             const facts = document.createElement("span");
             facts.className = "cell-sub";
-            facts.textContent = [kindLabels.get(hit.kind), ...hit.officials.map(official => official.name), ...hit.issueIds, hit.eventDate && formatDay(hit.eventDate)]
+            facts.textContent = [kindLabels.get(hit.kind), ...hit.officials.map(official => official.name), ...hit.issueIds.map(id => issueLabels.get(id) ?? id), hit.eventDate && formatDay(hit.eventDate)]
                 .filter(Boolean).join(" \u00B7 ");
             item.append(link, facts);
             if (hit.snippet) {
@@ -58,8 +62,11 @@
         };
         const run = async append => {
             const params = formParams();
-            if (append) params.set("cursor", nextCursor); else reset();
             const mine = ++running;
+            if (append) params.set("cursor", nextCursor); else reset();
+            hint.hidden = params.size > 0;
+            none.hidden = true;
+            if (params.size === 0) { status.textContent = ""; return; }
             status.textContent = "Searching.";
             let response;
             try { response = await fetch(`${api}/v1/search?${params}`); }
@@ -72,7 +79,8 @@
             if (append) results.append(...items); else results.replaceChildren(...items);
             nextCursor = page.nextCursor;
             more.hidden = nextCursor === null;
-            status.textContent = results.children.length === 0 ? "No records match." : `Showing ${results.children.length} records from release ${page.release}.`;
+            none.hidden = results.children.length > 0;
+            status.textContent = results.children.length === 0 ? "" : `Showing ${results.children.length} records from release ${page.release}.`;
         };
         let address = location.search;
         const writeAddress = (params, replace) => {
@@ -89,8 +97,7 @@
                 field.value = query.get(field.name) ?? "";
                 if (field instanceof HTMLSelectElement && field.selectedIndex === -1) field.value = "";
             }
-            if (formParams().toString() !== "") run(false);
-            else { running++; reset(); status.textContent = ""; }
+            run(false);
         };
         form.closest("section").hidden = false;
         restoreFromAddress();

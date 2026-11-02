@@ -16,6 +16,11 @@
     }
     else
     {
+        <noscript>
+            <div class="notice notice-warn">
+                <span>Search needs JavaScript. Without it, browse by <a href="@PublicationProtocol.FacetsPath">issue or policy area</a> or by <a href="@PublicationProtocol.OfficialsPagePath">official</a>, or see <a href="@PublicationProtocol.AllRecordsPagePath(1)">all records</a>.</span>
+            </div>
+        </noscript>
         <Panel Title="Search records" Padded="true" hidden>
             <form class="release-search" data-search-api="@PublicApiUrl">
                 <input class="search" type="search" name="q" aria-label="Search records" placeholder="Search records" maxlength="200" />
@@ -70,7 +75,9 @@
                     <Field Label="To" For="search-to"><input id="search-to" name="to" type="date" /></Field>
                 </div>
                 <div class="row"><Button Type="submit" Variant="ButtonVariant.Primary">Search</Button></div>
+                <p class="field-hint" data-search-hint>Type a topic, a bill number, or an official's name.</p>
                 <p class="field-hint" role="status" data-search-status></p>
+                <p class="field-hint" data-search-none hidden>No records match. Try fewer words, or a bill number such as H.R. 1. You can also browse <a href="@PublicationProtocol.FacetsPath">Issues</a> and <a href="@PublicationProtocol.OfficialsPagePath">Officials</a>.</p>
                 <ol class="search-results" data-search-results></ol>
                 <Button data-search-more hidden="hidden">More results</Button>
             </form>
@@ -78,7 +85,6 @@
         <Panel Title="How search works" Padded="true">
             <p>Search reads the headline, the summary, the quoted text, and the first @SourceTextLimit characters of each source text. A word in the headline ranks above the same word in the source text. Longer source texts are cut off at that limit.</p>
             <p>A date filter matches the date of the event. Records without one do not match.</p>
-            <p>Search needs JavaScript. Without it, browse by <a href="@PublicationProtocol.FacetsPath">issue or policy area</a> or by <a href="@PublicationProtocol.OfficialsPagePath">official</a>, or see <a href="@PublicationProtocol.AllRecordsPagePath(1)">all records</a>.</p>
         </Panel>
     }
 </PublicPage>
