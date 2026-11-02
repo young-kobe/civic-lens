@@ -133,7 +133,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
 
         async Task<PublishedVoteFigures> PreviousFiguresAsync(int older)
         {
-            var unchanged = !rewritePast && !congressesChanged && !rowsInMemory.ContainsKey(older);
+            var unchanged = !rewritePast && !rowsInMemory.ContainsKey(older);
             if (unchanged && previous.Summaries.GetValueOrDefault(profile.Id)?.Previous is { } carried && carried.Congress == older) return carried;
             return ReleaseOfficialSummaries.FiguresOf(older, await RowsAsync(older));
         }

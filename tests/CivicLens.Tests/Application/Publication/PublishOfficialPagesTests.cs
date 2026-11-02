@@ -162,6 +162,35 @@ public sealed class PublishOfficialPagesTests
     }
 
     [Fact]
+    public async Task ANewVoteInTheOlderCongressChangesThePreviousFiguresAndAReplacementThatRemovesOneOfHerVotesLowersThemSoACarriedRowNeverGoesStale()
+    {
+        var scenario = new PublicationScenario();
+        var older = scenario.AddVote('a', congress: 118);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, older), new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('b'))));
+
+        var added = await PublishAsync(scenario, "k2", PublishedRecordKind.Vote, scenario.AddVote('c', congress: 118));
+        Assert.Equal(2, Assert.Single(Summaries(scenario, added)["mayor"].Previous!.Attendance).Held);
+
+        var review = scenario.Votes.Publishable[older].Review;
+        var revised = review.CurrentRevision with { RevisionNumber = 2, Members = [review.CurrentRevision.Members[0] with { PersonId = "chair" }] };
+        scenario.Votes.Publishable[older] = scenario.Votes.Publishable[older] with
+        {
+            Review = review with
+            {
+                CurrentRevision = revised,
+                Revisions = review.Revisions.Add(revised),
+                Decisions = review.Decisions.Add(PublicationScenario.Decision(older, 2, ReviewDecisionKind.Approve, 2) with { CorrectionNote = PublicationScenario.PersonNote }),
+                ReviewStateVersion = 2
+            }
+        };
+        var replaced = await ReplaceAsync(scenario, "k3", PublishedRecordKind.Vote, older);
+
+        Assert.Equal(1, Assert.Single(Summaries(scenario, replaced)["mayor"].Previous!.Attendance).Held);
+        Assert.Equal(118, Summaries(scenario, replaced)["chair"].Congress);
+    }
+
+    [Fact]
     public async Task ARewriteOfAllOfficialsComputesThePreviousFiguresAgainSoItCorrectsACarriedRow()
     {
         var scenario = new PublicationScenario();
