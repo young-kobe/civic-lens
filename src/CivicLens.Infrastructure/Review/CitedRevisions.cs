@@ -62,7 +62,7 @@ internal static class CitedRevisions
         return [.. rows.Select(row => new PublishedRevisionBinding(kind, row.RecordId, row.RevisionNumber))];
     }
 
-    private static void RequireKind(PublishedRecordKind kind, PublishedRevisionBinding[] bindings, string parameterName)
+    public static void RequireKind(PublishedRecordKind kind, PublishedRevisionBinding[] bindings, string parameterName)
     {
         if (bindings.Any(binding => binding.Kind != kind))
             throw new ArgumentException($"Every named revision must be a {kind} revision.", parameterName);

@@ -48,7 +48,7 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
         var returnedActions = build.Returned.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId);
         var votesOnChangedBills = await loaders.Votes.FindOnBillsOfActionsAsync(
             build.Removed.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId).Concat(returnedActions),
-            cancellationToken);
+            build.ReleaseRecords, cancellationToken);
         var changedStatuses = ReleaseBillStatuses.ChangedActionIds(
             ReleaseBillStatuses.ActionIdsOf(build.ReleaseRecords), build.Previous, build.BillStatuses);
         var skipped = SkippedRecords(build, additions);

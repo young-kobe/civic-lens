@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Publication;
@@ -135,16 +136,7 @@ public sealed partial class PostgresHouseVoteTests
         var newerBill = new string('8', 64);
         await InsertActionDraftAsync(publishedBill, "hconres", 14);
         await InsertActionDraftAsync(newerBill, "hr", 99);
-        var newer = new string('1', 64);
-        await ExecuteAsync($"""
-            SET session_replication_role = replica;
-            INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
-                bill_type, bill_number, detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
-            SELECT '{newer}', source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks + 1,
-                'hr', 99, 'newer-detail', 'newer-members', detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks
-            FROM vote_candidates WHERE candidate_id = (SELECT candidate_id FROM vote_drafts WHERE record_id = '{recordId}');
-            UPDATE vote_drafts SET candidate_id = '{newer}' WHERE record_id = '{recordId}';
-            """);
+        await MoveCurrentCandidateToBillAsync(recordId, "hr", 99);
 
         var found = await VoteReviews().FindBillActionRecordIdsOfVotesAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
 
@@ -160,9 +152,26 @@ public sealed partial class PostgresHouseVoteTests
         await InsertActionDraftAsync(sameBill, "hconres", 14);
         await InsertActionDraftAsync(otherBill, "hr", 14);
 
-        Assert.Equal([recordId], [.. await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([sameBill, otherBill], default)]);
-        Assert.Empty(await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([otherBill], default));
-        Assert.Empty(await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([], default));
+        ImmutableArray<PublishedRevisionBinding> published = [new(PublishedRecordKind.Vote, recordId, 1)];
+        Assert.Equal([recordId], [.. await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([sameBill, otherBill], published, default)]);
+        Assert.Empty(await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([otherBill], published, default));
+        Assert.Empty(await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([], published, default));
+        Assert.Empty(await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([sameBill], [], default));
+    }
+
+    [Fact]
+    public async Task FindVoteRecordIdsOnBillsOfActionsUsesTheBillOfThePublishedRevisionAndNotTheBillOfTheCurrentCandidate()
+    {
+        var recordId = await ApprovedVoteAsync();
+        var publishedBill = new string('7', 64);
+        var newerBill = new string('8', 64);
+        await InsertActionDraftAsync(publishedBill, "hconres", 14);
+        await InsertActionDraftAsync(newerBill, "hr", 99);
+        await MoveCurrentCandidateToBillAsync(recordId, "hr", 99);
+        ImmutableArray<PublishedRevisionBinding> published = [new(PublishedRecordKind.Vote, recordId, 1)];
+
+        Assert.Equal([recordId], [.. await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([publishedBill], published, default)]);
+        Assert.Empty(await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([newerBill], published, default));
     }
 
     [Fact]
@@ -224,6 +233,20 @@ public sealed partial class PostgresHouseVoteTests
         var recordId = await RecordIdAsync(candidate);
         await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
         return recordId;
+    }
+
+    private Task MoveCurrentCandidateToBillAsync(string recordId, string billType, int billNumber)
+    {
+        var newer = new string('1', 64);
+        return ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
+                bill_type, bill_number, detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
+            SELECT '{newer}', source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks + 1,
+                '{billType}', {billNumber}, 'newer-detail', 'newer-members', detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks
+            FROM vote_candidates WHERE candidate_id = (SELECT candidate_id FROM vote_drafts WHERE record_id = '{recordId}');
+            UPDATE vote_drafts SET candidate_id = '{newer}' WHERE record_id = '{recordId}';
+            """);
     }
 
     private Task InsertActionDraftAsync(string recordId, string billType, int billNumber) => ExecuteAsync($"""

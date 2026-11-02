@@ -127,10 +127,19 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         CancellationToken cancellationToken)
     {
         if (revisions.IsEmpty) return [];
+        var requested = revisions.Distinct().ToArray();
+        CitedRevisions.RequireKind(PublishedRecordKind.Vote, requested, nameof(revisions));
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var json = await CitedRevisions.ReadRevisionJsonAsync(db, PublishedRecordKind.Vote, revisions, cancellationToken);
-        return [.. json.Select(item => ReviewJson.Deserialize<VoteDraftRevision>(item, "vote revision"))
-            .SelectMany(revision => revision.OfficialIds().Select(personId => new VoteMembership(revision.RecordId, personId)))];
+        var rows = await db.Database.SqlQueryRaw<StoredVoteMember>("""
+                SELECT k.id AS "VoteRecordId", r.record_id IS NOT NULL AS "IsStored", m.person_id AS "PersonId"
+                FROM unnest({0}, {1}) AS k(id, number)
+                LEFT JOIN vote_revisions r ON r.record_id = k.id AND r.revision_number = k.number
+                LEFT JOIN LATERAL (SELECT DISTINCT e ->> 'personId' AS person_id
+                                   FROM jsonb_array_elements(r.revision_json::jsonb -> 'members') e) m ON true
+                """, requested.Select(binding => binding.RecordId).ToArray(), requested.Select(binding => binding.RevisionNumber).ToArray())
+            .ToArrayAsync(cancellationToken);
+        if (rows.Any(row => !row.IsStored)) throw new InvalidDataException("A named Vote revision is not stored.");
+        return [.. rows.Where(row => row.PersonId is not null).Select(row => new VoteMembership(row.VoteRecordId, row.PersonId!))];
     }
 
     public async Task<IReadOnlyDictionary<string, ImmutableArray<string>>> FindBillActionRecordIdsOfVotesAsync(
@@ -151,16 +160,20 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
     }
 
     public async Task<IReadOnlySet<string>> FindVoteRecordIdsOnBillsOfActionsAsync(ImmutableArray<string> actionRecordIds,
-        CancellationToken cancellationToken)
+        ImmutableArray<PublishedRevisionBinding> voteRevisions, CancellationToken cancellationToken)
     {
-        if (actionRecordIds.IsEmpty) return new HashSet<string>();
+        if (actionRecordIds.IsEmpty || voteRevisions.IsEmpty) return new HashSet<string>();
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var requested = voteRevisions.Distinct().ToArray();
         var found = await db.Database.SqlQueryRaw<string>("""
-                SELECT DISTINCT d.record_id AS "Value" FROM vote_drafts d
-                JOIN vote_candidates c ON c.candidate_id = d.candidate_id
-                JOIN action_drafts a ON a.congress = c.congress AND a.bill_type = c.bill_type AND a.bill_number = c.bill_number
+                SELECT DISTINCT r.record_id AS "Value"
+                FROM unnest({1}, {2}) AS k(id, number)
+                JOIN vote_revisions r ON r.record_id = k.id AND r.revision_number = k.number
+                JOIN action_drafts a ON a.congress = (r.revision_json::jsonb ->> 'congress')::int
+                  AND a.bill_type = r.revision_json::jsonb ->> 'billType' AND a.bill_number = (r.revision_json::jsonb ->> 'billNumber')::int
                 WHERE a.record_id = ANY({0})
-                """, (object)actionRecordIds.ToArray()).ToArrayAsync(cancellationToken);
+                """, (object)actionRecordIds.ToArray(), requested.Select(binding => binding.RecordId).ToArray(),
+                requested.Select(binding => binding.RevisionNumber).ToArray()).ToArrayAsync(cancellationToken);
         return found.ToHashSet(StringComparer.Ordinal);
     }
 
@@ -204,6 +217,8 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
             .ToDictionaryAsync(row => row.CandidateId, row => row.ConfigurationRevisionId, StringComparer.Ordinal, cancellationToken);
         return await ConfiguredPersonNames.ReadAsync(db, candidateIds, revisionIds, cancellationToken);
     }
+
+    private sealed record StoredVoteMember(string VoteRecordId, bool IsStored, string? PersonId);
 
     private sealed record StoredVoteBill(string VoteRecordId, int Congress, string? BillType, int? BillNumber);
 }
