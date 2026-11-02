@@ -15,8 +15,8 @@
                 <TableCell Header Class="fit num">@PublicColumn.WeekOf</TableCell>
                 <TableCell Header Class="fit num">@PublicColumn.FirstPublished</TableCell>
                 break;
-            case RecordTableColumns.FirstPublished:
-                <TableCell Header Class="fit num" Sort="@Sortable(SortKind.Date)" SortKey="@Key("published")">@PublicColumn.FirstPublished</TableCell>
+            case RecordTableColumns.Dated:
+                <TableCell Header Class="fit num" Sort="@Sortable(SortKind.Date)" SortKey="@Key("date")">@PublicColumn.Date</TableCell>
                 break;
         }
     </Head>
@@ -32,8 +32,8 @@
                 <TableCell Class="fit num" Label="@PublicColumn.WeekOf">@Moment.Day(ReleaseRecordOrder.Day(entry))</TableCell>
                 <TableCell Class="time fit num" Label="@PublicColumn.FirstPublished"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></TableCell>
                 break;
-            case RecordTableColumns.FirstPublished:
-                <TableCell Class="time fit num" Label="@PublicColumn.FirstPublished"><Timestamp Value="entry.FirstPublishedAtUtc" Format="TimestampFormat.Day" /></TableCell>
+            case RecordTableColumns.Dated:
+                <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Day(ReleaseRecordOrder.Day(entry))</TableCell>
                 break;
         }
     </Row>

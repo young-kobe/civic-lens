@@ -258,14 +258,7 @@
             return cell;
         },
         officials: hit => hit.officials.map(official => official.name).join(", "),
-        date: hit => formatDay(hit.eventDate ?? hit.firstPublishedAtUtc),
-        published: hit => {
-            const time = document.createElement("time");
-            time.dateTime = hit.firstPublishedAtUtc;
-            time.title = `${formatDay(hit.firstPublishedAtUtc)}, ${hit.firstPublishedAtUtc.slice(11, 16)} UTC`;
-            time.textContent = formatDay(hit.firstPublishedAtUtc);
-            return time;
-        }
+        date: hit => formatDay(hit.eventDate ?? hit.firstPublishedAtUtc)
     };
     const hitRow = (hit, source, headers) => {
         const row = document.createElement("tr");
@@ -274,7 +267,7 @@
             const content = hitCells[column](hit, source);
             const cell = content instanceof HTMLTableCellElement ? content : document.createElement("td");
             if (cell !== content) {
-                cell.className = `${headers[index].className}${column === "published" ? " time" : ""}`.trim();
+                cell.className = headers[index].className;
                 cell.setAttribute("role", "cell");
                 cell.append(content);
             }

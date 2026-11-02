@@ -37,7 +37,7 @@ public sealed class PublishedOfficialPageTests
 
         var badges = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-records']")!.QuerySelectorAll("tbody .badge, tbody [class*=badge]")
             .Select(badge => badge.TextContent.Trim());
-        Assert.Equal(["Proclamation", "Action"], badges);
+        Assert.Equal(["Proclamation", "Bill or resolution"], badges);
     }
 
     [Fact]
@@ -128,12 +128,12 @@ public sealed class PublishedOfficialPageTests
     public async Task TheRecordsCountLineCountsEachKindAndTheVotesWithTheirCongressSoNoCountHasAnUnstatedScope()
     {
         var page = Current(
-            [Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)), Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1))],
+            [Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)), Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1)), Entry('5', PublishedRecordKind.Action, new DateOnly(2026, 5, 2))],
             [Vote('3', new DateOnly(2026, 4, 1)), Vote('4', new DateOnly(2025, 12, 1))]);
 
         var records = await PanelAsync(page, "panel-records");
 
-        Assert.Equal("This list holds 4 published records: 1 statement, 1 action and 2 votes in the 119th Congress. Rows are newest first.", records.QuerySelector("p.muted")!.TextContent);
+        Assert.Equal("This list holds 5 published records: 1 statement, 2 bills and resolutions and 2 votes in the 119th Congress. Rows are newest first.", records.QuerySelector("p.muted")!.TextContent);
     }
 
     [Fact]
@@ -586,7 +586,7 @@ public sealed class PublishedOfficialPageTests
         var document = await RenderedWithCountsAsync();
 
         var tabs = document.QuerySelectorAll("[data-records] [data-record-filters] [data-filter-value]").ToArray();
-        Assert.Equal(["All records 9", "Statements 4", "Actions 2", "Votes 3"], tabs.Select(TabText));
+        Assert.Equal(["All records 9", "Statements 4", "Bills and resolutions 2", "Votes 3"], tabs.Select(TabText));
         foreach (var tab in tabs.Skip(1))
         {
             var rows = document.QuerySelectorAll($"[data-records] tbody tr.{tab.GetAttribute("data-filter-value")}");
