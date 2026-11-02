@@ -106,7 +106,7 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
         var added = full.NewRecords.ToHashSet();
         var fitting = ShareLimitBetweenKinds([.. ready.Where(record => added.Contains(record.Reference)).GroupBy(record => record.Kind)
             .Select(kind => (IReadOnlyList<ReadyToPublishRecord>)[.. kind])], full.FreeSlots);
-        logger.LogError("The release holds {Cap} records. {Waiting} new records wait for room. Take records off the site or raise the cap.",
+        logger.LogError("The release holds {Cap} records. {Waiting} new records of this batch wait for room. Raise the cap.",
             PublicationProtocol.MaximumRecordsPerRelease, added.Count - fitting.Length);
         return [.. ready.Where(record => !added.Contains(record.Reference)), .. fitting];
     }

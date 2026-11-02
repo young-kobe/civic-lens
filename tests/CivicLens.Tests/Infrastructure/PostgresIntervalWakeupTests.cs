@@ -79,6 +79,20 @@ public sealed class PostgresIntervalWakeupTests(PostgresCollection postgres) : I
         Assert.True(elapsing.IntervalElapsed);
     }
 
+    [Fact]
+    public async Task ANotificationWakeAfterACrossedBoundaryReportsItBecauseNoIntervalWakeMayBeLost()
+    {
+        await using var wakeup = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_crossed_test", TimeSpan.FromSeconds(2));
+        await wakeup.ConnectAsync(default);
+        await Task.Delay(TimeSpan.FromSeconds(2.5));
+        await NotifyDeadlineAsync("civic_lens_crossed_test", 0.1);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        await wakeup.WaitAsync(timeout.Token);
+
+        Assert.True(wakeup.IntervalElapsed);
+    }
+
     private async Task NotifyDeadlineAsync(string channel, double secondsFromNow)
     {
         await using var connection = new NpgsqlConnection(connectionString);

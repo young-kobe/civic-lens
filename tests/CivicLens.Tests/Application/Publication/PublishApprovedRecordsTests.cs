@@ -263,7 +263,7 @@ public sealed class PublishApprovedRecordsTests
 
         Assert.Equal([replaced, first], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
         var error = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
-        Assert.Contains("1 new records wait", error.Message);
+        Assert.Contains("1 new records of this batch wait", error.Message);
     }
 
     [Fact]
@@ -427,7 +427,7 @@ public sealed class PublishApprovedRecordsTests
     }
 
     [Fact]
-    public async Task ManyRowsThatAreNotReadyDoNotHideAnOlderReadyRecordBecauseTheReadRepeatsWithoutThem()
+    public async Task ManyRowsThatAreNotReadyDoNotHideAReadyRecordBecauseTheReadRepeatsWithoutThem()
     {
         var scenario = new PublicationScenario();
         for (var index = 0; index < PublishRelease.MaximumRecords + 6; index++)
@@ -673,34 +673,13 @@ public sealed class PublishApprovedRecordsTests
         return scenario;
     }
 
-    // One published action plus filler entries leave the given number of free slots in the active release.
     private static async Task<PublicationScenario> ScenarioAtTheCapAsync(int freeSlots)
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('a', ApprovedByCode('a'));
         scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
-        var directory = scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName];
-        var manifest = JsonSerializer.Deserialize<PublicationRelease>(directory[PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
-        var fillers = Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease - freeSlots - manifest.Records.Length).Select(index =>
-            new PublishedRecordEntry
-            {
-                IssueIds = [],
-                Kind = PublishedRecordKind.DocumentChange,
-                Officials = [],
-                PolicyAreaIds = [],
-                RecordId = index.ToString("x32"),
-                RevisionNumber = 1,
-                Headline = $"Filler {index}",
-                FirstPublishedAtUtc = PublicationScenario.ApprovedAt
-            }).ToArray();
-        foreach (var filler in fillers)
-        {
-            directory[PublicationProtocol.RecordDataPath(filler.RecordId)] = [];
-            directory[PublicationProtocol.RecordPagePath(filler.RecordId)] = [];
-        }
-        directory[PublicationProtocol.ManifestPath] =
-            JsonSerializer.SerializeToUtf8Bytes(manifest with { Records = [.. manifest.Records, .. fillers] }, PublicationProtocol.JsonOptions);
+        scenario.FillActiveReleaseToTheCap(freeSlots);
         return scenario;
     }
 

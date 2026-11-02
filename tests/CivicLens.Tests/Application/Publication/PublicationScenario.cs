@@ -172,6 +172,32 @@ internal sealed class PublicationScenario
         Publications.ActiveReleaseNumber = 1;
     }
 
+    // Adds filler entries to the active release, so that it leaves the given number of free slots.
+    public void FillActiveReleaseToTheCap(int freeSlots)
+    {
+        var directory = Releases.Directories[Publications.Committed[^1].DirectoryName];
+        var manifest = JsonSerializer.Deserialize<PublicationRelease>(directory[PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
+        var fillers = Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease - freeSlots - manifest.Records.Length - manifest.Withdrawals.Length)
+            .Select(index => new PublishedRecordEntry
+            {
+                IssueIds = [],
+                Kind = PublishedRecordKind.DocumentChange,
+                Officials = [],
+                PolicyAreaIds = [],
+                RecordId = index.ToString("x32"),
+                RevisionNumber = 1,
+                Headline = $"Filler {index}",
+                FirstPublishedAtUtc = ApprovedAt
+            }).ToArray();
+        foreach (var filler in fillers)
+        {
+            directory[PublicationProtocol.RecordDataPath(filler.RecordId)] = [];
+            directory[PublicationProtocol.RecordPagePath(filler.RecordId)] = [];
+        }
+        directory[PublicationProtocol.ManifestPath] =
+            JsonSerializer.SerializeToUtf8Bytes(manifest with { Records = [.. manifest.Records, .. fillers] }, PublicationProtocol.JsonOptions);
+    }
+
     public void SeedReleaseOfAnotherSchemaVersion()
     {
         var manifest = new JsonObject

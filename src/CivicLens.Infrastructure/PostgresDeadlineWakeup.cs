@@ -44,8 +44,13 @@ internal sealed class PostgresDeadlineWakeup(string connectionString, string cha
     {
         var current = connection ?? throw new InvalidOperationException("Wakeup is not connected.");
         await WaitForDeadlineAsync(current, cancellationToken);
+        if (intervalTicks == 0)
+        {
+            IntervalElapsed = false;
+            return;
+        }
         var now = await ReadDatabaseTicksAsync(current, cancellationToken);
-        IntervalElapsed = intervalTicks > 0 && now / intervalTicks > lastWakeTicks / intervalTicks;
+        IntervalElapsed = now / intervalTicks > lastWakeTicks / intervalTicks;
         lastWakeTicks = now;
     }
 
