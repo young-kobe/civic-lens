@@ -48,6 +48,39 @@ public sealed class PublishedBoardPageTests
     }
 
     [Fact]
+    public async Task TheLeftOutPanelNamesTheCongressOfTheFiguresSoAReaderKnowsWhichOfficialsAreNotInIt()
+    {
+        var document = await RenderAsync(new OfficialBoardPage(Board, 118, [], 0, 2, 0));
+
+        Assert.Contains("Three lists of the House Democrats in the 118th Congress.", document.QuerySelector("main")!.TextContent);
+        Assert.Contains("2 officials with no vote figures in this chamber in the 118th Congress.", document.QuerySelector("[aria-labelledby='panel-what-this-page-leaves-out']")!.TextContent);
+    }
+
+    [Fact]
+    public async Task AKeptBoardSaysWhyItShowsTheEarlierCongressNamesTheCongressOfTheRollCallAndLinksThePagesOfThatCongress()
+    {
+        var page = new OfficialBoardPage(Board, 118, [Member("Ada Rep", 30, 3, missed: 1, held: 400, earlierPage: true)], 0, 0, 0, 119);
+
+        var document = await RenderAsync(page);
+
+        var text = document.QuerySelector("main")!.TextContent;
+        Assert.Contains("The 119th Congress has no member with 25 split votes yet, so this page keeps the 118th Congress.", text);
+        Assert.Contains("The newest roll call counted here, in the 118th Congress, is on", text);
+        Assert.Contains("No count includes a later day.", text);
+        var links = document.QuerySelectorAll("main table a").Select(link => link.GetAttribute("href")).Distinct().ToList();
+        Assert.Equal(["officials/ada-rep/118.html"], links);
+    }
+
+    [Fact]
+    public async Task ABoardAtTheNewestCongressHasNoKeptNoticeAndLinksTheCurrentPage()
+    {
+        var document = await RenderAsync(Page(Member("Ada Rep", 30, 3, missed: 1, held: 400)));
+
+        Assert.DoesNotContain("keeps the", document.QuerySelector("main")!.TextContent);
+        Assert.Equal(["officials/ada-rep.html"], document.QuerySelectorAll("main table a").Select(link => link.GetAttribute("href")).Distinct());
+    }
+
+    [Fact]
     public async Task APageWithNoCongressSaysSoAndStillListsWhatItLeavesOut()
     {
         var document = await RenderAsync(new OfficialBoardPage(Board, null, [], 8, 0, 0));
@@ -75,9 +108,12 @@ public sealed class PublishedBoardPageTests
 
     private static OfficialBoardPage Page(params BoardMember[] members) => new(Board, 119, [.. members], 0, 0, 0);
 
-    private static BoardMember Member(string name, int cast, int breaks, int missed, int held) =>
-        new(new OfficialListing(new PublishedOfficialProfile { Id = name.ToLowerInvariant().Replace(' ', '-'), Name = name, Terms = [] }, 0), cast, breaks,
-            new MissedVotes(PublishedChamber.House, missed, held, new DateOnly(2025, 1, 3), new DateOnly(2026, 10, 27)));
+    private static BoardMember Member(string name, int cast, int breaks, int missed, int held, bool earlierPage = false)
+    {
+        var official = new OfficialListing(new PublishedOfficialProfile { Id = name.ToLowerInvariant().Replace(' ', '-'), Name = name, Terms = [] }, 0);
+        return new(official, cast, breaks, new MissedVotes(PublishedChamber.House, missed, held, new DateOnly(2025, 1, 3), new DateOnly(2026, 10, 27)),
+            earlierPage ? PublicationProtocol.OfficialCongressPagePath(official.Profile.Id, 118) : official.PagePath);
+    }
 
     [Theory]
     [InlineData(1, 400, "1 of 400 split votes (under 1%)")]

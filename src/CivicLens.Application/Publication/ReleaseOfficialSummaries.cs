@@ -9,30 +9,48 @@ namespace CivicLens.Application.Publication;
 /// </summary>
 internal static class ReleaseOfficialSummaries
 {
-    public static PublishedOfficialSummary Of(string officialId, int? congress, TalkAndActionProfile? profile) =>
-        profile is null
+    public static PublishedOfficialSummary Of(string officialId, int? congress, TalkAndActionProfile? profile, PublishedVoteFigures? previous) =>
+        profile is null || congress is null
             ? PublishedOfficialSummary.Empty(officialId)
             : new()
             {
                 Id = officialId,
                 Congress = congress,
                 CosponsoredBills = null,
-                PartyVotes = [.. profile.WithPartyByChamber.Select(party => new PublishedPartyVoteSummary
-                {
-                    Chamber = party.Chamber,
-                    Party = party.Party,
-                    SplitVotesCast = party.Cast,
-                    Breaks = party.Breaks.Length
-                })],
-                Attendance = [.. profile.MissedByChamber.Select(missed => new PublishedAttendanceSummary
-                {
-                    Chamber = missed.Chamber,
-                    Held = missed.Held,
-                    Missed = missed.Missed,
-                    First = missed.First,
-                    Last = missed.Last
-                })]
+                PartyVotes = PartyVotesOf(profile.WithPartyByChamber),
+                Attendance = AttendanceOf(profile.MissedByChamber),
+                Previous = previous
             };
+
+    public static PublishedVoteFigures FiguresOf(int congress, IEnumerable<PublishedOfficialVote> votes)
+    {
+        var rows = votes.ToArray();
+        return new()
+        {
+            Congress = congress,
+            PartyVotes = PartyVotesOf(VotesWithParty.Of(rows)),
+            Attendance = AttendanceOf(MissedVotes.Of(rows))
+        };
+    }
+
+    private static PublishedPartyVoteSummary[] PartyVotesOf(IEnumerable<VotesWithParty> parties) =>
+        [.. parties.Select(party => new PublishedPartyVoteSummary
+        {
+            Chamber = party.Chamber,
+            Party = party.Party,
+            SplitVotesCast = party.Cast,
+            Breaks = party.Breaks.Length
+        })];
+
+    private static PublishedAttendanceSummary[] AttendanceOf(IEnumerable<MissedVotes> missed) =>
+        [.. missed.Select(row => new PublishedAttendanceSummary
+        {
+            Chamber = row.Chamber,
+            Held = row.Held,
+            Missed = row.Missed,
+            First = row.First,
+            Last = row.Last
+        })];
 
     public static Dictionary<string, int>? CosponsoredCounts(IEnumerable<PublishedRecordEntry> entries)
     {
