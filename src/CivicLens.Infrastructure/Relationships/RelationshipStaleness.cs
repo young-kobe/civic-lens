@@ -28,7 +28,7 @@ internal static class RelationshipStaleness
         JOIN unnest({1}, {2}, {3}) AS f(pair_id, fingerprint, target_revision) ON f.pair_id = a.pair_id
         WHERE a.task = {0}
           AND (a.status = 'Succeeded' OR a.status = 'Blocked' AND a.error_code = '{{RelationshipDraftErrorCodes.SideNotApproved}}')
-          AND NOT EXISTS (SELECT 1 FROM relationship_drafts d WHERE d.record_id = a.pair_id AND d.review_status = 'Approved')
+          AND NOT EXISTS (SELECT 1 FROM relationship_drafts d WHERE d.record_id = a.pair_id AND d.review_status IN ('Approved', 'Rejected'))
           AND (f.fingerprint IS DISTINCT FROM {{SettledFingerprint("a.pair_id")}}
                OR {{SettledReason("a.pair_id")}} IS DISTINCT FROM '{{RelationshipDraftErrorCodes.NoRelationship}}' AND EXISTS (SELECT 1 FROM relationship_drafts d JOIN relationship_revisions r
                             ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number

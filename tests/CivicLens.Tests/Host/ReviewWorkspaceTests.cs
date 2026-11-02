@@ -304,6 +304,39 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task RejectingNeedsAReasonFromTheListAndTheEditorShowsTheRejectionAndAPersonCanStillApproveItAsync()
+    {
+        await SaveComparisonAsync("Hours: 9 to 5.\n", "Hours: 10 to 4.\n");
+        SignIn(Owner);
+        var editorUrl = await StartFirstDraftAsync();
+        await SaveReadyRevisionAsync(editorUrl, "Office hours shortened");
+
+        var before = await host.GetDocumentAsync(editorUrl);
+        Assert.Equal(["Choose a reason", "Not a statement", "Wrong speaker", "Index or menu page", "Too little substance",
+            "Summary does not match the source", "Duplicate of another record"],
+            before.QuerySelectorAll("#Decision_ReasonCode option").Select(option => option.TextContent));
+
+        using var withoutReason = await DecideAsync(editorUrl, "Reject");
+        Assert.Equal(HttpStatusCode.BadRequest, withoutReason.StatusCode);
+        var invalid = await ParseAsync(withoutReason);
+        Assert.Contains("Rejecting needs a reason from the list.", invalid.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
+
+        using var rejected = await DecideAsync(editorUrl, "Reject", reasonCode: "IndexPage");
+        Assert.Equal(HttpStatusCode.Redirect, rejected.StatusCode);
+
+        var editor = await host.GetDocumentAsync(editorUrl);
+        Assert.Equal("Rejected", editor.QuerySelector(".page-header .badge")!.TextContent);
+        Assert.Null(editor.QuerySelector("#decision-form button[value='Reject']"));
+        Assert.Null(editor.QuerySelector("#Decision_ReasonCode"));
+        Assert.Contains("Reason: Index or menu page.", editor.QuerySelector("[aria-labelledby='history'] tbody")!.TextContent, StringComparison.Ordinal);
+
+        await ApproveAsync(editorUrl);
+
+        editor = await host.GetDocumentAsync(editorUrl);
+        Assert.Equal("Approved, private", editor.QuerySelector(".page-header .badge")!.TextContent);
+    }
+
+    [Fact]
     public async Task RetainedEvidenceIsShownAsTextNeverAsMarkupAsync()
     {
         const string untrustedSource = "<img src=x onerror=alert(1)>";
@@ -726,11 +759,12 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     private async Task<HttpResponseMessage> DecideAsync(string editorUrl, string kind, string? note = null,
-        IEnumerable<string>? resolved = null, string? correctionNote = null)
+        IEnumerable<string>? resolved = null, string? correctionNote = null, string? reasonCode = null)
     {
         var editor = await host.GetDocumentAsync(editorUrl);
         var fields = Fields(editor.QuerySelector("#decision-form")!);
         Set(fields, "kind", kind);
+        if (reasonCode is not null) Set(fields, "Decision.ReasonCode", reasonCode);
         if (note is not null) Set(fields, "Decision.Note", note);
         if (correctionNote is not null) Set(fields, "Decision.CorrectionNote", correctionNote);
         foreach (var id in resolved ?? []) fields.Add(new("Decision.ResolvedDecisionIds", id));

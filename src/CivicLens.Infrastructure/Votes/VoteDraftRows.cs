@@ -25,6 +25,7 @@ internal static class VoteDraftRows
             return VoteDraftErrorCodes.SupersededByNewerCandidate;
         var draft = await db.Set<VoteDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return VoteDraftErrorCodes.RevisionConflict;
+        if (draft?.ReviewStatus == ReviewStatus.Rejected) return VoteDraftErrorCodes.RecordRejected;
         if (draft is null) db.Add(draft = NewDraft(revision));
         await Records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision, runId), await Records.ReadCycleAsync(db, draft, cancellationToken),
             () => ApprovalCheck.OfAsync(() => PostgresVoteReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)));

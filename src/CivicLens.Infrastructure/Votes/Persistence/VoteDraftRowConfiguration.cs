@@ -17,7 +17,7 @@ internal sealed class VoteDraftRowConfiguration : IEntityTypeConfiguration<VoteD
             table.HasCheckConstraint("ck_vote_drafts_revision", "current_revision_number >= 1");
             table.HasCheckConstraint("ck_vote_drafts_review_state_version", "review_state_version >= 0");
             table.HasCheckConstraint("ck_vote_drafts_review_status",
-                "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
+                ReviewDraftTableConfiguration.StatusCheck(allowNotDrafted: false));
         });
         builder.HasKey(row => row.RecordId);
         builder.Property(row => row.RecordId).HasColumnName("record_id").HasMaxLength(64);

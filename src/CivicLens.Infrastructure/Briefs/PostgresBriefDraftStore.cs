@@ -110,9 +110,12 @@ public sealed class PostgresBriefDraftStore : PostgresAnalysisStore<BriefDraftRu
         var currentWeekStart = await db.Database.SqlQueryRaw<DateOnly>(ReadCurrentWeekSql).SingleAsync(cancellationToken);
         if (weekStart >= currentWeekStart) throw new ArgumentException("Only a week that has ended can be redrafted.", nameof(weekStart));
         var recordId = BriefWeek.RecordIdOf(weekStart);
-        if (await db.Set<BriefDraftRow>().AsNoTracking().AnyAsync(row => row.RecordId == recordId && row.ReviewStatus == ReviewStatus.Approved,
-                cancellationToken))
+        var status = await db.Set<BriefDraftRow>().AsNoTracking().Where(row => row.RecordId == recordId)
+            .Select(row => (ReviewStatus?)row.ReviewStatus).SingleOrDefaultAsync(cancellationToken);
+        if (status == ReviewStatus.Approved)
             throw new ArgumentException("The brief of this week is approved. Withdraw the approval first.", nameof(weekStart));
+        if (status == ReviewStatus.Rejected)
+            throw new ArgumentException("The brief of this week is rejected. A person must save a new revision or approve it first.", nameof(weekStart));
         var requeued = await InsertWeeksAsync(db, [weekStart], cancellationToken);
         foreach (var state in RedraftableStates)
             requeued += await queue.RequeueAsync(state, null, recordId, null, cancellationToken);

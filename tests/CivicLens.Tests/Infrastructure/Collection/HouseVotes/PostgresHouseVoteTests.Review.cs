@@ -139,6 +139,22 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
+    public async Task ARejectedVoteStaysRejectedWhenTheWorkerRevisesItBecauseTheWorkerCannotReopenAPersonDecision()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        await SettleAsync(second, await RevisionAsync(second, 2));
+
+        Assert.Equal("Rejected", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
+        Assert.Equal(1, await ScalarAsync($"SELECT current_revision_number FROM vote_drafts WHERE record_id = '{recordId}'"));
+        Assert.Equal(ReviewDecisionKind.Reject, Assert.Single(await VoteDecisionsAsync()).Kind);
+    }
+
+    [Fact]
     public async Task APersonEditAfterACodeApprovalWaitsForAPersonAndAWorkerRevisionOverItStaysForAPerson()
     {
         var first = await PendingCandidateAsync();
@@ -324,9 +340,10 @@ public sealed partial class PostgresHouseVoteTests
     private PostgresVoteReviewStore VoteReviews() => new(new PooledDbContextFactory<CollectionAttemptDbContext>(
         new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));
 
-    private Task<ReviewDecision> DecideAsync(string recordId, int revision, int stateVersion, ReviewDecisionKind kind, string? note = null) =>
+    private Task<ReviewDecision> DecideAsync(string recordId, int revision, int stateVersion, ReviewDecisionKind kind, string? note = null,
+        ReviewReasonCode? reason = null) =>
         new DecideVoteReview(VoteReviews()).ExecuteAsync(Reviewer,
-            new(recordId, revision, stateVersion, kind, note, [], Guid.NewGuid().ToString("N")));
+            new(recordId, revision, stateVersion, kind, note, [], Guid.NewGuid().ToString("N"), ReasonCode: reason));
 
     private Task<VoteDraftRevision> SaveAsync(string recordId, int expected, SuggestionChoice suggestion, string key,
         string headline = "Person headline", string summary = "Person summary.") =>

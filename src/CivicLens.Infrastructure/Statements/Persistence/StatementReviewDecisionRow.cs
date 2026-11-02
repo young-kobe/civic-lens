@@ -13,6 +13,7 @@ internal sealed class StatementReviewDecisionRow : IReviewDecisionRow
     public string ActorSubject { get; set; } = string.Empty;
     public string? Note { get; set; }
     public string? CorrectionNote { get; set; }
+    public ReviewReasonCode? ReasonCode { get; set; }
     public long CreatedAtUtcTicks { get; set; }
 
     string IReviewDecisionRow.RecordId

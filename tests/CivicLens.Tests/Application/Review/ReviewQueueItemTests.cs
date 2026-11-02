@@ -48,6 +48,12 @@ public sealed class ReviewQueueItemTests
     }
 
     [Fact]
+    public void ARecordRejectedAfterTheListWasReadTellsTheReaderToRefresh()
+    {
+        Assert.Equal("This record is rejected. Refresh the page.", Item(PublishedRecordKind.Statement, ReviewStatus.Rejected).Reason);
+    }
+
+    [Fact]
     public void AnUnreadableRecordSaysPlainlyThatItCannotBeReadAndSendsTheOwnerToTheLogsBecauseTheEditorShowsNoError()
     {
         var item = ReviewQueueItem.Unreadable(PublishedRecordKind.Vote, "abc", DateTimeOffset.UnixEpoch, new InvalidOperationException("bad json"));

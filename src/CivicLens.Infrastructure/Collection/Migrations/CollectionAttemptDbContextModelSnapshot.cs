@@ -394,7 +394,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("LastRevisedAtUtcTicks", "RecordId")
                         .IsDescending()
                         .HasDatabaseName("ix_action_drafts_needs_action_revised")
-                        .HasFilter("review_status <> 'Approved'");
+                        .HasFilter("review_status <> 'Approved' AND review_status <> 'Rejected'");
 
                     b.HasIndex("SourceId", "Congress", "BillType", "BillNumber")
                         .IsUnique()
@@ -412,7 +412,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_action_drafts_review_state_version", "review_state_version >= 0");
 
-                            t.HasCheckConstraint("ck_action_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
+                            t.HasCheckConstraint("ck_action_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn','Rejected')");
 
                             t.HasCheckConstraint("ck_action_drafts_revision", "current_revision_number >= 1");
                         });
@@ -448,6 +448,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("note");
 
+                    b.Property<string>("ReasonCode")
+                        .HasColumnType("text")
+                        .HasColumnName("reason_code");
+
                     b.Property<string>("RecordId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -475,7 +479,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_action_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
 
-                            t.HasCheckConstraint("ck_action_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval')");
+                            t.HasCheckConstraint("ck_action_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval', 'Reject')");
+
+                            t.HasCheckConstraint("ck_action_review_decisions_reason_code", "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+
+                            t.HasCheckConstraint("ck_action_review_decisions_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_action_review_decisions_versions", "revision_number >= 1 AND review_state_version >= 1");
                         });
@@ -1182,7 +1190,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("LastRevisedAtUtcTicks", "RecordId")
                         .IsDescending()
                         .HasDatabaseName("ix_brief_drafts_needs_action_revised")
-                        .HasFilter("review_status <> 'Approved'");
+                        .HasFilter("review_status <> 'Approved' AND review_status <> 'Rejected'");
 
                     b.ToTable("brief_drafts", null, t =>
                         {
@@ -1194,7 +1202,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_brief_drafts_review_state_version", "review_state_version >= 0");
 
-                            t.HasCheckConstraint("ck_brief_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
+                            t.HasCheckConstraint("ck_brief_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn','Rejected')");
 
                             t.HasCheckConstraint("ck_brief_drafts_revision", "current_revision_number >= 1");
 
@@ -1232,6 +1240,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("note");
 
+                    b.Property<string>("ReasonCode")
+                        .HasColumnType("text")
+                        .HasColumnName("reason_code");
+
                     b.Property<string>("RecordId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -1259,7 +1271,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_brief_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
 
-                            t.HasCheckConstraint("ck_brief_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval')");
+                            t.HasCheckConstraint("ck_brief_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval', 'Reject')");
+
+                            t.HasCheckConstraint("ck_brief_review_decisions_reason_code", "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+
+                            t.HasCheckConstraint("ck_brief_review_decisions_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_brief_review_decisions_versions", "revision_number >= 1 AND review_state_version >= 1");
                         });
@@ -2843,7 +2859,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("LastRevisedAtUtcTicks", "RecordId")
                         .IsDescending()
                         .HasDatabaseName("ix_executive_action_drafts_needs_action_revised")
-                        .HasFilter("review_status <> 'Approved'");
+                        .HasFilter("review_status <> 'Approved' AND review_status <> 'Rejected'");
 
                     b.ToTable("executive_action_drafts", null, t =>
                         {
@@ -2855,7 +2871,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_executive_action_drafts_review_state_version", "review_state_version >= 0");
 
-                            t.HasCheckConstraint("ck_executive_action_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
+                            t.HasCheckConstraint("ck_executive_action_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn','Rejected')");
 
                             t.HasCheckConstraint("ck_executive_action_drafts_revision", "current_revision_number >= 1");
                         });
@@ -2891,6 +2907,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("note");
 
+                    b.Property<string>("ReasonCode")
+                        .HasColumnType("text")
+                        .HasColumnName("reason_code");
+
                     b.Property<string>("RecordId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -2918,7 +2938,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_executive_action_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
 
-                            t.HasCheckConstraint("ck_executive_action_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval')");
+                            t.HasCheckConstraint("ck_executive_action_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval', 'Reject')");
+
+                            t.HasCheckConstraint("ck_executive_action_review_decisions_reason_code", "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+
+                            t.HasCheckConstraint("ck_executive_action_review_decisions_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_executive_action_review_decisions_versions", "revision_number >= 1 AND review_state_version >= 1");
                         });
@@ -3375,7 +3399,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("LastRevisedAtUtcTicks", "RecordId")
                         .IsDescending()
                         .HasDatabaseName("ix_relationship_drafts_needs_action_revised")
-                        .HasFilter("review_status <> 'Approved'");
+                        .HasFilter("review_status <> 'Approved' AND review_status <> 'Rejected'");
 
                     b.ToTable("relationship_drafts", null, t =>
                         {
@@ -3387,7 +3411,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_relationship_drafts_review_state_version", "review_state_version >= 0");
 
-                            t.HasCheckConstraint("ck_relationship_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
+                            t.HasCheckConstraint("ck_relationship_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn','Rejected')");
 
                             t.HasCheckConstraint("ck_relationship_drafts_revision", "current_revision_number >= 1");
                         });
@@ -3423,6 +3447,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("note");
 
+                    b.Property<string>("ReasonCode")
+                        .HasColumnType("text")
+                        .HasColumnName("reason_code");
+
                     b.Property<string>("RecordId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -3450,7 +3478,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_relationship_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
 
-                            t.HasCheckConstraint("ck_relationship_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval')");
+                            t.HasCheckConstraint("ck_relationship_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval', 'Reject')");
+
+                            t.HasCheckConstraint("ck_relationship_review_decisions_reason_code", "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+
+                            t.HasCheckConstraint("ck_relationship_review_decisions_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_relationship_review_decisions_versions", "revision_number >= 1 AND review_state_version >= 1");
                         });
@@ -3661,7 +3693,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("LastRevisedAtUtcTicks", "DraftId")
                         .IsDescending()
                         .HasDatabaseName("ix_document_change_drafts_needs_action_revised")
-                        .HasFilter("review_status <> 'Approved'");
+                        .HasFilter("review_status <> 'Approved' AND review_status <> 'Rejected'");
 
                     b.ToTable("document_change_drafts", null, t =>
                         {
@@ -3671,7 +3703,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_document_change_drafts_last_revised_at_utc_ticks", "last_revised_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
-                            t.HasCheckConstraint("ck_document_change_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
+                            t.HasCheckConstraint("ck_document_change_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn','Rejected')");
 
                             t.HasCheckConstraint("ck_document_change_drafts_versions", "current_revision_number >= 1 AND review_state_version >= 0");
                         });
@@ -3932,6 +3964,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("note");
 
+                    b.Property<string>("ReasonCode")
+                        .HasColumnType("text")
+                        .HasColumnName("reason_code");
+
                     b.Property<int>("ReviewStateVersion")
                         .HasColumnType("integer")
                         .HasColumnName("review_state_version");
@@ -3953,7 +3989,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_document_change_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
 
-                            t.HasCheckConstraint("ck_document_change_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval')");
+                            t.HasCheckConstraint("ck_document_change_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval', 'Reject')");
+
+                            t.HasCheckConstraint("ck_document_change_review_decisions_reason_code", "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+
+                            t.HasCheckConstraint("ck_document_change_review_decisions_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_document_change_review_decisions_versions", "revision_number >= 1 AND review_state_version >= 1");
                         });
@@ -4618,7 +4658,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("LastRevisedAtUtcTicks", "CandidateId")
                         .IsDescending()
                         .HasDatabaseName("ix_statement_drafts_needs_action_revised")
-                        .HasFilter("review_status <> 'Approved'");
+                        .HasFilter("review_status <> 'Approved' AND review_status <> 'Rejected'");
 
                     b.ToTable("statement_drafts", null, t =>
                         {
@@ -4630,7 +4670,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_statement_drafts_review_state_version", "review_state_version >= 0");
 
-                            t.HasCheckConstraint("ck_statement_drafts_review_status", "review_status IN ('NotDrafted','AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
+                            t.HasCheckConstraint("ck_statement_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn','NotDrafted','Rejected')");
 
                             t.HasCheckConstraint("ck_statement_drafts_revision", "current_revision_number >= 0");
                         });
@@ -4738,6 +4778,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("note");
 
+                    b.Property<string>("ReasonCode")
+                        .HasColumnType("text")
+                        .HasColumnName("reason_code");
+
                     b.Property<int>("ReviewStateVersion")
                         .HasColumnType("integer")
                         .HasColumnName("review_state_version");
@@ -4759,7 +4803,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_statement_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
 
-                            t.HasCheckConstraint("ck_statement_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval')");
+                            t.HasCheckConstraint("ck_statement_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval', 'Reject')");
+
+                            t.HasCheckConstraint("ck_statement_review_decisions_reason_code", "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+
+                            t.HasCheckConstraint("ck_statement_review_decisions_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_statement_review_decisions_versions", "revision_number >= 1 AND review_state_version >= 1");
                         });
@@ -5195,7 +5243,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("LastRevisedAtUtcTicks", "RecordId")
                         .IsDescending()
                         .HasDatabaseName("ix_vote_drafts_needs_action_revised")
-                        .HasFilter("review_status <> 'Approved'");
+                        .HasFilter("review_status <> 'Approved' AND review_status <> 'Rejected'");
 
                     b.HasIndex("SourceId", "Chamber", "Congress", "SessionNumber", "RollCallNumber")
                         .IsUnique()
@@ -5213,7 +5261,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_vote_drafts_review_state_version", "review_state_version >= 0");
 
-                            t.HasCheckConstraint("ck_vote_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
+                            t.HasCheckConstraint("ck_vote_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn','Rejected')");
 
                             t.HasCheckConstraint("ck_vote_drafts_revision", "current_revision_number >= 1");
 
@@ -5251,6 +5299,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("note");
 
+                    b.Property<string>("ReasonCode")
+                        .HasColumnType("text")
+                        .HasColumnName("reason_code");
+
                     b.Property<string>("RecordId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -5278,7 +5330,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_vote_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
 
-                            t.HasCheckConstraint("ck_vote_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval')");
+                            t.HasCheckConstraint("ck_vote_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval', 'Reject')");
+
+                            t.HasCheckConstraint("ck_vote_review_decisions_reason_code", "reason_code IN ('NotAStatement', 'WrongSpeaker', 'IndexPage', 'LowSubstance', 'InaccurateSummary', 'Duplicate')");
+
+                            t.HasCheckConstraint("ck_vote_review_decisions_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_vote_review_decisions_versions", "revision_number >= 1 AND review_state_version >= 1");
                         });

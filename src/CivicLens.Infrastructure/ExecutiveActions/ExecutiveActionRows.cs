@@ -2,6 +2,7 @@ using CivicLens.Application.ExecutiveActions;
 using CivicLens.Application.Collection.FederalRegister;
 using CivicLens.Application.Review;
 using CivicLens.Core.ExecutiveActions;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.ExecutiveActions.Persistence;
@@ -17,7 +18,7 @@ internal static class ExecutiveActionRows
 
     /// <summary>Records one document. An original makes revision 1 with the correction notices that waited for it. A correction appends a revision
     /// to the record of its original, or waits when the original is not recorded. Code approves each revision in the same transaction.
-    /// Returns null when the document waits. A correction of a correction is invalid data, in either arrival order.</summary>
+    /// A correction of a rejected record waits too, so a rejection stays. Returns null when the document waits. A correction of a correction is invalid data, in either arrival order.</summary>
     public static async Task<ExecutiveActionRevision?> AdmitAsync(CollectionAttemptDbContext db, string sourceId, string documentJobId,
         FederalRegisterEvidence evidence, DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -71,7 +72,7 @@ internal static class ExecutiveActionRows
         var notice = ExecutiveActionRevisions.NoticeOf(evidence);
         row.NoticeJson = ReviewJson.Serialize(notice);
         var draft = await db.Set<ExecutiveActionDraftRow>().SingleOrDefaultAsync(candidate => candidate.RecordId == recordId, cancellationToken);
-        if (draft is null) return null;
+        if (draft is null || draft.ReviewStatus == ReviewStatus.Rejected) return null;
         var current = await Records.FindRevisionAsync(db, recordId, draft.CurrentRevisionNumber, cancellationToken)
             ?? throw new InvalidOperationException("Current executive action revision is missing.");
         var revision = ExecutiveActionRevisions.Add(current, now, notice);

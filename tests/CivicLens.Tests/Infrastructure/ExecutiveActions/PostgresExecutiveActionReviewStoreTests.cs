@@ -101,6 +101,24 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     }
 
     [Fact]
+    public async Task ACorrectionOfARejectedRecordWaitsAndDoesNotReopenItBecauseARejectionStays()
+    {
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
+        var withdrawal = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
+            "Check the date.", [], DateTimeOffset.UtcNow);
+        await store.DecideAsync("auth0|owner", withdrawal, 1, 1, "key-1", new string('a', 64), default);
+        var rejection = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 3, ReviewDecisionKind.Reject, "auth0|owner",
+            null, [], DateTimeOffset.UtcNow, ReasonCode: ReviewReasonCode.Duplicate);
+        await store.DecideAsync("auth0|owner", rejection, 1, 2, "key-2", new string('b', 64), default);
+
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
+
+        var review = (await store.GetAsync(recordId, default))!.Review;
+        Assert.Equal(1, review.CurrentRevision.RevisionNumber);
+        Assert.Equal(ReviewStatus.Rejected, review.CurrentStatus);
+    }
+
+    [Fact]
     public async Task ARecordPublishesWithItsRealPageThenLeavesTheReadyListAndWithdrawsFromTheSite()
     {
         var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");

@@ -22,6 +22,7 @@ internal static class ActionDraftRows
         if (await HasNewerCandidateAsync(db, candidate, cancellationToken)) return ActionDraftErrorCodes.SupersededByNewerCandidate;
         var draft = await db.Set<ActionDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return ActionDraftErrorCodes.RevisionConflict;
+        if (draft?.ReviewStatus == ReviewStatus.Rejected) return ActionDraftErrorCodes.RecordRejected;
         if (draft is null) db.Add(draft = NewDraft(revision));
         var records = PostgresActionReviewStore.Records;
         await records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision, runId), await records.ReadCycleAsync(db, draft, cancellationToken),

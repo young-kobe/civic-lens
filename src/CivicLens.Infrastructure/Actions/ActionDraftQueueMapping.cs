@@ -59,6 +59,8 @@ internal sealed class ActionDraftQueueMapping(Func<CollectionAttemptDbContext, s
         if (refusal is null) return settlement;
         var discarded = run.Run.Outcome == AnalysisRunOutcome.Drafted
             ? run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } } : run;
+        if (refusal == ActionDraftErrorCodes.RecordRejected)
+            return new(checkpoint with { ErrorCode = ActionDraftErrorCodes.Unchanged, Revision = null }, discarded);
         if (refusal == ActionDraftErrorCodes.SupersededByNewerCandidate)
             return new(checkpoint with { ErrorCode = refusal, Revision = null }, discarded);
         row.RetryOfRunId = null;

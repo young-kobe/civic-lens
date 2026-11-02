@@ -272,6 +272,59 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task ARejectionWithoutAReasonCodeIsRefusedAndWritesNoDecision()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => DecideAsync(1, 0, ReviewDecisionKind.Reject));
+
+        Assert.Empty(await ActionDecisionsAsync());
+    }
+
+    [Fact]
+    public async Task AnApprovedRevisionCannotBeRejectedBecauseAnApprovalUsesWithdraw()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => DecideAsync(1, 1, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate));
+
+        Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Single(await ActionDecisionsAsync());
+    }
+
+    [Fact]
+    public async Task ARejectedPersonEditStoresItsReasonNeverPublishesAndAPersonCanReverseItWithBothDecisionsKept()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        await SaveAsync(1, SuggestionChoice.Keep, "save-2");
+
+        await DecideAsync(2, 1, ReviewDecisionKind.Reject, reason: ReviewReasonCode.InaccurateSummary);
+
+        Assert.Equal("Rejected", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal("InaccurateSummary", await ScalarAsync("SELECT reason_code FROM action_review_decisions WHERE kind = 'Reject'"));
+        Assert.Empty(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
+
+        await DecideAsync(2, 2, ReviewDecisionKind.Approve);
+
+        Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal([ReviewDecisionKind.Approve, ReviewDecisionKind.Reject, ReviewDecisionKind.Approve],
+            (await ActionDecisionsAsync()).Select(decision => decision.Kind));
+    }
+
+    [Fact]
+    public async Task ARejectedRecordStaysRejectedWhenTheWorkerDraftsAgainBecauseTheWorkerCannotReopenAPersonDecision()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.LowSubstance);
+
+        await AddSponsorAsync(UpdatedAt.AddDays(1));
+
+        Assert.Equal("Rejected", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal(1, await ScalarAsync("SELECT current_revision_number FROM action_drafts"));
+        Assert.Equal(ReviewDecisionKind.Reject, Assert.Single(await ActionDecisionsAsync()).Kind);
+    }
+
+    [Fact]
     public async Task APersonCannotActAsTheCodeSubject()
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
@@ -553,9 +606,10 @@ public sealed partial class PostgresBillStreamTests
     private async Task<string?> HeldReasonAsync() =>
         await ScalarAsync("SELECT held_reason FROM action_drafts") is string reason ? reason : null;
 
-    private Task<ReviewDecision> DecideAsync(int revision, int stateVersion, ReviewDecisionKind kind, string? note = null) =>
+    private Task<ReviewDecision> DecideAsync(int revision, int stateVersion, ReviewDecisionKind kind, string? note = null,
+        ReviewReasonCode? reason = null) =>
         new DecideActionReview(ActionReviews()).ExecuteAsync(Reviewer,
-            new(RecordId, revision, stateVersion, kind, note, [], Guid.NewGuid().ToString("N")));
+            new(RecordId, revision, stateVersion, kind, note, [], Guid.NewGuid().ToString("N"), ReasonCode: reason));
 
     private Task<ActionDraftRevision> SaveAsync(int expected, SuggestionChoice suggestion, string key,
         string headline = "Person headline", string summary = "Person summary.") =>

@@ -46,7 +46,7 @@ internal sealed class BriefDraftQueueMapping : IAnalysisQueueMapping<BriefAnalys
         var refusal = await BriefDraftRows.AppendAnalysisRevisionAsync(db, revision, run.Run.RunId, cancellationToken);
         if (refusal is null) return settlement;
         var discarded = run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } };
-        if (refusal == BriefDraftErrorCodes.AlreadyApproved)
+        if (refusal is BriefDraftErrorCodes.AlreadyApproved or BriefDraftErrorCodes.RecordRejected)
             return new(checkpoint with { ErrorCode = BriefDraftErrorCodes.Unchanged, Revision = null }, discarded);
         row.RetryOfRunId = null;
         return new(checkpoint with

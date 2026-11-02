@@ -89,6 +89,25 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
         Assert.Equal(VoteId, back.Items.Single().RecordId);
     }
 
+    [Theory]
+    [InlineData(PublishedRecordKind.DocumentChange, "document_change_drafts")]
+    [InlineData(PublishedRecordKind.Statement, "statement_drafts")]
+    [InlineData(PublishedRecordKind.Action, "action_drafts")]
+    [InlineData(PublishedRecordKind.Vote, "vote_drafts")]
+    [InlineData(PublishedRecordKind.Relationship, "relationship_drafts")]
+    [InlineData(PublishedRecordKind.Brief, "brief_drafts")]
+    [InlineData(PublishedRecordKind.ExecutiveAction, "executive_action_drafts")]
+    public async Task ARejectedRecordLeavesTheQueueAndTheCountBecauseNoPersonHasToDecideOnItAgain(PublishedRecordKind kind, string table)
+    {
+        await SeedEveryKindAsync();
+
+        await seeder.ExecuteAsync($"UPDATE {table} SET review_status = 'Rejected'");
+
+        var page = await store.ListAsync(null, 10, default);
+        Assert.Equal(6, page.Total);
+        Assert.DoesNotContain(kind, page.Items.Select(item => item.Kind));
+    }
+
     [Fact]
     public async Task EveryKindAppearsWithItsOwnRecordIdAndHeadlineAndARelationshipNamesItsCitedStatement()
     {

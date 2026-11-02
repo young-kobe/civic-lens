@@ -15,13 +15,22 @@ internal static class ReviewDecisionTableConfiguration
     private static readonly string KindCheck = "kind IN (" + string.Join(", ",
         Enum.GetNames<ReviewDecisionKind>().Select(name => $"'{name}'")) + ")";
 
+    private static readonly string ReasonCodeCheck = "reason_code IN (" + string.Join(", ",
+        Enum.GetNames<ReviewReasonCode>().Select(name => $"'{name}'")) + ")";
+
     public static void ConfigureDecisionColumns<TRow>(EntityTypeBuilder<TRow> builder, string table, string recordIdProperty)
         where TRow : class, IReviewDecisionRow
     {
         builder.Property(row => row.ActorSubject).HasColumnName("actor_subject").HasMaxLength(ReviewAuthor.MaximumSubjectLength).IsRequired();
         builder.Property(row => row.Note).HasColumnName("note");
         builder.Property(row => row.CorrectionNote).HasColumnName("correction_note");
-        builder.ToTable(table, tableBuilder => tableBuilder.HasCheckConstraint($"ck_{table}_kind", KindCheck));
+        builder.Property(row => row.ReasonCode).HasColumnName("reason_code").HasConversion<string>();
+        builder.ToTable(table, tableBuilder =>
+        {
+            tableBuilder.HasCheckConstraint($"ck_{table}_kind", KindCheck);
+            tableBuilder.HasCheckConstraint($"ck_{table}_reason_code", ReasonCodeCheck);
+            tableBuilder.HasCheckConstraint($"ck_{table}_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
+        });
         builder.HasAlternateKey(nameof(IReviewDecisionRow.DecisionId), recordIdProperty);
     }
 

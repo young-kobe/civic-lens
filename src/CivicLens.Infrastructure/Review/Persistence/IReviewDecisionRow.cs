@@ -12,5 +12,6 @@ internal interface IReviewDecisionRow
     string ActorSubject { get; set; }
     string? Note { get; set; }
     string? CorrectionNote { get; set; }
+    ReviewReasonCode? ReasonCode { get; set; }
     long CreatedAtUtcTicks { get; set; }
 }

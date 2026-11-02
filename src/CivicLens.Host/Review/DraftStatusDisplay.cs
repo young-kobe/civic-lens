@@ -11,6 +11,7 @@ internal static class DraftStatusDisplay
         ReviewStatus.Approved => "Approved, private",
         ReviewStatus.ChangesRequested => "Changes requested",
         ReviewStatus.ApprovalWithdrawn => "Approval withdrawn",
+        ReviewStatus.Rejected => "Rejected",
         ReviewStatus.NotDrafted => "Not drafted",
         _ => "Awaiting review"
     };
@@ -21,7 +22,7 @@ internal static class DraftStatusDisplay
     public static Tone Tone(ReviewStatus status) => status switch
     {
         ReviewStatus.Approved => Components.Ui.Tone.Ok,
-        ReviewStatus.AwaitingReview or ReviewStatus.NotDrafted => Components.Ui.Tone.Neutral,
+        ReviewStatus.AwaitingReview or ReviewStatus.NotDrafted or ReviewStatus.Rejected => Components.Ui.Tone.Neutral,
         _ => Components.Ui.Tone.Warn
     };
 
@@ -29,7 +30,19 @@ internal static class DraftStatusDisplay
     {
         ReviewDecisionKind.Approve => "Approved",
         ReviewDecisionKind.RequestChanges => "Changes requested",
+        ReviewDecisionKind.Reject => "Rejected",
         _ => "Approval withdrawn"
+    };
+
+    public static string Label(ReviewReasonCode code) => code switch
+    {
+        ReviewReasonCode.NotAStatement => "Not a statement",
+        ReviewReasonCode.WrongSpeaker => "Wrong speaker",
+        ReviewReasonCode.IndexPage => "Index or menu page",
+        ReviewReasonCode.LowSubstance => "Too little substance",
+        ReviewReasonCode.InaccurateSummary => "Summary does not match the source",
+        ReviewReasonCode.Duplicate => "Duplicate of another record",
+        _ => throw new ArgumentOutOfRangeException(nameof(code))
     };
 
     public static Tone Tone(ReviewDecisionKind kind) =>

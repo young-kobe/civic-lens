@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Tests.Fixtures;
@@ -14,7 +13,7 @@ namespace CivicLens.Tests.Infrastructure.Review;
 
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
-public sealed partial class ReviewDecisionColumnsMigrationTests(PostgresCollection postgres) : IAsyncLifetime
+public sealed class ReviewDecisionColumnsMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string Migration = "20261031041526_ReviewDecisionColumns";
     private static readonly string Concern = new('c', 32);
@@ -256,9 +255,7 @@ public sealed partial class ReviewDecisionColumnsMigrationTests(PostgresCollecti
     public async Task EveryNewColumnThatHoldsAnActorOrANoteIsHiddenFromTheReadOnlyRoleAndTheResolutionColumnsAreNot()
     {
         await MigrateForwardAsync();
-        var script = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "deploy", "scripts", "readonly-grants.sql"));
-        var literals = HiddenColumnAssignment().Match(script).Groups["value"].Value;
-        var hidden = new Regex(string.Concat(QuotedLiteral().Matches(literals).Select(match => match.Groups[1].Value)));
+        var hidden = ReadOnlyHiddenColumns.Load();
         var columns = await ReadAsync("""
             SELECT table_name || '.' || column_name FROM information_schema.columns
             WHERE table_schema = 'public' AND table_name ~ '_review_decision(s|_resolutions)$'
@@ -334,10 +331,4 @@ public sealed partial class ReviewDecisionColumnsMigrationTests(PostgresCollecti
         while (await reader.ReadAsync()) rows.Add(reader.GetValue(0).ToString()!);
         return rows;
     }
-
-    [GeneratedRegex(@"hidden_column constant text :=(?<value>.*?);", RegexOptions.Singleline)]
-    private static partial Regex HiddenColumnAssignment();
-
-    [GeneratedRegex("'([^']*)'")]
-    private static partial Regex QuotedLiteral();
 }

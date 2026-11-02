@@ -202,6 +202,7 @@ public sealed partial class ReviewHome
         {
             ReviewDecisionKind.Approve => $"{who} approved {draft}.",
             ReviewDecisionKind.RequestChanges => $"{who} requested changes to {draft}.",
+            ReviewDecisionKind.Reject => $"{who} rejected {draft}.",
             _ => $"{who} withdrew approval of {draft}."
         };
         return new(text, item.OccurredAt, DraftStatusDisplay.Tone(kind));

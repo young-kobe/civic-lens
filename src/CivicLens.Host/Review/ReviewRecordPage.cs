@@ -23,7 +23,7 @@ public abstract class ReviewRecordPage : ComponentBase
 
     protected static readonly ReviewFailureMessages DecideFailures = new(
         "The revision or review state changed after you opened this page. Check the latest state before you record a decision.",
-        "The decision needs valid details. Requesting changes and withdrawing approval need a reason. Approval must resolve every open concern.",
+        "The decision needs valid details. Requesting changes and withdrawing approval need a reason. Rejecting needs a reason from the list. Approval must resolve every open concern.",
         "The decision could not be saved. The current review state shows below. Try again.");
 
     protected readonly string saveKey = Guid.NewGuid().ToString("N");
@@ -147,6 +147,9 @@ public abstract class ReviewRecordPage : ComponentBase
 
     protected string? CorrectionNoteOfApproval() =>
         ParseDecisionKind(Kind) == ReviewDecisionKind.Approve ? EmptyToNull(Decision?.CorrectionNote) : null;
+
+    protected ReviewReasonCode? ReasonCodeOfRejection() =>
+        ParseDecisionKind(Kind) == ReviewDecisionKind.Reject ? Decision?.ReasonCode : null;
 
     protected static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 }

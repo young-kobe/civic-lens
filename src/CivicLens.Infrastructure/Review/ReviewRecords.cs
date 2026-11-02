@@ -163,6 +163,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         ActorSubject = decision.ActorSubject,
         Note = decision.Note,
         CorrectionNote = decision.CorrectionNote,
+        ReasonCode = decision.ReasonCode,
         CreatedAtUtcTicks = decision.CreatedAtUtc.UtcTicks
     };
 
@@ -207,7 +208,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         return filter switch
         {
             DraftStatusFilter.All => drafts,
-            DraftStatusFilter.NeedsAction => drafts.Where(draft => draft.ReviewStatus != ReviewStatus.Approved),
+            DraftStatusFilter.NeedsAction => drafts.Where(draft => draft.ReviewStatus != ReviewStatus.Approved && draft.ReviewStatus != ReviewStatus.Rejected),
             DraftStatusFilter.Approved => drafts.Where(draft => draft.ReviewStatus == ReviewStatus.Approved),
             _ => throw new ArgumentOutOfRangeException(nameof(filter))
         };

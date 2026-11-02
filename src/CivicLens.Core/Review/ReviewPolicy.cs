@@ -7,7 +7,7 @@ public static class ReviewPolicy
 {
     public const int MaximumOpenConcerns = 64;
 
-    /// <summary>A cycle holds its opening approval and at most <see cref="MaximumOpenConcerns"/> concerns. Only an approval resolves
+    /// <summary>A cycle holds its opening approval and at most <see cref="MaximumOpenConcerns"/> other decisions. Only an approval resolves
     /// a concern, and the next approval opens a new cycle.</summary>
     public const int MaximumDecisionsPerCycle = MaximumOpenConcerns + 1;
 
@@ -28,6 +28,7 @@ public static class ReviewPolicy
             ReviewDecisionKind.Approve => ReviewStatus.Approved,
             ReviewDecisionKind.RequestChanges => ReviewStatus.ChangesRequested,
             ReviewDecisionKind.WithdrawApproval => ReviewStatus.ApprovalWithdrawn,
+            ReviewDecisionKind.Reject => ReviewStatus.Rejected,
             _ => throw new InvalidOperationException("Unknown review decision kind.")
         };
     }
@@ -70,14 +71,17 @@ public static class ReviewPolicy
             throw new ArgumentException("This decision requires a note.", nameof(decision));
         if (decision.Kind != ReviewDecisionKind.Approve && !decision.ResolvedDecisionIds.IsEmpty)
             throw new ArgumentException("Only approval may resolve concerns.", nameof(decision));
+        if ((decision.Kind == ReviewDecisionKind.Reject) != decision.ReasonCode.HasValue ||
+            (decision.ReasonCode is { } reason && !Enum.IsDefined(reason)))
+            throw new ArgumentException("A rejection needs a reason code, and no other decision takes one.", nameof(decision));
     }
 
     private static void ValidateDecisionAgainstHistory(int currentRevisionNumber, ImmutableArray<ReviewDecision> decisions,
         ReviewDecision decision)
     {
         var currentConcerns = GetUnresolvedConcerns(decisions);
-        if ((decision.Kind is ReviewDecisionKind.RequestChanges or ReviewDecisionKind.WithdrawApproval) && currentConcerns.Length >= MaximumOpenConcerns)
-            throw new ArgumentException("Resolve outstanding concerns before adding another blocker.", nameof(decision));
+        if (decision.Kind != ReviewDecisionKind.Approve && decisions.Count(item => item.Kind != ReviewDecisionKind.Approve) >= MaximumOpenConcerns)
+            throw new ArgumentException("Approve the record to start a new review cycle before adding another blocker.", nameof(decision));
         var outstanding = currentConcerns.Select(item => item.DecisionId).Order(StringComparer.Ordinal).ToArray();
         var resolved = decision.ResolvedDecisionIds.Order(StringComparer.Ordinal).ToArray();
         if (decision.Kind == ReviewDecisionKind.Approve && !outstanding.SequenceEqual(resolved, StringComparer.Ordinal))
@@ -86,5 +90,8 @@ public static class ReviewPolicy
             throw new ArgumentException("Resolving concerns requires a resolution note.", nameof(decision));
         if (decision.Kind == ReviewDecisionKind.WithdrawApproval && LatestFor(decisions, currentRevisionNumber)?.Kind != ReviewDecisionKind.Approve)
             throw new ArgumentException("Approval can only be withdrawn while the current revision is approved.", nameof(decision));
+        if (decision.Kind == ReviewDecisionKind.Reject &&
+            LatestFor(decisions, currentRevisionNumber)?.Kind is ReviewDecisionKind.Approve or ReviewDecisionKind.Reject)
+            throw new ArgumentException("Only a revision that is neither approved nor rejected can be rejected.", nameof(decision));
     }
 }

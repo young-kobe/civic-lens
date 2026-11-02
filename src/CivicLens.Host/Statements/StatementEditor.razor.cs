@@ -162,7 +162,7 @@ public sealed partial class StatementEditor
     {
         var request = new DecideStatementReviewRequest(CandidateId, DecideExpectedRevision, DecideExpectedStateVersion,
             ParseDecisionKind(Kind), EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "",
-            CorrectionNoteOfApproval());
+            CorrectionNoteOfApproval(), ReasonCodeOfRejection());
         _ = await DecideReview.ExecuteAsync(actor, request, RequestAborted);
         return StatementRoutes.Editor(CandidateId, "decided");
     }

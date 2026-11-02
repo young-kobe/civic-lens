@@ -11,7 +11,7 @@ public sealed class PublishedRecordRules(PublicationCatalog catalog)
         status == ReviewStatus.Approved && unresolvedConcernCount == 0;
 
     public static bool IsWithdrawable(ReviewStatus status) =>
-        status is ReviewStatus.ApprovalWithdrawn or ReviewStatus.ChangesRequested or ReviewStatus.AwaitingReviewWithConcerns;
+        status is ReviewStatus.ApprovalWithdrawn or ReviewStatus.ChangesRequested or ReviewStatus.AwaitingReviewWithConcerns or ReviewStatus.Rejected;
 
     public static bool CanReturn(int revisionNumber, int withdrawnRevisionNumber) => revisionNumber > withdrawnRevisionNumber;
 

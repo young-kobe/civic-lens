@@ -7,6 +7,7 @@ using CivicLens.Infrastructure.Briefs;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.ExecutiveActions;
 using CivicLens.Infrastructure.Relationships;
+using CivicLens.Infrastructure.Review.Persistence;
 using CivicLens.Infrastructure.Statements;
 using CivicLens.Infrastructure.Votes;
 using CivicLens.Publication.Contracts;
@@ -43,7 +44,7 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         SELECT '{kind.Code}' AS "KindCode", {kind.IdColumn} AS "RecordId", '{kind.Code}-' || {kind.IdColumn} AS "QueueId",
                last_revised_at_utc_ticks AS "LastRevisedAtUtcTicks"
         FROM {kind.Table}
-        WHERE review_status <> 'Approved' AND current_revision_number >= 1
+        WHERE {ReviewDraftTableConfiguration.NeedsAPersonFilter} AND current_revision_number >= 1
         """));
 
     private const string UnmatchedApprovedLinks = """

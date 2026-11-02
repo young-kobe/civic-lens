@@ -15,4 +15,5 @@ public static class ActionDraftErrorCodes
     public const string TextKept = "textKept";
     public const string SupersededByNewerCandidate = "supersededByNewerCandidate";
     public const string RevisionConflict = "revisionConflict";
+    public const string RecordRejected = "recordRejected";
 }
