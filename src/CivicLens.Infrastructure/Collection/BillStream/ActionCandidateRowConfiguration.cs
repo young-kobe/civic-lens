@@ -12,8 +12,6 @@ internal sealed class ActionCandidateRowConfiguration : IEntityTypeConfiguration
         {
             table.HasCheckConstraint("ck_action_candidates_id", "candidate_id ~ '^[0-9a-f]{64}$'");
             table.HasCheckConstraint("ck_action_candidates_bill", "congress >= 1 AND bill_number >= 1");
-            table.HasCheckConstraint("ck_action_candidates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
-            table.HasCheckConstraint("ck_action_candidates_created", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
         });
         builder.Property(row => row.CandidateId).HasColumnName("candidate_id").HasMaxLength(64);
         builder.Property(row => row.SourceId).HasColumnName("source_id").HasMaxLength(128);

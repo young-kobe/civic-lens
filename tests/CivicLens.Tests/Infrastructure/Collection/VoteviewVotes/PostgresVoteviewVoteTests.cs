@@ -285,6 +285,7 @@ public sealed class PostgresVoteviewVoteTests(PostgresCollection postgres) : IAs
     }
 
     private static string VoteDraft(char id, string chamber) => $"""
+        SET session_replication_role = replica;
         INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number,
             review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
         VALUES ('{new string(id, 64)}', 'source', '{chamber}', 119, 1, 100, 1, 0, 'AwaitingReview', 1, 1)

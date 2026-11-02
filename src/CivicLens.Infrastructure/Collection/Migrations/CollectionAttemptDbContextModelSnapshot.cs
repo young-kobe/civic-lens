@@ -128,6 +128,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("CandidateId", "Task");
 
+                    b.HasIndex("RetryOfRunId");
+
                     b.HasIndex("Status", "CreatedAtUtcTicks", "CandidateId");
 
                     b.HasIndex(new[] { "Task", "Priority", "CreatedAtUtcTicks", "CandidateId" }, "ix_action_analysis_active_claim")
@@ -137,11 +139,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_action_analysis_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
 
+                            t.HasCheckConstraint("ck_action_analysis_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_action_analysis_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
 
                             t.HasCheckConstraint("ck_action_analysis_priority", "priority BETWEEN 1 AND 3");
 
                             t.HasCheckConstraint("ck_action_analysis_reservation", "(reserved_tokens = 0) = (budget_day IS NULL AND reserved_at_utc_ticks IS NULL AND pending_run_id IS NULL AND pending_input_hash IS NULL)");
+
+                            t.HasCheckConstraint("ck_action_analysis_reserved_at_utc_ticks", "reserved_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_action_analysis_retry_of", "retry_of_run_id IS NULL OR retry_of_run_id ~ '^[0-9a-f]{32}$'");
 
@@ -274,11 +280,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("action_analysis_runs", null, t =>
                         {
+                            t.HasCheckConstraint("ck_action_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_action_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
 
                             t.HasCheckConstraint("ck_action_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Bypassed')");
 
                             t.HasCheckConstraint("ck_action_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noTrackedOfficial','summaryOmitted','sponsorshipsChanged','codeWritten','textKept')");
+
+                            t.HasCheckConstraint("ck_action_analysis_runs_started_at_utc_ticks", "started_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_action_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
@@ -369,6 +379,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("RecordId");
 
+                    b.HasIndex("CandidateId");
+
                     b.HasIndex("IssueIds")
                         .HasDatabaseName("ix_action_drafts_issue_ids");
 
@@ -392,7 +404,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_action_drafts_bill", "congress >= 1 AND bill_number >= 1");
 
+                            t.HasCheckConstraint("ck_action_drafts_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_action_drafts_id", "record_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_action_drafts_last_revised_at_utc_ticks", "last_revised_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_action_drafts_review_state_version", "review_state_version >= 0");
 
@@ -455,6 +471,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("action_review_decisions", null, t =>
                         {
+                            t.HasCheckConstraint("ck_action_review_decisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_action_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
 
                             t.HasCheckConstraint("ck_action_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval')");
@@ -508,6 +526,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("action_revisions", null, t =>
                         {
                             t.HasCheckConstraint("ck_action_revisions_author_kind", "author_kind IN ('Person','Analysis','Code')");
+
+                            t.HasCheckConstraint("ck_action_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_action_revisions_number", "revision_number >= 1");
 
@@ -623,6 +643,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("DraftId");
 
+                    b.HasIndex("RetryOfRunId");
+
                     b.HasIndex("Status", "CreatedAtUtcTicks", "ComparisonId");
 
                     b.HasIndex(new[] { "Task", "Priority", "CreatedAtUtcTicks", "ComparisonId" }, "ix_document_change_analysis_active_claim")
@@ -632,11 +654,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_document_change_analysis_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
 
+                            t.HasCheckConstraint("ck_document_change_analysis_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_document_change_analysis_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
 
                             t.HasCheckConstraint("ck_document_change_analysis_priority", "priority BETWEEN 1 AND 3");
 
                             t.HasCheckConstraint("ck_document_change_analysis_reservation", "(reserved_tokens = 0) = (budget_day IS NULL AND reserved_at_utc_ticks IS NULL AND pending_run_id IS NULL AND pending_input_hash IS NULL)");
+
+                            t.HasCheckConstraint("ck_document_change_analysis_reserved_at_utc_ticks", "reserved_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_document_change_analysis_retry_of", "retry_of_run_id IS NULL OR retry_of_run_id ~ '^[0-9a-f]{32}$'");
 
@@ -778,9 +804,13 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_document_change_analysis_runs_draft", "(draft_id IS NULL AND revision_number IS NULL) OR (draft_id IS NOT NULL AND revision_number = 1)");
 
+                            t.HasCheckConstraint("ck_document_change_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_document_change_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
 
                             t.HasCheckConstraint("ck_document_change_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted')");
+
+                            t.HasCheckConstraint("ck_document_change_analysis_runs_started_at_utc_ticks", "started_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_document_change_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
@@ -819,6 +849,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_document_change_analysis_status_limit", "daily_token_limit IS NULL OR daily_token_limit > 0");
 
                             t.HasCheckConstraint("ck_document_change_analysis_status_pause", "paused_until_utc_ticks IS NULL OR paused_reason IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_document_change_analysis_status_paused_until_utc_ticks", "paused_until_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_document_change_analysis_status_recorded_at_utc_ticks", "recorded_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
                         });
                 });
 
@@ -932,6 +966,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("RecordId", "Task");
 
+                    b.HasIndex("RetryOfRunId");
+
                     b.HasIndex("WeekStart")
                         .IsUnique()
                         .HasDatabaseName("ux_brief_analysis_week");
@@ -945,11 +981,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_brief_analysis_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
 
+                            t.HasCheckConstraint("ck_brief_analysis_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_brief_analysis_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
 
                             t.HasCheckConstraint("ck_brief_analysis_priority", "priority BETWEEN 1 AND 3");
 
                             t.HasCheckConstraint("ck_brief_analysis_reservation", "(reserved_tokens = 0) = (budget_day IS NULL AND reserved_at_utc_ticks IS NULL AND pending_run_id IS NULL AND pending_input_hash IS NULL)");
+
+                            t.HasCheckConstraint("ck_brief_analysis_reserved_at_utc_ticks", "reserved_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_brief_analysis_retry_of", "retry_of_run_id IS NULL OR retry_of_run_id ~ '^[0-9a-f]{32}$'");
 
@@ -1084,11 +1124,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("brief_analysis_runs", null, t =>
                         {
+                            t.HasCheckConstraint("ck_brief_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_brief_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
 
                             t.HasCheckConstraint("ck_brief_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Bypassed')");
 
                             t.HasCheckConstraint("ck_brief_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noNewRecords')");
+
+                            t.HasCheckConstraint("ck_brief_analysis_runs_started_at_utc_ticks", "started_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_brief_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
@@ -1142,7 +1186,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("brief_drafts", null, t =>
                         {
+                            t.HasCheckConstraint("ck_brief_drafts_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_brief_drafts_id", "record_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_brief_drafts_last_revised_at_utc_ticks", "last_revised_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_brief_drafts_review_state_version", "review_state_version >= 0");
 
@@ -1207,6 +1255,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("brief_review_decisions", null, t =>
                         {
+                            t.HasCheckConstraint("ck_brief_review_decisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_brief_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
 
                             t.HasCheckConstraint("ck_brief_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval')");
@@ -1260,6 +1310,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("brief_revisions", null, t =>
                         {
                             t.HasCheckConstraint("ck_brief_revisions_author_kind", "author_kind IN ('Person','Analysis')");
+
+                            t.HasCheckConstraint("ck_brief_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_brief_revisions_number", "revision_number >= 1");
 
@@ -1356,11 +1408,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_action_candidates_bill", "congress >= 1 AND bill_number >= 1");
 
-                            t.HasCheckConstraint("ck_action_candidates_created", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_action_candidates_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_action_candidates_id", "candidate_id ~ '^[0-9a-f]{64}$'");
 
-                            t.HasCheckConstraint("ck_action_candidates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_action_candidates_update_date_utc_ticks", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
                         });
                 });
 
@@ -1498,9 +1550,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_bill_gates_cosponsor_count", "cosponsor_count >= 0");
 
-                            t.HasCheckConstraint("ck_bill_gates_created", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_bill_gates_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
-                            t.HasCheckConstraint("ck_bill_gates_decided", "(decision = 'Pending') = (decided_at_utc_ticks IS NULL) AND (decided_at_utc_ticks IS NULL OR decided_at_utc_ticks BETWEEN 0 AND 3155378975999999999)");
+                            t.HasCheckConstraint("ck_bill_gates_decided", "(decision = 'Pending') = (decided_at_utc_ticks IS NULL)");
+
+                            t.HasCheckConstraint("ck_bill_gates_decided_at_utc_ticks", "decided_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_bill_gates_issue_revision", "issue_revision_id ~ '^[0-9a-f]{64}$'");
 
@@ -1518,7 +1572,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_bill_gates_text_without_summary", "text_state IS NULL OR summary_count = 0");
 
-                            t.HasCheckConstraint("ck_bill_gates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_bill_gates_update_date_utc_ticks", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
                         });
                 });
 
@@ -1598,7 +1652,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_bill_stream_cursors_pass_admitted_bills", "pass_admitted_bills >= 0");
 
-                            t.HasCheckConstraint("ck_bill_stream_cursors_updated", "updated_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_bill_stream_cursors_updated_at_utc_ticks", "updated_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
                         });
                 });
 
@@ -1621,7 +1675,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("bill_stream_pages", null, t =>
                         {
-                            t.HasCheckConstraint("ck_bill_stream_pages_recorded", "recorded_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_bill_stream_pages_recorded_at_utc_ticks", "recorded_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_bill_stream_pages_unknown_types", "unknown_type_count >= 0");
                         });
@@ -1826,9 +1880,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("collection_source_schedules", null, t =>
                         {
-                            t.HasCheckConstraint("ck_collection_source_schedules_due", "next_due_utc_ticks BETWEEN 0 AND 3155378975999999999");
-
                             t.HasCheckConstraint("ck_collection_source_schedules_interval", "interval_seconds BETWEEN 60 AND 604800");
+
+                            t.HasCheckConstraint("ck_collection_source_schedules_next_due_utc_ticks", "next_due_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_collection_source_schedules_revision", "configuration_revision_id ~ '^[0-9a-f]{64}$'");
                         });
@@ -2081,7 +2135,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("Loop");
 
-                    b.ToTable("worker_heartbeat", (string)null);
+                    b.ToTable("worker_heartbeat", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_worker_heartbeat_beat_at_utc_ticks", "beat_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Persistence.AttemptRow", b =>
@@ -2200,7 +2257,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_collection_attempts_identity", "length(btrim(attempt_id)) > 0 AND length(btrim(source_id)) > 0 AND length(btrim(requested_url)) > 0 AND length(btrim(final_url)) > 0");
 
-                            t.HasCheckConstraint("ck_collection_attempts_observed_ticks", "observed_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_collection_attempts_observed_at_utc_ticks", "observed_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_collection_attempts_outcome", "(outcome = 'captured' AND has_response AND response_status_code IS NOT NULL AND response_status_code = 200 AND capture_sha256 IS NOT NULL AND failure_code IS NULL AND retry_delay_ticks IS NULL AND prior_capture_attempt_id IS NULL AND prior_capture_sha256 IS NULL)\nOR (outcome = 'notModified' AND has_response AND has_sent_validators AND response_status_code IS NOT NULL AND response_status_code = 304 AND capture_sha256 IS NULL AND failure_code IS NULL AND retry_delay_ticks IS NULL)\nOR (outcome = 'failed' AND failure_code IS NOT NULL AND retry_delay_ticks IS NULL AND capture_sha256 IS NULL AND prior_capture_attempt_id IS NULL AND prior_capture_sha256 IS NULL)\nOR (outcome = 'deferred' AND failure_code IS NOT NULL AND capture_sha256 IS NULL AND prior_capture_attempt_id IS NULL AND prior_capture_sha256 IS NULL)");
 
@@ -2210,13 +2267,13 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_collection_attempts_response", "(has_response AND response_status_code IS NOT NULL AND response_status_code BETWEEN 100 AND 599 AND response_content_encodings IS NOT NULL AND array_position(response_content_encodings, NULL) IS NULL)\nOR (NOT has_response AND response_status_code IS NULL AND response_etag IS NULL AND response_last_modified_utc_ticks IS NULL AND response_content_type IS NULL AND response_content_encodings IS NULL)");
 
-                            t.HasCheckConstraint("ck_collection_attempts_response_ticks", "response_last_modified_utc_ticks IS NULL OR response_last_modified_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_collection_attempts_response_last_modified_utc_ticks", "response_last_modified_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_collection_attempts_retry_ticks", "retry_delay_ticks IS NULL OR retry_delay_ticks >= 0");
 
                             t.HasCheckConstraint("ck_collection_attempts_robots_delay", "robots_crawl_delay_milliseconds IS NULL OR robots_crawl_delay_milliseconds BETWEEN 0 AND 922337203685000");
 
-                            t.HasCheckConstraint("ck_collection_attempts_sent_ticks", "sent_last_modified_utc_ticks IS NULL OR sent_last_modified_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_collection_attempts_sent_last_modified_utc_ticks", "sent_last_modified_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_collection_attempts_validators", "(has_sent_validators OR (sent_etag IS NULL AND sent_last_modified_utc_ticks IS NULL))");
                         });
@@ -2341,6 +2398,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("AttemptId");
 
+                    b.HasIndex("ComparisonId");
+
+                    b.HasIndex("ExtractionId");
+
                     b.HasIndex("JobId", "Stage", "Status");
 
                     b.HasIndex("Status", "ObservedAtUtcTicks", "AttemptId", "JobId");
@@ -2354,6 +2415,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_evidence_processing_fence", "fence >= 0 AND attempts >= 0");
 
                             t.HasCheckConstraint("ck_evidence_processing_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
+
+                            t.HasCheckConstraint("ck_evidence_processing_observed_at_utc_ticks", "observed_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_evidence_processing_stage", "stage IN ('Preparation','Extraction','Comparison','Complete')");
 
@@ -2472,13 +2535,13 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_vote_candidates_chamber", "chamber IN ('House', 'Senate')");
 
-                            t.HasCheckConstraint("ck_vote_candidates_created", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_vote_candidates_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_vote_candidates_id", "candidate_id ~ '^[0-9a-f]{64}$'");
 
                             t.HasCheckConstraint("ck_vote_candidates_roll", "congress >= 1 AND session_number IN (1, 2) AND roll_call_number >= 1");
 
-                            t.HasCheckConstraint("ck_vote_candidates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_vote_candidates_update_date_utc_ticks", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
                         });
                 });
 
@@ -2548,7 +2611,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_vote_versions_roll", "congress >= 1 AND session_number IN (1, 2) AND roll_call_number >= 1");
 
-                            t.HasCheckConstraint("ck_vote_versions_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_vote_versions_update_date_utc_ticks", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
                         });
                 });
 
@@ -2784,7 +2847,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("executive_action_drafts", null, t =>
                         {
+                            t.HasCheckConstraint("ck_executive_action_drafts_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_executive_action_drafts_id", "record_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_executive_action_drafts_last_revised_at_utc_ticks", "last_revised_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_executive_action_drafts_review_state_version", "review_state_version >= 0");
 
@@ -2847,6 +2914,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("executive_action_review_decisions", null, t =>
                         {
+                            t.HasCheckConstraint("ck_executive_action_review_decisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_executive_action_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
 
                             t.HasCheckConstraint("ck_executive_action_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval')");
@@ -2879,6 +2948,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("executive_action_revisions", null, t =>
                         {
+                            t.HasCheckConstraint("ck_executive_action_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_executive_action_revisions_number", "revision_number >= 1");
                         });
                 });
@@ -2964,7 +3035,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_publication_releases_number", "release_number BETWEEN 1 AND 999999");
 
-                            t.HasCheckConstraint("ck_publication_releases_published", "published_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_publication_releases_published_at_utc_ticks", "published_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
                         });
                 });
 
@@ -3092,6 +3163,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("PairId", "Task");
 
+                    b.HasIndex("RetryOfRunId");
+
                     b.HasIndex("StatementCandidateId");
 
                     b.HasIndex("Status", "CreatedAtUtcTicks", "PairId");
@@ -3103,6 +3176,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_relationship_analysis_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
 
+                            t.HasCheckConstraint("ck_relationship_analysis_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_relationship_analysis_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
 
                             t.HasCheckConstraint("ck_relationship_analysis_pair", "pair_id ~ '^[0-9a-f]{64}$'");
@@ -3110,6 +3185,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_relationship_analysis_priority", "priority BETWEEN 1 AND 3");
 
                             t.HasCheckConstraint("ck_relationship_analysis_reservation", "(reserved_tokens = 0) = (budget_day IS NULL AND reserved_at_utc_ticks IS NULL AND pending_run_id IS NULL AND pending_input_hash IS NULL)");
+
+                            t.HasCheckConstraint("ck_relationship_analysis_reserved_at_utc_ticks", "reserved_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_relationship_analysis_retry_of", "retry_of_run_id IS NULL OR retry_of_run_id ~ '^[0-9a-f]{32}$'");
 
@@ -3244,11 +3321,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("relationship_analysis_runs", null, t =>
                         {
+                            t.HasCheckConstraint("ck_relationship_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_relationship_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
 
                             t.HasCheckConstraint("ck_relationship_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Bypassed')");
 
                             t.HasCheckConstraint("ck_relationship_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noRelationship','noLongerMatches','targetRecited')");
+
+                            t.HasCheckConstraint("ck_relationship_analysis_runs_started_at_utc_ticks", "started_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_relationship_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
@@ -3298,7 +3379,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("relationship_drafts", null, t =>
                         {
+                            t.HasCheckConstraint("ck_relationship_drafts_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_relationship_drafts_id", "record_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_relationship_drafts_last_revised_at_utc_ticks", "last_revised_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_relationship_drafts_review_state_version", "review_state_version >= 0");
 
@@ -3361,6 +3446,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("relationship_review_decisions", null, t =>
                         {
+                            t.HasCheckConstraint("ck_relationship_review_decisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_relationship_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
 
                             t.HasCheckConstraint("ck_relationship_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval')");
@@ -3414,6 +3501,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("relationship_revisions", null, t =>
                         {
                             t.HasCheckConstraint("ck_relationship_revisions_author_kind", "author_kind IN ('Person','Analysis')");
+
+                            t.HasCheckConstraint("ck_relationship_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_relationship_revisions_number", "revision_number >= 1");
 
@@ -3514,11 +3603,13 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("reader_reports", null, t =>
                         {
-                            t.HasCheckConstraint("ck_reader_reports_received", "received_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                            t.HasCheckConstraint("ck_reader_reports_received_at_utc_ticks", "received_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_reader_reports_record_id", "record_id ~ '^([0-9a-f]{32}|[0-9a-f]{64})$'");
 
                             t.HasCheckConstraint("ck_reader_reports_resolution", "(status = 'Open') = (resolved_by IS NULL AND resolved_at_utc_ticks IS NULL) AND (status <> 'CorrectionNeeded' OR note IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_reader_reports_resolved_at_utc_ticks", "resolved_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_reader_reports_revision", "revision_number >= 1");
 
@@ -3574,7 +3665,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("document_change_drafts", null, t =>
                         {
+                            t.HasCheckConstraint("ck_document_change_drafts_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_document_change_drafts_id", "draft_id ~ '^[0-9a-f]{32}$'");
+
+                            t.HasCheckConstraint("ck_document_change_drafts_last_revised_at_utc_ticks", "last_revised_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_document_change_drafts_review_status", "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
 
@@ -3606,6 +3701,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("document_change_revisions", null, t =>
                         {
+                            t.HasCheckConstraint("ck_document_change_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_document_change_revisions_number", "revision_number >= 1");
                         });
                 });
@@ -3852,6 +3949,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("document_change_review_decisions", null, t =>
                         {
+                            t.HasCheckConstraint("ck_document_change_review_decisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_document_change_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
 
                             t.HasCheckConstraint("ck_document_change_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval')");
@@ -4221,6 +4320,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("CandidateId", "Task");
 
+                    b.HasIndex("RetryOfRunId");
+
                     b.HasIndex("Status", "CreatedAtUtcTicks", "CandidateId");
 
                     b.HasIndex(new[] { "Task", "Priority", "CreatedAtUtcTicks", "CandidateId" }, "ix_statement_analysis_active_claim")
@@ -4230,11 +4331,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_statement_analysis_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
 
+                            t.HasCheckConstraint("ck_statement_analysis_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_statement_analysis_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
 
                             t.HasCheckConstraint("ck_statement_analysis_priority", "priority BETWEEN 1 AND 3");
 
                             t.HasCheckConstraint("ck_statement_analysis_reservation", "(reserved_tokens = 0) = (budget_day IS NULL AND reserved_at_utc_ticks IS NULL AND pending_run_id IS NULL AND pending_input_hash IS NULL)");
+
+                            t.HasCheckConstraint("ck_statement_analysis_reserved_at_utc_ticks", "reserved_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_statement_analysis_retry_of", "retry_of_run_id IS NULL OR retry_of_run_id ~ '^[0-9a-f]{32}$'");
 
@@ -4376,6 +4481,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("statement_analysis_runs", null, t =>
                         {
+                            t.HasCheckConstraint("ck_statement_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_statement_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (issue_revision_id IS NULL OR issue_revision_id ~ '^[0-9a-f]{64}$') AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
 
                             t.HasCheckConstraint("ck_statement_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Classified','Bypassed')");
@@ -4383,6 +4490,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_statement_analysis_runs_reason", "reason IS NULL OR reason IN ('passed','passed-bill-or-vote','passed-bill-number','no-tracked-issue','over-byte-cap','gate-failed-open')");
 
                             t.HasCheckConstraint("ck_statement_analysis_runs_revision", "issue_revision_id IS NOT NULL OR outcome = 'Interrupted' OR task <> 'gate'");
+
+                            t.HasCheckConstraint("ck_statement_analysis_runs_started_at_utc_ticks", "started_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_statement_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
@@ -4431,6 +4540,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("statement_candidates", null, t =>
                         {
+                            t.HasCheckConstraint("ck_statement_candidates_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_statement_candidates_id", "candidate_id ~ '^[0-9a-f]{64}$'");
                         });
                 });
@@ -4511,6 +4622,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("statement_drafts", null, t =>
                         {
+                            t.HasCheckConstraint("ck_statement_drafts_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_statement_drafts_last_revised_at_utc_ticks", "last_revised_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_statement_drafts_not_drafted", "(current_revision_number = 0) = (review_status = 'NotDrafted')");
 
                             t.HasCheckConstraint("ck_statement_drafts_review_state_version", "review_state_version >= 0");
@@ -4568,6 +4683,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("LabelId");
 
+                    b.HasIndex("ExtractionId");
+
                     b.HasIndex("RunId")
                         .IsUnique();
 
@@ -4576,6 +4693,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("statement_gate_labels", null, t =>
                         {
                             t.HasCheckConstraint("ck_statement_gate_labels_author_kind", "author_kind IN ('Person','Analysis')");
+
+                            t.HasCheckConstraint("ck_statement_gate_labels_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_statement_gate_labels_id", "label_id ~ '^[0-9a-f]{32}$'");
 
@@ -4636,6 +4755,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("statement_review_decisions", null, t =>
                         {
+                            t.HasCheckConstraint("ck_statement_review_decisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_statement_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
 
                             t.HasCheckConstraint("ck_statement_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval')");
@@ -4689,6 +4810,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("statement_revisions", null, t =>
                         {
                             t.HasCheckConstraint("ck_statement_revisions_author_kind", "author_kind IN ('Person','Analysis')");
+
+                            t.HasCheckConstraint("ck_statement_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_statement_revisions_number", "revision_number >= 1");
 
@@ -4802,6 +4925,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("CandidateId", "Task");
 
+                    b.HasIndex("RetryOfRunId");
+
                     b.HasIndex("Status", "CreatedAtUtcTicks", "CandidateId");
 
                     b.HasIndex(new[] { "Task", "Priority", "CreatedAtUtcTicks", "CandidateId" }, "ix_vote_analysis_active_claim")
@@ -4811,11 +4936,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_vote_analysis_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
 
+                            t.HasCheckConstraint("ck_vote_analysis_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_vote_analysis_lease", "(lease_token IS NULL) = (lease_expires_at IS NULL)");
 
                             t.HasCheckConstraint("ck_vote_analysis_priority", "priority BETWEEN 1 AND 3");
 
                             t.HasCheckConstraint("ck_vote_analysis_reservation", "(reserved_tokens = 0) = (budget_day IS NULL AND reserved_at_utc_ticks IS NULL AND pending_run_id IS NULL AND pending_input_hash IS NULL)");
+
+                            t.HasCheckConstraint("ck_vote_analysis_reserved_at_utc_ticks", "reserved_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_vote_analysis_retry_of", "retry_of_run_id IS NULL OR retry_of_run_id ~ '^[0-9a-f]{32}$'");
 
@@ -4948,11 +5077,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("vote_analysis_runs", null, t =>
                         {
+                            t.HasCheckConstraint("ck_vote_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_vote_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
 
                             t.HasCheckConstraint("ck_vote_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Bypassed')");
 
                             t.HasCheckConstraint("ck_vote_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noTrackedMember','memberVotesChanged','kindChanged')");
+
+                            t.HasCheckConstraint("ck_vote_analysis_runs_started_at_utc_ticks", "started_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_vote_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
@@ -5047,6 +5180,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("RecordId");
 
+                    b.HasIndex("CandidateId");
+
                     b.HasIndex("IssueIds")
                         .HasDatabaseName("ix_vote_drafts_issue_ids");
 
@@ -5070,7 +5205,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_vote_drafts_chamber", "chamber IN ('House', 'Senate')");
 
+                            t.HasCheckConstraint("ck_vote_drafts_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_vote_drafts_id", "record_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_vote_drafts_last_revised_at_utc_ticks", "last_revised_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_vote_drafts_review_state_version", "review_state_version >= 0");
 
@@ -5135,6 +5274,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("vote_review_decisions", null, t =>
                         {
+                            t.HasCheckConstraint("ck_vote_review_decisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_vote_review_decisions_id", "decision_id ~ '^[0-9a-f]{32}$'");
 
                             t.HasCheckConstraint("ck_vote_review_decisions_kind", "kind IN ('Approve', 'RequestChanges', 'WithdrawApproval')");
@@ -5189,6 +5330,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_vote_revisions_author_kind", "author_kind IN ('Person','Analysis')");
 
+                            t.HasCheckConstraint("ck_vote_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_vote_revisions_number", "revision_number >= 1");
 
                             t.HasCheckConstraint("ck_vote_revisions_run", "(author_kind = 'Analysis') = (run_id IS NOT NULL)");
@@ -5202,6 +5345,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("CandidateId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionAnalysisRunRow", null)
+                        .WithMany()
+                        .HasForeignKey("RetryOfRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionAnalysisRunRow", b =>
@@ -5214,6 +5362,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionAnalysisRow", null)
                         .WithMany()
                         .HasForeignKey("CandidateId", "Task")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionDraftRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.BillStream.ActionCandidateRow", null)
+                        .WithMany()
+                        .HasForeignKey("CandidateId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -5253,6 +5410,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .WithMany()
                         .HasForeignKey("DraftId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.DocumentChangeAnalysisRunRow", null)
+                        .WithMany()
+                        .HasForeignKey("RetryOfRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Analysis.Persistence.DocumentChangeAnalysisRunRow", b =>
@@ -5271,6 +5433,14 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionRow", null)
                         .WithMany()
                         .HasForeignKey("DraftId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Briefs.Persistence.BriefAnalysisRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefAnalysisRunRow", null)
+                        .WithMany()
+                        .HasForeignKey("RetryOfRunId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
@@ -5490,6 +5660,19 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.Processing.PersistedEvidenceProcessingRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonRow", null)
+                        .WithMany()
+                        .HasForeignKey("ComparisonId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.Votes.VoteCandidateRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Collection.Jobs.Persistence.ConfigurationRevisionRow", null)
@@ -5616,6 +5799,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Relationships.Persistence.RelationshipAnalysisRow", b =>
                 {
+                    b.HasOne("CivicLens.Infrastructure.Relationships.Persistence.RelationshipAnalysisRunRow", null)
+                        .WithMany()
+                        .HasForeignKey("RetryOfRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementCandidateRow", null)
                         .WithMany()
                         .HasForeignKey("StatementCandidateId")
@@ -5872,6 +6060,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("CandidateId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementAnalysisRunRow", null)
+                        .WithMany()
+                        .HasForeignKey("RetryOfRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementAnalysisRunRow", b =>
@@ -5920,6 +6113,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementAnalysisRunRow", null)
                         .WithMany()
                         .HasForeignKey("RunId")
@@ -5956,6 +6155,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("CandidateId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Votes.Persistence.VoteAnalysisRunRow", null)
+                        .WithMany()
+                        .HasForeignKey("RetryOfRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteAnalysisRunRow", b =>
@@ -5968,6 +6172,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Votes.Persistence.VoteAnalysisRow", null)
                         .WithMany()
                         .HasForeignKey("CandidateId", "Task")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteDraftRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.Votes.VoteCandidateRow", null)
+                        .WithMany()
+                        .HasForeignKey("CandidateId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

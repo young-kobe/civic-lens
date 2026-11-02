@@ -8,7 +8,7 @@ internal sealed class StatementAnalysisRowConfiguration : IEntityTypeConfigurati
 {
     public void Configure(EntityTypeBuilder<StatementAnalysisRow> builder)
     {
-        AnalysisTableConfiguration.ConfigureQueue(builder, "statement_analysis", nameof(StatementAnalysisRow.CandidateId), "candidate_id");
+        AnalysisTableConfiguration.ConfigureQueue<StatementAnalysisRow, StatementAnalysisRunRow>(builder, "statement_analysis", nameof(StatementAnalysisRow.CandidateId), "candidate_id");
         builder.HasOne<StatementCandidateRow>().WithMany()
             .HasForeignKey(row => row.CandidateId).OnDelete(DeleteBehavior.Restrict);
     }
