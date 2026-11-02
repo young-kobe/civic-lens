@@ -255,7 +255,7 @@ public sealed class ReviewDecisionColumnsMigrationTests(PostgresCollection postg
     public async Task EveryNewColumnThatHoldsAnActorOrANoteIsHiddenFromTheReadOnlyRoleAndTheResolutionColumnsAreNot()
     {
         await MigrateForwardAsync();
-        var hidden = ReadOnlyGrants.HiddenColumnPattern();
+        var hidden = ReadOnlyGrants.HiddenColumn();
         var columns = await ReadAsync("""
             SELECT table_name || '.' || column_name FROM information_schema.columns
             WHERE table_schema = 'public' AND table_name ~ '_review_decision(s|_resolutions)$'

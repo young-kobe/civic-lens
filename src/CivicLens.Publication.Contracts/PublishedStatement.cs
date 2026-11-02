@@ -8,7 +8,7 @@ public sealed record PublishedStatement
     public required int RevisionNumber { get; init; }
     public required string Headline { get; init; }
     public required string Summary { get; init; }
-    public required PublishedTextOrigin TextOrigin { get; init; }
+    public PublishedTextOrigin TextOrigin { get; init; } = PublishedTextOrigin.Model;
     public DateOnly? StatementDate { get; init; }
     public PublishedCitation? StatementDateEvidence { get; init; }
     public required PublishedOfficial[] Speakers { get; init; }
@@ -19,7 +19,7 @@ public sealed record PublishedStatement
     public required string[] BillNumbers { get; init; }
     public required PublishedDocumentVersion Source { get; init; }
     public string? ArticleUrl { get; init; }
-    public required PublishedApprover ApprovedBy { get; init; }
+    public PublishedApprover ApprovedBy { get; init; } = PublishedApprover.Person;
     public required DateTimeOffset ApprovedAtUtc { get; init; }
     public required DateTimeOffset FirstPublishedAtUtc { get; init; }
     public required PublishedCorrection[] Corrections { get; init; }

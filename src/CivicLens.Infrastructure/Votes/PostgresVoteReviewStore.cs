@@ -51,11 +51,12 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
     public Task<VoteDraftRevision> SaveRevisionAsync(string actorSubject, VoteDraftRevision revision, int expectedRevisionNumber,
         ReviewDecision? approval, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
-            payloadHash, (_, _, current) =>
+            payloadHash, async (db, _, current) =>
             {
                 revision.ValidatePersonEditOf(current);
-                return Task.FromResult(revision);
-            }, saved => VoteDraftRows.NewRevision(saved, null), null,
+                await VoteMemberLists.EnsureAsync(db, revision, cancellationToken);
+                return revision;
+            }, saved => VoteRevisionRows.Create(saved, null), null,
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
                 afterDecision, revision => revision.ComparableForm()), cancellationToken);
 

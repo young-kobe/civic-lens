@@ -4,8 +4,8 @@ namespace CivicLens.Tests.Fixtures;
 
 internal static partial class ReadOnlyGrants
 {
-    // The read-only role hides a column by name, so each column that holds a reviewer or a note must match this pattern.
-    public static Regex HiddenColumnPattern()
+    /// <summary>The column name pattern that deploy/scripts/readonly-grants.sql hides from the read-only role.</summary>
+    public static Regex HiddenColumn()
     {
         var script = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "deploy", "scripts", "readonly-grants.sql"));
         var literals = HiddenColumnAssignment().Match(script).Groups["value"].Value;

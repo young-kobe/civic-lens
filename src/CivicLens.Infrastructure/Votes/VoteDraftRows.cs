@@ -26,7 +26,8 @@ internal static class VoteDraftRows
         var draft = await db.Set<VoteDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return VoteDraftErrorCodes.RevisionConflict;
         if (draft is null) db.Add(draft = NewDraft(revision));
-        await Records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision, runId), await Records.ReadCycleAsync(db, draft, cancellationToken),
+        await VoteMemberLists.EnsureAsync(db, revision, cancellationToken);
+        await Records.AppendCodeApprovedAsync(db, draft, revision, VoteRevisionRows.Create(revision, runId), await Records.ReadCycleAsync(db, draft, cancellationToken),
             () => ApprovalCheck.OfAsync(() => PostgresVoteReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)));
         return null;
     }
@@ -62,17 +63,6 @@ internal static class VoteDraftRows
         Congress = revision.Congress,
         SessionNumber = revision.SessionNumber,
         RollCallNumber = revision.RollCallNumber,
-        CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
-    };
-
-    public static VoteRevisionRow NewRevision(VoteDraftRevision revision, string? runId) => new()
-    {
-        RecordId = revision.RecordId,
-        RevisionNumber = revision.RevisionNumber,
-        AuthorSubject = revision.AuthorSubject,
-        AuthorKind = ReviewAuthor.KindOf(revision.AuthorSubject),
-        RunId = runId,
-        RevisionJson = ReviewJson.Serialize(revision),
         CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
     };
 }

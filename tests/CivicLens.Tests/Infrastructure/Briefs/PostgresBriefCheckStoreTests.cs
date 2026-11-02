@@ -272,7 +272,7 @@ public sealed class PostgresBriefCheckStoreTests(PostgresCollection postgres) : 
     [Fact]
     public async Task TheReadOnlyRoleCanReadTheModelNoteOfAFlagBecauseItIsNotAReviewerNote()
     {
-        var hidden = ReadOnlyGrants.HiddenColumnPattern();
+        var hidden = ReadOnlyGrants.HiddenColumn();
         var columns = await RowsAsync("SELECT column_name FROM information_schema.columns WHERE table_name = 'brief_check_flags'");
 
         Assert.Contains("message", columns);
