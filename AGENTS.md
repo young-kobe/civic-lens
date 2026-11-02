@@ -2,7 +2,7 @@
 
 ## Start here
 
-Read README.md for current capabilities and commands, then docs/architecture.md for ownership and dependency rules. Start at its lookup table and read only the feature docs in docs/architecture/ that the task needs. Read docs/roadmap.md only to select pending work, and docs/operations.md for execution. Inspect the relevant project and tests before changing code. Do not recursively read the legacy repo or generated artifacts by default.
+Read README.md for current capabilities and commands, then docs/architecture.md for ownership and dependency rules. Start at its lookup table and read only the feature docs in docs/architecture/ that the task needs. Read docs/roadmap.md only to select pending work, docs/operations.md for execution, and docs/agent-rules.md for how agents work here. Inspect the relevant project and tests before changing code. Do not recursively read the legacy repo or generated artifacts by default.
 
 Entry points: src/CivicLens.Host/Program.cs and src/CivicLens.Collector/Program.cs. Boundary tests: tests/CivicLens.Tests/Architecture/ArchitectureTests.cs. Build policy: Directory.Build.props and global.json. The solution file is the project inventory.
 
@@ -44,7 +44,7 @@ The application owns durable jobs and aggregate budgets. The collector accepts b
 
 ## Documentation and repository hygiene
 
-The core prose reference set is README.md, AGENTS.md, docs/architecture.md (system overview and the only lookup table), one doc for each feature in docs/architecture/, docs/operations.md, and docs/roadmap.md. Every feature doc uses the template headings: Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, and Limits and planned work. Each invariant names its rule, its enforcer, and its protecting test, or says "No test". Update these in place. Do not add session reports, changelogs, audit trails, implementation diaries, or duplicate plans. Git records history.
+The core prose reference set is README.md, AGENTS.md, docs/architecture.md (system overview and the only lookup table), one doc for each feature in docs/architecture/, docs/operations.md, docs/agent-rules.md, and docs/roadmap.md. Every feature doc uses the template headings: Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, and Limits and planned work. Each invariant names its rule, its enforcer, and its protecting test, or says "No test". Update these in place. Do not add session reports, changelogs, audit trails, implementation diaries, or duplicate plans. Git records history.
 
 Architecture diagrams and the generated HTML explorer share definitions in tools/render-architecture.py. When boundaries change, update the diagram definitions and run the renderer. Generated HTML lives in ignored artifacts/.
 
