@@ -7,6 +7,7 @@
 <TopBarTitle Crumbs="Crumbs" />
 
 <div class="content">
+    <ReaderReportDismissForm Actor="actor" />
     @if (item is null)
     {
         @if (error is not null)
@@ -54,7 +55,7 @@
         {
             <Panel Title="Resolve this report" Id="decision" Padded="true">
                 <p class="small">To fix the record, open it in the editor and press Save and approve. If the report is wrong, dismiss it.</p>
-                <ReaderReportDismissButton Actor="actor" Report="report" />
+                <ReaderReportDismissButton Report="report" />
                 <div class="actions"><Button Href="@ReportRoutes.List">Back to the list</Button></div>
             </Panel>
         }

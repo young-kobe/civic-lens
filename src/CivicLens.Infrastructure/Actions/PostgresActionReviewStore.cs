@@ -50,7 +50,8 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
     }
 
     public Task<ActionDraftRevision> SaveRevisionAsync(string actorSubject, ActionDraftRevision revision, int expectedRevisionNumber,
-        ReviewDecision? approval, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
+        ReviewDecision? approval, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds,
+        CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
             payloadHash, (_, _, current) =>
             {
@@ -58,10 +59,10 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
                 return Task.FromResult(revision);
             }, saved => ActionDraftRows.NewRevision(saved, null),
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
-                afterDecision, revision => revision.ComparableForm()), cancellationToken);
+                afterDecision, revision => revision.ComparableForm(), correctedReportIds), cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, string idempotencyKey, string payloadHash,
+        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds,
         CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash, async (db, _, history) =>
@@ -69,7 +70,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
                 var current = history.CurrentRevision!;
                 await ValidateApprovalAsync(db, current, cancellationToken);
-            }, afterDecision, cancellationToken);
+            }, afterDecision, correctedReportIds, cancellationToken);
 
     public async Task<string?> FindRecordIdByBillAsync(int congress, string billType, int billNumber, CancellationToken cancellationToken)
     {

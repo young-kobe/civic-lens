@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CivicLens.Application.Relationships;
 using CivicLens.Application.Review;
 using CivicLens.Core.Documents;
@@ -212,6 +213,91 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new DecideRelationshipReview(reviews).ExecuteAsync(analysis,
             new(recordId, 1, 0, ReviewDecisionKind.Approve, null, [], "decide-1")));
     }
+
+    [Fact]
+    public async Task SaveAndApproveClosesTheListedReportsOfAnOlderRevisionAndNoOtherBecauseTheReviewerSawOnlyThose()
+    {
+        var listed = await OpenReportAsync(1);
+        var unlisted = await OpenReportAsync(1);
+        var elsewhere = await OpenReportAsync(1, new string('b', 64));
+        var request = new SaveRelationshipDraftRequest(recordId, 1, RelationshipType.ClaimsCreditFor, "She claims credit for the bill.",
+            Span(BillSentence), "F1", "save-and-approve", new ApprovalWithSave(0, null, [], null, [listed, elsewhere]));
+
+        _ = await new SaveRelationshipDraft(reviews).ExecuteAsync(Reviewer, request);
+
+        Assert.Equal(("CorrectionNeeded", "Approved with a correction.", Reviewer.Subject),
+            (await ReportAsync(listed, "status"), await ReportAsync(listed, "note"), await ReportAsync(listed, "resolved_by")));
+        Assert.Equal(("Open", "Open"), (await ReportAsync(unlisted, "status"), await ReportAsync(elsewhere, "status")));
+    }
+
+    [Fact]
+    public async Task ASeparateApprovalClosesAReportOfAnOlderRevisionAndKeepsOneOnTheApprovedRevisionBecauseNoNewWordingAnsweredIt()
+    {
+        _ = await SaveAsync(1, RelationshipType.StatesPositionOn, "Person reason.", Span(BillSentence), "F1");
+        var older = await OpenReportAsync(1);
+        var onApproved = await OpenReportAsync(2);
+
+        _ = await ApproveWithReportsAsync(2, [older, onApproved]);
+
+        Assert.Equal(("CorrectionNeeded", "Open"), (await ReportAsync(older, "status"), await ReportAsync(onApproved, "status")));
+    }
+
+    [Fact]
+    public async Task AnApprovalOfTheRevisionThatTheReportNamesClosesNothing()
+    {
+        var onCurrent = await OpenReportAsync(1);
+
+        _ = await ApproveWithReportsAsync(1, [onCurrent]);
+
+        Assert.Equal("Open", await ReportAsync(onCurrent, "status"));
+    }
+
+    [Fact]
+    public async Task ARejectedApprovalLeavesTheReportOpenBecauseTheCloseSitsInTheApprovalTransaction()
+    {
+        _ = await SaveAsync(1, RelationshipType.StatesPositionOn, "Person reason.", Span(BillSentence), "F1");
+        var report = await OpenReportAsync(1);
+        await seeder.ExecuteAsync("""
+            CREATE FUNCTION refuse_idempotency_row() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'refused'; END $$ LANGUAGE plpgsql;
+            CREATE TRIGGER refuse_idempotency_row BEFORE INSERT ON document_change_review_idempotency
+                FOR EACH ROW EXECUTE FUNCTION refuse_idempotency_row();
+            """);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => ApproveWithReportsAsync(2, [report]));
+
+        Assert.Equal(("Open", "0"), (await ReportAsync(report, "status"), await ReadAsync("SELECT count(*) FROM relationship_review_decisions")));
+    }
+
+    [Fact]
+    public async Task ASubjectWhoCannotReviewClosesNoReportBecauseTheReviewerCheckComesBeforeTheStore()
+    {
+        var report = await OpenReportAsync(1);
+        var outsider = new ReviewActor("auth0|nobody", (ReviewRole)99);
+        var save = new SaveRelationshipDraftRequest(recordId, 1, RelationshipType.StatesPositionOn, "Reason.", Span(BillSentence), "F1",
+            "save-and-approve", new ApprovalWithSave(0, null, [], null, [report]));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new SaveRelationshipDraft(reviews).ExecuteAsync(outsider, save));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new DecideRelationshipReview(reviews).ExecuteAsync(outsider,
+            new(recordId, 1, 0, ReviewDecisionKind.Approve, null, [], "decide-1", null, [report])));
+
+        Assert.Equal("Open", await ReportAsync(report, "status"));
+    }
+
+    private Task<ReviewDecision> ApproveWithReportsAsync(int revision, ImmutableArray<Guid> reportIds) =>
+        new DecideRelationshipReview(reviews).ExecuteAsync(Reviewer, new(recordId, revision, 0, ReviewDecisionKind.Approve, null, [],
+            Guid.NewGuid().ToString("N"), null, reportIds));
+
+    private async Task<Guid> OpenReportAsync(int revision, string? record = null)
+    {
+        var id = Guid.NewGuid();
+        await seeder.ExecuteAsync("""
+            INSERT INTO reader_reports (report_id, record_id, kind, revision_number, category, body, received_at_utc_ticks, status, version)
+            VALUES (@id, @record, 'Relationship', @revision, 'other', 'text', 1, 'Open', 0)
+            """, ("id", id), ("record", record ?? recordId), ("revision", revision));
+        return id;
+    }
+
+    private Task<string> ReportAsync(Guid id, string column) => ReadAsync($"SELECT {column} FROM reader_reports WHERE report_id = '{id}'");
 
     private async Task DraftAsync(IRelationshipDraftModel model)
     {

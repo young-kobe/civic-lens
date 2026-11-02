@@ -9,7 +9,6 @@ internal sealed class FakeReaderReportStore : IReaderReportStore
     public string? Cursor { get; private set; }
     public List<Guid> Stored { get; } = [];
     public List<(string Actor, Guid ReportId, int ExpectedVersion)> Dismissals { get; } = [];
-    public List<(string Actor, PublishedRecordKind Kind, string RecordId, Guid[] ReportIds, string Note)> Closures { get; } = [];
 
     public Task<string?> GetCursorAsync(CancellationToken cancellationToken) => Task.FromResult(Cursor);
 
@@ -23,13 +22,6 @@ internal sealed class FakeReaderReportStore : IReaderReportStore
     public Task DismissAsync(string actorSubject, Guid reportId, int expectedVersion, CancellationToken cancellationToken)
     {
         Dismissals.Add((actorSubject, reportId, expectedVersion));
-        return Task.CompletedTask;
-    }
-
-    public Task CloseCorrectedAsync(string actorSubject, PublishedRecordKind kind, string recordId, IReadOnlyCollection<Guid> reportIds,
-        string note, CancellationToken cancellationToken)
-    {
-        Closures.Add((actorSubject, kind, recordId, [.. reportIds], note));
         return Task.CompletedTask;
     }
 

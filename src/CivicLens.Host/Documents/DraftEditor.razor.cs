@@ -197,7 +197,7 @@ public sealed partial class DraftEditor
     {
         var request = new DecideDocumentChangeReviewRequest(DraftId, DecideExpectedRevision, DecideExpectedStateVersion,
             ParseDecisionKind(Kind), EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "",
-            CorrectionNoteOfApproval());
+            CorrectionNoteOfApproval(), ApprovedReportIds());
         _ = await DecideReview.ExecuteAsync(actor, request, RequestAborted);
         return DocumentRoutes.Editor(DraftId, "decided");
     }
@@ -208,7 +208,7 @@ public sealed partial class DraftEditor
         return LoadAsync();
     }
 
-    protected override PublishedRecordReference Record => new(PublishedRecordKind.DocumentChange, DraftId);
+    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.DocumentChange, DraftId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(review is null ? null : await RunTakeOffSiteAsync(CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));

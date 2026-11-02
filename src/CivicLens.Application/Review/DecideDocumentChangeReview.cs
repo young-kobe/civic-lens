@@ -15,6 +15,6 @@ public sealed class DecideDocumentChangeReview(IDocumentChangeReviewStore store,
             request.ExpectedReviewStateVersion, request.Kind, request.Note, request.ResolvedDecisionIds, request.CorrectionNote);
         return store.DecideAsync(actor.Subject, decision, request.ExpectedRevisionNumber,
             request.ExpectedReviewStateVersion, request.IdempotencyKey, ReviewValidation.HashPayload(request),
-            catalog.OfficialIds, catalog.IssueIds, cancellationToken);
+            catalog.OfficialIds, catalog.IssueIds, ReviewValidation.ValidateReportIds(request.CorrectedReportIds), cancellationToken);
     }
 }

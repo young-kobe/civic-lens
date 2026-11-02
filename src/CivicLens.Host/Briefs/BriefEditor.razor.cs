@@ -104,7 +104,7 @@ public sealed partial class BriefEditor
     {
         var request = new DecideBriefReviewRequest(RecordId, DecideExpectedRevision, DecideExpectedStateVersion,
             ParseDecisionKind(Kind), EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "",
-            CorrectionNoteOfApproval());
+            CorrectionNoteOfApproval(), ApprovedReportIds());
         _ = await DecideReview.ExecuteAsync(actor, request, RequestAborted);
         return BriefRoutes.Editor(RecordId, "decided");
     }
@@ -115,7 +115,7 @@ public sealed partial class BriefEditor
         return LoadAsync();
     }
 
-    protected override PublishedRecordReference Record => new(PublishedRecordKind.Brief, RecordId);
+    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Brief, RecordId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(detail.Review.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));

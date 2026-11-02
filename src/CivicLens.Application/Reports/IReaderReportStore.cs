@@ -20,10 +20,6 @@ public interface IReaderReportStore
     /// <summary>Dismisses an open report at the expected version. A report that is resolved or changed throws <see cref="ReviewConflictException"/>.</summary>
     Task DismissAsync(string actorSubject, Guid reportId, int expectedVersion, CancellationToken cancellationToken);
 
-    /// <summary>Closes the open reports of the record whose revision is older than the current revision of the record. Other reports stay open.</summary>
-    Task CloseCorrectedAsync(string actorSubject, PublishedRecordKind kind, string recordId, IReadOnlyCollection<Guid> reportIds, string note,
-        CancellationToken cancellationToken);
-
     /// <summary>Deletes the closed reports that were resolved more than <see cref="ReaderReportProtocol.ClosedRetentionDays"/> days ago by the database clock. An open report stays. Returns the number deleted.</summary>
     Task<int> DeleteExpiredClosedAsync(CancellationToken cancellationToken);
 

@@ -69,7 +69,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
     public Task<DocumentChangeDraftRevision> SaveRevisionAsync(string actorSubject,
         DocumentChangeDraftRevision revision, int expectedRevisionNumber, bool changeDateChecked,
         ReviewDecision? approval, ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds,
-        string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
+        string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken)
     {
         VerifiedComparison? verified = null;
         return Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
@@ -89,21 +89,21 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
                     ValidateDecision(draft, history, approval, verified!, allowedOfficialIds, allowedIssueIds);
                     return Task.CompletedTask;
                 },
-                afterDecision, revision => revision.ComparableForm(),
+                afterDecision, revision => revision.ComparableForm(), correctedReportIds,
                 current => AiProposedDate.IsProposed(current.AuthorSubject, current.ChangeDate)), cancellationToken);
     }
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision,
         int expectedRevisionNumber, int expectedReviewStateVersion, string idempotencyKey,
         string payloadHash, ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds,
-        CancellationToken cancellationToken) =>
+        ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash,
             async (db, draft, history) => ValidateDecision(draft, history, decision,
                 await ReadVerifiedComparisonAsync(db, draft.ComparisonId, cancellationToken)
                     ?? throw new InvalidOperationException("Retained draft comparison is no longer valid."),
                 allowedOfficialIds, allowedIssueIds),
-            afterDecision, cancellationToken);
+            afterDecision, correctedReportIds, cancellationToken);
 
     private static void ValidateDecision(DocumentChangeDraftRow draft, ReviewHistory<DocumentChangeDraftRevision> history,
         ReviewDecision decision, VerifiedComparison verified, ImmutableHashSet<string> allowedOfficialIds,

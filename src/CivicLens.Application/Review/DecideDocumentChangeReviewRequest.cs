@@ -6,4 +6,4 @@ namespace CivicLens.Application.Review;
 public sealed record DecideDocumentChangeReviewRequest(string DraftId, int ExpectedRevisionNumber,
     int ExpectedReviewStateVersion, ReviewDecisionKind Kind, string? Note,
     ImmutableArray<string> ResolvedDecisionIds, string IdempotencyKey,
-    string? CorrectionNote = null);
+    string? CorrectionNote = null, ImmutableArray<Guid>? CorrectedReportIds = null);

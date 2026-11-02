@@ -329,7 +329,6 @@ internal static class ReviewWorkspace
     {
         services.AddSingleton<IReaderReportStore>(new PostgresReaderReportStore(contexts));
         services.AddScoped<DismissReaderReport>();
-        services.AddScoped<CloseCorrectedReports>();
         services.AddScoped<GetReaderReport>();
         services.AddScoped<ListReaderReports>();
         services.AddScoped<CountOpenReaderReports>();

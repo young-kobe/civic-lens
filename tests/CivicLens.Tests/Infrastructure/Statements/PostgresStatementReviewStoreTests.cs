@@ -547,7 +547,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
             DateTimeOffset.UtcNow);
         var withoutWarren = new StatementAllowedSelections([Markey], [RentIssue], [HousingArea]);
         await Assert.ThrowsAsync<ArgumentException>(() => reviews.DecideAsync(Owner.Subject, decision, 2, 0, withoutWarren,
-            "direct", new string('a', 64), default));
+            "direct", new string('a', 64), [], default));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_review_decisions"));
     }
 

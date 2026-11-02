@@ -33,6 +33,7 @@ internal static class ReviewValidation
 {
     private const int MaximumIdempotencyKeyLength = 256;
     private const int MaximumFilterIdLength = 128;
+    private const int MaximumReportIds = 64;
 
     public static void ValidateIdempotencyKey(string value)
     {
@@ -120,6 +121,13 @@ internal static class ReviewValidation
     public static ReviewDecision? CreateApprovalOf(ReviewActor actor, string recordId, int revisionNumber, ApprovalWithSave? approval) =>
         approval is null ? null : CreateDecision(actor, recordId, revisionNumber, approval.ExpectedReviewStateVersion,
             ReviewDecisionKind.Approve, approval.Note, approval.ResolvedDecisionIds, approval.CorrectionNote);
+
+    public static ImmutableArray<Guid> ValidateReportIds(ImmutableArray<Guid>? ids)
+    {
+        if (ids is not { IsDefaultOrEmpty: false } listed) return [];
+        if (listed.Length > MaximumReportIds) throw new ArgumentException($"At most {MaximumReportIds} report IDs may be supplied.", nameof(ids));
+        return [.. listed.Distinct()];
+    }
 
     public static ImmutableArray<string> ValidateDecisionIds(ImmutableArray<string> ids)
     {

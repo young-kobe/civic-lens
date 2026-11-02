@@ -11,12 +11,12 @@ public interface IDocumentChangeReviewStore
 
     Task<DocumentChangeDraftRevision> SaveRevisionAsync(string actorSubject, DocumentChangeDraftRevision revision,
         int expectedRevisionNumber, bool changeDateChecked, ReviewDecision? approval,
-        ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
+        ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken);
 
     Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision,
         int expectedRevisionNumber, int expectedReviewStateVersion, string idempotencyKey,
         string payloadHash, ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds,
-        CancellationToken cancellationToken);
+        ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken);
 
     Task<DocumentChangeReview?> GetAsync(string draftId, CancellationToken cancellationToken);
     Task<IReadOnlyDictionary<string, PublishableDocumentChange>> GetForPublicationAsync(

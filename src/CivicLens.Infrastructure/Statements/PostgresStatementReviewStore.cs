@@ -62,7 +62,7 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
 
     public Task<StatementDraftRevision> SaveRevisionAsync(string actorSubject, StatementDraftRevision revision,
         int expectedRevisionNumber, bool statementDateChecked, ReviewDecision? approval, StatementAllowedSelections? approvalSelections,
-        string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
+        string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
             payloadHash, async (db, draft, current) =>
             {
@@ -75,16 +75,16 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
             }, saved => StatementDraftRows.NewRevision(saved, null),
             approval is null ? null : new(approval,
                 (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, approvalSelections, cancellationToken), afterDecision,
-                revision => revision.ComparableForm(), current => AiProposedDate.IsProposed(current.AuthorSubject, current.StatementDate)),
+                revision => revision.ComparableForm(), correctedReportIds, current => AiProposedDate.IsProposed(current.AuthorSubject, current.StatementDate)),
             cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash,
-        CancellationToken cancellationToken) =>
+        ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash, (db, _, history) => decision.Kind == ReviewDecisionKind.Approve
                 ? ValidateApprovalAsync(db, history.CurrentRevision!, approvalSelections, cancellationToken)
-                : Task.CompletedTask, afterDecision, cancellationToken);
+                : Task.CompletedTask, afterDecision, correctedReportIds, cancellationToken);
 
     public async Task<StatementReviewRead?> GetAsync(string candidateId, CancellationToken cancellationToken)
     {

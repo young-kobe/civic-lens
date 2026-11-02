@@ -44,11 +44,11 @@ internal sealed class FakeActionReviewStore : IActionReviewStore
         throw new NotSupportedException();
 
     public Task<ActionDraftRevision> SaveRevisionAsync(string actorSubject, ActionDraftRevision revision, int expectedRevisionNumber,
-        ReviewDecision? approval, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) => throw new NotSupportedException();
+        ReviewDecision? approval, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, string idempotencyKey, string payloadHash,
-        CancellationToken cancellationToken) => throw new NotSupportedException();
+        ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<ActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken) => throw new NotSupportedException();
 

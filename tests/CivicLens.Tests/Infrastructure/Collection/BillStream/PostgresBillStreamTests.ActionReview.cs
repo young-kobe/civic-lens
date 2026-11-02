@@ -281,7 +281,7 @@ public sealed partial class PostgresBillStreamTests
             new(RecordId, 1, 0, ReviewDecisionKind.Approve, null, [], Guid.NewGuid().ToString("N"))));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => ActionReviews().DecideAsync(ReviewAuthor.CodeSubject,
             new(Guid.NewGuid().ToString("N"), RecordId, 1, 1, ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, null, [], DateTimeOffset.UtcNow),
-            1, 0, "key", new string('a', 64), default));
+            1, 0, "key", new string('a', 64), [], default));
         Assert.Empty(await ActionDecisionsAsync());
     }
 
@@ -453,7 +453,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.Null(cleared.Suggestion);
         var forged = cleared with { RevisionNumber = 6, CreatedAtUtc = DateTimeOffset.UtcNow, Suggestion = withSuggestion.Suggestion };
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            ActionReviews().SaveRevisionAsync(Reviewer.Subject, forged, 5, null, "save-6", new string('6', 64), default));
+            ActionReviews().SaveRevisionAsync(Reviewer.Subject, forged, 5, null, "save-6", new string('6', 64), [], default));
         Assert.Equal(5, await ScalarAsync($"SELECT current_revision_number FROM action_drafts WHERE record_id = '{RecordId}'"));
     }
 

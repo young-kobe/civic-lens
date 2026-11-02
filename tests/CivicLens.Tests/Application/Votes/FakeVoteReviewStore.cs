@@ -63,10 +63,10 @@ internal sealed class FakeVoteReviewStore : IVoteReviewStore
         throw new NotSupportedException();
 
     public Task<VoteDraftRevision> SaveRevisionAsync(string actorSubject, VoteDraftRevision revision, int expectedRevisionNumber,
-        ReviewDecision? approval, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) => throw new NotSupportedException();
+        ReviewDecision? approval, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
+        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken)
     {
         Decided.Add(decision);
         return Task.FromResult(decision);

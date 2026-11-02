@@ -426,7 +426,7 @@ This is the only navigation index.
 | Production hosting plan | [Host](architecture/host.md#limits-and-planned-work) | none |
 | MCP plans | [Review](architecture/review.md#limits-and-planned-work), [Publication](architecture/publication.md#limits-and-planned-work) | none |
 | Public search service: ingest, index, read API, rate limit | [Search](architecture/search.md#decisions) | `src/CivicLens.PublicApi/PublicApiApp.cs` |
-| Reader report queue: pull, resolve, banner | [Review](architecture/review.md#reader-reports), [Search](architecture/search.md#operational-pull) | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Infrastructure/Reports/PostgresReaderReportStore.cs` |
+| Reader report queue: pull, dismiss, editor panel, close by approval | [Review](architecture/review.md#reader-reports), [Search](architecture/search.md#operational-pull) | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Infrastructure/Reports/PostgresReaderReportStore.cs` |
 | Search ingest of a release | [Search](architecture/search.md#ingest) | `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs` |
 | Search API routes and errors | [Search](architecture/search.md#api) | `src/CivicLens.PublicApi/Search/SearchEndpoints.cs` |
 | Issue panel and `method.html` | [Publication](architecture/publication.md#issue-panel) | `src/CivicLens.Application/Publication/TalkAndActionProfile.cs` |

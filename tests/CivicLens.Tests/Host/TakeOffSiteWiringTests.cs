@@ -41,7 +41,7 @@ public sealed class TakeOffSiteWiringTests
         var page = (PublishedRecordEditorPage)Activator.CreateInstance(editor)!;
         editor.GetProperty(idParameter)!.SetValue(page, "the-id");
 
-        var record = typeof(PublishedRecordEditorPage).GetProperty("Record", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(page);
+        var record = typeof(PublishedRecordEditorPage).GetProperty("TakeOffRecord", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(page);
         Assert.Equal(new PublishedRecordReference(kind, "the-id"), record);
         var template = editor.GetCustomAttribute<RouteAttribute>()!.Template;
         Assert.Equal(route.Replace("{id}", "{" + idParameter + "}"), template);

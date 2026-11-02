@@ -99,7 +99,7 @@ public sealed partial class RelationshipEditor
     {
         var request = new DecideRelationshipReviewRequest(RecordId, DecideExpectedRevision, DecideExpectedStateVersion,
             ParseDecisionKind(Kind), EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "",
-            CorrectionNoteOfApproval());
+            CorrectionNoteOfApproval(), ApprovedReportIds());
         _ = await DecideReview.ExecuteAsync(actor, request, RequestAborted);
         return RelationshipRoutes.Editor(RecordId, "decided");
     }
@@ -110,7 +110,7 @@ public sealed partial class RelationshipEditor
         return LoadAsync();
     }
 
-    protected override PublishedRecordReference Record => new(PublishedRecordKind.Relationship, RecordId);
+    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Relationship, RecordId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(detail.Review.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));

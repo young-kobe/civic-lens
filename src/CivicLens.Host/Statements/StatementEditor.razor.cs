@@ -160,7 +160,7 @@ public sealed partial class StatementEditor
     {
         var request = new DecideStatementReviewRequest(CandidateId, DecideExpectedRevision, DecideExpectedStateVersion,
             ParseDecisionKind(Kind), EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "",
-            CorrectionNoteOfApproval());
+            CorrectionNoteOfApproval(), ApprovedReportIds());
         _ = await DecideReview.ExecuteAsync(actor, request, RequestAborted);
         return StatementRoutes.Editor(CandidateId, "decided");
     }
@@ -171,7 +171,7 @@ public sealed partial class StatementEditor
         return LoadAsync();
     }
 
-    protected override PublishedRecordReference Record => new(PublishedRecordKind.Statement, CandidateId);
+    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Statement, CandidateId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(review!.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));

@@ -179,7 +179,10 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
         var dismissed = OnRelationship(2);
         var elsewhere = Report() with { RecordId = new string('b', 64), Kind = PublishedRecordKind.Relationship, RevisionNumber = 2 };
         await store.SavePulledAsync(Batch(corrected, open, dismissed, elsewhere), default);
-        await store.CloseCorrectedAsync("auth0|friend", PublishedRecordKind.Relationship, RelationshipId, [corrected.ReportId], "Fixed.", default);
+        await seeder.ExecuteAsync("""
+            UPDATE reader_reports SET status = 'CorrectionNeeded', note = 'Fixed.', resolved_by = 'auth0|friend', resolved_at_utc_ticks = 1, version = 1
+            WHERE report_id = @id
+            """, ("id", corrected.ReportId));
         await store.DismissAsync("auth0|friend", dismissed.ReportId, 0, default);
 
         Assert.Equal(new[] { corrected.ReportId, open.ReportId }.Order(), await ReportsOfRecordAsync());
@@ -187,25 +190,6 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
         Assert.Equal(new[] { corrected.ReportId, open.ReportId }.Order(), await ReportsOfRecordAsync());
         await PublishAsync(2, revision: 3);
         Assert.Equal([open.ReportId], await ReportsOfRecordAsync());
-    }
-
-    [Fact]
-    public async Task AnApprovalClosesOnlyTheReportsOfThatRecordThatTheNewRevisionCorrects()
-    {
-        await SeedRelationshipDraftAsync(RelationshipId, currentRevision: 3);
-        var older = OnRelationship(2);
-        var sameRevision = OnRelationship(3);
-        var elsewhere = Report() with { RecordId = new string('b', 64), Kind = PublishedRecordKind.Relationship, RevisionNumber = 1 };
-        var notListed = OnRelationship(1);
-        await store.SavePulledAsync(Batch(older, sameRevision, elsewhere, notListed), default);
-
-        await store.CloseCorrectedAsync("auth0|friend", PublishedRecordKind.Relationship, RelationshipId,
-            [older.ReportId, sameRevision.ReportId, elsewhere.ReportId], "Fixed.", default);
-
-        var closed = (await store.GetAsync(older.ReportId, default))!.Report;
-        Assert.Equal((ReaderReportStatus.CorrectionNeeded, "Fixed.", "auth0|friend", 1), (closed.Status, closed.Note, closed.ResolvedBy, closed.Version));
-        foreach (var stillOpen in new[] { sameRevision, elsewhere, notListed })
-            Assert.Equal(ReaderReportStatus.Open, (await store.GetAsync(stillOpen.ReportId, default))!.Report.Status);
     }
 
     private static PulledReport OnRelationship(int revision) =>

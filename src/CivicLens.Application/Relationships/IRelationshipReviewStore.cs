@@ -11,10 +11,10 @@ public interface IRelationshipReviewStore
     Task<RelationshipRevision?> GetRevisionAsync(string recordId, int revisionNumber, CancellationToken cancellationToken);
 
     Task<RelationshipRevision> SaveRevisionAsync(string actorSubject, RelationshipRevision revision, int expectedRevisionNumber,
-        ReviewDecision? approval, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
+        ReviewDecision? approval, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken);
 
     Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
+        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken);
 
     Task<RelationshipReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken);
 

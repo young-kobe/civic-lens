@@ -23,7 +23,7 @@ internal static class ReportLabels
     {
         ReaderReportStatus.Open => "Open",
         ReaderReportStatus.Dismissed => "Dismissed",
-        ReaderReportStatus.CorrectionNeeded => "Correction needed",
+        ReaderReportStatus.CorrectionNeeded => "Corrected",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Report status has no label.")
     };
 

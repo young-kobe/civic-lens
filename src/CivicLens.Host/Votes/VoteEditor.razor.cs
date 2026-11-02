@@ -92,7 +92,7 @@ public sealed partial class VoteEditor
     {
         var request = new DecideVoteReviewRequest(RecordId, DecideExpectedRevision, DecideExpectedStateVersion,
             ParseDecisionKind(Kind), EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "",
-            CorrectionNoteOfApproval());
+            CorrectionNoteOfApproval(), ApprovedReportIds());
         _ = await DecideReview.ExecuteAsync(actor, request, RequestAborted);
         return VoteRoutes.Editor(RecordId, "decided");
     }
@@ -103,7 +103,7 @@ public sealed partial class VoteEditor
         return LoadAsync();
     }
 
-    protected override PublishedRecordReference Record => new(PublishedRecordKind.Vote, RecordId);
+    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Vote, RecordId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(detail.Review.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));
