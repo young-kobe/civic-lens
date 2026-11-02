@@ -82,7 +82,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
                     ?? throw new ArgumentException("Drafts must reference a complete comparison containing a text change.", nameof(revision));
                 ValidateRevisionAgainstEvidence(saved, verified);
                 return saved;
-            }, NewRevisionRow,
+            }, NewRevisionRow, null,
             approval is null ? null : new(approval,
                 (_, draft, history) =>
                 {

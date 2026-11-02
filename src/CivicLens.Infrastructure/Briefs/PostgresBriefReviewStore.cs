@@ -34,12 +34,12 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
     public Task<BriefRevision> SaveRevisionAsync(string actorSubject, BriefRevision revision, int expectedRevisionNumber,
         ReviewDecision? approval, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
-            payloadHash, async (db, _, current) =>
+            payloadHash, (_, _, current) =>
             {
                 revision.ValidatePersonEditOf(current);
-                await BriefCheckQueue.QueueAsync(checkQueue, db, revision, cancellationToken);
-                return revision;
+                return Task.FromResult(revision);
             }, saved => BriefDraftRows.NewRevision(saved, null),
+            (db, saved) => BriefCheckQueue.QueueAsync(checkQueue, db, saved, cancellationToken),
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
                 NoAfterDecision, revision => revision.ComparableForm()), cancellationToken);
 

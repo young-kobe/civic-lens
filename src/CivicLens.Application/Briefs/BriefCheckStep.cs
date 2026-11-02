@@ -14,18 +14,19 @@ public sealed class BriefCheckStep(IBriefCheckStore store, IBriefCheckModel mode
 
     public AnalysisTaskIdentity Identity => BriefCheckTask.Identity;
 
-    public BriefCheckRun Wrap(AnalysisRun run) => new(run, null, null);
+    public BriefCheckRun Wrap(AnalysisRun run) => new(run, null, null, null);
 
     public async Task<bool> RunAsync(IAnalysisAttempt<BriefCheckRun> attempt, CancellationToken cancellationToken)
     {
         var evidence = await store.ReadEvidenceAsync(attempt.Claim.Record.SubjectId, cancellationToken);
         if (evidence is null) return await attempt.CompleteAsync(State.Blocked, BriefDraftErrorCodes.EvidenceUnavailable, cancellationToken);
-        var notCited = BriefSelection.Select(evidence.NotCited, sent => Prompt(evidence, [.. sent.Select(item => item.Record)], default) is not null)
+        var notCited = BriefSelection.Select(evidence.NotCited, sent => FitsWithRetryReserve(evidence, [.. sent.Select(item => item.Record)]))
             .Sent.Select(item => item.Record).ToImmutableArray();
-        attempt.ContextJson = BriefCheckPrompt.SerializeContext(evidence.Revision, notCited);
         var first = Prompt(evidence, notCited, default);
         if (first is null) return await attempt.CompleteAsync(State.Blocked, BriefDraftErrorCodes.OverByteCap, cancellationToken);
-        if (first.InputHash == evidence.LastCheckedInputHash) return await SettleUnchangedAsync(attempt, first.InputHash, cancellationToken);
+        attempt.ContextJson = BriefCheckPrompt.SerializeContext(evidence.Revision, notCited, Omitted(evidence, notCited),
+            first.InputHash);
+        if (evidence.Settled?.Fingerprint == first.InputHash) return await SettleUnchangedAsync(attempt, evidence.Settled, cancellationToken);
         return await CheckAsync(attempt, evidence, notCited, cancellationToken);
     }
 
@@ -39,7 +40,7 @@ public sealed class BriefCheckStep(IBriefCheckStore store, IBriefCheckModel mode
         var result = await loop.RunAsync(cancellationToken);
         return result.End switch
         {
-            AnalysisLoopEnd.Accepted => await attempt.SettleAsync(new BriefCheckRun(result.Run!, null, result.Accepted), State.Succeeded, null,
+            AnalysisLoopEnd.Accepted => await attempt.SettleAsync(new BriefCheckRun(result.Run!, null, result.Accepted, null), State.Succeeded, null,
                 cancellationToken),
             AnalysisLoopEnd.NotSent when result.Run is null =>
                 await attempt.CompleteAsync(State.Blocked, BriefDraftErrorCodes.OverByteCap, cancellationToken),
@@ -49,12 +50,20 @@ public sealed class BriefCheckStep(IBriefCheckStore store, IBriefCheckModel mode
     }
 
     private AnalysisModelRequest? Prompt(BriefCheckEvidence evidence, ImmutableArray<BriefRecord> notCited, ImmutableArray<string> errors) =>
-        BriefCheckPrompt.Build(evidence.Revision, evidence.Cited, notCited, settings.PromptByteCap, errors);
+        BriefCheckPrompt.Build(evidence.Revision, evidence.Cited, notCited, Omitted(evidence, notCited), settings.PromptByteCap,
+            errors);
 
-    private static Task<bool> SettleUnchangedAsync(IAnalysisAttempt<BriefCheckRun> attempt, string inputHash, CancellationToken cancellationToken)
+    private bool FitsWithRetryReserve(BriefCheckEvidence evidence, ImmutableArray<BriefRecord> notCited) =>
+        BriefCheckPrompt.Build(evidence.Revision, evidence.Cited, notCited, Omitted(evidence, notCited),
+            settings.PromptByteCap - BriefDraftTask.RetryReasonReserveBytes) is not null;
+
+    private static int Omitted(BriefCheckEvidence evidence, ImmutableArray<BriefRecord> notCited) => evidence.NotCited.Length - notCited.Length;
+
+    private static Task<bool> SettleUnchangedAsync(IAnalysisAttempt<BriefCheckRun> attempt, BriefCheckSettled settled,
+        CancellationToken cancellationToken)
     {
-        var run = attempt.BypassRun(BriefCheckTask.Model, inputHash, null);
-        return attempt.SettleAsync(new BriefCheckRun(run, BriefDraftErrorCodes.Unchanged, null), State.Succeeded,
+        var run = attempt.BypassRun(BriefCheckTask.Model, settled.Fingerprint, null);
+        return attempt.SettleAsync(new BriefCheckRun(run, BriefDraftErrorCodes.Unchanged, null, settled.RunId), State.Succeeded,
             BriefDraftErrorCodes.Unchanged, cancellationToken);
     }
 }

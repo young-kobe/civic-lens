@@ -19,6 +19,7 @@ internal sealed class BriefAnalysisRunRow : IAnalysisRunRow
     public string? Reason { get; set; }
     public int? CheckedRevisionNumber { get; set; }
     public BriefCheckRecommendation? Recommendation { get; set; }
+    public string? SourceRunId { get; set; }
     public long InputTokens { get; set; }
     public long OutputTokens { get; set; }
     public long CacheReadTokens { get; set; }

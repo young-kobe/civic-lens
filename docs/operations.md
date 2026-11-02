@@ -737,6 +737,15 @@ The `worker` command also checks the current revision of each brief when both re
 
 The check uses Claude Sonnet 5.5. No automated test sends a paid request for it.
 
+No page shows a failed or blocked check yet. Run this query to list them:
+
+```sql
+SELECT record_id, week_start, status, error_code, attempts
+FROM brief_analysis
+WHERE task = 'brief-check' AND status IN ('Failed', 'Blocked')
+ORDER BY week_start DESC;
+```
+
 ### Member roster
 
 Enable the source `congress-members` in the collection configuration to capture the public member file once a day. It needs no credential. The command below needs `CIVIC_LENS_DATABASE`. It reads the latest snapshot and writes nothing.

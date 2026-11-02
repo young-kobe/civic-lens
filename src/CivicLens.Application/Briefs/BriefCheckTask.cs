@@ -6,7 +6,7 @@ public static class BriefCheckTask
 {
     public const string Task = "brief-check";
     public const string TaskVersion = "brief-check-v1";
-    public const string PromptVersion = "brief-check-prompt-v1";
+    public const string PromptVersion = "brief-check-prompt-v2";
     public const string SchemaVersion = "brief-check-schema-v1";
     public const string Model = "claude-sonnet-5-5";
     public const string Effort = "medium";

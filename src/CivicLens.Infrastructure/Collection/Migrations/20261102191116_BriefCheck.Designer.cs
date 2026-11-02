@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CivicLens.Infrastructure.Collection.Migrations
 {
     [DbContext(typeof(CollectionAttemptDbContext))]
-    [Migration("20261102175203_BriefCheck")]
+    [Migration("20261102191116_BriefCheck")]
     partial class BriefCheck
     {
         /// <inheritdoc />
@@ -1103,6 +1103,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("schema_version");
 
+                    b.Property<string>("SourceRunId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("source_run_id");
+
                     b.Property<long>("StartedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("started_at_utc_ticks");
@@ -1132,13 +1137,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("PreviousRunId");
 
+                    b.HasIndex("SourceRunId");
+
                     b.HasIndex("RecordId", "CheckedRevisionNumber");
 
                     b.HasIndex("RecordId", "Task", "StartedAtUtcTicks");
 
                     b.ToTable("brief_analysis_runs", null, t =>
                         {
-                            t.HasCheckConstraint("ck_brief_analysis_runs_check", "(checked_revision_number IS NULL) = (recommendation IS NULL) AND (checked_revision_number IS NULL OR (checked_revision_number >= 1 AND task = 'brief-check' AND recommendation IN ('ApproveRecommended','NeedsAttention')))");
+                            t.HasCheckConstraint("ck_brief_analysis_runs_check", "(checked_revision_number IS NULL) = (recommendation IS NULL) AND (checked_revision_number IS NULL OR (checked_revision_number >= 1 AND task = 'brief-check' AND recommendation IN ('ApproveRecommended','NeedsAttention'))) AND (source_run_id IS NOT NULL) = (task = 'brief-check' AND outcome = 'Bypassed')");
 
                             t.HasCheckConstraint("ck_brief_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
@@ -1178,35 +1185,23 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("code");
 
-                    b.Property<string>("Note")
+                    b.Property<string>("Message")
                         .IsRequired()
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)")
-                        .HasColumnName("note");
+                        .HasColumnName("message");
 
                     b.Property<int>("ParagraphIndex")
                         .HasColumnType("integer")
                         .HasColumnName("paragraph_index");
 
-                    b.Property<string>("RecordId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("record_id");
-
-                    b.Property<int>("RevisionNumber")
-                        .HasColumnType("integer")
-                        .HasColumnName("revision_number");
-
                     b.HasKey("RunId", "FlagNumber");
-
-                    b.HasIndex("RecordId", "RevisionNumber");
 
                     b.ToTable("brief_check_flags", null, t =>
                         {
                             t.HasCheckConstraint("ck_brief_check_flags_code", "code IN ('UnsupportedByCitation','Overstated','StatesBillStatus','LoadedWording','OmitsNotableRecord','Other')");
 
-                            t.HasCheckConstraint("ck_brief_check_flags_note", "char_length(note) BETWEEN 1 AND 300");
+                            t.HasCheckConstraint("ck_brief_check_flags_message", "char_length(message) BETWEEN 1 AND 300");
 
                             t.HasCheckConstraint("ck_brief_check_flags_number", "flag_number BETWEEN 1 AND 24");
 
@@ -5525,6 +5520,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("PreviousRunId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefAnalysisRunRow", null)
+                        .WithMany()
+                        .HasForeignKey("SourceRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefRevisionRow", null)
                         .WithMany()
                         .HasForeignKey("RecordId", "CheckedRevisionNumber")
@@ -5542,12 +5542,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefAnalysisRunRow", null)
                         .WithMany()
                         .HasForeignKey("RunId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefRevisionRow", null)
-                        .WithMany()
-                        .HasForeignKey("RecordId", "RevisionNumber")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

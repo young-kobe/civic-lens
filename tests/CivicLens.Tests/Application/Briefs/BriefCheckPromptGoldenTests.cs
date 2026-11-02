@@ -7,9 +7,9 @@ namespace CivicLens.Tests.Application.Briefs;
 
 public sealed class BriefCheckPromptGoldenTests
 {
-    private const string SystemSha256 = "56636b4f8b707272530dc6452eb29acc67206eaf74c99dea80e36a762ead56d6";
+    private const string SystemSha256 = "a5314576242555d05ae9fffc5bfd9b5016a3397f204a9bd0f32ddd5db904107a";
     private const string SchemaSha256 = "3abb1e3791114e74a2ea35a1582228b8a935b2f64116985622c95f21bd80850b";
-    private const string InputHash = "59b805ac6a45082787bef4a869606fd48747b78fe9961afdd2585fa02fdd94d3";
+    private const string InputHash = "20aa00069bc7e4bc1a6c904d48311b0bd57de281a54a41094590b90f75b8af02";
 
     [Fact]
     public void ThePromptAndSchemaMatchTheirPinnedVersions()
@@ -18,7 +18,7 @@ public sealed class BriefCheckPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(BriefCheckTask.PromptVersion)} ({BriefCheckTask.PromptVersion}) or " +
             $"{nameof(BriefCheckTask.SchemaVersion)} ({BriefCheckTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("brief-check", "brief-check-v1", "brief-check-prompt-v1", "brief-check-schema-v1", "claude-sonnet-5-5"),
+        Assert.Equal(("brief-check", "brief-check-v1", "brief-check-prompt-v2", "brief-check-schema-v1", "claude-sonnet-5-5"),
             (BriefCheckTask.Task, BriefCheckTask.TaskVersion, BriefCheckTask.PromptVersion, BriefCheckTask.SchemaVersion, BriefCheckTask.Model));
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");
@@ -42,8 +42,8 @@ public sealed class BriefCheckPromptGoldenTests
     {
         var evidence = BriefCheckFixtures.Evidence();
 
-        var first = BriefCheckPrompt.Build(evidence.Revision, evidence.Cited, evidence.NotCited, 100_000)!;
-        var retry = BriefCheckPrompt.Build(evidence.Revision, evidence.Cited, evidence.NotCited, 100_000, ["flag 1 names paragraph 7."])!;
+        var first = BriefCheckPrompt.Build(evidence.Revision, evidence.Cited, evidence.NotCited, 0, 100_000)!;
+        var retry = BriefCheckPrompt.Build(evidence.Revision, evidence.Cited, evidence.NotCited, 0, 100_000, ["flag 1 names paragraph 7."])!;
 
         Assert.Contains("- flag 1 names paragraph 7.", retry.UserPrompt, StringComparison.Ordinal);
         Assert.StartsWith(first.UserPrompt, retry.UserPrompt, StringComparison.Ordinal);
@@ -56,7 +56,7 @@ public sealed class BriefCheckPromptGoldenTests
         var renumbered = evidence.Revision with { RevisionNumber = 9 };
 
         Assert.Equal(Build().InputHash,
-            BriefCheckPrompt.Build(renumbered, evidence.Cited, evidence.NotCited, 100_000)!.InputHash);
+            BriefCheckPrompt.Build(renumbered, evidence.Cited, evidence.NotCited, 0, 100_000)!.InputHash);
     }
 
     [Fact]
@@ -65,8 +65,8 @@ public sealed class BriefCheckPromptGoldenTests
         var evidence = BriefCheckFixtures.Evidence();
         var size = Build().ReservedTokens - BriefCheckTask.MaximumOutputTokens;
 
-        Assert.NotNull(BriefCheckPrompt.Build(evidence.Revision, evidence.Cited, evidence.NotCited, (int)size));
-        Assert.Null(BriefCheckPrompt.Build(evidence.Revision, evidence.Cited, evidence.NotCited, (int)size - 1));
+        Assert.NotNull(BriefCheckPrompt.Build(evidence.Revision, evidence.Cited, evidence.NotCited, 0, (int)size));
+        Assert.Null(BriefCheckPrompt.Build(evidence.Revision, evidence.Cited, evidence.NotCited, 0, (int)size - 1));
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public sealed class BriefCheckPromptGoldenTests
     private static CivicLens.Application.Analysis.AnalysisModelRequest Build()
     {
         var evidence = BriefCheckFixtures.Evidence();
-        return BriefCheckPrompt.Build(evidence.Revision, evidence.Cited, evidence.NotCited, 100_000)!;
+        return BriefCheckPrompt.Build(evidence.Revision, evidence.Cited, evidence.NotCited, 0, 100_000)!;
     }
 
     private static string Sha256(string value) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));

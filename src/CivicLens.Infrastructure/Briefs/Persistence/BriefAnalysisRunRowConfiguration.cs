@@ -10,7 +10,8 @@ internal sealed class BriefAnalysisRunRowConfiguration : IEntityTypeConfiguratio
     private static readonly string CheckedRunRule =
         "(checked_revision_number IS NULL) = (recommendation IS NULL) AND (checked_revision_number IS NULL OR " +
         $"(checked_revision_number >= 1 AND task = '{BriefCheckTask.Task}' AND recommendation IN (" +
-        string.Join(",", Enum.GetNames<BriefCheckRecommendation>().Select(name => $"'{name}'")) + ")))";
+        string.Join(",", Enum.GetNames<BriefCheckRecommendation>().Select(name => $"'{name}'")) + "))) AND " +
+        $"(source_run_id IS NOT NULL) = (task = '{BriefCheckTask.Task}' AND outcome = 'Bypassed')";
 
     public void Configure(EntityTypeBuilder<BriefAnalysisRunRow> builder)
     {
@@ -28,6 +29,8 @@ internal sealed class BriefAnalysisRunRowConfiguration : IEntityTypeConfiguratio
         builder.Property(row => row.Reason).HasColumnName("reason").HasMaxLength(32);
         builder.Property(row => row.CheckedRevisionNumber).HasColumnName("checked_revision_number");
         builder.Property(row => row.Recommendation).HasColumnName("recommendation").HasConversion<string>().HasMaxLength(32);
+        builder.Property(row => row.SourceRunId).HasColumnName("source_run_id").HasMaxLength(32);
+        builder.HasOne<BriefAnalysisRunRow>().WithMany().HasForeignKey(row => row.SourceRunId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<BriefRevisionRow>().WithMany()
             .HasForeignKey(row => new { row.RecordId, row.CheckedRevisionNumber }).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<BriefAnalysisRow>().WithMany()

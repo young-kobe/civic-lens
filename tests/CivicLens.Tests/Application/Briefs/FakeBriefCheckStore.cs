@@ -64,12 +64,12 @@ internal sealed class FakeBriefCheckModel : IBriefCheckModel
 
 internal static class BriefCheckFixtures
 {
-    public static BriefCheckEvidence Evidence(string? lastCheckedInputHash = null, ImmutableArray<BriefRecord> notCited = default) => new(
+    public static BriefCheckEvidence Evidence(BriefCheckSettled? settled = null, ImmutableArray<BriefRecord> notCited = default) => new(
         BriefFixtures.Revision(),
         new Dictionary<string, BriefRecord>
         {
             ["R1"] = BriefFixtures.Statement(new string('1', 64), "Warren on rent", 1, "warren"),
             ["R2"] = BriefFixtures.DocumentChange(new string('2', 32), "A rule changed", 3)
         }.ToImmutableDictionary(),
-        notCited.IsDefault ? [] : notCited, lastCheckedInputHash);
+        notCited.IsDefault ? [] : notCited, settled);
 }

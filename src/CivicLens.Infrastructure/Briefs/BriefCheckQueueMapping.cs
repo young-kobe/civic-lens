@@ -25,17 +25,18 @@ internal sealed class BriefCheckQueueMapping : IAnalysisQueueMapping<BriefAnalys
 
     public AnalysisRun RunOf(BriefCheckRun run) => run.Run;
 
-    public BriefCheckRun WrapInterrupted(AnalysisRun run) => new(run, null, null);
+    public BriefCheckRun WrapInterrupted(AnalysisRun run) => new(run, null, null, null);
 
     public void AddRun(CollectionAttemptDbContext db, BriefAnalysisRow row, BriefCheckRun run)
     {
         var runRow = AnalysisRunRows.Create<BriefAnalysisRunRow>(run.Run);
         runRow.Reason = run.Reason;
+        runRow.SourceRunId = run.SourceRunId;
         if (run.Result is { } result)
         {
             runRow.CheckedRevisionNumber = result.RevisionNumber;
             runRow.Recommendation = result.Recommendation;
-            db.AddRange(result.Flags.Select((flag, index) => ToRow(run.Run.RunId, row.RecordId, result.RevisionNumber, index + 1, flag)));
+            db.AddRange(result.Flags.Select((flag, index) => ToRow(run.Run.RunId, index + 1, flag)));
         }
         db.Add(runRow);
     }
@@ -48,15 +49,13 @@ internal sealed class BriefCheckQueueMapping : IAnalysisQueueMapping<BriefAnalys
         return Task.FromResult(settlement);
     }
 
-    private static BriefCheckFlagRow ToRow(string runId, string recordId, int revisionNumber, int flagNumber, BriefCheckFlag flag) => new()
+    private static BriefCheckFlagRow ToRow(string runId, int flagNumber, BriefCheckFlag flag) => new()
     {
         RunId = runId,
         FlagNumber = flagNumber,
-        RecordId = recordId,
-        RevisionNumber = revisionNumber,
         ParagraphIndex = flag.ParagraphIndex,
         Code = flag.Code,
         CitationId = flag.CitationId,
-        Note = flag.Note
+        Message = flag.Note
     };
 }

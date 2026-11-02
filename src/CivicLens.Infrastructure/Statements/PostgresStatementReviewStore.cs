@@ -72,7 +72,7 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
                 saved.ValidateShape();
                 StatementDraftRows.SetListing(draft, saved, await StatementDraftRows.RequireCandidateExtractionAsync(db, saved, cancellationToken));
                 return saved;
-            }, saved => StatementDraftRows.NewRevision(saved, null),
+            }, saved => StatementDraftRows.NewRevision(saved, null), null,
             approval is null ? null : new(approval,
                 (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, approvalSelections, cancellationToken), afterDecision,
                 revision => revision.ComparableForm(), current => AiProposedDate.IsProposed(current.AuthorSubject, current.StatementDate)),
