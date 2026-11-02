@@ -10,13 +10,13 @@ public static class PublicationProtocol
     public const string ManifestPath = "release.json";
     public const string ManifestGzipPath = ManifestPath + ".gz";
     public const string ManifestBrotliPath = ManifestPath + ".br";
-    public const int MaximumRecordsPerRelease = 20000;
+    public const int MaximumRecordsPerRelease = 40000;
     public const int PageSize = 50;
     public const int HomeRecordCount = 20;
     public const int MaximumFacetIdLength = 60;
     public const string HomePath = "index.html";
     public const string FacetsPath = "issues.html";
-    public const int MaximumManifestBytes = 32 * 1024 * 1024;
+    public const int MaximumManifestBytes = 64 * 1024 * 1024;
     public const int SearchSourceTextCharacters = 200_000;
     public const string SearchPagePath = "search.html";
     public const string ReportPagePath = "report.html";
