@@ -10,6 +10,8 @@ caddyfile="$deploy_directory/caddy/Caddyfile"
 search_env="$CIVIC_LENS_ROOT/env/search.env"
 backup_stamp="$CIVIC_LENS_ROOT/backup/last-success"
 backup_max_age_hours=26
+tunnel_wait_attempts=12
+tunnel_wait_seconds=5
 failures=0
 
 body_file=$(mktemp)
@@ -28,6 +30,19 @@ status_of() { awk 'NR == 1 { print $2 }' <<< "$1"; }
 header_of() { { grep -i "^$2:" <<< "$1" || true; } | head -n 1 | cut -d: -f2- | sed 's/^ *//'; }
 
 noindex_expected() { grep -Eq '^[[:space:]]*import noindex[[:space:]]*$' "$caddyfile"; }
+
+# update.sh recreates cloudflared, and Cloudflare answers 530 until the new tunnel connects. Wait a bounded time, then let the checks judge.
+wait_for_tunnel() {
+  local url attempt status
+  for url in "$site/" "$api/v1/release"; do
+    for ((attempt = 1; attempt <= tunnel_wait_attempts; attempt++)); do
+      status=$(status_of "$(fetch "$url")")
+      [[ $status != 530 ]] && continue 2
+      ((attempt < tunnel_wait_attempts)) && sleep "$tunnel_wait_seconds"
+    done
+    echo "NOTE  $url still answers 530 after $((tunnel_wait_attempts * tunnel_wait_seconds)) seconds. The tunnel is not connected."
+  done
+}
 
 check_noindex() {
   local name=$1 url=$2 headers value
@@ -150,6 +165,7 @@ check_rate_limit() {
   fi
 }
 
+wait_for_tunnel
 check_noindex "Noindex site" "$site/"
 check_noindex "Noindex api" "$api/v1/release"
 check_missing_page
