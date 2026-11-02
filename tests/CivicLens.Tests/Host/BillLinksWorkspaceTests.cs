@@ -153,10 +153,8 @@ public sealed class BillLinksWorkspaceTests(PostgresCollection postgres) : IAsyn
         await Seeder.ExecuteAsync($$"""
             SET session_replication_role = replica;
             UPDATE action_drafts SET review_state_version = 1, review_status = 'Approved' WHERE record_id = @record;
-            INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, decision_json, kind, actor_subject, created_at_utc_ticks)
-            VALUES ('{{new string('a', 32)}}', @record, 1, 1,
-                '{"decisionId":"{{new string('a', 32)}}","draftId":"{{action.RecordId}}","revisionNumber":1,"reviewStateVersion":1,"kind":0,"actorSubject":"civic-lens:code","note":null,"resolvedDecisionIds":[],"createdAtUtc":"2026-10-19T00:00:00+00:00"}',
-                'Approve', 'civic-lens:code', 1)
+            INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, kind, actor_subject, created_at_utc_ticks)
+            VALUES ('{{new string('a', 32)}}', @record, 1, 1, 'Approve', 'civic-lens:code', 1)
             """, ("record", action.RecordId));
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
 

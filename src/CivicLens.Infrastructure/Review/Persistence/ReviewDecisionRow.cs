@@ -8,7 +8,6 @@ internal sealed class ReviewDecisionRow : IReviewDecisionRow
     public string DraftId { get; set; } = string.Empty;
     public int RevisionNumber { get; set; }
     public int ReviewStateVersion { get; set; }
-    public string DecisionJson { get; set; } = string.Empty;
     public ReviewDecisionKind Kind { get; set; }
     public string ActorSubject { get; set; } = string.Empty;
     public string? Note { get; set; }
