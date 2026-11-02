@@ -296,6 +296,7 @@ public sealed class PostgresBriefCheckStoreTests(PostgresCollection postgres) : 
     [Theory]
     [InlineData("UPDATE brief_analysis_runs SET input_fingerprint = NULL WHERE recommendation IS NOT NULL")]
     [InlineData("UPDATE brief_analysis_runs SET input_fingerprint = 'abc' WHERE recommendation IS NOT NULL")]
+    [InlineData("UPDATE brief_analysis_runs SET outcome = 'OutputRejected' WHERE recommendation IS NOT NULL")]
     [InlineData("UPDATE brief_analysis_runs SET task = 'brief-draft', checked_revision_number = NULL, recommendation = NULL WHERE recommendation IS NOT NULL")]
     public async Task OnlyADraftedCheckRunHasAFingerprintAndItIsAHash(string update)
     {
