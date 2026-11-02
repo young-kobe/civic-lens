@@ -6,7 +6,7 @@ public static class RecordTableColumnNames
     public static string[] ForSort(this RecordTableColumns columns) => columns switch
     {
         RecordTableColumns.Facet => ["record", "officials", "date"],
-        RecordTableColumns.FirstPublished => ["record", "published"],
+        RecordTableColumns.Dated => ["record", "date"],
         _ => throw new ArgumentOutOfRangeException(nameof(columns), columns, "Record table columns do not sort.")
     };
 }

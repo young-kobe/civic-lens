@@ -249,7 +249,7 @@ After you set the variable, run:
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- db migrate
 ```
 
-`db migrate` applies all pending checked-in EF migrations and can be repeated. An image from before the migration `DropPublicationRecordsJson` cannot run until you roll that migration back with an explicit EF rollback, because that image needs the dropped column `publication_releases.records_json`. The rollback rebuilds the column from `publication_record_states`. `db migrate` only moves forward. Each migration command fails after 10 minutes, for example when it waits on a lock. Imports never apply migrations. Capture files stay in the artifact directory. [Managed collection jobs](#managed-collection-jobs) collect and import evidence.
+`db migrate` applies all pending checked-in EF migrations and can be repeated. An image from before the migration `DropPublicationRecordsJson` cannot run until you roll that migration back with an explicit EF rollback, because that image needs the dropped column `publication_releases.records_json`. The rollback rebuilds the column from `publication_record_states`. An image from before the migration `DropDecisionJson` needs the same explicit EF rollback, because that image needs the dropped column `decision_json` in the seven `<kind>_review_decisions` tables. The rollback rebuilds the column from the decision columns and the resolution rows. To roll back to such an image, do these steps in this order. Stop the worker and the review host. Have a developer with the EF tool roll the database back to the migration before `DropDecisionJson`. Then run `update.sh` with the old SHA. No production command rolls a migration back, and `db migrate` only moves forward. Running `update.sh` alone is wrong, because the old image starts without the column and every decision write fails. Running the rollback while the new worker runs is also wrong, because the new writer fails on the rebuilt NOT NULL column. `db migrate` only moves forward. Each migration command fails after 10 minutes, for example when it waits on a lock. Imports never apply migrations. Capture files stay in the artifact directory. [Managed collection jobs](#managed-collection-jobs) collect and import evidence.
 
 For other application composition, build `PostgresCollectionAttemptStore` with `FromConnectionString`, or supply an `IDbContextFactory<CollectionAttemptDbContext>`. Call `MigrateAsync` explicitly before you import.
 
@@ -1013,7 +1013,7 @@ sudo deploy/scripts/compose.sh run --rm cli releases list
 
 `install.sh` creates the directories and copies each `deploy/env/*.env.example` file only when the target is absent. It never overwrites a file. Fill in the env files and the two config files, then run `update.sh`.
 
-`update.sh` stops when the checkout is not at the given SHA, when `deploy/` has uncommitted changes, or when the Caddy port in `compose.env` differs from the port in the tunnel config. It sets the image tag for the run and pulls the images. It stops the worker and the review host, so no old image runs on the new schema or commits a release during the migration. Then it applies the migrations with a one-off `cli` container. Then it writes the tag to `compose.env`, because the schema now belongs to that commit. Last, it recreates the services, and it always recreates Caddy and cloudflared so that a changed Caddyfile or tunnel config takes effect. The worker stays stopped until the services start from the new tag. A search service of an older image fails the ingest of a release with a new published value, keeps its last index, and tries again at the next interval. It recovers by itself once the new image runs. If a step after the migration fails, run `update.sh` again with the same SHA. If the migration fails, the worker and the review host stay stopped. Fix the cause and run `update.sh` again, or run `sudo deploy/scripts/compose.sh up --detach worker review` to start the old services. Services never migrate at start. The tag must be a full commit SHA whose images exist. To roll back, run `update.sh` with an earlier SHA. A rollback does not undo a migration. If the migration `DropPublicationRecordsJson` raises "Cannot drop records_json", run `db migrate` from the prior image, which still rebuilds the record state table, and then run `update.sh` again.
+`update.sh` stops when the checkout is not at the given SHA, when `deploy/` has uncommitted changes, or when the Caddy port in `compose.env` differs from the port in the tunnel config. It sets the image tag for the run and pulls the images. It stops the worker and the review host, so no old image runs on the new schema or commits a release during the migration. Then it applies the migrations with a one-off `cli` container. Then it writes the tag to `compose.env`, because the schema now belongs to that commit. Last, it recreates the services, and it always recreates Caddy and cloudflared so that a changed Caddyfile or tunnel config takes effect. The worker stays stopped until the services start from the new tag. A search service of an older image fails the ingest of a release with a new published value, keeps its last index, and tries again at the next interval. It recovers by itself once the new image runs. If a step after the migration fails, run `update.sh` again with the same SHA. If the migration fails, the worker and the review host stay stopped. Fix the cause and run `update.sh` again, or run `sudo deploy/scripts/compose.sh up --detach worker review` to start the old services. Services never migrate at start. The tag must be a full commit SHA whose images exist. To roll back, run `update.sh` with an earlier SHA. A rollback does not undo a migration, so a rollback past `DropDecisionJson` needs the steps in [Postgres adapter and migrations](#postgres-adapter-and-migrations) first. If the migration `DropPublicationRecordsJson` raises "Cannot drop records_json", run `db migrate` from the prior image, which still rebuilds the record state table, and then run `update.sh` again. If the migration `DropDecisionJson` raises "Cannot drop decision_json", the migration rolled back, the column is intact, and `compose.env` still holds the old tag. Run `sudo deploy/scripts/compose.sh up --detach worker review` to restore service, and give the named decision to the developer.
 
 `compose.sh` is `docker compose` with the compose file and `compose.env` set. The `cli` service starts the host image with no command. The `restic` service has the same `tools` profile. Add the host command after `cli`, for example `releases publish` or `db migrate`.
 
@@ -1042,7 +1042,7 @@ On an existing deploy, copy the two White House source lines into `/srv/civic-le
 
 ### Go-live checks
 
-Run `sudo deploy/scripts/check-live.sh` from `/opt/civic-lens` after the first install and after each `update.sh`. The script prints one PASS or FAIL line per check, runs every check, and exits with code 1 if one failed. Each FAIL line says what it expected, what came back, and what to check. It sends requests to the public host names, so it needs the tunnel. The checks are:
+Run `sudo deploy/scripts/check-live.sh` from `/opt/civic-lens` after the first install and after each `update.sh`. The script prints one PASS or FAIL line per check, runs every check, and exits with code 1 if one failed. Each FAIL line says what it expected, what came back, and what to check. It sends requests to the public host names, so it needs the tunnel. `update.sh` recreates `cloudflared`, and Cloudflare answers 530 until the new tunnel connects. The script first tries each host name up to 12 times, 5 seconds apart, until it answers with a status other than 530. A failed request also counts as not ready. Then it runs the checks. If a host still answers 530 or fails, it prints a NOTE and the checks fail as usual. The checks are:
 
 - `X-Robots-Tag: noindex` on the home page and on an api response. The script reads `deploy/caddy/Caddyfile`. With an `import noindex` line, each response must carry the header. Without one, no response may carry it.
 - A missing page returns 404 with the release 404 page and `Cache-Control: no-store`.
@@ -1129,7 +1129,7 @@ The first backup run by hand also proves the credentials. The timer runs at 03:3
 
 **Restore.** Test this procedure once before you need it, on a spare machine or directory.
 
-1. Stop the backup timer and the services that use the databases: `sudo systemctl stop civic-lens-backup.timer` and `sudo deploy/scripts/compose.sh stop worker review search search-postgres`.
+1. Stop the backup and health timers and the services that use the databases: `sudo systemctl stop civic-lens-backup.timer civic-lens-health.timer` and `sudo deploy/scripts/compose.sh stop worker review search search-postgres`.
 2. Restore the snapshot to a work directory: `sudo deploy/scripts/compose.sh run --rm -v /srv/restore:/restore restic restore latest --target /restore`. The files keep their full paths, for example `/srv/restore/srv/civic-lens/captures`.
 3. Drop and create the operational database again. A restore into the old database would keep the tables of newer migrations. Start Postgres if it is down. Then run:
 
@@ -1157,7 +1157,7 @@ sudo install -d -m 700 -o 70 -g 70 /srv/civic-lens/postgres/search
 
 6. Start the services with `update.sh`. The search service ingests the active release when it starts, and then every 30 seconds. Wait for one poll, then search on the site.
 7. Run `sudo deploy/scripts/install-operator-access.sh "<agent public key>"` again, because the restore leaves out the grants of the read-only role.
-8. Start the timer: `sudo systemctl start civic-lens-backup.timer`. When the site works, delete `/srv/restore` and the `.old` folders.
+8. Start the timers: `sudo systemctl start civic-lens-backup.timer civic-lens-health.timer`. When the site works, delete `/srv/restore` and the `.old` folders.
 
 The dump file stays in `/srv/civic-lens/backup`, mode 700, until the next run replaces it.
 
@@ -1185,13 +1185,30 @@ Every result that an agent reads goes to its model vendor, so add a column to th
 
 ### Failure alerts
 
-If `civic-lens-backup.service` fails, systemd starts `civic-lens-alert@civic-lens-backup.service`. That unit runs `deploy/scripts/alert.sh` with the failed unit name. The script sends one email through the Resend HTTP API from `alerts@civic-lens.info`. The body holds the unit name, the host name, the time, and the command `journalctl -u <unit>`. It holds no log line and no other data. Resend receives only this text. If the send fails, the script exits with an error in the journal of the alert unit. Other jobs can use the script later: give it any unit name.
+If `civic-lens-backup.service` fails, systemd starts `civic-lens-alert@civic-lens-backup.service`. That unit runs `deploy/scripts/alert.sh` with the failed unit name. The script sends one email through the Resend HTTP API from `alerts@civic-lens.info`. The body holds the unit name, the host name, the time, and the command `journalctl -u <unit>`. It holds no log line and no other data. Resend receives only this text. If the send fails, the script exits with an error in the journal of the alert unit. Other jobs can use the script: give it any unit name. `deploy/scripts/send-alert.sh` owns the Resend call, and the failure alert and the [health alert](#health-alerts) both use it.
 
 1. In Resend, add and verify the `civic-lens.info` domain. Add the DNS records that Resend shows in the Cloudflare zone.
 2. Make a send-only API key in Resend.
 3. Fill in `/srv/civic-lens/env/alert.secret.env` with the key and the recipient address. The file has mode 600. The script passes the key to `curl` in a temporary header file, not on the command line.
 4. Check that `curl --version` shows version 7.55 or later. The script needs `curl` on the host.
 5. Test: `sudo systemctl start civic-lens-alert@civic-lens-test.service`. An email arrives that names the unit `civic-lens-test`. Read `sudo journalctl -u civic-lens-alert@civic-lens-test.service` if it does not.
+
+### Health alerts
+
+`civic-lens-health.timer` runs `deploy/scripts/check-health.sh` every 10 minutes. The script sends one email when `worker health` exits with a non-zero status. It sends one email when free space under `/srv/civic-lens` is below 10 GB (`min_free_gb` in the script). The 10 GB value is a guess, not a measurement. A failed `docker compose` call also counts as an unhealthy worker. The email holds a fixed sentence, the host name, and the time. It holds no output from the worker. The check measures only the filesystem that holds `/srv/civic-lens`. It does not measure `/var/lib/docker` or `/tmp` if they sit on another filesystem. The worker check stops after 120 seconds and does not start stopped services.
+
+The script writes a marker file in `/run/civic-lens` for each problem that it reported. While the marker exists, the script sends no more email for that problem. When the check passes, the script removes the marker, so the next failure sends a new email. A reboot clears `/run`, so a problem that lasts through a reboot sends one new email. If a send fails, the script writes no marker and tries again on the next tick. A failure of the check itself starts the failure alert for `civic-lens-health.service`.
+
+A worker beat can be up to 10 minutes old before it fails health, and the timer runs every 10 minutes. So a dead worker sends an email 10 to 20 minutes after it stops. Each documented worker stop, such as the withdraw test or a long rewrite, can send one email if it lasts that long. A deploy or a reboot restarts the worker. `worker health` can report no heartbeat until every loop has started, so a deploy or a reboot can send one health email that clears by itself. See [Managed collection jobs](#managed-collection-jobs) for the rules.
+
+Install it after the failure alert works. The unit files link from the checkout:
+
+```sh
+sudo systemctl link /opt/civic-lens/deploy/systemd/civic-lens-health.service /opt/civic-lens/deploy/systemd/civic-lens-health.timer
+sudo systemctl enable --now civic-lens-health.timer
+```
+
+Test the worker path: run `sudo deploy/scripts/compose.sh stop worker`, wait more than 10 minutes, run `sudo systemctl start civic-lens-health.service`, and read the email. Then run `sudo deploy/scripts/compose.sh start worker`. The marker stops a second email, so run `sudo rm /run/civic-lens/worker.alerted` before you test again. Test the disk path the same way: edit `min_free_gb` in `/opt/civic-lens/deploy/scripts/check-health.sh` to a value above the free space, run `sudo systemctl start civic-lens-health.service`, then undo the edit. Check `systemctl list-timers civic-lens-health.timer` every week.
 
 ### No page logs
 

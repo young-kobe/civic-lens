@@ -30,7 +30,7 @@ internal static class CitedRevisions
     {
         var requested = named.Distinct().ToArray();
         var stored = await ReadStoredRevisionsAsync(db, kind, requested, cancellationToken);
-        if (stored.Length != requested.Length) throw new InvalidDataException($"A named {kind} revision is not stored.");
+        if (stored.Length != requested.Length) throw NotStored(kind);
         return [.. stored.Select(row => row.RevisionJson)];
     }
 
@@ -62,7 +62,9 @@ internal static class CitedRevisions
         return [.. rows.Select(row => new PublishedRevisionBinding(kind, row.RecordId, row.RevisionNumber))];
     }
 
-    private static void RequireKind(PublishedRecordKind kind, PublishedRevisionBinding[] bindings, string parameterName)
+    public static InvalidDataException NotStored(PublishedRecordKind kind) => new($"A named {kind} revision is not stored.");
+
+    public static void RequireKind(PublishedRecordKind kind, PublishedRevisionBinding[] bindings, string parameterName)
     {
         if (bindings.Any(binding => binding.Kind != kind))
             throw new ArgumentException($"Every named revision must be a {kind} revision.", parameterName);

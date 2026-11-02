@@ -442,11 +442,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
 
-                    b.Property<string>("DecisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("decision_json");
-
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1230,11 +1225,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
-
-                    b.Property<string>("DecisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("decision_json");
 
                     b.Property<string>("Kind")
                         .IsRequired()
@@ -2895,11 +2885,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
 
-                    b.Property<string>("DecisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("decision_json");
-
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasColumnType("text")
@@ -3432,11 +3417,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
 
-                    b.Property<string>("DecisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("decision_json");
-
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasColumnType("text")
@@ -3939,11 +3919,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
-
-                    b.Property<string>("DecisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("decision_json");
 
                     b.Property<string>("DraftId")
                         .IsRequired()
@@ -4711,6 +4686,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("LabelId");
 
+                    b.HasIndex("ExtractionId");
+
                     b.HasIndex("RunId")
                         .IsUnique();
 
@@ -4754,11 +4731,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
-
-                    b.Property<string>("DecisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("decision_json");
 
                     b.Property<string>("Kind")
                         .IsRequired()
@@ -5272,11 +5244,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
-
-                    b.Property<string>("DecisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("decision_json");
 
                     b.Property<string>("Kind")
                         .IsRequired()
@@ -6146,6 +6113,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementCandidateRow", null)
                         .WithMany()
                         .HasForeignKey("CandidateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ExtractionId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 

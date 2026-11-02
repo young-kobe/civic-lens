@@ -138,8 +138,8 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
             SET session_replication_role = replica;
             ALTER TABLE vote_review_decisions DROP CONSTRAINT ck_vote_review_decisions_created_at_utc_ticks;
             UPDATE vote_drafts SET review_state_version = 1 WHERE record_id = @id;
-            INSERT INTO vote_review_decisions (decision_id, record_id, revision_number, review_state_version, decision_json, kind, actor_subject, note, created_at_utc_ticks)
-            VALUES (repeat('b', 32), @id, 1, 1, '{}', 'RequestChanges', 'auth0|reviewer', 'Check it.', -1)
+            INSERT INTO vote_review_decisions (decision_id, record_id, revision_number, review_state_version, kind, actor_subject, note, created_at_utc_ticks)
+            VALUES (repeat('b', 32), @id, 1, 1, 'RequestChanges', 'auth0|reviewer', 'Check it.', -1)
             """, ("id", VoteId));
 
         var page = await store.ListAsync(null, 10, default);

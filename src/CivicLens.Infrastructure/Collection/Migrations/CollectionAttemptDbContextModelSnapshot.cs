@@ -439,11 +439,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
 
-                    b.Property<string>("DecisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("decision_json");
-
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1227,11 +1222,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
-
-                    b.Property<string>("DecisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("decision_json");
 
                     b.Property<string>("Kind")
                         .IsRequired()
@@ -2892,11 +2882,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
 
-                    b.Property<string>("DecisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("decision_json");
-
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasColumnType("text")
@@ -3429,11 +3414,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
 
-                    b.Property<string>("DecisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("decision_json");
-
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasColumnType("text")
@@ -3936,11 +3916,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
-
-                    b.Property<string>("DecisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("decision_json");
 
                     b.Property<string>("DraftId")
                         .IsRequired()
@@ -4754,11 +4729,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
 
-                    b.Property<string>("DecisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("decision_json");
-
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasColumnType("text")
@@ -5271,11 +5241,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
-
-                    b.Property<string>("DecisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("decision_json");
 
                     b.Property<string>("Kind")
                         .IsRequired()

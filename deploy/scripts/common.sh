@@ -2,7 +2,8 @@
 CIVIC_LENS_ROOT=${CIVIC_LENS_ROOT:-/srv/civic-lens}
 export CIVIC_LENS_ROOT
 deploy_directory=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+compose_command=(docker compose --file "$deploy_directory/compose.yaml" --env-file "$CIVIC_LENS_ROOT/env/compose.env")
 
 compose() {
-  docker compose --file "$deploy_directory/compose.yaml" --env-file "$CIVIC_LENS_ROOT/env/compose.env" "$@"
+  "${compose_command[@]}" "$@"
 }
