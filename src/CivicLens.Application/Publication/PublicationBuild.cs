@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CivicLens.Application.Actions;
 using CivicLens.Application.Roster;
 using CivicLens.Publication.Contracts;
 
@@ -10,7 +11,7 @@ internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset
     public ImmutableArray<PublishedRevisionBinding> ReleaseRecords { get; private init; } =
         [.. Previous.Entries.Select(PublishedRevisionBinding.Of)];
 
-    public IReadOnlyDictionary<string, PublishedBillStatus> BillStatuses { get; private init; } = new Dictionary<string, PublishedBillStatus>();
+    public IReadOnlyDictionary<string, ActionBillStatus> BillStatuses { get; private init; } = new Dictionary<string, ActionBillStatus>();
 
     public IReadOnlyDictionary<string, ImmutableArray<string>> VoteBillActions { get; private init; } =
         ImmutableDictionary<string, ImmutableArray<string>>.Empty;
@@ -19,7 +20,7 @@ internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset
 
     public ImmutableArray<PublishedRecordReference> Returned { get; private init; } = [];
 
-    public PublicationBuild WithBillStatuses(IReadOnlyDictionary<string, PublishedBillStatus> statuses) => this with { BillStatuses = statuses };
+    public PublicationBuild WithBillStatuses(IReadOnlyDictionary<string, ActionBillStatus> statuses) => this with { BillStatuses = statuses };
 
     public PublicationBuild WithVoteBillActions(IReadOnlyDictionary<string, ImmutableArray<string>> voteBillActions) =>
         this with { VoteBillActions = voteBillActions };

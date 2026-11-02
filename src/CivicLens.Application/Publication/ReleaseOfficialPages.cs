@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
+using CivicLens.Application.Actions;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -9,19 +10,21 @@ namespace CivicLens.Application.Publication;
 /// Writes the vote files and pages of the officials, the board pages, and the page that lists the officials. A publish rebuilds the files of an
 /// official only when the official is touched or the operator asks for a rewrite of all officials, and links every other file from the previous release. It also writes the summary row of each official: new for a touched official, carried for the others. An official who left the configuration is always touched. The current Congress of an
 /// official is the newest Congress with a vote file of that official. A change to a bill or a vote also touches the matched official of each link that cites it.
+/// A changed bill status touches each official who sponsors the bill, because the current page shows the status of every bill that names the official.
 /// </summary>
 internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, PublicationOfficials officials, IReleaseRenderer renderer,
     PublicationCatalog catalog)
 {
     public async Task<ImmutableArray<OfficialBoardPage>> WriteAsync(IReleaseStaging staging, PublicationRelease manifest, PublishedOfficials published,
         IReadOnlyList<PendingRecord> additions, IReadOnlyList<PublishedRecordEntry> removed, PreviousRelease previous,
-        bool rewriteAll, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, ActionBillStatus> statuses, bool rewriteAll, CancellationToken cancellationToken)
     {
         var release = manifest.Records.ToDictionary(entry => (entry.Kind, entry.RecordId));
         var changes = await votes.ChangesAsync(additions, removed, previous, cancellationToken);
         var entriesByOfficial = manifest.Records.SelectMany(entry => entry.Officials.Select(official => (official.Id, Entry: entry)))
             .ToLookup(pair => pair.Id, pair => pair.Entry, StringComparer.Ordinal);
         var namedByChange = OfficialsNamedByChanges(manifest, additions, removed, previous);
+        namedByChange.UnionWith(SponsorsOfChangedStatuses(manifest, previous, statuses));
         var cosponsored = ReleaseOfficialSummaries.CosponsoredCounts(manifest.Records);
         var listings = new List<OfficialListing>();
         var summaries = new List<PublishedOfficialSummary>();
@@ -34,7 +37,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
             PublishedOfficialSummary summary;
             if (rewriteAll || !tracked || !SameProfile(earlier, profile) || namedByChange.Contains(profile.Id) || changes.Touches(profile.Id))
             {
-                summary = await WriteTouchedAsync(staging, profile, tracked, entries, release, changes, previous, rewriteAll || earlier?.Name != profile.Name, manifest.PublishedAtUtc, cancellationToken);
+                summary = await WriteTouchedAsync(staging, profile, tracked, entries, release, changes, previous, statuses, rewriteAll || earlier?.Name != profile.Name, manifest.PublishedAtUtc, cancellationToken);
             }
             else
             {
@@ -72,6 +75,14 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
             .SelectMany(entry => entry.Officials.Select(official => official.Id).Concat(linksByTarget[entry.RecordId].Select(link => link.MatchedOfficialId!)))];
     }
 
+    private static IEnumerable<string> SponsorsOfChangedStatuses(PublicationRelease manifest, PreviousRelease previous,
+        IReadOnlyDictionary<string, ActionBillStatus> statuses)
+    {
+        var changed = ReleaseBillStatuses.ChangedActionIds(ReleaseBillStatuses.ActionIdsOf(manifest.Records), previous, statuses).ToHashSet(StringComparer.Ordinal);
+        return manifest.Records.Where(entry => entry.Kind == PublishedRecordKind.Action && changed.Contains(entry.RecordId))
+            .SelectMany(entry => entry.Officials.Select(official => official.Id));
+    }
+
     private async Task LinkAsync(IReleaseStaging staging, string officialId, PreviousRelease previous, CancellationToken cancellationToken)
     {
         var files = await votes.ListAsync(previous, officialId, cancellationToken);
@@ -84,7 +95,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
 
     private async Task<PublishedOfficialSummary> WriteTouchedAsync(IReleaseStaging staging, PublishedOfficialProfile profile, bool tracked,
         ImmutableArray<PublishedRecordEntry> entries, IReadOnlyDictionary<(PublishedRecordKind, string), PublishedRecordEntry> release,
-        OfficialVoteChanges changes, PreviousRelease previous, bool rewritePast, DateTimeOffset publishedAtUtc,
+        OfficialVoteChanges changes, PreviousRelease previous, IReadOnlyDictionary<string, ActionBillStatus> statuses, bool rewritePast, DateTimeOffset publishedAtUtc,
         CancellationToken cancellationToken)
     {
         var files = await votes.ListAsync(previous, profile.Id, cancellationToken);
@@ -127,7 +138,8 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         var talkAndAction = current is null ? null : TalkAndActionProfile.Of(current.Value, entries, currentRows);
         await WriteAsync(staging, PublicationProtocol.OfficialPagePath(profile.Id), await renderer.RenderOfficialAsync(
             new(profile, tracked, current, true, newestFirst, entries, currentRows, publishedAtUtc, talkAndAction,
-                current is { } newestCongress ? LinkedPair.In(profile.Id, newestCongress, entries, release, currentRows) : []), catalog, cancellationToken), cancellationToken);
+                current is { } newestCongress ? LinkedPair.In(profile.Id, newestCongress, entries, release, currentRows) : [],
+                statuses), catalog, cancellationToken), cancellationToken);
         return ReleaseOfficialSummaries.Of(profile.Id, current, talkAndAction);
     }
 

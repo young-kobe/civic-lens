@@ -26,5 +26,5 @@ public interface IActionReviewStore
     Task<IReadOnlyDictionary<string, PublishableAction>> GetForPublicationAsync(ImmutableArray<string> recordIds,
         CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<PublishedBillStatus>> ReadBillStatusesAsync(ImmutableArray<string> recordIds, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ActionBillStatus>> ReadBillStatusesAsync(ImmutableArray<string> recordIds, CancellationToken cancellationToken);
 }
