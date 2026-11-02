@@ -599,8 +599,10 @@ public sealed class PublishWithdrawalsTests
         var action = scenario.AddAction('d');
         var vote = scenario.AddVote('a', billActionRecordIds: [action]);
         var unrelated = scenario.AddVote('b', billType: null);
+        var otherBill = scenario.AddVote('e', billType: "s");
         var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
-            Reference(action), Reference(vote, PublishedRecordKind.Vote), Reference(unrelated, PublishedRecordKind.Vote)));
+            Reference(action), Reference(vote, PublishedRecordKind.Vote), Reference(unrelated, PublishedRecordKind.Vote),
+            Reference(otherBill, PublishedRecordKind.Vote)));
         Assert.Equal($"<html>vote {vote} bill {action}</html>", Page(scenario.Releases.Directories[first.DirectoryName], PublicationProtocol.RecordPagePath(vote)));
         scenario.Releases.Links.Clear();
 
@@ -609,6 +611,7 @@ public sealed class PublishWithdrawalsTests
         var files = scenario.Releases.Directories[second.DirectoryName];
         Assert.Equal($"<html>vote {vote} bill </html>", Page(files, PublicationProtocol.RecordPagePath(vote)));
         Assert.Contains((first.DirectoryName, PublicationProtocol.RecordPagePath(unrelated)), scenario.Releases.Links);
+        Assert.Contains((first.DirectoryName, PublicationProtocol.RecordPagePath(otherBill)), scenario.Releases.Links);
     }
 
     [Fact]
