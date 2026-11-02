@@ -136,8 +136,8 @@ public sealed partial class PostgresHouseVoteTests
         var revision = await RevisionAsync(candidate, 1);
         await ExecuteAsync($"""
             INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version,
-                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 'House', 119, 1, 100, 1, 0, 'AwaitingReview', 0, 0);
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)
+            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 'House', 119, 1, 100, 1, 0, 'AwaitingReview', 0, 0, '{candidate}');
             INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
             VALUES ('{recordId}', 1, 'auth0|editor', 'Person', NULL, 'x', 0)
             """);
@@ -189,8 +189,8 @@ public sealed partial class PostgresHouseVoteTests
         var recordId = await RecordIdAsync(candidate);
         await ExecuteAsync($"""
             INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version,
-                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 'House', 119, 1, 100, 1, 0, 'AwaitingReview', 0, 0)
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)
+            VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 'House', 119, 1, 100, 1, 0, 'AwaitingReview', 0, 0, '{candidate}')
             """);
 
         var withoutRun = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"""
@@ -208,10 +208,11 @@ public sealed partial class PostgresHouseVoteTests
     [Fact]
     public async Task TheDatabaseAllowsOneDraftForEachRollCallAndRefusesABadRecordId()
     {
+        var candidate = await PendingCandidateAsync();
         var insert = (string id) => $"""
             INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version,
-                review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-            VALUES ('{id}', 'source', 'House', 119, 1, 100, 1, 0, 'AwaitingReview', 0, 0)
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)
+            VALUES ('{id}', 'source', 'House', 119, 1, 100, 1, 0, 'AwaitingReview', 0, 0, '{candidate}')
             """;
         await ExecuteAsync(insert(new string('a', 64)));
 

@@ -1,3 +1,4 @@
+using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Review.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -31,6 +32,7 @@ internal sealed class ActionDraftRowConfiguration : IEntityTypeConfiguration<Act
         ReviewDraftTableConfiguration.ConfigureLastRevised(builder, "action_drafts", nameof(ActionDraftRow.RecordId));
         builder.Property(row => row.HeldReason).HasColumnName("held_reason");
         ListedDraftTableConfiguration.ConfigureListing(builder, "action_drafts");
+        builder.HasOne<ActionCandidateRow>().WithMany().HasForeignKey(row => row.CandidateId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(row => new { row.SourceId, row.Congress, row.BillType, row.BillNumber }).IsUnique()
             .HasDatabaseName("ux_action_drafts_bill");
     }

@@ -16,8 +16,6 @@ internal sealed class VoteCandidateRowConfiguration : IEntityTypeConfiguration<V
             table.HasCheckConstraint("ck_vote_candidates_roll", "congress >= 1 AND session_number IN (1, 2) AND roll_call_number >= 1");
             table.HasCheckConstraint("ck_vote_candidates_bill",
                 "(bill_type IS NULL) = (bill_number IS NULL) AND (bill_number IS NULL OR bill_number >= 1)");
-            table.HasCheckConstraint("ck_vote_candidates_update", "update_date_utc_ticks BETWEEN 0 AND 3155378975999999999");
-            table.HasCheckConstraint("ck_vote_candidates_created", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
         });
         builder.Property(row => row.CandidateId).HasColumnName("candidate_id").HasMaxLength(64);
         builder.Property(row => row.SourceId).HasColumnName("source_id").HasMaxLength(128);

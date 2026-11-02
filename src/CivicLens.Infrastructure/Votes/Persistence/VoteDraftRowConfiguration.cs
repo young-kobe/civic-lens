@@ -1,3 +1,4 @@
+using CivicLens.Infrastructure.Collection.Votes;
 using CivicLens.Infrastructure.Review.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -33,6 +34,7 @@ internal sealed class VoteDraftRowConfiguration : IEntityTypeConfiguration<VoteD
         ReviewDraftTableConfiguration.ConfigureLastRevised(builder, "vote_drafts", nameof(VoteDraftRow.RecordId));
         builder.Property(row => row.HeldReason).HasColumnName("held_reason");
         ListedDraftTableConfiguration.ConfigureListing(builder, "vote_drafts");
+        builder.HasOne<VoteCandidateRow>().WithMany().HasForeignKey(row => row.CandidateId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(row => new { row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber }).IsUnique()
             .HasDatabaseName("ux_vote_drafts_roll");
     }

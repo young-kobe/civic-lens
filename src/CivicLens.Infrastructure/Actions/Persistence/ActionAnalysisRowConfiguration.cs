@@ -9,7 +9,7 @@ internal sealed class ActionAnalysisRowConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<ActionAnalysisRow> builder)
     {
-        AnalysisTableConfiguration.ConfigureQueue(builder, "action_analysis", nameof(ActionAnalysisRow.CandidateId), "candidate_id");
+        AnalysisTableConfiguration.ConfigureQueue<ActionAnalysisRow, ActionAnalysisRunRow>(builder, "action_analysis", nameof(ActionAnalysisRow.CandidateId), "candidate_id");
         builder.HasOne<ActionCandidateRow>().WithMany()
             .HasForeignKey(row => row.CandidateId).OnDelete(DeleteBehavior.Restrict);
     }

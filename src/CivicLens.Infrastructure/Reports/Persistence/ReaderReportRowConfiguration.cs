@@ -12,7 +12,6 @@ internal sealed class ReaderReportRowConfiguration : IEntityTypeConfiguration<Re
         {
             table.HasCheckConstraint("ck_reader_reports_record_id", "record_id ~ '^([0-9a-f]{32}|[0-9a-f]{64})$'");
             table.HasCheckConstraint("ck_reader_reports_revision", "revision_number >= 1");
-            table.HasCheckConstraint("ck_reader_reports_received", "received_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
             table.HasCheckConstraint("ck_reader_reports_status", "status IN ('Open','Dismissed','CorrectionNeeded')");
             table.HasCheckConstraint("ck_reader_reports_resolution",
                 "(status = 'Open') = (resolved_by IS NULL AND resolved_at_utc_ticks IS NULL) AND (status <> 'CorrectionNeeded' OR note IS NOT NULL)");
