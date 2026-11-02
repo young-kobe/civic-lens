@@ -116,6 +116,8 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Relationship type has no label.")
     };
 
+    public const string ReportRecordLink = "Report a problem with this record";
+
     public const string ContactEmail = "contact@civic-lens.info";
 
     public const string Voteview = "Voteview, an academic database at UCLA";

@@ -1,3 +1,4 @@
+using CivicLens.Application.Statements;
 using CivicLens.Core.ExecutiveActions;
 using CivicLens.Application.Issues;
 using System.Text.RegularExpressions;
@@ -202,23 +203,37 @@ public sealed class ReleaseRendererTests
     {
         var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
 
-        var links = new HtmlParser().ParseDocument(html).QuerySelectorAll("main a[href^='../report.html']");
+        var document = new HtmlParser().ParseDocument(html);
+        var links = document.QuerySelectorAll("main a[href^='../report.html']");
 
         Assert.Equal(2, links.Length);
-        Assert.All(links, link => Assert.Equal("Report a problem with this record", link.TextContent));
-        Assert.True(links[0].CompareDocumentPosition(links[1]).HasFlag(DocumentPositions.Following));
+        Assert.All(links, link => Assert.Equal(PublishedRecordLabels.ReportRecordLink, link.TextContent));
+        Assert.True(document.QuerySelector("main h1")!.CompareDocumentPosition(links[0]).HasFlag(DocumentPositions.Preceding));
+        Assert.True(document.QuerySelector("main .facts, main dl")!.CompareDocumentPosition(links[1]).HasFlag(DocumentPositions.Following));
     }
 
     [Fact]
-    public async Task TheReportPageWithNoRecordSaysWhichLinkToUseAndGivesTheSiteContactAddress()
+    public async Task TheReportPageWithNoRecordSaysWhichLinkToUseAndGivesTheSiteContactAddressInEveryState()
     {
         var html = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);
 
-        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[data-report-missing]")!;
+        var document = new HtmlParser().ParseDocument(html);
+        var panel = document.QuerySelector("[data-report-missing]")!;
 
         Assert.Equal("Choose the record first", panel.QuerySelector("h3")!.TextContent);
-        Assert.Contains("use the link \"Report a problem with this record\"", panel.TextContent, StringComparison.Ordinal);
-        Assert.Equal($"mailto:{PublishedRecordLabels.ContactEmail}", panel.QuerySelector("a[href^='mailto:']")!.GetAttribute("href"));
+        Assert.Contains($"use the link \"{PublishedRecordLabels.ReportRecordLink}\"", panel.TextContent, StringComparison.Ordinal);
+        Assert.Equal($"mailto:{PublishedRecordLabels.ContactEmail}", document.QuerySelector("main a[href^='mailto:']")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task AboutNamesStatementsAmongTheRecordsThatCodeApprovesBecauseStatementCodeApprovalDoesApproveThem()
+    {
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAboutAsync(CancellationToken.None)).QuerySelector("main")!.ShownText();
+
+        Assert.Contains("Here, code means software that we wrote. It follows fixed rules and uses no AI.", text, StringComparison.Ordinal);
+        Assert.Contains("Code also approves a statement when the statement comes from the own website of the office of that official, names no other speaker", text, StringComparison.Ordinal);
+        Assert.Contains($"within {StatementCodeApproval.DateWindowDays} days before Civic Lens saved the page", text, StringComparison.Ordinal);
+        Assert.Contains("and each statement that code does not approve", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -230,6 +245,8 @@ public sealed class ReleaseRendererTests
 
         Assert.Contains("votes with most of their party on 45. The page shows 45 of 48.", method.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
         Assert.Equal("How the counts work", method.QuerySelector("h1")!.TextContent);
+        var unavailable = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderReportAsync(CancellationToken.None));
+        Assert.NotNull(unavailable.QuerySelector($"main a[href='mailto:{PublishedRecordLabels.ContactEmail}']"));
         Assert.Equal("How the counts work", method.QuerySelector(".public-footer-nav a[href='method.html']")!.TextContent);
         Assert.Equal("How the counts work", about.QuerySelector("main a[href='method.html']")!.TextContent);
     }
@@ -1956,7 +1973,7 @@ public sealed class ReleaseRendererTests
         Assert.Contains(PublishedRecordLabels.ModelWording, html, StringComparison.Ordinal);
         Assert.Contains(PublishedRecordLabels.CodeWording, html, StringComparison.Ordinal);
         Assert.Contains("On an action page or a vote page, a summary that a model wrote has the label \"An AI summary of the official record\". " +
-            "Wording that our software wrote from the bill title, the sponsor, and the introduction date has the label \"Written automatically from Congress.gov data, with no AI\".",
+            "Wording that code wrote from the bill title, the sponsor, and the introduction date has the label \"Written automatically from Congress.gov data, with no AI\".",
             new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("unreviewed", html, StringComparison.OrdinalIgnoreCase);
     }

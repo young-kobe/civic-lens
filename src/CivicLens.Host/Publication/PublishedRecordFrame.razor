@@ -12,7 +12,7 @@
 </PublicPage>
 
 @code {
-    private RenderFragment ReportLink => @<p class="muted small"><a href="@("../" + PublicationProtocol.ReportPageLink(RecordId, RevisionNumber))">Report a problem with this record</a></p>;
+    private RenderFragment ReportLink => @<p class="muted small"><a href="@("../" + PublicationProtocol.ReportPageLink(RecordId, RevisionNumber))">@PublishedRecordLabels.ReportRecordLink</a></p>;
 
     private IReadOnlyList<Crumb> Crumbs => [PublicCrumbs.Home("../"), SectionCrumb, new(Headline)];
 

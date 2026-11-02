@@ -37,13 +37,10 @@
         </Panel>
         <div role="status" tabindex="-1" data-report-result></div>
         <div role="alert" tabindex="-1" data-report-failure></div>
-        <Panel Label="No record chosen" Padded="true" hidden data-report-missing>
+        <Panel Label="Choose the record first" Padded="true" hidden data-report-missing>
             <EmptyState Title="Choose the record first"
-                        Text="To report a record, open its page and use the link &quot;Report a problem with this record&quot;. This page needs that link to know which record you mean.">
-                <Action>
-                    <p>For a problem with the site, such as a broken page, send an email to <a href="mailto:@PublishedRecordLabels.ContactEmail">@PublishedRecordLabels.ContactEmail</a>.</p>
-                    <Button Href="@PublicationProtocol.AllRecordsPagePath(1)">All records</Button>
-                </Action>
+                        Text="@($"To report a record, open its page and use the link \"{PublishedRecordLabels.ReportRecordLink}\". This page needs that link to know which record you mean.")">
+                <Action><Button Href="@PublicationProtocol.AllRecordsPagePath(1)">All records</Button></Action>
             </EmptyState>
         </Panel>
         <Panel Title="About reports" Padded="true">
@@ -52,6 +49,9 @@
             <p><a data-report-record href="@PublicationProtocol.AllRecordsPagePath(1)">All records</a></p>
         </Panel>
     }
+    <Panel Title="A problem with the site" Padded="true">
+        <p>For a problem with the site, such as a broken page, send an email to <a href="mailto:@PublishedRecordLabels.ContactEmail">@PublishedRecordLabels.ContactEmail</a>.</p>
+    </Panel>
 </PublicPage>
 
 @code {
