@@ -111,7 +111,7 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
 
         var row = Assert.Single(found.QuerySelectorAll("[aria-labelledby='search-results'] tbody tr"));
         Assert.NotNull(row.QuerySelector($"a[href='/Review/Actions/{action.RecordId}']"));
-        Assert.Contains("Action", row.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Bill or resolution", row.TextContent, StringComparison.Ordinal);
         Assert.Equal("No approved record matches", missing.QuerySelector("[aria-labelledby='search-results'] .empty h3")!.TextContent);
         Assert.Contains("Type 1 to 300 characters", blank.QuerySelector(".notice-warn")!.TextContent, StringComparison.Ordinal);
         Assert.NotNull(found.QuerySelector("form[action='/Review'] input[name='find']"));

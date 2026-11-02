@@ -2,7 +2,7 @@ namespace CivicLens.Host.Publication;
 
 public enum RecordTableColumns
 {
-    FirstPublished,
+    Dated,
     Facet,
     Week
 }

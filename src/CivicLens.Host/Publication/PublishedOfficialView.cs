@@ -88,7 +88,7 @@ internal static class PublishedOfficialView
         var total = page.Records.Length + page.Votes.Length;
         if (total == 0) return null;
         var parts = page.Records.GroupBy(entry => entry.Kind).OrderBy(group => group.Key)
-            .Select(group => Counted(group.Count(), PublishedRecordLabels.Kind(group.Key).ToLowerInvariant())).ToList();
+            .Select(group => $"{group.Count()} {KindNoun(group.Key, group.Count())}").ToList();
         if (!page.Votes.IsEmpty) parts.Add($"{Counted(page.Votes.Length, "vote")} in {TheCongress(page.Congress!.Value)}");
         return $"This list holds {Counted(total, "published record")}: {JoinAnd(parts)}. Rows are newest first.";
     }
@@ -112,9 +112,17 @@ internal static class PublishedOfficialView
 
     public static string TheCongress(int congress) => $"the {CongressCalendar.Ordinal(congress)} Congress";
 
+    private static string KindNoun(PublishedRecordKind kind, int count) =>
+        (count == 1 ? PublishedRecordLabels.Kind(kind) : PublishedRecordLabels.KindPlural(kind)).ToLowerInvariant();
+
     public static string Counted(int count, string singular) => $"{count} {Noun(count, singular)}";
 
-    private static string JoinAnd(List<string> parts) => parts.Count == 1 ? parts[0] : $"{string.Join(", ", parts[..^1])} and {parts[^1]}";
+    private static string JoinAnd(List<string> parts) => parts.Count switch
+    {
+        1 => parts[0],
+        2 => $"{parts[0]} and {parts[1]}",
+        _ => $"{string.Join(", ", parts[..^1])}, and {parts[^1]}"
+    };
 
     public static string PartyLine(string party, string? caucus) =>
         caucus is null || caucus == party ? $"Party: {party}" : $"Party: {party}, caucuses with {Members(caucus)}";

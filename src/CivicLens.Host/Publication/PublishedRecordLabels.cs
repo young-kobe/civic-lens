@@ -10,7 +10,7 @@ public static class PublishedRecordLabels
     {
         PublishedRecordKind.DocumentChange => "Document change",
         PublishedRecordKind.Statement => "Statement",
-        PublishedRecordKind.Action => "Action",
+        PublishedRecordKind.Action => "Bill or resolution",
         PublishedRecordKind.Brief => "Weekly brief",
         PublishedRecordKind.Vote => "Vote",
         PublishedRecordKind.Relationship => "Relationship",
@@ -29,7 +29,7 @@ public static class PublishedRecordLabels
     {
         PublishedRecordKind.DocumentChange => "Document changes",
         PublishedRecordKind.Statement => "Statements",
-        PublishedRecordKind.Action => "Actions",
+        PublishedRecordKind.Action => "Bills and resolutions",
         PublishedRecordKind.Brief => "Weekly briefs",
         PublishedRecordKind.Vote => "Votes",
         PublishedRecordKind.Relationship => "Relationships",

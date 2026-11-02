@@ -1411,7 +1411,7 @@ public sealed class ReleaseRendererTests
         var targetLink = rows[0].QuerySelectorAll("a");
         Assert.Equal(($"../records/{action.RecordId}.html", "Housing bill funds rent aid"), (targetLink[0].GetAttribute("href"), targetLink[0].TextContent));
         Assert.Equal($"../records/{actionLink.RecordId}.html", targetLink[1].GetAttribute("href"));
-        Assert.Contains("Action, Describes own bill, statement of 1 May 2026", rows[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("Bill or resolution, Describes own bill, statement of 1 May 2026", rows[0].TextContent, StringComparison.Ordinal);
         Assert.Contains("Vote, Statement about a vote", rows[1].TextContent, StringComparison.Ordinal);
         var onAction = Assert.Single(actionPage.QuerySelectorAll("[aria-labelledby='related-title'] li"));
         Assert.Equal(($"../records/{statement.RecordId}.html", "Doe backs a rent cap"), (onAction.QuerySelector("a")!.GetAttribute("href"), onAction.QuerySelector("a")!.TextContent));
@@ -1443,7 +1443,7 @@ public sealed class ReleaseRendererTests
         Assert.DoesNotContain("<b>", html, StringComparison.Ordinal);
         Assert.Equal(link.Headline, document.QuerySelector("h1")!.TextContent);
         var cited = document.QuerySelectorAll("[aria-labelledby='linked-title'] li");
-        Assert.Equal(["Statement, revision 2", "Action, revision 3"],
+        Assert.Equal(["Statement, revision 2", "Bill or resolution, revision 3"],
             cited.Select(row => row.QuerySelector("span")!.TextContent.Trim()));
         Assert.Equal([$"../records/{link.Statement.RecordId}.html", $"../records/{link.Target.RecordId}.html"],
             cited.Select(row => row.QuerySelector("a")!.GetAttribute("href")));
@@ -1507,7 +1507,7 @@ public sealed class ReleaseRendererTests
         var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody tr")
             .Select(row => (row.QuerySelector("a")!.GetAttribute("href"), row.QuerySelector(".badge")!.TextContent));
         Assert.Equal([($"records/{release.Records[0].RecordId}.html", "Document change"),
-            ($"records/{new string('d', 64)}.html", "Statement"), ($"records/{new string('f', 64)}.html", "Action")], rows);
+            ($"records/{new string('d', 64)}.html", "Statement"), ($"records/{new string('f', 64)}.html", "Bill or resolution")], rows);
     }
 
     [Fact]
@@ -1526,7 +1526,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal("Search by kind", panel.QuerySelector("h2")!.TextContent);
         Assert.Contains("Each link opens the search page with that kind of record chosen.", panel.TextContent);
         var links = document.QuerySelectorAll("nav[aria-label='Search one kind of record'] a").ToList();
-        Assert.Equal(["Document changes", "Statements", "Actions", "Weekly briefs", "Votes", "Relationships", "Executive actions"], links.Select(link => link.TextContent.Trim()));
+        Assert.Equal(["Document changes", "Statements", "Bills and resolutions", "Weekly briefs", "Votes", "Relationships", "Executive actions"], links.Select(link => link.TextContent.Trim()));
         foreach (var link in links)
         {
             Assert.StartsWith("search.html?kind=", link.GetAttribute("href"), StringComparison.Ordinal);
@@ -1600,14 +1600,14 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer("https://api.test", null).RenderAllRecordsAsync(release, 1, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
-        Assert.Equal([("text", "headline"), ("date", "published")],
+        Assert.Equal([("text", "headline"), ("date", "date")],
             document.QuerySelectorAll("thead th").Select(header => (header.GetAttribute("data-sort")!, header.GetAttribute("data-sort-key")!)));
         Assert.Equal("Published records. Newest first.", document.QuerySelector("caption")!.TextContent);
         var source = System.Text.Json.JsonDocument.Parse(document.QuerySelector("table")!.GetAttribute("data-sort-source")!).RootElement;
         Assert.Equal(("https://api.test", 120, "documentChange"), (source.GetProperty("api").GetString(), source.GetProperty("total").GetInt32(),
             source.GetProperty("kinds").EnumerateObject().Single(kind => kind.Value.GetString() == "Document change").Name));
         Assert.Equal(PublicationProtocol.PageSize, source.GetProperty("pageSize").GetInt32());
-        Assert.Equal(["record", "published"], source.GetProperty("columns").EnumerateArray().Select(column => column.GetString()));
+        Assert.Equal(["record", "date"], source.GetProperty("columns").EnumerateArray().Select(column => column.GetString()));
         Assert.Equal(release.Records.Take(50).Select(entry => entry.RecordId),
             Regex.Matches(html, "href=\"records/([0-9a-f]{32})\\.html\"").Select(match => match.Groups[1].Value));
         Assert.NotNull(document.QuerySelector("nav.pager"));
@@ -1730,7 +1730,7 @@ public sealed class ReleaseRendererTests
     {
         var release = ReleaseOf(3) with { Records = [.. ReleaseOf(3).Records.Select(entry => entry with { IssueIds = ["housing"] })] };
         var renderer = new ReleaseRenderer("https://api.test", null);
-        var headerOf = new Dictionary<string, string> { ["record"] = "Record", ["officials"] = "Officials", ["date"] = "Date", ["published"] = "First published" };
+        var headerOf = new Dictionary<string, string> { ["record"] = "Record", ["officials"] = "Officials", ["date"] = "Date" };
 
         foreach (var html in new[]
         {
@@ -1743,6 +1743,34 @@ public sealed class ReleaseRendererTests
             Assert.Equal(document.QuerySelectorAll("thead th").Select(header => header.TextContent.Trim()),
                 source.GetProperty("columns").EnumerateArray().Select(column => headerOf[column.GetString()!]));
         }
+    }
+
+    [Fact]
+    public async Task HomeDatesARecordByItsOwnEventDayNotByTheDayTheSiteAddedIt()
+    {
+        var release = ReleaseOf(2);
+        var published = new DateTimeOffset(2026, 11, 1, 8, 0, 0, TimeSpan.Zero);
+        release = release with
+        {
+            Records = [release.Records[0] with { EventDate = new DateOnly(2025, 3, 2), FirstPublishedAtUtc = published },
+                release.Records[1] with { EventDate = null, FirstPublishedAtUtc = published }]
+        };
+
+        var html = await new ReleaseRenderer(null, null).RenderHomeAsync(release, null, NoFacets, NoHighlights(release), CancellationToken.None);
+
+        var table = new HtmlParser().ParseDocument(html).QuerySelector("table")!;
+        Assert.Equal(["Record", "Date"], table.QuerySelectorAll("thead th").Select(header => header.TextContent.Trim()));
+        Assert.Equal(["2 Mar 2025", "1 Nov 2026"], table.QuerySelectorAll("tbody td[data-label='Date']").Select(cell => cell.TextContent.Trim()));
+    }
+
+    [Fact]
+    public async Task TheIssueIndexSaysWhoChoosesIssuesAndWhoNamesPolicyAreas()
+    {
+        var release = ReleaseOf(1);
+
+        var html = await new ReleaseRenderer(null, null).RenderFacetsAsync(ReleaseFacets.From(release, PublicationCatalogs.None), CancellationToken.None);
+
+        Assert.Contains("Issues are topics we chose. Policy areas are Congress.gov's own labels.", new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1917,7 +1945,7 @@ public sealed class ReleaseRendererTests
         Assert.NotNull(document.QuerySelector("main a[href='report.html']"));
         Assert.Contains(PublishedRecordLabels.ModelWording, html, StringComparison.Ordinal);
         Assert.Contains(PublishedRecordLabels.CodeWording, html, StringComparison.Ordinal);
-        Assert.Contains("On an action page or a vote page, a summary that a model wrote has the label \"An AI summary of the official record\". " +
+        Assert.Contains("On a bill or resolution page or a vote page, a summary that a model wrote has the label \"An AI summary of the official record\". " +
             "Wording that code wrote from the bill title, the sponsor, and the introduction date has the label \"Written automatically from Congress.gov data, with no AI\".",
             new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("unreviewed", html, StringComparison.OrdinalIgnoreCase);
@@ -2157,7 +2185,7 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         var text = document.QuerySelector("main")!.TextContent;
         Assert.Equal("This record was withdrawn", document.QuerySelector("h1")!.TextContent);
-        foreach (var expected in new[] { "Action", new string('c', 64), "3", "1 Feb 2026, 08:00 UTC", "9 Feb 2026, 09:30 UTC", "Wrong <bill>." })
+        foreach (var expected in new[] { "Bill or resolution", new string('c', 64), "3", "1 Feb 2026, 08:00 UTC", "9 Feb 2026, 09:30 UTC", "Wrong <bill>." })
             Assert.Contains(expected, text, StringComparison.Ordinal);
         Assert.Contains("Wrong &lt;bill&gt;.", html, StringComparison.Ordinal);
         Assert.Equal("Correction, 4 Feb 2026. Replaces revision 2.", document.QuerySelector("ul.corrections > li strong")!.ShownText());
@@ -2264,7 +2292,7 @@ public sealed class ReleaseRendererTests
         var second = TitleOf(await renderer.RenderWithdrawalAsync(Withdrawal('b'), CancellationToken.None));
 
         Assert.NotEqual(first, second);
-        Assert.Equal("Withdrawn action: aaaaaaaaaaaa | Civic Lens", first);
+        Assert.Equal("Withdrawn bill or resolution: aaaaaaaaaaaa | Civic Lens", first);
     }
 
     [Fact]
@@ -2538,7 +2566,7 @@ public sealed class ReleaseRendererTests
         AssertTrail(pages["brief"], ["Home|../index.html", "Briefs|../briefs.html", Brief().Headline]);
         AssertTrail(pages["issue"], ["Home|../index.html", "Issues|../issues.html", "Housing costs"]);
         AssertTrail(pages["vote"], ["Home|../index.html", "All records|../all.html", Vote().Headline]);
-        AssertTrail(pages["withdrawal"], ["Home|../index.html", "All records|../all.html", "Withdrawn action: cccccccccccc"]);
+        AssertTrail(pages["withdrawal"], ["Home|../index.html", "All records|../all.html", "Withdrawn bill or resolution: cccccccccccc"]);
         AssertTrail(pages["official"], ["Home|../index.html", "Officials|../officials.html", "Mayor Example"]);
         AssertTrail(pages["past congress"], ["Home|../../index.html", "Officials|../../officials.html",
             "Mayor Example|../../officials/mayor.html", "Mayor Example, the 118th Congress"]);
