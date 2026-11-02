@@ -1,4 +1,5 @@
 using CivicLens.Application.Publication;
+using CivicLens.Core.Relationships;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Publication.Contracts;
 
@@ -36,7 +37,7 @@ internal static class PublishedHomeCardView
         : $"The pick is the closest of {highlights.VotesInWindow} substantive roll call votes with counts in these dates. The gap is the difference between the Yea count and the Nay count.";
 
     public static string Leader(BreakLeader leader, DateTimeOffset publishedAtUtc) =>
-        $"{Identity(leader, publishedAtUtc)}sided against most {PublishedOfficialView.PartyOf(leader.Chamber, leader.Party)} on {leader.Breaks} of {leader.Cast} votes where the parties split.";
+        $"{Identity(leader, publishedAtUtc)}sided against most {PublishedOfficialView.PartyOf(leader.Chamber, leader.Party)} on {leader.Breaks} of {leader.Cast} votes where the parties split in the {CongressCalendar.Ordinal(leader.Congress)} Congress.";
 
     private static string Identity(BreakLeader leader, DateTimeOffset publishedAtUtc)
     {
