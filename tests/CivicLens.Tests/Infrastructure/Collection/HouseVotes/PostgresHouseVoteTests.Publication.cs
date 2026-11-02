@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Publication;
@@ -135,16 +136,7 @@ public sealed partial class PostgresHouseVoteTests
         var newerBill = new string('8', 64);
         await InsertActionDraftAsync(publishedBill, "hconres", 14);
         await InsertActionDraftAsync(newerBill, "hr", 99);
-        var newer = new string('1', 64);
-        await ExecuteAsync($"""
-            SET session_replication_role = replica;
-            INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
-                bill_type, bill_number, detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
-            SELECT '{newer}', source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks + 1,
-                'hr', 99, 'newer-detail', 'newer-members', detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks
-            FROM vote_candidates WHERE candidate_id = (SELECT candidate_id FROM vote_drafts WHERE record_id = '{recordId}');
-            UPDATE vote_drafts SET candidate_id = '{newer}' WHERE record_id = '{recordId}';
-            """);
+        await MoveCurrentCandidateToBillAsync(recordId, "hr", 99);
 
         var found = await VoteReviews().FindBillActionRecordIdsOfVotesAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
 
@@ -152,17 +144,22 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task FindVoteRecordIdsOnBillsOfActionsReturnsTheVotesOnTheBillOfEachNamedActionOnly()
+    public async Task FindBillActionRecordIdsOfVotesReadsTheNamedRevisionNumberAndNotAnotherStoredRevisionOfTheRecord()
     {
         var recordId = await ApprovedVoteAsync();
-        var sameBill = new string('7', 64);
-        var otherBill = new string('9', 64);
-        await InsertActionDraftAsync(sameBill, "hconres", 14);
-        await InsertActionDraftAsync(otherBill, "hr", 14);
+        var firstBill = new string('7', 64);
+        var secondBill = new string('8', 64);
+        await InsertActionDraftAsync(firstBill, "hconres", 14);
+        await InsertActionDraftAsync(secondBill, "hr", 99);
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        var newer = await RevisionAsync(second, 2);
+        await SettleForReviewAsync(second, newer with { BillType = "hr", BillNumber = 99 });
 
-        Assert.Equal([recordId], [.. await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([sameBill, otherBill], default)]);
-        Assert.Empty(await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([otherBill], default));
-        Assert.Empty(await VoteReviews().FindVoteRecordIdsOnBillsOfActionsAsync([], default));
+        var first = await VoteReviews().FindBillActionRecordIdsOfVotesAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
+        var later = await VoteReviews().FindBillActionRecordIdsOfVotesAsync([new(PublishedRecordKind.Vote, recordId, 2)], default);
+
+        Assert.Equal([firstBill], [.. first[recordId]]);
+        Assert.Equal([secondBill], [.. later[recordId]]);
     }
 
     [Fact]
@@ -178,6 +175,46 @@ public sealed partial class PostgresHouseVoteTests
         Assert.All(members, member => Assert.Equal(recordId, member.RecordId));
         Assert.Empty(await VoteReviews().ReadMembersAsync([], default));
         await Assert.ThrowsAsync<InvalidDataException>(() => VoteReviews().ReadMembersAsync([new(PublishedRecordKind.Vote, recordId, 2)], default));
+    }
+
+    [Fact]
+    public async Task ReadMembersReadsAStoredRevisionAndRefusesTheCallWhenAnotherNamedRevisionIsNotStored()
+    {
+        var recordId = await ApprovedVoteAsync();
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => VoteReviews().ReadMembersAsync(
+            [new(PublishedRecordKind.Vote, recordId, 1), new(PublishedRecordKind.Vote, recordId, 2)], default));
+    }
+
+    [Fact]
+    public async Task ReadMembersListsAPersonOnceWhenTheRevisionNamesThePersonTwice()
+    {
+        var recordId = await ApprovedVoteAsync();
+        var expected = (await VoteReviews().GetRevisionAsync(recordId, 1, default))!.OfficialIds().Order().ToArray();
+        await ExecuteAsync($$"""
+            SET session_replication_role = replica;
+            UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{members}',
+                (revision_json::jsonb -> 'members') || (revision_json::jsonb -> 'members'))::text
+            WHERE record_id = '{{recordId}}' AND revision_number = 1;
+            """);
+
+        var members = await VoteReviews().ReadMembersAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
+
+        Assert.Equal(expected, members.Select(member => member.PersonId).Order());
+    }
+
+    [Fact]
+    public async Task ReadMembersFailsForAStoredRevisionWithoutMembersInsteadOfDroppingTheVote()
+    {
+        var recordId = await ApprovedVoteAsync();
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            UPDATE vote_revisions SET revision_json = (revision_json::jsonb - 'members')::text
+            WHERE record_id = '{recordId}' AND revision_number = 1;
+            """);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            VoteReviews().ReadMembersAsync([new(PublishedRecordKind.Vote, recordId, 1)], default));
     }
 
     [Fact]
@@ -205,6 +242,8 @@ public sealed partial class PostgresHouseVoteTests
 
         await Assert.ThrowsAsync<ArgumentException>(() => VoteReviews().ReadMembersAsync(
             [new(PublishedRecordKind.Vote, recordId, 1), new(PublishedRecordKind.Statement, recordId, 1)], default));
+        await Assert.ThrowsAsync<ArgumentException>(() => VoteReviews().FindBillActionRecordIdsOfVotesAsync(
+            [new(PublishedRecordKind.Vote, recordId, 1), new(PublishedRecordKind.Statement, recordId, 1)], default));
     }
 
     [Fact]
@@ -224,6 +263,20 @@ public sealed partial class PostgresHouseVoteTests
         var recordId = await RecordIdAsync(candidate);
         await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
         return recordId;
+    }
+
+    private Task MoveCurrentCandidateToBillAsync(string recordId, string billType, int billNumber)
+    {
+        var newer = new string('1', 64);
+        return ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
+                bill_type, bill_number, detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
+            SELECT '{newer}', source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks + 1,
+                '{billType}', {billNumber}, 'newer-detail', 'newer-members', detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks
+            FROM vote_candidates WHERE candidate_id = (SELECT candidate_id FROM vote_drafts WHERE record_id = '{recordId}');
+            UPDATE vote_drafts SET candidate_id = '{newer}' WHERE record_id = '{recordId}';
+            """);
     }
 
     private Task InsertActionDraftAsync(string recordId, string billType, int billNumber) => ExecuteAsync($"""

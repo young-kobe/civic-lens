@@ -59,16 +59,6 @@ internal sealed class FakeVoteReviewStore : IVoteReviewStore
         return Task.FromResult(found);
     }
 
-    public Task<IReadOnlySet<string>> FindVoteRecordIdsOnBillsOfActionsAsync(ImmutableArray<string> actionRecordIds,
-        CancellationToken cancellationToken)
-    {
-        IReadOnlySet<string> found = Publishable
-            .Where(vote => VoteBill.Of(vote.Value.Review.CurrentRevision) is { } bill &&
-                BillActions.GetValueOrDefault((bill.Congress, bill.BillType, bill.BillNumber), []).Any(actionRecordIds.Contains))
-            .Select(vote => vote.Key).ToHashSet(StringComparer.Ordinal);
-        return Task.FromResult(found);
-    }
-
     public Task<VoteDraftRevision?> GetRevisionAsync(string recordId, int revisionNumber, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
