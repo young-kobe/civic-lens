@@ -9,6 +9,13 @@ internal static class VoteRevisionComparison
 {
     private const char Separator = '\u001F';
 
+    /// <summary>A stored JSON can lack a part that the type requires. Such a JSON cannot be compared.</summary>
+    public static bool IsComparable(VoteDraftRevision revision) =>
+        !revision.Facts.IsDefault && !revision.Members.IsDefault && !revision.TrackedIssueIds.IsDefault &&
+        new[] { revision.RecordId, revision.AuthorSubject, revision.Headline, revision.Summary, revision.SourceId, revision.CandidateId, revision.IssueRevisionId }.All(text => text is not null) &&
+        revision.VotedOnCitation is not null && revision.Facts.All(fact => fact is { Text: not null, Citation: not null }) &&
+        revision.Members.All(member => member is { PersonId: not null, BioguideId: not null, Cast: not null, Citation: not null });
+
     public static IReadOnlyList<string> DifferingFields(VoteDraftRevision stored, VoteDraftRevision rebuilt) =>
         [.. Fields(stored).Zip(Fields(rebuilt)).Where(pair => pair.First.Value != pair.Second.Value).Select(pair => pair.First.Name)];
 

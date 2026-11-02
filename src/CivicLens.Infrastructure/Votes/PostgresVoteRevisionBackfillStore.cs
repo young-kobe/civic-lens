@@ -59,13 +59,12 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
         return new(checkedCount, legacy, mismatched, first);
     }
 
-    private static IQueryable<VoteRevisionRow> LegacyRows(CollectionAttemptDbContext db, VoteRevisionKey? after)
-    {
-        var rows = db.Set<VoteRevisionRow>().AsNoTracking().Where(row => row.Headline == null);
-        if (after is not null)
-            rows = rows.Where(row => row.RecordId.CompareTo(after.RecordId) > 0 || row.RecordId == after.RecordId && row.RevisionNumber > after.RevisionNumber);
-        return rows.OrderBy(row => row.RecordId).ThenBy(row => row.RevisionNumber);
-    }
+    private static IQueryable<VoteRevisionRow> LegacyRows(CollectionAttemptDbContext db, VoteRevisionKey? after) =>
+        InKeyOrderAfter(db.Set<VoteRevisionRow>().AsNoTracking().Where(row => row.Headline == null), after);
+
+    private static IQueryable<VoteRevisionRow> InKeyOrderAfter(IQueryable<VoteRevisionRow> rows, VoteRevisionKey? after) =>
+        rows.Where(row => after == null || row.RecordId.CompareTo(after.RecordId) > 0 || row.RecordId == after.RecordId && row.RevisionNumber > after.RevisionNumber)
+            .OrderBy(row => row.RecordId).ThenBy(row => row.RevisionNumber);
 
     private static async Task<string?> TryMoveAsync(CollectionAttemptDbContext db, IDbContextTransaction transaction, VoteRevisionRow row,
         CancellationToken cancellationToken)
@@ -132,9 +131,8 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
     private static async Task<VerifyPage> ReadPageAsync(CollectionAttemptDbContext db, VoteRevisionKey? after, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var rows = await db.Set<VoteRevisionRow>().AsNoTracking().Include(row => row.Facts).Include(row => row.Issues)
-            .Where(row => after == null || row.RecordId.CompareTo(after.RecordId) > 0 || row.RecordId == after.RecordId && row.RevisionNumber > after.RevisionNumber)
-            .OrderBy(row => row.RecordId).ThenBy(row => row.RevisionNumber).Take(VerifyPageSize).ToListAsync(cancellationToken);
+        var rows = await InKeyOrderAfter(db.Set<VoteRevisionRow>().AsNoTracking().Include(row => row.Facts).Include(row => row.Issues), after)
+            .Take(VerifyPageSize).ToListAsync(cancellationToken);
         var listIds = rows.Select(row => row.MemberListId).OfType<string>().Distinct().ToArray();
         var lists = await db.Set<VoteMemberListRow>().AsNoTracking().Where(list => listIds.Contains(list.ListId))
             .ToDictionaryAsync(list => list.ListId, list => list.MemberCount, StringComparer.Ordinal, cancellationToken);
@@ -152,6 +150,7 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
         try
         {
             var stored = ReviewJson.Deserialize<VoteDraftRevision>(row.RevisionJson, "vote revision");
+            if (!VoteRevisionComparison.IsComparable(stored)) return [nameof(VoteRevisionRow.RevisionJson)];
             var fields = VoteRevisionComparison.DifferingFields(stored, VoteRevisionRows.Rebuild(row, members)).ToList();
             if (row.MemberListId != VoteMemberLists.IdOf(members)) fields.Add("MemberListId");
             if (page.MemberCounts.GetValueOrDefault(row.MemberListId!) != members.Length) fields.Add("MemberCount");

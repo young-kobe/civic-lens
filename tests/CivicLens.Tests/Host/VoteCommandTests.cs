@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CivicLens.Application.Votes;
 using CivicLens.Tests.Infrastructure.Collection;
+using Npgsql;
 
 namespace CivicLens.Tests.Host;
 
@@ -112,6 +113,39 @@ public sealed class VoteCommandTests(PostgresCollection postgres) : IAsyncLifeti
         Assert.Contains("\"examined\":0", backfill.Output, StringComparison.Ordinal);
         Assert.Equal(0, verify.ExitCode);
         Assert.Contains("\"mismatched\":0", verify.Output, StringComparison.Ordinal);
+    }
+
+    // The rows hold every column, and the JSON is no revision, so the rebuild cannot equal it.
+    [Fact]
+    public async Task VerifyExitsWithOneAndNamesTheMismatchWhenARowDiffersFromItsJsonSoTheOwnerCannotMissIt()
+    {
+        var record = new string('a', 64);
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand($$"""
+                SET session_replication_role = replica;
+                INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, candidate_id,
+                    current_revision_number, review_state_version, review_status, created_at_utc_ticks)
+                VALUES ('{{record}}', 'house-clerk', 'House', 119, 1, 100, '{{record}}', 1, 0, 'AwaitingReview', 100);
+                INSERT INTO vote_member_lists (list_id, member_count, created_at_utc_ticks) VALUES ('{{record}}', 1, 100);
+                INSERT INTO vote_member_list_entries (list_id, position, person_id, bioguide_id, vote_cast, citation_extraction_id, citation_start, citation_length)
+                VALUES ('{{record}}', 0, 'p', 'A000001', 'Yea', '{{record}}', 0, 1);
+                INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks,
+                    headline, summary, text_origin, source_id, vote_source, chamber, congress, session_number, roll_call_number, candidate_id,
+                    candidate_update_utc_ticks, voted_on, voted_on_citation_extraction_id, voted_on_citation_start, voted_on_citation_length, kind,
+                    member_list_id, issue_revision_id, issue_candidates_recorded)
+                VALUES ('{{record}}', 1, 'auth0|editor', 'Person', NULL, '{}', 100, 'H', 'S.', 'Person', 'house-clerk', 'CongressGov', 'House', 119, 1, 100,
+                    '{{record}}', 100, '2025-04-10', '{{record}}', 0, 1, 'Other', '{{record}}', '{{record}}', false)
+                """, connection);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var result = await RunAsync("auth0|owner", "votes", "revisions", "verify");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("\"mismatched\":1", result.Output, StringComparison.Ordinal);
+        Assert.Contains("RevisionJson", result.Output, StringComparison.Ordinal);
     }
 
     [Theory]

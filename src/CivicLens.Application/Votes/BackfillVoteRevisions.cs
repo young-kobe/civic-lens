@@ -3,7 +3,8 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Votes;
 
-public sealed record VoteRevisionBackfillResult(int Examined, int Moved, int Skipped, IReadOnlyList<SkippedVoteRevision> SkippedRevisions);
+public sealed record VoteRevisionBackfillResult(int Examined, int Moved, int Skipped,
+    IReadOnlyDictionary<string, int> SkippedByReason, IReadOnlyList<SkippedVoteRevision> SkippedRevisions);
 
 public sealed class BackfillVoteRevisions(IVoteRevisionBackfillStore store)
 {
@@ -25,6 +26,7 @@ public sealed class BackfillVoteRevisions(IVoteRevisionBackfillStore store)
             skipped.AddRange(batch.Skipped);
             after = batch.Last;
         }
-        return new(examined, examined - skipped.Count, skipped.Count, [.. skipped.Take(ReportedSkips)]);
+        var byReason = skipped.GroupBy(revision => revision.Reason).ToDictionary(group => group.Key, group => group.Count());
+        return new(examined, examined - skipped.Count, skipped.Count, byReason, [.. skipped.Take(ReportedSkips)]);
     }
 }
