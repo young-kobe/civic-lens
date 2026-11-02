@@ -1185,13 +1185,30 @@ Every result that an agent reads goes to its model vendor, so add a column to th
 
 ### Failure alerts
 
-If `civic-lens-backup.service` fails, systemd starts `civic-lens-alert@civic-lens-backup.service`. That unit runs `deploy/scripts/alert.sh` with the failed unit name. The script sends one email through the Resend HTTP API from `alerts@civic-lens.info`. The body holds the unit name, the host name, the time, and the command `journalctl -u <unit>`. It holds no log line and no other data. Resend receives only this text. If the send fails, the script exits with an error in the journal of the alert unit. Other jobs can use the script later: give it any unit name.
+If `civic-lens-backup.service` fails, systemd starts `civic-lens-alert@civic-lens-backup.service`. That unit runs `deploy/scripts/alert.sh` with the failed unit name. The script sends one email through the Resend HTTP API from `alerts@civic-lens.info`. The body holds the unit name, the host name, the time, and the command `journalctl -u <unit>`. It holds no log line and no other data. Resend receives only this text. If the send fails, the script exits with an error in the journal of the alert unit. Other jobs can use the script: give it any unit name. `deploy/scripts/send-alert.sh` owns the Resend call, and the failure alert and the [health alert](#health-alerts) both use it.
 
 1. In Resend, add and verify the `civic-lens.info` domain. Add the DNS records that Resend shows in the Cloudflare zone.
 2. Make a send-only API key in Resend.
 3. Fill in `/srv/civic-lens/env/alert.secret.env` with the key and the recipient address. The file has mode 600. The script passes the key to `curl` in a temporary header file, not on the command line.
 4. Check that `curl --version` shows version 7.55 or later. The script needs `curl` on the host.
 5. Test: `sudo systemctl start civic-lens-alert@civic-lens-test.service`. An email arrives that names the unit `civic-lens-test`. Read `sudo journalctl -u civic-lens-alert@civic-lens-test.service` if it does not.
+
+### Health alerts
+
+`civic-lens-health.timer` runs `deploy/scripts/check-health.sh` every 10 minutes. The script sends one email when `worker health` exits with a non-zero status. It sends one email when free space under `/srv/civic-lens` is below 10 GB (`min_free_gb` in the script). The 10 GB value is a guess, not a measurement. A failed `docker compose` call also counts as an unhealthy worker. The email holds the host name, the time, and a fixed sentence. It holds no output from the worker.
+
+The script writes a marker file in `/run/civic-lens` for each problem that it reported. While the marker exists, the script sends no more email for that problem. When the check passes, the script removes the marker, so the next failure sends a new email. A reboot clears `/run`, so a problem that lasts through a reboot sends one new email. If a send fails, the script writes no marker and tries again on the next tick. A failure of the check itself starts the failure alert for `civic-lens-health.service`.
+
+A deploy restarts the worker. `worker health` can report no heartbeat until every loop has started, so a deploy can send one health email that clears by itself. See [Managed collection jobs](#managed-collection-jobs) for the rules.
+
+Install it after the failure alert works. The unit files link from the checkout:
+
+```sh
+sudo systemctl link /opt/civic-lens/deploy/systemd/civic-lens-health.service /opt/civic-lens/deploy/systemd/civic-lens-health.timer
+sudo systemctl enable --now civic-lens-health.timer
+```
+
+Test the worker path: run `sudo deploy/scripts/compose.sh stop worker`, then `sudo systemctl start civic-lens-health.service`, and read the email. Then run `sudo deploy/scripts/compose.sh start worker`. Test the disk path with `sudo CIVIC_LENS_HEALTH_STATE=/tmp/civic-lens-test deploy/scripts/check-health.sh` after you edit `min_free_gb` to a value above the free space, then undo the edit. Check `systemctl list-timers civic-lens-health.timer` every week.
 
 ### No page logs
 

@@ -91,6 +91,10 @@ Pages compose these components. The comparison page, the draft editor, and publi
 - A selector lives in one of `app.css`, `public.css`, and `review.css`. A selector with a `.public-` class lives only in `public.css`. A rendered public page uses no class that only `review.css` defines; see [publication](publication.md#rendering).
 - Only shared components render `del` and `ins`.
 
+### Health alerts
+
+A systemd timer runs `deploy/scripts/check-health.sh` every 10 minutes on the host. The script runs `worker health` and treats a non-zero exit status as unhealthy, so it has no second definition of healthy. It also checks that free space under the data root is at least 10 GB. For each problem, it sends one email through `deploy/scripts/send-alert.sh`, which the unit failure alert also uses. A marker file in `/run/civic-lens` stops repeat email until the problem clears or the host reboots. See [health alerts](../operations.md#health-alerts).
+
 ## Storage and contracts
 
 - The Razor component build adds the SDK-managed `Microsoft.AspNetCore.App.Internal.Assets` entry to the Host package lock file.
@@ -108,6 +112,7 @@ Pages compose these components. The comparison page, the draft editor, and publi
 | Styles and scripts | `src/CivicLens.Host/wwwroot/css/theme.css`, `src/CivicLens.Host/wwwroot/css/app.css`, `src/CivicLens.Host/wwwroot/css/public.css`, `src/CivicLens.Host/wwwroot/css/review.css`, `src/CivicLens.Host/wwwroot/js/theme.js`, `src/CivicLens.Host/wwwroot/js/app.js`, `src/CivicLens.Host/wwwroot/js/public.js`, `src/CivicLens.Host/wwwroot/js/review.js` |
 | Workspace wiring | `src/CivicLens.Host/Review/ReviewWorkspace.cs` |
 | Sources page | `src/CivicLens.Host/Collection/SourcesPage.razor` |
+| Health and failure alerts | `deploy/scripts/check-health.sh`, `deploy/scripts/send-alert.sh`, `deploy/scripts/alert.sh`, `deploy/systemd/civic-lens-health.service`, `deploy/systemd/civic-lens-health.timer` |
 | Presentation tests | `tests/CivicLens.Tests/Architecture/PresentationArchitectureTests.cs` |
 
 ## Limits and planned work
