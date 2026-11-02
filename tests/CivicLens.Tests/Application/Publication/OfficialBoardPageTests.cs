@@ -114,7 +114,7 @@ public sealed class OfficialBoardPageTests
     }
 
     [Fact]
-    public void AnOfficialWithAttendanceInANewerCongressAndNoEarlierFiguresMovesTheChamberToThatCongressAndLeavesItsBoardsEmpty()
+    public void AnOfficialWithOnlyAttendanceInANewerCongressNeverMovesTheBoardBecauseNoMemberThereHasEnoughSplitVotes()
     {
         var attendanceOnly = new PublishedOfficialSummary
         {
@@ -128,8 +128,8 @@ public sealed class OfficialBoardPageTests
 
         var page = OfficialBoardPage.All([Listing("attendance"), voter], [attendanceOnly, voterSummary]).Single(page => page.Board == HouseDemocrats);
 
-        Assert.Equal(120, page.Congress);
-        Assert.Empty(page.Members);
+        Assert.Equal(119, page.Congress);
+        Assert.Equal(["voter"], page.Members.Select(member => member.Official.Profile.Id));
         Assert.Equal(1, page.NotInCongress);
     }
 
@@ -145,6 +145,8 @@ public sealed class OfficialBoardPageTests
         Assert.Equal(["moved-on", "stayed"], page.Breakers.Select(member => member.Official.Profile.Id).Order());
         Assert.Equal(60, page.Members.Single(member => member.Official.Profile.Id == "moved-on").Cast);
         Assert.Equal(0, page.NotInCongress);
+        Assert.Equal(120, page.NewerCongress);
+        Assert.Equal(["officials/moved-on/119.html", "officials/stayed.html"], page.Members.OrderBy(member => member.Official.Profile.Id).Select(member => member.PagePath));
     }
 
     [Fact]
@@ -158,6 +160,32 @@ public sealed class OfficialBoardPageTests
 
         Assert.Equal(120, page.Congress);
         Assert.Equal(["below", "reached"], page.Members.Select(member => member.Official.Profile.Id));
+        Assert.Null(page.NewerCongress);
+        Assert.All(page.Members, member => Assert.Equal(member.Official.PagePath, member.PagePath));
+    }
+
+    [Fact]
+    public void AMemberOfTheOtherPartyReachingTheMinimumMovesBothPagesOfTheChamberToTheNewCongress()
+    {
+        var democrat = Row("democrat", 120, 5, 1, previous: Previous(119, 60, 6));
+        var republican = Row("republican", 120, OfficialBoardPage.MinimumSplitVotes, 3, party: PublishedPartyMajority.Republican,
+            previous: Previous(119, 60, 6, PublishedPartyMajority.Republican));
+
+        var pages = OfficialBoardPage.All([democrat.Item1, republican.Item1], [democrat.Item2, republican.Item2])
+            .Where(page => page.Board.Chamber == PublishedChamber.House).ToList();
+
+        Assert.Equal(2, pages.Count);
+        Assert.All(pages, page => Assert.Equal(120, page.Congress));
+    }
+
+    [Fact]
+    public void WhenOnlyANewcomerHoldsTheNewCongressAndNoRowHasPreviousFiguresTheBoardKeepsTheCongressOfTheOthers()
+    {
+        var page = PageOf(Row("newcomer", 120, 5, 1), Row("veteran", 119, 60, 6));
+
+        Assert.Equal(119, page.Congress);
+        Assert.Equal(["veteran"], page.Members.Select(member => member.Official.Profile.Id));
+        Assert.Equal(1, page.NotInCongress);
     }
 
     [Fact]
@@ -199,10 +227,10 @@ public sealed class OfficialBoardPageTests
 
     private const int MinimumMinusOne = OfficialBoardPage.MinimumSplitVotes - 1;
 
-    private static PublishedVoteFigures Previous(int congress, int cast, int breaks) => new()
+    private static PublishedVoteFigures Previous(int congress, int cast, int breaks, string party = PublishedPartyMajority.Democrat) => new()
     {
         Congress = congress,
-        PartyVotes = [new PublishedPartyVoteSummary { Chamber = PublishedChamber.House, Party = PublishedPartyMajority.Democrat, SplitVotesCast = cast, Breaks = breaks }],
+        PartyVotes = [new PublishedPartyVoteSummary { Chamber = PublishedChamber.House, Party = party, SplitVotesCast = cast, Breaks = breaks }],
         Attendance = [new PublishedAttendanceSummary { Chamber = PublishedChamber.House, Held = 100, Missed = 1, First = new DateOnly(2023, 1, 3), Last = new DateOnly(2024, 12, 20) }]
     };
 }

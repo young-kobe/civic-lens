@@ -19,7 +19,7 @@
             <ul>
                 @foreach (var leader in Highlights.BreakLeaders)
                 {
-                    <li><a href="@leader.Official.PagePath">@leader.Official.Profile.Name</a> @PublishedHomeCardView.Leader(leader, PublishedAtUtc)</li>
+                    <li><a href="@leader.PagePath">@leader.Official.Profile.Name</a> @PublishedHomeCardView.Leader(leader, PublishedAtUtc)</li>
                 }
             </ul>
             @if (PublishedHomeCardView.LeavesOutGroups(Highlights))

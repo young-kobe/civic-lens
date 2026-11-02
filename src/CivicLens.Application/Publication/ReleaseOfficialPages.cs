@@ -128,8 +128,15 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         await WriteAsync(staging, PublicationProtocol.OfficialPagePath(profile.Id), await renderer.RenderOfficialAsync(
             new(profile, tracked, current, true, newestFirst, entries, currentRows, publishedAtUtc, talkAndAction,
                 current is { } newestCongress ? LinkedPair.In(profile.Id, newestCongress, entries, release, currentRows) : []), catalog, cancellationToken), cancellationToken);
-        var previousFigures = newestFirst.Length > 1 ? ReleaseOfficialSummaries.FiguresOf(newestFirst[1], await RowsAsync(newestFirst[1])) : null;
+        var previousFigures = newestFirst.Length > 1 ? await PreviousFiguresAsync(newestFirst[1]) : null;
         return ReleaseOfficialSummaries.Of(profile.Id, current, talkAndAction, previousFigures);
+
+        async Task<PublishedVoteFigures> PreviousFiguresAsync(int older)
+        {
+            var unchanged = !rewritePast && !congressesChanged && !rowsInMemory.ContainsKey(older);
+            if (unchanged && previous.Summaries.GetValueOrDefault(profile.Id)?.Previous is { } carried && carried.Congress == older) return carried;
+            return ReleaseOfficialSummaries.FiguresOf(older, await RowsAsync(older));
+        }
     }
 
     private static Task WriteAsync(IReleaseStaging staging, string path, string html, CancellationToken cancellationToken) =>

@@ -6,10 +6,11 @@ namespace CivicLens.Application.Publication;
 /// <summary>
 /// The lists of one board page, built from the figures of one Congress in the chamber of the board. That is the newest Congress while any member holds MinimumSplitVotes split votes in it. Until then it is the next older Congress that the summary rows hold. Members hold the officials
 /// with a vote row for the chamber and party of the board, by name. The other counts are the officials that no board can show.
+/// NewerCongress is the newest Congress of the chamber while the board keeps an older one, else null.
 /// A list ranks only members with at least MinimumSplitVotes split votes cast.
 /// </summary>
 public sealed record OfficialBoardPage(OfficialBoard Board, int? Congress, ImmutableArray<BoardMember> Members, int WithoutVotes,
-    int NotInCongress, int WithoutMajorParty)
+    int NotInCongress, int WithoutMajorParty, int? NewerCongress = null)
 {
     public const int MinimumSplitVotes = 25;
 
@@ -42,25 +43,28 @@ public sealed record OfficialBoardPage(OfficialBoard Board, int? Congress, Immut
     private static OfficialBoardPage PageOf(OfficialBoard board, List<(OfficialListing Official, PublishedOfficialSummary Summary)> withVotes, int withoutVotes)
     {
         var inChamber = withVotes.Where(pair => AnyFigures(pair.Summary).Any(figures => HoldsChamber(figures, board.Chamber))).ToList();
-        var congress = ShownCongress(inChamber.Select(pair => pair.Summary).ToList(), board.Chamber);
+        var (congress, newest) = ShownCongress(inChamber.Select(pair => pair.Summary).ToList(), board.Chamber);
         var shown = inChamber
-            .Select(pair => (pair.Official, Figures: congress is { } number ? pair.Summary.FiguresIn(number) : null))
+            .Select(pair => (pair.Official, pair.Summary, Figures: congress is { } number ? pair.Summary.FiguresIn(number) : null))
             .Where(pair => pair.Figures is not null && HoldsChamber(pair.Figures, board.Chamber))
-            .Select(pair => (pair.Official, Figures: pair.Figures!))
+            .Select(pair => (pair.Official, pair.Summary, Figures: pair.Figures!))
             .ToList();
         return new(board, congress, MembersOf(board, shown), withoutVotes, inChamber.Count - shown.Count,
-            shown.Count(pair => pair.Figures.PartyVotes.All(row => row.Chamber != board.Chamber)));
+            shown.Count(pair => pair.Figures.PartyVotes.All(row => row.Chamber != board.Chamber)), newest > congress ? newest : null);
     }
 
-    private static int? ShownCongress(List<PublishedOfficialSummary> inChamber, PublishedChamber chamber)
+    private static (int? Shown, int? Newest) ShownCongress(List<PublishedOfficialSummary> inChamber, PublishedChamber chamber)
     {
         var current = inChamber.Where(summary => HoldsChamber(summary.FiguresIn(summary.Congress!.Value)!, chamber)).ToList();
         var newest = current.Max(summary => summary.Congress);
-        if (current.Any(summary => summary.Congress == newest && HasRankableMember(summary.PartyVotes, chamber))) return newest;
-        var earlier = inChamber.Select(summary => summary.Previous).OfType<PublishedVoteFigures>()
-            .Where(previous => HoldsChamber(previous, chamber)).Select(previous => previous.Congress).DefaultIfEmpty().Max();
-        return earlier > 0 ? earlier : newest;
+        if (current.Any(summary => summary.Congress == newest && HasRankableMember(summary.PartyVotes, chamber))) return (newest, newest);
+        var earlier = inChamber.SelectMany(AnyFigures).Where(figures => figures.Congress < newest && HoldsChamber(figures, chamber))
+            .Select(figures => figures.Congress).DefaultIfEmpty().Max();
+        return (earlier > 0 ? earlier : newest, newest);
     }
+
+    private static string PagePathOf(OfficialListing official, int congress, PublishedOfficialSummary summary) =>
+        congress == summary.Congress ? official.PagePath : PublicationProtocol.OfficialCongressPagePath(official.Profile.Id, congress);
 
     private static bool HasRankableMember(PublishedPartyVoteSummary[] partyVotes, PublishedChamber chamber) =>
         partyVotes.Any(row => row.Chamber == chamber && row.SplitVotesCast >= MinimumSplitVotes);
@@ -71,12 +75,12 @@ public sealed record OfficialBoardPage(OfficialBoard Board, int? Congress, Immut
     private static bool HoldsChamber(PublishedVoteFigures figures, PublishedChamber chamber) =>
         figures.PartyVotes.Any(row => row.Chamber == chamber) || figures.Attendance.Any(row => row.Chamber == chamber);
 
-    private static ImmutableArray<BoardMember> MembersOf(OfficialBoard board, List<(OfficialListing Official, PublishedVoteFigures Figures)> shown) =>
+    private static ImmutableArray<BoardMember> MembersOf(OfficialBoard board, List<(OfficialListing Official, PublishedOfficialSummary Summary, PublishedVoteFigures Figures)> shown) =>
     [.. shown
-        .Select(pair => (pair.Official, Party: pair.Figures.PartyVotes.SingleOrDefault(row => row.Chamber == board.Chamber && row.Party == board.Party),
+        .Select(pair => (pair.Official, pair.Summary, pair.Figures, Party: pair.Figures.PartyVotes.SingleOrDefault(row => row.Chamber == board.Chamber && row.Party == board.Party),
             Attendance: pair.Figures.Attendance.SingleOrDefault(row => row.Chamber == board.Chamber)))
         .Where(pair => pair.Party is not null)
         .Select(pair => new BoardMember(pair.Official, pair.Party!.SplitVotesCast, pair.Party.Breaks, pair.Attendance is { } attendance
-            ? new MissedVotes(board.Chamber, attendance.Missed, attendance.Held, attendance.First, attendance.Last) : null))
+            ? new MissedVotes(board.Chamber, attendance.Missed, attendance.Held, attendance.First, attendance.Last) : null, PagePathOf(pair.Official, pair.Figures.Congress, pair.Summary)))
         .OrderBy(Name, StringComparer.Ordinal)];
 }

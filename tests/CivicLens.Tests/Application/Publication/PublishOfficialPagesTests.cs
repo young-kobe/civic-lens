@@ -132,10 +132,60 @@ public sealed class PublishOfficialPagesTests
             new PublishedRecordReference(PublishedRecordKind.Vote, older), new PublishedRecordReference(PublishedRecordKind.Vote, newer),
             new PublishedRecordReference(PublishedRecordKind.Vote, chairOnly)));
 
-        var rows = JsonSerializer.Deserialize<PublishedOfficialSummaries>(
-            scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.OfficialSummariesPath], PublicationProtocol.JsonOptions)!.Officials.ToDictionary(row => row.Id);
-        Assert.Equal((119, 118), (rows["mayor"].Congress, rows["mayor"].Previous?.Congress));
+        var rows = Summaries(scenario, summary);
+        var previous = rows["mayor"].Previous!;
+        Assert.Equal((119, 118), (rows["mayor"].Congress, previous.Congress));
+        Assert.Equal(1, Assert.Single(previous.Attendance).Held);
+        var party = Assert.Single(previous.PartyVotes);
+        Assert.Equal((0, 0), (party.SplitVotesCast, party.Breaks));
         Assert.Null(rows["chair"].Previous);
+    }
+
+    [Fact]
+    public async Task ATouchedOfficialReusesTheCarriedPreviousFiguresWhenTheOlderCongressFileIsUnchangedAndComputesThemAgainWhenTheCarriedRowIsOutOfStep()
+    {
+        var scenario = new PublicationScenario();
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('a', congress: 118)),
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('b'))));
+        var truth = Summaries(scenario, first)["mayor"].Previous!;
+        var marked = truth with { Attendance = [.. truth.Attendance.Select(row => row with { Held = 99 })] };
+        TamperPrevious(scenario, first, marked);
+
+        var reused = await PublishAsync(scenario, "k2", PublishedRecordKind.Vote, scenario.AddVote('c'));
+        Assert.Equal(99, Assert.Single(Summaries(scenario, reused)["mayor"].Previous!.Attendance).Held);
+
+        TamperPrevious(scenario, reused, marked with { Congress = 117 });
+        var recomputed = await PublishAsync(scenario, "k3", PublishedRecordKind.Vote, scenario.AddVote('d'));
+        Assert.Equal(truth.Congress, Summaries(scenario, recomputed)["mayor"].Previous!.Congress);
+        Assert.Equal(1, Assert.Single(Summaries(scenario, recomputed)["mayor"].Previous!.Attendance).Held);
+    }
+
+    [Fact]
+    public async Task ARewriteOfAllOfficialsComputesThePreviousFiguresAgainSoItCorrectsACarriedRow()
+    {
+        var scenario = new PublicationScenario();
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('a', congress: 118)),
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('b'))));
+        var truth = Summaries(scenario, first)["mayor"].Previous!;
+        TamperPrevious(scenario, first, truth with { Attendance = [.. truth.Attendance.Select(row => row with { Held = 99 })] });
+
+        var rewritten = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteOfficials = true });
+
+        Assert.Equal(1, Assert.Single(Summaries(scenario, rewritten)["mayor"].Previous!.Attendance).Held);
+    }
+
+    private static Dictionary<string, PublishedOfficialSummary> Summaries(PublicationScenario scenario, PublicationReleaseSummary release) =>
+        JsonSerializer.Deserialize<PublishedOfficialSummaries>(
+            scenario.Releases.Directories[release.DirectoryName][PublicationProtocol.OfficialSummariesPath], PublicationProtocol.JsonOptions)!.Officials.ToDictionary(row => row.Id);
+
+    private static void TamperPrevious(PublicationScenario scenario, PublicationReleaseSummary release, PublishedVoteFigures previous)
+    {
+        var rows = Summaries(scenario, release);
+        rows["mayor"] = rows["mayor"] with { Previous = previous };
+        scenario.Releases.Directories[release.DirectoryName][PublicationProtocol.OfficialSummariesPath] =
+            JsonSerializer.SerializeToUtf8Bytes(new PublishedOfficialSummaries { Officials = [.. rows.Values] }, PublicationProtocol.JsonOptions);
     }
 
     [Fact]

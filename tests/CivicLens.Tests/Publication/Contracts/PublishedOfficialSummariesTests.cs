@@ -90,6 +90,11 @@ public sealed class PublishedOfficialSummariesTests
         {
             Officials = [.. Enumerable.Range(0, PublishedOfficials.MaximumOfficials).Select(index => Row($"{index}".PadLeft(PublishedRecordEntry.MaximumFilterValueLength, 'p')) with
             {
+                Previous = Figures(118) with
+                {
+                    PartyVotes = [.. new[] { PublishedChamber.House, PublishedChamber.Senate }.SelectMany(chamber => new[] { "Democrat", "Republican" }.Select(party => Party(chamber, party, 5000, 5000)))],
+                    Attendance = [Attendance(PublishedChamber.House, 5000, 5000), Attendance(PublishedChamber.Senate, 5000, 5000)]
+                },
                 PartyVotes = [.. new[] { PublishedChamber.House, PublishedChamber.Senate }.SelectMany(chamber => new[] { "Democrat", "Republican" }.Select(party => Party(chamber, party, 5000, 5000)))],
                 Attendance = [Attendance(PublishedChamber.House, 5000, 5000), Attendance(PublishedChamber.Senate, 5000, 5000)]
             })]
