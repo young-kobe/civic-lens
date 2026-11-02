@@ -214,7 +214,7 @@ public sealed class TickBoundsAndKeysMigrationTests(PostgresCollection postgres)
     private async Task MigrateForwardAsync()
     {
         await using var db = NewContext();
-        await db.Database.MigrateAsync();
+        await db.GetService<IMigrator>().MigrateAsync(Migration);
     }
 
     private async Task MigrateBackAsync()

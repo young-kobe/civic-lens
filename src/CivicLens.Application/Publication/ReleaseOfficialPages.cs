@@ -140,7 +140,15 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
             new(profile, tracked, current, true, newestFirst, entries, currentRows, publishedAtUtc, talkAndAction,
                 current is { } newestCongress ? LinkedPair.In(profile.Id, newestCongress, entries, release, currentRows) : [],
                 statuses), catalog, cancellationToken), cancellationToken);
-        return ReleaseOfficialSummaries.Of(profile.Id, current, talkAndAction);
+        var previousFigures = newestFirst.Length > 1 ? await PreviousFiguresAsync(newestFirst[1]) : null;
+        return ReleaseOfficialSummaries.Of(profile.Id, current, talkAndAction, previousFigures);
+
+        async Task<PublishedVoteFigures> PreviousFiguresAsync(int older)
+        {
+            var unchanged = !rewritePast && !rowsInMemory.ContainsKey(older);
+            if (unchanged && previous.Summaries.GetValueOrDefault(profile.Id)?.Previous is { } carried && carried.Congress == older) return carried;
+            return ReleaseOfficialSummaries.FiguresOf(older, await RowsAsync(older));
+        }
     }
 
     private static Task WriteAsync(IReleaseStaging staging, string path, string html, CancellationToken cancellationToken) =>

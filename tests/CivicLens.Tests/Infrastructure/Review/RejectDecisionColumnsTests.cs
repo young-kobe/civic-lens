@@ -96,7 +96,7 @@ public sealed class RejectDecisionColumnsTests(PostgresCollection postgres) : IA
     [Fact]
     public async Task TheReasonCodeColumnIsNotHiddenFromTheReadOnlyRoleOfAnyDecisionTable()
     {
-        var hidden = ReadOnlyHiddenColumns.Load();
+        var hidden = ReadOnlyGrants.HiddenColumn();
 
         var tables = await ReadAsync("SELECT table_name FROM information_schema.columns WHERE table_schema = 'public' AND column_name = 'reason_code' AND table_name ~ '_review_decisions$'");
 

@@ -21,6 +21,9 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
     public const int MaximumMembers = 600;
     public const int MaximumBillTypeLength = 16;
     public const int MaximumCastLength = 32;
+    public const int MaximumPersonIdLength = 128;
+    public const int MaximumBioguideIdLength = 16;
+    public const int MaximumIssueIdLength = 128;
 
     public ReviewAuthorKind AuthorKind => ReviewAuthor.KindOf(AuthorSubject);
 
@@ -48,6 +51,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
             throw new ArgumentException($"A bill type has at most {MaximumBillTypeLength} characters and a number, and a number has a type.");
         if (TrackedIssueIds.IsDefault || TrackedIssueIds.Length > StatementDraftRevision.MaximumSelections)
             throw new ArgumentException($"A vote revision needs at most {StatementDraftRevision.MaximumSelections} tracked issues.");
+        if (TrackedIssueIds.Concat(IssueCandidateIds.IsDefault ? [] : IssueCandidateIds).Any(id => string.IsNullOrWhiteSpace(id) || id.Length > MaximumIssueIdLength))
+            throw new ArgumentException($"An issue ID of a vote revision has 1 to {MaximumIssueIdLength} characters.");
         if (!IssueCandidateIds.IsDefault && !TrackedIssueIds.All(IssueCandidateIds.Contains))
             throw new ArgumentException("The tracked issues of a vote revision must come from its issue candidates.");
         ReviewTextRules.ValidateHeadlineAndSummary(this, MaximumHeadlineLength, MaximumSummaryLength);
@@ -60,9 +65,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
             throw new ArgumentException("A vote kind other than Other needs a bounded citation of its question.");
         if (Members.IsDefaultOrEmpty || Members.Length > MaximumMembers)
             throw new ArgumentException($"A vote revision needs 1 to {MaximumMembers} member votes.");
-        if (Members.Any(member => string.IsNullOrWhiteSpace(member.PersonId) || string.IsNullOrWhiteSpace(member.BioguideId) ||
-                string.IsNullOrWhiteSpace(member.Cast) || member.Cast.Length > MaximumCastLength || !IsBounded(member.Citation)))
-            throw new ArgumentException($"Each member vote needs a person, a bioguide ID, a cast of at most {MaximumCastLength} characters, and a bounded citation.");
+        if (Members.Any(member => !IsValid(member)))
+            throw new ArgumentException($"Each member vote needs a person ID of at most {MaximumPersonIdLength} characters, a bioguide ID of at most {MaximumBioguideIdLength}, a cast of at most {MaximumCastLength}, and a bounded citation.");
     }
 
     public void ValidateForApproval() => ValidateShape();
@@ -108,6 +112,12 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
         TrackedIssueIds.SequenceEqual(other.TrackedIssueIds) && IssueCandidateIds.IsDefault == other.IssueCandidateIds.IsDefault &&
         (IssueCandidateIds.IsDefault || IssueCandidateIds.SequenceEqual(other.IssueCandidateIds)) && IssueRevisionId == other.IssueRevisionId &&
         SubjectsHash == other.SubjectsHash;
+
+    private static bool IsValid(MemberVote member) =>
+        IsTextOfAtMost(member.PersonId, MaximumPersonIdLength) && IsTextOfAtMost(member.BioguideId, MaximumBioguideIdLength) &&
+        IsTextOfAtMost(member.Cast, MaximumCastLength) && IsBounded(member.Citation);
+
+    private static bool IsTextOfAtMost(string text, int length) => !string.IsNullOrWhiteSpace(text) && text.Length <= length;
 
     private static bool IsBounded(SourceSpan span) => span is { Start: >= 0, Length: > 0 } && LowercaseHex.Is(span.ExtractionId, 64);
 }

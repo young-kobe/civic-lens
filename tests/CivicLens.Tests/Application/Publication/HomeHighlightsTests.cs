@@ -92,6 +92,21 @@ public sealed class HomeHighlightsTests
     }
 
     [Fact]
+    public void TheLeaderKeepsTheCongressOfItsBoardAndLinksThePageOfThatCongressWhenTheBoardKeepsAnEarlierOne()
+    {
+        var moved = Summary("moved", 120, PublishedChamber.House, PublishedPartyMajority.Democrat, 5, 1);
+        var earlier = Summary("moved", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10);
+        moved = moved with { Previous = new PublishedVoteFigures { Congress = 119, PartyVotes = earlier.PartyVotes, Attendance = earlier.Attendance } };
+        var stayed = Summary("stayed", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 30, 3);
+
+        var kept = Assert.Single(BreakLeader.All(OfficialBoardPage.All([Listing("moved"), Listing("stayed")], [moved, stayed])));
+        var current = Assert.Single(BreakLeader.All(OfficialBoardPage.All([Listing("stayed")], [stayed])));
+
+        Assert.Equal(("moved", 119, "officials/moved/119.html"), (kept.Official.Profile.Id, kept.Congress, kept.PagePath));
+        Assert.Equal((119, "officials/stayed.html"), (current.Congress, current.PagePath));
+    }
+
+    [Fact]
     public void AMemberWithExactlyTheMinimumOfSplitVotesCanLead()
     {
         var officials = new[] { Listing("exact") };

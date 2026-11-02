@@ -116,11 +116,11 @@ public sealed partial class PostgresHouseVoteTests
         var candidate = await PendingCandidateAsync();
         var revision = await RevisionAsync(candidate, 1);
 
-        await SettleAsync(candidate, revision with { Facts = [new("Result: Passed", new(new string('f', 64), 0, 5))] });
+        await SettleAsync(candidate, revision with { Facts = [new("Result: Passed", revision.Facts[0].Citation with { Length = 1_000_000 })] });
 
         Assert.Empty(await VoteDecisionsAsync());
         Assert.Equal("AwaitingReview", await ScalarAsync("SELECT review_status FROM vote_drafts"));
-        Assert.Equal("A vote citation names a missing extraction.", await ScalarAsync("SELECT held_reason FROM vote_drafts"));
+        Assert.Equal("Span must fit within the extracted text.", await ScalarAsync("SELECT held_reason FROM vote_drafts"));
     }
 
     [Fact]
@@ -223,9 +223,10 @@ public sealed partial class PostgresHouseVoteTests
     public async Task ApprovalChecksEveryCitationAgainstItsSavedExtractionSoNoApprovalRestsOnAMissingLine()
     {
         var candidate = await PendingCandidateAsync();
-        var revision = await RevisionAsync(candidate, 1);
-        await SettleForReviewAsync(candidate, revision with { Facts = [new("Result: Passed", new(new string('c', 64), 0, 5))] });
+        await SettleForReviewAsync(candidate, await RevisionAsync(candidate, 1));
         var recordId = await RecordIdAsync(candidate);
+        await ExecuteAsync("UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{facts,0,citation,extractionId}', '\"" +
+            new string('c', 64) + "\"')::text");
 
         await Assert.ThrowsAsync<ArgumentException>(() => DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve));
 
@@ -325,7 +326,9 @@ public sealed partial class PostgresHouseVoteTests
         var recordId = await RecordIdAsync(first);
         var edited = await SaveAsync(recordId, 1, SuggestionChoice.Keep, "save-2");
         var second = await PendingCandidateAsync(Updated.AddDays(1));
-        var text = ReviewText.AfterModelDraft(edited, "Model headline", "Model summary.", new string('1', 32), new string('d', 64));
+        var suggestionRunId = Guid.NewGuid().ToString("N");
+        await InsertRunAsync(first, VoteDraftTask.PromptVersion, 1, runId: suggestionRunId);
+        var text = ReviewText.AfterModelDraft(edited, "Model headline", "Model summary.", suggestionRunId, new string('d', 64));
         await SettleForReviewAsync(second, (await RevisionAsync(second, 3)) with
         {
             Headline = text.Headline,

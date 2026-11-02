@@ -2,10 +2,10 @@ using System.Text.RegularExpressions;
 
 namespace CivicLens.Tests.Fixtures;
 
-/// <summary>The pattern that deploy/scripts/readonly-grants.sql uses to hide a column from the read-only role.</summary>
-internal static partial class ReadOnlyHiddenColumns
+internal static partial class ReadOnlyGrants
 {
-    public static Regex Load()
+    /// <summary>The column name pattern that deploy/scripts/readonly-grants.sql hides from the read-only role.</summary>
+    public static Regex HiddenColumn()
     {
         var script = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "deploy", "scripts", "readonly-grants.sql"));
         var literals = HiddenColumnAssignment().Match(script).Groups["value"].Value;
