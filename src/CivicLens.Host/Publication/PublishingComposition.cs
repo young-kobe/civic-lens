@@ -26,7 +26,7 @@ internal sealed record PublishingComposition(AnalysisStage Stage, IWorkerWakeup 
         var (publish, loaders) = PublicationComposition.Create(connectionString, publications, new FileReleaseDirectory(releaseRoot),
             collection, PublicationComposition.RequireIssues(issues), artifactRoot, loggers);
         var wakeup = PostgresPublishingWakeup.FromConnectionString(connectionString, PublishApprovedRecords.ReleaseGap);
-        var publishApproved = new PublishApprovedRecords(publish, publications, loaders, loggers.CreateLogger<PublishApprovedRecords>(), beat, TimeProvider.System);
+        var publishApproved = new PublishApprovedRecords(publish, publications, loaders, loggers.CreateLogger<PublishApprovedRecords>(), beat, TimeProvider.System, wakeup);
         var worker = new StageWorker(WorkerLoopNames.Publishing, publishApproved.ExecuteAsync, wakeup, loggers.CreateLogger<StageWorker>(), beat);
         return new(new AnalysisStage(WorkerLoopNames.Publishing, worker.ExecuteAsync), wakeup);
     }

@@ -1,4 +1,5 @@
 using System.Globalization;
+using CivicLens.Infrastructure.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
@@ -114,6 +115,25 @@ public sealed class PublishingApprovalNotifyTests(PostgresCollection postgres) :
         await ExecuteAsync($"UPDATE {table} SET review_status = 'Approved'");
         await ExecuteAsync($"UPDATE {table} SET review_status = 'Approved', review_state_version = 2");
         Assert.Single(await notifications.DrainAsync());
+    }
+
+    // The test shortens the grouping window of the real function. The channel name stays the one the migration wrote.
+    [Fact]
+    public async Task ApprovingADraftWakesThePublishingWakeupBecauseTheTriggerAndTheWakeupMustShareOneChannel()
+    {
+        await ExecuteAsync("""
+            DO $$
+            BEGIN
+                EXECUTE replace(pg_get_functiondef('civic_lens_notify_publishing_approval'::regproc), '60 seconds', '1 seconds');
+            END $$;
+            """);
+        await using var wakeup = PostgresPublishingWakeup.FromConnectionString(connectionString, TimeSpan.FromHours(1));
+        await wakeup.ConnectAsync(default);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        await ExecuteAsync(Inserts["executive_action_drafts"].Replace("'AwaitingReview'", "'Approved'"));
+
+        await wakeup.WaitAsync(timeout.Token);
     }
 
     private static void AssertGroupingDeadline(string payload, long before)

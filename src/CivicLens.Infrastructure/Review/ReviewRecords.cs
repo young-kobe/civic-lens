@@ -255,7 +255,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         var keys = await db.Database.SqlQueryRaw<UnpublishedKey>(unpublishedApprovedSql)
             .Where(key => key.PublishedRevisionNumber == null || key.PublishedRevisionNumber != key.CurrentRevisionNumber)
             .Where(key => !excluded.Contains(key.RecordId))
-            .OrderByDescending(key => key.CreatedAtUtcTicks).ThenByDescending(key => key.RecordId)
+            .OrderByDescending(key => key.PublishedRevisionNumber != null).ThenBy(key => key.CreatedAtUtcTicks).ThenBy(key => key.RecordId)
             .Take(limit).ToArrayAsync(cancellationToken);
         var drafts = (await ReadDraftsAsync(db, [.. keys.Select(key => key.RecordId)], cancellationToken))
             .ToDictionary(row => row.RecordId, StringComparer.Ordinal);

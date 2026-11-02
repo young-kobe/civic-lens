@@ -1,12 +1,13 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Application.Publication;
 
 public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationStore publications, PublishedRecordLoaders loaders,
-    ILogger<PublishApprovedRecords> logger, WorkerBeat beat, TimeProvider clock)
+    ILogger<PublishApprovedRecords> logger, WorkerBeat beat, TimeProvider clock, IIntervalWakeup wakeup)
 {
     /// <summary>The least time between two releases of the stage. The database clock measures it from the stored time of the newest
     /// release. A failed or conflicted tick starts the same gap on the clock of this process.</summary>
@@ -18,7 +19,6 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
 
     public async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
-        await beat.BeatIfDueAsync(cancellationToken);
         if (await IsInsideGapAsync(cancellationToken)) return 0;
         try
         {
@@ -40,16 +40,17 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
     private async Task<int> PublishOneReleaseAsync(CancellationToken cancellationToken)
     {
         var skipped = new HashSet<string>();
+        ImmutableArray<ReadyToPublishRecord> fitted = default;
         while (true)
         {
             await beat.BeatIfDueAsync(cancellationToken);
             // After a rollback the active release is not the latest. The stage waits until the owner activates the latest release.
             var state = await publications.GetStateAsync(cancellationToken);
             if (state.Active?.ReleaseNumber != state.LatestReleaseNumber && state.LatestReleaseNumber > 0) return 0;
-            var ready = await ListReadyAsync(skipped, cancellationToken);
+            var ready = fitted.IsDefault ? await ListReadyAsync(skipped, cancellationToken) : [.. fitted.Where(record => !skipped.Contains(record.RecordId))];
             if (ready.IsEmpty)
             {
-                await PublishStatusChangesAsync(state, cancellationToken);
+                if (wakeup.IntervalElapsed) await PublishStatusChangesAsync(state, cancellationToken);
                 return 0;
             }
             PublicationReleaseSummary summary;
@@ -61,6 +62,11 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
             {
                 failedAt = clock.GetTimestamp();
                 return 0;
+            }
+            catch (ReleaseFullException exception) when (fitted.IsDefault)
+            {
+                fitted = LeaveOutWhatDoesNotFit(ready, exception);
+                continue;
             }
             catch (Exception exception) when (exception is WithdrawnRecordException or MissingCorrectionNoteException or CorrectionLimitException)
             {
@@ -90,7 +96,19 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
         }
         catch (PublicationConflictException)
         {
+            failedAt = clock.GetTimestamp();
         }
+    }
+
+    // A replacement or a return adds no entry, so it always fits. New records share the free slots, as kinds share a batch.
+    private ImmutableArray<ReadyToPublishRecord> LeaveOutWhatDoesNotFit(ImmutableArray<ReadyToPublishRecord> ready, ReleaseFullException full)
+    {
+        var added = full.NewRecords.ToHashSet();
+        var fitting = ShareLimitBetweenKinds([.. ready.Where(record => added.Contains(record.Reference)).GroupBy(record => record.Kind)
+            .Select(kind => (IReadOnlyList<ReadyToPublishRecord>)[.. kind])], full.FreeSlots);
+        logger.LogError("The release holds {Cap} records. {Waiting} new records wait for room. Take records off the site or raise the cap.",
+            PublicationProtocol.MaximumRecordsPerRelease, added.Count - fitting.Length);
+        return [.. ready.Where(record => !added.Contains(record.Reference)), .. fitting];
     }
 
     private async Task<ImmutableArray<ReadyToPublishRecord>> ListReadyAsync(HashSet<string> skipped, CancellationToken cancellationToken)

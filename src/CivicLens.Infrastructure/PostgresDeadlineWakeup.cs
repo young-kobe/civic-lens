@@ -5,12 +5,15 @@ using Npgsql;
 namespace CivicLens.Infrastructure;
 
 internal sealed class PostgresDeadlineWakeup(string connectionString, string channel, string deadlineQuery,
-    string? payloadFilter = null) : IWorkerWakeup
+    string? payloadFilter = null, long intervalTicks = 0) : IIntervalWakeup
 {
     private NpgsqlConnection? connection;
     private bool hasNotification;
     private long? notifiedDeadline;
     private long databaseTicksWatermark;
+    private long lastWakeTicks;
+
+    public bool IntervalElapsed { get; private set; } = true;
 
     public async Task ConnectAsync(CancellationToken cancellationToken)
     {
@@ -27,6 +30,8 @@ internal sealed class PostgresDeadlineWakeup(string connectionString, string cha
             hasNotification = false;
             notifiedDeadline = null;
             databaseTicksWatermark = watermark;
+            lastWakeTicks = watermark;
+            IntervalElapsed = true;
         }
         catch
         {
@@ -38,6 +43,14 @@ internal sealed class PostgresDeadlineWakeup(string connectionString, string cha
     public async Task WaitAsync(CancellationToken cancellationToken)
     {
         var current = connection ?? throw new InvalidOperationException("Wakeup is not connected.");
+        await WaitForDeadlineAsync(current, cancellationToken);
+        var now = await ReadDatabaseTicksAsync(current, cancellationToken);
+        IntervalElapsed = intervalTicks > 0 && now / intervalTicks > lastWakeTicks / intervalTicks;
+        lastWakeTicks = now;
+    }
+
+    private async Task WaitForDeadlineAsync(NpgsqlConnection current, CancellationToken cancellationToken)
+    {
         while (true)
         {
             var deadline = await ReadNextDeadlineAsync(current, databaseTicksWatermark, cancellationToken);

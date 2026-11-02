@@ -135,6 +135,28 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
             PublicationProtocol.ManifestPath, PublicationProtocol.MaximumManifestBytes, default), PublicationProtocol.JsonOptions)!.Records);
     }
 
+    [Fact]
+    public async Task TheReadyListShowsAReplacementFirstThenTheOldestBecauseACorrectionMustReachReadersSoonest()
+    {
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenNotice, "joe-biden");
+        var ids = (await ScalarAsync("SELECT string_agg(record_id, ',' ORDER BY record_id) FROM executive_action_drafts"))!.Split(',');
+        var (replacement, oldest, newer) = (ids[0], ids[1], ids[2]);
+        await ExecuteAsync($"""
+            UPDATE executive_action_drafts SET created_at_utc_ticks = CASE record_id
+                WHEN '{oldest}' THEN 10 WHEN '{newer}' THEN 20 ELSE 30 END;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES (1, '000001-' || md5('order'), 'owner', 0, 1, true);
+            INSERT INTO publication_record_states (kind, record_id, revision_number, first_release)
+            VALUES ('executiveAction', '{replacement}', 0, 1);
+            """);
+
+        var listed = await store.ListUnpublishedApprovedAsync(10, [], default);
+
+        Assert.Equal([replacement, oldest, newer], listed.Select(item => item.Action.RecordId));
+    }
+
     private Task<string?> HeldReasonAsync() => ScalarAsync("SELECT held_reason FROM executive_action_drafts");
 
     private async Task<string?> ScalarAsync(string sql)
@@ -143,5 +165,13 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         return await command.ExecuteScalarAsync() as string;
+    }
+
+    private async Task ExecuteAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
     }
 }

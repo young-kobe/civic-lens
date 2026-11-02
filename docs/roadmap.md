@@ -101,7 +101,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [x] Agree the direction
   - [x] Stop parsing JSON where a column already holds the value (#261)
   - [x] Move review decisions to columns, and read them there (#266, #272)
-  - [x] Drop the decision JSON (#295)
+  - [ ] Drop the decision JSON, after a read-only check of production rows
   - [ ] Add tick bounds and missing foreign keys, after a read-only check of production rows
   - [x] Agree the table design from one pilot on vote revisions, with measured row counts
   - [ ] Vote pilot 1: write both, so every vote revision writes columns and child rows beside its JSON

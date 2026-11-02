@@ -57,6 +57,28 @@ public sealed class PostgresIntervalWakeupTests(PostgresCollection postgres) : I
         Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, interval + TimeSpan.FromSeconds(1));
     }
 
+    [Fact]
+    public async Task AWakeAtTheIntervalReportsItAndAWakeFromANotificationDoesNotBecauseHourlyWorkMustWaitForTheHour()
+    {
+        if (await SecondsToTheNextBoundaryAsync(TimeSpan.FromHours(1)) < SafeSecondsToTheBoundary) return;
+        await using var hourly = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_elapsed_test", TimeSpan.FromHours(1));
+        await hourly.ConnectAsync(default);
+        Assert.True(hourly.IntervalElapsed);
+        await NotifyDeadlineAsync("civic_lens_elapsed_test", 0.5);
+        using var notified = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        await hourly.WaitAsync(notified.Token);
+
+        Assert.False(hourly.IntervalElapsed);
+        await using var elapsing = PostgresIntervalWakeup.FromConnectionString(connectionString, "civic_lens_elapsed_elapsingtest", TimeSpan.FromSeconds(2));
+        await elapsing.ConnectAsync(default);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        await elapsing.WaitAsync(timeout.Token);
+
+        Assert.True(elapsing.IntervalElapsed);
+    }
+
     private async Task NotifyDeadlineAsync(string channel, double secondsFromNow)
     {
         await using var connection = new NpgsqlConnection(connectionString);

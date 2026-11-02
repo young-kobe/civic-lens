@@ -45,7 +45,7 @@ public sealed class PublishingWorkerTests
     }
 
     private static PublishApprovedRecords Publisher(PublicationScenario scenario) =>
-        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), NullLogger<PublishApprovedRecords>.Instance, TestBeat.Create(), TimeProvider.System);
+        new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), NullLogger<PublishApprovedRecords>.Instance, TestBeat.Create(), TimeProvider.System, new CountingWakeup());
 
     private static StageWorker Worker(PublicationScenario scenario, ILogger<StageWorker> logger) =>
         new("publishing", Publisher(scenario).ExecuteAsync, new CountingWakeup(() => { }), logger, TestBeat.Create());
