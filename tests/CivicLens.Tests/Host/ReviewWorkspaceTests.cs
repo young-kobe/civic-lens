@@ -489,6 +489,37 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task ALiveRecordWarnsThatARejectionLeavesTheOldTextLiveAndThenShowsACannotPublishRowAsync()
+    {
+        SignIn(Owner);
+        var (draftUrl, draftId) = await ApprovedDraftAsync();
+        await PublishWithCliAsync("k1", $"documentChange:{draftId}");
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose again");
+
+        var editor = await host.GetDocumentAsync(draftUrl);
+        Assert.Equal("This record is on the public site. Rejecting this revision leaves the published text live. To remove it, take the record off the site.",
+            editor.QuerySelector("#reject-live-warning")!.TextContent.Trim());
+
+        using var rejected = await DecideAsync(draftUrl, "Reject", reasonCode: "Duplicate");
+
+        Assert.Equal(HttpStatusCode.Redirect, rejected.StatusCode);
+        Assert.Null((await host.GetDocumentAsync(draftUrl)).QuerySelector("#reject-live-warning"));
+        var queue = QueuePanel(await host.GetDocumentAsync("/Review"));
+        Assert.Contains("Cannot publish", queue.TextContent, StringComparison.Ordinal);
+        Assert.Contains("the published text stays on the site", queue.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnUnpublishedRecordShowsNoLiveWarningBecauseNothingOfItIsOnTheSiteAsync()
+    {
+        SignIn(Owner);
+        var (draftUrl, _) = await ApprovedDraftAsync();
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose again");
+
+        Assert.Null((await host.GetDocumentAsync(draftUrl)).QuerySelector("#reject-live-warning"));
+    }
+
+    [Fact]
     public async Task TakeOffSiteBlocksTheApprovalAndWithdrawsTheRecordOnceBecauseARepeatedPostReplaysTheSameKeysAsync()
     {
         SignIn(Owner);

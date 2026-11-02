@@ -1293,6 +1293,7 @@ public sealed class ActionDraftStepTests
         Assert.Empty(model.Requests);
         Assert.Empty(rejected.Revisions);
         Assert.Equal((State.Succeeded, ActionDraftErrorCodes.Unchanged), (rejected.Entries[0].Status, rejected.Entries[0].ErrorCode));
+        Assert.Equal(ActionDraftErrorCodes.RecordRejected, Assert.Single(rejected.Runs).Reason);
     }
 
     private static async Task<(FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> RunAsync(ActionBillWorld world,

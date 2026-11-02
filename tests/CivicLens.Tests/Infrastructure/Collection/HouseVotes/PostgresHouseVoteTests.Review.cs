@@ -156,6 +156,22 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
+    public async Task ReversingARejectedVoteIsRefusedWhenTheWorkerRefusedANewerCandidateBecauseTheOldRevisionHoldsOldFacts()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        await SettleAsync(second, await RevisionAsync(second, 2));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_analysis_runs WHERE reason = 'recordRejected'"));
+
+        await Assert.ThrowsAsync<ReversalRefusedException>(() => DecideAsync(recordId, 1, 1, ReviewDecisionKind.Approve));
+
+        Assert.Equal("Rejected", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
+    }
+
+    [Fact]
     public async Task APersonEditAfterACodeApprovalWaitsForAPersonAndAWorkerRevisionOverItStaysForAPerson()
     {
         var first = await PendingCandidateAsync();

@@ -118,6 +118,9 @@ public abstract class ReviewRecordPage : ComponentBase
             case ReviewCommandFailure.NothingToSave:
                 error = new NothingToSaveException().Message;
                 break;
+            case ReviewCommandFailure.ReversalRefused:
+                error = new ReversalRefusedException().Message;
+                break;
             case ReviewCommandFailure.CycleFull:
                 error = new ReviewCycleFullException().Message;
                 break;

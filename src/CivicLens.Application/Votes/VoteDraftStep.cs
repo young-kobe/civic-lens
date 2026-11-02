@@ -33,7 +33,8 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
         var choice = BillIssueChoice.For(snapshot.PolicyArea, snapshot.Subjects, snapshot.Day, issueConfiguration);
         attempt.ContextJson = VoteDraftPrompt.SerializeContext(snapshot, choice, issues.Id);
         if (evidence.IsRejected)
-            return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken);
+            return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken,
+                VoteDraftErrorCodes.RecordRejected);
         if (snapshot.Members.IsEmpty)
             return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.NoTrackedMember, cancellationToken);
         if (snapshot.Members.Length > VoteDraftRevision.MaximumMembers)
@@ -84,9 +85,9 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
     }
 
     private static Task<bool> SettleWithoutCallAsync(IAnalysisAttempt<VoteDraftRun> attempt, string inputHash, string code,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string? runReason = null)
     {
         var run = attempt.BypassRun(VoteDraftTask.Model, inputHash, null);
-        return attempt.SettleAsync(new VoteDraftRun(run, code), State.Succeeded, code, cancellationToken);
+        return attempt.SettleAsync(new VoteDraftRun(run, runReason ?? code), State.Succeeded, code, cancellationToken);
     }
 }

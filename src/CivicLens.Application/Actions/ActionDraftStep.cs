@@ -36,7 +36,8 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         var choice = BillIssueChoice.For(snapshot.Bill.PolicyArea, snapshot.Subjects, BillGate.DayOf(snapshot.Bill.UpdateDate), issueConfiguration);
         attempt.ContextJson = ActionDraftPrompt.SerializeContext(snapshot, choice, issues.Id);
         if (evidence.IsRejected)
-            return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken);
+            return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken,
+                ActionDraftErrorCodes.RecordRejected);
         if (snapshot.Sponsorships.IsEmpty)
             return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.NoTrackedOfficial, cancellationToken);
         if (snapshot.Sponsorships.Length > ActionDraftRevision.MaximumSponsorships)
@@ -114,9 +115,9 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
     }
 
     private static Task<bool> SettleWithoutCallAsync(IAnalysisAttempt<ActionDraftRun> attempt, string inputHash, string code,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string? runReason = null)
     {
         var run = attempt.BypassRun(ActionDraftTask.Model, inputHash, null);
-        return attempt.SettleAsync(new ActionDraftRun(run, code), State.Succeeded, code, cancellationToken);
+        return attempt.SettleAsync(new ActionDraftRun(run, runReason ?? code), State.Succeeded, code, cancellationToken);
     }
 }

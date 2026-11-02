@@ -12,7 +12,7 @@ namespace CivicLens.Infrastructure.Review;
 /// <summary>The shared store core. Reads hold one review cycle: the current revision, the last approved revision, and the
 /// decisions since that approval.</summary>
 internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevision>(string lockKey, string draftName,
-    string recordIdProperty, Action<TDraftRow, TRevision>? revised = null)
+    string recordIdProperty, Action<TDraftRow, TRevision>? revised = null, ReversalRules<TDraftRow>? reversal = null)
     where TDraftRow : class, IReviewDraftRow
     where TRevisionRow : class, IReviewRevisionRow
     where TDecisionRow : class, IReviewDecisionRow, new()
@@ -197,8 +197,11 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             expectedReviewStateVersion, decision);
         ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, history.Decisions, decision);
         await validateDecision(db, draft, history);
+        var reverses = decision.Kind == ReviewDecisionKind.Approve && history.CurrentStatus == ReviewStatus.Rejected;
+        if (reverses && reversal?.Check is { } check) await check(db, draft, cancellationToken);
         RecordDecision(db, draft, history.Decisions, decision);
         await afterDecision(db, draft.RecordId, decision.RevisionNumber, cancellationToken);
+        if (reverses && reversal?.Apply is { } apply) await apply(db, draft, decision.CreatedAtUtc, cancellationToken);
         return decision;
     }
 

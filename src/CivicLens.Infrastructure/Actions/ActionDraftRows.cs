@@ -33,12 +33,25 @@ internal static class ActionDraftRows
     public static Task<bool> IsRejectedAsync(CollectionAttemptDbContext db, string recordId, CancellationToken cancellationToken) =>
         db.Set<ActionDraftRow>().AsNoTracking().AnyAsync(draft => draft.RecordId == recordId && draft.ReviewStatus == ReviewStatus.Rejected, cancellationToken);
 
-    public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, ActionDraftCandidate candidate, CancellationToken cancellationToken)
-    {
-        return db.Set<ActionCandidateRow>().AsNoTracking().Where(newer => newer.SourceId == candidate.SourceId &&
+    public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, ActionDraftCandidate candidate, CancellationToken cancellationToken) =>
+        NewerCandidates(db, candidate).AnyAsync(cancellationToken);
+
+    private static IQueryable<ActionCandidateRow> NewerCandidates(CollectionAttemptDbContext db, ActionDraftCandidate candidate) =>
+        db.Set<ActionCandidateRow>().AsNoTracking().Where(newer => newer.SourceId == candidate.SourceId &&
                 newer.Congress == candidate.Congress && newer.BillType == candidate.BillType && newer.BillNumber == candidate.BillNumber)
-            .Where(ActionCandidateInputs.Supersedes(candidate.UpdateDate.UtcTicks, candidate.IncludesSummaries, candidate.IncludesSubjects))
-            .AnyAsync(cancellationToken);
+            .Where(ActionCandidateInputs.Supersedes(candidate.UpdateDate.UtcTicks, candidate.IncludesSummaries, candidate.IncludesSubjects));
+
+    /// <summary>Refuses to reverse a rejection when the worker refused a newer candidate, because the old revision holds old facts.
+    /// The refusal shows in the <c>reason</c> column of the run.</summary>
+    public static async Task RequireNoRefusedNewerCandidateAsync(CollectionAttemptDbContext db, ActionDraftRow draft, CancellationToken cancellationToken)
+    {
+        var current = await db.Set<ActionCandidateRow>().AsNoTracking().SingleOrDefaultAsync(row => row.CandidateId == draft.CandidateId, cancellationToken);
+        if (current is null) return;
+        var candidate = new ActionDraftCandidate(current.CandidateId, draft.RecordId, current.SourceId, current.Congress, current.BillType,
+            current.BillNumber, new DateTimeOffset(current.UpdateDateUtcTicks, TimeSpan.Zero), current.IncludesSummaries, current.IncludesSubjects);
+        var refused = await NewerCandidates(db, candidate).AnyAsync(newer => db.Set<ActionAnalysisRunRow>().Any(run =>
+            run.CandidateId == newer.CandidateId && run.Task == ActionDraftTask.Task && run.Reason == ActionDraftErrorCodes.RecordRejected), cancellationToken);
+        if (refused) throw new ReversalRefusedException();
     }
 
     public static async Task<ActionDraftRevision?> ReadCurrentAsync(CollectionAttemptDbContext db, string recordId,

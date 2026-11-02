@@ -873,6 +873,7 @@ public sealed class VoteDraftStepTests
         Assert.Empty(model.Requests);
         Assert.DoesNotContain(store.Revisions, revision => revision.RevisionNumber > 1);
         Assert.Equal((State.Succeeded, VoteDraftErrorCodes.Unchanged), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Equal(VoteDraftErrorCodes.RecordRejected, store.Runs.Last().Reason);
     }
 
     private static async Task<VoteDraftRevision> FirstRevisionAsync(VoteWorld world)

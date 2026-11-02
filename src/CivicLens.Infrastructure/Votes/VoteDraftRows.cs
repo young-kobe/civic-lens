@@ -13,7 +13,8 @@ namespace CivicLens.Infrastructure.Votes;
 internal static class VoteDraftRows
 {
     internal static readonly ReviewRecords<VoteDraftRow, VoteRevisionRow, VoteReviewDecisionRow, VoteDraftRevision> Records =
-        new(PostgresAdvisoryLock.VoteReview, "Vote", nameof(VoteDraftRow.RecordId), Revised);
+        new(PostgresAdvisoryLock.VoteReview, "Vote", nameof(VoteDraftRow.RecordId), Revised,
+            new(RequireNoRefusedNewerCandidateAsync));
 
     public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, VoteDraftRevision revision, string runId,
         CancellationToken cancellationToken)
@@ -38,9 +39,25 @@ internal static class VoteDraftRows
 
     public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, string sourceId, Chamber chamber, int congress,
         int sessionNumber, int rollCallNumber, long updateDateUtcTicks, CancellationToken cancellationToken) =>
-        db.Set<VoteCandidateRow>().AsNoTracking().AnyAsync(newer => newer.SourceId == sourceId && newer.Chamber == chamber && newer.Congress == congress &&
-            newer.SessionNumber == sessionNumber && newer.RollCallNumber == rollCallNumber && newer.UpdateDateUtcTicks > updateDateUtcTicks,
-            cancellationToken);
+        NewerCandidates(db, sourceId, chamber, congress, sessionNumber, rollCallNumber, updateDateUtcTicks).AnyAsync(cancellationToken);
+
+    private static IQueryable<VoteCandidateRow> NewerCandidates(CollectionAttemptDbContext db, string sourceId, Chamber chamber, int congress,
+        int sessionNumber, int rollCallNumber, long updateDateUtcTicks) =>
+        db.Set<VoteCandidateRow>().AsNoTracking().Where(newer => newer.SourceId == sourceId && newer.Chamber == chamber && newer.Congress == congress &&
+            newer.SessionNumber == sessionNumber && newer.RollCallNumber == rollCallNumber && newer.UpdateDateUtcTicks > updateDateUtcTicks);
+
+    /// <summary>Refuses to reverse a rejection when the worker refused a newer candidate, because the old revision holds old facts.
+    /// The refusal shows in the <c>reason</c> column of the run.</summary>
+    public static async Task RequireNoRefusedNewerCandidateAsync(CollectionAttemptDbContext db, VoteDraftRow draft, CancellationToken cancellationToken)
+    {
+        var current = await db.Set<VoteCandidateRow>().AsNoTracking().SingleOrDefaultAsync(row => row.CandidateId == draft.CandidateId, cancellationToken);
+        if (current is null) return;
+        var refused = await NewerCandidates(db, current.SourceId, current.Chamber, current.Congress, current.SessionNumber, current.RollCallNumber,
+                current.UpdateDateUtcTicks)
+            .AnyAsync(newer => db.Set<VoteAnalysisRunRow>().Any(run => run.CandidateId == newer.CandidateId && run.Task == VoteDraftTask.Task &&
+                run.Reason == VoteDraftErrorCodes.RecordRejected), cancellationToken);
+        if (refused) throw new ReversalRefusedException();
+    }
 
     public static async Task<VoteDraftRevision?> ReadCurrentAsync(CollectionAttemptDbContext db, string recordId,
         CancellationToken cancellationToken)

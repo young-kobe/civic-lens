@@ -347,6 +347,32 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task ReversingARejectionIsRefusedWhenTheWorkerRefusedANewerCandidateBecauseTheOldRevisionHoldsOldFacts()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        _ = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
+        Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE reason = 'recordRejected'"));
+
+        await Assert.ThrowsAsync<ReversalRefusedException>(() => DecideAsync(1, 1, ReviewDecisionKind.Approve));
+
+        Assert.Equal("Rejected", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal(ReviewDecisionKind.Reject, Assert.Single(await ActionDecisionsAsync()).Kind);
+    }
+
+    [Fact]
+    public async Task ReversingARejectionStillWorksWhenOnlyAnOlderOrNoCandidateExistsBecauseNoFactsWereRefused()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+
+        await DecideAsync(1, 1, ReviewDecisionKind.Approve);
+
+        Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+    }
+
+    [Fact]
     public async Task ARejectedRecordGetsNoModelCallForANewCandidateBecauseTheTokensWouldBeWasted()
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
