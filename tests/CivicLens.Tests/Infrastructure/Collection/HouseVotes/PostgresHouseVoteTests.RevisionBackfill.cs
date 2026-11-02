@@ -404,6 +404,76 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal(["source"], Assert.Single((await VerifyAsync()).FirstMismatches).Fields);
     }
 
+    // A missing key is not a null value: the JSON that the code writes names every nullable key, except subjectsHash and issueCandidateIds.
+    [Theory]
+    [InlineData("billType,billNumber")]
+    [InlineData("suggestion")]
+    [InlineData("kindCitation")]
+    public async Task ARowWhoseJsonLacksAKeyThatTheRebuildHoldsAsNullIsSkippedBecauseAMissingKeyIsNotANull(string keys)
+    {
+        await SettledLegacyAsync(basis => basis);
+        await RewriteJsonAsync(1, json =>
+        {
+            foreach (var key in keys.Split(',')) Assert.True(json.Remove(key));
+        });
+
+        var skipped = Assert.Single((await BackfillAsync(10)).SkippedRevisions);
+
+        Assert.Equal("RebuildMismatch", skipped.Reason);
+    }
+
+    [Theory]
+    [InlineData("billType,billNumber")]
+    [InlineData("suggestion")]
+    [InlineData("kindCitation")]
+    public async Task VerifyNamesAKeyThatAMovedRowsJsonLacksAndTheRowsHoldAsNullBecauseAMissingKeyIsNotANull(string keys)
+    {
+        await SettledLegacyAsync(basis => basis);
+        await BackfillAsync(10);
+        await RewriteJsonAsync(1, json =>
+        {
+            foreach (var key in keys.Split(',')) Assert.True(json.Remove(key));
+        });
+
+        Assert.Equal(keys.Split(','), Assert.Single((await VerifyAsync()).FirstMismatches).Fields);
+    }
+
+    [Fact]
+    public async Task AnExplicitNullSubjectsHashIsSkippedBecauseTheCodeNeverWritesItAndOnlyAMissingKeyMatchesTheRebuild()
+    {
+        await SettledLegacyAsync(basis => basis);
+        await RewriteJsonAsync(1, json => json["subjectsHash"] = null);
+
+        Assert.Equal("RebuildMismatch", Assert.Single((await BackfillAsync(10)).SkippedRevisions).Reason);
+    }
+
+    [Theory]
+    [InlineData("""{"recordId":"a","recordId":"b"}""", "UnreadableJson")]
+    [InlineData("facts", "InvalidShape")]
+    [InlineData("members", "InvalidShape")]
+    public async Task AMalformedRowIsSkippedAndTheRunGoesOnBecauseOneBadRowMustNotAbortTheBackfill(string malformed, string reason)
+    {
+        var first = await SettledLegacyAsync(basis => basis);
+        await AddRevisionAsync(first, 2, legacy: true);
+        if (malformed.StartsWith('{')) await ExecuteAsync($"UPDATE vote_revisions SET revision_json = '{malformed}' WHERE revision_number = 1");
+        else await RewriteJsonAsync(1, json => json[malformed] = new JsonArray(null, null));
+
+        var result = await BackfillAsync(10);
+
+        Assert.Equal((2, 1, 1), (result.Examined, result.Moved, result.Skipped));
+        Assert.Equal(reason, Assert.Single(result.SkippedRevisions).Reason);
+    }
+
+    [Fact]
+    public async Task VerifyReportsAnObjectWithDuplicateKeysAsAnUnreadableJsonAndKeepsGoing()
+    {
+        await SettledLegacyAsync(basis => basis);
+        await BackfillAsync(10);
+        await ExecuteAsync("""UPDATE vote_revisions SET revision_json = '{"recordId":"a","recordId":"b"}'""");
+
+        Assert.Equal(["revisionJson"], Assert.Single((await VerifyAsync()).FirstMismatches).Fields);
+    }
+
     [Fact]
     public async Task VerifyReportsALegacyRowAsLegacyAndNotAsAMismatchBecauseItHasNoColumnsToCompare()
     {

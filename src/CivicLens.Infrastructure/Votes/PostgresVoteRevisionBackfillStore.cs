@@ -105,11 +105,10 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
 
     private static (VoteDraftRevision? Revision, string? Refusal) ReadMovable(VoteRevisionRow row)
     {
-        JsonObject stored;
+        if (VoteRevisionComparison.TryParseObject(row.RevisionJson) is not { } stored) return (null, UnreadableJson);
         VoteDraftRevision revision;
         try
         {
-            stored = JsonNode.Parse(row.RevisionJson) as JsonObject ?? throw new InvalidDataException("A stored vote revision is no JSON object.");
             revision = ReviewJson.Deserialize<VoteDraftRevision>(row.RevisionJson, "vote revision");
         }
         catch (Exception exception) when (ReviewJson.IsUnreadableStoredData(exception))
@@ -121,6 +120,7 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
             if (!VoteRevisionComparison.MayOmitSource(stored)) return (null, UnprovenSource);
             revision = revision with { Source = VoteSource.CongressGov };
         }
+        if (HasNullElements(revision)) return (null, InvalidShape);
         try
         {
             revision.ValidateShape();
@@ -134,18 +134,21 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
         return (revision, null);
     }
 
+    private static bool HasNullElements(VoteDraftRevision revision) =>
+        !revision.Facts.IsDefault && revision.Facts.Any(fact => fact is null) || !revision.Members.IsDefault && revision.Members.Any(member => member is null);
+
     private static bool HasDuplicates(ImmutableArray<string> ids) => ids.Distinct(StringComparer.Ordinal).Count() != ids.Length;
 
     private static string? RefusalOf(Exception exception)
     {
         var fault = exception as PostgresException ?? (exception as DbUpdateException)?.InnerException as PostgresException;
-        return fault is { SqlState: { } state } && (state.StartsWith("23", StringComparison.Ordinal) || state == PostgresErrorCodes.StringDataRightTruncation)
+        return fault is { SqlState: { } state } && (state.StartsWith("23", StringComparison.Ordinal) || state is PostgresErrorCodes.StringDataRightTruncation or PostgresErrorCodes.CharacterNotInRepertoire)
             ? fault.ConstraintName ?? state
             : null;
     }
 
     private static IQueryable<VoteRevisionRow> Rows(CollectionAttemptDbContext db) =>
-        db.Set<VoteRevisionRow>().AsNoTracking().Include(row => row.Facts).Include(row => row.Issues);
+        db.Set<VoteRevisionRow>().AsNoTracking().Include(row => row.Facts).Include(row => row.Issues).AsSplitQuery();
 
     private static async Task<VerifyPage> ReadVerifyPageAsync(CollectionAttemptDbContext db, VoteRevisionKey? after, CancellationToken cancellationToken)
     {
