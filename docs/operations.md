@@ -1042,7 +1042,7 @@ On an existing deploy, copy the two White House source lines into `/srv/civic-le
 
 ### Go-live checks
 
-Run `sudo deploy/scripts/check-live.sh` from `/opt/civic-lens` after the first install and after each `update.sh`. The script prints one PASS or FAIL line per check, runs every check, and exits with code 1 if one failed. Each FAIL line says what it expected, what came back, and what to check. It sends requests to the public host names, so it needs the tunnel. The checks are:
+Run `sudo deploy/scripts/check-live.sh` from `/opt/civic-lens` after the first install and after each `update.sh`. The script prints one PASS or FAIL line per check, runs every check, and exits with code 1 if one failed. Each FAIL line says what it expected, what came back, and what to check. It sends requests to the public host names, so it needs the tunnel. `update.sh` recreates `cloudflared`, and Cloudflare answers 530 until the new tunnel connects. The script first tries each host name up to 12 times, 5 seconds apart, until it answers with a status other than 530. A failed request also counts as not ready. Then it runs the checks. If a host still answers 530 or fails, it prints a NOTE and the checks fail as usual. The checks are:
 
 - `X-Robots-Tag: noindex` on the home page and on an api response. The script reads `deploy/caddy/Caddyfile`. With an `import noindex` line, each response must carry the header. Without one, no response may carry it.
 - A missing page returns 404 with the release 404 page and `Cache-Control: no-store`.

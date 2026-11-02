@@ -375,7 +375,7 @@ try
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
             new ListBlockedPublished(publications, releases, blocked),
             new ActivatePublicationRelease(publications, releases, blocked, loggers.CreateLogger<ActivatePublicationRelease>()), owner,
-            cancellation.Token);
+            Console.Out, Console.Error, cancellation.Token);
     }
 
     if (DocumentCommand.Matches(args))
