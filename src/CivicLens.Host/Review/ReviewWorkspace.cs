@@ -328,11 +328,12 @@ internal static class ReviewWorkspace
     private static void ConfigureReportReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
     {
         services.AddSingleton<IReaderReportStore>(new PostgresReaderReportStore(contexts));
-        services.AddScoped<ResolveReaderReport>();
+        services.AddScoped<DismissReaderReport>();
+        services.AddScoped<CloseCorrectedReports>();
         services.AddScoped<GetReaderReport>();
         services.AddScoped<ListReaderReports>();
         services.AddScoped<CountOpenReaderReports>();
-        services.AddScoped<ListUnansweredCorrections>();
+        services.AddScoped<ListRecordReports>();
     }
 
     private static void ConfigureBriefReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)

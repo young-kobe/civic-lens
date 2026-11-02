@@ -1,0 +1,71 @@
+@using Microsoft.Extensions.Logging
+@using CivicLens.Application.Reports
+@using CivicLens.Core.Review
+@using CivicLens.Host.Review
+@using CivicLens.Publication.Contracts
+
+@if (failed)
+{
+    <Notice Tone="Tone.Warn">Reader reports could not load for this record. Refresh the page to try again.</Notice>
+}
+@foreach (var report in reports)
+{
+    <section class="stack" id="@($"reader-report-{report.ReportId:D}")">
+        @if (report.Status == ReaderReportStatus.Open)
+        {
+            <Notice Tone="Tone.Warn">
+                <strong>A reader reported a problem.</strong><br />
+                @ReportLabels.Category(report.Category)@(string.IsNullOrWhiteSpace(report.Text) ? "." : ": " + report.Text)<br />
+                A reader wrote this text. It may be wrong. Check it against the record.
+                @(EditFormId is null
+                    ? "No person edits this record. Dismiss the report if it is wrong. The owner can take the record off the site."
+                    : "To fix it, change the wording and press Save and approve. If the report is wrong, dismiss it.")
+            </Notice>
+            @if (EditFormId is not null)
+            {
+                <input type="hidden" form="@EditFormId" name="@PublishedRecordEditorPage.CorrectedReportsField" value="@report.ReportId" />
+            }
+            <ReaderReportDismissButton Actor="Actor" Report="report" />
+        }
+        else
+        {
+            <Notice Tone="Tone.Neutral">
+                <strong>A reader report waits for the fix to publish.</strong><br />
+                @ReportLabels.Category(report.Category)@(string.IsNullOrWhiteSpace(report.Text) ? "." : ": " + report.Text)<br />
+                You approved a correction. This notice goes away when the corrected record is published.
+            </Notice>
+        }
+    </section>
+}
+
+@code {
+    private IReadOnlyList<ReaderReport> reports = [];
+    private bool failed;
+
+    [Inject] private ListRecordReports ListReports { get; set; } = default!;
+    [Inject] private ILogger<ReaderReportPanel> Logger { get; set; } = default!;
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    [Parameter, EditorRequired] public ReviewActor Actor { get; set; } = default!;
+    [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
+    [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;
+
+    /// <summary>The id of the form whose Save and approve closes the open reports. Null when no person edits the record.</summary>
+    [Parameter] public string? EditFormId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var cancellationToken = HttpContext.RequestAborted;
+        try
+        {
+            reports = await ListReports.ExecuteAsync(Actor, Kind, RecordId, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "The reader report panel could not load.");
+            failed = true;
+        }
+    }
+}

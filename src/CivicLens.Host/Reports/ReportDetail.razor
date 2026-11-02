@@ -20,7 +20,6 @@
                     <Action><Button Href="@ReportRoutes.List">Go to Reader reports</Button></Action>
                 </EmptyState>
             </Panel>
-            <form @formname="decide" @onsubmit="DecideAsync" hidden></form>
         }
     }
     else
@@ -54,18 +53,9 @@
         @if (report.Status == ReaderReportStatus.Open)
         {
             <Panel Title="Resolve this report" Id="decision" Padded="true">
-                <form id="decision-form" class="form" method="post" @formname="decide" @onsubmit="DecideAsync">
-                    <AntiforgeryToken />
-                    <input type="hidden" name="expectedReviewStateVersion" value="@report.Version" />
-                    <Field Label="Note" For="Decision_Note" Hint="A report that needs a correction needs a note. The record page shows the note until a newer revision is published.">
-                        <textarea id="Decision_Note" class="plain" name="Decision.Note" maxlength="@ResolveReaderReport.MaximumNoteCharacters" aria-describedby="Decision_Note-hint"></textarea>
-                    </Field>
-                    <div class="actions">
-                        <Button Variant="ButtonVariant.Primary" Type="submit" name="kind" value="CorrectionNeeded">Correction needed</Button>
-                        <Button Type="submit" name="kind" value="Dismissed">Dismiss</Button>
-                        <Button Href="@ReportRoutes.List">Back to the list</Button>
-                    </div>
-                </form>
+                <p class="small">To fix the record, open it in the editor and press Save and approve. If the report is wrong, dismiss it.</p>
+                <ReaderReportDismissButton Actor="actor" Report="report" />
+                <div class="actions"><Button Href="@ReportRoutes.List">Back to the list</Button></div>
             </Panel>
         }
         else
@@ -74,7 +64,6 @@
                 <Facts Items="ResolutionFacts" />
                 <div class="actions"><Button Href="@ReportRoutes.List">Back to the list</Button></div>
             </Panel>
-            <form @formname="decide" @onsubmit="DecideAsync" hidden></form>
         }
     }
 </div>

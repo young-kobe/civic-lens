@@ -74,6 +74,7 @@ public abstract class ReviewRecordPage : ComponentBase
     {
         "saved" => "The new revision is saved. Review it before you record a decision.",
         "decided" => "Your decision on this revision is saved.",
+        "reportDismissed" => "The report is dismissed.",
         _ => null
     };
 

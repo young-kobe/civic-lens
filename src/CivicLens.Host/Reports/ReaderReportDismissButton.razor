@@ -1,0 +1,56 @@
+@using CivicLens.Application.Reports
+@using CivicLens.Core.Review
+@using CivicLens.Host.Review
+@using Microsoft.Extensions.Logging
+
+@if (error is not null)
+{
+    <Notice Tone="Tone.Bad">@error</Notice>
+}
+<form class="form" method="post" @formname="@($"dismiss-report-{Report.ReportId:N}")" @onsubmit="DismissAsync">
+    <AntiforgeryToken />
+    <input type="hidden" name="expectedVersion" value="@Report.Version" />
+    <div class="actions">
+        <Button Type="submit">Dismiss this report</Button>
+    </div>
+</form>
+
+@code {
+    private static readonly ReviewFailureMessages Failures = new(
+        "Someone resolved this report after you opened the page. Reload the page to see the current state.",
+        "The report could not be dismissed. Reload the page and try again.",
+        "The report could not be dismissed. Try again.");
+
+    private string? error;
+
+    [Inject] private DismissReaderReport Dismiss { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+    [Inject] private ILogger<ReaderReportDismissButton> Logger { get; set; } = default!;
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    [Parameter, EditorRequired] public ReviewActor Actor { get; set; } = default!;
+    [Parameter, EditorRequired] public ReaderReport Report { get; set; } = default!;
+
+    private async Task DismissAsync()
+    {
+        var (target, failure) = await ReviewCommand.RunAsync(DismissOpenReportAsync, HttpContext.Response, Logger, HttpContext.RequestAborted);
+        error = failure switch
+        {
+            ReviewCommandFailure.Conflict => Failures.Conflict,
+            ReviewCommandFailure.Invalid => Failures.Invalid,
+            ReviewCommandFailure.Unavailable => Failures.Unavailable,
+            _ => null
+        };
+        if (failure == ReviewCommandFailure.AccessDenied) Navigation.NavigateTo(ReviewCommand.AccessDenied);
+        else if (target is not null) Navigation.NavigateTo(target);
+    }
+
+    private async Task<string> DismissOpenReportAsync()
+    {
+        if (!int.TryParse(HttpContext.Request.Form["expectedVersion"], out var version))
+            throw new ArgumentException("The report version is missing.");
+        await Dismiss.ExecuteAsync(Actor, Report.ReportId, version, HttpContext.RequestAborted);
+        return ReportRoutes.WithDismissedStatus(HttpContext.Request.Path);
+    }
+}

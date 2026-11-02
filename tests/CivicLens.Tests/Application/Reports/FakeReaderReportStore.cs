@@ -8,7 +8,8 @@ internal sealed class FakeReaderReportStore : IReaderReportStore
 {
     public string? Cursor { get; private set; }
     public List<Guid> Stored { get; } = [];
-    public List<(string Actor, Guid ReportId, int ExpectedVersion, ReaderReportStatus Status, string? Note)> Resolutions { get; } = [];
+    public List<(string Actor, Guid ReportId, int ExpectedVersion)> Dismissals { get; } = [];
+    public List<(string Actor, PublishedRecordKind Kind, string RecordId, Guid[] ReportIds, string Note)> Closures { get; } = [];
 
     public Task<string?> GetCursorAsync(CancellationToken cancellationToken) => Task.FromResult(Cursor);
 
@@ -19,10 +20,16 @@ internal sealed class FakeReaderReportStore : IReaderReportStore
         return Task.CompletedTask;
     }
 
-    public Task ResolveAsync(string actorSubject, Guid reportId, int expectedVersion, ReaderReportStatus status, string? note,
-        CancellationToken cancellationToken)
+    public Task DismissAsync(string actorSubject, Guid reportId, int expectedVersion, CancellationToken cancellationToken)
     {
-        Resolutions.Add((actorSubject, reportId, expectedVersion, status, note));
+        Dismissals.Add((actorSubject, reportId, expectedVersion));
+        return Task.CompletedTask;
+    }
+
+    public Task CloseCorrectedAsync(string actorSubject, PublishedRecordKind kind, string recordId, IReadOnlyCollection<Guid> reportIds,
+        string note, CancellationToken cancellationToken)
+    {
+        Closures.Add((actorSubject, kind, recordId, [.. reportIds], note));
         return Task.CompletedTask;
     }
 
@@ -42,6 +49,6 @@ internal sealed class FakeReaderReportStore : IReaderReportStore
 
     public Task<ReaderReportListItem?> GetAsync(Guid reportId, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<IReadOnlyList<ReaderReport>> ListUnansweredCorrectionsAsync(PublishedRecordKind kind, string recordId,
-        CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<IReadOnlyList<ReaderReport>> ListForRecordAsync(PublishedRecordKind kind, string recordId, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
 }

@@ -41,7 +41,7 @@ else
         {
             <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
         }
-        <ReaderReportBanner Actor="actor" Kind="PublishedRecordKind.DocumentChange" RecordId="@DraftId" />
+        <ReaderReportPanel Actor="actor" Kind="PublishedRecordKind.DocumentChange" RecordId="@DraftId" EditFormId="draft-form" />
         @if (IsAiRevision)
         {
             <Notice Tone="Tone.Warn">The AI drafter wrote this revision. It is not a human decision. Check every sentence, date, and citation against the evidence before you approve it.</Notice>

@@ -10,15 +10,9 @@ namespace CivicLens.Host.Reports;
 
 public sealed partial class ReportDetail
 {
-    private static readonly ReviewFailureMessages ResolveFailures = new(
-        "Someone resolved this report, or it changed, after you opened the page. The current state shows below.",
-        "A report that needs a correction needs a note. Add the note and try again.",
-        "The report could not be saved. Try again.");
-
     private ReaderReportListItem? item;
 
     [Inject] private GetReaderReport GetReport { get; set; } = default!;
-    [Inject] private ResolveReaderReport Resolve { get; set; } = default!;
 
     [Parameter] public Guid ReportId { get; set; }
 
@@ -52,20 +46,5 @@ public sealed partial class ReportDetail
     {
         item = null;
         base.ShowNotFound();
-    }
-
-    protected override string? StatusText() => Status == "resolved" ? "The report is resolved." : null;
-
-    private async Task DecideAsync() => NavigateWhenSet(await TryDecideAsync());
-
-    private async Task<string?> TryDecideAsync() =>
-        item is null ? null : await RunCommandAsync(ResolveAsync, ResolveFailures, LoadAsync);
-
-    private async Task<string> ResolveAsync()
-    {
-        var status = Enum.TryParse<ReaderReportStatus>(Kind, ignoreCase: false, out var parsed) ? parsed
-            : throw new ArgumentException("Choose how to resolve the report.");
-        await Resolve.ExecuteAsync(actor, new(ReportId, DecideExpectedStateVersion, status, EmptyToNull(Decision?.Note)), RequestAborted);
-        return ReportRoutes.Detail(ReportId, "resolved");
     }
 }

@@ -61,9 +61,7 @@ public sealed partial class RelationshipEditor
     private async Task<string?> TrySaveAsync()
     {
         if (detail is null) return null;
-        var target = await RunCommandAsync(PersistDraftAsync, SaveMessages, ReloadAfterSaveConflictAsync);
-        hasUnsavedInput = target is null;
-        return target;
+        return await RunSaveAsync(PersistDraftAsync, ReloadAfterSaveConflictAsync);
     }
 
     private async Task<string> PersistDraftAsync()
@@ -112,7 +110,7 @@ public sealed partial class RelationshipEditor
         return LoadAsync();
     }
 
-    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Relationship, RecordId);
+    protected override PublishedRecordReference Record => new(PublishedRecordKind.Relationship, RecordId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(detail.Review.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));

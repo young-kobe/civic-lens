@@ -6,6 +6,7 @@ using CivicLens.Infrastructure.Reports.Persistence;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query;
 
 namespace CivicLens.Infrastructure.Reports;
 
@@ -88,24 +89,41 @@ public sealed class PostgresReaderReportStore(IDbContextFactory<CollectionAttemp
         return new(ToReport(row), CurrentOf(revisions, row));
     }
 
-    public async Task ResolveAsync(string actorSubject, Guid reportId, int expectedVersion, ReaderReportStatus status, string? note,
-        CancellationToken cancellationToken)
+    public async Task DismissAsync(string actorSubject, Guid reportId, int expectedVersion, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var now = await DatabaseClock.ReadAsync(db, cancellationToken);
-        var resolved = await db.Set<ReaderReportRow>()
+        var dismissed = await db.Set<ReaderReportRow>()
             .Where(row => row.ReportId == reportId && row.Status == ReaderReportStatus.Open && row.Version == expectedVersion)
-            .ExecuteUpdateAsync(set => set
-                .SetProperty(row => row.Status, status)
-                .SetProperty(row => row.Note, note)
-                .SetProperty(row => row.ResolvedBy, actorSubject)
-                .SetProperty(row => row.ResolvedAtUtcTicks, now.Ticks)
-                .SetProperty(row => row.Version, row => row.Version + 1), cancellationToken);
-        if (resolved == 1) return;
+            .ExecuteUpdateAsync(set => Resolve(set, ReaderReportStatus.Dismissed, null, actorSubject, now.Ticks), cancellationToken);
+        if (dismissed == 1) return;
         if (!await db.Set<ReaderReportRow>().AnyAsync(row => row.ReportId == reportId, cancellationToken))
             throw new ArgumentException("The report does not exist.", nameof(reportId));
         throw new ReviewConflictException("This report is already resolved.");
     }
+
+    public async Task CloseCorrectedAsync(string actorSubject, PublishedRecordKind kind, string recordId, IReadOnlyCollection<Guid> reportIds,
+        string note, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var now = await DatabaseClock.ReadAsync(db, cancellationToken);
+        var open = await db.Set<ReaderReportRow>().AsNoTracking()
+            .Where(row => reportIds.Contains(row.ReportId) && row.Kind == kind && row.RecordId == recordId && row.Status == ReaderReportStatus.Open)
+            .ToArrayAsync(cancellationToken);
+        var revisions = await ReadCurrentRevisionsAsync(db, open, cancellationToken);
+        if (!revisions.TryGetValue((kind, recordId), out var current)) return;
+        var corrected = open.Where(row => row.RevisionNumber < current).Select(row => row.ReportId).ToArray();
+        await db.Set<ReaderReportRow>().Where(row => corrected.Contains(row.ReportId) && row.Status == ReaderReportStatus.Open)
+            .ExecuteUpdateAsync(set => Resolve(set, ReaderReportStatus.CorrectionNeeded, note, actorSubject, now.Ticks), cancellationToken);
+    }
+
+    private static void Resolve(UpdateSettersBuilder<ReaderReportRow> set, ReaderReportStatus status, string? note, string actorSubject,
+        long nowTicks) => set
+        .SetProperty(row => row.Status, status)
+        .SetProperty(row => row.Note, note)
+        .SetProperty(row => row.ResolvedBy, actorSubject)
+        .SetProperty(row => row.ResolvedAtUtcTicks, nowTicks)
+        .SetProperty(row => row.Version, row => row.Version + 1);
 
     public async Task<int> DeleteExpiredClosedAsync(CancellationToken cancellationToken)
     {
@@ -117,16 +135,16 @@ public sealed class PostgresReaderReportStore(IDbContextFactory<CollectionAttemp
             .ExecuteDeleteAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<ReaderReport>> ListUnansweredCorrectionsAsync(PublishedRecordKind kind, string recordId,
+    public async Task<IReadOnlyList<ReaderReport>> ListForRecordAsync(PublishedRecordKind kind, string recordId,
         CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var rows = await db.Set<ReaderReportRow>().AsNoTracking()
-            .Where(row => row.RecordId == recordId && row.Kind == kind && row.Status == ReaderReportStatus.CorrectionNeeded)
+            .Where(row => row.RecordId == recordId && row.Kind == kind && row.Status != ReaderReportStatus.Dismissed)
             .OrderBy(row => row.ReceivedAtUtcTicks).ThenBy(row => row.ReportId).ToArrayAsync(cancellationToken);
         if (rows.Length == 0) return [];
         var published = await ReviewQueries.ReadActiveRevisionNumberAsync(db, kind, recordId, cancellationToken);
-        return [.. rows.Where(row => published is null || published <= row.RevisionNumber).Select(ToReport)];
+        return [.. rows.Where(row => row.Status == ReaderReportStatus.Open || published is null || published <= row.RevisionNumber).Select(ToReport)];
     }
 
     private static async Task<Dictionary<(PublishedRecordKind Kind, string RecordId), int>> ReadCurrentRevisionsAsync(

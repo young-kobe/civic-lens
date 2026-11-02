@@ -1,4 +1,8 @@
 using System.Net;
+using System.Text.RegularExpressions;
+using AngleSharp.Dom;
+using AngleSharp.Html.Parser;
+using CivicLens.Application.Reports;
 using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Reports;
@@ -71,7 +75,7 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
         var detail = await host.GetDocumentAsync($"/Review/Reports/{replaced.ReportId}");
 
         var rows = list.QuerySelectorAll("[aria-labelledby='reports'] tbody tr").ToDictionary(row => row.QuerySelector("a.cell-title")!.GetAttribute("href")!);
-        var replacedRow = rows[$"/Review/Reports/{replaced.ReportId}"];
+        var replacedRow = rows[editor];
         var unknownRow = rows[$"/Review/Reports/{unknown.ReportId}"];
         Assert.Contains("Revision 1, current is 3", replacedRow.TextContent, StringComparison.Ordinal);
         Assert.NotNull(replacedRow.QuerySelector($"a[href='{editor}']"));
@@ -86,54 +90,163 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
     }
 
     [Fact]
-    public async Task ACorrectionNeedsANoteAndAResolvedReportCannotBeResolvedAgain()
+    public async Task AnOpenReportOpensTheEditorWithTheReaderWordsAboveTheFormAndTheQueueLinksStraightToIt()
+    {
+        await SeedRelationshipAsync();
+        var report = await SaveReportAsync(OnRelationship() with { Text = Script });
+
+        var list = await host.GetDocumentAsync("/Review/Reports");
+        var page = await host.GetDocumentAsync(editor);
+
+        Assert.Equal(editor, list.QuerySelector("[aria-labelledby='reports'] tbody a.cell-title")!.GetAttribute("href"));
+        var panel = page.QuerySelector($"#reader-report-{report.ReportId:D}")!;
+        Assert.Contains("Wrong quote", panel.TextContent, StringComparison.Ordinal);
+        Assert.Contains(Script, panel.TextContent, StringComparison.Ordinal);
+        Assert.Null(panel.QuerySelector("script"));
+        Assert.True(panel.CompareDocumentPosition(page.QuerySelector("#draft-form")!).HasFlag(DocumentPositions.Following));
+        Assert.Equal(report.ReportId.ToString(), page.QuerySelector("input[form='draft-form'][name='correctedReportIds']")!.GetAttribute("value"));
+    }
+
+    [Fact]
+    public async Task DismissClosesTheReportAndAStaleSecondDismissalChangesNothing()
+    {
+        await SeedRelationshipAsync();
+        var report = await SaveReportAsync(OnRelationship());
+        var form = (await host.GetDocumentAsync(editor)).QuerySelector($"#reader-report-{report.ReportId:D} form")!;
+
+        using var dismissed = await host.Client.PostAsync(editor, Form(form));
+        using var again = await host.Client.PostAsync(editor, Form(form));
+
+        Assert.Equal(HttpStatusCode.Redirect, dismissed.StatusCode);
+        Assert.Contains("status=reportDismissed", dismissed.Headers.Location!.Query, StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.BadRequest, again.StatusCode);
+        var kept = (await store.GetAsync(report.ReportId, default))!.Report;
+        Assert.Equal((ReaderReportStatus.Dismissed, 1), (kept.Status, kept.Version));
+        var after = await host.GetDocumentAsync(editor + "?status=reportDismissed");
+        Assert.Null(after.QuerySelector("[id^='reader-report-']"));
+        Assert.Contains("The report is dismissed.", after.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SaveAndApproveWithATypedFixKeepsTheReportUntilThePublishAndNoReaderTextReachesTheRevision()
+    {
+        await SeedRelationshipAsync();
+        var report = await SaveReportAsync(OnRelationship() with { Text = Script });
+        var fields = EditorFields(await host.GetDocumentAsync(editor));
+        Set(fields, "Input.Reason", "The typed public reason.");
+
+        using var approved = await host.Client.PostAsync(editor, new FormUrlEncodedContent(fields));
+
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        var closed = (await store.GetAsync(report.ReportId, default))!.Report;
+        Assert.Equal((ReaderReportStatus.CorrectionNeeded, CloseCorrectedReports.Note), (closed.Status, closed.Note));
+        Assert.Equal("0", (await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions r WHERE r::text LIKE '%alert(%'")).Single().Single());
+        Assert.Equal("1", (await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions r WHERE r::text LIKE '%The typed public reason.%'")).Single().Single());
+        var waiting = await host.GetDocumentAsync(editor);
+        Assert.Contains("waits for the fix to publish", waiting.QuerySelector($"#reader-report-{report.ReportId:D}")!.TextContent, StringComparison.Ordinal);
+        Assert.Null(waiting.QuerySelector("input[name='correctedReportIds']"));
+
+        await new BriefWorldSeeder(host.ConnectionString).ReplaceActiveReleaseAsync(1, DateTimeOffset.UtcNow,
+            new PublishedRevisionBinding(PublishedRecordKind.Relationship, ActionPair().PairId, 2));
+        Assert.Null((await host.GetDocumentAsync(editor)).QuerySelector("[id^='reader-report-']"));
+    }
+
+    [Fact]
+    public async Task AFailedApprovalKeepsTheTypedTextAndLeavesTheReportOpen()
+    {
+        await SeedRelationshipAsync();
+        var report = await SaveReportAsync(OnRelationship());
+        var fields = EditorFields(await host.GetDocumentAsync(editor));
+        Set(fields, "Input.Reason", "Typed text that must survive.");
+        Set(fields, "expectedReviewStateVersion", "99");
+
+        using var refused = await host.Client.PostAsync(editor, new FormUrlEncodedContent(fields));
+
+        Assert.NotEqual(HttpStatusCode.Redirect, refused.StatusCode);
+        var kept = await new HtmlParser().ParseDocumentAsync(await refused.Content.ReadAsStringAsync());
+        Assert.Equal("Typed text that must survive.", kept.QuerySelector("#Input_Reason")!.GetAttribute("value"));
+        Assert.NotNull(kept.QuerySelector("input[name='correctedReportIds']"));
+        Assert.Equal(ReaderReportStatus.Open, (await store.GetAsync(report.ReportId, default))!.Report.Status);
+        Assert.Equal("1", (await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions")).Single().Single());
+    }
+
+    [Fact]
+    public async Task ASaveWithoutApprovalLeavesTheReportOpen()
+    {
+        await SeedRelationshipAsync();
+        var report = await SaveReportAsync(OnRelationship());
+        var fields = EditorFields(await host.GetDocumentAsync(editor));
+        fields.RemoveAll(field => field.Key == "approve");
+        Set(fields, "Input.Reason", "Saved only.");
+
+        using var saved = await host.Client.PostAsync(editor, new FormUrlEncodedContent(fields));
+
+        Assert.Equal(HttpStatusCode.Redirect, saved.StatusCode);
+        Assert.Equal(ReaderReportStatus.Open, (await store.GetAsync(report.ReportId, default))!.Report.Status);
+    }
+
+    [Fact]
+    public void EveryEditorShowsTheReportPanelOfItsOwnKindAndOnlyAnEditableOneCanCloseByApproval()
+    {
+        var editors = new (string File, PublishedRecordKind Kind)[]
+        {
+            ("Documents/DraftEditor.razor", PublishedRecordKind.DocumentChange), ("Statements/StatementEditor.razor", PublishedRecordKind.Statement),
+            ("Actions/ActionEditor.razor", PublishedRecordKind.Action), ("Votes/VoteEditor.razor", PublishedRecordKind.Vote),
+            ("Relationships/RelationshipEditor.razor", PublishedRecordKind.Relationship), ("Briefs/BriefEditor.razor", PublishedRecordKind.Brief),
+            ("ExecutiveActions/ExecutiveActionEditor.razor", PublishedRecordKind.ExecutiveAction)
+        };
+
+        foreach (var (file, kind) in editors)
+        {
+            var markup = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.Host", file));
+            var panel = Regex.Match(markup, @"<ReaderReportPanel [^>]*/>").Value;
+            Assert.Contains($"Kind=\"PublishedRecordKind.{kind}\"", panel, StringComparison.Ordinal);
+            Assert.Equal(kind != PublishedRecordKind.ExecutiveAction, panel.Contains("EditFormId=\"draft-form\"", StringComparison.Ordinal));
+        }
+        Assert.Equal(Enum.GetValues<PublishedRecordKind>().Length, editors.Length);
+    }
+
+    [Fact]
+    public async Task AnExecutiveActionReportCanBeDismissedButOffersNoApprovalToCloseIt()
+    {
+        var recordId = await new ExecutiveActionSeeder(host.ConnectionString, host.ArtifactDirectory)
+            .AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
+        var report = await SaveReportAsync(Report() with { RecordId = recordId, Kind = PublishedRecordKind.ExecutiveAction });
+
+        var shown = await host.GetDocumentAsync($"/Review/ExecutiveActions/{recordId}");
+
+        var panel = shown.QuerySelector($"#reader-report-{report.ReportId:D}")!;
+        Assert.Contains("No person edits this record", panel.TextContent, StringComparison.Ordinal);
+        Assert.NotNull(panel.QuerySelector("form"));
+        Assert.Null(shown.QuerySelector("input[name='correctedReportIds']"));
+    }
+
+    [Fact]
+    public async Task TheReportPageDismissesAnOpenReportAndShowsTheResolutionOfAClosedOne()
     {
         var report = await SaveReportAsync(Report());
         var url = $"/Review/Reports/{report.ReportId}";
-        var fields = Fields((await host.GetDocumentAsync(url)).QuerySelector("#decision-form")!);
+        var open = await host.GetDocumentAsync(url);
 
-        var noNote = new List<KeyValuePair<string, string>>(fields) { new("kind", "CorrectionNeeded") };
-        using var refused = await host.Client.PostAsync(url, new FormUrlEncodedContent(noNote));
-        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        using var dismissed = await host.Client.PostAsync(url, Form(open.QuerySelector("[aria-labelledby='decision'] form")!));
 
-        var dismissal = new List<KeyValuePair<string, string>>(fields) { new("kind", "Dismissed") };
-        using var dismissed = await host.Client.PostAsync(url, new FormUrlEncodedContent(dismissal));
         Assert.Equal(HttpStatusCode.Redirect, dismissed.StatusCode);
-        using var again = await host.Client.PostAsync(url, new FormUrlEncodedContent(dismissal));
-        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
-
         var after = await host.GetDocumentAsync(url);
-        Assert.Null(after.QuerySelector("#decision-form"));
+        Assert.Null(after.QuerySelector("#decision"));
         Assert.Contains("Dismissed", after.QuerySelector("[aria-labelledby='resolution']")!.TextContent, StringComparison.Ordinal);
         Assert.Contains("auth0|friend", after.QuerySelector("[aria-labelledby='resolution']")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task TheRecordPageShowsTheCorrectionBannerUntilANewerRevisionIsPublishedAndAnOpenOrDismissedReportShowsNone()
+    public async Task ADismissedReportShowsNoPanelOnTheRecordPage()
     {
         await SeedRelationshipAsync();
-        var needsFix = await SaveReportAsync(Report() with
-        {
-            RecordId = ActionPair().PairId,
-            Kind = PublishedRecordKind.Relationship,
-            Category = ReaderReportProtocol.WrongQuoteCategory,
-            Text = Script
-        });
-        var openOnly = await SaveReportAsync(Report() with { RecordId = ActionPair().PairId, Kind = PublishedRecordKind.Relationship });
-        await store.ResolveAsync("auth0|friend", needsFix.ReportId, 0, CivicLens.Application.Reports.ReaderReportStatus.CorrectionNeeded, "Use the full quote.", default);
+        var dismissed = await SaveReportAsync(OnRelationship());
+        await store.DismissAsync("auth0|friend", dismissed.ReportId, 0, default);
 
         var shown = await host.GetDocumentAsync(editor);
-        var banner = shown.QuerySelector($"#reader-report-{needsFix.ReportId:D}")!;
-        Assert.Contains("Wrong quote", banner.TextContent, StringComparison.Ordinal);
-        Assert.Contains("Use the full quote.", banner.TextContent, StringComparison.Ordinal);
-        Assert.Contains(Script, banner.TextContent, StringComparison.Ordinal);
-        Assert.Equal($"/Review/Reports/{needsFix.ReportId:D}", banner.QuerySelector("a")!.GetAttribute("href"));
-        Assert.Null(shown.QuerySelector($"#reader-report-{openOnly.ReportId:D}"));
 
-        await new BriefWorldSeeder(host.ConnectionString).ReplaceActiveReleaseAsync(1, DateTimeOffset.UtcNow,
-            new PublishedRevisionBinding(PublishedRecordKind.Relationship, ActionPair().PairId, 2));
-        var gone = await host.GetDocumentAsync(editor);
-        Assert.Null(gone.QuerySelector("[id^='reader-report-']"));
+        Assert.Null(shown.QuerySelector("[id^='reader-report-']"));
     }
 
     [Fact]
@@ -165,25 +278,26 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
         }
     }
 
-    [Fact]
-    public async Task AnExecutiveActionPageShowsTheBannerOfACorrectionReportOfThatKind()
-    {
-        var recordId = await new ExecutiveActionSeeder(host.ConnectionString, host.ArtifactDirectory)
-            .AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
-        var report = await SaveReportAsync(Report() with { RecordId = recordId, Kind = PublishedRecordKind.ExecutiveAction });
-        await store.ResolveAsync("auth0|friend", report.ReportId, 0, CivicLens.Application.Reports.ReaderReportStatus.CorrectionNeeded, "Use the full title.", default);
-
-        var shown = await host.GetDocumentAsync($"/Review/ExecutiveActions/{recordId}");
-
-        var banner = shown.QuerySelector($"#reader-report-{report.ReportId:D}")!;
-        Assert.Contains("Use the full title.", banner.TextContent, StringComparison.Ordinal);
-        Assert.Equal($"/Review/Reports/{report.ReportId:D}", banner.QuerySelector("a")!.GetAttribute("href"));
-    }
-
     private async Task<PulledReport> SaveReportAsync(PulledReport report)
     {
         await store.SavePulledAsync(Batch(report), default);
         return report;
+    }
+
+    private static PulledReport OnRelationship() => Report() with
+    {
+        RecordId = ActionPair().PairId,
+        Kind = PublishedRecordKind.Relationship,
+        RevisionNumber = 1
+    };
+
+    private static List<KeyValuePair<string, string>> EditorFields(IDocument page)
+    {
+        var fields = Fields(page.QuerySelector("#draft-form")!);
+        fields.AddRange(page.QuerySelectorAll("input[form='draft-form']")
+            .Select(input => new KeyValuePair<string, string>(input.GetAttribute("name")!, input.GetAttribute("value") ?? "")));
+        fields.Add(new("approve", "true"));
+        return fields;
     }
 
     private async Task SeedRelationshipAsync()

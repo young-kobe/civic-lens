@@ -97,9 +97,7 @@ public sealed partial class StatementEditor
     private async Task<string?> TrySaveAsync()
     {
         if (detail is null) return null;
-        var target = await RunCommandAsync(PersistDraftAsync, SaveMessages, ReloadAfterSaveConflictAsync);
-        hasUnsavedInput = target is null;
-        return target;
+        return await RunSaveAsync(PersistDraftAsync, ReloadAfterSaveConflictAsync);
     }
 
     private async Task<string> PersistDraftAsync()
@@ -173,7 +171,7 @@ public sealed partial class StatementEditor
         return LoadAsync();
     }
 
-    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.Statement, CandidateId);
+    protected override PublishedRecordReference Record => new(PublishedRecordKind.Statement, CandidateId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(detail is null ? null : await RunTakeOffSiteAsync(review!.CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));

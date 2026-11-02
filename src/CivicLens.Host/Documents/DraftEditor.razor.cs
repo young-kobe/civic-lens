@@ -131,9 +131,7 @@ public sealed partial class DraftEditor
     private async Task<string?> TrySaveAsync()
     {
         if (review is null) return null;
-        var target = await RunCommandAsync(PersistDraftAsync, SaveMessages, ReloadAfterSaveConflictAsync);
-        hasUnsavedInput = target is null;
-        return target;
+        return await RunSaveAsync(PersistDraftAsync, ReloadAfterSaveConflictAsync);
     }
 
     private async Task<string> PersistDraftAsync()
@@ -210,7 +208,7 @@ public sealed partial class DraftEditor
         return LoadAsync();
     }
 
-    protected override PublishedRecordReference TakeOffRecord => new(PublishedRecordKind.DocumentChange, DraftId);
+    protected override PublishedRecordReference Record => new(PublishedRecordKind.DocumentChange, DraftId);
 
     private async Task TakeOffSiteAsync() =>
         NavigateWhenSet(review is null ? null : await RunTakeOffSiteAsync(CurrentStatus, WithdrawAsync, ReloadAfterDecideConflictAsync));
