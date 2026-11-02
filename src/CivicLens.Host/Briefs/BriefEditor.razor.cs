@@ -58,7 +58,7 @@ public sealed partial class BriefEditor
     private async Task<string?> TrySaveAsync()
     {
         if (detail is null) return null;
-        var target = await RunCommandAsync(PersistDraftAsync, SaveFailures, ReloadAfterSaveConflictAsync);
+        var target = await RunCommandAsync(PersistDraftAsync, SaveMessages, ReloadAfterSaveConflictAsync);
         hasUnsavedInput = target is null;
         return target;
     }
@@ -68,12 +68,12 @@ public sealed partial class BriefEditor
         if (SaveExpectedRevision != Revision.RevisionNumber)
             throw new ReviewConflictException("The brief has a newer revision. Refresh before saving.");
         _ = await SaveDraft.ExecuteAsync(actor, BuildSaveRequest(Input ?? new BriefInput()), RequestAborted);
-        return BriefRoutes.Editor(RecordId, "saved");
+        return BriefRoutes.Editor(RecordId, SavedStatus);
     }
 
     private SaveBriefDraftRequest BuildSaveRequest(BriefInput input) =>
         new(RecordId, SaveExpectedRevision, input.Headline ?? "", WrittenParagraphs(input),
-            SuggestionActions.ChoiceOf(input.SuggestionAction), SaveKey ?? "");
+            SuggestionActions.ChoiceOf(input.SuggestionAction), SaveKey ?? "", ApprovalOfSave());
 
     private static ImmutableArray<BriefParagraph> WrittenParagraphs(BriefInput input) =>
         [.. input.Paragraphs.Where(paragraph => !string.IsNullOrWhiteSpace(paragraph.Text))

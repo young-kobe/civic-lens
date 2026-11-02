@@ -8,41 +8,26 @@
     {
         <p id="take-off-site-off" class="small">This record is off the public site. It returns only when a person approves a newer revision with a correction note.</p>
     }
-    @Checklist
-    @if (Concerns.Length > 0)
+    @if (CanApprove)
     {
-        <FieldSet Legend="Open concerns" Hint="Select each concern you resolved, and say how in the note.">
-            <ul class="choices">
-                @foreach (var concern in Concerns)
-                {
-                    <li>
-                        <Choice Name="Decision.ResolvedDecisionIds" Value="@concern.DecisionId" Form="decision-form"
-                                Label="@(string.IsNullOrWhiteSpace(concern.Note) ? "Concern without a note" : concern.Note)">
-                            <span class="muted small">Raised on revision @concern.RevisionNumber</span>
-                        </Choice>
-                    </li>
-                }
-            </ul>
-        </FieldSet>
+        @Checklist
     }
-    <Notice Tone="Tone.Warn" id="decision-unsaved-warning" hidden="@CanDecide">Save your edits or reload the saved revision before you decide. Decisions apply only to saved wording.</Notice>
+    <Notice Tone="Tone.Warn" id="decision-unsaved-warning" hidden="@CanDecide">You have edits that are not saved. Press Save and approve to keep them, or reload the page. Requesting changes and withdrawing approval apply only to saved wording.</Notice>
     <form id="decision-form" class="form" method="post" @formname="decide" @onsubmit="OnDecide">
         <AntiforgeryToken />
         <FieldSet Id="decision-controls" Legend="Your decision" Disabled="@(!CanDecide)">
             <input type="hidden" name="expectedRevisionNumber" value="@RevisionNumber" />
             <input type="hidden" name="expectedReviewStateVersion" value="@ReviewStateVersion" />
             <input type="hidden" name="idempotencyKey" value="@IdempotencyKey" />
-            <Field Label="Note" For="Decision_Note" Hint="Requesting changes and withdrawing approval need a reason. Resolving concerns needs a note.">
+            <Field Label="Note" For="Decision_Note" Hint="@(CanApprove ? "Requesting changes and withdrawing approval need a reason. Resolving concerns needs a note." : "Requesting changes and withdrawing approval need a reason.")">
                 <textarea id="Decision_Note" class="plain" name="Decision.Note" maxlength="4000" aria-describedby="Decision_Note-hint" value="@Note"></textarea>
             </Field>
-            @if (Status != ReviewStatus.Approved)
+            @if (CanApprove && Status != ReviewStatus.Approved)
             {
-                <Field Label="Correction note" For="Decision_CorrectionNote" Hint="Needed if this record replaces or returns a public one. Without it, the public page does not change.">
-                    <textarea id="Decision_CorrectionNote" class="plain" name="Decision.CorrectionNote" maxlength="@PublishedCorrection.MaximumNoteLength" aria-describedby="Decision_CorrectionNote-hint" value="@CorrectionNote"></textarea>
-                </Field>
+                <ApprovalInputs Prefix="Decision" Concerns="Concerns" CorrectionNote="@CorrectionNote" />
             }
             <div class="actions">
-                @if (Status != ReviewStatus.Approved)
+                @if (CanApprove && Status != ReviewStatus.Approved)
                 {
                     <Button Variant="ButtonVariant.Primary" Type="submit" name="kind" value="Approve">Approve</Button>
                 }
@@ -51,7 +36,7 @@
                 {
                     <Button Variant="ButtonVariant.Danger" Type="submit" name="kind" value="WithdrawApproval">Withdraw approval</Button>
                 }
-                @if (Status != ReviewStatus.Approved)
+                @if (CanApprove && Status != ReviewStatus.Approved)
                 {
                     <span class="actions-hint">@(CannotReturn ? "Approving this revision does not bring the record back. Only a newer revision can." : "Publishes soon.")</span>
                 }
@@ -68,6 +53,7 @@
     [Parameter, EditorRequired] public ReviewStatus Status { get; set; }
     [Parameter, EditorRequired] public ImmutableArray<ReviewDecision> Concerns { get; set; }
     [Parameter, EditorRequired] public bool CanDecide { get; set; }
+    [Parameter] public bool CanApprove { get; set; } = true;
     [Parameter, EditorRequired] public string IdempotencyKey { get; set; } = string.Empty;
     [Parameter] public int? WithdrawnRevisionNumber { get; set; }
     [Parameter] public string? Note { get; set; }

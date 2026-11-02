@@ -25,7 +25,8 @@ internal sealed class FakeStatementReviewStore : IStatementReviewStore
     }
 
     public Task<StatementDraftRevision> SaveRevisionAsync(string actorSubject, StatementDraftRevision revision, int expectedRevisionNumber,
-        bool statementDateChecked, string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
+        bool statementDateChecked, ReviewDecision? approval, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash,
+        CancellationToken cancellationToken)
     {
         Saved = revision;
         SavedDateChecked = statementDateChecked;

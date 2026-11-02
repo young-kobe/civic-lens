@@ -18,6 +18,7 @@ public sealed class SaveStatementDraft(IStatementReviewStore store, StatementRev
         var context = await contextReader.ReadAsync(candidateId, cancellationToken);
         var revision = BuildRevision(actor, request, candidateId, context);
         return await store.SaveRevisionAsync(actor.Subject, revision, request.ExpectedRevisionNumber, request.StatementDateChecked,
+            ReviewValidation.CreateApprovalOf(actor, candidateId, revision.RevisionNumber, request.Approval), context.Allowed,
             request.IdempotencyKey, ReviewValidation.HashPayload(request), cancellationToken);
     }
 

@@ -32,7 +32,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
     private const string DecideOperation = "decide";
 
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
-    private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue;
+    private readonly Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision;
 
     public PostgresDocumentChangeReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
         : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping())) { }
@@ -41,7 +41,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
         PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue)
     {
         this.contextFactory = contextFactory;
-        this.briefQueue = briefQueue;
+        afterDecision = BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.DocumentChange);
     }
 
     public static PostgresDocumentChangeReviewStore FromConnectionString(string connectionString)
@@ -67,31 +67,55 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
         }, cancellationToken);
 
     public Task<DocumentChangeDraftRevision> SaveRevisionAsync(string actorSubject,
-        DocumentChangeDraftRevision revision, int expectedRevisionNumber, bool changeDateChecked, string idempotencyKey,
-        string payloadHash, CancellationToken cancellationToken) =>
-        Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
+        DocumentChangeDraftRevision revision, int expectedRevisionNumber, bool changeDateChecked,
+        ReviewDecision? approval, ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds,
+        string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
+    {
+        VerifiedComparison? verified = null;
+        return Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
             payloadHash, async (db, _, current) =>
             {
+                if (approval is not null)
+                    AiProposedDate.RequireCheckedOrCleared(current.AuthorSubject, current.ChangeDate, revision.ChangeDate, changeDateChecked, "change date");
                 var saved = revision.KeepingAiChangeDateOnlyIfChecked(current, changeDateChecked) with { ComparisonId = current.ComparisonId };
-                await ValidateRevisionAgainstEvidenceAsync(db, saved, cancellationToken);
+                verified = await ReadVerifiedComparisonAsync(db, saved.ComparisonId, cancellationToken)
+                    ?? throw new ArgumentException("Drafts must reference a complete comparison containing a text change.", nameof(revision));
+                ValidateRevisionAgainstEvidence(saved, verified);
                 return saved;
-            }, NewRevisionRow, cancellationToken);
+            }, NewRevisionRow,
+            approval is null ? null : new(approval,
+                (_, draft, history) =>
+                {
+                    ValidateDecision(draft, history, approval, verified!, allowedOfficialIds, allowedIssueIds);
+                    return Task.CompletedTask;
+                },
+                afterDecision, revision => revision.ComparableForm(),
+                current => AiProposedDate.IsProposed(current.AuthorSubject, current.ChangeDate)), cancellationToken);
+    }
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision,
         int expectedRevisionNumber, int expectedReviewStateVersion, string idempotencyKey,
         string payloadHash, ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds,
         CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
-            idempotencyKey, payloadHash, async (db, draft, history) =>
-            {
-                var comparisons = await ReadVerifiedComparisonsAsync(db, [draft.ComparisonId], cancellationToken);
-                ValidateAgainstEvidence(draft, history, comparisons);
-                if (decision.Kind != ReviewDecisionKind.Approve) return;
-                var current = history.CurrentRevision!;
-                if (current.OfficialIds.Any(id => !allowedOfficialIds.Contains(id)) || current.IssueIds.Any(id => !allowedIssueIds.Contains(id)))
-                    throw new ArgumentException("The saved revision includes selections that are no longer configured.");
-                current.ValidateForApproval();
-            }, BriefStaleness.AfterDecision(briefQueue, PublishedRecordKind.DocumentChange), cancellationToken);
+            idempotencyKey, payloadHash,
+            async (db, draft, history) => ValidateDecision(draft, history, decision,
+                await ReadVerifiedComparisonAsync(db, draft.ComparisonId, cancellationToken)
+                    ?? throw new InvalidOperationException("Retained draft comparison is no longer valid."),
+                allowedOfficialIds, allowedIssueIds),
+            afterDecision, cancellationToken);
+
+    private static void ValidateDecision(DocumentChangeDraftRow draft, ReviewHistory<DocumentChangeDraftRevision> history,
+        ReviewDecision decision, VerifiedComparison verified, ImmutableHashSet<string> allowedOfficialIds,
+        ImmutableHashSet<string> allowedIssueIds)
+    {
+        ValidateAgainstEvidence(draft, history, new(StringComparer.Ordinal) { [draft.ComparisonId] = verified });
+        if (decision.Kind != ReviewDecisionKind.Approve) return;
+        var current = history.CurrentRevision!;
+        if (current.OfficialIds.Any(id => !allowedOfficialIds.Contains(id)) || current.IssueIds.Any(id => !allowedIssueIds.Contains(id)))
+            throw new ArgumentException("The saved revision includes selections that are no longer configured.");
+        current.ValidateForApproval();
+    }
 
     public async Task<DocumentChangeReview?> GetAsync(string draftId, CancellationToken cancellationToken)
     {

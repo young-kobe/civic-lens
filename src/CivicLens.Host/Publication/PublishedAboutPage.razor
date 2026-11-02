@@ -1,20 +1,24 @@
+@using CivicLens.Application.Statements
 @using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
 <PublicPage Section="PublicSection.About" CanonicalPath="@PublicationProtocol.AboutPagePath" Title="About Civic Lens" Description="What Civic Lens covers, where its records come from, and who approves them." Crumbs="Crumbs">
-    <PageHeader Title="About Civic Lens" Lede="Civic Lens publishes records of what members of Congress say and do. Each record shows its sources. Civic Lens is not part of any government office, party, campaign or company." />
+    <PageHeader Title="About Civic Lens" Lede="Civic Lens shows what U.S. officials say and do, using official records you can check yourself. Each record shows its sources. Civic Lens is not part of any government office, party, campaign or company." />
     <Panel Title="What it covers" Padded="true">
-        <p>Civic Lens covers the federal government of the United States. It covers the members of Congress.</p>
+        <p>Civic Lens covers the federal government of the United States: the members of Congress and the President. Most records are from the current Congress. Some pages also show earlier Congresses and former officials.</p>
     </Panel>
     <Panel Title="Where the records come from" Padded="true">
         <p>Most records come from official sources: Congress.gov, the House Clerk, the <Term Key="federal-register">Federal Register</Term> and officials' own websites. Senate votes come from @PublishedRecordLabels.Voteview. Voteview is not an official source, so each Senate vote page links the official Senate roll call.</p>
         <p>Each record shows its sources and the exact text it cites.</p>
     </Panel>
     <Panel Title="Who approves a record" Padded="true">
+        <p>Here, code means software that we wrote. It follows fixed rules. No AI decides an approval.</p>
         <p>Code approves the bill and resolution records, the vote records, and the records of presidential documents from the Federal Register. Code first checks their citations against the source.</p>
+        <p>Code also approves a <Term Key="statement">statement</Term> when the statement comes from the own website of the office of that official and names no other speaker. An AI model drafts these statements, finds their issues, and proposes their date. Code then checks the quote and the date against the saved page. A statement with a date must show the date in the quote, and the date must be within @StatementCodeApproval.DateWindowDays days before Civic Lens saved the page.</p>
         <p>A record of a presidential document shows the official title from the Federal Register. Civic Lens does not summarize these documents yet.</p>
-        <p>A model drafts some records. A person checks and approves each <Term Key="statement">statement</Term>, <Term Key="document-change">document change</Term>, brief, and link. A model never approves a record.</p>
+        <p>A model drafts some records. A person checks and approves each <Term Key="document-change">document change</Term>, brief, and link, and each statement that code does not approve. A model never approves a record.</p>
         <p>On a bill or resolution page or a vote page, a summary that a model wrote has the label "@PublishedRecordLabels.ModelWording". Wording that code wrote from the bill title, the sponsor, and the introduction date has the label "@PublishedRecordLabels.CodeWording".</p>
+        <p>On a statement page, a summary that a model wrote has the label "@PublishedRecordLabels.StatementModelWording"</p>
         <p>A link joins a statement to a bill or a vote. A link is not a verdict. It does not say that the vote or the bill matches the statement.</p>
     </Panel>
     <Panel Title="Weekly briefs" Padded="true">
@@ -25,8 +29,8 @@
         <p>You can tell us about a mistake on the <a href="@PublicationProtocol.ReportPagePath">report page</a>. A person checks each report.</p>
     </Panel>
     <Panel Title="Contact" Padded="true">
-        <p><strong>A record is wrong.</strong> Open the record and use "Report a problem with this record" at the bottom of the page. The report names the exact record and version, so we can find and fix the problem fast.</p>
-        <p><strong>Anything else.</strong> Send an email to <a href="mailto:@ContactEmail">@ContactEmail</a>. We read every message. We cannot promise to answer each one.</p>
+        <p><strong>If a record is wrong:</strong> Open the record and use "@PublishedRecordLabels.ReportRecordLink". The report names the exact record and version, so we can find and fix the problem fast.</p>
+        <p><strong>For anything else:</strong> Send an email to <a href="mailto:@PublishedRecordLabels.ContactEmail">@PublishedRecordLabels.ContactEmail</a>. We read every message. We cannot promise to answer each one.</p>
         <p>Officials and their staff use the same two ways. Please do not send private details about yourself or other people.</p>
     </Panel>
     <Panel Title="Privacy" Padded="true">
@@ -56,12 +60,11 @@
         <p>A record can be corrected or withdrawn. Link to it, so your readers see the current version. Do not suggest that Civic Lens supports you, a product or a campaign.</p>
     </Panel>
     <Panel Title="More information" Padded="true">
-        <p>The <a href="@PublicationProtocol.MethodPagePath">method page</a> explains how the counts on each official page work.</p>
+        <p>The page <a href="@PublicationProtocol.MethodPagePath">How the counts work</a> explains how the counts on each official page work.</p>
     </Panel>
 </PublicPage>
 
 @code {
-    private const string ContactEmail = "contact@civic-lens.info";
     private const string CloudflarePrivacyUrl = "https://www.cloudflare.com/privacypolicy/";
     private const string CreativeCommonsUrl = "https://creativecommons.org/licenses/by/4.0/";
     private const string VoteviewCitation = "Lewis, Jeffrey B., Keith Poole, Howard Rosenthal, Adam Boche, Aaron Rudkin, and Luke Sonnet (2026). Voteview: Congressional Roll-Call Votes Database. https://voteview.com/";

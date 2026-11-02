@@ -117,6 +117,10 @@ internal static class ReviewValidation
             correctionNote is null ? null : CorrectionNoteText.Validate(correctionNote, nameof(correctionNote)));
     }
 
+    public static ReviewDecision? CreateApprovalOf(ReviewActor actor, string recordId, int revisionNumber, ApprovalWithSave? approval) =>
+        approval is null ? null : CreateDecision(actor, recordId, revisionNumber, approval.ExpectedReviewStateVersion,
+            ReviewDecisionKind.Approve, approval.Note, approval.ResolvedDecisionIds, approval.CorrectionNote);
+
     public static ImmutableArray<string> ValidateDecisionIds(ImmutableArray<string> ids)
     {
         if (ids.IsDefault || ids.Length > 64) throw new ArgumentException("At most 64 decision IDs may be supplied.", nameof(ids));

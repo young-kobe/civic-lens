@@ -42,6 +42,18 @@ public sealed record DocumentChangeDraftRevision(string DraftId, int RevisionNum
         return value;
     }
 
+    public DocumentChangeDraftRevision ComparableForm() => this with
+    {
+        Headline = ComparableText.Lines(Headline),
+        Summary = ComparableText.Lines(Summary),
+        Significance = ComparableText.LinesOrNull(Significance),
+        Limits = ComparableText.LinesOrNull(Limits),
+        Institution = ComparableText.Lines(Institution),
+        OfficialIds = ComparableText.Sorted(OfficialIds),
+        IssueIds = ComparableText.Sorted(IssueIds),
+        Citations = ComparableText.Sorted(Citations)
+    };
+
     public void ValidateShape()
     {
         if (!LowercaseHex.Is(DraftId, 32) || !ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc))

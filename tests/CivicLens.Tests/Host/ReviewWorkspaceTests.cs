@@ -165,6 +165,67 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task AReviewerIsPromisedNothingAboutPublishingBecauseOnlyTheOwnerCanSeeThePublishedStateAsync()
+    {
+        await SaveComparisonAsync("Before policy.\n", "After policy.\n");
+        SignIn(Owner);
+        var editorUrl = await StartFirstDraftAsync();
+        host.Client.DefaultRequestHeaders.Remove("Cookie");
+        SignIn(Reviewer);
+
+        var editor = await host.GetDocumentAsync(editorUrl);
+
+        Assert.DoesNotContain("Publishes soon.", editor.QuerySelector("#save-and-approve .actions-hint")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheFirstSubmitButtonOfTheEditFormIsDisabledSoEnterInAFieldNeverApprovesAsync()
+    {
+        await SaveComparisonAsync("Before policy.\n", "After policy.\n");
+        SignIn(Owner);
+        var editor = await host.GetDocumentAsync(await StartFirstDraftAsync());
+
+        var first = editor.QuerySelectorAll("#draft-form button[type='submit'], #draft-form input[type='submit']").First();
+
+        Assert.True(first.HasAttribute("disabled"));
+        Assert.Equal("Save and approve", editor.QuerySelector("#draft-form button[name='approve']")!.TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task SaveAndApproveRefusesAnAiChangeDateThatIsNotTickedAndSavesNothingAsync()
+    {
+        var comparison = await SaveComparisonAsync("Deadline: October 15.\n", "Updated 2026-10-03. Deadline: October 30.\n");
+        SignIn(Owner);
+        var analysis = PostgresDocumentChangeAnalysisStore.FromConnectionString(host.ConnectionString);
+        var status = PostgresAnalysisStatusStore.FromConnectionString(host.ConnectionString);
+        await status.RecordStartAsync(50_000, default);
+        var model = new FakeDocumentChangeDraftModel().Draft(FakeDocumentChangeDraftModel.Output("Deadline moves to October 30",
+            [("h1", "after", "Updated 2026-10-03.")], changeDate: new { date = "2026-10-03", citationIndex = 0, confidence = 0.9 }));
+        await AnalysisWorkers.Drafting(analysis, status, model, new DocumentChangeDraftSettings(1_000_000, concurrency: 1),
+            [], TimeProvider.System).ExecuteAsync(once: true);
+        var draftId = Assert.Single(await analysis.GetByComparisonIdsAsync([comparison.ComparisonId], default)).DraftId!;
+        var editorUrl = "/Review/" + draftId;
+        Assert.NotNull((await host.GetDocumentAsync(editorUrl)).QuerySelector("#unconfirmed-change-date"));
+
+        var form = (await host.GetDocumentAsync(editorUrl)).QuerySelector("#draft-form")!;
+        var fields = Fields(form);
+        fields.Add(new("Input.DateEvidenceSelection", form.QuerySelector("#Input_DateEvidenceSelection option[selected]")!.GetAttribute("value")!));
+        fields.Add(new("approve", "true"));
+
+        using var refused = await host.Client.PostAsync(editorUrl, new FormUrlEncodedContent(fields));
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal(1, (await ReadCurrentRevisionAsync(editorUrl)).RevisionNumber);
+        var kept = await ParseAsync(refused);
+        Assert.Equal("Deadline moves to October 30", kept.QuerySelector("#Input_Headline")!.GetAttribute("value"));
+
+        fields.Add(new("Input.ChangeDateChecked", "true"));
+        using var approved = await host.Client.PostAsync(editorUrl, new FormUrlEncodedContent(fields));
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        Assert.Equal(new DateOnly(2026, 10, 3), (await ReadCurrentRevisionAsync(editorUrl)).ChangeDate);
+    }
+
+    [Fact]
     public async Task StaleSaveKeepsUnsavedWordingApartFromTheApprovalTargetAndBlocksDecisionsAsync()
     {
         await SaveComparisonAsync("Before policy.\n", "After policy.\n");
@@ -172,7 +233,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var editorUrl = await StartFirstDraftAsync();
         var editor = await host.GetDocumentAsync(editorUrl);
         Assert.Equal("false", editor.QuerySelector("[data-unsaved-form]")!.GetAttribute("data-recovered-unsaved"));
-        Assert.Equal("saved", editor.QuerySelector("[data-tabset]")!.GetAttribute("data-selected"));
+        Assert.Equal("edit", editor.QuerySelector("[data-tabset]")!.GetAttribute("data-selected"));
         var fields = Fields(editor.QuerySelector("#draft-form")!);
         Set(fields, "Input.Headline", "Saved headline");
         Set(fields, "Input.Summary", "Supported summary");
@@ -219,13 +280,19 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal(HttpStatusCode.Redirect, requested.StatusCode);
         var editor = await host.GetDocumentAsync(editorUrl);
         Assert.Contains("Approval is blocked", editor.QuerySelector(".notice-warn")!.TextContent, StringComparison.Ordinal);
-        var concern = editor.QuerySelector("input[name='Decision.ResolvedDecisionIds']")!;
-        Assert.Equal("decision-form", concern.GetAttribute("form"));
+        var concern = editor.QuerySelector("#draft-form input[name='Approval.ResolvedDecisionIds']")!;
+        Assert.Null(editor.QuerySelector("#decision-form input[name='Decision.ResolvedDecisionIds']"));
+        Assert.Null(editor.QuerySelector("#decision-form button[value='Approve']"));
 
-        using var unresolved = await DecideAsync(editorUrl, "Approve", "Looks fine.");
+        using var unresolved = await SaveAndApproveAsync(editorUrl, "Reworded after the concern", "Looks fine.");
         Assert.Equal(HttpStatusCode.BadRequest, unresolved.StatusCode);
-        using var approved = await DecideAsync(editorUrl, "Approve", "The notice is cited.", [concern.GetAttribute("value")!]);
+        var blocked = await ParseAsync(unresolved);
+        Assert.Equal("Reworded after the concern", blocked.QuerySelector("#Input_Headline")!.GetAttribute("value"));
+        Assert.Equal("Looks fine.", blocked.QuerySelector("#Approval_Note")!.TextContent.Trim());
+        Assert.Equal("Office hours shortened", (await ReadCurrentRevisionAsync(editorUrl)).Headline);
+        using var approved = await SaveAndApproveAsync(editorUrl, "Reworded after the concern", "The notice is cited.", [concern.GetAttribute("value")!]);
         Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        Assert.Equal("Reworded after the concern", (await ReadCurrentRevisionAsync(editorUrl)).Headline);
 
         editor = await host.GetDocumentAsync(editorUrl);
         Assert.Equal("Approved, private", editor.QuerySelector(".page-header .badge")!.TextContent);
@@ -322,12 +389,11 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         var reference = $"documentChange:{draftId}";
         await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars");
         var firstEditor = await host.GetDocumentAsync(draftUrl);
-        Assert.Equal("500", firstEditor.QuerySelector("textarea[name='Decision.CorrectionNote']")!.GetAttribute("maxlength"));
-        Assert.Contains("Publishes soon.", firstEditor.QuerySelector("#decision-controls .actions-hint")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal("500", firstEditor.QuerySelector("#draft-form textarea[name='Approval.CorrectionNote']")!.GetAttribute("maxlength"));
+        Assert.Contains("Publishes soon.", firstEditor.QuerySelector("#save-and-approve .actions-hint")!.TextContent, StringComparison.Ordinal);
         await ApproveAsync(draftUrl);
         var approvedEditor = await host.GetDocumentAsync(draftUrl);
-        Assert.Null(approvedEditor.QuerySelector("#decision-controls .actions-hint"));
-        Assert.Null(approvedEditor.QuerySelector("textarea[name='Decision.CorrectionNote']"));
+        Assert.Null(approvedEditor.QuerySelector("#decision-controls button[value='Approve']"));
         await PublishWithCliAsync("k1", reference);
 
         await SaveReadyRevisionAsync(draftUrl, "Fee rose to 12 dollars, effective now");
@@ -400,8 +466,9 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Null(editor.QuerySelector("#take-off-site"));
         Assert.Equal("This record is off the public site. It returns only when a person approves a newer revision with a correction note.",
             editor.QuerySelector("[aria-labelledby='decision'] #take-off-site-off")!.TextContent);
-        Assert.Equal("Approving this revision does not bring the record back. Only a newer revision can.",
-            editor.QuerySelector("#decision-controls .actions-hint")!.TextContent);
+        Assert.DoesNotContain("Publishes soon.", editor.QuerySelector("#save-and-approve .actions-hint")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal("This record is off the site. Saving with no edit does not bring it back. Change the wording to return it.",
+            editor.QuerySelector("#save-and-approve-off-site")!.TextContent.Trim());
         Assert.Equal([ReviewDecisionKind.Approve, ReviewDecisionKind.WithdrawApproval], await DecisionKindsAsync(draftId));
 
         using var repeated = await host.Client.PostAsync(draftUrl, new FormUrlEncodedContent(fields));
@@ -673,10 +740,26 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     private async Task ApproveAsync(string editorUrl)
     {
         var editor = await host.GetDocumentAsync(editorUrl);
-        var concerns = editor.QuerySelectorAll("input[name='Decision.ResolvedDecisionIds']").Select(box => box.GetAttribute("value")!);
-        using var approved = await DecideAsync(editorUrl, "Approve", "Checked again.", concerns);
+        var concerns = editor.QuerySelectorAll("input[name='Approval.ResolvedDecisionIds']").Select(box => box.GetAttribute("value")!);
+        using var approved = await SaveAndApproveAsync(editorUrl, null, "Checked again.", concerns);
         Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
     }
+
+    private async Task<HttpResponseMessage> SaveAndApproveAsync(string editorUrl, string? headline, string? note = null,
+        IEnumerable<string>? resolved = null)
+    {
+        var editor = await host.GetDocumentAsync(editorUrl);
+        var fields = Fields(editor.QuerySelector("#draft-form")!);
+        if (headline is not null) Set(fields, "Input.Headline", headline);
+        if (note is not null) Set(fields, "Approval.Note", note);
+        foreach (var id in resolved ?? []) fields.Add(new("Approval.ResolvedDecisionIds", id));
+        fields.Add(new("approve", "true"));
+        return await host.Client.PostAsync(editorUrl, new FormUrlEncodedContent(fields));
+    }
+
+    private async Task<DocumentChangeDraftRevision> ReadCurrentRevisionAsync(string editorUrl) =>
+        (await PostgresDocumentChangeReviewStore.FromConnectionString(host.ConnectionString)
+            .GetAsync(editorUrl[("/Review/".Length)..], default))!.CurrentRevision;
 
     private void FillCorrectionsToTheCap(string draftId)
     {

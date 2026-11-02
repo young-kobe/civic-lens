@@ -46,7 +46,7 @@ internal sealed class FakeRelationshipReviewStore : IRelationshipReviewStore
         throw new NotSupportedException();
 
     public Task<RelationshipRevision> SaveRevisionAsync(string actorSubject, RelationshipRevision revision, int expectedRevisionNumber,
-        string idempotencyKey, string payloadHash, CancellationToken cancellationToken) => throw new NotSupportedException();
+        ReviewDecision? approval, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
