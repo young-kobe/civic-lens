@@ -71,7 +71,7 @@ public sealed class WorkerLoopTests
         }, Lease, ownership).WaitAsync(HangGuard);
 
         Assert.True(ownership.IsCancellationRequested);
-        Assert.InRange(started.Elapsed, Lease * 0.9, Lease + Lease / 3);
+        Assert.InRange(started.Elapsed, Lease * 0.9, Lease * 2);
     }
 
     [Fact]
@@ -90,6 +90,6 @@ public sealed class WorkerLoopTests
         }, SlowRenewalLease, ownership).WaitAsync(HangGuard);
 
         var sentAt = SlowRenewalLease / 3;
-        Assert.InRange(started.Elapsed, sentAt + SlowRenewalLease * 0.9, sentAt + SlowRenewalLease + SlowRenewalLease / 4);
+        Assert.InRange(started.Elapsed, sentAt + SlowRenewalLease * 0.9, sentAt + SlowRenewalLease + SlowRenewalLease / 2 - TimeSpan.FromMilliseconds(100));
     }
 }

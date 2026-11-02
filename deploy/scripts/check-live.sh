@@ -37,10 +37,10 @@ wait_for_tunnel() {
   for url in "$site/" "$api/v1/release"; do
     for ((attempt = 1; attempt <= tunnel_wait_attempts; attempt++)); do
       status=$(status_of "$(fetch "$url")")
-      [[ $status != 530 ]] && continue 2
+      [[ -n $status && $status != 530 ]] && continue 2
       ((attempt < tunnel_wait_attempts)) && sleep "$tunnel_wait_seconds"
     done
-    echo "NOTE  $url still answers 530 after $((tunnel_wait_attempts * tunnel_wait_seconds)) seconds. The tunnel is not connected."
+    echo "NOTE  $url is not ready after $tunnel_wait_attempts attempts, $tunnel_wait_seconds seconds apart. The tunnel is not connected."
   done
 }
 
