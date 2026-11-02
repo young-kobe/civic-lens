@@ -42,7 +42,7 @@ public sealed class OfficialBoardPageTests
 
         Assert.Equal(119, page.Congress);
         Assert.Equal(["current"], page.Members.Select(member => member.Official.Profile.Id));
-        Assert.Equal((1, 1, 1), (page.WithoutVotes, page.InEarlierCongress, page.WithoutMajorParty));
+        Assert.Equal((1, 1, 1), (page.WithoutVotes, page.NotInCongress, page.WithoutMajorParty));
     }
 
     [Fact]
@@ -68,8 +68,8 @@ public sealed class OfficialBoardPageTests
 
         var house = pages.Single(page => page.Board == HouseDemocrats);
         var senate = pages.Single(page => page.Board == new OfficialBoard(PublishedChamber.Senate, PublishedPartyMajority.Democrat));
-        Assert.Equal((120, 1, 1), (house.Congress, house.InEarlierCongress, house.Members.Length));
-        Assert.Equal((119, 1, 1), (senate.Congress, senate.InEarlierCongress, senate.Members.Length));
+        Assert.Equal((120, 1, 1), (house.Congress, house.NotInCongress, house.Members.Length));
+        Assert.Equal((119, 1, 1), (senate.Congress, senate.NotInCongress, senate.Members.Length));
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public sealed class OfficialBoardPageTests
     }
 
     [Fact]
-    public void AnOfficialWithAttendanceInANewerCongressAndNoPartyVotesMovesTheChamberToThatCongressAndLeavesItsBoardsEmpty()
+    public void AnOfficialWithAttendanceInANewerCongressAndNoEarlierFiguresMovesTheChamberToThatCongressAndLeavesItsBoardsEmpty()
     {
         var attendanceOnly = new PublishedOfficialSummary
         {
@@ -130,7 +130,44 @@ public sealed class OfficialBoardPageTests
 
         Assert.Equal(120, page.Congress);
         Assert.Empty(page.Members);
-        Assert.Equal(1, page.InEarlierCongress);
+        Assert.Equal(1, page.NotInCongress);
+    }
+
+    [Fact]
+    public void ABoardKeepsTheEarlierCongressWhileNoMemberOfTheNewCongressHasEnoughSplitVotes()
+    {
+        var movedOn = Row("moved-on", 120, 24, 3, previous: Previous(119, 60, 6));
+        var stayed = Row("stayed", 119, 40, 4);
+
+        var page = PageOf(movedOn, stayed);
+
+        Assert.Equal(119, page.Congress);
+        Assert.Equal(["moved-on", "stayed"], page.Breakers.Select(member => member.Official.Profile.Id).Order());
+        Assert.Equal(60, page.Members.Single(member => member.Official.Profile.Id == "moved-on").Cast);
+        Assert.Equal(0, page.NotInCongress);
+    }
+
+    [Fact]
+    public void ABoardMovesToTheNewCongressWhenOneMemberReachesTheMinimumSplitVotes()
+    {
+        var below = Row("below", 120, MinimumMinusOne, 3, previous: Previous(119, 60, 6));
+        var reached = Row("reached", 120, OfficialBoardPage.MinimumSplitVotes, 3, previous: Previous(119, 60, 6));
+
+        Assert.Equal(119, PageOf(below).Congress);
+        var page = PageOf(below, reached);
+
+        Assert.Equal(120, page.Congress);
+        Assert.Equal(["below", "reached"], page.Members.Select(member => member.Official.Profile.Id));
+    }
+
+    [Fact]
+    public void AMemberNewToTheChamberHasNoFiguresInTheKeptCongressAndIsCountedAsLeftOut()
+    {
+        var page = PageOf(Row("moved-on", 120, 5, 1, previous: Previous(119, 60, 6)), Row("newcomer", 120, 5, 1));
+
+        Assert.Equal(119, page.Congress);
+        Assert.Equal(["moved-on"], page.Members.Select(member => member.Official.Profile.Id));
+        Assert.Equal(1, page.NotInCongress);
     }
 
     [Fact]
@@ -149,13 +186,23 @@ public sealed class OfficialBoardPageTests
     private static OfficialListing Listing(string id, string? name = null) => new(new PublishedOfficialProfile { Id = id, Name = name ?? id, Terms = [] }, 0);
 
     private static (OfficialListing, PublishedOfficialSummary) Row(string id, int congress, int cast, int breaks,
-        PublishedChamber chamber = PublishedChamber.House, string party = PublishedPartyMajority.Democrat, int missed = 1, int held = 100, string? name = null) =>
+        PublishedChamber chamber = PublishedChamber.House, string party = PublishedPartyMajority.Democrat, int missed = 1, int held = 100, string? name = null, PublishedVoteFigures? previous = null) =>
         (Listing(id, name), new PublishedOfficialSummary
         {
             Id = id,
             Congress = congress,
             CosponsoredBills = null,
             PartyVotes = [new PublishedPartyVoteSummary { Chamber = chamber, Party = party, SplitVotesCast = cast, Breaks = breaks }],
-            Attendance = [new PublishedAttendanceSummary { Chamber = chamber, Held = held, Missed = missed, First = new DateOnly(2025, 1, 3), Last = new DateOnly(2026, 10, 27) }]
+            Attendance = [new PublishedAttendanceSummary { Chamber = chamber, Held = held, Missed = missed, First = new DateOnly(2025, 1, 3), Last = new DateOnly(2026, 10, 27) }],
+            Previous = previous
         });
+
+    private const int MinimumMinusOne = OfficialBoardPage.MinimumSplitVotes - 1;
+
+    private static PublishedVoteFigures Previous(int congress, int cast, int breaks) => new()
+    {
+        Congress = congress,
+        PartyVotes = [new PublishedPartyVoteSummary { Chamber = PublishedChamber.House, Party = PublishedPartyMajority.Democrat, SplitVotesCast = cast, Breaks = breaks }],
+        Attendance = [new PublishedAttendanceSummary { Chamber = PublishedChamber.House, Held = 100, Missed = 1, First = new DateOnly(2023, 1, 3), Last = new DateOnly(2024, 12, 20) }]
+    };
 }

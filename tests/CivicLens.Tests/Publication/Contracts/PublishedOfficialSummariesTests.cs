@@ -31,12 +31,17 @@ public sealed class PublishedOfficialSummariesTests
         Row("mayor") with { PartyVotes = [Party(PublishedChamber.House, "Democrat", 12, 13)] },
         Row("mayor") with { PartyVotes = [Party(PublishedChamber.House, "Independent", 12, 3)] },
         Row("mayor") with { PartyVotes = [Party(PublishedChamber.House, "Democrat", 12, 3), Party(PublishedChamber.House, "Democrat", 5, 1)] },
-        Row("mayor") with { PartyVotes = [.. Enumerable.Repeat(Party(PublishedChamber.House, "Democrat", 1, 0), PublishedOfficialSummary.MaximumRows + 1)] },
+        Row("mayor") with { PartyVotes = [.. Enumerable.Repeat(Party(PublishedChamber.House, "Democrat", 1, 0), PublishedVoteFigures.MaximumRows + 1)] },
         Row("mayor") with { Attendance = [Attendance(PublishedChamber.House, 10, 11)] },
         Row("mayor") with { Attendance = [Attendance(PublishedChamber.House, PublishedOfficialVotes.MaximumVotes + 1, 0)] },
         Row("mayor") with { Attendance = [Attendance(PublishedChamber.House, 10, 2) with { First = new(2025, 6, 1), Last = new(2025, 1, 1) }] },
         Row("mayor") with { Attendance = [Attendance(PublishedChamber.House, 10, 2), Attendance(PublishedChamber.House, 5, 1)] },
-        Row("mayor") with { PartyVotes = null! }
+        Row("mayor") with { PartyVotes = null! },
+        Row("mayor") with { Previous = Figures(119) },
+        Row("mayor") with { Previous = Figures(120) },
+        Row("mayor") with { Previous = Figures(0) },
+        Row("mayor") with { Previous = Figures(118) with { PartyVotes = [Party(PublishedChamber.House, "Democrat", 12, 13)] } },
+        Row("mayor") with { Congress = null, Previous = Figures(118) }
     };
 
     [Theory]
@@ -44,6 +49,21 @@ public sealed class PublishedOfficialSummariesTests
     public void ARowIsBoundedAndConsistentSoARankingNeverReadsANumberThatCannotBeTrue(PublishedOfficialSummary row)
     {
         Assert.Throws<InvalidDataException>(new PublishedOfficialSummaries { Officials = [row] }.Validate);
+    }
+
+    [Fact]
+    public void AnOlderPreviousCongressKeepsItsFiguresThroughAJsonRoundTripAndAMissingOneReadsAsNoData()
+    {
+        var file = new PublishedOfficialSummaries { Officials = [Row("mayor") with { Previous = Figures(118) }, Row("chair")] };
+
+        var read = JsonSerializer.Deserialize<PublishedOfficialSummaries>(
+            JsonSerializer.Serialize(file, PublicationProtocol.JsonOptions), PublicationProtocol.JsonOptions)!;
+        read.Validate();
+
+        Assert.Equal(7, read.Officials[0].FiguresIn(118)!.PartyVotes[0].SplitVotesCast);
+        Assert.Equal(12, read.Officials[0].FiguresIn(119)!.PartyVotes[0].SplitVotesCast);
+        Assert.Null(read.Officials[0].FiguresIn(117));
+        Assert.Null(read.Officials[1].Previous);
     }
 
     [Fact]
@@ -87,6 +107,9 @@ public sealed class PublishedOfficialSummariesTests
         PartyVotes = [Party(PublishedChamber.House, "Democrat", 12, 3)],
         Attendance = [Attendance(PublishedChamber.House, 40, 2)]
     };
+
+    private static PublishedVoteFigures Figures(int congress) =>
+        new() { Congress = congress, PartyVotes = [Party(PublishedChamber.House, "Democrat", 7, 1)], Attendance = [Attendance(PublishedChamber.House, 30, 1)] };
 
     private static PublishedPartyVoteSummary Party(PublishedChamber chamber, string party, int cast, int breaks) =>
         new() { Chamber = chamber, Party = party, SplitVotesCast = cast, Breaks = breaks };

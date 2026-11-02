@@ -121,6 +121,24 @@ public sealed class PublishOfficialPagesTests
     }
 
     [Fact]
+    public async Task TheSummaryRowOfAnOfficialWithTwoCongressesHoldsThePreviousCongressSoABoardCanKeepShowingItAndAOneCongressRowHoldsNone()
+    {
+        var scenario = new PublicationScenario();
+        var older = scenario.AddVote('a', congress: 118);
+        var newer = scenario.AddVote('b');
+        var chairOnly = scenario.AddVote('c', memberIds: ["chair"]);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
+            new PublishedRecordReference(PublishedRecordKind.Vote, older), new PublishedRecordReference(PublishedRecordKind.Vote, newer),
+            new PublishedRecordReference(PublishedRecordKind.Vote, chairOnly)));
+
+        var rows = JsonSerializer.Deserialize<PublishedOfficialSummaries>(
+            scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.OfficialSummariesPath], PublicationProtocol.JsonOptions)!.Officials.ToDictionary(row => row.Id);
+        Assert.Equal((119, 118), (rows["mayor"].Congress, rows["mayor"].Previous?.Congress));
+        Assert.Null(rows["chair"].Previous);
+    }
+
+    [Fact]
     public async Task WhenTheNewestCongressEmptiesTheNextOlderCongressBecomesCurrentAndItsPastPageIsDropped()
     {
         var scenario = new PublicationScenario();

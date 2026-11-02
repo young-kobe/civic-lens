@@ -70,8 +70,8 @@ internal static class PublishedBoardView
     {
         if (page.WithoutVotes > 0)
             yield return $"{page.WithoutVotes} {PublishedOfficialView.Noun(page.WithoutVotes, "official")} with no vote figures in this release.";
-        if (page.InEarlierCongress > 0)
-            yield return $"{page.InEarlierCongress} {PublishedOfficialView.Noun(page.InEarlierCongress, "official")} whose newest vote figures are in an earlier Congress.";
+        if (page.NotInCongress > 0 && page.Congress is { } congress)
+            yield return $"{page.NotInCongress} {PublishedOfficialView.Noun(page.NotInCongress, "official")} with no vote figures in the {CongressCalendar.Ordinal(congress)} Congress.";
         if (page.WithoutMajorParty > 0)
             yield return $"{page.WithoutMajorParty} {PublishedOfficialView.Noun(page.WithoutMajorParty, "official")} with vote figures in this Congress but no {PublishedPartyMajority.Democrat} or {PublishedPartyMajority.Republican} party on their votes, so no party majority applies.";
         yield return "Members of the other party. They are on the other page for this chamber.";

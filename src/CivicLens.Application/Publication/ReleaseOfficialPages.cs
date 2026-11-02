@@ -128,7 +128,8 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         await WriteAsync(staging, PublicationProtocol.OfficialPagePath(profile.Id), await renderer.RenderOfficialAsync(
             new(profile, tracked, current, true, newestFirst, entries, currentRows, publishedAtUtc, talkAndAction,
                 current is { } newestCongress ? LinkedPair.In(profile.Id, newestCongress, entries, release, currentRows) : []), catalog, cancellationToken), cancellationToken);
-        return ReleaseOfficialSummaries.Of(profile.Id, current, talkAndAction);
+        var previousFigures = newestFirst.Length > 1 ? ReleaseOfficialSummaries.FiguresOf(newestFirst[1], await RowsAsync(newestFirst[1])) : null;
+        return ReleaseOfficialSummaries.Of(profile.Id, current, talkAndAction, previousFigures);
     }
 
     private static Task WriteAsync(IReleaseStaging staging, string path, string html, CancellationToken cancellationToken) =>

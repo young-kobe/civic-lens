@@ -48,6 +48,15 @@ public sealed class PublishedBoardPageTests
     }
 
     [Fact]
+    public async Task TheLeftOutPanelNamesTheCongressOfTheFiguresSoAReaderKnowsWhichOfficialsAreNotInIt()
+    {
+        var document = await RenderAsync(new OfficialBoardPage(Board, 118, [], 0, 2, 0));
+
+        Assert.Contains("Three lists of the House Democrats in the 118th Congress.", document.QuerySelector("main")!.TextContent);
+        Assert.Contains("2 officials with no vote figures in the 118th Congress.", document.QuerySelector("[aria-labelledby='panel-what-this-page-leaves-out']")!.TextContent);
+    }
+
+    [Fact]
     public async Task APageWithNoCongressSaysSoAndStillListsWhatItLeavesOut()
     {
         var document = await RenderAsync(new OfficialBoardPage(Board, null, [], 8, 0, 0));
