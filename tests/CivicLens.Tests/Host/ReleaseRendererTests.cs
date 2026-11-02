@@ -158,6 +158,23 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task SearchPageTellsTheReaderWhatToTypeAndShowsTheJavaScriptNoticeBeforeTheFormBecauseTheFormIsHiddenWithoutScript()
+    {
+        var html = await new ReleaseRenderer("https://api.example.test", null).RenderSearchAsync(ReleaseWithFilters(), SearchFacets(), CancellationToken.None);
+        var document = new HtmlParser().ParseDocument(html);
+
+        Assert.Equal("Type a topic or a bill number, or choose an official above.", document.QuerySelector("form [data-search-hint]")!.TextContent);
+        Assert.True(document.QuerySelector("form [data-search-none]")!.HasAttribute("hidden"));
+        Assert.Equal(2, document.QuerySelectorAll("form [data-search-none] a").Length);
+        var noscriptStart = html.IndexOf("<noscript>", StringComparison.Ordinal);
+        var noscriptEnd = html.IndexOf("</noscript>", StringComparison.Ordinal);
+        var notice = html.IndexOf("Search needs JavaScript", StringComparison.Ordinal);
+        Assert.True(noscriptStart >= 0);
+        Assert.InRange(notice, noscriptStart, noscriptEnd);
+        Assert.True(noscriptEnd < html.IndexOf("<form", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task SearchPageWithoutAServiceAddressSaysThatSearchIsNotAvailableAndShowsNoForm()
     {
         var html = await new ReleaseRenderer(null, null).RenderSearchAsync(ReleaseWithFilters(), SearchFacets(), CancellationToken.None);
