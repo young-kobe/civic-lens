@@ -8,6 +8,7 @@ using CivicLens.Core.Review;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Layout;
 using CivicLens.Host.Components.Ui;
+using CivicLens.Host.Publication;
 using CivicLens.Host.Review;
 using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
@@ -31,7 +32,7 @@ public sealed partial class ActionEditor
     private ActionDraftRevision Revision => detail!.Review.CurrentRevision;
 
     private IReadOnlyList<Crumb> Crumbs =>
-        [new("Review", "/Review"), new(detail is not null ? Revision.Headline : notFound ? "Action not found" : "Action")];
+        [new("Review", "/Review"), new(detail is not null ? Revision.Headline : notFound ? "Bill or resolution not found" : PublishedRecordLabels.Kind(PublishedRecordKind.Action))];
 
     private IReadOnlyList<TabDefinition> RecordTabs =>
         [new("saved", $"Saved revision {Revision.RevisionNumber}"), new("edit", "Edit wording")];
