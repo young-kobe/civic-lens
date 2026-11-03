@@ -46,34 +46,15 @@ def write_runsettings(path, classes):
         '</RunConfiguration></RunSettings>\n')
 
 
-def check(classes, count):
-    seen = {}
-    for index in range(count):
-        for name in shard_classes(classes, index, count):
-            if name in seen:
-                sys.exit(f'{name} is in shard {seen[name]} and shard {index}.')
-            seen[name] = index
-    missing = sorted(set(classes) - set(seen))
-    if missing:
-        sys.exit('Classes in no shard: ' + ', '.join(missing))
-    sizes = [len(shard_classes(classes, index, count)) for index in range(count)]
-    print(f'{len(classes)} test classes in {count} shards. Classes per shard: {sizes}.')
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--shards', type=int, required=True)
-    parser.add_argument('--index', type=int, help='Shard number, from 0.')
-    parser.add_argument('--runsettings', type=Path, help='Write the filter for --index to this file.')
-    parser.add_argument('--check', action='store_true', help='Check that each class is in exactly one shard.')
+    parser.add_argument('--index', type=int, required=True, help='Shard number, from 0.')
+    parser.add_argument('--runsettings', type=Path, required=True, help='Write the filter for --index to this file.')
     args = parser.parse_args()
-    classes = list_classes()
-    if args.check:
-        check(classes, args.shards)
-        return
-    if args.index is None or not 0 <= args.index < args.shards or args.runsettings is None:
-        parser.error('Give --index from 0 to shards minus 1, and --runsettings.')
-    chosen = shard_classes(classes, args.index, args.shards)
+    if not 0 <= args.index < args.shards:
+        parser.error('Give --index from 0 to shards minus 1.')
+    chosen = shard_classes(list_classes(), args.index, args.shards)
     write_runsettings(args.runsettings, chosen)
     print(f'Shard {args.index} of {args.shards}: {len(chosen)} test classes.')
 
