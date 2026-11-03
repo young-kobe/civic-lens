@@ -680,6 +680,21 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- vo
 
 `status` prints one JSON object. Its `queue` field holds the daily limit, any pause, `chargedToday`, and `counts` for each outcome. Its `waitingForBill` field is the number of votes on a bill that wait for the bill detail and have no queue row yet. `list` takes `drafted`, `unchanged`, `superseded`, `no-member`, `pending`, or `failed`, and a limit up to 500 (default 100). `requeue` moves Failed and no other rows back to Pending. `requeue --blocked --code <block-code>` moves Blocked rows with that code back to Pending. Fix the cause first, or the entry blocks again. The code is required. Use a code from the [outcomes](architecture/votes.md#outcomes) table. A mistyped code requeues nothing and prints `{"requeued":0}`. `redraft` moves drafted and unchanged rows of votes on a bill with an older prompt version back to Pending. It prints the count of entries, not roll calls. Older entries of a stale roll call count too and settle as superseded. The newest drafted run of the roll call decides. A vote with no bill never moves. A redraft can write new revisions. Code approval of a new revision can queue relationship pairs, and a queued pair can cost a model call. An approved link that cites the old revision shows "cited records changed" and needs a person. A vote redraft requeues no brief, because briefs cannot cite votes. The worker then drafts each requeued vote again, because its newest draft used an older prompt. The daily limit bounds the spend. A second run of the command requeues nothing. A vote whose text a person wrote, or that has an open concern or a withdrawn approval, is skipped. A vote on an older prompt that is collected again, corrected, or requeued also drafts again with no command, once for each stale roll call. A Failed redraft keeps the old text, and only `votes draft requeue` retries it. Code approves new model text when the checks pass, and the next publish replaces the published text, so no publish option is needed. The model also chooses the issues again, so they can change. Each replaced vote gains a public correction entry. It reads "Summary rewritten by the AI model" when only the headline or the summary changed. After the command, let the worker draft within its daily limit. The worker makes the paid calls, not the command. A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
 
+### Vote revision backfill
+
+R-63 pilot step 2 moves old vote revisions into columns and child rows. A revision written by current code already has them. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes revisions backfill 500
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes revisions verify
+```
+
+`backfill <limit>` moves at most `limit` legacy revisions. It walks the table in key order in batches of 25. It stops when it reaches the limit or the end of the table, and a skipped row does not count against the limit. Each batch is one short transaction that holds the vote review lock, so reviewers and the worker wait for one batch at most. For each row it writes the columns, reads the row back, rebuilds the revision, and compares it to the stored JSON. A row that differs is skipped with `RebuildMismatch`. It prints `examined`, `moved`, `skipped`, `skippedByReason` (a count for each reason), and the first 50 skipped revisions as record ID, revision number, and reason. A skipped row is not changed. The JSON of every revision stays as it is. A rerun moves nothing that it moved before. The exit code is 1 when any row was skipped, and the counts still print. The [votes doc](architecture/votes.md#invariants) lists the reasons.
+
+`verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. It prints `checked`, `legacy`, `mismatched`, and the first 20 mismatches as record ID, revision number, and JSON key names. It never prints text. The exit code is 1 while `legacy` or `mismatched` is above 0. One absence passes: a missing `source` key on a revision of the source `congress-house-votes`. Any other difference fails.
+
+Run order: `backfill`, then `verify`. Step 3 of the pilot starts only when `verify` exits 0, so `legacy` and `mismatched` are both 0. Production held 1,717 revisions when the pilot was measured, so expect shared member lists.
+
 ## Relationship drafting
 
 The `worker` command drafts one relationship for each pair of an approved statement and an approved action or vote that share an official and a bill. [Statements](architecture/statements.md#relationship-drafting) holds the rules. Relationship drafting runs when both required variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. The names of the officials come from the collection configuration of the worker.
@@ -724,6 +739,27 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- br
 `redraft` queues the week if it has no entry. It moves a Succeeded, Blocked, or Failed entry back to Pending. It also works for a week before the first brief week. The date must be a Monday, and the week must have ended. The command prints `{"requeued":1}` when it queued or moved the entry, and `{"requeued":0}` when the entry is already Pending, Running, or waiting. The step settles as `unchanged` when the records of the week and their revisions in the active release have not changed since the last brief; see [staleness](architecture/briefs.md#staleness). A paused or waiting stage follows the same table as document-change drafting: fix the key or the credit and restart the worker, or wait for the next UTC day.
 
 The [live test](#verification) for brief drafting sends one paid request.
+
+### Brief checking
+
+The `worker` command also checks the current revision of each brief when both required variables below are set. The check gives advice only. [Briefs](architecture/briefs.md#brief-check) holds the rules. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. With no limit, the check stays off and no call is made. Entries still queue, so the first start with a limit set checks each queued brief.
+
+| Variable | Meaning |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
+| `CIVIC_LENS_BRIEF_CHECKING_DAILY_TOKENS` | Daily token limit for brief check calls, per UTC day. It is separate from the other limits. |
+| `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
+
+The check uses Claude Sonnet 5.5. No automated test sends a paid request for it.
+
+No page shows a failed or blocked check yet. Run this query to list them:
+
+```sql
+SELECT record_id, week_start, status, error_code, attempts
+FROM brief_analysis
+WHERE task = 'brief-check' AND status IN ('Failed', 'Blocked')
+ORDER BY week_start DESC;
+```
 
 ### Member roster
 
@@ -1179,7 +1215,7 @@ The installer refuses a checkout that anyone other than root can write, because 
 
 Every result that an agent reads goes to its model vendor, so add a column to the hidden list before it holds private text.
 
-**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
+**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `votes revisions backfill`, `votes revisions verify`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
 
 `deploy` takes a full commit SHA on `origin/main` that is the checkout or newer. The scripts of that commit run as root, and a migration has no undo, so a rollback stays with the owner. It checks out the commit, runs `update.sh`, and runs `check-live.sh`. A merge to `main` is therefore the real approval. GitHub does not stop the agent from merging, because it uses the owner's token. Only the agent rules and the Claude Code permissions stop it.
 

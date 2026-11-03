@@ -611,7 +611,7 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("SELECT week_start FROM brief_analysis ORDER BY week_start", connection);
+        await using var command = new NpgsqlCommand("SELECT week_start FROM brief_analysis WHERE task = 'brief-draft' ORDER BY week_start", connection);
         await using var reader = await command.ExecuteReaderAsync();
         var weeks = new List<DateOnly>();
         while (await reader.ReadAsync()) weeks.Add(reader.GetFieldValue<DateOnly>(0));
@@ -622,7 +622,7 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("SELECT status, error_code FROM brief_analysis WHERE week_start = @week", connection);
+        await using var command = new NpgsqlCommand("SELECT status, error_code FROM brief_analysis WHERE week_start = @week AND task = 'brief-draft'", connection);
         command.Parameters.AddWithValue("week", week);
         await using var reader = await command.ExecuteReaderAsync();
         await reader.ReadAsync();

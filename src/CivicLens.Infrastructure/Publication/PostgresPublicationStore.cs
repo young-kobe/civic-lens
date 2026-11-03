@@ -34,7 +34,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
     private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue;
 
     public PostgresPublicationStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-        : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping())) { }
+        : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping(contextFactory))) { }
 
     private PostgresPublicationStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
         PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue)

@@ -44,11 +44,12 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
 
     /// <summary>Saves a revision. With an approval, the same transaction then approves the saved revision with every check of a
     /// separate decision. A failed check rolls the saved revision back. When the input equals the current revision, no revision is
-    /// written and the approval binds to the current one. That refuses when the current revision is already approved.</summary>
+    /// written and the approval binds to the current one. That refuses when the current revision is already approved. The
+    /// <paramref name="afterAppend"/> hook runs only when the save appends a revision.</summary>
     public async Task<TRevision> SaveRevisionAsync(IDbContextFactory<CollectionAttemptDbContext> contextFactory, string actorSubject,
         TRevision revision, int expectedRevisionNumber, string operation, string idempotencyKey, string payloadHash,
         Func<CollectionAttemptDbContext, TDraftRow, TRevision, Task<TRevision>> prepareAndList, Func<TRevision, TRevisionRow> toRow,
-        ApprovalAfterSave? approval, CancellationToken cancellationToken)
+        Func<CollectionAttemptDbContext, TRevision, Task>? afterAppend, ApprovalAfterSave? approval, CancellationToken cancellationToken)
     {
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
         ArgumentNullException.ThrowIfNull(revision);
@@ -71,6 +72,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
                 return current;
             }
             AppendRevision(db, draft, saved, toRow(saved), cycle);
+            if (afterAppend is not null) await afterAppend(db, saved);
             if (approval is null) return saved;
             await db.SaveChangesAsync(cancellationToken);
             await ApproveSavedAsync(db, approval, cancellationToken);

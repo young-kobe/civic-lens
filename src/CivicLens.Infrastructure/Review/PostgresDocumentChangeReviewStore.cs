@@ -35,7 +35,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
     private readonly Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision;
 
     public PostgresDocumentChangeReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-        : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping())) { }
+        : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping(contextFactory))) { }
 
     private PostgresDocumentChangeReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
         PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue)
@@ -82,7 +82,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
                     ?? throw new ArgumentException("Drafts must reference a complete comparison containing a text change.", nameof(revision));
                 ValidateRevisionAgainstEvidence(saved, verified);
                 return saved;
-            }, NewRevisionRow,
+            }, NewRevisionRow, null,
             approval is null ? null : new(approval,
                 (_, draft, history) =>
                 {
