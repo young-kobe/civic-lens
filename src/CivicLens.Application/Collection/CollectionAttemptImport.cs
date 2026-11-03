@@ -9,15 +9,17 @@ public sealed class CollectionAttemptImport
     private readonly CollectionImportPolicy policy = new();
 
     internal CollectionAttemptImport(CollectionAttemptResult attemptResult, SentValidators? sentValidators,
-        DiscoveryEvidence? discovery = null, long? robotsCrawlDelayMilliseconds = null)
+        DiscoveryEvidence? discovery = null, long? robotsCrawlDelayMilliseconds = null, AttemptTransfer? transfer = null)
     {
         AttemptResult = attemptResult;
         SentValidators = sentValidators;
         Discovery = discovery;
         RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds;
+        Transfer = transfer;
     }
 
     public long? RobotsCrawlDelayMilliseconds { get; }
+    public AttemptTransfer? Transfer { get; }
     public CollectionAttemptResult AttemptResult { get; }
     public SentValidators? SentValidators { get; }
     public DiscoveryEvidence? Discovery { get; }

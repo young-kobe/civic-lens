@@ -77,7 +77,7 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
                     await RetainCaptureAsync(db, captured.Capture, cancellationToken);
                     await db.SaveChangesAsync(cancellationToken);
                 }
-                db.Attempts.Add(ToRow(decision.AttemptResult, decision.PriorCapturedAttempt, decision.SentValidators, attempt.RobotsCrawlDelayMilliseconds));
+                db.Attempts.Add(ToRow(decision.AttemptResult, decision.PriorCapturedAttempt, decision.SentValidators, attempt.RobotsCrawlDelayMilliseconds, attempt.Transfer));
                 if (attempt.Discovery is { } discovery)
                     db.Add(new DiscoveryRow
                     {
@@ -161,7 +161,8 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
         var discovery = discoveryRow is null ? null : new DiscoveryEvidence(
             JsonSerializer.Deserialize<CollectionRequest>(discoveryRow.RequestJson, CollectionProtocol.JsonOptions)!,
             JsonSerializer.Deserialize<DiscoveryResult>(discoveryRow.DiscoveryJson, CollectionProtocol.JsonOptions)!);
-        return new StoredCollectionAttempt(result, row.HasSentValidators ? ReadSentValidators(row) : null, prior, discovery, row.RobotsCrawlDelayMilliseconds);
+        return new StoredCollectionAttempt(result, row.HasSentValidators ? ReadSentValidators(row) : null, prior, discovery,
+            row.RobotsCrawlDelayMilliseconds, ReadTransfer(row));
     }
 
     internal static async Task<IReadOnlyList<StoredCollectionAttempt>> ReadEvidenceAsync(CollectionAttemptDbContext db,
@@ -195,17 +196,19 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
                     ?? throw new InvalidOperationException("Stored prior evidence is not a captured attempt.");
             evidence.Add(new StoredCollectionAttempt(results[row.AttemptId],
                 row.HasSentValidators ? ReadSentValidators(row) : null, prior,
-                robotsCrawlDelayMilliseconds: row.RobotsCrawlDelayMilliseconds));
+                robotsCrawlDelayMilliseconds: row.RobotsCrawlDelayMilliseconds, transfer: ReadTransfer(row)));
         }
         return evidence;
     }
 
     private static AttemptRow ToRow(CollectionAttemptResult result, CapturedAttemptResult? prior,
-        SentValidators? validators, long? robotsCrawlDelayMilliseconds)
+        SentValidators? validators, long? robotsCrawlDelayMilliseconds, AttemptTransfer? transfer)
     {
         var row = new AttemptRow
         {
             RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds,
+            RequestCount = transfer?.RequestCount,
+            BytesReceived = transfer?.BytesReceived,
             AttemptId = result.AttemptId,
             SourceId = result.SourceId,
             RequestedUrl = result.RequestedUrl,
@@ -277,6 +280,9 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
     private static CollectionResponse ReadResponse(AttemptRow row) => new(row.ResponseStatusCode!.Value,
         row.ResponseETag, FromUtcTicks(row.ResponseLastModifiedUtcTicks), row.ResponseContentType,
         row.ResponseContentEncodings!);
+
+    private static AttemptTransfer? ReadTransfer(AttemptRow row) => row.RequestCount is { } requests
+        ? new AttemptTransfer(requests, row.BytesReceived!.Value) : null;
 
     private static SentValidators ReadSentValidators(AttemptRow row) => new(row.SentETag,
         FromUtcTicks(row.SentLastModifiedUtcTicks));

@@ -10,9 +10,8 @@ public sealed record CollectionJobCharges(int Requests, long Bytes, int TimeoutS
         var timeoutSeconds = 0;
         foreach (var attempt in attempts)
         {
-            var receipt = attempt.Resolution?.Receipt;
-            requests += receipt?.RequestCount ?? attempt.Request.MaxRequests;
-            bytes += receipt?.BytesReceived ?? attempt.Request.MaxBytes;
+            requests += attempt.Transfer?.RequestCount ?? attempt.Request.MaxRequests;
+            bytes += attempt.Transfer?.BytesReceived ?? attempt.Request.MaxBytes;
             timeoutSeconds += attempt.Request.TimeoutSeconds;
         }
         return new(requests, bytes, timeoutSeconds);

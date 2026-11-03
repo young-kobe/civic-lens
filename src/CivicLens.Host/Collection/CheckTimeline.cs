@@ -1,6 +1,8 @@
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
+using CivicLens.Core.Collection;
 using CivicLens.Host.Components.Ui;
 
 namespace CivicLens.Host.Collection;
@@ -27,12 +29,14 @@ public static class CheckTimeline
 
     public static IReadOnlyList<FeedItem> Build(CollectionJobRecord job,
         IReadOnlyDictionary<string, StoredCollectionAttempt> retained) =>
-        job.Attempts.Reverse().Select(attempt => new FeedItem(Describe(attempt, retained.GetValueOrDefault(attempt.AttemptId)),
-            attempt.CompletedAt ?? attempt.StartedAt, ToneOf(attempt, retained.ContainsKey(attempt.AttemptId)))).ToArray();
+        job.Attempts.Reverse().Select(attempt => ToItem(attempt, retained.GetValueOrDefault(attempt.AttemptId))).ToArray();
+
+    private static FeedItem ToItem(CollectionJobAttempt attempt, StoredCollectionAttempt? retained) =>
+        new(Describe(attempt, retained), attempt.CompletedAt ?? attempt.StartedAt, ToneOf(attempt, retained));
 
     private static string Describe(CollectionJobAttempt attempt, StoredCollectionAttempt? retained)
     {
-        if (attempt.Resolution?.Receipt is { } receipt) return Describe(receipt);
+        if (retained is { Transfer: { } transfer }) return Describe(retained, transfer);
         if (retained is not null)
             return $"Saved evidence is kept, but the transfer receipt is missing. Observed {Moment.Full(retained.AttemptResult.ObservedAt)}.";
         if (attempt.Resolution is null) return "No result yet. The check may still be running or waiting to recover.";
@@ -40,30 +44,41 @@ public static class CheckTimeline
         return $"No transfer receipt is available. Open the saved versions to find any kept evidence.{recorded}";
     }
 
-    private static string Describe(CollectionResult receipt)
+    private static string Describe(StoredCollectionAttempt retained, AttemptTransfer transfer)
     {
-        var requests = receipt.RequestCount == 1 ? "1 request" : $"{receipt.RequestCount} requests";
-        var summary = receipt.Outcome switch
+        var requests = transfer.RequestCount == 1 ? "1 request" : $"{transfer.RequestCount} requests";
+        var summary = retained.AttemptResult switch
         {
-            CollectionOutcome.Captured when receipt.Discovery is { } discovery => $"Listing saved with {discovery.Urls.Length} links found{Skipped(discovery)}",
-            CollectionOutcome.Captured => "Page saved",
-            CollectionOutcome.NotModified => "The site reported no change since the last saved version",
-            CollectionOutcome.Deferred => "Check put off",
+            CapturedAttemptResult when retained.Discovery is { } discovery => $"Listing saved with {discovery.Urls.Length} links found{Skipped(discovery)}",
+            CapturedAttemptResult => "Page saved",
+            NotModifiedAttemptResult => "The site reported no change since the last saved version",
+            DeferredAttemptResult => "Check put off",
             _ => "Check failed"
         };
-        if (receipt.FailureCode is not { } failure) return $"{summary} after {requests}.";
-        return $"{summary}: {Failures.GetValueOrDefault(failure, "the response could not be used")}. {CoverageGap}";
+        if (FailureCodeOf(retained.AttemptResult) is not { } failure) return $"{summary} after {requests}.";
+        return $"{summary}: {FailureText(failure)}. {CoverageGap}";
     }
 
-    private static string Skipped(DiscoveryResult discovery) =>
+    private static string? FailureCodeOf(CollectionAttemptResult result) => result switch
+    {
+        FailedAttemptResult failed => failed.FailureCode,
+        DeferredAttemptResult deferred => deferred.FailureCode,
+        _ => null
+    };
+
+    private static string FailureText(string failureCode) =>
+        Enum.TryParse<CollectionFailureCode>(failureCode, out var failure) && Failures.TryGetValue(failure, out var text)
+            ? text : "the response could not be used";
+
+    private static string Skipped(DiscoveryEvidence discovery) =>
         discovery.OutOfScopeCount > 0 ? $" and {discovery.OutOfScopeCount} outside the source scope skipped" : "";
 
-    private static Tone ToneOf(CollectionJobAttempt attempt, bool retained) => attempt.Resolution switch
+    private static Tone ToneOf(CollectionJobAttempt attempt, StoredCollectionAttempt? retained) => (attempt.Resolution, retained?.AttemptResult) switch
     {
-        null => Tone.Live,
-        { Receipt: { FailureCode: not null, Outcome: CollectionOutcome.Deferred } } => Tone.Warn,
-        { Receipt.FailureCode: not null } => Tone.Bad,
-        { Receipt: not null } => Tone.Ok,
-        _ => retained ? Tone.Ok : Tone.Warn
+        (null, _) => Tone.Live,
+        (_, DeferredAttemptResult) => Tone.Warn,
+        (_, FailedAttemptResult) => Tone.Bad,
+        (_, not null) => Tone.Ok,
+        _ => Tone.Warn
     };
 }

@@ -756,7 +756,7 @@ public sealed class JobPreparationTests
             Backfill, CollectionJobPriority.Check);
         if (resource is null) definition = definition with { ApiResource = null };
         var attempt = new CollectionJobAttempt("attempt", definition.CreateRequest("job", Path.GetFullPath("captures")),
-            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
             false, [attempt]);
         var (jobs, bodyOf) = resource switch
@@ -778,7 +778,7 @@ public sealed class JobPreparationTests
             var definition = configured.CreateApiJobDefinition(resource, VoteviewUrl.File(configured.SourceUrl, resource, 119), Backfill,
                 CollectionJobPriority.Check);
             var attempt = new CollectionJobAttempt("attempt-" + id, definition.CreateRequest(id, Path.GetFullPath("captures")),
-                new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
+                new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
             return new CollectionJobRecord(id, definition, key, CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null, false, [attempt]);
         }
         var rollCalls = Job("rollcalls-job", ApiResource.VoteviewRollCalls, "scheduled-check/x/1");
@@ -801,7 +801,7 @@ public sealed class JobPreparationTests
         var bills = new ConfiguredCollectionSource(BillTextFixtures.Configuration(), "congress-bills", Backfill);
         var definition = bills.CreateApiJobDefinition(ApiResource.BillTextVersions, BillTextFixtures.VersionsUrl, Backfill, CollectionJobPriority.Check);
         var attempt = new CollectionJobAttempt("attempt-versions-job", definition.CreateRequest("versions-job", Path.GetFullPath("captures")),
-            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         var versionsJob = new CollectionJobRecord("versions-job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null, false, [attempt]);
         var textJob = text with { IdempotencyKey = BillStreamJobKeys.BillText(BillTextFixtures.SourceId, versionsJob.JobId) };
         byte[] BodyOf(string attemptId) => attemptId == attempt.AttemptId ? Encoding.UTF8.GetBytes(versionsBody) : textBody;

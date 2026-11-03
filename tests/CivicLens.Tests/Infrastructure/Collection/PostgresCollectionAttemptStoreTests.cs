@@ -49,6 +49,24 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
     }
 
     [Fact]
+    public async Task AnImportedReceiptKeepsItsMeasuredTransferBecauseJobChargesAndTheTimelineReadItFromTheAttempt()
+    {
+        var request = CollectionFixtures.Request();
+        var receipt = CollectionFixtures.Receipt(request) with
+        {
+            Outcome = CollectionOutcome.Failed,
+            Capture = null,
+            FailureCode = CollectionFailureCode.HttpError,
+            RequestCount = 3,
+            BytesReceived = 77
+        };
+
+        await CollectionAttemptImporter.ImportAsync("attempt", request, receipt, store, default);
+
+        Assert.Equal(new AttemptTransfer(3, 77), (await store.GetAsync("attempt", default))!.Transfer);
+    }
+
+    [Fact]
     public async Task MigrationsCreateTheHandWrittenObjects()
     {
         string[] indexes =

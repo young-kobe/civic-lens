@@ -58,7 +58,7 @@ public sealed class CollectionWorkspace
         var progress = await ReadProgressAsync(listed.Concat(latest), cancellationToken);
         var retained = selected is null
             ? new Dictionary<string, StoredCollectionAttempt>(StringComparer.Ordinal)
-            : await ReadReceiptlessAttemptsAsync(selected, cancellationToken);
+            : await ReadRetainedAttemptsAsync(selected, cancellationToken);
         return new CollectionWorkspaceSources(recentJobs, selected, retained, SourceHealthResolver.ByJob(listed, progress),
             SourceHealthResolver.Report(sourceIds, latest, progress), page.NewerCursor, page.OlderCursor);
     }
@@ -69,12 +69,11 @@ public sealed class CollectionWorkspace
             ?? await jobs.GetAsync(jobId, cancellationToken)
             ?? throw new ArgumentException("Collection job was not found.");
 
-    private async Task<Dictionary<string, StoredCollectionAttempt>> ReadReceiptlessAttemptsAsync(CollectionJobRecord job,
+    private async Task<Dictionary<string, StoredCollectionAttempt>> ReadRetainedAttemptsAsync(CollectionJobRecord job,
         CancellationToken cancellationToken)
     {
         var retained = new Dictionary<string, StoredCollectionAttempt>(StringComparer.Ordinal);
-        var attemptIds = job.Attempts.Where(item => item.Resolution?.Receipt is null)
-            .Select(item => item.AttemptId).Distinct(StringComparer.Ordinal);
+        var attemptIds = job.Attempts.Select(item => item.AttemptId).Distinct(StringComparer.Ordinal);
         foreach (var attemptId in attemptIds)
         {
             var attempt = await attempts.GetAsync(attemptId, cancellationToken);

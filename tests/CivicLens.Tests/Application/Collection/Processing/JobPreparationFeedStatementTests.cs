@@ -75,7 +75,7 @@ public sealed class JobPreparationFeedStatementTests
         var definition = new ConfiguredCollectionSource(CollectionConfigurationRevision.Create(configuration), "senator", Today)
             .CreateJobDefinition(Today);
         var request = definition.CreateRequest("job", Path.GetFullPath("captures"));
-        var attempt = new CollectionJobAttempt("attempt", request, new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null),
+        var attempt = new CollectionJobAttempt("attempt", request, new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded),
             DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null, false, [attempt]);
         var captured = new CapturedAttemptResult("attempt", "senator", FeedUrl, FeedUrl, DateTimeOffset.UnixEpoch,
