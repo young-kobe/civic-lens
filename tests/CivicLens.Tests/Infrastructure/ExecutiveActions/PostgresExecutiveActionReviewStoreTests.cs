@@ -384,12 +384,4 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         await using var command = new NpgsqlCommand(sql, connection);
         return await command.ExecuteScalarAsync() as string;
     }
-
-    private async Task ExecuteAsync(string sql)
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
-    }
 }

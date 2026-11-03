@@ -29,7 +29,7 @@
 
     private async Task DismissAsync()
     {
-        var (target, failure) = await ReviewCommand.RunAsync(DismissOpenReportAsync, HttpContext.Response, Logger, HttpContext.RequestAborted);
+        var (target, failure, _) = await ReviewCommand.RunAsync(DismissOpenReportAsync, HttpContext.Response, Logger, HttpContext.RequestAborted);
         error = failure switch
         {
             ReviewCommandFailure.Conflict => Failures.Conflict,
