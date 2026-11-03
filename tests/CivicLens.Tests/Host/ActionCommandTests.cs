@@ -1,5 +1,6 @@
 using CivicLens.Application.Actions;
 using CivicLens.Tests.Infrastructure.Collection;
+using Npgsql;
 
 namespace CivicLens.Tests.Host;
 
@@ -95,6 +96,80 @@ public sealed class ActionCommandTests(PostgresCollection postgres) : IAsyncLife
 
         Assert.Equal(2, result.ExitCode);
         Assert.Contains("The configured actor is not the owner.", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RevisionBackfillAndVerifyReportZeroOnAnEmptyDatabaseSoTheDocumentedCommandsRun()
+    {
+        var backfill = await RunAsync("auth0|owner", "actions", "revisions", "backfill", "5");
+        var verify = await RunAsync("auth0|owner", "actions", "revisions", "verify");
+
+        Assert.Equal(0, backfill.ExitCode);
+        Assert.Contains("\"examined\":0", backfill.Output, StringComparison.Ordinal);
+        Assert.Equal(0, verify.ExitCode);
+        Assert.Contains("\"mismatched\":0", verify.Output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task VerifyExitsWithOneWhileALegacyRowRemainsBecauseAReadFailsOnNullColumns()
+    {
+        await InsertLegacyRevisionAsync("x");
+
+        var result = await RunAsync("auth0|owner", "actions", "revisions", "verify");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("\"legacy\":1", result.Output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BackfillExitsWithOneOnASkippedRowAndStillPrintsTheCountsSoTheOwnerSeesWhatHappened()
+    {
+        await InsertLegacyRevisionAsync("x");
+
+        var result = await RunAsync("auth0|owner", "actions", "revisions", "backfill", "5");
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("\"skipped\":1", result.Output, StringComparison.Ordinal);
+        Assert.Contains("\"UnreadableJson\":1", result.Output, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("actions", "revisions", "backfill")]
+    [InlineData("actions", "revisions", "backfill", "many")]
+    [InlineData("actions", "revisions", "backfill", "0")]
+    [InlineData("actions", "revisions", "verify", "now")]
+    public async Task RevisionCommandsRefuseABadLimitOrExtraArgument(params string[] arguments)
+    {
+        var result = await RunAsync("auth0|owner", arguments);
+
+        Assert.Equal(2, result.ExitCode);
+    }
+
+    [Theory]
+    [InlineData("backfill", "5")]
+    [InlineData("verify")]
+    public async Task TheAiDrafterCannotRunTheRevisionCommands(params string[] command)
+    {
+        var result = await RunAsync("civic-lens:analysis", ["actions", "revisions", .. command]);
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("The configured actor is not the owner.", result.Error, StringComparison.Ordinal);
+    }
+
+    private async Task InsertLegacyRevisionAsync(string revisionJson)
+    {
+        var record = new string('a', 64);
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand($$"""
+            SET session_replication_role = replica;
+            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)
+            VALUES ('{{record}}', 'congress-bills', 119, 'hr', 7, 1, 0, 'AwaitingReview', 100, 100, '{{record}}');
+            INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
+            VALUES ('{{record}}', 1, 'auth0|editor', 'Person', NULL, '{{revisionJson}}', 100)
+            """, connection);
+        await command.ExecuteNonQueryAsync();
     }
 
     private Task<(int ExitCode, string Output, string Error)> RunAsync(string owner, params string[] arguments) =>

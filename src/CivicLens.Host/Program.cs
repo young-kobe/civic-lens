@@ -91,6 +91,8 @@ if (args is [] or ["--help"] or ["help"])
           actions draft requeue <candidate-id|--all>
           actions draft requeue --refused
           actions draft redraft
+          actions revisions backfill <limit>
+          actions revisions verify
           votes draft status
           votes draft list [drafted|unchanged|superseded|no-member|pending|failed] [limit]
           votes draft requeue <candidate-id|--all>
@@ -310,7 +312,9 @@ try
         var draftStore = new PostgresActionDraftStore(contexts);
         var draftCommands = new AnalysisQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
-        var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), new RequeueRefusedActionDrafts(draftStore), new RedraftActionDrafts(draftStore), owner);
+        var backfillStore = new PostgresActionRevisionBackfillStore(contexts);
+        var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), new RequeueRefusedActionDrafts(draftStore), new RedraftActionDrafts(draftStore),
+            new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
         executing = true;
         return await actions.ExecuteAsync(args, cancellation.Token);
     }
