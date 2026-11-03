@@ -188,6 +188,8 @@ The collection and evidence workers keep their own claim, checkpoint, and progre
 
 `IWorkerWakeup` is the one wakeup port. `DatabaseClock`, at the Infrastructure project root, owns the database clock expression and its read. Every store that reads database time uses it, and so does `PostgresDeadlineWakeup`. `PostgresDeadlineWakeup`, also at the project root, implements the port with a LISTEN connection and a deadline query.
 
+`CodeVersion`, at the Application project root, owns the git commit SHA of the running build. The SDK property `SourceRevisionId` puts the SHA in the assembly. The Host reads it there and hands it to the stores that write a Code revision or a release. A build with no valid SHA fails those writes.
+
 Each wakeup factory gives `PostgresDeadlineWakeup` its own channel and deadline query. `PostgresCollectionPipelineWakeup` is a small factory in its feature folder. `PostgresAnalysisWakeup` is the one factory for analysis queues, and it takes the queue table name and task. `PostgresIntervalWakeup` and `PostgresBriefDraftStore.Wakeup` also build a `PostgresDeadlineWakeup`.
 
 The analysis queues share the `civic_lens_analysis` channel. The notify trigger sends the payload `table:task`. Each analysis listener ignores every other payload and filters its deadline query to its own task.

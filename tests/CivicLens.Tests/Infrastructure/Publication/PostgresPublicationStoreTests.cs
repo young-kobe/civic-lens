@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text.Json;
+using CivicLens.Application;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
@@ -89,6 +90,42 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             publications.CommitAsync(ReviewAuthor.AnalysisSubject, Commit(1, draft, 1, 0), "key", Hash(1), default));
         Assert.Equal(new PublicationState(0, null), await publications.GetStateAsync(default));
+    }
+
+    [Fact]
+    public async Task AReleaseStoresTheCodeVersionOfTheBuildThatCommittedIt()
+    {
+        var draft = await CreateDraftAsync();
+
+        await publications.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key", Hash(1), default);
+
+        Assert.Equal(TestCodeVersion.Sha, await ScalarTextAsync("SELECT code_version FROM publication_releases WHERE release_number = 1"));
+    }
+
+    [Fact]
+    public async Task ABuildWithoutACodeVersionCannotCommitAReleaseAndStoresNothing()
+    {
+        var draft = await CreateDraftAsync();
+        var unversioned = new PostgresPublicationStore(factory, CodeVersion.Unknown);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            unversioned.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key", Hash(1), default));
+
+        Assert.Equal(new PublicationState(0, null), await publications.GetStateAsync(default));
+    }
+
+    [Theory]
+    [InlineData("C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0")]
+    [InlineData("ccccccccccccccccccccccccccccccccccccccc")]
+    [InlineData("")]
+    public async Task TheDatabaseRefusesAMalformedCodeVersionOnARelease(string value)
+    {
+        var draft = await CreateDraftAsync();
+        await publications.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key", Hash(1), default);
+
+        var refused = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync("UPDATE publication_releases SET code_version = @id", value));
+
+        Assert.Equal(PostgresErrorCodes.CheckViolation, refused.SqlState);
     }
 
     [Fact]
@@ -851,6 +888,14 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     }
 
     private async Task<long> StoredPublishedTicksAsync() => await ScalarTicksAsync("SELECT published_at_utc_ticks FROM publication_releases");
+
+    private async Task<string?> ScalarTextAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        return await command.ExecuteScalarAsync() as string;
+    }
 
     private async Task<long> ScalarTicksAsync(string sql)
     {

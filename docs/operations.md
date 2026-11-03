@@ -946,7 +946,7 @@ Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (empty in development) and
 
 ## Container images
 
-The `Dockerfile` in the repository root builds two images for linux-arm64. The workflow `.github/workflows/release.yml` builds them on a native ARM64 runner. On main, from a push or a manual run, it pushes them to ghcr.io and adds a build provenance attestation to each. On a pull request that changes the build inputs, it builds them and does not push or attest. Pull request runs never wait for or cancel main runs. A newer main run can cancel a queued main run, so deploy only a commit whose image tag exists.
+The `Dockerfile` in the repository root builds two images for linux-arm64. The workflow `.github/workflows/release.yml` builds them on a native ARM64 runner. On main, from a push or a manual run, it pushes them to ghcr.io and adds a build provenance attestation to each. On a pull request that changes the build inputs, it builds them and does not push or attest. The workflow passes the commit SHA as the build argument `SOURCE_REVISION_ID`, and the `Dockerfile` fails without it. Each `dotnet publish` gets it as `SourceRevisionId`, and `CodeVersion` reads it from the assembly. A local `docker build` needs `--build-arg SOURCE_REVISION_ID=<40 hex digits>`. Pull request runs never wait for or cancel main runs. A newer main run can cancel a queued main run, so deploy only a commit whose image tag exists.
 
 | Image | Holds | Entry point |
 | --- | --- | --- |
