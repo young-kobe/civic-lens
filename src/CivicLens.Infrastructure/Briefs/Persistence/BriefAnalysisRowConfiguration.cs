@@ -11,6 +11,6 @@ internal sealed class BriefAnalysisRowConfiguration : IEntityTypeConfiguration<B
         AnalysisTableConfiguration.ConfigureQueue<BriefAnalysisRow, BriefAnalysisRunRow>(builder, "brief_analysis", nameof(BriefAnalysisRow.RecordId), "record_id");
         builder.ToTable("brief_analysis", table => table.HasCheckConstraint("ck_brief_analysis_week", "EXTRACT(ISODOW FROM week_start) = 1"));
         builder.Property(row => row.WeekStart).HasColumnName("week_start");
-        builder.HasIndex(row => row.WeekStart).IsUnique().HasDatabaseName("ux_brief_analysis_week");
+        builder.HasIndex(row => new { row.WeekStart, row.Task }).IsUnique().HasDatabaseName("ux_brief_analysis_week");
     }
 }

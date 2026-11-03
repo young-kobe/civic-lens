@@ -10,6 +10,7 @@ internal static class WorkerLoopNames
     public const string VoteDrafting = "voteDrafting";
     public const string RelationshipDrafting = "relationshipDrafting";
     public const string BriefDrafting = "briefDrafting";
+    public const string BriefChecking = "briefChecking";
     public const string Publishing = "publishing";
     public const string ReportPull = "reportPull";
 }

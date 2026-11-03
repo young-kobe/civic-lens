@@ -56,7 +56,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
                 revision.ValidatePersonEditOf(current);
                 await VoteMemberLists.EnsureAsync(db, revision, cancellationToken);
                 return revision;
-            }, saved => VoteRevisionRows.Create(saved, null),
+            }, saved => VoteRevisionRows.Create(saved, null), null,
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
                 afterDecision, revision => revision.ComparableForm()), cancellationToken);
 

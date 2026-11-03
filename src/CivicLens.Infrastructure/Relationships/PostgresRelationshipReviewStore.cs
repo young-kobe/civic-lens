@@ -46,7 +46,7 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
                 var (statement, target) = await RelationshipCitedReader.ReadCitedAsync(db, current, cancellationToken);
                 RelationshipEditOptions.For(current, statement, target).Require(revision);
                 return revision;
-            }, saved => RelationshipDraftRows.NewRevision(saved, null),
+            }, saved => RelationshipDraftRows.NewRevision(saved, null), null,
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
                 NoAfterDecision, revision => revision.ComparableForm()), cancellationToken);
 

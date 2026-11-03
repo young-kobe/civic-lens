@@ -13,7 +13,7 @@ internal static class AfterDecisionHooks
         IDbContextFactory<CollectionAttemptDbContext> contextFactory, RelationshipRecordKind relationshipKind, PublishedRecordKind publishedKind) =>
         InOrder(
             RelationshipStaleness.AfterDecision(new(contextFactory, new RelationshipDraftQueueMapping()), relationshipKind),
-            BriefStaleness.AfterDecision(new(contextFactory, new BriefDraftQueueMapping()), publishedKind));
+            BriefStaleness.AfterDecision(new(contextFactory, new BriefDraftQueueMapping(contextFactory)), publishedKind));
 
     public static Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> InOrder(
         params Func<CollectionAttemptDbContext, string, int, CancellationToken, Task>[] hooks) =>
