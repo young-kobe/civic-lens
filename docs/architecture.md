@@ -271,6 +271,7 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | House vote members extraction | `congress-house-vote-members-v1` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteMembersParser.cs` | Extraction IDs, text, and citations of a House member list | The parse or the rendered text of a member list changes |
 | Feed item statement extraction | `feed-item-statement-v1` plus the version of the HTML extraction | `src/CivicLens.Application/Collection/FeedStatements/FeedStatementExtractions.cs` | Extraction IDs, text, and citations of a feed item | The parse or the rendered text of a feed item changes |
 | Voteview Senate vote extraction | `voteview-senate-vote-v1` | `src/CivicLens.Application/Collection/VoteviewVotes/VoteviewParser.cs` | Extraction IDs, text, and citations of a Voteview Senate vote | The parse or the rendered text of a roll call changes |
+| Federal Register document extraction | `federal-register-document-v1` | `src/CivicLens.Application/Collection/FederalRegister/FederalRegisterDocumentParser.cs` | Extraction IDs, text, and citations of a Federal Register document | The parse or the rendered text of a document changes |
 | Comparison algorithm | `line-lcs-context-v1` | `src/CivicLens.Core/Documents/DocumentComparison.cs` | Stored comparison IDs and hunks | Hunk or word-edit output changes |
 | Comparison settings | `bounded-lines-2000-...-v1` | same file | Limits recorded with each comparison | Any limit constant changes |
 | Draft task | `document-change-draft-v1` | `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs` | Analysis runs | Task flow or output handling changes |
@@ -287,6 +288,7 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Vote draft task | `vote-draft-v1` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |
 | Vote draft prompt | `vote-draft-prompt-v5` | same file | Vote analysis runs | Prompt text or input framing changes |
 | Vote draft schema | `vote-draft-schema-v2` | same file | Vote analysis runs | The model output schema changes |
+| Vote member list identity | `vote-member-list-v1` | `src/CivicLens.Infrastructure/Votes/VoteMemberLists.cs` | The ID of a stored vote member list | The canonical text of the list changes |
 | Vote fingerprint | `vote-fingerprint-v1` | `src/CivicLens.Application/Votes/VoteFingerprint.cs` | The run input hash of a draft that makes no call | The canonical text of the fingerprint changes |
 | Sponsorship fingerprint | `action-fingerprint-v1` | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs` | The fingerprint in each action revision | The canonical text of an entry changes |
 | Relationship draft task | `relationship-draft-v1` | `src/CivicLens.Application/Relationships/RelationshipDraftTask.cs` | Relationship analysis runs | Task flow or output handling changes |
