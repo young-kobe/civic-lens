@@ -1,3 +1,4 @@
+using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Core.Votes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -18,6 +19,6 @@ internal sealed class VoteRevisionFactRowConfiguration : IEntityTypeConfiguratio
         builder.Property(row => row.RevisionNumber).HasColumnName("revision_number");
         builder.Property(row => row.Position).HasColumnName("position");
         builder.Property(row => row.FactText).HasColumnName("fact_text").IsRequired();
-        VoteCitationColumns.Configure(builder, "vote_revision_facts", "Citation", "citation", optional: false);
+        SourceSpanColumns.Configure(builder, "vote_revision_facts", "Citation", "citation", optional: false);
     }
 }

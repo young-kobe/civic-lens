@@ -19,6 +19,7 @@ using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Application.Documents;
 using CivicLens.Host.Analysis;
 using CivicLens.Application.Actions;
+using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
 using CivicLens.Infrastructure.Votes;
 using CivicLens.Host;
@@ -318,7 +319,7 @@ try
             draftStore, new PostgresAnalysisStatusStore(contexts, VoteDraftTask.Task));
         var votes = new VoteCommand(draftCommands, new GetVoteDraftStatus(draftCommands.Status, draftStore),
             new RequeueBlockedVoteDrafts(draftStore), new RequeueRefusedVoteDrafts(draftStore), new RedraftVoteDrafts(draftStore),
-            new BackfillVoteRevisions(backfillStore), new VerifyVoteRevisions(backfillStore), owner);
+            new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
         executing = true;
         return await votes.ExecuteAsync(args, cancellation.Token);
     }
