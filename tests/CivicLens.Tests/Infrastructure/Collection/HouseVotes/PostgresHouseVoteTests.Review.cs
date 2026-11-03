@@ -1,3 +1,4 @@
+using CivicLens.Application.Analysis;
 using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
@@ -188,6 +189,73 @@ public sealed partial class PostgresHouseVoteTests
         var edited = await SaveAsync(recordId, 1, SuggestionChoice.Keep, "save-2");
         await Assert.ThrowsAsync<StaleApprovalException>(() => new DecideVoteReview(VoteReviews()).ExecuteAsync(Reviewer,
             new(recordId, edited.RevisionNumber, 2, ReviewDecisionKind.Approve, "Looked again.", [changes.DecisionId], Guid.NewGuid().ToString("N"))));
+    }
+
+    private async Task<(string RecordId, string Refused)> RejectAndRefuseANewerUpdateAsync()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        await SettleAsync(second, await RevisionAsync(second, 2));
+        return (recordId, second);
+    }
+
+    private async Task BypassAsync(string candidate, string reason)
+    {
+        var store = VoteStore();
+        var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
+        Assert.True(await store.CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Succeeded, VoteDraftErrorCodes.Unchanged),
+            new VoteDraftRun(BypassedRun(Guid.NewGuid().ToString("N"), candidate), reason), default));
+    }
+
+    [Fact]
+    public async Task AFailedRetryKeepsTheMarkSoApprovingStaysRefusedBecauseTheNewDraftNeverArrived()
+    {
+        var (recordId, second) = await RejectAndRefuseANewerUpdateAsync();
+        var changes = await DecideAsync(recordId, 1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
+        Assert.Equal(1, await new RequeueRefusedVoteDrafts(VoteStore()).ExecuteAsync(new ReviewActor("auth0|owner", ReviewRole.Owner)));
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO vote_analysis_runs (run_id, candidate_id, task, task_version, model, prompt_version, schema_version, input_hash, outcome, reason,
+                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks)
+            VALUES (repeat('f', 32), '{second}', 'vote-draft', 'v', 'm', 'p', 's', repeat('e', 64), 'OutputRejected', NULL, 0, 0, 0, 0, 0, 9, 9)
+            """);
+
+        await Assert.ThrowsAsync<StaleApprovalException>(() => new DecideVoteReview(VoteReviews()).ExecuteAsync(Reviewer,
+            new(recordId, 1, 2, ReviewDecisionKind.Approve, "Looked again.", [changes.DecisionId], Guid.NewGuid().ToString("N"))));
+    }
+
+    [Fact]
+    public async Task ALaterUpdateWithTheSameFactsFreesTheRecordBecauseOnlyTheNewestSettledUpdateCounts()
+    {
+        var (recordId, _) = await RejectAndRefuseANewerUpdateAsync();
+        var third = await PendingCandidateAsync(Updated.AddDays(2));
+        await BypassAsync(third, VoteDraftErrorCodes.Unchanged);
+
+        await DecideAsync(recordId, 1, 1, ReviewDecisionKind.Approve);
+
+        Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
+    }
+
+    [Fact]
+    public async Task AMarkIsNotWrittenWhenThePersonChangedTheRecordBeforeTheSettlementBecauseTheWorkerMayDraftIt()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        var store = VoteStore();
+        var claim = (await store.TryClaimAsync(second, Lease, default))!;
+        await DecideAsync(recordId, 1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
+
+        Assert.True(await store.CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Succeeded, VoteDraftErrorCodes.Unchanged),
+            new VoteDraftRun(BypassedRun(Guid.NewGuid().ToString("N"), second), VoteDraftErrorCodes.RecordRejected), default));
+
+        Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM vote_analysis_runs WHERE candidate_id = '{second}'"));
+        Assert.Equal("RetryWaiting", await ScalarAsync($"SELECT status FROM vote_analysis WHERE candidate_id = '{second}'"));
     }
 
     [Fact]

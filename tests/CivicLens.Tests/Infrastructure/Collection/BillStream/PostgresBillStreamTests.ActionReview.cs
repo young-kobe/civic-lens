@@ -439,6 +439,32 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task AFailedRetryKeepsTheMarkSoApprovingStaysRefusedBecauseTheNewDraftNeverArrived()
+    {
+        await RejectAndRefuseANewerUpdateAsync();
+        var changes = await DecideAsync(1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
+        Assert.Equal(1, await new RequeueRefusedActionDrafts(ActionStore()).ExecuteAsync(Owner));
+
+        _ = await RunActionWorkerAsync(new FakeHeadlineSummaryModel().Draft("not json").Draft("not json").Draft("not json"));
+
+        Assert.True(await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE outcome = 'OutputRejected'") is long rejected && rejected > 0);
+        await Assert.ThrowsAsync<StaleApprovalException>(() => new DecideActionReview(ActionReviews()).ExecuteAsync(Reviewer,
+            new(RecordId, 1, 2, ReviewDecisionKind.Approve, "Looked again.", [changes.DecisionId], Guid.NewGuid().ToString("N"))));
+    }
+
+    [Fact]
+    public async Task ALaterUpdateWithTheSameFactsFreesTheRecordBecauseOnlyTheNewestSettledUpdateCounts()
+    {
+        await RejectAndRefuseANewerUpdateAsync();
+        _ = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(2));
+        Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
+
+        await DecideAsync(1, 1, ReviewDecisionKind.Approve);
+
+        Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+    }
+
+    [Fact]
     public async Task OnlyTheOwnerRunsTheRequeueCommand()
     {
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new RequeueRefusedActionDrafts(ActionStore()).ExecuteAsync(Reviewer));
@@ -459,6 +485,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.True(await ActionStore().CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Succeeded, ActionDraftErrorCodes.Unchanged), bypass, default));
 
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE reason = 'recordRejected'"));
+        Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM action_analysis_runs WHERE candidate_id = '{newer}'"));
         Assert.Equal("RetryWaiting", await ScalarAsync($"SELECT status FROM action_analysis WHERE candidate_id = '{newer}'"));
     }
 

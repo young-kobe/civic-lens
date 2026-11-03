@@ -1296,6 +1296,21 @@ public sealed class ActionDraftStepTests
         Assert.Equal(ActionDraftErrorCodes.RecordRejected, Assert.Single(rejected.Runs).Reason);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ARejectedRecordWithTheSameFactsLeavesNoMarkEvenWhenThePromptIsOlderBecauseNothingWasRefused(bool olderPrompt)
+    {
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+        var drafted = Assert.Single(first.Revisions);
+
+        var (rejected, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel(), drafted, hasOlderPromptDraft: olderPrompt,
+            shape: evidence => evidence with { IsRejected = true });
+
+        Assert.Empty(model.Requests);
+        Assert.Equal(ActionDraftErrorCodes.Unchanged, Assert.Single(rejected.Runs).Reason);
+    }
+
     private static async Task<(FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> RunAsync(ActionBillWorld world,
         FakeHeadlineSummaryModel model, ActionDraftRevision? current = null, DateTimeOffset? updatedAt = null, ActionDraftSettings? settings = null,
         IssueConfigurationRevision? issues = null, bool hasNewerCandidate = false, bool hasOlderPromptDraft = false,

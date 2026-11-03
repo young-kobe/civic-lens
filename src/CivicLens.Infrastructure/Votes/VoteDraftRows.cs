@@ -54,18 +54,19 @@ internal static class VoteDraftRows
         var current = await db.Set<VoteCandidateRow>().AsNoTracking().SingleOrDefaultAsync(row => row.CandidateId == draft.CandidateId, cancellationToken);
         if (current is null) return;
         var newer = await NewerCandidates(db, current.SourceId, current.Chamber, current.Congress, current.SessionNumber, current.RollCallNumber,
-            current.UpdateDateUtcTicks).Select(row => row.CandidateId).ToArrayAsync(cancellationToken);
-        if ((await RefusedCandidateIdsAsync(db, newer, cancellationToken)).Length > 0) throw new StaleApprovalException(StaleApprovalMessage);
+            current.UpdateDateUtcTicks).Select(row => new RefusedUpdates.NewerCandidate(row.CandidateId, row.UpdateDateUtcTicks, row.CreatedAtUtcTicks))
+            .ToArrayAsync(cancellationToken);
+        if (await RefusedUpdates.NewestSettledIsMarkedAsync<VoteAnalysisRunRow>(db, VoteDraftTask.Task, nameof(VoteAnalysisRunRow.CandidateId), newer, cancellationToken))
+            throw new StaleApprovalException(StaleApprovalMessage);
     }
 
     private const string StaleApprovalMessage = "A newer update of this vote arrived while the record was rejected, so approving it now would publish old facts. " +
         "Do these steps. 1. If the record is still rejected, press Request changes. 2. Ask the owner to run the command: votes draft requeue --refused. " +
         "3. Approve the new draft when it appears.";
 
-    /// <summary>The candidates whose latest run was refused because the record was rejected. A later run clears the mark.</summary>
+    /// <summary>The candidates whose latest settled run was refused because the record was rejected.</summary>
     internal static Task<string[]> RefusedCandidateIdsAsync(CollectionAttemptDbContext db, string[] candidateIds, CancellationToken cancellationToken) =>
-        AnalysisRunLookup.Latest<VoteAnalysisRunRow>(db, VoteDraftTask.Task, nameof(VoteAnalysisRunRow.CandidateId), candidateIds)
-            .Where(run => run.Reason == VoteDraftErrorCodes.RecordRejected).Select(run => run.CandidateId).ToArrayAsync(cancellationToken);
+        RefusedUpdates.MarkedAsync<VoteAnalysisRunRow>(db, VoteDraftTask.Task, nameof(VoteAnalysisRunRow.CandidateId), candidateIds, cancellationToken);
 
     /// <summary>True while the draft of the roll call of this candidate is rejected.</summary>
     internal static Task<bool> IsRejectedForCandidateAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken) =>

@@ -8,8 +8,14 @@ public sealed record VoteDraftContext(VoteDraftEvidence Evidence, VoteSnapshot S
 {
     public VoteChange ChangeSinceCurrent()
     {
-        var previous = Evidence.Current;
-        if (previous is null || Evidence.DraftedUnderOlderPrompt || previous.Source != Snapshot.Source || !previous.Facts.Select(fact => fact.Text).SequenceEqual(Snapshot.Facts.Select(fact => fact.Text)) ||
+        var change = ChangeFromFacts(Evidence.Current);
+        if (!Evidence.DraftedUnderOlderPrompt) return change;
+        return change == VoteChange.None ? VoteChange.OlderPromptOnly : VoteChange.Other;
+    }
+
+    private VoteChange ChangeFromFacts(VoteDraftRevision? previous)
+    {
+        if (previous is null || previous.Source != Snapshot.Source || !previous.Facts.Select(fact => fact.Text).SequenceEqual(Snapshot.Facts.Select(fact => fact.Text)) ||
             previous.IssueCandidateIds.IsDefault || !previous.IssueCandidateIds.SequenceEqual(Issues.CandidateIds) || previous.IssueRevisionId != IssueRevisionId ||
             previous.SubjectsHash != Issues.SubjectsHash)
             return VoteChange.Other;
@@ -21,4 +27,4 @@ public sealed record VoteDraftContext(VoteDraftEvidence Evidence, VoteSnapshot S
         (member.PersonId, member.BioguideId, member.Cast);
 }
 
-public enum VoteChange { None, MemberVotesOnly, KindOnly, Other }
+public enum VoteChange { None, MemberVotesOnly, KindOnly, OlderPromptOnly, Other }

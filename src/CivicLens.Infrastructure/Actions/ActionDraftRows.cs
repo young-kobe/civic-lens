@@ -50,18 +50,19 @@ internal static class ActionDraftRows
         if (current is null) return;
         var candidate = new ActionDraftCandidate(current.CandidateId, draft.RecordId, current.SourceId, current.Congress, current.BillType,
             current.BillNumber, new DateTimeOffset(current.UpdateDateUtcTicks, TimeSpan.Zero), current.IncludesSummaries, current.IncludesSubjects);
-        var newer = await NewerCandidates(db, candidate).Select(row => row.CandidateId).ToArrayAsync(cancellationToken);
-        if ((await RefusedCandidateIdsAsync(db, newer, cancellationToken)).Length > 0) throw new StaleApprovalException(StaleApprovalMessage);
+        var newer = await NewerCandidates(db, candidate).Select(row => new RefusedUpdates.NewerCandidate(row.CandidateId, row.UpdateDateUtcTicks, row.CreatedAtUtcTicks))
+            .ToArrayAsync(cancellationToken);
+        if (await RefusedUpdates.NewestSettledIsMarkedAsync<ActionAnalysisRunRow>(db, ActionDraftTask.Task, nameof(ActionAnalysisRunRow.CandidateId), newer, cancellationToken))
+            throw new StaleApprovalException(StaleApprovalMessage);
     }
 
-    internal const string StaleApprovalMessage = "A newer update of this bill arrived while the record was rejected, so approving it now would publish old facts. " +
+    private const string StaleApprovalMessage = "A newer update of this bill arrived while the record was rejected, so approving it now would publish old facts. " +
         "Do these steps. 1. If the record is still rejected, press Request changes. 2. Ask the owner to run the command: actions draft requeue --refused. " +
         "3. Approve the new draft when it appears.";
 
-    /// <summary>The candidates whose latest run was refused because the record was rejected. A later run clears the mark.</summary>
+    /// <summary>The candidates whose latest settled run was refused because the record was rejected.</summary>
     internal static Task<string[]> RefusedCandidateIdsAsync(CollectionAttemptDbContext db, string[] candidateIds, CancellationToken cancellationToken) =>
-        AnalysisRunLookup.Latest<ActionAnalysisRunRow>(db, ActionDraftTask.Task, nameof(ActionAnalysisRunRow.CandidateId), candidateIds)
-            .Where(run => run.Reason == ActionDraftErrorCodes.RecordRejected).Select(run => run.CandidateId).ToArrayAsync(cancellationToken);
+        RefusedUpdates.MarkedAsync<ActionAnalysisRunRow>(db, ActionDraftTask.Task, nameof(ActionAnalysisRunRow.CandidateId), candidateIds, cancellationToken);
 
     /// <summary>True while the draft of the bill of this candidate is rejected.</summary>
     internal static Task<bool> IsRejectedForCandidateAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken) =>

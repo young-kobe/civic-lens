@@ -143,7 +143,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     }
 
     [Fact]
-    public async Task ApprovingAfterRequestChangesAppliesTheWaitingCorrectionsInOneRevisionBecauseAPersonEditDoesNotSkipThem()
+    public async Task ApprovingAfterRequestChangesAppliesTheWaitingCorrectionsInOneRevisionBecauseNoPersonDecisionMaySkipThem()
     {
         var recordId = await RejectedRecordWithTwoWaitingCorrectionsAsync();
         var changes = await DecideAsync(recordId, 4, ReviewDecisionKind.RequestChanges, "Look again.");

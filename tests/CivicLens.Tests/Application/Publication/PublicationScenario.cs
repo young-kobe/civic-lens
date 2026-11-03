@@ -277,7 +277,7 @@ internal sealed class PublicationScenario
                 {
                     RevisionNumber = revisionNumber,
                     ActorSubject = approver,
-                    CorrectionNote = ReviewAuthor.IsCode(approver) ? null : correctionNote
+                    CorrectionNote = ReviewAuthor.IsCode(approver) && correctionNote == PersonNote ? null : correctionNote
                 }),
                 ReviewStateVersion = revisionNumber
             }

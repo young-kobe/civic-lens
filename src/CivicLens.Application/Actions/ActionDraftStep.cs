@@ -46,7 +46,7 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         var change = context.ChangeSinceCurrent();
         if (evidence.IsRejected)
             return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken,
-                change == ActionChange.None ? null : ActionDraftErrorCodes.RecordRejected);
+                change is ActionChange.None or ActionChange.OlderPromptOnly ? null : ActionDraftErrorCodes.RecordRejected);
         return change switch
         {
             ActionChange.None =>

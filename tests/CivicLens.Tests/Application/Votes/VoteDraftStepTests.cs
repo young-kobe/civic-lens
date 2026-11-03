@@ -876,6 +876,20 @@ public sealed class VoteDraftStepTests
         Assert.Equal(VoteDraftErrorCodes.RecordRejected, store.Runs.Last().Reason);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ARejectedRecordWithTheSameFactsLeavesNoMarkEvenWhenThePromptIsOlderBecauseNothingWasRefused(bool olderPrompt)
+    {
+        var current = await FirstRevisionAsync(Create());
+        var evidence = Create().Evidence(current, null, false, olderPrompt) with { IsRejected = true };
+
+        var (store, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel(), evidence: evidence);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal(VoteDraftErrorCodes.Unchanged, store.Runs.Last().Reason);
+    }
+
     private static async Task<VoteDraftRevision> FirstRevisionAsync(VoteWorld world)
     {
         var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted));

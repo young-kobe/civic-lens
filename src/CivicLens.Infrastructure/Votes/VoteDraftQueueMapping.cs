@@ -51,8 +51,8 @@ internal sealed class VoteDraftQueueMapping(Func<CollectionAttemptDbContext, str
     {
         if (settlement.Run is null && settlement.Checkpoint.ErrorCode is VoteDraftErrorCodes.Unchanged or VoteDraftErrorCodes.NoTrackedMember)
             throw new ArgumentException("A bypassed settlement needs its run.", nameof(settlement));
-        if (settlement.Run is { Reason: VoteDraftErrorCodes.RecordRejected } refusedRun && settlement.Checkpoint is not VoteDraftCheckpoint { Revision: not null })
-            return await ConfirmRefusalAsync(db, row, settlement, refusedRun, cancellationToken);
+        if (settlement.Run is { Reason: VoteDraftErrorCodes.RecordRejected } && settlement.Checkpoint is not VoteDraftCheckpoint { Revision: not null })
+            return await ConfirmRefusalAsync(db, row, settlement, cancellationToken);
         if (settlement.Checkpoint is not VoteDraftCheckpoint { Revision: { } revision } checkpoint || settlement.Run is not { } run)
             return settlement;
         if (run.Run.Outcome is not (AnalysisRunOutcome.Drafted or AnalysisRunOutcome.Bypassed))
@@ -76,8 +76,9 @@ internal sealed class VoteDraftQueueMapping(Func<CollectionAttemptDbContext, str
     }
 
     // The step read the record as rejected before it settled. A person may have changed it since, so the mark needs the review key.
+    // The retry writes no run, because a run would hide an earlier mark.
     private static async Task<AnalysisSettlement<VoteDraftRun>> ConfirmRefusalAsync(CollectionAttemptDbContext db, VoteAnalysisRow row,
-        AnalysisSettlement<VoteDraftRun> settlement, VoteDraftRun refusedRun, CancellationToken cancellationToken)
+        AnalysisSettlement<VoteDraftRun> settlement, CancellationToken cancellationToken)
     {
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.VoteReview, cancellationToken);
         if (await VoteDraftRows.IsRejectedForCandidateAsync(db, row.CandidateId, cancellationToken)) return settlement;
@@ -87,6 +88,6 @@ internal sealed class VoteDraftQueueMapping(Func<CollectionAttemptDbContext, str
             Status = AnalysisState.RetryWaiting,
             ErrorCode = VoteDraftErrorCodes.RecordRejected,
             RetryDelay = AnalysisPolicy.RetryDelay(row.Attempts)
-        }, refusedRun with { Reason = null });
+        }, null);
     }
 }

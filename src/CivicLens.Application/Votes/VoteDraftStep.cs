@@ -44,7 +44,7 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
         var change = context.ChangeSinceCurrent();
         if (evidence.IsRejected)
             return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken,
-                change == VoteChange.None ? null : VoteDraftErrorCodes.RecordRejected);
+                change is VoteChange.None or VoteChange.OlderPromptOnly ? null : VoteDraftErrorCodes.RecordRejected);
         return change switch
         {
             VoteChange.None => await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken),
