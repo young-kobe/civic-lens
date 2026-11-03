@@ -1,5 +1,7 @@
 # Survey: model run storage (R-63, option B)
 
+Owner decisions D1 to D8 are recorded in section 6. D9 is open.
+
 Read-only survey of `origin/main` at `de620566`. Nothing here is implemented. Line numbers cite that commit.
 The review in `survey/model-run-storage-review.md` found no change of these facts on `c3c116b9`. Every review fix was checked there with `git grep`.
 Scope: six `*_analysis_runs` tables, the shared run writer, and the eight model tasks that fill them.
@@ -43,7 +45,7 @@ Row classes: `StatementAnalysisRunRow.cs:27-30`, `ActionAnalysisRunRow.cs:26-28`
 | `context_json` | Per-kind JSON copy of inputs. Required for every run except `Interrupted`, which must have none (`AnalysisRun.cs:34-35`). | `AnalysisRunRows.cs:30`. `AnalysisWorker.cs:160` holds it, and `:187` (bypass) and `:266` (every call run) copy it. | `AnalysisRunRows.cs:42`. One SQL reader: `RelationshipStaleness.cs:58,65` reads `context_json::jsonb ->> 'fingerprint'`. Tests only otherwise. |
 | `quotes_json` | Gate quotes (`StatementGateQuote[]`). Statement runs only. | `StatementGateQueueMapping.cs:52`. | `StatementGateQueueMapping.cs:56-57`. `StatementGateCarryOver.From` reads `gateRun.Quotes` (`StatementGateCarryOver.cs:15`) for the draft step. `PostgresStatementDraftStore.cs:53` calls it. |
 
-`quotes_json` is a JSON column outside option B. R-63 still owns it. This survey only flags it.
+`quotes_json` moves to a child table of gate quotes in this series (D8, PR 4).
 
 Raw `validation_json`, `output_json` and `context_json` have no reader in `tools/`, `.github/` or `deploy/`. `readonly-grants.sql` names none of them.
 
@@ -108,27 +110,27 @@ No kind is unable to give its request. Only the wire body is unavailable, for al
 
 ## 3. Proposed schema
 
-### 3.1 Prompt text table
+### 3.1 Prompt text tables (D7)
 
-`analysis_prompt_texts` (one shared table, not per kind).
+Two tables, `analysis_system_prompts` and `analysis_output_schemas`. Both have the same columns. Plain foreign keys enforce the role, so there is no `role` column.
 
 | Column | Type | Notes |
 |---|---|---|
 | `text_sha256` | `varchar(64)` PK | Lowercase hex. Hash recipe below. |
-| `role` | `varchar(16)` not null | `system` or `schema`. |
 | `text` | `text` not null | Verbatim string the code built. |
 | `created_at_utc_ticks` | `bigint` not null | Ticks of the first writer. |
 
 Checks, named like the repo's (`ck_{table}_{rule}`):
 
-- `ck_analysis_prompt_texts_id`: `text_sha256 ~ '^[0-9a-f]{64}$'`. Precedent: `ck_vote_member_lists_id`, `ck_collection_configuration_revisions_id`.
-- `ck_analysis_prompt_texts_role`: `role IN ('system','schema')`.
-- `ck_analysis_prompt_texts_text`: `char_length(text) BETWEEN 1 AND 100000`. The cap is open for the owner. Proposal: one Core constant with the value 100 000, used also by `ck_{table}_user_message`. The eight task classes set `MaximumPromptBytes = 100_000` (for example `ActionDraftTask.cs:17`). Each of them changes to `MaximumPromptBytes = <Core constant>`, so the call sites in the settings and prompt classes stay as they are. A test that only ties the values would leave two owners of the limit. One constant leaves one. Each builder rejects a prompt when system, user and schema together exceed it (`DocumentChangeDraftPrompt.cs:50-51`). A text length in chars is never above its byte count, so no valid text fails. `AnalysisRun.MaximumOutputLength` (`AnalysisRun.cs:12`, 1 000 000) is too loose for input.
-- `ck_analysis_prompt_texts_created_at_utc_ticks`: the standard tick range check every table has.
-- Optional, see decision D2: `text_sha256 = encode(sha256(convert_to(role || E'\n' || text, 'UTF8')), 'hex')`.
+- `ck_{table}_id`: `text_sha256 ~ '^[0-9a-f]{64}$'`. Precedent: `ck_vote_member_lists_id`, `ck_collection_configuration_revisions_id`.
+- `ck_{table}_hash` (D2 B): `text_sha256 = encode(sha256(convert_to(text, 'UTF8')), 'hex')`. The database refuses a text that does not match its key.
+- `ck_{table}_text`: `char_length(text) BETWEEN 1 AND 100000`. The cap is open for the owner. Proposal: one Core constant with the value 100 000, used also by `ck_{table}_user_message`. The eight task classes set `MaximumPromptBytes = 100_000` (for example `ActionDraftTask.cs:17`). Each of them changes to `MaximumPromptBytes = <Core constant>`, so the call sites in the settings and prompt classes stay as they are. A test that only ties the values would leave two owners of the limit. One constant leaves one. Each builder rejects a prompt when system, user and schema together exceed it (`DocumentChangeDraftPrompt.cs:50-51`). A text length in chars is never above its byte count, so no valid text fails. `AnalysisRun.MaximumOutputLength` (`AnalysisRun.cs:12`, 1 000 000) is too loose for input.
+- `ck_{table}_created_at_utc_ticks`: the standard tick range check every table has.
 
-Hash recipe, one only: SHA-256 over the UTF-8 bytes of `role`, a newline (`\n`), and `text`, written as lowercase hex. One Core member owns it: `AnalysisRunInput.TextHash(role, text)`. The D2 check repeats it in SQL. The role in the hash means the same text under two roles gets two keys, so one key never has two roles.
-`VoteMemberLists.IdOf` adds a version tag (`vote-member-list-v1`, `VoteMemberLists.cs:15,30-31`). This table adds no tag, so that SQL can repeat the hash. A new recipe later needs a migration. The role set has no newline, so the join is unambiguous.
+Hash recipe, one only: SHA-256 over the UTF-8 bytes of `text`, written as lowercase hex. One Core member owns it: `AnalysisRunInput.TextHash(text)`. The CHECK repeats it in SQL. The hash covers the text only. The same text in both tables gets the same key, and that is harmless, because each run column has its own foreign key.
+`VoteMemberLists.IdOf` adds a version tag (`vote-member-list-v1`, `VoteMemberLists.cs:15,30-31`). These tables add no tag, so that SQL can repeat the hash. A new recipe later needs a migration.
+
+Rule for content hashes (document it in `docs/architecture/analysis.md` in PR 1): a content hash over one row gets a CHECK. A content hash over child rows gets a verify recompute, as `vote_member_lists` does (`PostgresVoteRevisionBackfillStore.cs:68` compares `row.MemberListId` with `VoteMemberLists.IdOf(members)`). A CHECK cannot see child rows, and AGENTS.md limits triggers.
 
 ### 3.2 Run columns
 
@@ -136,21 +138,21 @@ Add to all six run tables through `ConfigureRun`, so one change covers every kin
 
 | Column | Type | Notes |
 |---|---|---|
-| `system_prompt_sha256` | `varchar(64)` null | FK to `analysis_prompt_texts(text_sha256)`, restrict. |
-| `output_schema_sha256` | `varchar(64)` null | Same FK. |
+| `system_prompt_sha256` | `varchar(64)` null | FK to `analysis_system_prompts(text_sha256)`, restrict. |
+| `output_schema_sha256` | `varchar(64)` null | FK to `analysis_output_schemas(text_sha256)`, restrict. |
 | `user_message` | `text` null | Exact text. |
-| `effort` | `varchar(16)` null | See D3. |
-| `max_output_tokens` | `integer` null | See D3. |
+| `effort` | `varchar(16)` null | D3. |
+| `max_output_tokens` | `integer` null | D3. |
 
-`output_json` stays and keeps its name. It already holds the exact answer for `end_turn` runs. See D4 for the other stops.
+`output_json` stays and keeps its name. It holds the exact answer for every stop that has text (D4).
 
-Drop `context_json` and `validation_json` in later steps (section 5).
+Drop `context_json`, `validation_json` and `quotes_json` in later steps (section 5).
 
 Checks per run table, added in `ConfigureRun`:
 
 - `ck_{table}_input`: `(system_prompt_sha256 IS NULL) = (output_schema_sha256 IS NULL) AND (system_prompt_sha256 IS NULL) = (user_message IS NULL) AND (system_prompt_sha256 IS NULL) = (effort IS NULL) AND (effort IS NULL) = (max_output_tokens IS NULL)`. All set or all null. Precedent: all-or-none checks such as `ck_document_change_analysis_reservation`.
 - `ck_{table}_input_outcome`: `outcome NOT IN ('Bypassed','Interrupted') OR system_prompt_sha256 IS NULL`. A run without a call holds no request.
-- `ck_{table}_user_message`: `user_message IS NULL OR char_length(user_message) BETWEEN 1 AND 100000` (same constant as the text table).
+- `ck_{table}_user_message`: `user_message IS NULL OR char_length(user_message) BETWEEN 1 AND 100000` (same constant as the text tables).
 - `ck_{table}_max_output_tokens`: `max_output_tokens IS NULL OR max_output_tokens > 0`.
 
 Old runs have all nulls, so every check passes. No rebuild, as decided.
@@ -161,7 +163,7 @@ EF already shortens long foreign key names (`InitialSchema.cs:1716`). The new ch
 
 ### 3.3 Validation child rows
 
-One child table per run table, built by one shared `ConfigureRunError` helper next to `ConfigureRun`. The CLR shape of the six tables is open (D9). Names: `document_change_analysis_run_errors`, `statement_analysis_run_errors`, `action_...`, `vote_...`, `relationship_...`, `brief_analysis_run_errors`.
+One child table per run table, built by one shared `ConfigureRunError` helper next to `ConfigureRun`. The CLR shape of the six tables is open (D9, still for the owner). Names: `document_change_analysis_run_errors`, `statement_analysis_run_errors`, `action_...`, `vote_...`, `relationship_...`, `brief_analysis_run_errors`.
 
 | Column | Type |
 |---|---|
@@ -177,32 +179,62 @@ One child table per run table, built by one shared `ConfigureRunError` helper ne
 - Index: the PK serves the one read, `WHERE run_id = @id ORDER BY error_number`.
 - Read path and CLR shape: D9, section 4 and PR 2.
 
-### 3.4 Other column changes
+### 3.4 Context data to columns and rows (D1)
 
-- `relationship_analysis_runs.input_fingerprint varchar(64) null`, with the hex check. `RelationshipStaleness.cs:58,65` needs the fingerprint of a settled run once `context_json` is gone. Precedent: `brief_analysis_runs.input_fingerprint` (`BriefAnalysisRunRowConfiguration.cs:26-28,35`). Backfill in the same migration, before the drop: `UPDATE relationship_analysis_runs SET input_fingerprint = context_json::jsonb ->> 'fingerprint' WHERE outcome IN ('Drafted','DraftDiscarded','Bypassed')`. The WHERE matches the check below. `AnalysisWorker.cs:187,266` put `ContextJson` on every run of an attempt, including rejected, stop-failure and discarded runs, so an unfiltered copy would break the check.
+Decision: each run keeps a foreign key to every record revision it was given. Control values drop: `summaryVersion`, `considered` and `omittedNotCited`. Officials and issue IDs name configuration and sit in the user message, so they drop too. Action and vote fingerprints already live on their revisions (`ActionRevisionRows.cs:38`). The statement gate `issue_revision_id` already is a column (`StatementAnalysisRunRowConfiguration.cs:22`).
 
-The column needs a writer, or every new run gets null and every pair looks stale (`RelationshipStaleness.cs:32-33`), so paid redrafts repeat. Today `RelationshipDraftRun` holds only `(Run, Reason)`, and `RelationshipDraftQueueMapping.AddRun` sets only `Reason` (`:31-36`). The writer has four parts:
+Because the new columns and rows can be rebuilt from `context_json`, a verify step runs before the drop (PR 5).
 
-- `RelationshipDraftRun` gains `InputFingerprint`, like `BriefCheckRun` (`BriefCheckRun.cs:5`). The new positional field breaks these constructor sites: `RelationshipDraftStep.cs:18` (`Wrap`), `:54` (recite), `:87` (no relationship), `:95` (`SettleWithoutCallAsync`), `RelationshipDraftQueueMapping.cs:29` (`WrapInterrupted`), `PostgresRelationshipDraftStore.cs:39` (`GetRunAsync`, reads the column) and `PostgresRelationshipDraftStoreTests.cs:288`.
-- `RelationshipDraftStep` sets it on each Drafted or Bypassed run built from a matched pair: the two runs in `SettleAcceptedAsync` (pass it the context), the recite run, and the `SettleWithoutCallAsync` runs for unchanged and no-relationship. `SettleWithoutCallAsync` (`:91-96`) gains a nullable fingerprint parameter. The unmatched path passes `PairId` as its input hash (`:28`), so it passes null. The shared `Wrap` (`RelationshipDraftStep.cs:18`) also builds rejected runs, so it keeps a null fingerprint. The unmatched bypass stays null too, because it has no fingerprint today.
-- `AddRun` writes it, as `BriefCheckQueueMapping.cs:35` does.
-- A check `ck_relationship_analysis_runs_fingerprint`, built like `ck_brief_analysis_runs_fingerprint` (`BriefAnalysisRunRowConfiguration.cs:26-28`): exact SQL: `(outcome IN ('Drafted','DraftDiscarded') AND input_fingerprint ~ '^[0-9a-f]{64}$') OR (outcome = 'Bypassed' AND (input_fingerprint IS NULL OR input_fingerprint ~ '^[0-9a-f]{64}$')) OR (outcome NOT IN ('Drafted','DraftDiscarded','Bypassed') AND input_fingerprint IS NULL)`. Bypassed allows one or none, because the unmatched bypass has none. The check allows DraftDiscarded because `RelationshipDraftQueueMapping.cs:50-51` turns a Drafted run into DraftDiscarded with `run with { Run = ... }`, which keeps the fingerprint. A check for Drafted and Bypassed only would make every refused revision append throw in `CheckpointAsync`. The other fix, to clear the fingerprint at `:50-51`, adds code and loses data. Staleness still filters on outcome (`RelationshipStaleness.cs:64`), so a discarded run never counts as settled.
+**Relationship runs** (`relationship_analysis_runs`). Context shape: `RelationshipDraftPrompt.cs:49-61`.
 
-The settled-run filter `r.context_json::jsonb ->> 'fingerprint' IS NOT NULL` (`RelationshipStaleness.cs:65`) also reads `context_json`. It moves to `r.input_fingerprint IS NOT NULL` in the same PR.
-- No other kind reads a context field. Statement gate `issue_revision_id` already is a column (`StatementAnalysisRunRowConfiguration.cs:22`).
+- `input_fingerprint varchar(64) null`, with the hex check. `RelationshipStaleness.cs:58,65` needs the fingerprint of a settled run once `context_json` is gone. Precedent: `brief_analysis_runs.input_fingerprint` (`BriefAnalysisRunRowConfiguration.cs:26-28,35`).
+- The revisions the pair held: `statement_record_id varchar(64)` and `statement_revision_number int`, with a restricting FK to `statement_revisions` (key `(candidate_id, revision_number)`, `StatementRevisionRowConfiguration.cs:16`). The target is an Action or a Vote. See sub-choice D1a for its columns.
+- Check `ck_relationship_analysis_runs_pair`: the statement pair is all set or all null, and the target pair is set exactly when the statement pair is set. The unmatched bypass has none (`RelationshipDraftStep.cs:27`), and so does an Interrupted run.
+
+The fingerprint check, built like `ck_brief_analysis_runs_fingerprint` (`BriefAnalysisRunRowConfiguration.cs:26-28`), `ck_relationship_analysis_runs_fingerprint`, exact SQL: `(outcome IN ('Drafted','DraftDiscarded') AND input_fingerprint ~ '^[0-9a-f]{64}$') OR (outcome = 'Bypassed' AND (input_fingerprint IS NULL OR input_fingerprint ~ '^[0-9a-f]{64}$')) OR (outcome NOT IN ('Drafted','DraftDiscarded','Bypassed') AND input_fingerprint IS NULL)`. Bypassed allows one or none, because the unmatched bypass has none. The check allows DraftDiscarded because `RelationshipDraftQueueMapping.cs:50-51` turns a Drafted run into DraftDiscarded with `run with { Run = ... }`, which keeps the fingerprint. A check for Drafted and Bypassed only would make every refused revision append throw in `CheckpointAsync`. The other fix, to clear the fingerprint at `:50-51`, adds code and loses data. Staleness still filters on outcome (`RelationshipStaleness.cs:64`), so a discarded run never counts as settled.
+
+Backfill, in the same migration as the columns, before the drop:
+- Fingerprint: `UPDATE relationship_analysis_runs SET input_fingerprint = context_json::jsonb ->> 'fingerprint' WHERE outcome IN ('Drafted','DraftDiscarded','Bypassed')`. The WHERE matches the check. `AnalysisWorker.cs:187,266` put `ContextJson` on every run of an attempt, including rejected, stop-failure and discarded runs, so an unfiltered copy would break the check. The unmatched bypass context has no `fingerprint` key, so it stays null.
+- Revisions: `UPDATE ... SET statement_record_id = context_json::jsonb #>> '{statement,recordId}', statement_revision_number = (context_json::jsonb #>> '{statement,revisionNumber}')::int, <target columns from {target,kind}, {target,recordId}, {target,revisionNumber}> WHERE context_json::jsonb ? 'statement'`. Every run that carries a matched pair gets them, whatever its outcome. The unmatched context `{pairId, matched:false}` has no `statement` key.
+- Before the checks and FKs are added, count Drafted and DraftDiscarded rows with a null fingerprint, and rows whose context names a revision that does not exist. Both counts must be zero.
+
+The writer needs the new fields, or every new run gets null and every pair looks stale (`RelationshipStaleness.cs:32-33`), so paid redrafts repeat. Today `RelationshipDraftRun` holds only `(Run, Reason)`, and `RelationshipDraftQueueMapping.AddRun` sets only `Reason` (`:31-36`). The writer has four parts:
+
+- `RelationshipDraftRun` gains `InputFingerprint` (like `BriefCheckRun`, `BriefCheckRun.cs:5`) and the pair revisions. The new positional fields break these constructor sites: `RelationshipDraftStep.cs:18` (`Wrap`), `:54` (recite), `:87` (no relationship), `:95` (`SettleWithoutCallAsync`), `RelationshipDraftQueueMapping.cs:29` (`WrapInterrupted`), `PostgresRelationshipDraftStore.cs:39` (`GetRunAsync`, reads the columns) and `PostgresRelationshipDraftStoreTests.cs:288`.
+- `RelationshipDraftStep` sets the revisions on every run built from a matched pair, rejected runs included. So `Wrap` (`:18`), which `AnalysisValidationLoop` calls with a bare `AnalysisRun`, becomes a closure over the context. It sets the fingerprint only on the Drafted and Bypassed runs: the two runs in `SettleAcceptedAsync` (pass it the context), the recite run, and the `SettleWithoutCallAsync` runs for unchanged and no-relationship. `SettleWithoutCallAsync` (`:91-96`) gains nullable fingerprint and revision parameters. The unmatched path passes `PairId` as its input hash (`:28`), so it passes null for all of them.
+- `AddRun` writes them, as `BriefCheckQueueMapping.cs:35` does.
+- The settled-run filter `r.context_json::jsonb ->> 'fingerprint' IS NOT NULL` (`RelationshipStaleness.cs:65`) moves to `r.input_fingerprint IS NOT NULL`, with `:58`, in PR 7.
+
+**Brief runs** (`brief_analysis_runs`, tasks `draft` and `check`). Context shapes: `BriefDraftPrompt.cs:41-56` (sent `records`: `id`, `kind`, `recordId`, `revisionNumber`) and `BriefCheckPrompt.cs:52-59` (`citations` with `id`, `notCited` without an ID).
+
+New child table `brief_analysis_run_records`. Precedent: `brief_check_flags` (`BriefCheckFlagRowConfiguration.cs:12-30`).
+
+| Column | Type |
+|---|---|
+| `run_id` | `varchar(32)` |
+| `position` | `smallint` |
+| `citation_id` | `varchar(16)` null |
+| record revision keys | see D1a |
+
+- PK `(run_id, position)`. FK `run_id` to `brief_analysis_runs`, restrict. `ck_brief_analysis_run_records_position`: `position >= 1`. A unique index on `(run_id, citation_id)` where `citation_id IS NOT NULL`.
+- One row per record sent. A brief draft run holds the records it sent, each with its citation ID. A brief check run holds the cited records first (with their citation IDs from the revision), then the not-cited records with a null `citation_id`. Position keeps the sent order.
+- Writers: `BriefDraftStep` and `BriefCheckStep` set the records on `BriefDraftRun` (`BriefDraftRun.cs`) and `BriefCheckRun`. `BriefDraftQueueMapping.AddRun` and `BriefCheckQueueMapping.AddRun` write the rows, as `BriefCheckQueueMapping.cs:40` writes flags. They replace `SerializeContext` at `BriefDraftPrompt.cs:41` and `BriefCheckPrompt.cs:52`.
+- Backfill: `INSERT INTO brief_analysis_run_records ... SELECT r.run_id, e.ordinality::smallint, ... FROM brief_analysis_runs r CROSS JOIN LATERAL jsonb_array_elements(r.context_json::jsonb -> 'records') WITH ORDINALITY AS e(value, ordinality) WHERE r.task = 'draft' AND r.context_json IS NOT NULL`. For `check` runs, the same shape runs over `citations` and then over `notCited`, and the not-cited positions start after `jsonb_array_length(citations)`. A `CASE` maps the kind text of each context to the key columns. The draft context writes `Kind.ToString()` and the check context writes `KindOf(...)`, so PR 3 reads both writers before it fixes the `CASE`.
+
+**Sub-choice D1a (shape of a foreign key to a polymorphic revision).** The relationship target is an Action or a Vote. A brief record is a DocumentChange, a Statement or an Action. One FK cannot name two tables. Options: (i) one nullable column group per kind, each with its own restricting FK, and a check that exactly one group is set; (ii) a kind column with record and revision and no FK, covered only by verify; (iii) one child table per kind. Recommendation: (i). It keeps the repo rule of restricting FKs (`actions.md:62`) with no extra table. Keys: `action_revisions (record_id, revision_number)`, `vote_revisions (record_id, revision_number)`, `statement_revisions (candidate_id, revision_number)` and `document_change_revisions (draft_id, revision_number)`. The columns are `target_action_record_id`, `target_action_revision_number`, `target_vote_record_id` and `target_vote_revision_number` on relationship runs. Brief records use `document_change_draft_id`, `statement_candidate_id` and `action_record_id`, each with its revision number column. The owner may choose (ii) instead.
 
 ## 4. Write path
 
-One owner: a new `AnalysisPromptTexts` static class in `src/CivicLens.Infrastructure/Analysis/`. Precedent: `VoteMemberLists` (`VoteMemberLists.cs:13-50`), which owns the identity and the `INSERT ... ON CONFLICT DO NOTHING` through raw SQL on the caller's transaction. A second precedent is the configuration revision insert (`JobRowWriter.cs:38`).
+One owner for both tables: a new `AnalysisPromptTexts` static class in `src/CivicLens.Infrastructure/Analysis/`. Precedent: `VoteMemberLists` (`VoteMemberLists.cs:13-50`), which owns the identity and the `INSERT ... ON CONFLICT DO NOTHING` through raw SQL on the caller's transaction. A second precedent is the configuration revision insert (`JobRowWriter.cs:38`).
 
-- `EnsureAsync(db, input, nowTicks, ct)` runs one statement: `INSERT INTO analysis_prompt_texts (...) SELECT ... FROM unnest(...) ORDER BY text_sha256 ON CONFLICT DO NOTHING`. Sorting by key gives every writer the same insert order. Settles of one kind already lock the budget day row first (`PostgresAnalysisQueue.cs:238`), so they run one after another and the order adds little. Only Bypassed runs skip that lock, and they insert no text. Each kind has its own budget table, so settles of different kinds do not share a lock. The order still guards that case. Keep it, at no cost.
+- `EnsureAsync(db, input, nowTicks, ct)` runs one statement for each of the two tables, system prompts first: `INSERT INTO analysis_system_prompts (...) SELECT ... FROM unnest(...) ORDER BY text_sha256 ON CONFLICT DO NOTHING`. Sorting by key gives every writer the same insert order, and the fixed table order gives every writer the same lock order. Settles of one kind already lock the budget day row first (`PostgresAnalysisQueue.cs:238`), so they run one after another and the order adds little. Only Bypassed runs skip that lock, and they insert no text. Each kind has its own budget table, so settles of different kinds do not share a lock. The order still guards that case. Keep it, at no cost.
 - One caller: `PostgresAnalysisQueue.SettleRunAsync`, just before `mapping.AddRun` (`:242`). It runs in the checkpoint transaction under the subject row lock (`CheckpointAsync` `:161-180`). Every kind passes here, so no kind has its own insert.
 - The Interrupted path (`:302`) and the Bypassed branch (`:229-233`) skip it. They hold no input.
-- Hash once, one owner. A Core record `AnalysisRunInput(SystemPrompt, UserMessage, OutputSchema, Effort, MaximumOutputTokens)` owns the recipe in a static `TextHash(role, text)` and computes the two text hashes at construction. Core already uses `SHA256` (`BriefWeek.cs`). `AnalysisRunRows.Create` (`AnalysisRunRows.cs:9-33`) copies the hashes and `user_message`. `EnsureAsync` reads the same hashes from the `Input`. No `IdOf` in Infrastructure, no second hash pass.
-- `AnalysisRun` (`AnalysisRun.cs:5-8`) gains `AnalysisRunInput? Input = null` as its last parameter. It sits beside `ContextJson`. It does not replace it, because `context_json` stays live until PR 5 (relationship staleness reads it, and the Interrupted rule needs it). `Attempt.Run` (`AnalysisWorker.cs:260-266`) builds the input from `request`. `BypassRun` (`:182-187`) passes null.
+- Hash once, one owner. A Core record `AnalysisRunInput(SystemPrompt, UserMessage, OutputSchema, Effort, MaximumOutputTokens)` owns the recipe in a static `TextHash(text)` and computes the two text hashes at construction. Core already uses `SHA256` (`BriefWeek.cs`). `AnalysisRunRows.Create` (`AnalysisRunRows.cs:9-33`) copies the hashes and `user_message`. `EnsureAsync` reads the same hashes from the `Input`. No `IdOf` in Infrastructure, no second hash pass.
+- `AnalysisRun` (`AnalysisRun.cs:5-8`) gains `AnalysisRunInput? Input = null` as its last parameter. It sits beside `ContextJson`. It does not replace it, because `context_json` stays live until PR 7 (relationship staleness reads it, and the Interrupted rule needs it). `Attempt.Run` (`AnalysisWorker.cs:260-266`) builds the input from `request`. `BypassRun` (`:182-187`) passes null.
 - Write rule and read rule are separate. `AnalysisRun.Validate()` stays the read rule and accepts a null `Input`. `AnalysisRun.ValidateForWrite()` calls it, then requires `Input` for every outcome except Bypassed and Interrupted, and none for those two. The owner of the write rule is the queue, which already validates before it writes. `CheckpointAsync` calls `Validate()` before the transaction (`PostgresAnalysisQueue.cs:164`). Change that call to `ValidateForWrite()`. `Interrupt` calls `run.Validate()` at `:301`. Change it to `ValidateForWrite()` too, so both write sites use one rule. Do not add a third call in `AnalysisRunRows.Create`. `ToRun` keeps `Validate()` (`AnalysisRunRows.cs:44`).
 - Reads: `ToRun` leaves `Input` null. A reader needs the text only for an inspection command. Add that later, not now (AGENTS: no member without a caller).
-- Validation errors must arrive with the run, not through a new query in `ToRun`. `ToRun` stays static, and `IAnalysisRunRow` gains an `Errors` collection. The CLR shape of the six error tables and the way the rows load is open (D9). Ten queries need the rows (section 1.2). No site loops over many runs, and `AnalysisRunLookup.Latest` callers load no run rows, so this is not an N+1 read. A rejected run without its errors makes `Validate()` throw ("at least one" error). So a missed load fails the per-kind round-trip test. The resume path (`AnalysisValidationLoop.cs:22`) needs these rows for recovery.
+- Validation errors must arrive with the run, not through a new query in `ToRun`. `ToRun` stays static, and `IAnalysisRunRow` gains an `Errors` collection. The CLR shape of the six error tables and the way the rows load is open (D9, still for the owner). Ten queries need the rows (section 1.2). No site loops over many runs, and `AnalysisRunLookup.Latest` callers load no run rows, so this is not an N+1 read. A rejected run without its errors makes `Validate()` throw ("at least one" error). So a missed load fails the per-kind round-trip test. The resume path (`AnalysisValidationLoop.cs:22`) needs these rows for recovery.
 
 Concurrency: `ON CONFLICT DO NOTHING` on the PK makes two writers of one text safe. The second waits for the first to commit, then skips. The run FK sees a committed row.
 
@@ -211,18 +243,20 @@ Concurrency: `ON CONFLICT DO NOTHING` on the PK makes two writers of one text sa
 Each PR starts from `origin/main`. No stacking. Each is a migration plus code that stands alone and is safe to roll back. Each PR edits the docs of the behavior it changes, so docs never lag. `tools/check-docs.py` runs on each PR.
 
 **PR 1. Prompt texts and run input, written by every kind.**
-The table has a production caller only when a run writes to it. So the table, its owner, and the run columns ship together.
-- Migration: `analysis_prompt_texts`, the five run columns, the four checks, and the two FKs on the six tables through `ConfigureRun`.
-- Code: `AnalysisPromptTexts` (`EnsureAsync`), `AnalysisRunInput` (with `TextHash`), `Attempt.Run`, `AnalysisRunRows.Create`, `SettleRunAsync`. Add `Effort` to `AnalysisModelRequest`, and map it to the SDK enum at `AnthropicStructuredCall.cs:43` (D3).
+The tables have a production caller only when a run writes to them. So the tables, their owner, and the run columns ship together.
+- Migration: `analysis_system_prompts`, `analysis_output_schemas` (each with the hash CHECK of D2), the five run columns, the four run checks, and the two FKs on the six tables through `ConfigureRun`.
+- Code: `AnalysisPromptTexts` (`EnsureAsync`), `AnalysisRunInput` (with `TextHash`), `Attempt.Run`, `AnalysisRunRows.Create`, `SettleRunAsync`. Add `Effort` to `AnalysisModelRequest`, and map it to the SDK enum at `AnthropicStructuredCall.cs:43` (D3). Return the output text for every stop that has text (D4, `AnthropicStructuredCall.cs:54-56`).
 - `AnalysisRun` gains `Input` beside `ContextJson`. The context stays written and read. Nothing is swapped.
 - Rules: `Validate()` stays the read rule, so `ToRun` loads legacy rows with a null `Input`. `ValidateForWrite()` requires `Input` for call runs. Owner: `PostgresAnalysisQueue.CheckpointAsync` and `Interrupt` (section 4).
-- Docs: `docs/architecture/analysis.md:198-200` says the run stores no prompt text. Rewrite it. Update the schema docs. Apply D5 to `deploy/scripts/readonly-grants.sql` if the owner chooses to hide columns.
+- Grants (D5 C): add the token `user_message` exactly to the hidden column pattern in `deploy/scripts/readonly-grants.sql`. A bare `message` token would hide `brief_check_flags.message`. System prompt and schema tables stay readable.
+- Docs: `docs/architecture/analysis.md:198-200` says the run stores no prompt text. Rewrite it. Add the content hash rule of section 3.1 (CHECK over one row, verify over child rows). Update the schema docs.
 
 Tests:
-- New `AnalysisPromptTextsTests`: same text gives one row, parallel writers, insert order. `AnalysisRunInputTests`: role changes the key.
+- New `AnalysisPromptTextsTests`: same text gives one row, parallel writers, insert order. A test that the database refuses a row whose key is not the SHA-256 of its text, in each table. `AnalysisRunInputTests`: the hash is the SHA-256 of the text.
+- A grants test: `civic_lens_readonly` cannot read `user_message`, and still reads `brief_check_flags.message` (`PostgresBriefCheckStoreTests.cs:316`).
 - `AnalysisRunTests`: `Validate()` accepts a null `Input`. `ValidateForWrite()` rejects it for call runs and for Bypassed and Interrupted runs that hold one.
 - `AnalysisPromptHashTests`: the hash equals the stored parts.
-- `AnthropicDocumentChangeDraftModelTests`: effort comes from the request.
+- `AnthropicDocumentChangeDraftModelTests`: effort comes from the request. A new test: a refusal and a `max_tokens` stop keep their output text.
 - Per kind: `PostgresDocumentChangeAnalysisStoreTests`, `PostgresStatementGateStoreTests`, `PostgresStatementDraftStoreTests`, `PostgresBillStreamTests.ActionDrafts`, `PostgresRelationshipDraftStoreTests`, `PostgresBriefCheckStoreTests`, and the vote and brief draft store tests. Each asserts that the stored user message, system text, and schema equal the request, and that a retry run holds its own user message.
 - A new test: Bypassed and Interrupted keep nulls, and a legacy row with null input loads through `ToRun`.
 - A migration test modeled on `VoteRevisionColumnsMigrationTests`. `SchemaReferenceTests` regenerates the schema doc. `ArchitectureTests` stays green.
@@ -237,19 +271,31 @@ Tests:
 - Reader: the load of `Errors` at the ten queries (section 4), in the shape that D9 chooses. `validation_json` stays written this PR, for rollback safety. It is no longer read.
 - Tests: a store test per kind for a rejected run round trip, which loads its errors through the include. A migration test with legacy rows. A resume test for `AnalysisValidationLoop` that reads errors from rows. A test that `StatementGateQueueMapping.ToRun` and `PostgresStatementDraftStore.cs:47-53` load errors for a rejected gate run.
 
-**PR 3. Verify command.**
-A read-only check, as R-63 requires before any drop. For each run, errors rebuilt from rows equal `validation_json`. For each new call run, `AnalysisPromptHash` recomputed from stored model, effort, max tokens, system, user, and schema equals `input_hash`. A join checks that each run's two keys point to rows with the right roles (D7). Prints counts and run IDs, never text. Exits 1 on mismatch. Precedent: `votes revisions verify` (`docs/architecture/votes.md:150`).
+**PR 3. Context columns and sent-record rows (D1, D1a).**
+Section 3.4 holds the design. This PR adds data and keeps `context_json` written, so it is safe to roll back.
+- Migration: the relationship columns and checks, the `brief_analysis_run_records` table, and the backfills of section 3.4, with the pre-checks that count nulls and missing revisions.
+- Writers: `RelationshipDraftRun` fields, `RelationshipDraftStep`, `BriefDraftRun` and `BriefCheckRun` records, and the `AddRun` of the three mappings. Section 3.4 lists the constructor sites.
+- Reader: move `RelationshipStaleness.cs:58` and the filter at `:65` to the column. The store read (`PostgresRelationshipDraftStore.cs:18`) and the stale-pair query (`RelationshipStaleness.cs:32-33`) call that helper and need no change.
+Tests: a new relationship run, once settled, writes its fingerprint, and its pair is no longer stale at `RelationshipStaleness.cs:32`. The check rejects a Drafted run with a null fingerprint, accepts a DraftDiscarded run with one, accepts a Bypassed run with or without one, and rejects a rejected run with one. A rejected relationship run writes its pair revisions. The database refuses a revision that does not exist, for each FK group. A brief draft run and a brief check run round trip their records in order. A migration test with legacy rows for both tasks. Edit `PostgresRelationshipDraftStoreTests.cs`: the raw insert at `:155` names `context_json`, and the update at `:511` writes `"old"`, which fails the hex check, so it must write a 64-character hex value.
+
+**PR 4. Gate quotes to child rows (D8).**
+Same steps as `validation_json`: add, backfill, read from rows, verify, drop.
+- Migration: `statement_gate_quotes` with `run_id`, `quote_number`, `issue_id`, `extraction_id`, `start` and `length` (the fields of `StatementGateQuote`). PK `(run_id, quote_number)`. FK `run_id` to `statement_analysis_runs`, restrict. FK `extraction_id` to `document_extractions`, restrict (precedent `statements.md:59`). Checks: `start >= 0` and `length >= 1`. Backfill with `jsonb_array_elements` over `quotes_json::jsonb` `WITH ORDINALITY`, as in PR 2.
+- Writer: `StatementGateQueueMapping.cs:52` writes the rows. `quotes_json` stays written this PR, for rollback safety.
+- Reader: `StatementGateQueueMapping.cs:56-57` reads the rows, in the load shape that D9 chooses. `StatementGateCarryOver.From` (`StatementGateCarryOver.cs:15`) and `PostgresStatementDraftStore.cs:53` keep reading `gateRun.Quotes`, so the carry-over path stays whole.
+- Tests: a gate store round trip, `StatementGateCarryOverTests`, a migration test with legacy rows, and a test that the database refuses a quote with an unknown extraction.
+
+**PR 5. Verify command.**
+A read-only check, as R-63 requires before any drop. For each run: errors rebuilt from rows equal `validation_json`. For each new call run, `AnalysisPromptHash` recomputed from stored model, effort, max tokens, system, user, and schema equals `input_hash`. Relationship columns equal the `context_json` fields (fingerprint, statement pair, target pair). Brief record rows equal the sent records of `context_json`, in order. Gate quote rows equal `quotes_json`. Prints counts and run IDs, never text. Exits 1 on mismatch. Precedent: `votes revisions verify` (`docs/architecture/votes.md:150`). The text tables need no verify join, because a CHECK holds each key and plain FKs hold each role.
 Tests: a verify test per condition, like `PostgresHouseVoteTests.VerifyFailsWhenAColumnDiffersFromTheJsonAndNamesTheFieldButNeverItsTextBecauseTheTextIsPrivate`, and a command exit code test.
 
-**PR 4. Drop `validation_json`.**
+**PR 6. Drop `validation_json`.**
 Migration drops the column after verify passes in production. Remove the property and the JSON code in `AnalysisRunRows.cs:29,41`. Down migration restores the column and rebuilds it from the child rows.
 Tests: migration down and up test with rows. Schema doc regeneration. Edit `PostgresBriefCheckStoreTests.cs:319`, which asserts that the hidden pattern does not match `validation_json`. Line 318 (`output_json`) stays, since `output_json` stays. Edit `briefs.md:93`, which names `validation_json`. `briefs.md:237` names only `output_json` and stays.
 
-**PR 5. Drop `context_json`. No verify step.**
-This PR drops the column with no verify step, because the dropped fields have no rebuild source (see D1). R-63 asks for a check before a drop. The owner decides in D1.
-- Migration: add `relationship_analysis_runs.input_fingerprint` with its check, and backfill it with the filtered UPDATE of section 3.4 (outcomes Drafted, DraftDiscarded and Bypassed only). Before the check is added, count Drafted and DraftDiscarded rows whose backfill is null. The count must be zero.
-- Writer (section 3.4): `RelationshipDraftRun.InputFingerprint`, set in `RelationshipDraftStep`, written in `RelationshipDraftQueueMapping.AddRun`. Section 3.4 lists the constructor sites that the new field breaks, and the new parameter of `SettleWithoutCallAsync`.
-- Reader: move `RelationshipStaleness.cs:58` and the `IS NOT NULL` filter at `:65` to the column. The store read (`PostgresRelationshipDraftStore.cs:18`) and the stale-pair query (`RelationshipStaleness.cs:32-33`) call that helper and need no change.
+**PR 7. Drop `context_json`.**
+This PR drops the column after verify passes in production (D1). Its replacements ship in PR 3.
+- Migration: drop the column. Down migration restores it, and rebuilds the fields that the columns and rows hold.
 - Code: remove `ContextJson` from `IAnalysisAttempt` (`IAnalysisAttempt.cs:8`), `AnalysisWorker.cs:160,187,266`, `AnalysisRun.cs:34-35`, the row interface, and the column. Interrupted runs lose the special rule.
 - Remove nine context lines in eight step files: `ActionDraftStep.cs:37`, `DocumentChangeDraftStep.cs:31`, `BriefCheckStep.cs:27`, `BriefDraftStep.cs:26`, `RelationshipDraftStep.cs:27,31`, `StatementDraftStep.cs:31`, `StatementGateStep.cs:28`, `VoteDraftStep.cs:34`.
 - Remove nine context methods that lose their last production caller: six `SerializeContext` (action, brief check, brief draft, relationship, statement draft, vote), `SerializeCatalog`, `ToContextJson`, and `SerializeUnmatchedContext`.
@@ -259,87 +305,41 @@ Tests:
 - Two tests still call context methods and change: `ActionDraftPromptGoldenTests.cs:66` and `PostgresDocumentChangeAnalysisStoreTests.cs:115`.
 - Remove the context rule from `AnalysisRunTests.cs:27-28`.
 - Update `PostgresBillStreamTests.ActionDrafts.cs:484,503,505`, `StatementGateStepTests.cs:46`, `DocumentChangeDraftStepTests.cs:29`, `VoteDraftStepTests.cs:426`, `BriefCheckStepTests.cs:96`, and `RelationshipWorldSeeder.cs:93`.
-- A new test: a new relationship run, once settled, writes its fingerprint, and its pair is no longer stale at `RelationshipStaleness.cs:32`. A second test: the check rejects a Drafted run with a null fingerprint, accepts a DraftDiscarded run with one, accepts a Bypassed run with or without one, and rejects a rejected run with one.
-- `PostgresRelationshipDraftStoreTests.cs`: the raw insert at `:155` names `context_json`. The update at `:511` writes it. Rewrite both to use `input_fingerprint`. The update at `:511` writes `"old"`, which fails the hex check, so it must write a 64-character hex value. A settled fingerprint reads the column.
+- `PostgresRelationshipDraftStoreTests.cs:155` still names `context_json` in its raw insert. Rewrite it to use the new columns.
 - `ContextJson` sits in the middle of the `AnalysisRun` record. Removing it breaks every `new AnalysisRun(...)`. Edit the nine files: `FakeAnalysisStore.cs:41`, `FakeStatementDraftStore.cs:36`, `FakeStatementGateStore.cs:42`, `StatementCodeApprovalTests.cs:191`, `StatementGateCarryOverTests.cs:55`, `PostgresBillStreamTests.ActionDrafts.cs:999`, `PostgresBillStreamTests.ActionReview.cs:684`, `PostgresHouseVoteTests.Drafting.cs:518`, `PostgresRelationshipDraftStoreTests.cs:282`.
 
-No separate docs PR. PR 1, 2, 4 and 5 all touch `AnalysisRunRows.cs`, so merge them one at a time. Roadmap says R-63 revision steps follow R-51 PR 3 and PR 4.
+**PR 8. Drop `quotes_json`.**
+Migration drops the column after verify passes. Remove the property (`StatementAnalysisRunRowConfiguration.cs:24`, `StatementAnalysisRunRow.cs:28`) and the JSON code at `StatementGateQueueMapping.cs:52,57`. Down migration restores the column and rebuilds it from the gate quote rows. Update the schema docs and `statements.md`.
+
+No separate docs PR. PR 1, 2, 3, 6 and 7 touch `AnalysisRunRows.cs`, and PR 4 and 8 touch `StatementGateQueueMapping.cs`, so merge in order, one at a time. Roadmap says R-63 revision steps follow R-51 PR 3 and PR 4.
 
 ## 6. Open decisions for the owner
 
-**D1. What to do with `context_json` data that is not in the user message.**
-Problem: contexts hold fields the user message lacks. Examples: `fingerprint`, `summaryVersion`, `considered`, each sent brief record's kind, record ID and revision number, and `omittedNotCited` (section 1.2). The brief draft prompt names records by citation ID only. The map from citation ID to record revision lives in `context_json` and in the accepted revision. A rejected or discarded brief run loses the map when the column goes.
-Options:
-- A. Drop all of it. Matches the plan. Rejected runs lose the record map.
-- B. Add one column where a reader exists (`input_fingerprint` on relationship runs), with its writer, check and test (section 3.4). Drop the rest.
-- C. B plus a child table of sent records for brief runs.
-Cost, stated plainly: PR 5 drops `context_json` with no verify step. R-63 asks for a check before a drop. After the drop, nothing rebuilds the lost fields from the run. The user message replaces the context only in part. The owner keeps the choice: accept the loss, or add a verify step before PR 5.
-Facts: action and vote fingerprints already live on their revisions (`ActionRevisionRows.cs:38`). Bypassed action and vote runs pass the fingerprint into `input_hash` (`ActionDraftStep.cs:78`, `VoteDraftStep.cs:64`). Relationship Drafted runs do not, because their `input_hash` is the prompt hash. So only relationship runs need a column.
-Recommendation: B. Only the relationship fingerprint has a reader. Revisions carry exact evidence versions for anything that publishes. C builds a table with no caller. Reopen if a brief inspection command is planned.
-Precedent checked: `brief_analysis_runs.input_fingerprint`, `RelationshipStaleness.cs:58`, `docs/architecture/briefs.md` flag rules.
+**D1. What to do with `context_json` data that is not in the user message.** DECIDED: C, extended.
+Decision: each run keeps a foreign key to every record revision it was given. Brief draft and brief check runs get a child table of sent records (citation ID, record, revision number). Relationship runs get statement and target revision columns plus `input_fingerprint`. Control values (`summaryVersion`, `considered`, `omittedNotCited`) drop. Action and vote fingerprints already live on revisions (`ActionRevisionRows.cs:38`). A verify step runs before the `context_json` drop, because the new data can be rebuilt from it. Design: section 3.4, PR 3, PR 5 and PR 7. Open sub-choice: D1a in section 3.4 (the FK shape for a polymorphic revision), with a recommendation.
+Precedent checked: `brief_check_flags`, `brief_analysis_runs.input_fingerprint`, `RelationshipStaleness.cs:58`, `votes revisions verify`.
 
-**D2. How the table proves that text matches its key.**
-Problem: `ON CONFLICT DO NOTHING` skips a row on a key clash without comparing text. A C# bug that hashes the wrong string stores wrong text under a right key. The roadmap says our data is first class.
-Options:
-- A. C# computes the key and a test covers it. Same as `vote_member_lists`.
-- B. Add the CHECK `text_sha256 = encode(sha256(convert_to(role || E'\n' || text,'UTF8')),'hex')`. The database refuses a mismatch. This is the same recipe as section 3.1, with no version tag in either place.
-- C. A verify query only (PR 3).
-Recommendation: B. The cost is one SHA-256 per new text, and texts are few. C# still computes the key for the FK. The key then cannot lie. Postgres runs 18.3 (`deploy/compose.yaml:30`), so `sha256()` is available.
-Precedent checked: `vote_member_lists` (A, hash of a canonical list that SQL cannot rebuild cheaply), `ck_collection_configuration_revisions_id` (format only), `document_extractions.text_sha256` (format only). Hash-of-content checks have no precedent. This is a departure to document.
+**D2. How a text table proves that text matches its key.** DECIDED: B.
+Decision: a database CHECK that the key is the SHA-256 of the text (section 3.1). Rule for the plan: a content hash over one row gets a CHECK. A content hash over child rows (`vote_member_lists`) gets a verify recompute (`PostgresVoteRevisionBackfillStore.cs:68`), because a CHECK cannot see child rows and AGENTS.md limits triggers. PR 1 writes the rule into the analysis architecture doc.
+Precedent checked: `vote_member_lists` (hash of a canonical list), `ck_collection_configuration_revisions_id` (format only). Hash-of-content CHECKs have no precedent. This is a departure to document. Postgres runs 18.3 (`deploy/compose.yaml:30`), so `sha256()` is available.
 
-**D3. Store `effort` and `max_output_tokens` on the run.**
-Problem: the input hash covers them (`AnalysisPromptHash.cs:9-20`) but runs do not store them, and `effort` is hard-coded in the SDK call. Without them the stored parts cannot rebuild `input_hash`, so verify (PR 3) cannot prove the stored text is what was hashed. `Effort` is a string const on each task. The SDK takes an enum, so option B needs a mapping from string to enum at `AnthropicStructuredCall.cs:43`. All eight consts are `"medium"` today.
-Options:
-- A. Store neither. Verify checks only that the three texts exist.
-- B. Store both, as columns. Put `Effort` on the request.
-- C. Store both and `model` inside a JSON blob. Rejected, since R-63 removes JSON.
-Recommendation: B. It is two small columns. It also removes the drift between the task consts and `AnthropicStructuredCall.cs:43`.
-Precedent checked: `AnalysisModelRequest` fields, task `Effort` consts.
+**D3. Store `effort` and `max_output_tokens` on the run.** DECIDED: B.
+Decision: store both as columns, and put `Effort` on the request, with a string to enum mapping at `AnthropicStructuredCall.cs:43`. All eight consts are `"medium"` today. It also removes drift between the task consts and the SDK call.
 
-**D4. Raw output for refusal and `max_tokens` stops.**
-Problem: `AnthropicStructuredCall.cs:54-56` returns text only for `end_turn`. The owner wants the exact model output. Refused, truncated, and every other non-`end_turn` run (`UnexpectedStop`) keep none.
-Options:
-- A. Leave it. `output_json` stays null for those stops.
-- B. Return text for every stop that has text, including `UnexpectedStop`. `StopOutcome` (`AnalysisModelResponse.cs:7-13`) already decides the outcome from `StopReason` first, so this is safe. Relax nothing in `Validate` (it requires output only for Drafted, DraftDiscarded, Classified).
-- C. B plus rename the column to `output_text` since it is not always JSON. Defer the rename to R-63's JSON cleanup.
-Recommendation: B. It is a small change and gives the truncated answer, which is the most useful debug data. Skip C: rename costs a migration and touches every reader for no gain.
-Precedent checked: `AnalysisModelResponse.StopOutcome`, `AnalysisRun.Validate` output rules.
+**D4. Raw output for refusal and `max_tokens` stops.** DECIDED: B.
+Decision: return text for every stop that has text (`AnthropicStructuredCall.cs:54-56`). `StopOutcome` (`AnalysisModelResponse.cs:7-13`) decides the outcome from `StopReason` first, so this is safe. The column keeps its name.
 
-**D5. Who may read `user_message` and prompt text.**
-Problem: `readonly-grants.sql` grants every column not matching its hidden pattern. `user_message` and `analysis_prompt_texts.text` would be readable by `civic_lens_readonly`. User messages hold article text, evidence, and unreviewed model context. They are large. No query needs them from that role. The pattern is a regex on column names, so one added name hides the column in every table. Existing grant tests check per table (`ReviewDecisionColumnsMigrationTests.cs:258-268`), so a new name breaks none of them.
-Options:
-- A. Leave them readable. Consistent with `output_json` and `validation_json`, which `briefs.md:93` says the role reads on purpose.
-- B. Hide `user_message` through the column pattern, and list `analysis_prompt_texts` under `hidden_table`. Add a test for the grants.
-- C. Hide only `user_message`. Name the regex token `user_message` exactly. A bare `message` token would also hide `brief_check_flags.message` and fail `PostgresBriefCheckStoreTests.cs:316`.
-Recommendation: C. System and schema text is code-derived and helps debug. The user message carries evidence and is large. Hiding it keeps the role small. Reopen if the agent role needs it.
-Precedent checked: `deploy/scripts/readonly-grants.sql` (`hidden_column`, `hidden_table`), `docs/architecture/briefs.md:93`.
+**D5. Who may read `user_message` and prompt text.** DECIDED: C.
+Decision: hide only `user_message`, with the exact token `user_message` in the pattern of `deploy/scripts/readonly-grants.sql` (PR 1). A bare `message` token would also hide `brief_check_flags.message` and fail `PostgresBriefCheckStoreTests.cs:316`. System prompt and schema text stay readable.
 
-**D6. Interrupted runs.**
-Problem: an interrupted call may have been sent, but its request lived only in the dead worker. Section 2 gap 5.
-Options:
-- A. Leave null. State it in the doc. Matches the plan.
-- B. Persist the request on the queue row at reservation (`ReserveAsync` `:150-154`), copy it into the Interrupted run, clear it at settle. This writes up to the prompt cap on every call, even when no crash happens.
-- C. Persist only the hashes and user message hash. Does not give the text.
-Recommendation: A. Interrupts are rare, the charge is recorded, and B adds a large write to the hot path of every call. The run keeps its `input_hash`.
-Precedent checked: `PostgresAnalysisQueue.Interrupt`, `docs/architecture/analysis.md:200`.
+**D6. Interrupted runs.** DECIDED: A.
+Decision: leave the input null. State it in the doc. The run keeps its `input_hash`.
 
-**D7. One text table or two.**
-Problem: the table keys by hash and carries a role. The role cannot be enforced by a single-column FK. A system prompt hash could sit in `output_schema_sha256`.
-Options:
-- A. One table. The role sits in the hash (D2 B checks it). A test proves that writers pass the right role. The DB does not stop a swapped FK.
-- B. One table with composite FK `(sha256, role)` and a constant role column on each run table. Extra columns for little value.
-- C. Two tables, `analysis_system_prompts` and `analysis_output_schemas`. The FK enforces the role. The owner chose one table.
-Recommendation: A, with a verify query that joins each run's two keys to their roles (PR 3). It follows the owner's choice. Revisit C if a swap ever happens.
-Precedent checked: `vote_member_lists` and entries (single table per concept), per-kind review tables.
+**D7. One text table or two.** DECIDED: two tables.
+Decision: `analysis_system_prompts` and `analysis_output_schemas`. Plain FKs enforce the role, so there is no role column. The hash covers the text only, so the D2 CHECK is the SHA-256 of the text. One owner, `AnalysisPromptTexts`, writes both. PR 5 has no role join.
 
-**D8. `quotes_json` on `statement_analysis_runs`.**
-Problem: it is a JSON column on a run table that option B does not mention. R-63 says own data leaves JSON.
-Fact: the draft step reads it. `StatementGateCarryOver.From` reads `gateRun.Quotes` and `output_json` to carry issue IDs into the draft (`StatementGateCarryOver.cs:12,15`, `PostgresStatementDraftStore.cs:53`). A move must keep that path whole.
-Options:
-- A. Leave it for the statement R-63 step.
-- B. Move it to a child table in this work.
-Recommendation: A. It is gate output, not model input. Its readers are `StatementGateQueueMapping.cs:56` and the carry-over. Do it in its kind's step.
-Precedent checked: `brief_check_flags`, R-63 text.
+**D8. `quotes_json` on `statement_analysis_runs`.** DECIDED: B.
+Decision: move it to a child table of gate quotes in this series, with backfill, a carry-over read from rows (`StatementGateCarryOver`), verify, then drop. These are the same steps as `validation_json`. PR 4 and PR 8.
 
 **D9. CLR shape of the six error tables.**
 Problem: PR 2 needs one child table per run table, and `ToRun` must see the errors with the run. The shape decides how the rows load, and a wrong load makes `Validate()` throw for a rejected run.
@@ -354,6 +354,6 @@ Recommendation: A. It follows the R-63 navigation precedent and keeps Restrict. 
 ## 7. Risks to keep in view
 
 - Size: user messages add raw text to six run tables. The repo holds no size figure. Postgres compresses large `text` in TOAST. Measure after PR 1 with `pg_total_relation_size` on each run table before and after one week.
-- Down migrations: PR 4 and 5 drop columns. Each needs the repo's down-and-up test with legacy rows.
+- Down migrations: PR 6, 7 and 8 drop columns. Each needs the repo's down-and-up test with legacy rows.
 - `tools/check-docs.py` and `tools/render-architecture.py --check` run on each PR. The architecture diagram changes only if a project boundary moves. None does here.
 - The Core project may not take a package. Hashing uses the BCL, as `AnalysisPromptHash` does in Application, so `AnalysisRunInput` in Core is allowed. If the owner prefers, put the record in Application and keep `AnalysisRun` in Core with plain string fields.

@@ -120,3 +120,12 @@ Each item was checked on `origin/main` with `git show` and `git grep`. All were 
 - P3a (check SQL): section 3.4 states it. The test text matches it.
 - P3b (`"old"`): PR 5 says to write a 64-character hex value at `PostgresRelationshipDraftStoreTests.cs:511`.
 - P3c (prompt cap owner): the eight tasks use the one Core constant. A test that ties two values would keep two owners.
+
+## Owner decisions folded in
+
+The owner chose D1 C (extended), D2 B, D3 B, D4 B, D5 C, D6 A, D7 two tables and D8 B. D9 stays open. The survey records each in section 6 and updates sections 3 to 5. The plan now has eight PRs. New facts checked on `origin/main`:
+
+- Brief draft sent records carry `id`, `kind`, `recordId` and `revisionNumber` (`BriefDraftPrompt.cs:41-56`). Brief check carries `citations` with IDs and `notCited` without (`BriefCheckPrompt.cs:52-59`). Relationship context carries `statement` and `target` revisions (`RelationshipDraftPrompt.cs:49-61`).
+- The relationship target (Action or Vote) and the brief record kinds (DocumentChange, Statement, Action) name several revision tables, so one FK cannot hold them. This is the new sub-choice D1a, with a recommendation.
+- `RelationshipDraftStep.Wrap` now needs the context, because rejected runs also carry the pair revisions.
+- The role join in verify is gone, because two tables and plain FKs hold the role.
