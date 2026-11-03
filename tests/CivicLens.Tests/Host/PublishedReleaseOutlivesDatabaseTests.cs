@@ -95,7 +95,7 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
         await new DecideDocumentChangeReview(reviews, catalog).ExecuteAsync(Owner,
             new(saved.DraftId, 2, 0, ReviewDecisionKind.Approve, null, [], "approve"));
 
-        var store = PostgresPublicationStore.FromConnectionString(connectionString);
+        var store = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var directory = new FileReleaseDirectory(releasesRoot);
         var publish = new PublishRelease(store,
             directory, new ReleaseRenderer(null, null),

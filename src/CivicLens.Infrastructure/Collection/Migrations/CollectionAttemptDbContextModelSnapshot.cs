@@ -519,6 +519,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("author_subject");
 
+                    b.Property<string>("CodeVersion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("code_version");
+
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
@@ -541,6 +546,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("action_revisions", null, t =>
                         {
                             t.HasCheckConstraint("ck_action_revisions_author_kind", "author_kind IN ('Person','Analysis','Code')");
+
+                            t.HasCheckConstraint("ck_action_revisions_code_version", "code_version ~ '^[0-9a-f]{40}$'");
+
+                            t.HasCheckConstraint("ck_action_revisions_code_version_author", "code_version IS NULL OR author_kind = 'Code'");
 
                             t.HasCheckConstraint("ck_action_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
@@ -3106,6 +3115,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("actor_subject");
 
+                    b.Property<string>("CodeVersion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("code_version");
+
                     b.Property<string>("DirectoryName")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -3135,6 +3149,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("publication_releases", null, t =>
                         {
+                            t.HasCheckConstraint("ck_publication_releases_code_version", "code_version ~ '^[0-9a-f]{40}$'");
+
                             t.HasCheckConstraint("ck_publication_releases_directory", "directory_name ~ '^[0-9]{6}-[0-9a-f]{32}$'");
 
                             t.HasCheckConstraint("ck_publication_releases_number", "release_number BETWEEN 1 AND 999999");

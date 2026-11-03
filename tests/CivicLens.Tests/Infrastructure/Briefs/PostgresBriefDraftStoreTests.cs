@@ -48,7 +48,7 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
         factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         store = new PostgresBriefDraftStore(factory);
-        publications = new PostgresPublicationStore(factory);
+        publications = new PostgresPublicationStore(factory, TestCodeVersion.Current);
         seeder = new BriefWorldSeeder(connectionString);
     }
 

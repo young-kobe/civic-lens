@@ -206,7 +206,7 @@ try
         var textExtractor = new CaptureDocumentTextExtractor();
         var apiResponses = new ApiResponseReader(attempts, new CaptureBodyReader());
         var artifactRoot = CollectionWorkerCommand.ArtifactRootOf(args);
-        var actionDrafting = ActionDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, textExtractor, issues,
+        var actionDrafting = ActionDraftComposition.Create(analysisContexts, connectionString, CodeVersion.FromAssembly(typeof(Program).Assembly), jobs, apiResponses, textExtractor, issues,
             artifactRoot, BeatOf(WorkerLoopNames.ActionDrafting), loggers);
         await using var actionDraftingWakeup = actionDrafting.Wakeup;
         var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, issues, artifactRoot, BeatOf(WorkerLoopNames.VoteDrafting), loggers);
@@ -217,7 +217,7 @@ try
         await using var briefDraftingWakeup = briefDrafting.Wakeup;
         var briefChecking = BriefCheckComposition.Create(analysisContexts, connectionString, BeatOf(WorkerLoopNames.BriefChecking), loggers);
         await using var briefCheckingWakeup = briefChecking.Wakeup;
-        var publishing = PublishingComposition.Create(connectionString, workerConfiguration, issueConfiguration, artifactRoot, BeatOf(WorkerLoopNames.Publishing), loggers);
+        var publishing = PublishingComposition.Create(connectionString, CodeVersion.FromAssembly(typeof(Program).Assembly), workerConfiguration, issueConfiguration, artifactRoot, BeatOf(WorkerLoopNames.Publishing), loggers);
         await using var publishingWakeup = publishing?.Wakeup;
         var reportPull = ReportPullComposition.Create(analysisContexts, connectionString, BeatOf(WorkerLoopNames.ReportPull), loggers);
         await using var reportPullWakeup = reportPull?.Wakeup;
@@ -268,7 +268,7 @@ try
         executing = true;
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         var capacity = string.IsNullOrWhiteSpace(releaseRoot) ? null
-            : new ReadReleaseCapacity(PostgresPublicationStore.FromConnectionString(connectionString), new FileReleaseDirectory(releaseRoot));
+            : new ReadReleaseCapacity(PostgresPublicationStore.FromConnectionString(connectionString, CodeVersion.FromAssembly(typeof(Program).Assembly)), new FileReleaseDirectory(releaseRoot));
         return await WorkerHealthCommand.ExecuteAsync(PostgresWorkerHeartbeatStore.FromConnectionString(connectionString), capacity, Console.Out, cancellation.Token);
     }
 
@@ -301,7 +301,7 @@ try
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
-        var draftStore = new PostgresActionDraftStore(contexts);
+        var draftStore = new PostgresActionDraftStore(contexts, CodeVersion.FromAssembly(typeof(Program).Assembly));
         var draftCommands = new AnalysisQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
         var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), new RequeueRefusedActionDrafts(draftStore), new RedraftActionDrafts(draftStore), owner);
@@ -378,7 +378,7 @@ try
             ? PublicationComposition.RequireIssues(ConfigurationFile.ReadIssuesFromEnvironment())
             : IssueConfiguration.None;
         var artifactRoot = args is ["releases", "publish", ..] ? PublicationComposition.RequireArtifactRoot() : string.Empty;
-        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, CodeVersion.FromAssembly(typeof(Program).Assembly));
         var releases = new FileReleaseDirectory(releaseRoot);
         using var loggers = CreateLoggers();
         var (publish, _) = PublicationComposition.Create(connectionString, publications, releases, publishConfiguration, issueConfiguration,

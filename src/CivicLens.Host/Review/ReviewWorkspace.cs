@@ -1,3 +1,4 @@
+using CivicLens.Application;
 using System.Net;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Activity;
@@ -349,7 +350,7 @@ internal static class ReviewWorkspace
     {
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (releaseRoot is null) return;
-        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, CodeVersion.FromAssembly(typeof(ReviewWorkspace).Assembly));
         var releases = new FileReleaseDirectory(releaseRoot);
         services.AddScoped(_ => new ListPublicationReleases(publications, releases));
         services.AddScoped(_ => new ListBlockedPublished(publications, releases, new BlockedPublishedRecords(publications, releases)));

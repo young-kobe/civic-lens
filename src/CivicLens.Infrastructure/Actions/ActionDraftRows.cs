@@ -1,3 +1,4 @@
+using CivicLens.Application;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Review;
 using CivicLens.Core.Actions;
@@ -13,7 +14,7 @@ namespace CivicLens.Infrastructure.Actions;
 internal static class ActionDraftRows
 {
     public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, ActionDraftRevision revision, string runId,
-        CancellationToken cancellationToken)
+        CodeVersion codeVersion, CancellationToken cancellationToken)
     {
         revision.ValidateShape();
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.ActionReview, cancellationToken);
@@ -29,7 +30,7 @@ internal static class ActionDraftRows
         }
         if (draft is null) db.Add(draft = NewDraft(revision));
         var records = PostgresActionReviewStore.Records;
-        await records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision, runId), await records.ReadCycleAsync(db, draft, cancellationToken),
+        await records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision, runId, codeVersion), await records.ReadCycleAsync(db, draft, cancellationToken),
             () => ApprovalCheck.OfAsync(() => PostgresActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)));
         return null;
     }
@@ -131,13 +132,14 @@ internal static class ActionDraftRows
         CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
     };
 
-    public static ActionRevisionRow NewRevision(ActionDraftRevision revision, string? runId) => new()
+    public static ActionRevisionRow NewRevision(ActionDraftRevision revision, string? runId, CodeVersion? codeVersion) => new()
     {
         RecordId = revision.RecordId,
         RevisionNumber = revision.RevisionNumber,
         AuthorSubject = revision.AuthorSubject,
         AuthorKind = ReviewAuthor.KindOf(revision.AuthorSubject),
         RunId = runId,
+        CodeVersion = ReviewAuthor.IsCode(revision.AuthorSubject) ? (codeVersion ?? throw new ArgumentNullException(nameof(codeVersion))).Sha : null,
         RevisionJson = ReviewJson.Serialize(revision),
         CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
     };

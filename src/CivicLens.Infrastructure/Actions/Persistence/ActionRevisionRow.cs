@@ -10,6 +10,7 @@ internal sealed class ActionRevisionRow : IReviewRevisionRow
     public string AuthorSubject { get; set; } = string.Empty;
     public ReviewAuthorKind AuthorKind { get; set; }
     public string? RunId { get; set; }
+    public string? CodeVersion { get; set; }
     public string RevisionJson { get; set; } = string.Empty;
     public long CreatedAtUtcTicks { get; set; }
 }

@@ -479,7 +479,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         await Decide.ExecuteAsync(Owner, new(candidate, 3, 2, ReviewDecisionKind.Approve, "Fixed.", [withdrawal.DecisionId], "approve-new"));
         await briefs.ExecuteAsync("UPDATE brief_analysis SET status = 'Succeeded', attempts = 3");
 
-        await new PostgresPublicationStore(factory).CommitAsync(Owner.Subject, new(2, 1, $"000002-{Guid.NewGuid():N}",
+        await new PostgresPublicationStore(factory, TestCodeVersion.Current).CommitAsync(Owner.Subject, new(2, 1, $"000002-{Guid.NewGuid():N}",
             [new(PublishedRecordKind.Statement, candidate, 3)], []), "publish", new string('a', 64), default);
 
         Assert.Equal("Pending:0", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));

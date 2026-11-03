@@ -14,7 +14,7 @@ public sealed partial class PostgresHouseVoteTests
     public async Task AVoteCommitWithAStaleReviewStateVersionIsAConflictBecauseTheKindPicksTheVoteTable()
     {
         var recordId = await ApprovedVoteAsync();
-        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
 
         await Assert.ThrowsAsync<PublicationConflictException>(() =>
             publications.CommitAsync(PublicationScenario.Owner.Subject, VoteCommit(recordId, reviewStateVersion: 0), "stale", Hash(1), default));
@@ -31,7 +31,7 @@ public sealed partial class PostgresHouseVoteTests
         var recordId = await ApprovedVoteAsync();
         var ready = Assert.Single(await VoteReviews().ListUnpublishedApprovedAsync(10, [], default));
 
-        await PostgresPublicationStore.FromConnectionString(connectionString).CommitAsync(PublicationScenario.Owner.Subject,
+        await PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current).CommitAsync(PublicationScenario.Owner.Subject,
             VoteCommit(recordId, reviewStateVersion: 1), "key", Hash(1), default);
 
         Assert.Empty(await VoteReviews().ListUnpublishedApprovedAsync(10, [], default));

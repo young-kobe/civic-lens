@@ -58,7 +58,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
             {
                 revision.ValidatePersonEditOf(current);
                 return Task.FromResult(revision);
-            }, saved => ActionDraftRows.NewRevision(saved, null), null,
+            }, saved => ActionDraftRows.NewRevision(saved, null, null), null,
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
                 afterDecision, revision => revision.ComparableForm(), correctedReportIds), cancellationToken);
 

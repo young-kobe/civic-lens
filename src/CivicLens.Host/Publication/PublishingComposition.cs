@@ -13,7 +13,7 @@ internal sealed record PublishingComposition(AnalysisStage Stage, IWorkerWakeup 
 {
     private const string EnabledVariable = "CIVIC_LENS_PUBLISHING";
 
-    public static PublishingComposition? Create(string connectionString, CollectionConfiguration collection, IssueConfiguration? issues,
+    public static PublishingComposition? Create(string connectionString, CodeVersion codeVersion, CollectionConfiguration collection, IssueConfiguration? issues,
         string artifactRoot, WorkerBeat beat, ILoggerFactory loggers)
     {
         var setting = Environment.GetEnvironmentVariable(EnabledVariable);
@@ -22,7 +22,7 @@ internal sealed record PublishingComposition(AnalysisStage Stage, IWorkerWakeup 
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (string.IsNullOrWhiteSpace(releaseRoot))
             throw new ArgumentException("Publishing needs CIVIC_LENS_RELEASE_DIRECTORY.");
-        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, codeVersion);
         var (publish, loaders) = PublicationComposition.Create(connectionString, publications, new FileReleaseDirectory(releaseRoot),
             collection, PublicationComposition.RequireIssues(issues), artifactRoot, loggers);
         var wakeup = PostgresPublishingWakeup.FromConnectionString(connectionString, PublishApprovedRecords.ReleaseGap);

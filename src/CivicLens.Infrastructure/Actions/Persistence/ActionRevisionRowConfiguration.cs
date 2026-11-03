@@ -12,6 +12,8 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
             table.HasCheckConstraint("ck_action_revisions_number", "revision_number >= 1");
             table.HasCheckConstraint("ck_action_revisions_author_kind", "author_kind IN ('Person','Analysis','Code')");
             table.HasCheckConstraint("ck_action_revisions_run", "(author_kind <> 'Person') = (run_id IS NOT NULL)");
+            table.HasCheckConstraint("ck_action_revisions_code_version", "code_version ~ '^[0-9a-f]{40}$'");
+            table.HasCheckConstraint("ck_action_revisions_code_version_author", "code_version IS NULL OR author_kind = 'Code'");
         });
         builder.HasKey(row => new { row.RecordId, row.RevisionNumber });
         builder.Property(row => row.RecordId).HasColumnName("record_id").HasMaxLength(64);
@@ -19,6 +21,7 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.AuthorSubject).HasColumnName("author_subject").HasMaxLength(256).IsRequired();
         builder.Property(row => row.AuthorKind).HasColumnName("author_kind").HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(row => row.RunId).HasColumnName("run_id").HasMaxLength(32);
+        builder.Property(row => row.CodeVersion).HasColumnName("code_version").HasMaxLength(40);
         builder.Property(row => row.RevisionJson).HasColumnName("revision_json").IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
         builder.HasIndex(row => row.RunId).IsUnique();

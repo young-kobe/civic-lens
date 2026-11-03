@@ -890,7 +890,7 @@ public sealed partial class PostgresBillStreamTests
     private static string RecordId => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{SourceId.Length}:{SourceId}119:hr:7")));
 
     private PostgresActionDraftStore ActionStore() => new(new PooledDbContextFactory<CollectionAttemptDbContext>(
-        new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));
+        new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options), TestCodeVersion.Current);
 
     private async Task<string> CandidateWithoutSummariesAsync()
     {

@@ -52,7 +52,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         extractions = new PostgresDocumentExtractionStore(factory);
         comparisons = new PostgresDocumentComparisonStore(factory);
         reviews = new PostgresDocumentChangeReviewStore(factory);
-        publications = new PostgresPublicationStore(factory);
+        publications = new PostgresPublicationStore(factory, TestCodeVersion.Current);
         statementReviews = new PostgresStatementReviewStore(factory);
         statementDrafts = new PostgresStatementDraftStore(factory);
         seeder = new ComparisonSeeder(attempts, extractions, comparisons, captureRoot);

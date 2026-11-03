@@ -31,7 +31,7 @@ public sealed partial class PostgresBillStreamTests
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Approve);
-        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
 
         await Assert.ThrowsAsync<PublicationConflictException>(() =>
             publications.CommitAsync(PublicationScenario.Owner.Subject, ActionCommit(reviewStateVersion: 0), "stale", ReleaseHash(1), default));
@@ -47,7 +47,7 @@ public sealed partial class PostgresBillStreamTests
         await DraftAsync(UpdatedAt, DraftableOutput);
         Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
 
-        await PostgresPublicationStore.FromConnectionString(connectionString).CommitAsync(PublicationScenario.Owner.Subject,
+        await PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current).CommitAsync(PublicationScenario.Owner.Subject,
             ActionCommit(reviewStateVersion: 1), "key", ReleaseHash(1), default);
 
         Assert.Equal("action", await ScalarAsync("SELECT kind FROM publication_record_states"));
@@ -146,7 +146,7 @@ public sealed partial class PostgresBillStreamTests
         var revision = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
         var names = revision.Sponsorships.Select(item => item.PersonId).Distinct().ToDictionary(id => id, id => $"Official {id}");
         var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
-        var store = PostgresPublicationStore.FromConnectionString(connectionString);
+        var store = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var publisher = new PublishRelease(store, releases, new ReleaseRenderer(null, null),
             new PublishedRecordLoaders(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
                 PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),
@@ -230,7 +230,7 @@ public sealed partial class PostgresBillStreamTests
     {
         var names = revision.Sponsorships.Select(item => item.PersonId).Distinct().ToDictionary(id => id, id => $"Official {id}");
         var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
-        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var publisher = new PublishRelease(publications, releases, new ReleaseRenderer(null, null),
             new PublishedRecordLoaders(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
                 PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),

@@ -265,7 +265,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
         var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
         var clock = new FakeClock(DateTimeOffset.UtcNow);
-        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var publisher = new PublishRelease(publications, releases, new ReleaseRenderer(null, null), new PublishedRecordLoaders(
                 PostgresDocumentChangeReviewStore.FromConnectionString(connectionString), PostgresStatementReviewStore.FromConnectionString(connectionString),
                 PostgresActionReviewStore.FromConnectionString(connectionString), PostgresVoteReviewStore.FromConnectionString(connectionString),
@@ -336,7 +336,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
 
         Assert.Equal([ids[0], ids[2]], batch.Select(item => item.Action.RecordId));
         Assert.Equal([ids[0], ids[1]], replacementsOnly.Select(item => item.Action.RecordId));
-        Assert.Equal(1, await PostgresPublicationStore.FromConnectionString(connectionString).CountApprovedOutsideActiveReleaseAsync([], default));
+        Assert.Equal(1, await PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current).CountApprovedOutsideActiveReleaseAsync([], default));
     }
 
     [Theory]

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CivicLens.Application;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Relationships;
@@ -31,23 +32,25 @@ public sealed class PostgresPublicationStore : IPublicationStore
     private const string UniqueViolation = PostgresErrorCodes.UniqueViolation;
 
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
+    private readonly CodeVersion codeVersion;
     private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue;
 
-    public PostgresPublicationStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-        : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping(contextFactory))) { }
+    public PostgresPublicationStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory, CodeVersion codeVersion)
+        : this(contextFactory, codeVersion, new(contextFactory, new BriefDraftQueueMapping(contextFactory))) { }
 
-    private PostgresPublicationStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
+    private PostgresPublicationStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory, CodeVersion codeVersion,
         PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> briefQueue)
     {
         this.contextFactory = contextFactory;
+        this.codeVersion = codeVersion;
         this.briefQueue = briefQueue;
     }
 
-    public static PostgresPublicationStore FromConnectionString(string connectionString)
+    public static PostgresPublicationStore FromConnectionString(string connectionString, CodeVersion codeVersion)
     {
         _ = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
-        return new(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
+        return new(new PooledDbContextFactory<CollectionAttemptDbContext>(options), codeVersion);
     }
 
     public async Task<PublicationState> GetStateAsync(CancellationToken cancellationToken)
@@ -172,7 +175,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         await ClearActiveAsync(db, cancellationToken);
         var publishedAt = await DatabaseClock.ReadAsync(db, cancellationToken);
         var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName, publishedAt.Offset, commit.Records.Length);
-        db.Add(ToRow(actorSubject, commit, publishedAt));
+        db.Add(ToRow(actorSubject, commit, publishedAt, codeVersion));
         ReviewIdempotency.Add(db, actorSubject, PublishOperation, idempotencyKey, payloadHash, ReviewJson.Serialize(summary));
         await SaveAsync(db, cancellationToken);
         await PublicationRecordStates.RecordAsync(db, commit, cancellationToken);
@@ -410,14 +413,15 @@ public sealed class PostgresPublicationStore : IPublicationStore
 
     private readonly record struct ReviewState(int RevisionNumber, int ReviewStateVersion, ReviewStatus ReviewStatus);
 
-    private static PublicationReleaseRow ToRow(string actorSubject, PublicationCommit commit, DatabaseTime publishedAt) => new()
+    private static PublicationReleaseRow ToRow(string actorSubject, PublicationCommit commit, DatabaseTime publishedAt, CodeVersion codeVersion) => new()
     {
         ReleaseNumber = commit.ReleaseNumber,
         DirectoryName = commit.DirectoryName,
         ActorSubject = actorSubject,
         PublishedAtUtcTicks = publishedAt.Ticks,
         RecordCount = commit.Records.Length,
-        IsActive = true
+        IsActive = true,
+        CodeVersion = codeVersion.Sha
     };
 
     private static PublicationReleaseSummary ToSummary(PublicationReleaseRow row) => new(row.ReleaseNumber,

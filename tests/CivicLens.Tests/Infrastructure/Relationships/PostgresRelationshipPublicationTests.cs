@@ -41,7 +41,7 @@ public sealed class PostgresRelationshipPublicationTests(PostgresCollection post
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         var drafts = new PostgresRelationshipDraftStore(factory);
         reviews = new PostgresRelationshipReviewStore(factory);
-        publications = new PostgresPublicationStore(factory);
+        publications = new PostgresPublicationStore(factory, TestCodeVersion.Current);
         seeder = new RelationshipWorldSeeder(connectionString);
         releases = new BriefWorldSeeder(connectionString);
         await seeder.StatementAsync(Statement());

@@ -17,7 +17,7 @@ namespace CivicLens.Host.Actions;
 internal static class ActionDraftComposition
 {
     public static AnalysisComposition<ActionDraftRun> Create(IDbContextFactory<CollectionAttemptDbContext> contexts, string connectionString,
-        ICollectionJobStore jobs, ApiResponseReader responses, IDocumentTextExtractor textExtractor, IssueConfigurationRevision? issues,
+        CodeVersion codeVersion, ICollectionJobStore jobs, ApiResponseReader responses, IDocumentTextExtractor textExtractor, IssueConfigurationRevision? issues,
         string artifactRoot, WorkerBeat beat, ILoggerFactory loggers)
     {
         var status = new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task);
@@ -26,7 +26,7 @@ internal static class ActionDraftComposition
         if (issues is null) throw new ArgumentException("Action drafting needs CIVIC_LENS_ISSUES_CONFIG.");
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresActionDraftStore.Table, ActionDraftTask.Task);
         var reader = new ActionBillReader(jobs, responses, textExtractor, artifactRoot);
-        var step = new ActionDraftStep(new PostgresActionDraftStore(contexts), reader,
+        var step = new ActionDraftStep(new PostgresActionDraftStore(contexts, codeVersion), reader,
             new AnthropicActionDraftModel(configuration.ApiKey), configuration.Settings, issues);
         return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<ActionDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<ActionDraftRun>>(), beat, wakeup), wakeup);
     }
