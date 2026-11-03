@@ -40,7 +40,7 @@ def load_weights():
 
 def shard_classes(classes, index, count):
     weights = load_weights()
-    default = statistics.median(weights.values()) if weights else 1.0
+    default = statistics.mean(weights.values()) if weights else 1.0
     ordered = sorted(classes, key=lambda name: (-weights.get(name, default), name))
     totals = [0.0] * count
     members = [[] for _ in range(count)]
