@@ -4,8 +4,6 @@ using CivicLens.Infrastructure.Review.Persistence;
 
 namespace CivicLens.Infrastructure.ExecutiveActions.Persistence;
 
-/// <summary>The columns after <see cref="AuthorKind"/> copy <see cref="RevisionJson"/>. They stay null on a row that
-/// older code wrote.</summary>
 internal sealed class ExecutiveActionRevisionRow : IReviewRevisionRow
 {
     public string RecordId { get; set; } = string.Empty;
