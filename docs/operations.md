@@ -217,9 +217,7 @@ ORDER BY v.congress, v.session_number, v.roll_call_number;
 
 ### Voteview Senate vote stream
 
-The Senate votes come from Voteview. senate.gov blocks the collector with a 403, so no other Senate vote source exists. The source `voteview-senate-votes` in `config/federal-coverage.json` ships with `enabled: false`. A configuration may enable only one Voteview source. The parser name `senateVoteList` still reads in a stored configuration, but the Host refuses a live configuration file that enables it.
-
-Before you update a deploy that has the old `senate-votes` source, set `"enabled":false` on the `senate-votes` line in `/srv/civic-lens/config/collection.json`, or remove that line. Do this before you start the new release. The new release stops with an error while the line is enabled.
+The Senate votes come from Voteview. senate.gov blocks the collector with a 403, so no other Senate vote source exists. The source `voteview-senate-votes` in `config/federal-coverage.json` ships with `enabled: false`. A configuration may enable only one Voteview source. The Host refuses a live configuration file that enables a source with the retired senate.gov parser `senateVoteList`. Set `"enabled":false` on that source, or remove it.
 
 Do the steps on the machine that runs the worker. On production, this is `/srv/civic-lens/config/collection.json`. Production steps are for the owner to run.
 
@@ -239,7 +237,7 @@ What to watch:
 - Drafts Blocked with `evidenceUnavailable`. Voteview matches senators by bioguide ID, so a roster gap does not cause them.
 - Voteview lists no Vice President tie-break vote. A roll call that ended 50 to 50 shows no tie-break cast on its page. The page says so.
 
-The first full run drafts every roll call that has a tracked senator. Drafting costs about $0.00046 for each draft. Code approves each draft after it checks the citations. A Senate vote from Voteview rests on Voteview data, and the record page names Voteview as the source.
+The first full run drafts every roll call that has a tracked senator. Code approves each draft after it checks the citations. A Senate vote from Voteview rests on Voteview data, and the record page names Voteview as the source.
 
 ## Postgres adapter and migrations
 
@@ -251,7 +249,7 @@ After you set the variable, run:
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- db migrate
 ```
 
-`db migrate` applies all pending checked-in EF migrations and can be repeated. An image from before the migration `DropPublicationRecordsJson` cannot run until you roll that migration back with an explicit EF rollback, because that image needs the dropped column `publication_releases.records_json`. The rollback rebuilds the column from `publication_record_states`. An image from before the migration `RejectDecision` runs on the new schema only until the first rejection. After a rejection, that image cannot parse the kind Reject or the status Rejected, and the `Down` of the migration fails with a check violation and rolls back, because it deletes no decision. Roll forward with a fixed image in that case. An image from before the migration `DropDecisionJson` needs the same explicit EF rollback, because that image needs the dropped column `decision_json` in the seven `<kind>_review_decisions` tables. The rollback rebuilds the column from the decision columns and the resolution rows. To roll back to such an image, do these steps in this order. Stop the worker and the review host. Have a developer with the EF tool roll the database back to the migration before `DropDecisionJson`. Then run `update.sh` with the old SHA. No production command rolls a migration back, and `db migrate` only moves forward. Running `update.sh` alone is wrong, because the old image starts without the column and every decision write fails. Running the rollback while the new worker runs is also wrong, because the new writer fails on the rebuilt NOT NULL column. `db migrate` only moves forward. Each migration command fails after 10 minutes, for example when it waits on a lock. Imports never apply migrations. Capture files stay in the artifact directory. [Managed collection jobs](#managed-collection-jobs) collect and import evidence.
+`db migrate` applies all pending checked-in EF migrations and can be repeated. An image from before the migration `DropPublicationRecordsJson` cannot run until you roll that migration back with an explicit EF rollback, because that image needs the dropped column `publication_releases.records_json`. The rollback rebuilds the column from `publication_record_states`. An image from before the migration `RejectDecision` runs on the new schema only until the first rejection. After a rejection, that image cannot parse the kind Reject or the status Rejected, and the `Down` of the migration fails with a check violation and rolls back, because it deletes no decision. Roll forward with a fixed image in that case. An image from before the migration `DropDecisionJson` needs the same explicit EF rollback, because that image needs the dropped column `decision_json` in the seven `<kind>_review_decisions` tables. The rollback rebuilds the column from the decision columns and the resolution rows. To roll back to such an image, do these steps in this order. Stop the worker and the review host. Have a developer with the EF tool roll the database back to the migration before `DropDecisionJson`. Then run `update.sh` with the old SHA. No production command rolls a migration back. Running `update.sh` alone is wrong, because the old image starts without the column and every decision write fails. Running the rollback while the new worker runs is also wrong, because the new writer fails on the rebuilt NOT NULL column. `db migrate` only moves forward. Each migration command fails after 10 minutes, for example when it waits on a lock. Imports never apply migrations. Capture files stay in the artifact directory. [Managed collection jobs](#managed-collection-jobs) collect and import evidence.
 
 For other application composition, build `PostgresCollectionAttemptStore` with `FromConnectionString`, or supply an `IDbContextFactory<CollectionAttemptDbContext>`. Call `MigrateAsync` explicitly before you import.
 
@@ -368,7 +366,7 @@ If the worker cannot import a saved receipt, use `receipts replay`; no new fetch
 
 ## Federal source pilot
 
-`config/federal-pilot.json` holds a small live-source configuration for Elizabeth Warren and Ted Cruz. It also tracks Hakeem Jeffries, a House member with no sources, so that the House vote stream has a tracked member. It is a collection pilot, not representative national coverage. The coverage start date records when this project began to monitor these sources, not when either senator took office. Office press releases show what an office published. Claims about enacted legislation or completed government actions need corroborating authoritative records before publication. The pilot verified captures of both newsroom pages, and a worker pass parsed 16 candidate links from the Warren listing.
+`config/federal-pilot.json` holds a small live-source configuration for Elizabeth Warren and Ted Cruz. It also tracks Hakeem Jeffries, a House member with no sources, so that the House vote stream has a tracked member. It is a collection pilot, not representative national coverage. The coverage start date records when this project began to monitor these sources, not when either senator took office. Office press releases show what an office published. Claims about enacted legislation or completed government actions need corroborating authoritative records before publication.
 
 | Source ID | Purpose |
 |---|---|
@@ -528,8 +526,6 @@ An AI draft is revision 1 by the AI drafter. Check every sentence and citation a
 
 Code approves a worker revision of an action or a vote after it checks the citations. The decision history shows the actor "Code check". A record shows as Needs action only if code did not approve it. A concern is open, a person wrote the text, or an approval check failed. A person can edit or withdraw any record.
 
-Auth0 tenant login and logout and the production reverse proxy still need live verification.
-
 ## AI drafting of document-change accounts
 
 The `worker` command drafts AI accounts of changed comparisons. [Analysis](architecture/analysis.md) holds the rules. Set both required variables below in the worker's protected environment to turn drafting on. If you set only one, the worker stops with exit code 2.
@@ -686,7 +682,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- vo
 
 ### Vote revision backfill
 
-R-63 pilot step 2 moves old vote revisions into columns and child rows. A revision written by current code already has them. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+The commands below move old vote revisions into columns and child rows. A revision written by current code already has them. They need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes revisions backfill 500
@@ -697,7 +693,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- vo
 
 `verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. It prints `checked`, `legacy`, `mismatched`, and the first 20 mismatches as record ID, revision number, and JSON key names. It never prints text. The exit code is 1 while `legacy` or `mismatched` is above 0. One absence passes: a missing `source` key on a revision of the source `congress-house-votes`. Any other difference fails.
 
-Run order: `backfill`, then `verify`. Run the new code only when `verify` exits 0, so `legacy` and `mismatched` are both 0. Every reader fails on a row with null columns. Production held 1,717 revisions when the pilot was measured, so expect shared member lists.
+Run order: `backfill`, then `verify`. Run the new code only when `verify` exits 0, so `legacy` and `mismatched` are both 0. Every reader fails on a row with null columns.
 
 ### Executive action revision backfill
 
@@ -842,9 +838,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases first-published backfill
 ```
 
-A development database from before schema version 1 cannot publish. The publisher reads the active release and refuses a release of another schema version. Follow [Dev database reset](#dev-database-reset) once. The dates of the first publication of briefs start again after the reset. This is acceptable in development.
-
-Write each record as `<kind>:<id>`. The kind is `documentChange`, `statement`, `action`, `vote`, `brief`, or `relationship`. For example, use `documentChange:` and a 32-character draft ID, `statement:` and a 64-character candidate ID, or `action:` and a 64-character action record ID. The other three kinds take a 64-character record ID too. The command never guesses the kind from the ID. An unknown kind or a bad shape exits with code 2. The revision must be approved with no unresolved concerns. A record that replaces a record of the active release needs the correction note of its approval. The command exits with code 2 when the approval has no note. A note has 1 to 500 characters. The note shows on the record page as a correction. A note on the approval of a new record is dropped.
+Write each record as `<kind>:<id>`. The kind is `documentChange`, `statement`, `action`, `vote`, `brief`, `relationship`, or `executiveAction`. For example, use `documentChange:` and a 32-character draft ID, `statement:` and a 64-character candidate ID, or `action:` and a 64-character action record ID. The other four kinds take a 64-character record ID too. The command never guesses the kind from the ID. An unknown kind or a bad shape exits with code 2. The revision must be approved with no unresolved concerns. A record that replaces a record of the active release needs the correction note of its approval. The command exits with code 2 when the approval has no note. A note has 1 to 500 characters. The note shows on the record page as a correction. A note on the approval of a new record is dropped.
 
 To take a record out of the release, give `--withdraw <kind>:<id> <text>`. A request can have withdrawals and no records. The text has 1 to 500 characters and shows on the notice page. Review must have blocked the record: its status is Approval withdrawn, Changes requested, or Awaiting review with concerns. The publish exits with code 2 in three cases:
 
@@ -854,13 +848,7 @@ To take a record out of the release, give `--withdraw <kind>:<id> <text>`. A req
 
 To list the published records that cannot move on, run `releases blocked`. It prints the kind, the ID, the headline, the published revision, the review status, and the reason of each record. The reason `reviewBlocksIt` means review blocked the record. Use these rows to choose the records to withdraw. The reasons `correctionLimit` and `withdrawnAtCorrectionLimit` mean the record holds 20 corrections with a note, and a person approved a revision that cannot publish. A withdrawal does not free these rows. The list is empty when no release is active.
 
-To write the pages of all officials again, add `--rewrite-officials`. The publish then treats every official as touched. The option itself adds no record. It keeps the release history, the withdrawals, and the first publication date of each record. A rewrite with no named record needs an active release. Use it once after a deploy that changes the layout of the official pages. Until then an untouched official keeps its old page. On a commit conflict, run the same command again. A stop that names a record kind and ID does not clear on a retry. Compare that record file with its manifest entry, and send the message to the developer. Do not publish around it. Stop the worker before every `--rewrite-*` publish with `sudo deploy/scripts/compose.sh stop worker`, and start it after the command ends with `sudo deploy/scripts/compose.sh start worker`. A worker publish that commits while a rewrite runs makes the rewrite conflict, and on 2026-11-02 a rewrite lost that race on production. If a conflict happens anyway, run the command again. See the [publication limits](architecture/publication.md#limits-and-planned-work).
-
-After the deploy that ships the Congress tabs and the bill status lines on the official pages, run this once:
-
-```sh
-sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --rewrite-officials
-```
+To write the pages of all officials again, add `--rewrite-officials`. The publish then treats every official as touched. The option itself adds no record. It keeps the release history, the withdrawals, and the first publication date of each record. A rewrite with no named record needs an active release. Use it once after a deploy that changes the layout of the official pages. Until then an untouched official keeps its old page. On a commit conflict, run the same command again. A stop that names a record kind and ID does not clear on a retry. Compare that record file with its manifest entry, and send the message to the developer. Do not publish around it. Stop the worker before every `--rewrite-*` publish with `sudo deploy/scripts/compose.sh stop worker`, and start it after the command ends with `sudo deploy/scripts/compose.sh start worker`. A worker publish that commits while a rewrite runs makes the rewrite conflict, so a rewrite can lose that race. If a conflict happens anyway, run the command again. See the [publication limits](architecture/publication.md#limits-and-planned-work).
 
 To fill the new fields of carried vote and action entries, add `--rewrite-entries`. The publish reads the record file of each carried vote and action and builds its manifest entry again. It adds `yeaCount`, `nayCount`, `alignment`, and `cosponsorIds`. It checks each record file and stops with an error that names the record when the file is invalid or when its entry differs in any other field. It changes no other entry field. It keeps the record files linked and writes none of them again. A withdrawn record stays withdrawn. The option adds no record, and it needs an active release. It reads one file for each carried vote and action. On a failure, run the same command again.
 
@@ -868,13 +856,11 @@ A page layout change, such as a new source link, reaches only the pages that a p
 
 Every publish writes `officials-summary.json`, the roll-up of the figures that rankings need. A touched official gets new figures. An untouched official keeps the figures of the previous release. A release from before the roll-up has none, so its untouched officials have no vote figures until `--rewrite-officials` runs. The four board pages are partial until then. A board leaves out an official with no vote figures and says so. The cosponsor counts come from the manifest entries of every publish. The count is null until `--rewrite-entries` gives every carried action its cosponsor data. A reader must not read null as 0.
 
-After the deploy that ships the vote fields, the cosponsor field, and the roll-up, run this once. The rewrite also fills `previous` in each summary row. The voting boards need `previous` to keep an earlier Congress. Until it runs, a board shows the newest Congress, and a row without `previous` leaves its member off a kept board. After `releases activate` of a release older than this rewrite, run it again. Use a new key each time, because the same key and payload replay the old result with no rewrite:
+`--rewrite-officials` also fills `previous` in each summary row. The voting boards need `previous` to keep an earlier Congress. Until it runs, a board shows the newest Congress, and a row without `previous` leaves its member off a kept board. After `releases activate` of a release older than this rewrite, run it again. Use a new key each time, because the same key and payload replay the old result with no rewrite:
 
 ```sh
 sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --rewrite-entries --rewrite-officials
 ```
-
-An image from before this change cannot read a release that the new image made, because it refuses the new entry members and the `previous` member of a summary row. To go back to that image, first activate a release that it made. See the [publication limits](architecture/publication.md#limits-and-planned-work).
 
 ### First publication backfill
 
@@ -1005,7 +991,7 @@ The `Dockerfile` in the repository root builds two images for linux-arm64. The w
 | --- | --- |
 | `CIVIC_LENS_CADDY_PORT` | The loopback port of Caddy. Default 8080. The tunnel points both host names at it |
 | `CIVIC_LENS_RELEASE_DIRECTORY` | The release root. The same variable as for publishing. Required. Caddy serves `<root>/current`, the link that a release activation swaps |
-| `CIVIC_LENS_API_PORT` | The loopback port of the search service. Default 8100. It must equal the port in `ASPNETCORE_URLS` of the search service. The compose file, in a later change, will derive one from the other |
+| `CIVIC_LENS_API_PORT` | The loopback port of the search service. Default 8100. The compose file sets `ASPNETCORE_URLS` of the search service from it |
 
 - `civic-lens.info` serves the static release. `file_server` uses the precompressed `release.json.gz` and `release.json.br`, the only compressed files that a publish writes. Caddy compresses other responses when it sends them. A missing path gets the release `404.html` with status 404. Other error statuses, for example 405, get a plain text body. The same block also answers `127.0.0.1`, so the search service on the same machine can read the release without the tunnel. A request for any other host name gets 404.
 - `api.civic-lens.info` proxies to the search service. `/internal/*` gets 404 and never reaches the service. Caddy passes the `CF-Connecting-IP` header unchanged. Cloudflare sets it on every request. It refuses a request that already carries the header, with status 403 and error code 1000. The service trusts it because the peer is loopback.
@@ -1019,13 +1005,7 @@ Check the file with `caddy validate --config deploy/caddy/Caddyfile --adapter ca
 
 ## Dev database reset
 
-Reset the development database once, if it was created before the initial migration. The migrations are one initial migration, and the protocol, configuration, schema, parser, and behavior versions start at 1. The code reads no row, capture, or release from before the initial migration. Production has no older data and needs no reset.
-
-A dev statement that was published before `textOrigin` and `approvedBy` existed lacks both fields, and a reader refuses it. Publish those statements again, or reset the database.
-
-The reset also covers the term kind change. Each term of `officials.json` now requires `kind`. `PreviousRelease.ReadOfficialsAsync` throws on a release without it, so a publish fails until the reset.
-
-The reset also covers the linked pairs change. A relationship revision now holds the matched official. An older revision reads with no matched official, so a person edit of it and its publish fail. Release manifests now hold link fields and `billTitle`, and an older release does not read. Reset once after this change merges.
+Reset the development database to start again from an empty state. Production has no reset path, and it needs none.
 
 1. Stop the services that use the database: the `make review` command (proxy, review workspace, and worker), the static server, and the search service. Stop any other `dotnet` host that runs.
 2. Drop the database. The container name, user, and database name come from the ignored env file:
@@ -1052,19 +1032,11 @@ docker rm -f civic-lens-search-db
 
 Release numbers restart at 1 after this reset.
 
-A vote source change needs a reset only when the database holds Senate vote drafts from before the `source` field. A vote file and a vote revision with no `source` read as Congress.gov, which is right for every House vote. A stored Senate revision with no `source` breaks the pairing rule of `VoteDraftRevision.ValidateShape`. Run this check. If the count is 0, do not reset for this change.
-
-```sql
-SELECT count(*) FROM vote_drafts WHERE chamber = 'Senate';
-```
-
-Production has no Senate vote drafts, because senate.gov returned 403. Production needs no reset for this change.
-
 A release contract change can add a required field to a published file. Old files then do not read, and the next publish fails. On the dev machine, repeat steps 1 to 5. These steps delete all captures and records, not only the releases. Collect again and let code approve the facts, then publish a fresh release with `releases publish` as in [Publish a static release](#publish-a-static-release). Production holds live releases, so do not reset it for a contract change. Add the field as optional and fill the carried entries with `--rewrite-entries`; see [Publish a static release](#publish-a-static-release).
 
 ## Production compose
 
-`deploy/compose.yaml` runs the temporary production machine with Docker Compose v2. It starts two Postgres containers, the worker, the review workspace, the search service, Caddy, and cloudflared. Check out the repository at the commit that you deploy, because Compose mounts `deploy/caddy/Caddyfile` from the checkout. The images are described under [Container images](#container-images). Backups run from the same file; see [Production runbook](#production-runbook). The heartbeat is not in this file.
+`deploy/compose.yaml` runs the temporary production machine with Docker Compose v2. It starts two Postgres containers, the worker, the review workspace, the search service, Caddy, and cloudflared. Check out the repository at the commit that you deploy, because Compose mounts `deploy/caddy/Caddyfile` from the checkout. The images are described under [Container images](#container-images). Backups run from the same file; see [Production runbook](#production-runbook).
 
 - The worker, the review workspace, the search service, Caddy, and cloudflared use host networking. The review workspace keeps its loopback listener and the search service trusts only loopback proxies. Reach the review workspace through `tailscale serve`, not through Caddy.
 - The Postgres containers publish `127.0.0.1:5433` (operational) and `127.0.0.1:5434` (search). The connection strings in the secret env files name these ports. Change both places together.
@@ -1091,7 +1063,7 @@ sudo deploy/scripts/compose.sh run --rm cli releases list
 
 ## Production runbook
 
-This section is for the temporary production machine, a Jetson with Docker Compose v2. The long-term cloud move will use Terraform. Terraform state never goes to R2, because it holds credentials. The first launch uses no Terraform.
+This section is for the temporary production machine, a Jetson with Docker Compose v2.
 
 **Vendor data rule.** Cloudflare may receive public content and the encrypted backups. An agent that uses [operator access](#operator-access) sends each result that it reads to its model vendor, and that can include unpublished drafts and model output. Nothing else leaves the machine. The review workspace is never behind Cloudflare, because it holds review notes and reviewer identity.
 
@@ -1109,8 +1081,6 @@ This section is for the temporary production machine, a Jetson with Docker Compo
 8. Run `sudo deploy/scripts/check-live.sh`. See [Go-live checks](#go-live-checks).
 
 Do step 5 only after step 4. Without the credential file, the cloudflared container cannot start.
-
-On an existing deploy, copy the two White House source lines into `/srv/civic-lens/config/collection.json`, then restart the worker. A restart reads the configuration again.
 
 ### Go-live checks
 
@@ -1288,4 +1258,4 @@ Caddy keeps no access log for page reads or searches. The About page privacy cla
 
 ## Runtime data
 
-Runtime data belongs in ignored .runtime/. Generated publication and evaluation artifacts belong in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. The deploy files are in [Production compose](#production-compose). Published releases live under the configured release directory, not in the repository. The MCP runbook will come here when it exists.
+Runtime data belongs in ignored .runtime/. Generated publication and evaluation artifacts belong in ignored artifacts/. Never commit credentials or copy operational directories from the legacy repository. The deploy files are in [Production compose](#production-compose). Published releases live under the configured release directory, not in the repository.

@@ -4,7 +4,7 @@ This page holds pending work. A checked step is merged to main, and a merged ste
 
 ## MVP definition
 
-The MVP delivers the full product: officials' statements, authoritative actions, substantive document changes, and evidence-backed weekly briefs. A release with document changes only is a milestone, not the MVP. Coverage may start small, but all four record kinds must work end to end. Each one collects evidence, keeps exact inspectable provenance, gets human review, and publishes in a static release. AI drafts every record kind. Code approves action and vote records after it checks their citations (D-15, accepted on 2026-10-19). People edit and approve the other kinds, and the worker publishes. Review must handle a large volume of statements, relationships, briefs, and document changes. The dev box reaches the features, correctness, and citizen and reviewer UI of the first deploy before the first cloud deployment. Public MCP, the shared language insight, and the document-change criterion are checked after that deployment.
+The MVP delivers the full product: officials' statements, authoritative actions, substantive document changes, and evidence-backed weekly briefs. A release with document changes only is a milestone, not the MVP. Coverage may start small, but all four record kinds must work end to end. Each one collects evidence, keeps exact inspectable provenance, gets human review, and publishes in a static release. AI drafts every record kind. Code approves action and vote records after it checks their citations (D-15). People edit and approve the other kinds, and the worker publishes. Review must handle a large volume of statements, relationships, briefs, and document changes. The dev box reaches the features, correctness, and citizen and reviewer UI of the first deploy before the first cloud deployment. Public MCP, the shared language insight, and the document-change criterion are checked after that deployment.
 
 Exit criteria for the first deploy:
 
@@ -34,15 +34,15 @@ The first deploy is a complete product within the product direction. Its path is
 
 ### Accepted plans
 
-The owner accepted these designs in October 2026. Each item holds its choices until the code and the feature doc replace them. Build each PR from main.
+The owner accepted these designs. Each item holds its choices until the code and the feature doc replace them. Build each PR from main.
 
 **Public site**
 
 - R-47: Insight boards. One contract PR adds vote fields to vote entries, a per-official summary roll-up, and a cosponsor field on action entries. Then build boards for party breakers, loyalists, and missed votes, as static pages for each chamber and party. Then add list badges and home cards for the closest vote, the most breaks, and the newest executive actions. Then add a bill status line, sponsored bills that moved, and bipartisan cosponsorship. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
-  - [x] Contract PR (#258), with one operator rewrite of carried entries and no reset, not yet run
-  - [x] Boards (#269)
-  - [x] List badges and home cards (#273)
-  - [x] Bill status line (#281)
+  - [x] Contract PR, with one operator rewrite of carried entries and no reset, not yet run
+  - [x] Boards
+  - [x] List badges and home cards
+  - [x] Bill status line
   - [ ] The remaining items
   - [x] Show the prior Congress on the vote boards until a new Congress has votes. One `releases publish <key> --rewrite-officials` fills `previous` in the summary rows.
 - R-48: What an official said and how they voted. The profile lists pairs, not totals: the quote with its date, then the cast with its question, date, and result. It shows no Yea or Nay totals and no talk against action quadrant, because a bare total lacks context. Depends on: R-47. [Publication](architecture/publication.md#limits-and-planned-work)
@@ -52,40 +52,37 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 **Review and approval**
 
 - R-51: Cut the review pages. Make one "Needs a person" queue that says why each record needs a person. Delete the relationship and brief list pages, and the home panels that the queue replaces. Add an owner "Take off site" action in the editor, using the existing withdrawal code. Send a reader report straight to the editor, with the reader's words on top. Delete the gate label pages after D-13. Depends on: none. [Review](architecture/review.md#limits-and-planned-work)
-  - [x] "Needs a person" queue, and delete list pages and home panels (#257, #259, #263, #265, #267, #268)
-  - [x] "Take off site" action (#270)
+  - [x] "Needs a person" queue, and delete list pages and home panels
+  - [x] "Take off site" action
   - [x] Report to editor
   - [ ] Delete gate label pages, after D-13
-- R-65: One page for each review job. A reader report opens the record editor with the reader's words on top. The person dismisses it, or edits, types the public text, and clicks "Save and approve". After a decision, the page moves to the next item. A failed approval keeps the typed text. Every approval check stays. PR #271, which filled public text from the private note, is closed. Depends on: R-51 take off site (#270). [Review](architecture/review.md#limits-and-planned-work)
-  - [ ] Save and approve in one transaction, and open the edit form by default
+- R-65: One page for each review job. A reader report opens the record editor with the reader's words on top. The person dismisses it, or edits, types the public text, and clicks "Save and approve". After a decision, the page moves to the next item. A failed approval keeps the typed text. Every approval check stays. Depends on: R-51 take off site. [Review](architecture/review.md#limits-and-planned-work)
+  - [x] Save and approve in one transaction, and open the edit form by default
   - [x] Reader reports in the editor, closed by the approval
   - [ ] Move to the next item after a decision
 - R-52: Approve factual links by code. The types are "statement about a vote" and "describes own bill". The types "states position on" and "claims credit for" stay with a person. The public wording "a reviewer approved each link" must change with it. Depends on: R-51. [Review](architecture/review.md#limits-and-planned-work)
   - [ ] Code approval of factual links, and new public wording
-- R-53: AI brief check. A person still approves each brief. A new model task recommends approval or flags where the brief needs more attention. Its design is still to agree. Depends on: R-51. [Briefs](architecture/briefs.md#limits-and-planned-work)
-  - [ ] Agree the design
-  - [ ] Build the AI brief check
 - R-54: Finish bill issue narrowing. The model gets the Congress.gov legislative subjects when a bill has them, and the redraft commands exist. Still open: run the subjects backfill and the redraft commands on the live site. Then check on a sample that a bill with no fitting issue publishes with no issue. Depends on: none. [Actions](architecture/actions.md#limits-and-planned-work)
-  - [x] Vote issue narrowing (#241)
-  - [x] `actions draft redraft` (#239)
-  - [x] `votes draft redraft` (#244)
-  - [x] Read Congress.gov subjects in drafts (#248)
+  - [x] Vote issue narrowing
+  - [x] `actions draft redraft`
+  - [x] `votes draft redraft`
+  - [x] Read Congress.gov subjects in drafts
   - [ ] Run the subjects backfill and the redraft commands
-  - [x] Write action text in code when no summary text reaches the model, and move summary bills to the new prompt (#277)
+  - [x] Write action text in code when no summary text reaches the model, and move summary bills to the new prompt
   - [ ] Draft the action backlog, and spot check the issue tags after it
 
 - R-66: Gate model output on confidence. Models give a confidence score. A low score sends the record to the one page review, where a person fixes it or tells the model what to fix. Set the threshold from measured data and a person-labeled set. Depends on: R-65. [Review](architecture/review.md#limits-and-planned-work)
   - [ ] Agree the design
   - [ ] Build the gate and the model fix
 - R-67: Measure each prompt. Each prompt version gets a live, budgeted, opt-in measure on fixed bills, and the numbers go on the PR. Use the cheapest setting that holds accuracy. The order is vote, statement draft and gate, document change, relationship, then brief. Depends on: none. [Analysis](architecture/analysis.md#limits-and-planned-work)
-  - [x] Fix the vote prompt wording and measure it (#280)
+  - [x] Fix the vote prompt wording and measure it
   - [ ] Agree one opt-in eval command, and build it
   - [ ] Measure the other prompts, one PR for each
 
 **Coverage**
 
 - R-55: Stop losing feed items. Items past `maxJobs` are dropped for good today, and every member feed uses `maxJobs` 2. Survey a drain of deferred candidates, then build it. Depends on: none. [Collection](architecture/collection.md#limits-and-planned-work)
-  - [x] Admit new URLs before rechecks, with a starvation test first (#286)
+  - [x] Admit new URLs before rechecks, with a starvation test first
   - [ ] Survey and build a drain of deferred candidates
 - R-56: Publish source coverage. Add a coverage field for each official and a "sources we could read" panel, so uneven coverage is visible. Depends on: none. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-57: Finish the executive and judicial sources, after a check of what shipped. The plan is Cabinet officials from agency pages where the official speaks, then the 9 justices, speeches and remarks only. Opinions wait for a case record kind and a PDF reader. Executive orders as a record kind shipped with the Federal Register work. Depends on: none. [Executive actions](architecture/executive-actions.md#limits-and-planned-work)
@@ -101,12 +98,12 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [x] Agree the direction
   - [x] Stop parsing JSON where a column already holds the value (#261)
   - [x] Move review decisions to columns, and read them there (#266, #272)
-  - [ ] Drop the decision JSON, after a read-only check of production rows
-  - [ ] Add tick bounds and missing foreign keys, after a read-only check of production rows
+  - [x] Drop the decision JSON, after a read-only check of production rows
+  - [x] Add tick bounds and missing foreign keys, after a read-only check of production rows
   - [x] Agree the table design from one pilot on vote revisions, with measured row counts
   - [x] Vote pilot 1: write both, so every vote revision writes columns and child rows beside its JSON
-  - [ ] Vote pilot 2: backfill old vote revisions and verify them with a C# command that compares each revision to its JSON
-  - [ ] Vote pilot 3: move the vote readers to the columns
+  - [x] Vote pilot 2: backfill old vote revisions and verify them with a C# command that compares each revision to its JSON
+  - [x] Vote pilot 3: move the vote readers to the columns
   - [ ] Vote pilot 4: drop the vote revision JSON, after the read-only function stops reading it
   - [ ] Move the other revision kinds, one PR for each. Executive action revisions are done in code through step 3. The production backfill and the JSON drop stay open
   - [ ] Move release entries to a table: one immutable row for each record revision, with a foreign key to that revision. `publication_record_states` gives the release membership
@@ -138,7 +135,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [ ] Measure traffic, query load, and worker effect on the shared database
   - [ ] Render the official page from the API, then the home, issue, record, and list pages
   - [ ] Write `release.json` only as a public download on a schedule, or remove it
-- R-24: The long-term cloud move to a Hetzner CPX21 with containers, Terraform, CI, and live Auth0 verification. A Jetson runs temporary production with Docker Compose, and it serves releases through Caddy and a Cloudflare tunnel. Terraform state never goes to R2. The open host checklist items are its exit checks. Also stop the worker during a job and show that the deployed container recovers it. The search service runs as its own container on the same box. The deploy must set no provider-specific `Logging` levels for the search service, because such a rule overrides its request log filter. R-24 also holds a monthly restore test, worker service management, and the documented spending total. The owner withdraws with Take off site on the record editor, and the CLI stays. The runbook still holds a tested `releases publish --withdraw` command that runs on the cloud host. The coverage file is 775 KB of the 1 MB limit of the shared configuration loader. Raise the limit before R-24 only if the file would pass 1 MB before the deploy. Depends on: the exit criteria of the first deploy. [Host](architecture/host.md#limits-and-planned-work)
+- R-24: The long-term cloud move to a Hetzner CPX21 with containers, Terraform, CI, and live Auth0 verification. A Jetson runs temporary production with Docker Compose, and it serves releases through Caddy and a Cloudflare tunnel. Terraform state never goes to R2. The open host checklist items are its exit checks. Also stop the worker during a job and show that the deployed container recovers it. The search service runs as its own container on the same box. The deploy must set no provider-specific `Logging` levels for the search service, because such a rule overrides its request log filter. R-24 also holds a monthly restore test, worker service management, and the documented spending total. The owner withdraws with Take off site on the record editor, and the CLI stays. The runbook still holds a tested `releases publish --withdraw` command that runs on the cloud host. The coverage file is 814 KB of the 1 MB limit of the shared configuration loader. Raise the limit before R-24 only if the file would pass 1 MB before the deploy. Depends on: the exit criteria of the first deploy. [Host](architecture/host.md#limits-and-planned-work)
 - R-26: Read-only local MCP inspection. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
 - R-27: Automatic discovery of official sources, and check cadence from measured change rates. It needs runtime writes, so people, sources, and coverage then move to tables. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-28: Datasets and fine-tuning from labels and review history. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)

@@ -51,14 +51,14 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A candidate needs a Passed gate and closed chains. Enforced by `PostgresCollectionJobStore.RecordActionCandidateAsync`. Test: `PostgresBillStreamTests.NoCandidateIsWrittenForABillTheGateMarksNotRelevant`.
 - Each chain position has one page row, and a Detail row is its own root. Enforced by `ux_bill_pages_chain_order` and `ck_bill_pages_detail`. Test: `PostgresBillStreamTests.TheDatabaseRefusesADetailRowWhoseJobIsNotTheRoot`.
 - A page extraction belongs to the attempt of its job. Enforced by `PostgresCollectionJobStore`. Test: `PostgresBillStreamTests.AnExtractionOfAnotherJobsAttemptIsInvalidDataAndWritesNoPageRowOrCandidate`.
-- Bill admission never defers a job; a deferral fails the transaction. Enforced by `PostgresCollectionJobStore`. No test.
+- Bill admission never defers a job; a deferral fails the transaction. Enforced by `PostgresCollectionJobStore.AdmitListPageAsync`. Test: `PostgresBillStreamTests.PilotSourceBudgetsAdmitAFullPageAndItsNextPage` covers the shipped budget only. No test covers the throw.
 - The cursor never moves backward. Enforced by `PostgresCollectionJobStore`. Test: `PostgresBillStreamTests.CursorNeverMovesBackward`.
 
 ## Behavior
 
 ### Source configuration
 
-One `api` source with `apiParser` set to `congressBillList` follows the bill list. `ApiParser` in Application/Collection is the closed list of parsers. It holds `congressBillList`, `congressHouseVoteList`, `voteviewSenateVoteList`, `congressLegislators`, `congressLegislatorsExecutive`, `memberPhotos`, and `federalRegisterDocuments`. The retired `senateVoteList` still parses. The second and third are in [votes](votes.md). The fourth to sixth are in [roster](roster.md). The last is in [executive actions](executive-actions.md). The `ApiParser` JSON converter is registered in `ConfigurationJson`, which also serves the configuration snapshots.
+One `api` source with `apiParser` set to `congressBillList` follows the bill list. `ApiParser` in Application/Collection is the closed list of parsers. It holds `congressBillList`, `congressHouseVoteList`, `voteviewSenateVoteList`, `congressLegislators`, `congressLegislatorsExecutive`, `memberPhotos`, `congressBillText`, and `federalRegisterDocuments`. The retired `senateVoteList` still parses old revisions, and a configuration cannot enable it. The second and third are in [votes](votes.md). The fourth to sixth are in [roster](roster.md). The seventh is in [Bill text](#bill-text). The last is in [executive actions](executive-actions.md). The `ApiParser` JSON converter is registered in `ConfigurationJson`, which also serves the configuration snapshots.
 
 A Congress.gov source that sets `apiParser` also sets `credential`, `minimumCongress` (1 or more), and `backfillFrom`. Configuration allows these fields only with mode `api`. Null fields stay out of revision snapshots, so existing revision IDs do not change.
 
@@ -150,7 +150,7 @@ The detail admission also queues the [vote](votes.md#admission) candidates that 
 
 | Job | Key |
 |---|---|
-| Detail | `bill-stream/{source}/bill/{congress}/{type}/{number}/{updateDate}` |
+| Detail | `bill-stream/{source}/bill/{congress}/{type}/{number}/{update date as yyyy-MM-dd}` |
 | Next list page | `bill-stream/{source}/page/{list job ID}` |
 | First follow-on page | `bill-stream/{source}/{cosponsors, actions, summaries, subjects, or text}/{congress}/{type}/{number}/{update date}` |
 | Next follow-on page | `bill-stream/{source}/{cosponsors, actions, summaries, or subjects}/page/{parent job ID}` |
@@ -203,7 +203,7 @@ Every captured API page of a bill is saved as one `DocumentExtraction`: the deta
 
 A text versions page has no extraction and no `bill_pages` row. The govinfo text of a package is saved as one extraction; see [Bill text](#bill-text).
 
-A summaries page is the exception. Its extraction version is `{CongressBillSummariesParser.Version}+{extractor.ExtractionVersion}`. Today that is `congress-bill-summaries-v1+html-text-v1`.
+A summaries page is the exception. Its extraction version is `congress-bill-summaries-v1` plus `+` and the extractor version. `CongressBillSummariesParser.ExtractionVersion(extractor)` builds it. Today that is `congress-bill-summaries-v1+html-text-v1`.
 
 The text has one fact per line, in a fixed order, with invariant culture, `\n` line endings, and no trailing whitespace.
 
@@ -235,7 +235,7 @@ The source `congress-bill-text` has `apiParser` `congressBillText`. Its URL is `
 4. With no version, `AdmitTextVersionsAsync` sets `text_state` `NoText` and admits nothing. If a row for the package exists, it sets `Read` and admits nothing. Otherwise it admits one `billText` job on the text source in the same transaction. The job key holds the versions job ID, and the job is linked to the detail job in `bill_follow_on_jobs`.
 5. The text job fetches `https://api.govinfo.gov/packages/{packageId}/htm`. The collector keeps the raw bytes as an immutable capture. The job URL form is the only form the configuration binding accepts for `billText`.
 6. Preparation of the text job finds its versions job from the last segment of the job key. It reads the versions capture again, because the version type and date exist only there. It extracts the text of the captured HTML with `IDocumentTextExtractor.ExtractAsync`. The extractor turns every whitespace run into one space. That includes the line breaks of the govinfo `<pre>` body. The text of a long bill is therefore one flat line. The extractor and its version stay unchanged, because flat text suits quote matching.
-7. `CongressBillRenderer.RenderText` keeps the first 60,000 characters, cut at the last whitespace inside the window. Text of 60,000 characters or less stays whole. Empty text is invalid data. The header has the lines `Bill`, `Version`, `Version date` (or `not given`), `Package`, `Characters read: {read} of {total}`, and `Text:`. The extraction holds the header and the window. Publication will embed only this window.
+7. `CongressBillRenderer.RenderText` keeps the first 60,000 characters, cut at the last whitespace inside the window. Text of 60,000 characters or less stays whole. Empty text is invalid data. The header has the lines `Bill`, `Version`, `Version date` (or `not given`), `Package`, `Characters read: {read} of {total}`, and `Text:`. The extraction holds the header and the window. Publication does not read it yet.
 8. `AdmitTextAsync` adds the `bill_text_versions` row and sets `text_state` `Read` in one transaction. A repeat adds no second row. It first checks that the extraction belongs to an attempt of the text job, like a page chain does. `AdmitTextVersionsAsync` and `AdmitTextAsync` each set `text_package_id` when they set `Read`. The store holds the job lock for the whole check and insert. Two text jobs of one package therefore cannot write at the same time, and no conflict clause is needed.
 
 A bill text job whose versions job is missing or not succeeded blocks with `billTextVersionsMissing`. A package that the versions page does not list is invalid data.
@@ -330,7 +330,7 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 - Planned: list bills for each Congress from `/v3/bill/{congress}`, for each Congress at or above the configured minimum. The date-window bill list pages through thousands of older bills.
 - Planned: pull the shared line-format rules out of the bill renderer when a second renderer needs them.
 - Text for a bill without a summary is collected only. Drafting an AI summary from it, a backfill command for older bills, and publication of the summary are planned.
-- A gate with `NoText` is read again only when the bill gets a new `updateDate`. A later PR relists these bills.
+- A gate with `NoText` is read again only when the bill gets a new `updateDate`. Planned: relist these bills.
 - govinfo sends the bill text with no charset, so the extractor decodes it as windows-1252. Measured bodies (BILLS-119hr1eh, PLAW-119publ21, PLAW-119pvtl1) are pure ASCII, so nothing changes today. A UTF-8 body would decode wrongly with no error.
 - Bill text over 2,000,000 converted characters fails with `InvalidDataException` and stays unread.
 - The text versions job runs for every bill with `summary_count` 0, also for bills that the gate marks `notRelevant`. A later change can limit it to bills that can reach a reader.
