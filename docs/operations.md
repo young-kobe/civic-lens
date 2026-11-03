@@ -271,6 +271,14 @@ After a schema change, regenerate the schema reference in `docs/architecture/sch
 CIVIC_LENS_WRITE_SCHEMA_DOCS=1 dotnet test CivicLens.slnx --configuration Release --no-build --filter FullyQualifiedName~SchemaReferenceTests
 ```
 
+### Public role login
+
+The migration `PublicApiViews` creates the roles `civic_lens_public` and `civic_lens_public_owner`. Both have no login and no password. It also creates the schema `public_api` with its views and grants. The migration holds no secret, because a secret in a migration lands in Git. `readonly-grants.sql` creates its role the same way, without a password. The public role must log in over the network, so it needs one.
+
+Enable the login by hand, after the first deploy that holds the migration. Open an interactive `psql` session on the database host as the database owner. Run `ALTER ROLE civic_lens_public LOGIN PASSWORD` with a long random password. Keep the password out of shell history, logs, and Git. Store it only where the future `PublicApi` reads its settings.
+
+The role reads only the views in `public_api`. It cannot write, a statement stops after 2 seconds, and it holds at most 5 connections. After a restore into a new cluster, check that both roles exist, because roles belong to the cluster and a dump can leave them out. Without the login the views stay closed, which is the safe state. `PublicApi` does not use the role yet.
+
 ## Managed collection jobs
 
 Apply `db migrate` first, also when you upgrade. Rebuild the host and collector together. Job commands need `CIVIC_LENS_DATABASE`.

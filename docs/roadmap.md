@@ -134,7 +134,9 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 - R-22: Ordered row locks in the job store, after the MVP. Depends on: lock waits measured on a bills-only collection run. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-68: Serve public data from tables. The R-63 tables are the only source of truth, and no JSON file carries data to the public path. `PublicApi` reads a `public_api` schema of views, each listing its columns, through a role that can read nothing else. A new insight is a view, one endpoint, and one shared component. The target is server-rendered pages that Cloudflare caches for each release, and the browser calls the API for paging and filters. This comes before the official and home page rebuild. The design is still to agree in detail. Depends on: the vote, action, and release entry steps of R-63. [Publication](architecture/publication.md)
   - [ ] Agree the view design, active release rule, and role limits, with a test that fails when the role can read any other table
-  - [ ] Add the views and role, and serve votes and bills through `PublicApi`
+  - [x] Add the `public_api` schema, the role `civic_lens_public`, the active release view, and the vote views ([public API views](architecture/publication.md#public-api-views))
+  - [ ] Add the bill and action views. They wait until actions have columns, because actions still hold JSON
+  - [ ] Serve votes and bills through `PublicApi`
   - [ ] Measure traffic, query load, and worker effect on the shared database
   - [ ] Render the official page from the API, then the home, issue, record, and list pages
   - [ ] Write `release.json` only as a public download on a schedule, or remove it
