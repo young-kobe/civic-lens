@@ -56,15 +56,15 @@ The states are the values of `ck_<table>_status`, the same for every queue table
 |---|---|---|
 | Pending, RetryWaiting, WaitingForBudget | Running | Claim of due work |
 | Running | Running | Claim after an expired lease, or a validation retry inside a claim |
-| Running | Pending | Release on shutdown, or an account-wide provider pause |
+| Running | Pending | Release on shutdown, an account-wide provider pause, or a brief check when a revision is appended |
 | Running | RetryWaiting | Durable retry with a bounded delay |
 | Running | WaitingForBudget | Daily limit reached |
 | Running | Succeeded, Blocked, Failed | Settlement |
 | WaitingForBudget | Pending | Budget wait release at worker startup |
-| Failed | Pending | Owner requeue (`analyses requeue`) |
-| Succeeded | Pending | Only where the feature lifecycle allows it: a skipped statement gate (`statements regate`), any brief draft, and a relationship draft whose pair has a new input |
+| Failed | Pending | Owner requeue (`analyses requeue`), or a brief check when a revision is appended |
+| Succeeded | Pending | Only where the feature lifecycle allows it: a skipped statement gate (`statements regate`), any brief draft, a brief check when a revision is appended, and a relationship draft whose pair has a new input |
 | Succeeded | Pending | Owner redraft of a drafted or unchanged draft whose bill or roll call used an older prompt (`actions draft redraft`, `votes draft redraft`) |
-| Blocked | Pending | Only where the feature lifecycle allows it: an action draft (`actions draft requeue --blocked`), a vote draft (`votes draft requeue --blocked`), a brief draft (`brief redraft`), and a relationship draft that was blocked by an unapproved side |
+| Blocked | Pending | Only where the feature lifecycle allows it: an action draft (`actions draft requeue --blocked`), a vote draft (`votes draft requeue --blocked`), a brief draft (`brief redraft`), a brief check when a revision is appended, and a relationship draft that was blocked by an unapproved side |
 
 These events count as attempts: a durable retry, a reclaim of an expired lease, a release with tokens reserved, and a rejected draft. The claim owns the limit. A claim of an entry with eight attempts fails it as `attemptsExhausted` with no call.
 

@@ -6,6 +6,7 @@ using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
 using CivicLens.Core.Briefs;
 using CivicLens.Core.Review;
+using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Briefs.Persistence;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
@@ -16,6 +17,8 @@ namespace CivicLens.Infrastructure.Briefs;
 
 public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IBriefReviewStore
 {
+    private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefCheckRun> checkQueue = BriefCheckQueue.Create(contextFactory);
+
     internal static readonly ReviewRecords<BriefDraftRow, BriefRevisionRow, BriefReviewDecisionRow, BriefRevision> Records =
         new(PostgresAdvisoryLock.BriefReview, "Brief", nameof(BriefDraftRow.RecordId));
 
@@ -36,6 +39,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
                 revision.ValidatePersonEditOf(current);
                 return Task.FromResult(revision);
             }, saved => BriefDraftRows.NewRevision(saved, null),
+            (db, saved) => BriefCheckQueue.QueueAsync(checkQueue, db, saved, cancellationToken),
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
                 NoAfterDecision, revision => revision.ComparableForm()), cancellationToken);
 
@@ -110,8 +114,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
     private static BriefCitedRecord CitedRecordOf(BriefCitation citation, ImmutableArray<BriefRecord> records,
         HashSet<PublishedRevisionBinding> changed)
     {
-        var record = records.Single(candidate => candidate.Kind == citation.Kind && candidate.RecordId == citation.RecordId &&
-            candidate.RevisionNumber == citation.RevisionNumber);
+        var record = BriefRecordReader.RecordOf(citation, records);
         return new(record.Headline, record.Summary, changed.Contains(BriefRecordReader.BindingOf(citation)));
     }
 

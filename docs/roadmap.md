@@ -112,7 +112,7 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [ ] Drop the decision JSON, after a read-only check of production rows
   - [ ] Add tick bounds and missing foreign keys, after a read-only check of production rows
   - [x] Agree the table design from one pilot on vote revisions, with measured row counts
-  - [ ] Vote pilot 1: write both, so every vote revision writes columns and child rows beside its JSON
+  - [x] Vote pilot 1: write both, so every vote revision writes columns and child rows beside its JSON
   - [ ] Vote pilot 2: backfill old vote revisions and verify them with a C# command that compares each revision to its JSON
   - [ ] Vote pilot 3: move the vote readers to the columns
   - [ ] Vote pilot 4: drop the vote revision JSON, after the read-only function stops reading it
@@ -140,10 +140,12 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 - R-18: An engine-health view, built with R-21. The spending total is in R-24. Depends on: R-24. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-13: Measure document change, then gate it. Check the House press index pages and about 300 press release URLs daily for 2 to 4 weeks. Count byte, text, and line changes for each source, and label about 100 changes by hand. Add rules for the churn found. Add a model tier only if the changes that pass the rules are too many for people to review. Depends on: the first cloud deployment (R-24). [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-22: Ordered row locks in the job store, after the MVP. Depends on: lock waits measured on a bills-only collection run. [Collection](architecture/collection.md#limits-and-planned-work)
-- R-68: Decouple our data from the front end. Pages stay static during this work. The design is still to agree. Plan after R-24 planning. Depends on: the release entry steps of R-63. [Publication](architecture/publication.md)
-  - [ ] Add a public read model: extend the search database and `PublicApi` to serve records and officials, loaded for each release, with a release number on each row
-  - [ ] Move page rendering behind that public contract, and keep publishing static files
-  - [ ] Decide on live pages, with measured traffic, cost, and host failures
+- R-68: Serve public data from tables. The R-63 tables are the only source of truth, and no JSON file carries data to the public path. `PublicApi` reads a `public_api` schema of views, each listing its columns, through a role that can read nothing else. A new insight is a view, one endpoint, and one shared component. The target is server-rendered pages that Cloudflare caches for each release, and the browser calls the API for paging and filters. This comes before the official and home page rebuild. The design is still to agree in detail. Depends on: the vote, action, and release entry steps of R-63. [Publication](architecture/publication.md)
+  - [ ] Agree the view design, active release rule, and role limits, with a test that fails when the role can read any other table
+  - [ ] Add the views and role, and serve votes and bills through `PublicApi`
+  - [ ] Measure traffic, query load, and worker effect on the shared database
+  - [ ] Render the official page from the API, then the home, issue, record, and list pages
+  - [ ] Write `release.json` only as a public download on a schedule, or remove it
 - R-24: The long-term cloud move to a Hetzner CPX21 with containers, Terraform, CI, and live Auth0 verification. A Jetson runs temporary production with Docker Compose, and it serves releases through Caddy and a Cloudflare tunnel. Terraform state never goes to R2. The open host checklist items are its exit checks. Also stop the worker during a job and show that the deployed container recovers it. The search service runs as its own container on the same box. The deploy must set no provider-specific `Logging` levels for the search service, because such a rule overrides its request log filter. R-24 also holds a monthly restore test, worker service management, and the documented spending total. The owner withdraws with Take off site on the record editor, and the CLI stays. The runbook still holds a tested `releases publish --withdraw` command that runs on the cloud host. The coverage file is 775 KB of the 1 MB limit of the shared configuration loader. Raise the limit before R-24 only if the file would pass 1 MB before the deploy. Depends on: the exit criteria of the first deploy. [Host](architecture/host.md#limits-and-planned-work)
 - R-26: Read-only local MCP inspection. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
 - R-27: Automatic discovery of official sources, and check cadence from measured change rates. It needs runtime writes, so people, sources, and coverage then move to tables. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)

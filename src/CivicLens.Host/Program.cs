@@ -118,6 +118,7 @@ if (args is [] or ["--help"] or ["help"])
         worker also drafts House and Senate votes when CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
         worker also drafts relationships when CIVIC_LENS_RELATIONSHIP_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also drafts weekly briefs when CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
+        worker also checks weekly briefs when CIVIC_LENS_BRIEF_CHECKING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
         Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
         """);
@@ -211,6 +212,8 @@ try
         await using var relationshipDraftingWakeup = relationshipDrafting.Wakeup;
         var briefDrafting = BriefDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, BeatOf(WorkerLoopNames.BriefDrafting), loggers);
         await using var briefDraftingWakeup = briefDrafting.Wakeup;
+        var briefChecking = BriefCheckComposition.Create(analysisContexts, connectionString, BeatOf(WorkerLoopNames.BriefChecking), loggers);
+        await using var briefCheckingWakeup = briefChecking.Wakeup;
         var publishing = PublishingComposition.Create(connectionString, workerConfiguration, issueConfiguration, artifactRoot, BeatOf(WorkerLoopNames.Publishing), loggers);
         await using var publishingWakeup = publishing?.Wakeup;
         var reportPull = ReportPullComposition.Create(analysisContexts, connectionString, BeatOf(WorkerLoopNames.ReportPull), loggers);
@@ -225,6 +228,7 @@ try
         await voteDrafting.RecordStartAsync(cancellation.Token);
         await relationshipDrafting.RecordStartAsync(cancellation.Token);
         await briefDrafting.RecordStartAsync(cancellation.Token);
+        await briefChecking.RecordStartAsync(cancellation.Token);
         var extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         var comparisons = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
         var processingStore = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
@@ -248,6 +252,7 @@ try
                 AnalysisStage.For(WorkerLoopNames.VoteDrafting, voteDrafting.Worker),
                 AnalysisStage.For(WorkerLoopNames.RelationshipDrafting, relationshipDrafting.Worker),
                 AnalysisStage.For(WorkerLoopNames.BriefDrafting, briefDrafting.Worker),
+                AnalysisStage.For(WorkerLoopNames.BriefChecking, briefChecking.Worker),
                 publishing?.Stage,
                 reportPull?.Stage
             }.OfType<AnalysisStage>()], collectionConcurrency);
@@ -303,10 +308,12 @@ try
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var draftStore = new PostgresVoteDraftStore(contexts);
+        var backfillStore = new PostgresVoteRevisionBackfillStore(contexts);
         var draftCommands = new AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, VoteDraftTask.Task));
         var votes = new VoteCommand(draftCommands, new GetVoteDraftStatus(draftCommands.Status, draftStore),
-            new RequeueBlockedVoteDrafts(draftStore), new RedraftVoteDrafts(draftStore), owner);
+            new RequeueBlockedVoteDrafts(draftStore), new RedraftVoteDrafts(draftStore),
+            new BackfillVoteRevisions(backfillStore), new VerifyVoteRevisions(backfillStore), owner);
         executing = true;
         return await votes.ExecuteAsync(args, cancellation.Token);
     }
