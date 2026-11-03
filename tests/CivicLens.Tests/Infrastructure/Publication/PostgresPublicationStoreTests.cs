@@ -235,46 +235,37 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     }
 
     [Fact]
-    public async Task PruneRetiresBelowTheLowestOfTheKeptNumbersAndNamesTheActiveReleaseSoARolledBackReleaseSurvives()
-    {
-        var draft = await CreateDraftAsync();
-        var first = await publications.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key-1", Hash(1), default);
-        await publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key-2", Hash(2), default);
-        await publications.CommitAsync(Owner.Subject, Commit(3, draft, 1, 0), "key-3", Hash(3), default);
-        await publications.ActivateAsync(1, (_, _) => Task.CompletedTask, default);
-        (int Below, string? Active)? offered = null;
-
-        await publications.PruneAsync(2, (below, active, _) => { offered = (below, active); return Task.CompletedTask; }, default);
-
-        Assert.Equal((2, first.DirectoryName), offered);
-        Assert.Equal(3, (await publications.ListAsync(10, default)).Count);
-    }
-
-    [Fact]
-    public async Task PruneNamesTheActiveReleaseEvenWhenItIsBelowTheKeptNumbersSoARollbackTargetIsNeverRetired()
+    public async Task PruneOffersThePlanAndTheActiveFolderAndLeavesEveryRowSoARolledBackReleaseSurvives()
     {
         var draft = await CreateDraftAsync();
         var first = await publications.CommitAsync(Owner.Subject, Commit(1, draft, 1, 0), "key-1", Hash(1), default);
         await publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key-2", Hash(2), default);
         await publications.ActivateAsync(1, (_, _) => Task.CompletedTask, default);
-        string? active = null;
+        (ReleaseRetentionPlan Plan, string? Active)? offered = null;
 
-        await publications.PruneAsync(1, (_, name, _) => { active = name; return Task.CompletedTask; }, default);
+        await publications.PruneAsync((plan, active, _) => { offered = (plan, active); return Task.CompletedTask; }, default);
 
-        Assert.Equal(first.DirectoryName, active);
+        Assert.Equal(first.DirectoryName, offered!.Value.Active);
+        Assert.Equal(2, offered.Value.Plan.HighestNumber);
+        Assert.Equal(2, (await publications.ListAsync(10, default)).Count);
     }
 
     [Fact]
-    public async Task PruneRetiresEverythingBelowTheThirtyHighestNumbersAfterABurstBecauseADrainMustNotFillTheDisk()
+    public async Task PruneKeepsTheNewestThirtyAndOneReleasePerDayAfterABurstBecauseADrainMustNotFillTheDisk()
     {
         var draft = await CreateDraftAsync();
-        for (var number = 1; number <= PruneReleases.KeepReleases + 10; number++)
+        for (var number = 1; number <= ReleaseRetention.NewestKept + 10; number++)
             await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
-        var below = 0;
+        await SetPublishedDaysAgoAsync(10, "release_number <= 3");
+        await SetPublishedDaysAgoAsync(3, "release_number IN (4, 5)");
+        ReleaseRetentionPlan? offered = null;
 
-        await publications.PruneAsync(PruneReleases.KeepReleases, (lowestKept, _, _) => { below = lowestKept; return Task.CompletedTask; }, default);
+        await publications.PruneAsync((plan, _, _) => { offered = plan; return Task.CompletedTask; }, default);
 
-        Assert.Equal(11, below);
+        Assert.Equal([5, .. Enumerable.Range(11, 30)], offered!.KeptNumbers.Order().ToArray());
+        Assert.True(offered.Retires(4));
+        Assert.True(offered.Retires(3));
+        Assert.False(offered.Retires(5));
     }
 
     [Fact]
@@ -285,7 +276,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         await publications.CommitAsync(Owner.Subject, Commit(2, draft, 1, 0), "key-2", Hash(2), default);
         var lockWasFree = true;
 
-        await publications.PruneAsync(1, async (_, _, _) =>
+        await publications.PruneAsync(async (_, _, _) =>
         {
             await using var other = new NpgsqlConnection(connectionString);
             await other.OpenAsync();
@@ -847,6 +838,15 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
 
     private async Task<long> DatabaseTicksAsync() => await ScalarTicksAsync(
         $"SELECT {DatabaseClockTicksSql}");
+
+    private async Task SetPublishedDaysAgoAsync(int days, string where)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            $"UPDATE publication_releases SET published_at_utc_ticks = published_at_utc_ticks - {days} * 864000000000 WHERE {where}", connection);
+        await command.ExecuteNonQueryAsync();
+    }
 
     private async Task<long> StoredPublishedTicksAsync() => await ScalarTicksAsync("SELECT published_at_utc_ticks FROM publication_releases");
 

@@ -7,7 +7,7 @@ public interface IReleaseDirectory
     Task<IReadOnlyList<string>> ListFilesAsync(string directoryName, string folder, int maximumFiles,
         CancellationToken cancellationToken);
     Task DeleteAsync(string directoryName, CancellationToken cancellationToken);
-    Task RetireOlderThanAsync(int releaseNumber, IReadOnlyCollection<string> keepDirectoryNames, CancellationToken cancellationToken);
+    Task RetireAsync(ReleaseRetentionPlan plan, IReadOnlyCollection<string> keepDirectoryNames, CancellationToken cancellationToken);
     Task DeleteRetiredAsync(CancellationToken cancellationToken);
     Task ActivateAsync(string directoryName, CancellationToken cancellationToken);
     Task<string?> GetActiveAsync(CancellationToken cancellationToken);

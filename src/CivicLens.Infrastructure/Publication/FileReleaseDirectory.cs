@@ -70,7 +70,7 @@ public sealed class FileReleaseDirectory : IReleaseDirectory
         return Task.CompletedTask;
     }
 
-    public Task RetireOlderThanAsync(int releaseNumber, IReadOnlyCollection<string> keepDirectoryNames,
+    public Task RetireAsync(ReleaseRetentionPlan plan, IReadOnlyCollection<string> keepDirectoryNames,
         CancellationToken cancellationToken)
     {
         var releases = Path.Combine(rootPath, ReleasePaths.ReleasesFolder);
@@ -79,7 +79,7 @@ public sealed class FileReleaseDirectory : IReleaseDirectory
         {
             cancellationToken.ThrowIfCancellationRequested();
             var name = Path.GetFileName(path);
-            if (ReleasePaths.TryReleaseNumber(name, out var number) && number < releaseNumber && !keepDirectoryNames.Contains(name))
+            if (ReleasePaths.TryReleaseNumber(name, out var number) && plan.Retires(number) && !keepDirectoryNames.Contains(name))
                 _ = MoveToTombstone(path);
         }
 

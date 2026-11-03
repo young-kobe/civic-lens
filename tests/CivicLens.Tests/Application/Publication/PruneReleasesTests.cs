@@ -17,16 +17,6 @@ public sealed class PruneReleasesTests
     }
 
     [Fact]
-    public async Task AsksTheStoreToKeepThirtyReleases()
-    {
-        var scenario = Seed(1, active: 1);
-
-        await Prune(scenario).ExecuteAsync();
-
-        Assert.Equal(30, scenario.Publications.PrunedKeep);
-    }
-
-    [Fact]
     public async Task NeverRetiresTheReleaseTheCurrentLinkServesEvenWhenItIsOldSoVisitorsKeepTheirSite()
     {
         var scenario = Seed(35, active: 35);
@@ -47,6 +37,31 @@ public sealed class PruneReleasesTests
         await Prune(scenario).ExecuteAsync();
 
         Assert.Contains("release-2-orphan", scenario.Releases.RetiredEver);
+    }
+
+    [Fact]
+    public async Task AFolderAboveTheHighestCommittedReleaseSurvivesBecauseAPublishInProgressMayOwnIt()
+    {
+        var scenario = Seed(35, active: 35);
+        scenario.Releases.Directories["release-36-in-progress"] = [];
+
+        await Prune(scenario).ExecuteAsync();
+
+        Assert.Contains("release-36-in-progress", scenario.Releases.Directories.Keys);
+        Assert.DoesNotContain("release-36-in-progress", scenario.Releases.RetiredEver);
+    }
+
+    [Fact]
+    public async Task AnOlderDailyReleaseSurvivesAndTheRestOfThatDayIsRetired()
+    {
+        var scenario = Seed(35, active: 35);
+        scenario.Publications.Now = new(2026, 2, 3, 9, 0, 0, TimeSpan.Zero);
+        scenario.Publications.Committed[2] = scenario.Publications.Committed[2] with { PublishedAtUtc = new(2026, 2, 1, 8, 0, 0, TimeSpan.Zero) };
+        scenario.Publications.Committed[3] = scenario.Publications.Committed[3] with { PublishedAtUtc = new(2026, 2, 1, 20, 0, 0, TimeSpan.Zero) };
+
+        await Prune(scenario).ExecuteAsync();
+
+        Assert.Equal(["release-1", "release-2", "release-3", "release-5"], scenario.Releases.RetiredEver.Order().ToArray());
     }
 
     [Fact]
@@ -104,7 +119,7 @@ public sealed class PruneReleasesTests
         var scenario = new PublicationScenario();
         var publisher = scenario.Publisher();
         string? first = null;
-        for (var index = 0; index < PruneReleases.KeepReleases + 2; index++)
+        for (var index = 0; index < ReleaseRetention.NewestKept + 2; index++)
         {
             var id = "0123456789abcdef"[index % 16];
             var reference = index < 16
@@ -115,7 +130,7 @@ public sealed class PruneReleasesTests
         }
 
         Assert.DoesNotContain(first!, scenario.Releases.Directories.Keys);
-        Assert.Equal(PruneReleases.KeepReleases, scenario.Releases.Directories.Count);
+        Assert.Equal(ReleaseRetention.NewestKept, scenario.Releases.Directories.Count);
     }
 
     private static PruneReleases Prune(PublicationScenario scenario) =>
