@@ -25,6 +25,20 @@ public sealed class ExecutiveActionRevisionTests
         return new FederalRegisterEvidence(document, extractionId, FederalRegisterRenderer.Render(document), "donald-trump");
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ASourceIdAndAPersonIdHoldAtMostTheLengthOfAConfigurationId(bool source)
+    {
+        var (revision, _) = Create();
+        var longest = new string('a', ReviewTextRules.MaximumConfigurationIdLength);
+        var tooLong = longest + "a";
+
+        (source ? revision with { SourceId = longest } : revision with { PersonId = longest }).ValidateShape();
+
+        Assert.Throws<ArgumentException>(() => (source ? revision with { SourceId = tooLong } : revision with { PersonId = tooLong }).ValidateShape());
+    }
+
     [Fact]
     public void EachFactCitesItsOwnLineOfTheExtractionAndTheCodeIsTheAuthor()
     {
