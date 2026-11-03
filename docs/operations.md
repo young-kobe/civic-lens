@@ -699,7 +699,7 @@ Run order: `backfill`, then `verify`. Run the new code only when `verify` exits 
 
 ### Executive action revision backfill
 
-R-63 step 3 moves old executive action revisions into columns and child rows. A revision written by current code already has them. The migration `ExecutiveActionRevisionColumns` also moves each `notice_json` of a document into the notice columns, and drops `notice_json`. It sets the code author on each old revision. It fails and changes nothing when a notice differs from its row, or when a revision names another author. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+R-63 step 3 moves old executive action revisions into columns and child rows. A revision written by current code already has them. The migration `ExecutiveActionRevisionColumns` also moves each `notice_json` of a document into the notice columns, and drops `notice_json`. It sets the code author on each old revision. It fails and changes nothing when a notice differs from its row, when a revision names another author, or when a `notice_json` or `revision_json` is not valid JSON. The error names the row. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions revisions backfill 500
@@ -710,7 +710,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ex
 
 `verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. The output and the exit code are the same as for the vote `verify`. A revision whose rows cannot be read shows the field name `columns`. No key is allowed to be absent.
 
-Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. Run `backfill` right after the deploy, because every reader fails on an executive action until it finishes. Run the new code only when `verify` exits 0. Every reader fails on a row with null columns. Production held 688 revisions when the survey was made. A rollback past the migration rebuilds `notice_json` from the notice columns.
+Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every executive action read fails until it ends. For a manual run, start the new code only when `verify` exits 0. Every reader fails on a row with null columns. Production held 688 revisions when the survey was made. A rollback past the migration rebuilds `notice_json` from the notice columns.
 
 ## Relationship drafting
 
