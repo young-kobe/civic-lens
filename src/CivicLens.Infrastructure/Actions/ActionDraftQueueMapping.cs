@@ -54,7 +54,11 @@ internal sealed class ActionDraftQueueMapping(Func<CollectionAttemptDbContext, s
         if (settlement.Run is { Reason: ActionDraftErrorCodes.RecordRejected } && settlement.Checkpoint is not ActionDraftCheckpoint { Revision: not null })
             return await ConfirmRefusalAsync(db, row, settlement, cancellationToken);
         if (settlement.Checkpoint is not ActionDraftCheckpoint { Revision: { } revision } checkpoint || settlement.Run is not { } run)
+        {
+            if (settlement.Checkpoint.ErrorCode is ActionDraftErrorCodes.Unchanged or ActionDraftErrorCodes.NoTrackedOfficial && settlement.Run is not null)
+                await ClearRefusalAsync(db, row, cancellationToken);
             return settlement;
+        }
         if (run.Run.Outcome is not (AnalysisRunOutcome.Drafted or AnalysisRunOutcome.Bypassed))
             throw new ArgumentException("A revision needs its drafted or bypassed run.", nameof(settlement));
         var refusal = await ActionDraftRows.AppendAnalysisRevisionAsync(db, revision, run.Run.RunId, cancellationToken);
@@ -75,13 +79,13 @@ internal sealed class ActionDraftQueueMapping(Func<CollectionAttemptDbContext, s
         }, discarded);
     }
 
-    // The step read the record as rejected before it settled. A person may have changed it since, so the mark needs the review key.
-    // The retry writes no run, because a run would hide an earlier mark.
+    // The step read the record as rejected before it settled. A person may have changed it since, so the block needs the review key.
+    // The retry writes no run, because the run would look like a settlement.
     private static async Task<AnalysisSettlement<ActionDraftRun>> ConfirmRefusalAsync(CollectionAttemptDbContext db, ActionAnalysisRow row,
         AnalysisSettlement<ActionDraftRun> settlement, CancellationToken cancellationToken)
     {
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.ActionReview, cancellationToken);
-        if (await ActionDraftRows.IsRejectedForCandidateAsync(db, row.CandidateId, cancellationToken)) return settlement;
+        if (await ActionDraftRows.ConfirmRefusalAsync(db, row.CandidateId, cancellationToken)) return settlement;
         row.RetryOfRunId = null;
         return new(settlement.Checkpoint with
         {
@@ -89,5 +93,13 @@ internal sealed class ActionDraftQueueMapping(Func<CollectionAttemptDbContext, s
             ErrorCode = ActionDraftErrorCodes.RecordRejected,
             RetryDelay = AnalysisPolicy.RetryDelay(row.Attempts)
         }, null);
+    }
+
+    // An update with the same facts, or with no tracked official, ends the block. The review key is taken only when a draft holds one.
+    private static async Task ClearRefusalAsync(CollectionAttemptDbContext db, ActionAnalysisRow row, CancellationToken cancellationToken)
+    {
+        if (!await ActionDraftRows.HoldsRefusalAsync(db, row.CandidateId, cancellationToken)) return;
+        await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.ActionReview, cancellationToken);
+        await ActionDraftRows.ClearRefusalAsync(db, row.CandidateId, cancellationToken);
     }
 }

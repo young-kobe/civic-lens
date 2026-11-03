@@ -349,13 +349,102 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE outcome = 'DraftDiscarded'"));
     }
 
-    private async Task RejectAndRefuseANewerUpdateAsync()
+    private async Task<string> RejectAndRefuseANewerUpdateAsync()
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
-        _ = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
+        var newer = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
         Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE reason = 'recordRejected'"));
+        await AssertBlockAsync(newer);
+        return newer;
+    }
+
+    private async Task AssertBlockAsync(string? candidate) =>
+        Assert.Equal(candidate, await ScalarAsync("SELECT refused_candidate_id FROM action_drafts") as string);
+
+    private async Task<AnalysisClaim> ClaimAfterRequeueAsync(string candidate)
+    {
+        Assert.Equal(1, await new RequeueRefusedActionDrafts(ActionStore()).ExecuteAsync(Owner));
+        return (await ActionStore().TryClaimAsync(candidate, Lease, default))!;
+    }
+
+    private async Task AssertApprovalStillRefusedAsync(ReviewDecision changes) =>
+        await Assert.ThrowsAsync<StaleApprovalException>(() => new DecideActionReview(ActionReviews()).ExecuteAsync(Reviewer,
+            new(RecordId, 1, 2, ReviewDecisionKind.Approve, "Looked again.", [changes.DecisionId], Guid.NewGuid().ToString("N"))));
+
+    [Fact]
+    public async Task AConflictRetryKeepsTheBlockEvenAfterTheRetryFailsBecauseOnlyANewDraftMayEndIt()
+    {
+        var newer = await RejectAndRefuseANewerUpdateAsync();
+        var changes = await DecideAsync(1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
+        var claim = await ClaimAfterRequeueAsync(newer);
+        var runId = await ReserveAsync(ActionStore(), claim);
+        Assert.True(await ActionStore().CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(newer, 5)), DraftedRun(runId, newer), default));
+        await AssertBlockAsync(newer);
+        await AssertApprovalStillRefusedAsync(changes);
+
+        await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = 'Pending', retry_at = NULL WHERE candidate_id = '{newer}'");
+        _ = await RunActionWorkerAsync(new FakeHeadlineSummaryModel().Draft("not json").Draft("not json").Draft("not json"));
+
+        await AssertBlockAsync(newer);
+        await AssertApprovalStillRefusedAsync(changes);
+    }
+
+    [Fact]
+    public async Task ABypassedConflictKeepsTheBlockBecauseABypassedRunIsNotANewDraft()
+    {
+        var newer = await RejectAndRefuseANewerUpdateAsync();
+        var claim = await ClaimAfterRequeueAsync(newer);
+        var bypassed = DraftedRun(Guid.NewGuid().ToString("N"), newer);
+        bypassed = bypassed with { Run = bypassed.Run with { Outcome = AnalysisRunOutcome.Bypassed, ChargedTokens = 0, Usage = AnalysisTokenUsage.None } };
+
+        Assert.True(await ActionStore().CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(newer, 5)), bypassed, default));
+
+        await AssertBlockAsync(newer);
+    }
+
+    [Theory]
+    [InlineData("Pending")]
+    [InlineData("Blocked")]
+    [InlineData("Failed")]
+    public async Task ASupersededDiscardKeepsTheBlockWhateverTheNewestUpdateDoesBecauseNoDraftExistsYet(string newestStatus)
+    {
+        var newer = await RejectAndRefuseANewerUpdateAsync();
+        var newest = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(2), title: "A third title");
+        await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = '{newestStatus}' WHERE candidate_id = '{newest}'");
+        var claim = await ClaimAfterRequeueAsync(newer);
+
+        Assert.True(await ActionStore().CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Succeeded, ActionDraftErrorCodes.SupersededByNewerCandidate), null, default));
+
+        await AssertBlockAsync(newer);
+    }
+
+    [Fact]
+    public async Task AnUpdateWithNoTrackedOfficialEndsTheBlockBecauseThenNothingOfTheBillIsTracked()
+    {
+        await RejectAndRefuseANewerUpdateAsync();
+        _ = await ReadableCandidateAsync("Z000009", UpdatedAt.AddDays(2));
+
+        Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
+
+        await AssertBlockAsync(null);
+        await DecideAsync(1, 1, ReviewDecisionKind.Approve);
+    }
+
+    [Fact]
+    public async Task AnOlderLateUpdateNeverSetsTheBlockBecauseTheRevisionAlreadyHoldsNewerFacts()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        var older = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(-1), title: "An older title");
+        var claim = (await ActionStore().TryClaimAsync(older, Lease, default))!;
+        var bypass = DraftedRun(Guid.NewGuid().ToString("N"), older);
+        bypass = bypass with { Run = bypass.Run with { Outcome = AnalysisRunOutcome.Bypassed, ChargedTokens = 0, Usage = AnalysisTokenUsage.None }, Reason = ActionDraftErrorCodes.RecordRejected };
+
+        Assert.True(await ActionStore().CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Succeeded, ActionDraftErrorCodes.Unchanged), bypass, default));
+
+        await AssertBlockAsync(null);
     }
 
     [Fact]
@@ -433,32 +522,20 @@ public sealed partial class PostgresBillStreamTests
         _ = await RunActionWorkerAsync(new FakeHeadlineSummaryModel().Draft(DraftableOutput));
 
         Assert.Equal(0, await new RequeueRefusedActionDrafts(ActionStore()).ExecuteAsync(Owner));
+        await AssertBlockAsync(null);
         var latest = await ScalarAsync("SELECT max(current_revision_number) FROM action_drafts");
         await DecideAsync((int)latest!, 1, ReviewDecisionKind.Approve);
         Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
     }
 
     [Fact]
-    public async Task AFailedRetryKeepsTheMarkSoApprovingStaysRefusedBecauseTheNewDraftNeverArrived()
-    {
-        await RejectAndRefuseANewerUpdateAsync();
-        var changes = await DecideAsync(1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
-        Assert.Equal(1, await new RequeueRefusedActionDrafts(ActionStore()).ExecuteAsync(Owner));
-
-        _ = await RunActionWorkerAsync(new FakeHeadlineSummaryModel().Draft("not json").Draft("not json").Draft("not json"));
-
-        Assert.True(await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE outcome = 'OutputRejected'") is long rejected && rejected > 0);
-        await Assert.ThrowsAsync<StaleApprovalException>(() => new DecideActionReview(ActionReviews()).ExecuteAsync(Reviewer,
-            new(RecordId, 1, 2, ReviewDecisionKind.Approve, "Looked again.", [changes.DecisionId], Guid.NewGuid().ToString("N"))));
-    }
-
-    [Fact]
-    public async Task ALaterUpdateWithTheSameFactsFreesTheRecordBecauseOnlyTheNewestSettledUpdateCounts()
+    public async Task AnUpdateWithTheSameFactsEndsTheBlockBecauseNoFactWasRefused()
     {
         await RejectAndRefuseANewerUpdateAsync();
         _ = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(2));
         Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
 
+        await AssertBlockAsync(null);
         await DecideAsync(1, 1, ReviewDecisionKind.Approve);
 
         Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
@@ -486,6 +563,7 @@ public sealed partial class PostgresBillStreamTests
 
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE reason = 'recordRejected'"));
         Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM action_analysis_runs WHERE candidate_id = '{newer}'"));
+        await AssertBlockAsync(null);
         Assert.Equal("RetryWaiting", await ScalarAsync($"SELECT status FROM action_analysis WHERE candidate_id = '{newer}'"));
     }
 

@@ -116,6 +116,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         ImmutableArray<ReviewDecision> cycle, Func<Task<ApprovalCheck>> approvalChecks, string? correctionNote = null)
     {
         AppendRevision(db, draft, revision, row, cycle);
+        if (draft is IRefusedDraftRow refused) refused.RefusedCandidateId = null;
         if (!ReviewPolicy.GetUnresolvedConcerns(cycle).IsEmpty || revision is IHeadlineSummaryRevision { TextOrigin: ReviewTextOrigin.Person })
             return;
         var check = await approvalChecks();

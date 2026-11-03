@@ -10,7 +10,7 @@ public static class RelationshipDraftErrorCodes
     public const string NoRelationship = "noRelationship";
     public const string NoLongerMatches = "noLongerMatches";
     public const string RevisionConflict = "revisionConflict";
-    public const string RecordRejected = "recordRejected";
+    public const string RecordRejected = Review.RejectedRecordRefusal.Reason;
     public const string AlreadyApproved = "alreadyApproved";
     public const string PersonEditKept = "personEditKept";
 }

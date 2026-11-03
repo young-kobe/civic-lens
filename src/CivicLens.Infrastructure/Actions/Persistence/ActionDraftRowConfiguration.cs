@@ -31,6 +31,8 @@ internal sealed class ActionDraftRowConfiguration : IEntityTypeConfiguration<Act
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
         ReviewDraftTableConfiguration.ConfigureLastRevised(builder, "action_drafts", nameof(ActionDraftRow.RecordId));
         builder.Property(row => row.HeldReason).HasColumnName("held_reason");
+        builder.Property(row => row.RefusedCandidateId).HasColumnName("refused_candidate_id").HasMaxLength(64);
+        builder.HasOne<ActionCandidateRow>().WithMany().HasForeignKey(row => row.RefusedCandidateId).OnDelete(DeleteBehavior.Restrict);
         ListedDraftTableConfiguration.ConfigureListing(builder, "action_drafts");
         builder.HasOne<ActionCandidateRow>().WithMany().HasForeignKey(row => row.CandidateId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(row => new { row.SourceId, row.Congress, row.BillType, row.BillNumber }).IsUnique()

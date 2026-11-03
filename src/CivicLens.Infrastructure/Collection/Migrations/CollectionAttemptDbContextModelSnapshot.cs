@@ -361,6 +361,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnName("official_ids")
                         .HasDefaultValueSql("'{}'");
 
+                    b.Property<string>("RefusedCandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("refused_candidate_id");
+
                     b.Property<int>("ReviewStateVersion")
                         .HasColumnType("integer")
                         .HasColumnName("review_state_version");
@@ -390,6 +395,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasDatabaseName("ix_action_drafts_official_ids");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("OfficialIds"), "gin");
+
+                    b.HasIndex("RefusedCandidateId");
 
                     b.HasIndex("LastRevisedAtUtcTicks", "RecordId")
                         .IsDescending()
@@ -5275,6 +5282,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnName("official_ids")
                         .HasDefaultValueSql("'{}'");
 
+                    b.Property<string>("RefusedCandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("refused_candidate_id");
+
                     b.Property<int>("ReviewStateVersion")
                         .HasColumnType("integer")
                         .HasColumnName("review_state_version");
@@ -5315,6 +5327,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasDatabaseName("ix_vote_drafts_official_ids");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("OfficialIds"), "gin");
+
+                    b.HasIndex("RefusedCandidateId");
 
                     b.HasIndex("LastRevisedAtUtcTicks", "RecordId")
                         .IsDescending()
@@ -5850,6 +5864,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("CandidateId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.BillStream.ActionCandidateRow", null)
+                        .WithMany()
+                        .HasForeignKey("RefusedCandidateId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionReviewDecisionRow", b =>
@@ -6679,6 +6698,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("CandidateId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.Votes.VoteCandidateRow", null)
+                        .WithMany()
+                        .HasForeignKey("RefusedCandidateId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteMemberListEntryRow", b =>

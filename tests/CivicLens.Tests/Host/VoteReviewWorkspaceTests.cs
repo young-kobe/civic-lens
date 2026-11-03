@@ -84,9 +84,7 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
                 detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
             SELECT '{newerCandidateId}', source_id, chamber, congress, session_number, roll_call_number, 2, 'detail-2', 'members-2',
                 detail_extraction_id, members_extraction_id, configuration_revision_id, 2 FROM vote_candidates WHERE candidate_id = '{currentCandidateId}';
-            INSERT INTO vote_analysis_runs (run_id, candidate_id, task, task_version, model, prompt_version, schema_version, input_hash, outcome, reason,
-                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks)
-            VALUES (repeat('d', 32), '{newerCandidateId}', 'vote-draft', 'v', 'm', 'p', 's', repeat('e', 64), 'Bypassed', 'recordRejected', 0, 0, 0, 0, 0, 1, 1);
+            UPDATE vote_drafts SET refused_candidate_id = '{newerCandidateId}';
             """, connection);
         await command.ExecuteNonQueryAsync();
     }

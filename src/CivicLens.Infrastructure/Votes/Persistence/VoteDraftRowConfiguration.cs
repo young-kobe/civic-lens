@@ -33,6 +33,8 @@ internal sealed class VoteDraftRowConfiguration : IEntityTypeConfiguration<VoteD
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
         ReviewDraftTableConfiguration.ConfigureLastRevised(builder, "vote_drafts", nameof(VoteDraftRow.RecordId));
         builder.Property(row => row.HeldReason).HasColumnName("held_reason");
+        builder.Property(row => row.RefusedCandidateId).HasColumnName("refused_candidate_id").HasMaxLength(64);
+        builder.HasOne<VoteCandidateRow>().WithMany().HasForeignKey(row => row.RefusedCandidateId).OnDelete(DeleteBehavior.Restrict);
         ListedDraftTableConfiguration.ConfigureListing(builder, "vote_drafts");
         builder.HasOne<VoteCandidateRow>().WithMany().HasForeignKey(row => row.CandidateId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(row => new { row.SourceId, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber }).IsUnique()

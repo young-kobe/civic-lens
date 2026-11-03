@@ -79,9 +79,7 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
                 configuration_revision_id, created_at_utc_ticks, includes_summaries, includes_subjects)
             SELECT '{new string('9', 64)}', source_id, congress, bill_type, bill_number, 2, 'detail-2', configuration_revision_id, 2, false, false
             FROM action_candidates WHERE candidate_id = '{action.CandidateId}';
-            INSERT INTO action_analysis_runs (run_id, candidate_id, task, task_version, model, prompt_version, schema_version, input_hash, outcome, reason,
-                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks)
-            VALUES (repeat('d', 32), '{new string('9', 64)}', 'action-draft', 'v', 'm', 'p', 's', repeat('e', 64), 'Bypassed', 'recordRejected', 0, 0, 0, 0, 0, 1, 1);
+            UPDATE action_drafts SET refused_candidate_id = '{new string('9', 64)}' WHERE record_id = '{action.RecordId}';
             """);
         var approving = Fields((await host.GetDocumentAsync(url)).QuerySelector("#decision-form")!);
         Set(approving, "kind", "Approve");
