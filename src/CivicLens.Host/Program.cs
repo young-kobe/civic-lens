@@ -128,7 +128,16 @@ if (args is [] or ["--help"] or ["help"])
     return 0;
 }
 
-var codeVersion = BuildCodeVersion.ReadFor(args, typeof(Program).Assembly);
+CodeVersion codeVersion;
+try
+{
+    codeVersion = BuildCodeVersion.ReadFor(args, Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY"), typeof(Program).Assembly);
+}
+catch (InvalidOperationException exception)
+{
+    Console.Error.WriteLine(exception.Message);
+    return 2;
+}
 
 if (args.Length > 0 && args[0] == "review")
 {
@@ -372,14 +381,14 @@ try
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (string.IsNullOrWhiteSpace(releaseRoot))
             throw new ArgumentException("Release commands require CIVIC_LENS_RELEASE_DIRECTORY.");
-        var publishConfiguration = args is ["releases", "publish", ..]
+        var publishConfiguration = ReleaseCommand.IsPublish(args)
             ? ConfigurationFile.ReadCollectionFromEnvironment()
                 ?? throw new ArgumentException("Publishing requires CIVIC_LENS_COLLECTION_CONFIG.")
             : new CollectionConfiguration { People = [], Sources = [] };
-        var issueConfiguration = args is ["releases", "publish", ..]
+        var issueConfiguration = ReleaseCommand.IsPublish(args)
             ? PublicationComposition.RequireIssues(ConfigurationFile.ReadIssuesFromEnvironment())
             : IssueConfiguration.None;
-        var artifactRoot = args is ["releases", "publish", ..] ? PublicationComposition.RequireArtifactRoot() : string.Empty;
+        var artifactRoot = ReleaseCommand.IsPublish(args) ? PublicationComposition.RequireArtifactRoot() : string.Empty;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, codeVersion);
         var releases = new FileReleaseDirectory(releaseRoot);
         using var loggers = CreateLoggers();
