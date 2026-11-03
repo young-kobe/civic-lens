@@ -7,4 +7,6 @@ public sealed record PublicationCommit(int ReleaseNumber, int? BaseReleaseNumber
     ImmutableArray<ReviewStateExpectation> AddedRecords)
 {
     public ImmutableArray<PublishedRecordReference> WithdrawnRecords { get; init; } = [];
+
+    public ImmutableArray<PublishedFirstPublication> FirstPublications { get; init; } = [];
 }

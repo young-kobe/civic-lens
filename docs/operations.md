@@ -822,6 +822,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases list [limit]
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases blocked
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases first-published backfill
 ```
 
 A development database from before schema version 1 cannot publish. The publisher reads the active release and refuses a release of another schema version. Follow [Dev database reset](#dev-database-reset) once. The dates of the first publication of briefs start again after the reset. This is acceptable in development.
@@ -857,6 +858,18 @@ sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> -
 ```
 
 An image from before this change cannot read a release that the new image made, because it refuses the new entry members and the `previous` member of a summary row. To go back to that image, first activate a release that it made. See the [publication limits](architecture/publication.md#limits-and-planned-work).
+
+### First publication backfill
+
+The table `published_records` stores the first publication time of each record. A publish writes a row for each record that it adds. Run the backfill once after the migration `PublishedRecords`. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases first-published backfill
+```
+
+The command reads the manifest of the active release. It inserts a row for each record and each withdrawal, with the `firstPublishedAtUtc` of the entry. It never changes a row that exists, so a repeat is safe. It prints `examined`, `added`, and `alreadyPresent` as JSON. A record that no active entry or withdrawal names gets no row. Its row comes with the publish that adds it.
+
+Until the backfill runs, a publish that adds a record of the active release stops with the message "Run releases first-published backfill". A guess could give one record two first times. The worker logs the error and tries again at its next wake. Run the backfill, and the next publish works. A rollback keeps the rows.
 
 ### Take a record off the site
 
@@ -1219,7 +1232,7 @@ The installer refuses a checkout that anyone other than root can write, because 
 
 Every result that an agent reads goes to its model vendor, so add a column to the hidden list before it holds private text.
 
-**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `votes revisions backfill`, `votes revisions verify`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
+**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `votes revisions backfill`, `votes revisions verify`, `releases first-published backfill`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
 
 `deploy` takes a full commit SHA on `origin/main` that is the checkout or newer. The scripts of that commit run as root, and a migration has no undo, so a rollback stays with the owner. It checks out the commit, runs `update.sh`, and runs `check-live.sh`. A merge to `main` is therefore the real approval. GitHub does not stop the agent from merging, because it uses the owner's token. Only the agent rules and the Claude Code permissions stop it.
 

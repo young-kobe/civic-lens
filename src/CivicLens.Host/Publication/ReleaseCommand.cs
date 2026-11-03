@@ -15,7 +15,7 @@ public static class ReleaseCommand
     public static bool Matches(string[] args) => args is ["releases", ..];
 
     public static Task<int> ExecuteAsync(string[] args, PublishRelease publish,
-        ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, ReviewActor owner,
+        ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, BackfillFirstPublished backfill, ReviewActor owner,
         TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
         OwnerCommand.RunAsync(async () =>
         {
@@ -38,12 +38,15 @@ public static class ReleaseCommand
                     case ["releases", "activate", var numberText] when TryParsePositive(numberText, out var number):
                         CommandOutput.Write(output, await activate.ExecuteAsync(owner, number, cancellationToken));
                         return 0;
+                    case ["releases", "first-published", "backfill"]:
+                        CommandOutput.Write(output, await backfill.ExecuteAsync(owner, cancellationToken));
+                        return 0;
                     default:
-                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, or releases activate <release-number>.");
+                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, or releases first-published backfill.");
                         return 2;
                 }
             }
-            catch (Exception exception) when (exception is PublicationConflictException or PublicationStateMismatchException or ReleaseRewriteException)
+            catch (Exception exception) when (exception is PublicationConflictException or PublicationStateMismatchException or ReleaseRewriteException or FirstPublishedMissingException)
             {
                 error.WriteLine(exception.Message);
                 return 1;
