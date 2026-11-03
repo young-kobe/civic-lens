@@ -11,10 +11,10 @@ public sealed class ZctaDistrictParserTests
         Assert.Equal(
         [
             new ZctaDistrict("36009", "AL", 1, 4938464),
-            new ZctaDistrict("36009", "AL", 2, 100),
-            new ZctaDistrict("99501", "AK", 0, 5000),
-            new ZctaDistrict("20001", "DC", 0, 6000),
-            new ZctaDistrict("94601", "CA", 14, 9000)
+            new ZctaDistrict("36009", "AL", 2, 412306983),
+            new ZctaDistrict("99501", "AK", 0, 17227675),
+            new ZctaDistrict("20001", "DC", 0, 5302364),
+            new ZctaDistrict("94505", "CA", 14, 1679865)
         ], DistrictFixtures.Rows());
     }
 
@@ -57,6 +57,7 @@ public sealed class ZctaDistrictParserTests
     [Theory]
     [InlineData("1|0101|too|few|columns")]
     [InlineData("1|0101|Congressional District|1|2|G5200|N|3|3600|ZCTA5 3600|4|5|G6350|B5|S|10|0")]
+    [InlineData("1|0101|Congressional District|1|2|G5200|N|3|3601X|ZCTA5 3601X|4|5|G6350|B5|S|10|0")]
     [InlineData("1|0101|Congressional District|1|2|G5200|N|3|36012|ZCTA5 36012|4|5|G6350|B5|S|ten|0")]
     [InlineData("1|0101|Congressional District|1|2|G5200|N|3|36012|ZCTA5 36012|4|5|G6350|B5|S|-10|0")]
     [InlineData("1|01|Congressional District|1|2|G5200|N|3|36012|ZCTA5 36012|4|5|G6350|B5|S|10|0")]
