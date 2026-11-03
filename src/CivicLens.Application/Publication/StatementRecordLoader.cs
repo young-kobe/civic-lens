@@ -32,7 +32,7 @@ internal sealed class StatementRecordLoader(IStatementReviewStore statements)
         var revision = review.CurrentRevision
             ?? throw new ArgumentException($"Statement {recordId} has no revision.", "recordIds");
         RequirePublishable(recordId, revision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
-        var record = new PublishedStatementBuilder(build.Rules).Build(addition, build.Previous.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, revision.RevisionNumber, review.Decisions), build.Now);
+        var record = new PublishedStatementBuilder(build.Rules).Build(addition, build.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, revision.RevisionNumber, review.Decisions), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (related, cancellationToken) => build.Renderer.RenderStatementAsync(record, related, build.Catalog, cancellationToken));
     }

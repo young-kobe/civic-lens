@@ -20,6 +20,16 @@ internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset
 
     public ImmutableArray<PublishedRecordReference> Returned { get; private init; } = [];
 
+    public IReadOnlyDictionary<PublishedRecordReference, DateTimeOffset> FirstPublished { get; private init; } =
+        new Dictionary<PublishedRecordReference, DateTimeOffset>();
+
+    public PublicationBuild WithFirstPublished(IReadOnlyDictionary<PublishedRecordReference, DateTimeOffset> firstPublished) =>
+        this with { FirstPublished = firstPublished };
+
+    /// <summary>The stored first publication time of a record. A record with no row is new and has none.</summary>
+    public DateTimeOffset? FirstPublishedAt(PublishedRecordKind kind, string recordId) =>
+        FirstPublished.TryGetValue(new(kind, recordId), out var firstPublishedAt) ? firstPublishedAt : null;
+
     public PublicationBuild WithBillStatuses(IReadOnlyDictionary<string, ActionBillStatus> statuses) => this with { BillStatuses = statuses };
 
     public PublicationBuild WithVoteBillActions(IReadOnlyDictionary<string, ImmutableArray<string>> voteBillActions) =>

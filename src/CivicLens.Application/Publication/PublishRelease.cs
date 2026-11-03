@@ -75,8 +75,10 @@ public sealed class PublishRelease
         var roster = await officials.ReadRosterAsync(cancellationToken);
         var photos = await officials.ReadPhotosAsync(cancellationToken);
         var statuses = await ReleaseBillStatuses.LoadAsync(loaders.Actions, previous, references, cancellationToken);
+        var firstPublished = await publications.ReadFirstPublishedAsync(references, cancellationToken);
+        RequireFirstPublished(previous, references, firstPublished);
         var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster, byCode)
-            .WithRemoved(withdrawn).WithReturned(returned).WithBillStatuses(statuses);
+            .WithRemoved(withdrawn).WithReturned(returned).WithBillStatuses(statuses).WithFirstPublished(firstPublished);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
         var released = build.WithAdded(additions);
         await WithdrawalCascade.RequireNoCitersAsync(releases, loaders, previous, withdrawn, additions, cancellationToken);
@@ -94,12 +96,24 @@ public sealed class PublishRelease
             [.. entries.Select(PublishedRevisionBinding.Of)],
             [.. additions.Select(addition => addition.Expectation)])
         {
-            WithdrawnRecords = withdrawn
+            WithdrawnRecords = withdrawn,
+            FirstPublications = [.. additions.Select(addition => new PublishedFirstPublication(addition.Entry.Kind, addition.RecordId, addition.Entry.FirstPublishedAtUtc))]
         };
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
         await ServeActiveReleaseAsync(cancellationToken);
         await prune.ExecuteAsync(cancellationToken);
         return summary;
+    }
+
+    // A record that an active entry or withdrawal holds, and that has no stored time, needs the backfill. Guessing its time here could split it in two.
+    private static void RequireFirstPublished(PreviousRelease previous, ImmutableArray<PublishedRecordReference> references,
+        IReadOnlyDictionary<PublishedRecordReference, DateTimeOffset> firstPublished)
+    {
+        var unrecorded = references.FirstOrDefault(reference => !firstPublished.ContainsKey(reference) &&
+            (previous.Find(reference.Kind, reference.RecordId) is not null || previous.IsWithdrawn(reference.RecordId)));
+        if (unrecorded is null) return;
+        throw new FirstPublishedMissingException(
+            $"The first publication time of {unrecorded} is not stored. Run releases first-published backfill, then publish again.");
     }
 
     private static void RequireRoom(PreviousRelease previous, int total, List<PendingRecord> additions)

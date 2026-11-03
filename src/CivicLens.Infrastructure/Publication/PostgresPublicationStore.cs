@@ -147,6 +147,19 @@ public sealed class PostgresPublicationStore : IPublicationStore
             payloadHash, cancellationToken);
     }
 
+    public async Task<IReadOnlyDictionary<PublishedRecordReference, DateTimeOffset>> ReadFirstPublishedAsync(
+        IReadOnlyCollection<PublishedRecordReference> records, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await PublishedRecords.ReadAsync(db, records, cancellationToken);
+    }
+
+    public async Task<int> AddFirstPublishedAsync(IReadOnlyCollection<PublishedFirstPublication> records, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await PublishedRecords.InsertAsync(db, records, cancellationToken);
+    }
+
     public async Task<PublicationReleaseSummary> CommitAsync(string actorSubject, PublicationCommit commit,
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
     {
@@ -176,6 +189,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         ReviewIdempotency.Add(db, actorSubject, PublishOperation, idempotencyKey, payloadHash, ReviewJson.Serialize(summary));
         await SaveAsync(db, cancellationToken);
         await PublicationRecordStates.RecordAsync(db, commit, cancellationToken);
+        await PublishedRecords.InsertAsync(db, commit.FirstPublications, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return summary;
     }

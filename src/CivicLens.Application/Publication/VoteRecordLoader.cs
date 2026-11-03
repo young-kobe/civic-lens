@@ -35,7 +35,7 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
         var review = addition.Vote.Review;
         RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
         var built = new PublishedVoteBuilder(build.Rules).Build(review.CurrentRevision, review.Decisions, addition.Vote.Extractions,
-            build.Previous.FirstPublishedAt(Kind, recordId), [], build.Now, addition.Parties);
+            build.FirstPublishedAt(Kind, recordId), [], build.Now, addition.Parties);
         var textRewritten = build.Corrections.EarlierVote(recordId) is { } earlier && built.IsTextRewriteOf(earlier);
         var record = built with
         {
