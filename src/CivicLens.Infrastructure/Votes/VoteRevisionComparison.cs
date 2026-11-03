@@ -9,6 +9,7 @@ namespace CivicLens.Infrastructure.Votes;
 internal static class VoteRevisionComparison
 {
     public const string SourceKey = "source";
+    private static readonly HashSet<string> SourceKeyOnly = [SourceKey];
 
     private const string SourceIdKey = "sourceId";
     private const string SourceIdWithoutSourceKey = "congress-house-votes";
@@ -21,6 +22,6 @@ internal static class VoteRevisionComparison
     {
         if (RevisionJsonComparison.TryParseObject(storedJson) is not { } stored) return [RevisionJsonComparison.UnreadableKey];
         var sourceMayBeAbsent = !stored.ContainsKey(SourceKey) && MayOmitSource(stored) && rebuilt.Source == VoteSource.CongressGov;
-        return RevisionJsonComparison.DifferingKeys(stored, ReviewJson.ToObject(rebuilt), sourceMayBeAbsent ? new HashSet<string> { SourceKey } : []);
+        return RevisionJsonComparison.DifferingKeys(stored, ReviewJson.ToObject(rebuilt), sourceMayBeAbsent ? SourceKeyOnly : []);
     }
 }

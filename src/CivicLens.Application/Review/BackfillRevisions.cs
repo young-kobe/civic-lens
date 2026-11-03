@@ -2,9 +2,6 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Review;
 
-public sealed record RevisionBackfillResult(int Examined, int Moved, int Skipped,
-    IReadOnlyDictionary<string, int> SkippedByReason, IReadOnlyList<SkippedRevision> SkippedRevisions);
-
 public sealed class BackfillRevisions(IRevisionBackfillStore store)
 {
     private const int BatchSize = 25;

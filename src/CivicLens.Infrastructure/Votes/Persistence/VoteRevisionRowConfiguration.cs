@@ -1,6 +1,6 @@
-using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection.Votes;
+using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Review.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -23,12 +23,12 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
             table.HasCheckConstraint("ck_vote_revisions_number", "revision_number >= 1");
             table.HasCheckConstraint("ck_vote_revisions_author_kind", "author_kind IN ('Person','Analysis')");
             table.HasCheckConstraint("ck_vote_revisions_run", "(author_kind = 'Analysis') = (run_id IS NOT NULL)");
-            table.HasCheckConstraint("ck_vote_revisions_vote_source", ReviewTextColumns.InList("vote_source", Enum.GetNames<VoteSource>()));
+            table.HasCheckConstraint("ck_vote_revisions_vote_source", EnumChecks.InList("vote_source", Enum.GetNames<VoteSource>()));
             table.HasCheckConstraint("ck_vote_revisions_chamber", "chamber IN ('House', 'Senate')");
             table.HasCheckConstraint("ck_vote_revisions_roll", "congress >= 1 AND session_number IN (1, 2) AND roll_call_number >= 1");
             table.HasCheckConstraint("ck_vote_revisions_chamber_source", "(chamber = 'House') = (vote_source = 'CongressGov')");
             table.HasCheckConstraint("ck_vote_revisions_bill", "(bill_type IS NULL) = (bill_number IS NULL) AND bill_number >= 1");
-            table.HasCheckConstraint("ck_vote_revisions_kind", ReviewTextColumns.InList("kind", Enum.GetNames<VoteKind>()));
+            table.HasCheckConstraint("ck_vote_revisions_kind", EnumChecks.InList("kind", Enum.GetNames<VoteKind>()));
             table.HasCheckConstraint("ck_vote_revisions_issue_revision", "issue_revision_id ~ '^[0-9a-f]{64}$'");
             table.HasCheckConstraint("ck_vote_revisions_subjects_hash", "subjects_hash ~ '^[0-9a-f]{64}$'");
             table.HasCheckConstraint("ck_vote_revisions_columns_written", $"num_nulls({string.Join(", ", WrittenTogether)}) IN (0, {WrittenTogether.Length})");

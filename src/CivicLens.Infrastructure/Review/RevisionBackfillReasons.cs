@@ -4,7 +4,7 @@ using Npgsql;
 
 namespace CivicLens.Infrastructure.Review;
 
-/// <summary>Owns the reasons that a backfill gives for a skipped revision when every kind of revision can meet them. Operators read these strings.</summary>
+/// <summary>Owns the reasons that a backfill gives for a skipped revision, and the checks that give them, when every kind of revision can meet them. Operators read the reason strings.</summary>
 internal static class RevisionBackfillReasons
 {
     public const string UnreadableJson = "UnreadableJson";

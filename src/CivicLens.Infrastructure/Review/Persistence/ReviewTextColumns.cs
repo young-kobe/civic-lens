@@ -15,7 +15,7 @@ internal static class ReviewTextColumns
         {
             constraints.HasCheckConstraint($"ck_{table}_headline", $"length(btrim(headline)) BETWEEN 1 AND {maximumHeadlineLength}");
             constraints.HasCheckConstraint($"ck_{table}_summary", $"length(summary) BETWEEN 1 AND {maximumSummaryLength}");
-            constraints.HasCheckConstraint($"ck_{table}_text_origin", InList("text_origin", Enum.GetNames<ReviewTextOrigin>()));
+            constraints.HasCheckConstraint($"ck_{table}_text_origin", EnumChecks.InList("text_origin", Enum.GetNames<ReviewTextOrigin>()));
             constraints.HasCheckConstraint($"ck_{table}_suggestion",
                 "(suggestion_headline IS NULL) = (suggestion_summary IS NULL) AND (suggestion_headline IS NULL) = (suggestion_run_id IS NULL) AND " +
                 "(suggestion_headline IS NULL) = (suggestion_fingerprint IS NULL)");
@@ -28,6 +28,4 @@ internal static class ReviewTextColumns
         builder.Property(row => row.SuggestionRunId).HasColumnName("suggestion_run_id").HasMaxLength(32);
         builder.Property(row => row.SuggestionFingerprint).HasColumnName("suggestion_fingerprint").HasMaxLength(64);
     }
-
-    public static string InList(string column, IEnumerable<string> names) => $"{column} IN ({string.Join(", ", names.Select(name => $"'{name}'"))})";
 }

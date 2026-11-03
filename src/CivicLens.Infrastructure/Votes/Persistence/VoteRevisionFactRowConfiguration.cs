@@ -1,5 +1,5 @@
-using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Core.Votes;
+using CivicLens.Infrastructure.Documents.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
