@@ -216,7 +216,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Equal(new PublishedVoteTotals { Yea = 2, Nay = 2, Present = 1, NotVoting = 2 }, plainTotals);
         Assert.Null(speakerTotals);
         Assert.Equal([$"{plainTotals!.Yea} {plainTotals.Nay} {plainTotals.Present} {plainTotals.NotVoting}"], await ViewCountsAsync("plain", plain));
-        Assert.Equal(["none"], await ViewCountsAsync("speaker", speaker));
+        Assert.Equal(["none none none none"], await ViewCountsAsync("speaker", speaker));
     }
 
     [Fact]
@@ -333,7 +333,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             {Revision(record, 1, "Person", list)}
             {string.Join('\n', casts.Select((cast, index) => Entry(list, index, cast)))}
             """);
-        return await PublicAsync($"SELECT coalesce(yea || ' ' || nay || ' ' || present || ' ' || not_voting, 'none') FROM public_api.votes WHERE record_id = '{record}'");
+        return await PublicAsync($"SELECT concat_ws(' ', coalesce(yea::text, 'none'), coalesce(nay::text, 'none'), coalesce(present::text, 'none'), coalesce(not_voting::text, 'none')) FROM public_api.votes WHERE record_id = '{record}'");
     }
 
     private static string Revision(string record, int revision, string origin, string list) => $"""
