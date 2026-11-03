@@ -699,6 +699,21 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- vo
 
 Run order: `backfill`, then `verify`. Run the new code only when `verify` exits 0, so `legacy` and `mismatched` are both 0. Every reader fails on a row with null columns. Production held 1,717 revisions when the pilot was measured, so expect shared member lists.
 
+### Executive action revision backfill
+
+R-63 step 3 moves old executive action revisions into columns and child rows. A revision written by current code already has them. The migration `ExecutiveActionRevisionColumns` also moves each `notice_json` of a document into the notice columns, and drops `notice_json`. It sets the code author on each old revision. It fails and changes nothing when a notice differs from its row, when a revision names another author, or when a `notice_json` or `revision_json` is not valid JSON. The error names the row. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions revisions backfill 500
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions revisions verify
+```
+
+`backfill <limit>` moves at most `limit` legacy revisions. It walks the table in key order in batches of 25. Each batch is one short transaction that holds the executive action review lock. For each row it writes the columns and the fact and notice rows, reads the row back, rebuilds the revision, and compares it to the stored JSON. A row that differs is skipped with `RebuildMismatch`. The output and the exit code are the same as for the [vote backfill](#vote-revision-backfill). The reasons are `UnreadableJson`, `InvalidShape`, `RebuildMismatch`, and `database:<constraint>`.
+
+`verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. The output and the exit code are the same as for the vote `verify`. A revision whose rows cannot be read shows the field name `columns`. No key is allowed to be absent.
+
+Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every executive action read fails until it ends. For a manual run, start the new code only when `verify` exits 0. Every reader fails on a row with null columns. Production held 688 revisions when the survey was made. A rollback past the migration rebuilds `notice_json` from the notice columns.
+
 ## Relationship drafting
 
 The `worker` command drafts one relationship for each pair of an approved statement and an approved action or vote that share an official and a bill. [Statements](architecture/statements.md#relationship-drafting) holds the rules. Relationship drafting runs when both required variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. The names of the officials come from the collection configuration of the worker.
@@ -1232,7 +1247,7 @@ The installer refuses a checkout that anyone other than root can write, because 
 
 Every result that an agent reads goes to its model vendor, so add a column to the hidden list before it holds private text.
 
-**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `votes revisions backfill`, `votes revisions verify`, `releases first-published backfill`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
+**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `votes revisions backfill`, `votes revisions verify`, `executive-actions revisions backfill`, `executive-actions revisions verify`, `releases first-published backfill`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
 
 `deploy` takes a full commit SHA on `origin/main` that is the checkout or newer. The scripts of that commit run as root, and a migration has no undo, so a rollback stays with the owner. It checks out the commit, runs `update.sh`, and runs `check-live.sh`. A merge to `main` is therefore the real approval. GitHub does not stop the agent from merging, because it uses the owner's token. Only the agent rules and the Claude Code permissions stop it.
 
