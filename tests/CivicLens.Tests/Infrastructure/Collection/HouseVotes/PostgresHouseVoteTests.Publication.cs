@@ -193,9 +193,9 @@ public sealed partial class PostgresHouseVoteTests
         var expected = (await VoteReviews().GetRevisionAsync(recordId, 1, default))!.OfficialIds().Order().ToArray();
         await ExecuteAsync($$"""
             SET session_replication_role = replica;
-            UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{members}',
-                (revision_json::jsonb -> 'members') || (revision_json::jsonb -> 'members'))::text
-            WHERE record_id = '{{recordId}}' AND revision_number = 1;
+            INSERT INTO vote_member_list_entries (list_id, position, person_id, bioguide_id, vote_cast, citation_extraction_id, citation_start, citation_length)
+            SELECT list_id, position + 1, person_id, bioguide_id, vote_cast, citation_extraction_id, citation_start, citation_length
+            FROM vote_member_list_entries;
             """);
 
         var members = await VoteReviews().ReadMembersAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
@@ -209,8 +209,7 @@ public sealed partial class PostgresHouseVoteTests
         var recordId = await ApprovedVoteAsync();
         await ExecuteAsync($"""
             SET session_replication_role = replica;
-            UPDATE vote_revisions SET revision_json = (revision_json::jsonb - 'members')::text
-            WHERE record_id = '{recordId}' AND revision_number = 1;
+            DELETE FROM vote_member_list_entries;
             """);
 
         await Assert.ThrowsAsync<InvalidDataException>(() =>

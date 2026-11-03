@@ -58,12 +58,12 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
         VALUES (@id, @number, 'auth0|editor', 'Person', NULL, @json, 1)
         ON CONFLICT (record_id, revision_number) DO UPDATE SET revision_json = EXCLUDED.revision_json
-        """, ("id", vote.RecordId), ("candidate", vote.CandidateId), ("revised", revisedAtTicks), ("source", vote.SourceId), ("chamber", vote.Chamber.ToString()),
+        """ + VoteRevisionColumnsSeed.Sql, [.. VoteRevisionColumnsSeed.Parameters(vote), ("id", vote.RecordId), ("candidate", vote.CandidateId), ("revised", revisedAtTicks), ("source", vote.SourceId), ("chamber", vote.Chamber.ToString()),
         ("congress", vote.Congress),
         ("session", vote.SessionNumber), ("roll", vote.RollCallNumber), ("type", vote.BillType!), ("bill", vote.BillNumber!.Value),
         ("extraction", RelationshipFixtures.ExtractionId), ("number", vote.RevisionNumber), ("status", reviewStatus),
         ("json", JsonSerializer.Serialize(vote, Web)), ("eventOn", vote.VotedOn), ("issues", vote.TrackedIssueIds.ToArray()),
-        ("officials", vote.OfficialIds().ToArray()));
+        ("officials", vote.OfficialIds().ToArray())]);
 
     public Task RevisionAsync(RelationshipRevision revision) => ExecuteAsync("""
         SET session_replication_role = replica;

@@ -353,7 +353,7 @@ public sealed partial class PostgresHouseVoteTests
         await SettleAsync(candidate, revision);
         await ExecuteAsync("UPDATE vote_analysis_runs SET prompt_version = 'vote-draft-prompt-v1'");
         if (change == "person")
-            await ExecuteAsync($"UPDATE vote_revisions SET revision_json = $json${JsonSerializer.Serialize(revision with { TextOrigin = ReviewTextOrigin.Person }, new JsonSerializerOptions(JsonSerializerDefaults.Web))}$json$");
+            await ExecuteAsync("UPDATE vote_revisions SET text_origin = 'Person'");
         else if (change != "none")
             await ExecuteAsync($"UPDATE vote_drafts SET review_status = '{change}'");
 
@@ -469,9 +469,9 @@ public sealed partial class PostgresHouseVoteTests
             '{VoteDraftTask.SchemaVersion}', '{new string('1', 64)}', '{outcome}', 0, 0, 0, 0, 0, {startedAtTicks}, {startedAtTicks})
         """);
 
-    private async Task<string> PendingCandidateAsync(DateTimeOffset? updated = null)
+    private async Task<string> PendingCandidateAsync(DateTimeOffset? updated = null, int roll = 100)
     {
-        var vote = HouseVoteFixtures.Vote(100, updated ?? Updated);
+        var vote = HouseVoteFixtures.Vote(roll, updated ?? Updated);
         var (_, members) = await DetailWithMembersJobAsync(vote);
         await AdmitMembersAsync(members, vote);
         await AdmitBillDetailAsync();

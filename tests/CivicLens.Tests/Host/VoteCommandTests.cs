@@ -129,7 +129,7 @@ public sealed class VoteCommandTests(PostgresCollection postgres) : IAsyncLifeti
     }
 
     [Fact]
-    public async Task VerifyExitsWithOneWhileALegacyRowRemainsBecauseTheReadersMayNotMoveYet()
+    public async Task VerifyExitsWithOneWhileALegacyRowRemainsBecauseAReadFailsOnNullColumns()
     {
         await InsertRevisionAsync("x", withColumns: false);
 

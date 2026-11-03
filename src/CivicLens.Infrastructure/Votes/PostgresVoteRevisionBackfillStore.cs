@@ -99,7 +99,7 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
         VoteRevisionRows.FillColumns(row, revision);
         await VoteMemberLists.EnsureAsync(db, revision, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
-        var stored = await ReadPageAsync(db, Rows(db).Where(candidate => candidate.RecordId == row.RecordId && candidate.RevisionNumber == row.RevisionNumber), cancellationToken);
+        var stored = await VoteRevisionRows.ReadPageAsync(db, db.Set<VoteRevisionRow>().AsNoTracking().Where(candidate => candidate.RecordId == row.RecordId && candidate.RevisionNumber == row.RevisionNumber), cancellationToken);
         return DifferingFields(stored.Rows.Single(), stored).Count == 0 ? null : RebuildMismatch;
     }
 
@@ -147,38 +147,20 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
             : null;
     }
 
-    private static IQueryable<VoteRevisionRow> Rows(CollectionAttemptDbContext db) =>
-        db.Set<VoteRevisionRow>().AsNoTracking().Include(row => row.Facts).Include(row => row.Issues).AsSplitQuery();
-
-    private static async Task<VerifyPage> ReadVerifyPageAsync(CollectionAttemptDbContext db, VoteRevisionKey? after, CancellationToken cancellationToken)
+    private static async Task<VoteRevisionPage> ReadVerifyPageAsync(CollectionAttemptDbContext db, VoteRevisionKey? after, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var page = await ReadPageAsync(db, InKeyOrderAfter(Rows(db), after).Take(VerifyPageSize), cancellationToken);
+        var page = await VoteRevisionRows.ReadPageAsync(db, InKeyOrderAfter(db.Set<VoteRevisionRow>().AsNoTracking(), after).Take(VerifyPageSize), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return page;
     }
 
-    private static async Task<VerifyPage> ReadPageAsync(CollectionAttemptDbContext db, IQueryable<VoteRevisionRow> query, CancellationToken cancellationToken)
+    private static IReadOnlyList<string> DifferingFields(VoteRevisionRow row, VoteRevisionPage page)
     {
-        var rows = await query.ToListAsync(cancellationToken);
-        var listIds = rows.Select(row => row.MemberListId).OfType<string>().Distinct().ToArray();
-        var lists = await db.Set<VoteMemberListRow>().AsNoTracking().Where(list => listIds.Contains(list.ListId))
-            .ToDictionaryAsync(list => list.ListId, list => list.MemberCount, StringComparer.Ordinal, cancellationToken);
-        var entries = (await db.Set<VoteMemberListEntryRow>().AsNoTracking().Where(entry => listIds.Contains(entry.ListId))
-            .OrderBy(entry => entry.ListId).ThenBy(entry => entry.Position).ToListAsync(cancellationToken)).ToLookup(entry => entry.ListId, StringComparer.Ordinal);
-        return new(rows, lists, entries);
-    }
-
-    private static IReadOnlyList<string> DifferingFields(VoteRevisionRow row, VerifyPage page)
-    {
-        var members = page.Entries[row.MemberListId!].Select(entry => new MemberVote(entry.PersonId, entry.BioguideId, entry.VoteCast,
-            new(entry.CitationExtractionId, entry.CitationStart, entry.CitationLength))).ToImmutableArray();
-        var fields = VoteRevisionComparison.DifferingKeys(row.RevisionJson, VoteRevisionRows.Rebuild(row, members)).ToList();
+        var members = page.MembersOf(row);
+        var fields = VoteRevisionComparison.DifferingKeys(row.RevisionJson, VoteRevisionRows.Rebuild(row, members, page.FactsOf(row), page.IssuesOf(row))).ToList();
         if (row.MemberListId != VoteMemberLists.IdOf(members)) fields.Add("memberListId");
         if (page.MemberCounts.GetValueOrDefault(row.MemberListId!) != members.Length) fields.Add("memberCount");
         return fields;
     }
-
-    private sealed record VerifyPage(IReadOnlyList<VoteRevisionRow> Rows, IReadOnlyDictionary<string, short> MemberCounts,
-        ILookup<string, VoteMemberListEntryRow> Entries);
 }

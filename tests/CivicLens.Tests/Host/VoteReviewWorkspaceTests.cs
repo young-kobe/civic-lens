@@ -195,10 +195,12 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
                 review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
             VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', '{chamber}', 119, {session}, {roll}, 1, 0, 'AwaitingReview', 1, 1);
             INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-            VALUES ('{recordId}', 1, 'auth0|editor', 'Person', NULL, @revision, 1);
+            VALUES ('{recordId}', 1, 'auth0|editor', 'Person', NULL, @revision, 1)
+            {VoteRevisionColumnsSeed.Sql}
             """, connection);
         command.Parameters.AddWithValue("configuration", configuration.Json);
         command.Parameters.AddWithValue("revision", JsonSerializer.Serialize(revision, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        foreach (var (name, value) in VoteRevisionColumnsSeed.Parameters(revision)) command.Parameters.AddWithValue(name, value);
         await command.ExecuteNonQueryAsync();
         return recordId;
     }

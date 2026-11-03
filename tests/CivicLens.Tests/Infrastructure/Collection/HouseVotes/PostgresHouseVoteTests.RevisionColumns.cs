@@ -8,7 +8,7 @@ namespace CivicLens.Tests.Infrastructure.Collection.HouseVotes;
 public sealed partial class PostgresHouseVoteTests
 {
     [Fact]
-    public async Task AFullRevisionWritesColumnsAndChildRowsThatEqualItsJsonBecauseTheReadersWillMoveToThem()
+    public async Task AFullRevisionWritesColumnsAndChildRowsThatEqualItsJsonBecauseTheReadersUseThem()
     {
         var candidate = await PendingCandidateAsync();
         var basis = await RevisionAsync(candidate, 1);

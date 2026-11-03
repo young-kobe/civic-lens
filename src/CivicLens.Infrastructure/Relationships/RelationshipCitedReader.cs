@@ -9,6 +9,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Statements.Persistence;
+using CivicLens.Infrastructure.Votes;
 using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 
@@ -77,7 +78,7 @@ internal static class RelationshipCitedReader
         var statements = (await ReadAsync<StatementDraftRevision>(db, RelationshipRecordKind.Statement, citations, cancellationToken))
             .ToDictionary(item => (item.CandidateId, item.RevisionNumber));
         var targets = (await ReadAsync<ActionDraftRevision>(db, RelationshipRecordKind.Action, citations, cancellationToken))
-            .Select(RelationshipTarget.Of).Concat((await ReadAsync<VoteDraftRevision>(db, RelationshipRecordKind.Vote, citations, cancellationToken))
+            .Select(RelationshipTarget.Of).Concat((await ReadVotesAsync(db, citations, cancellationToken))
                 .Select(RelationshipTarget.Of)).ToDictionary(item => item.Citation);
         var candidateIds = statements.Keys.Select(key => key.CandidateId).Distinct().ToArray();
         var articleTexts = await (from candidate in db.Set<StatementCandidateRow>().AsNoTracking()
@@ -100,6 +101,11 @@ internal static class RelationshipCitedReader
         var json = await CitedRevisions.ReadRevisionJsonAsync(db, publishedKind, named, cancellationToken);
         return [.. json.Select(item => ReviewJson.Deserialize<T>(item, "revision"))];
     }
+
+    private static Task<ImmutableArray<VoteDraftRevision>> ReadVotesAsync(CollectionAttemptDbContext db, IEnumerable<RelationshipCitation> citations,
+        CancellationToken cancellationToken) =>
+        VoteRevisionRows.ReadNamedAsync(db, [.. citations.Where(citation => citation.Kind == RelationshipRecordKind.Vote)
+            .Select(citation => new PublishedRevisionBinding(PublishedRecordKind.Vote, citation.RecordId, citation.RevisionNumber))], cancellationToken);
 
     private static (string Table, string IdColumn) DraftsOf(RelationshipRecordKind kind) => kind switch
     {
