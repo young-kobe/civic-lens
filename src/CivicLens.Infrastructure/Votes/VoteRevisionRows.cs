@@ -67,7 +67,7 @@ internal static class VoteRevisionRows
     }
 
     /// <summary>Reads the rows of a query, then their facts, issues, and member lists, in a fixed number of queries. The child rows come
-    /// by the exact keys of the parent rows. A stored revision never changes, so a write that commits between the queries cannot drop its children.</summary>
+    /// by the exact keys of the parent rows. The child rows of a revision with columns never change, so a write that commits between the queries cannot drop its children.</summary>
     public static async Task<VoteRevisionPage> ReadPageAsync(CollectionAttemptDbContext db, IQueryable<VoteRevisionRow> query,
         CancellationToken cancellationToken)
     {

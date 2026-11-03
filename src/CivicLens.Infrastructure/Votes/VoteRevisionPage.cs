@@ -14,7 +14,6 @@ internal sealed record VoteRevisionPage(IReadOnlyList<VoteRevisionRow> Rows, ILo
 
     public IEnumerable<VoteRevisionIssueRow> IssuesOf(VoteRevisionRow row) => Issues[(row.RecordId, row.RevisionNumber)];
 
-
     public ImmutableArray<MemberVote> MembersOf(VoteRevisionRow row) => [.. Entries[row.MemberListId!].Select(entry =>
         new MemberVote(entry.PersonId, entry.BioguideId, entry.VoteCast, new(entry.CitationExtractionId, entry.CitationStart, entry.CitationLength)))];
 
