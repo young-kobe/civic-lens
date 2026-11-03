@@ -693,7 +693,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- vo
 
 `verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. It prints `checked`, `legacy`, `mismatched`, and the first 20 mismatches as record ID, revision number, and JSON key names. It never prints text. The exit code is 1 while `legacy` or `mismatched` is above 0. One absence passes: a missing `source` key on a revision of the source `congress-house-votes`. Any other difference fails.
 
-Run order: `backfill`, then `verify`. Step 3 of the pilot starts only when `verify` exits 0, so `legacy` and `mismatched` are both 0. Production held 1,717 revisions when the pilot was measured, so expect shared member lists.
+Run order: `backfill`, then `verify`. Run the new code only when `verify` exits 0, so `legacy` and `mismatched` are both 0. Every reader fails on a row with null columns. Production held 1,717 revisions when the pilot was measured, so expect shared member lists.
 
 ## Relationship drafting
 

@@ -115,7 +115,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
     public async Task OneRecordWhoseStoredRevisionCannotBeReadIsMarkedUnreadableAndTheOtherRowsStillLoad()
     {
         await SeedThreeKindsAsync();
-        await seeder.ExecuteAsync("UPDATE vote_revisions SET revision_json = '{broken' WHERE record_id = @id", ("id", VoteId));
+        await seeder.ExecuteAsync($"UPDATE vote_revisions SET {VoteRevisionColumnsSeed.NullColumns} WHERE record_id = @id", ("id", VoteId));
 
         var page = await store.ListAsync(null, 10, default);
 
@@ -154,7 +154,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
     public async Task ADatabaseFailureWhileReadingTheRevisionRowsReachesTheCallerEvenWhenItsTypeIsOneOfTheUnreadableDataTypes()
     {
         await SeedThreeKindsAsync();
-        await seeder.ExecuteAsync("UPDATE vote_revisions SET revision_json = '{broken' WHERE record_id = @id", ("id", VoteId));
+        await seeder.ExecuteAsync($"UPDATE vote_revisions SET {VoteRevisionColumnsSeed.NullColumns} WHERE record_id = @id", ("id", VoteId));
         var failure = new InvalidOperationException("The database failed.");
         var counter = new RevisionQueryInterceptor("vote_revisions", failure);
         var counted = CountedStore(counter);
@@ -170,7 +170,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
         await SeedThreeKindsAsync();
         var counter = new RevisionQueryInterceptor("no_such_table", null);
         var counted = CountedStore(counter);
-        await seeder.ExecuteAsync("UPDATE vote_revisions SET revision_json = '{broken' WHERE record_id = @id", ("id", VoteId));
+        await seeder.ExecuteAsync($"UPDATE vote_revisions SET {VoteRevisionColumnsSeed.NullColumns} WHERE record_id = @id", ("id", VoteId));
         await counted.ListAsync(null, 10, default);
         counter.QueryCount = 0;
 
@@ -238,7 +238,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
         await seeder.ExecuteAsync("""
             UPDATE statement_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{headline}', '"Zebra statement"')::text;
             UPDATE action_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{headline}', '"Zebra action"')::text;
-            UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{headline}', '"Zebra vote"')::text;
+            UPDATE vote_revisions SET headline = 'Zebra vote';
             UPDATE brief_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{headline}', '"Zebra brief"')::text;
             UPDATE executive_action_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{title}', '"Zebra order"')::text;
             """);

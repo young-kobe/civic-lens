@@ -14,7 +14,7 @@ internal static class BillVoteDrafts
     {
         var rows = await db.Database.SqlQuery<BillVoteRow>($"""
             SELECT d.record_id AS "RecordId", d.chamber AS "Chamber", d.session_number AS "SessionNumber", d.roll_call_number AS "RollCallNumber",
-                   d.event_on AS "EventOn", d.review_status AS "ReviewStatus", r.revision_json::jsonb ->> 'kind' AS "Kind"
+                   d.event_on AS "EventOn", d.review_status AS "ReviewStatus", r.kind AS "Kind"
             FROM vote_drafts d
             JOIN vote_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
             WHERE EXISTS (SELECT 1 FROM vote_candidates c WHERE c.candidate_id = d.candidate_id

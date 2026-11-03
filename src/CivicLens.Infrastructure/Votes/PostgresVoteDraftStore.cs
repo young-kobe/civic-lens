@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Relationships;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
@@ -142,16 +143,27 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
 
     // New model text would go to a person or stay held, so a redraft would spend tokens for nothing.
     private static async Task<string[]> CandidatesThatCannotTakeNewTextAsync(CollectionAttemptDbContext db, string[] candidateIds,
-        CancellationToken cancellationToken) =>
-        await db.Database.SqlQuery<string>($"""
-            SELECT c.candidate_id AS "Value"
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.Database.SqlQuery<DraftTextState>($"""
+            SELECT c.candidate_id AS "CandidateId", d.review_status AS "ReviewStatus", r.text_origin AS "TextOrigin"
             FROM vote_candidates c
             JOIN vote_drafts d ON d.source_id = c.source_id AND d.chamber = c.chamber AND d.congress = c.congress
                 AND d.session_number = c.session_number AND d.roll_call_number = c.roll_call_number
             JOIN vote_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
             WHERE c.candidate_id = ANY({candidateIds})
-              AND (d.review_status IN ('AwaitingReviewWithConcerns', 'ChangesRequested', 'ApprovalWithdrawn') OR r.revision_json::jsonb ->> 'textOrigin' = 'Person')
             """).ToArrayAsync(cancellationToken);
+        return [.. rows.Where(row => IsClosedToNewText(row)).Select(row => row.CandidateId)];
+    }
+
+    private static bool IsClosedToNewText(DraftTextState row)
+    {
+        if (row.TextOrigin is null)
+            throw new InvalidDataException($"The current vote revision of candidate {row.CandidateId} has null columns. Run the vote revision backfill.");
+        return row.ReviewStatus is "AwaitingReviewWithConcerns" or "ChangesRequested" or "ApprovalWithdrawn" || row.TextOrigin == nameof(ReviewTextOrigin.Person);
+    }
+
+    private sealed record DraftTextState(string CandidateId, string ReviewStatus, string? TextOrigin);
 
     private static async Task<VoteDraftPage?> ReadBillDetailAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate,
         CancellationToken cancellationToken)

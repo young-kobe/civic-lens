@@ -11,6 +11,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Statements.Persistence;
+using CivicLens.Infrastructure.Votes;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Relationships;
@@ -45,7 +46,7 @@ internal static class RelationshipEvidenceReader
         """;
 
     private const string VotesOnBills = """
-        SELECT r.revision_json AS "Value" FROM vote_drafts d
+        SELECT r.* FROM vote_drafts d
         JOIN vote_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
         WHERE @@scope
           AND EXISTS (SELECT 1 FROM vote_candidates c
@@ -56,7 +57,7 @@ internal static class RelationshipEvidenceReader
         """;
 
     private const string VoteById = """
-        SELECT r.revision_json AS "Value" FROM vote_drafts d
+        SELECT r.* FROM vote_drafts d
         JOIN vote_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
         WHERE @@scope AND d.record_id = {0}
         """;
@@ -114,14 +115,16 @@ internal static class RelationshipEvidenceReader
     public static async Task<ImmutableArray<VoteDraftRevision>> ReadVotesOnAsync(CollectionAttemptDbContext db,
         ImmutableArray<(int Congress, string BillType, int Number)> bills, RelationshipRevisionScope scope, CancellationToken cancellationToken) =>
         bills.IsEmpty ? []
-            : Parse<VoteDraftRevision>(await db.Database.SqlQueryRaw<string>(Scoped(VotesOnBills, scope), bills.Select(bill => bill.Congress).ToArray(),
-                bills.Select(bill => bill.BillType).ToArray(), bills.Select(bill => bill.Number).ToArray()).ToArrayAsync(cancellationToken),
-                "vote revision");
+            : await ReadVotesAsync(db, Scoped(VotesOnBills, scope), cancellationToken, bills.Select(bill => bill.Congress).ToArray(),
+                bills.Select(bill => bill.BillType).ToArray(), bills.Select(bill => bill.Number).ToArray());
 
     public static async Task<VoteDraftRevision?> ReadVoteAsync(CollectionAttemptDbContext db, string recordId,
         RelationshipRevisionScope scope, CancellationToken cancellationToken) =>
-        Parse<VoteDraftRevision>(await db.Database.SqlQueryRaw<string>(Scoped(VoteById, scope), recordId).ToArrayAsync(cancellationToken),
-            "vote revision").SingleOrDefault();
+        (await ReadVotesAsync(db, Scoped(VoteById, scope), cancellationToken, recordId)).SingleOrDefault();
+
+    private static async Task<ImmutableArray<VoteDraftRevision>> ReadVotesAsync(CollectionAttemptDbContext db, string sql,
+        CancellationToken cancellationToken, params object[] arguments) =>
+        await VoteRevisionRows.ReadDraftRevisionsAsync(db, db.Set<VoteRevisionRow>().FromSqlRaw(sql, arguments).AsNoTracking(), cancellationToken);
 
     private static string Scoped(string sql, RelationshipRevisionScope scope) =>
         sql.Replace("@@scope", scope == RelationshipRevisionScope.Approved ? "d.review_status = 'Approved'" : "TRUE", StringComparison.Ordinal);

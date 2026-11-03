@@ -12,7 +12,8 @@ namespace CivicLens.Infrastructure.Review;
 /// <summary>The shared store core. Reads hold one review cycle: the current revision, the last approved revision, and the
 /// decisions since that approval.</summary>
 internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevision>(string lockKey, string draftName,
-    string recordIdProperty, Action<TDraftRow, TRevision>? revised = null)
+    string recordIdProperty, Action<TDraftRow, TRevision>? revised = null,
+    Func<CollectionAttemptDbContext, IQueryable<TRevisionRow>, CancellationToken, Task<IReadOnlyList<StoredRevision<TRevisionRow, TRevision>>>>? readRevisions = null)
     where TDraftRow : class, IReviewDraftRow
     where TRevisionRow : class, IReviewRevisionRow
     where TDecisionRow : class, IReviewDecisionRow, new()
@@ -346,33 +347,33 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         return resolutions.ToLookup(resolution => resolution.DecisionId, resolution => resolution.ResolvedDecisionId, StringComparer.Ordinal);
     }
 
-    private async Task<Dictionary<(string RecordId, int RevisionNumber), TRevisionRow>> ReadCycleRevisionRowsAsync(
+    private async Task<Dictionary<(string RecordId, int RevisionNumber), StoredRevision<TRevisionRow, TRevision>>> ReadCycleRevisionRowsAsync(
         CollectionAttemptDbContext db, string[] recordIds, string[] approvalIds, CancellationToken cancellationToken)
     {
         if (recordIds.Length == 0) return [];
-        var rows = await db.Set<TRevisionRow>().AsNoTracking()
+        var rows = await ReadRevisionsAsync(db, db.Set<TRevisionRow>().AsNoTracking()
             .Where(row => recordIds.Contains(EF.Property<string>(row, recordIdProperty)) &&
                 (db.Set<TDraftRow>().Any(draft => EF.Property<string>(draft, recordIdProperty) == EF.Property<string>(row, recordIdProperty) &&
                         draft.CurrentRevisionNumber == row.RevisionNumber) ||
                     db.Set<TDecisionRow>().Any(approval => approvalIds.Contains(approval.DecisionId) &&
                         EF.Property<string>(approval, recordIdProperty) == EF.Property<string>(row, recordIdProperty) &&
                         approval.RevisionNumber == row.RevisionNumber)))
-            .Take(recordIds.Length * 2).ToArrayAsync(cancellationToken);
-        return rows.ToDictionary(row => (row.RecordId, row.RevisionNumber));
+            .Take(recordIds.Length * 2), cancellationToken);
+        return rows.ToDictionary(stored => (stored.Row.RecordId, stored.Row.RevisionNumber));
     }
 
     private ReviewHistory<TRevision> BuildHistory(TDraftRow draft, ImmutableArray<ReviewDecision> cycle,
-        Dictionary<(string RecordId, int RevisionNumber), TRevisionRow> revisionRows)
+        Dictionary<(string RecordId, int RevisionNumber), StoredRevision<TRevisionRow, TRevision>> revisionRows)
     {
         if (draft.CurrentRevisionNumber == 0)
             return cycle.IsEmpty ? new(null, null, [], [], ReviewStatus.NotDrafted)
                 : throw new InvalidOperationException("A draft without a revision has review decisions.");
-        var current = ParseRevision(revisionRows.GetValueOrDefault((draft.RecordId, draft.CurrentRevisionNumber))
+        var current = Resolve(revisionRows.GetValueOrDefault((draft.RecordId, draft.CurrentRevisionNumber))
             ?? throw new InvalidOperationException("Current draft revision is missing."));
         var approvedNumber = ReviewDecisionHistory.ApprovedRevisionOf(cycle);
         var approved = approvedNumber == 0 ? null
             : approvedNumber == draft.CurrentRevisionNumber ? current
-            : ParseRevision(revisionRows.GetValueOrDefault((draft.RecordId, approvedNumber))
+            : Resolve(revisionRows.GetValueOrDefault((draft.RecordId, approvedNumber))
                 ?? throw new InvalidOperationException("Approved draft revision is missing."));
         ReviewDecisionHistory.Validate(draft.RecordId, current, approved, cycle);
         var concerns = ReviewPolicy.GetUnresolvedConcerns(cycle);
@@ -386,21 +387,30 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
 
     public async Task<Dictionary<string, (TRevisionRow Row, TRevision Revision)>> ReadFirstRevisionsAsync(CollectionAttemptDbContext db,
         string[] recordIds, CancellationToken cancellationToken) =>
-        (await db.Set<TRevisionRow>().AsNoTracking()
-            .Where(row => recordIds.Contains(EF.Property<string>(row, recordIdProperty)) && row.RevisionNumber == 1)
-            .ToArrayAsync(cancellationToken))
-        .ToDictionary(row => row.RecordId, row => (row, ParseRevision(row)), StringComparer.Ordinal);
+        (await ReadRevisionsAsync(db, db.Set<TRevisionRow>().AsNoTracking()
+            .Where(row => recordIds.Contains(EF.Property<string>(row, recordIdProperty)) && row.RevisionNumber == 1), cancellationToken))
+        .ToDictionary(stored => stored.Row.RecordId, stored => (stored.Row, Resolve(stored)), StringComparer.Ordinal);
 
     public async Task<TRevision?> FindRevisionAsync(CollectionAttemptDbContext db, string recordId, int revisionNumber,
         CancellationToken cancellationToken) =>
-        await db.Set<TRevisionRow>().AsNoTracking().SingleOrDefaultAsync(candidate =>
-                EF.Property<string>(candidate, recordIdProperty) == recordId && candidate.RevisionNumber == revisionNumber, cancellationToken)
-            is { } row ? ParseRevision(row) : null;
+        (await ReadRevisionsAsync(db, db.Set<TRevisionRow>().AsNoTracking().Where(candidate =>
+            EF.Property<string>(candidate, recordIdProperty) == recordId && candidate.RevisionNumber == revisionNumber), cancellationToken))
+        .SingleOrDefault() is { } stored ? Resolve(stored) : null;
 
-    private static TRevision ParseRevision(TRevisionRow row)
+    /// <summary>Reads the rows of a query in a fixed number of queries. A kind with columns passes its own reader. Every other kind parses the JSON.</summary>
+    private Task<IReadOnlyList<StoredRevision<TRevisionRow, TRevision>>> ReadRevisionsAsync(CollectionAttemptDbContext db,
+        IQueryable<TRevisionRow> query, CancellationToken cancellationToken) =>
+        readRevisions is null ? ReadJsonRevisionsAsync(query, cancellationToken) : readRevisions(db, query, cancellationToken);
+
+    private static async Task<IReadOnlyList<StoredRevision<TRevisionRow, TRevision>>> ReadJsonRevisionsAsync(IQueryable<TRevisionRow> query,
+        CancellationToken cancellationToken) =>
+        [.. (await query.ToArrayAsync(cancellationToken)).Select(row =>
+            new StoredRevision<TRevisionRow, TRevision>(row, () => ReviewJson.Deserialize<TRevision>(row.RevisionJson, "revision")))];
+
+    private static TRevision Resolve(StoredRevision<TRevisionRow, TRevision> stored)
     {
-        var revision = ReviewJson.Deserialize<TRevision>(row.RevisionJson, "revision");
-        if (revision.RecordId != row.RecordId || revision.RevisionNumber != row.RevisionNumber)
+        var revision = stored.Read();
+        if (revision.RecordId != stored.Row.RecordId || revision.RevisionNumber != stored.Row.RevisionNumber)
             throw new InvalidOperationException("Stored revision identity is inconsistent.");
         revision.ValidateShape();
         return revision;

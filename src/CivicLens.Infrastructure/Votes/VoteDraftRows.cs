@@ -13,7 +13,7 @@ namespace CivicLens.Infrastructure.Votes;
 internal static class VoteDraftRows
 {
     internal static readonly ReviewRecords<VoteDraftRow, VoteRevisionRow, VoteReviewDecisionRow, VoteDraftRevision> Records =
-        new(PostgresAdvisoryLock.VoteReview, "Vote", nameof(VoteDraftRow.RecordId), Revised);
+        new(PostgresAdvisoryLock.VoteReview, "Vote", nameof(VoteDraftRow.RecordId), Revised, VoteRevisionRows.ReadAsync);
 
     public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, VoteDraftRevision revision, string runId,
         CancellationToken cancellationToken)
@@ -41,12 +41,14 @@ internal static class VoteDraftRows
     public static async Task<VoteDraftRevision?> ReadCurrentAsync(CollectionAttemptDbContext db, string recordId,
         CancellationToken cancellationToken)
     {
-        var json = await (from draft in db.Set<VoteDraftRow>().AsNoTracking()
-                          join revision in db.Set<VoteRevisionRow>().AsNoTracking()
-                              on new { draft.RecordId, Number = draft.CurrentRevisionNumber } equals new { revision.RecordId, Number = revision.RevisionNumber }
-                          where draft.RecordId == recordId
-                          select revision.RevisionJson).SingleOrDefaultAsync(cancellationToken);
-        return json is null ? null : ReviewJson.Deserialize<VoteDraftRevision>(json, "vote revision");
+        var current = from draft in db.Set<VoteDraftRow>().AsNoTracking()
+                      join revision in db.Set<VoteRevisionRow>().AsNoTracking()
+                          on new { draft.RecordId, Number = draft.CurrentRevisionNumber } equals new { revision.RecordId, Number = revision.RevisionNumber }
+                      where draft.RecordId == recordId
+                      select revision;
+        var read = (await VoteRevisionRows.ReadPageAsync(db, current, cancellationToken)).ToStoredRevisions().SingleOrDefault()?.Read();
+        read?.ValidateShape();
+        return read;
     }
 
     private static void Revised(VoteDraftRow draft, VoteDraftRevision revision)

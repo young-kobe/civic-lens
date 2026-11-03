@@ -6,6 +6,7 @@ using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Votes;
+using CivicLens.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
@@ -14,15 +15,6 @@ namespace CivicLens.Tests.Infrastructure.Collection.HouseVotes;
 
 public sealed partial class PostgresHouseVoteTests
 {
-    private const string NullColumns = """
-        headline = NULL, summary = NULL, text_origin = NULL, suggestion_headline = NULL, suggestion_summary = NULL, suggestion_run_id = NULL,
-        suggestion_fingerprint = NULL, source_id = NULL, vote_source = NULL, chamber = NULL, congress = NULL, session_number = NULL,
-        roll_call_number = NULL, bill_type = NULL, bill_number = NULL, candidate_id = NULL, candidate_update_utc_ticks = NULL, voted_on = NULL,
-        voted_on_citation_extraction_id = NULL, voted_on_citation_start = NULL, voted_on_citation_length = NULL, kind = NULL,
-        kind_citation_extraction_id = NULL, kind_citation_start = NULL, kind_citation_length = NULL, member_list_id = NULL,
-        issue_revision_id = NULL, subjects_hash = NULL, issue_candidates_recorded = NULL
-        """;
-
     private static readonly ReviewActor BackfillOwner = new("auth0|owner", ReviewRole.Owner);
 
     [Fact]
@@ -77,9 +69,10 @@ public sealed partial class PostgresHouseVoteTests
     [Fact]
     public async Task TheLimitCountsMovedRowsOnlyAndASkippedRowNeverUsesItBecauseABadRowMustNotStallTheRun()
     {
-        var first = await SettledLegacyAsync(basis => basis);
-        var second = await AddRevisionAsync(first, 2, legacy: true);
-        await AddRevisionAsync(second, 3, legacy: true);
+        var first = await SettledAsync(basis => basis);
+        var second = await AddRevisionAsync(first, 2);
+        await AddRevisionAsync(second, 3);
+        await MakeLegacyAsync(1, 2, 3);
         await RewriteJsonAsync(1, json => json["members"] = new JsonArray());
 
         var one = await BackfillAsync(1);
@@ -95,8 +88,9 @@ public sealed partial class PostgresHouseVoteTests
     [Fact]
     public async Task RevisionsWithTheSameMembersShareOneListAfterTheBackfillBecauseAListNeverChanges()
     {
-        var first = await SettledLegacyAsync(basis => basis);
-        await AddRevisionAsync(first, 2, legacy: true);
+        var first = await SettledAsync(basis => basis);
+        await AddRevisionAsync(first, 2);
+        await MakeLegacyAsync(1, 2);
 
         await BackfillAsync(10);
 
@@ -107,9 +101,10 @@ public sealed partial class PostgresHouseVoteTests
     [Fact]
     public async Task ARowThatCannotMoveIsSkippedAndTheRowsAroundItStillMoveBecauseOneBadRowMustNotStopTheRun()
     {
-        var first = await SettledLegacyAsync(basis => basis);
-        var second = await AddRevisionAsync(first, 2, legacy: true);
-        await AddRevisionAsync(second, 3, legacy: true);
+        var first = await SettledAsync(basis => basis);
+        var second = await AddRevisionAsync(first, 2);
+        await AddRevisionAsync(second, 3);
+        await MakeLegacyAsync(1, 2, 3);
         await RewriteJsonAsync(2, json => json["members"] = new JsonArray());
 
         var result = await BackfillAsync(10);
@@ -208,9 +203,10 @@ public sealed partial class PostgresHouseVoteTests
     [Fact]
     public async Task AnIdOverItsColumnLengthIsSkippedAndNeverCutBecauseCuttingAnIdWouldNameAnotherRecord()
     {
-        var first = await SettledLegacyAsync(basis => basis);
+        var first = await SettledAsync(basis => basis);
         await RewriteJsonAsync(1, json => json["members"]![0]!["personId"] = new string('p', VoteDraftRevision.MaximumPersonIdLength + 1));
-        var second = await AddRevisionAsync(first, 2, legacy: true);
+        var second = await AddRevisionAsync(first, 2);
+        await MakeLegacyAsync(1, 2);
         await RewriteJsonAsync(2, json => json["suggestion"] = new JsonObject
         {
             ["headline"] = "H",
@@ -283,8 +279,8 @@ public sealed partial class PostgresHouseVoteTests
     public async Task ABackfillAndANewRevisionAtTheSameTimeBothEndWithColumnsBecauseTheBackfillTouchesOnlyLegacyRows()
     {
         var first = await SettledLegacyAsync(basis => basis);
-        var newer = await PendingCandidateAsync(Updated.AddDays(1));
-        var second = (await RevisionAsync(newer, 2)) with { Members = first.Members };
+        var newer = await PendingCandidateAsync(Updated.AddDays(1), roll: 101);
+        var second = (await RevisionAsync(newer, 1)) with { Members = first.Members };
 
         var backfill = BackfillAsync(10);
         await SettleAsync(newer, second);
@@ -298,9 +294,10 @@ public sealed partial class PostgresHouseVoteTests
     [Fact]
     public async Task ABadRowBetweenTwoGoodRowsLeavesNoTraceAndTheRowsAfterItStillMoveBecauseTheBatchMustRollBackOnlyThatRow()
     {
-        var first = await SettledLegacyAsync(basis => basis);
-        await AddRevisionAsync(first, 2, legacy: true);
-        await AddRevisionAsync(first, 3, legacy: true);
+        var first = await SettledAsync(basis => basis);
+        await AddRevisionAsync(first, 2);
+        await AddRevisionAsync(first, 3);
+        await MakeLegacyAsync(1, 2, 3);
         await RewriteJsonAsync(1, json => json["members"]![0]!["cast"] = "Yea");
         await RewriteJsonAsync(2, json =>
         {
@@ -352,9 +349,10 @@ public sealed partial class PostgresHouseVoteTests
     [Fact]
     public async Task TheBackfillCountsSkippedRowsByReasonBecauseTheOwnerNeedsToSeeWhichCauseDominates()
     {
-        var first = await SettledLegacyAsync(basis => basis);
-        await AddRevisionAsync(first, 2, legacy: true);
-        await AddRevisionAsync(first, 3, legacy: true);
+        var first = await SettledAsync(basis => basis);
+        await AddRevisionAsync(first, 2);
+        await AddRevisionAsync(first, 3);
+        await MakeLegacyAsync(1, 2, 3);
         await RewriteJsonAsync(1, json => json["members"] = new JsonArray());
         await RewriteJsonAsync(2, json => json["members"] = new JsonArray());
         await RewriteJsonAsync(3, json => json["revisionNumber"] = 9);
@@ -453,8 +451,9 @@ public sealed partial class PostgresHouseVoteTests
     [InlineData("members", "InvalidShape")]
     public async Task AMalformedRowIsSkippedAndTheRunGoesOnBecauseOneBadRowMustNotAbortTheBackfill(string malformed, string reason)
     {
-        var first = await SettledLegacyAsync(basis => basis);
-        await AddRevisionAsync(first, 2, legacy: true);
+        var first = await SettledAsync(basis => basis);
+        await AddRevisionAsync(first, 2);
+        await MakeLegacyAsync(1, 2);
         if (malformed.StartsWith('{')) await ExecuteAsync($"UPDATE vote_revisions SET revision_json = '{malformed}' WHERE revision_number = 1");
         else await RewriteJsonAsync(1, json => json[malformed] = new JsonArray(null, null));
 
@@ -546,27 +545,36 @@ public sealed partial class PostgresHouseVoteTests
 
     private async Task<VoteDraftRevision> SettledLegacyAsync(Func<VoteDraftRevision, VoteDraftRevision> shape)
     {
-        var candidate = await PendingCandidateAsync();
-        var revision = shape((await RevisionAsync(candidate, 1)) with { IssueCandidateIds = ["issue-a", "issue-b"], TrackedIssueIds = ["issue-a"] });
-        await SettleAsync(candidate, revision);
+        var revision = await SettledAsync(shape);
         await MakeLegacyAsync(1);
         return revision;
     }
 
-    private async Task<VoteDraftRevision> AddRevisionAsync(VoteDraftRevision previous, int number, bool legacy)
+    private async Task<VoteDraftRevision> SettledAsync(Func<VoteDraftRevision, VoteDraftRevision> shape)
+    {
+        var candidate = await PendingCandidateAsync();
+        var revision = shape((await RevisionAsync(candidate, 1)) with { IssueCandidateIds = ["issue-a", "issue-b"], TrackedIssueIds = ["issue-a"] });
+        await SettleAsync(candidate, revision);
+        return revision;
+    }
+
+    private async Task<VoteDraftRevision> AddRevisionAsync(VoteDraftRevision previous, int number)
     {
         var newer = await PendingCandidateAsync(Updated.AddDays(number));
         var revision = (await RevisionAsync(newer, number)) with { Members = previous.Members, IssueCandidateIds = previous.IssueCandidateIds, TrackedIssueIds = previous.TrackedIssueIds };
         await SettleAsync(newer, revision);
-        if (legacy) await MakeLegacyAsync(number);
         return revision;
     }
 
-    private Task MakeLegacyAsync(int number) => ExecuteAsync($"""
-        DELETE FROM vote_revision_facts WHERE revision_number = {number};
-        DELETE FROM vote_revision_issues WHERE revision_number = {number};
-        UPDATE vote_revisions SET {NullColumns} WHERE revision_number = {number}
-        """);
+    private Task MakeLegacyAsync(params int[] numbers)
+    {
+        var list = string.Join(", ", numbers);
+        return ExecuteAsync($"""
+            DELETE FROM vote_revision_facts WHERE revision_number IN ({list});
+            DELETE FROM vote_revision_issues WHERE revision_number IN ({list});
+            UPDATE vote_revisions SET {VoteRevisionColumnsSeed.NullColumns} WHERE revision_number IN ({list})
+            """);
+    }
 
     private async Task RewriteJsonAsync(int number, Action<JsonObject> change)
     {

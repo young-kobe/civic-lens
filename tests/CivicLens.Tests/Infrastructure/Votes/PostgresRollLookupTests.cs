@@ -22,7 +22,7 @@ public sealed class PostgresRollLookupTests(PostgresCollection postgres) : IAsyn
     public async Task ARollCallFindsOnlyTheVoteDraftOfItsChamberCongressSessionAndNumber()
     {
         var house = RelationshipFixtures.Vote();
-        var senate = house with { RecordId = new string('7', 64), CandidateId = new string('8', 64), Chamber = Chamber.Senate };
+        var senate = house with { RecordId = new string('7', 64), CandidateId = new string('8', 64), Chamber = Chamber.Senate, Source = VoteSource.Voteview };
         var seeder = new RelationshipWorldSeeder(connectionString);
         await seeder.VoteAsync(house);
         await seeder.VoteAsync(senate);

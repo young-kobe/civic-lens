@@ -208,8 +208,7 @@ public sealed partial class PostgresHouseVoteTests
         var candidate = await PendingCandidateAsync();
         await SettleForReviewAsync(candidate, await RevisionAsync(candidate, 1));
         var recordId = await RecordIdAsync(candidate);
-        await ExecuteAsync("UPDATE vote_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{facts,0,citation,extractionId}', '\"" +
-            new string('c', 64) + "\"')::text");
+        await ExecuteAsync($"SET session_replication_role = replica; UPDATE vote_revision_facts SET citation_extraction_id = '{new string('c', 64)}'");
 
         await Assert.ThrowsAsync<ArgumentException>(() => DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve));
 
@@ -277,7 +276,7 @@ public sealed partial class PostgresHouseVoteTests
     public async Task ARevisionStoredBeforeTheModelChoiceHasNoCandidateSetAndStillPublishesOpensAndTakesAPersonEdit()
     {
         var recordId = await ApprovedVoteAsync();
-        await ExecuteAsync("UPDATE vote_revisions SET revision_json = (revision_json::jsonb - 'issueCandidateIds')::text");
+        await ExecuteAsync("UPDATE vote_revisions SET issue_candidates_recorded = false");
         var reviews = VoteReviews();
 
         var unpublished = Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, [], default));

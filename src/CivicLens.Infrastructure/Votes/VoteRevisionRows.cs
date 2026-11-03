@@ -1,13 +1,17 @@
 using System.Collections.Immutable;
+using CivicLens.Application.Publication;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Publication.Contracts;
+using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Votes.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Votes;
 
-/// <summary>Owns the mapping between a vote revision and its row, fact rows, and issue rows, in both directions. The row also keeps the JSON until readers use the columns.</summary>
+/// <summary>Owns the mapping between a vote revision and its row, fact rows, and issue rows, in both directions. The row also keeps the JSON, but readers use the columns.</summary>
 internal static class VoteRevisionRows
 {
     public static VoteRevisionRow Create(VoteDraftRevision revision, string? runId)
@@ -60,6 +64,42 @@ internal static class VoteRevisionRows
         row.IssueCandidatesRecorded = !revision.IssueCandidateIds.IsDefault;
         row.Facts = [.. revision.Facts.Select((fact, position) => FactRow(revision, fact, position))];
         row.Issues = [.. IssueIds(revision).Select((issueId, position) => IssueRow(revision, issueId, position))];
+    }
+
+    /// <summary>Reads the rows of a query with their facts, issues, and member lists in a fixed number of queries.</summary>
+    public static async Task<VoteRevisionPage> ReadPageAsync(CollectionAttemptDbContext db, IQueryable<VoteRevisionRow> query,
+        CancellationToken cancellationToken)
+    {
+        var rows = await query.Include(row => row.Facts).Include(row => row.Issues).AsSplitQuery().ToListAsync(cancellationToken);
+        var listIds = rows.Select(row => row.MemberListId).OfType<string>().Distinct().ToArray();
+        var lists = await db.Set<VoteMemberListRow>().AsNoTracking().Where(list => listIds.Contains(list.ListId))
+            .ToDictionaryAsync(list => list.ListId, list => list.MemberCount, StringComparer.Ordinal, cancellationToken);
+        var entries = (await db.Set<VoteMemberListEntryRow>().AsNoTracking().Where(entry => listIds.Contains(entry.ListId))
+            .OrderBy(entry => entry.ListId).ThenBy(entry => entry.Position).ToListAsync(cancellationToken)).ToLookup(entry => entry.ListId, StringComparer.Ordinal);
+        return new(rows, lists, entries);
+    }
+
+    /// <summary>The reader that the shared review code uses for votes.</summary>
+    public static async Task<IReadOnlyList<StoredRevision<VoteRevisionRow, VoteDraftRevision>>> ReadAsync(CollectionAttemptDbContext db,
+        IQueryable<VoteRevisionRow> query, CancellationToken cancellationToken) =>
+        (await ReadPageAsync(db, query, cancellationToken)).ToStoredRevisions();
+
+    public static async Task<ImmutableArray<VoteDraftRevision>> ReadDraftRevisionsAsync(CollectionAttemptDbContext db,
+        IQueryable<VoteRevisionRow> query, CancellationToken cancellationToken) =>
+        [.. (await ReadAsync(db, query, cancellationToken)).Select(stored => stored.Read())];
+
+    /// <summary>Reads the named revisions. It fails when one is not stored.</summary>
+    public static async Task<ImmutableArray<VoteDraftRevision>> ReadNamedAsync(CollectionAttemptDbContext db,
+        IReadOnlyCollection<PublishedRevisionBinding> named, CancellationToken cancellationToken)
+    {
+        var requested = named.Distinct().ToArray();
+        if (requested.Length == 0) return [];
+        CitedRevisions.RequireKind(PublishedRecordKind.Vote, requested, nameof(named));
+        var revisions = await ReadDraftRevisionsAsync(db, db.Set<VoteRevisionRow>().FromSqlRaw("""
+                SELECT r.* FROM vote_revisions r JOIN unnest({0}, {1}) AS k(id, number) ON r.record_id = k.id AND r.revision_number = k.number
+                """, requested.Select(binding => binding.RecordId).ToArray(), requested.Select(binding => binding.RevisionNumber).ToArray()).AsNoTracking(),
+            cancellationToken);
+        return revisions.Length == requested.Length ? revisions : throw CitedRevisions.NotStored(PublishedRecordKind.Vote);
     }
 
     /// <summary>Builds the revision back from a row with columns. The tracked issues come back in ordinal order, because the drafting code stores them that way.</summary>

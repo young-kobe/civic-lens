@@ -137,8 +137,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
                 SELECT k.id AS "VoteRecordId", r.record_id IS NOT NULL AS "IsStored", m.person_id AS "PersonId"
                 FROM unnest({0}, {1}) AS k(id, number)
                 LEFT JOIN vote_revisions r ON r.record_id = k.id AND r.revision_number = k.number
-                LEFT JOIN LATERAL (SELECT DISTINCT e ->> 'personId' AS person_id
-                                   FROM jsonb_array_elements(r.revision_json::jsonb -> 'members') e) m ON true
+                LEFT JOIN LATERAL (SELECT DISTINCT e.person_id FROM vote_member_list_entries e WHERE e.list_id = r.member_list_id) m ON true
                 """, requested.Select(binding => binding.RecordId).ToArray(), requested.Select(binding => binding.RevisionNumber).ToArray())
             .ToArrayAsync(cancellationToken);
         if (rows.Any(row => !row.IsStored)) throw CitedRevisions.NotStored(PublishedRecordKind.Vote);
@@ -154,8 +153,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         var requested = revisions.Distinct().ToArray();
         CitedRevisions.RequireKind(PublishedRecordKind.Vote, requested, nameof(revisions));
         var stored = await db.Database.SqlQueryRaw<StoredVoteBill>("""
-                SELECT r.record_id AS "VoteRecordId", (r.revision_json::jsonb ->> 'congress')::int AS "Congress",
-                       r.revision_json::jsonb ->> 'billType' AS "BillType", (r.revision_json::jsonb ->> 'billNumber')::int AS "BillNumber"
+                SELECT r.record_id AS "VoteRecordId", r.congress AS "Congress", r.bill_type AS "BillType", r.bill_number AS "BillNumber"
                 FROM vote_revisions r JOIN unnest({0}, {1}) AS k(id, number) ON r.record_id = k.id AND r.revision_number = k.number
                 """, requested.Select(binding => binding.RecordId).ToArray(), requested.Select(binding => binding.RevisionNumber).ToArray())
             .ToArrayAsync(cancellationToken);

@@ -28,7 +28,7 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         new(PublishedRecordKind.Action, "ac", "action_drafts", "headline",
             (db, ids, ct) => PostgresActionReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
         new(PublishedRecordKind.Vote, "vo", "vote_drafts", "headline",
-            (db, ids, ct) => VoteDraftRows.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
+            (db, ids, ct) => VoteDraftRows.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct), HeadlineInColumn: true),
         new(PublishedRecordKind.Brief, "br", "brief_drafts", "headline",
             (db, ids, ct) => PostgresBriefReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
         new(PublishedRecordKind.Relationship, "re", "relationship_drafts", null,
@@ -56,12 +56,12 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
     private static readonly string ApprovedHeadlineMatches = string.Join("\nUNION ALL\n", Kinds.Where(kind => kind.HeadlineProperty is not null)
         .Select(kind => $"""
         SELECT '{kind.Code}' AS "KindCode", draft.{kind.IdColumn} AS "RecordId", '{kind.Code}-' || draft.{kind.IdColumn} AS "QueueId",
-               draft.last_revised_at_utc_ticks AS "LastRevisedAtUtcTicks", revision.revision_json::jsonb ->> '{kind.HeadlineProperty}' AS "Headline"
+               draft.last_revised_at_utc_ticks AS "LastRevisedAtUtcTicks", {kind.HeadlineSql} AS "Headline"
         FROM {kind.Table} draft
         JOIN {ReviewTables.For(kind.Kind).Revisions} revision
             ON revision.{kind.IdColumn} = draft.{kind.IdColumn} AND revision.revision_number = draft.current_revision_number
         WHERE draft.review_status = 'Approved'
-            AND to_tsvector('english', revision.revision_json::jsonb ->> '{kind.HeadlineProperty}') @@ websearch_to_tsquery('english', {SearchTextParameter})
+            AND ({kind.NullHeadlineMatch}to_tsvector('english', {kind.HeadlineSql}) @@ websearch_to_tsquery('english', {SearchTextParameter}))
         """));
 
     public async Task<ReviewQueuePage> ListAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken)
@@ -148,9 +148,14 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
 
     private sealed record QueueKind(PublishedRecordKind Kind, string Code, string Table,
         string? HeadlineProperty,
-        Func<CollectionAttemptDbContext, string[], CancellationToken, Task<Dictionary<string, QueueDraft>>> Read)
+        Func<CollectionAttemptDbContext, string[], CancellationToken, Task<Dictionary<string, QueueDraft>>> Read, bool HeadlineInColumn = false)
     {
         public string IdColumn => ReviewTables.For(Kind).IdColumn;
+
+        public string HeadlineSql => HeadlineInColumn ? "revision.headline" : $"revision.revision_json::jsonb ->> '{HeadlineProperty}'";
+
+        /// <summary>A kind with a headline column returns a row with a null headline, so that the read fails and the search does not skip the row.</summary>
+        public string NullHeadlineMatch => HeadlineInColumn ? $"{HeadlineSql} IS NULL OR " : "";
     }
 
     private class QueueKey
