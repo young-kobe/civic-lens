@@ -30,7 +30,7 @@ public sealed partial class SchemaReferenceTests(PostgresCollection postgres) : 
             "vote_member_lists", "vote_review_decision_resolutions", "vote_review_decisions", "vote_revision_facts", "vote_revision_issues",
             "vote_revisions", "vote_versions"]),
         ("executive-actions", ["executive_action_documents", "executive_action_drafts", "executive_action_review_decision_resolutions", "executive_action_review_decisions",
-            "executive_action_revisions"]),
+            "executive_action_revision_facts", "executive_action_revision_notices", "executive_action_revisions"]),
         ("relationships", ["relationship_analysis", "relationship_analysis_budget", "relationship_analysis_runs", "relationship_drafts",
             "relationship_review_decision_resolutions", "relationship_review_decisions", "relationship_revisions"]),
         ("briefs", ["brief_analysis", "brief_analysis_budget", "brief_analysis_runs", "brief_check_flags", "brief_drafts",
@@ -38,9 +38,10 @@ public sealed partial class SchemaReferenceTests(PostgresCollection postgres) : 
         ("review", ["document_change_drafts", "document_change_review_decision_resolutions", "document_change_review_decisions", "document_change_review_idempotency",
             "document_change_revisions"]),
         ("roster", ["roster_snapshots", "roster_members", "roster_terms", "executive_officials", "executive_terms", "official_photos"]),
+        ("districts", ["zcta_districts"]),
         ("reports", ["reader_report_cursor", "reader_reports"]),
-        ("publication", ["publication_record_states", "publication_releases", "published_entries", "published_entry_issues",
-            "published_entry_officials", "published_entry_policy_areas", "published_records"])
+        ("publication", ["publication_record_states", "publication_releases", "publication_withdrawal_corrections", "publication_withdrawals",
+            "published_entries", "published_entry_issues", "published_entry_officials", "published_entry_policy_areas", "published_records"])
     ];
 
     private string connectionString = null!;

@@ -6,6 +6,7 @@ using CivicLens.Application;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Issues;
 using CivicLens.Core.Analysis;
+using CivicLens.Infrastructure.Districts;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
@@ -21,6 +22,7 @@ using CivicLens.Host.Analysis;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
+using CivicLens.Infrastructure.ExecutiveActions;
 using CivicLens.Infrastructure.Votes;
 using CivicLens.Host;
 using CivicLens.Host.Actions;
@@ -37,6 +39,7 @@ using CivicLens.Infrastructure.Briefs;
 using CivicLens.Infrastructure.Actions;
 using CivicLens.Host.Collection;
 using CivicLens.Host.Documents;
+using CivicLens.Host.ExecutiveActions;
 using CivicLens.Host.Publication;
 using CivicLens.Host.Reports;
 using CivicLens.Host.Review;
@@ -94,6 +97,8 @@ if (args is [] or ["--help"] or ["help"])
           votes draft requeue --blocked --code <block-code>
           votes draft requeue --refused
           votes draft redraft
+          executive-actions revisions backfill <limit>
+          executive-actions revisions verify
           bills subjects backfill [limit]
           bills status backfill [limit]
           relationships draft status
@@ -163,7 +168,7 @@ if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
     or ["discovery", "get", _] or ["discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
     !CollectionWorkerCommand.Matches(args) && !WorkerHealthCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
-    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !RelationshipCommand.Matches(args) && !BillBackfillCommand.Matches(args) && !BriefCommand.Matches(args) && !RosterCommand.Matches(args))
+    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !ExecutiveActionCommand.Matches(args) && !RelationshipCommand.Matches(args) && !BillBackfillCommand.Matches(args) && !BriefCommand.Matches(args) && !RosterCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -238,6 +243,7 @@ try
         var processing = new EvidenceProcessingWorker(jobs,
             new JobPreparation(jobs, attempts, jobs, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString),
                 PostgresExecutiveRosterStore.FromConnectionString(connectionString),
+                PostgresZctaDistrictStore.FromConnectionString(connectionString),
                 new CaptureBodyReader(), processingStore, extractions, textExtractor, issues, loggers.CreateLogger<JobPreparation>()),
             processingStore,
             new ExtractDocument(attempts, textExtractor, extractions),
@@ -322,6 +328,15 @@ try
             new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
         executing = true;
         return await votes.ExecuteAsync(args, cancellation.Token);
+    }
+
+    if (ExecutiveActionCommand.Matches(args))
+    {
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment();
+        var backfillStore = new PostgresExecutiveActionRevisionBackfillStore(AnalysisDbContextFactory.Create(connectionString));
+        var executiveActions = new ExecutiveActionCommand(new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
+        executing = true;
+        return await executiveActions.ExecuteAsync(args, cancellation.Token);
     }
 
     if (RelationshipCommand.Matches(args))

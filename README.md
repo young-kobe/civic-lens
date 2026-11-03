@@ -43,7 +43,7 @@ dotnet test --no-build --configuration Release
 dotnet run --project src/CivicLens.Collector -- --help
 ```
 
-No credentials, database, or paid services are required for the tracer. Tests never call the paid model API; one live test runs only on request. The full test suite requires a working Docker daemon and starts disposable Postgres containers; see operations for database-free checks. See [operations](docs/operations.md) for the local end-to-end example. Runtime data and generated releases will live under ignored `.runtime/` and `artifacts/` directories.
+No credentials, database, or paid services are required for the tracer. Tests never call the paid model API; one live test runs only on request. The full test suite requires a working Docker daemon and starts disposable Postgres containers; see operations for database-free checks. See [operations](docs/operations.md) for the local end-to-end example. Runtime data and generated releases live under ignored `.runtime/` and `artifacts/` directories.
 
 ## Navigate the repository
 

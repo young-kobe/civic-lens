@@ -9,5 +9,9 @@ public sealed record PublicationCommit(int ReleaseNumber, int? BaseReleaseNumber
 {
     public ImmutableArray<PublishedRecordReference> WithdrawnRecords { get; init; } = [];
 
+    public required ImmutableArray<PublishedWithdrawal> Withdrawals { get; init; }
+
+    public ImmutableArray<PublishedFirstPublication> FirstPublications { get; init; } = [];
+
     public ImmutableArray<PublishedRecordEntry> AddedEntries { get; init; } = [];
 }

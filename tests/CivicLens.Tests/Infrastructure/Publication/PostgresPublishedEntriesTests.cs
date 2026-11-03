@@ -112,7 +112,21 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         await publications.ActivateAsync(1, (_, _) => Task.CompletedTask, default);
         var entry = PublishedEntryFixtures.Action(A, First);
 
-        await CommitAsync(3, 1, entry with { Officials = [.. entry.Officials.Select(official => official with { Name = "Renamed" })], YeaCount = null });
+        await CommitAsync(3, 1, entry with { Officials = [.. entry.Officials.Select(official => official with { Name = "Renamed" })] });
+
+        Assert.Equal(["1", "2", "3"], await ReadAsync("SELECT release_number FROM publication_releases ORDER BY 1"));
+    }
+
+    [Fact]
+    public async Task APublishOfTheSameVoteRevisionWithOtherCountsAndAlignmentIsAcceptedBecauseThoseAreNotEntryFacts()
+    {
+        await SeedVoteAsync(A);
+        await SeedVoteAsync(B);
+        await CommitAsync(1, null, PublishedEntryFixtures.Vote(B, First));
+        await CommitAsync(2, 1, PublishedEntryFixtures.Vote(A, First));
+        await publications.ActivateAsync(1, (_, _) => Task.CompletedTask, default);
+
+        await CommitAsync(3, 1, PublishedEntryFixtures.Vote(A, First) with { YeaCount = 9, NayCount = 8, Alignment = PublishedVoteAlignment.Split });
 
         Assert.Equal(["1", "2", "3"], await ReadAsync("SELECT release_number FROM publication_releases ORDER BY 1"));
     }
@@ -339,7 +353,11 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
             [.. entries.Select(PublishedRevisionBinding.Of), .. cited],
             [.. entries.Select(entry => new ReviewStateExpectation(entry.Kind, entry.RecordId, 1, 1))])
-        { AddedEntries = [.. entries] },
+        {
+            Withdrawals = [],
+            FirstPublications = [.. entries.Select(entry => new PublishedFirstPublication(entry.Kind, entry.RecordId, entry.FirstPublishedAtUtc))],
+            AddedEntries = [.. entries]
+        },
             $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
 
     private async Task SeedActionAsync(params string[] ids)

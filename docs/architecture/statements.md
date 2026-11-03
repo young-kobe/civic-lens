@@ -43,12 +43,12 @@ The statements feature finds articles that may hold an official's statement and 
 - Approval needs both cited revisions to be the approved revision of their records. The flag is derived at read time, as for briefs. An approved relationship stays approved until a person withdraws it.
 - Publication uses a stricter rule than the review flag. It refuses a relationship when the new release lacks either cited revision, or when the latest decision on either is not an approval. A published relationship stays in later releases. The statement, action, and vote pages list the relationships that cite them; see [related records](publication.md#related-records).
 - Code finds the pairs, not the model. A pair is the same official plus a shared bill. For an action, the official needs a sponsorship of the bill in any role. A cosponsor who withdrew still counts. For a vote, the official needs to have cast it.
-- Code finds the shared bill by number first and then by title. A title is the saved title of the action revision. The match ignores case, a leading "the", and a trailing year such as "of 2025". A title of fewer than three words never matches ([D-09](../roadmap.md#pending-decisions)). When the statement date is known, a title matches only an action of the Congress of that date.
+- Code finds the shared bill by number first and then by title. A title is the saved title of the action revision. The match ignores case, a leading "the", and a trailing year such as "of 2025". A title of fewer than three words never matches. When the statement date is known, a title matches only an action of the Congress of that date.
 - A vote has no saved title, so a vote pairs by bill number only.
 - A bill number comes from `BillNumberFinder` in the quoted passages of the statement. The number has no Congress, so it takes the Congress of the statement date. A Congress starts on 3 January of an odd year, and 1 and 2 January belong to the Congress before it. A statement with no date cannot place a number. Code skips the number and counts the statement.
 - Pairs that share only a tracked issue wait for a measurement.
 - A relationship cites the revision number of each side, as a brief cites its records.
-- The queue key of a pair is the lowercase SHA-256 hash of `relationship-v1|statementCandidateId|targetKind|targetRecordId`. The match basis and the matched span are in the revision, not in the key.
+- The queue key of a pair is the lowercase SHA-256 hash of `relationship-v1|statementRecordId|targetKind|targetRecordId`, with the target kind in lowercase. The match basis and the matched span are in the revision, not in the key.
 - The model proposes the type and one sentence of reason. It also quotes the statement and names one fact of the record. Code finds the quote and requires it to cover the matched words. A person approves or rejects the relationship.
 - Relationship drafting uses Haiku with its own queue, budget table, and variable. No gate runs before it.
 
@@ -508,7 +508,7 @@ With `--since`, `regate` moves only candidates first captured on or after that U
 - `relationship_analysis` is keyed by `(pair_id, task)`. A row also holds the statement candidate ID, the target kind (`Action` or `Vote`), and the target record ID. The candidate ID has a foreign key to `statement_candidates`. The trigger `trg_relationship_analysis_notify` calls `civic_lens_notify_analysis_change`.
 - `relationship_analysis_runs` adds the reason `unchanged`, `noRelationship`, `noLongerMatches`, or `targetRecited`. The reason `targetRecited` marks a `Bypassed` run that tried to copy a revision to a new target citation. A refused copy keeps the reason and copies nothing. The refusals are `personEditKept`, `alreadyApproved`, and `revisionConflict`. Every run keeps `context_json`. A matched run holds the pair key, the fingerprint, and both cited revisions.
 - `relationship_drafts` has one row for each pair that has a revision. It has the review columns of the other draft tables and the flag `no_longer_matches`.
-- The relationship review lock is `civic-lens-relationship-review`. It is declared between the vote key and the brief key. Revision appends take it. The publication lists of locks do not hold it until relationship publication exists.
+- The relationship review lock is `civic-lens-relationship-review`. It is declared between the vote key and the brief key. Revision appends take it. A publication commit takes it too; see [publication](publication.md#invariants).
 - Relationship drafting has its own budget table, separate from the other budgets.
 - Version constants are listed in [Behavior versions](../architecture.md#behavior-versions).
 

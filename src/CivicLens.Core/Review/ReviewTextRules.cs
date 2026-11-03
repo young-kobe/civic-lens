@@ -2,6 +2,8 @@ namespace CivicLens.Core.Review;
 
 public static class ReviewTextRules
 {
+    public const int MaximumConfigurationIdLength = 128;
+
     public static void ValidateText(string text, int maximumLength, string name)
     {
         if (string.IsNullOrWhiteSpace(text) || text.Length > maximumLength || text.Contains('\0'))

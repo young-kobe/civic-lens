@@ -54,6 +54,9 @@ internal static class ReviewQueries
         [.. rows.Select(row => new PublishedRevisionBinding(Enum.Parse<PublishedRecordKind>(row.Kind, ignoreCase: true),
             row.RecordId, row.RevisionNumber))];
 
+    public static string RevisionChildren(string table) =>
+        $"SELECT c.* FROM {table} c JOIN unnest({{0}}, {{1}}) AS k(id, number) ON c.record_id = k.id AND c.revision_number = k.number";
+
     // Published state comes from the active release, not the draft, so this stays a read query.
     // The map must stay in a subquery. As the inner side of a join, Postgres copies the whole map for each draft.
     public static string UnpublishedApproved(string kind, string draftTable, string recordIdColumn) => $"""
