@@ -1,5 +1,6 @@
 using CivicLens.Application.Publication;
 using CivicLens.Host.Components.Evidence;
+using CivicLens.Host.Components.Ui;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Host.Publication;
@@ -16,6 +17,18 @@ public static class PublishedRecordLabels
         PublishedRecordKind.Relationship => "Relationship",
         PublishedRecordKind.ExecutiveAction => "Executive action",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no label.")
+    };
+
+    public static IconName Icon(PublishedRecordKind kind) => kind switch
+    {
+        PublishedRecordKind.DocumentChange => IconName.DocumentChange,
+        PublishedRecordKind.Statement => IconName.Statements,
+        PublishedRecordKind.Action => IconName.Bill,
+        PublishedRecordKind.Brief => IconName.Brief,
+        PublishedRecordKind.Vote => IconName.Vote,
+        PublishedRecordKind.Relationship => IconName.Relationship,
+        PublishedRecordKind.ExecutiveAction => IconName.ExecutiveAction,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no icon.")
     };
 
     public const string NewestFirst = "Newest first";

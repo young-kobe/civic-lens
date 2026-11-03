@@ -4,7 +4,7 @@
 @using CivicLens.Publication.Contracts
 
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@Page.PagePath" Title="@Title" Description="@Description" RootPath="@Page.RootPath" Crumbs="Crumbs">
-    <PageHeader Title="@Page.Profile.Name" Lede="@Lede" Serif="true" Portrait="Portrait" Meta="Links" />
+    <PageHeader Title="@Page.Profile.Name" Lede="@Lede" Portrait="Portrait" Meta="Links" />
     @if (Page.Congresses.Length > 1)
     {
         <FilterTabs Label="@PublishedOfficialView.CongressTabsLabel(Page)" Tabs="PublishedOfficialView.CongressTabs(Page)" />
@@ -54,7 +54,7 @@
             }
             else
             {
-                <DataTable Roles="true" Items="Page.Pairs" Caption="@($"Reviewed links between statements of {Page.Profile.Name} and their bills or votes")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
+                <DataTable Roles="true" PagedRows="links" Items="Page.Pairs" Caption="@($"Reviewed links between statements of {Page.Profile.Name} and their bills or votes")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
                     <Head><TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.StatementDate</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.WhatTheySaid</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.Link</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.WhatTheyDid</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.TheirVote</TableCell></Head>
                     <Row Context="pair">
                         <TableCell Class="fit num" Label="@PublicColumn.StatementDate" SortValue="@(pair.StatementDay is { } day ? Moment.Iso(day) : "")">@PublishedOfficialView.StatementDay(pair)</TableCell>
@@ -80,7 +80,7 @@
                 }
                 @foreach (var withParty in profile.WithPartyByChamber.Where(withParty => !withParty.Breaks.IsEmpty))
                 {
-                    <DataTable Roles="true" Items="withParty.Breaks" Caption="@($"Votes of {Page.Profile.Name} against most {PublishedOfficialView.PartyOf(withParty)}")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
+                    <DataTable Roles="true" PagedRows="votes" Items="withParty.Breaks" Caption="@($"Votes of {Page.Profile.Name} against most {PublishedOfficialView.PartyOf(withParty)}")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
                         <Head><TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.Date</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.Vote</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.TheirVote</TableCell><TableCell Header Sort="SortKind.Text">Most @PublishedOfficialView.PartyOf(withParty)</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.Result</TableCell></Head>
                         <Row Context="vote">
                             <TableCell Class="fit num" Label="@PublicColumn.Date" SortValue="@Moment.Iso(vote.VotedOn)">@Moment.Day(vote.VotedOn)</TableCell>
@@ -115,13 +115,13 @@
                 }
             </div>
         }
-        <DataTable Roles="true" Items="Rows" RowClass="PublishedOfficialView.RowClass" RowFilterKeys="@(row => row.FilterKeys)" Caption="@($"Published records of {Page.Profile.Name}")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
+        <DataTable Roles="true" PagedRows="records" Items="Rows" RowClass="PublishedOfficialView.RowClass" RowFilterKeys="@(row => row.FilterKeys)" Caption="@($"Published records of {Page.Profile.Name}")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
             <Head><TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.Date</TableCell><TableCell Header Sort="SortKind.Text">Record</TableCell>@if (HasCast){<TableCell Header Sort="SortKind.Text">@PublicColumn.Cast</TableCell>}</Head>
             <Row Context="row">
                 <TableCell Class="fit num" Label="@PublicColumn.Date" SortValue="@Moment.Iso(row.Date)">@Moment.Day(row.Date)</TableCell>
                 <TableCell Main SortValue="@row.Headline">
                     <PublishedRecordTitle RecordId="@row.RecordId" RootPath="@Page.RootPath">@row.Headline</PublishedRecordTitle>
-                    <StatusBadge Text="@row.Badge" />
+                    <StatusBadge Text="@row.Badge" Icon="PublishedRecordLabels.Icon(row.Kind)" />
                     @if (row.Detail is not null)
                     {
                         <div class="muted small">@row.Detail</div>

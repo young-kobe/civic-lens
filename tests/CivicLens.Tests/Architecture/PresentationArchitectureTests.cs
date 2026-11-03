@@ -109,6 +109,13 @@ public sealed class PresentationArchitectureTests
         }
     }
 
+    [Fact]
+    public void EveryTableIsTheSharedDataTableSoPagingAndTheCardLayoutHaveOneOwner()
+    {
+        foreach (var file in Markup().Where(file => Path.GetFileName(file) != "DataTable.razor"))
+            Assert.DoesNotMatch(@"<table[\s>]", File.ReadAllText(file));
+    }
+
     private static IEnumerable<string> StyleSheets() =>
         Directory.GetFiles(Path.Combine(HostRoot, "wwwroot"), "*.css", SearchOption.AllDirectories);
 
