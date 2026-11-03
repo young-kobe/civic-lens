@@ -1,4 +1,3 @@
-using CivicLens.Collection.Contracts;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -106,7 +105,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     ADD CONSTRAINT ck_job_attempt_resolution CHECK ((outcome IS NULL) = (completed_at IS NULL) AND (completed_at IS NOT NULL OR error_code IS NULL AND retry_delay_ticks IS NULL AND robots_crawl_delay_milliseconds IS NULL)),
                     ADD CONSTRAINT ck_job_attempt_outcome CHECK (outcome IS NULL OR outcome IN ('Succeeded','RetryableFailure','PermanentFailure','Interrupted')),
                     ADD CONSTRAINT ck_job_attempt_retry_ticks CHECK (retry_delay_ticks IS NULL OR retry_delay_ticks >= 0),
-                    ADD CONSTRAINT ck_job_attempt_robots_delay CHECK (robots_crawl_delay_milliseconds IS NULL OR (robots_crawl_delay_milliseconds BETWEEN 0 AND {{CollectionProtocol.MaximumCrawlDelayMilliseconds}} AND outcome <> 'Interrupted'));
+                    ADD CONSTRAINT ck_job_attempt_robots_delay CHECK (robots_crawl_delay_milliseconds IS NULL OR (robots_crawl_delay_milliseconds BETWEEN 0 AND 922337203685000 AND outcome <> 'Interrupted'));
                 """);
         }
 
