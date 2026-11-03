@@ -87,14 +87,16 @@ internal sealed class PostgresDeadlineWakeup(string connectionString, string cha
     private static int TimeoutMilliseconds(long ticks) =>
         (int)Math.Clamp(Math.Ceiling(ticks / (double)TimeSpan.TicksPerMillisecond), 1, int.MaxValue);
 
-    private static async Task WaitForDatabaseClockAsync(NpgsqlConnection listener, long deadlineTicks, CancellationToken cancellationToken)
+    private async Task WaitForDatabaseClockAsync(NpgsqlConnection listener, long deadlineTicks, CancellationToken cancellationToken)
     {
         var now = await ReadDatabaseTicksAsync(listener, cancellationToken);
-        while (now < deadlineTicks)
+        while (now < deadlineTicks && !hasNotification)
         {
-            if (await listener.WaitAsync(TimeoutMilliseconds(deadlineTicks - now), cancellationToken)) return;
+            await listener.WaitAsync(TimeoutMilliseconds(deadlineTicks - now), cancellationToken);
             now = await ReadDatabaseTicksAsync(listener, cancellationToken);
         }
+        hasNotification = false;
+        if (notifiedDeadline <= deadlineTicks) notifiedDeadline = null;
     }
 
     public async ValueTask DisposeAsync() => await DisposeConnectionAsync();
