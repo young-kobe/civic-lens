@@ -4,6 +4,10 @@ html:has(body.public) { scroll-padding-top: var(--s3); }
 table[data-paged]:focus { outline: none; }
 .public .table .num, .public .table .time { font-variant-numeric: tabular-nums; }
 .public .panel { box-shadow: 0 0 0 1px var(--line); }
+.public .panel > .table-wrap:first-child { border-top-left-radius: var(--r-panel); border-top-right-radius: var(--r-panel); }
+.public .panel > .table-wrap:last-child { border-bottom-left-radius: var(--r-panel); border-bottom-right-radius: var(--r-panel); }
+.public .page-header-lede { margin-top: var(--s3); }
+.public .record-headline { font-family: var(--ui); font-weight: 800; letter-spacing: -.03em; }
 .public .page-header h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); font-weight: 800; letter-spacing: -.03em; }
 .public .panel-head h2 { font-size: var(--t-md); font-weight: 700; }
 .badge:has(.icon)::before { display: none; }
@@ -35,6 +39,7 @@ table[data-paged]:focus { outline: none; }
 .portrait-compact img, .portrait-compact .portrait-placeholder { border-radius: var(--r-control); }
 
 .officials-filters { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s3); }
+.officials-filters :is(select, input) { min-height: 44px; }
 .officials { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--s3); margin: 0; padding: 0; list-style: none; }
 .official-card { display: flex; align-items: center; gap: var(--s3); padding: var(--s3); border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--surface); }
 .official-card-text { display: grid; min-width: 0; }
@@ -93,7 +98,7 @@ table[data-paged]:focus { outline: none; }
     .public-main .table tr:hover { background: var(--raised); }
     .public-main .panel .table-wrap { padding: var(--s3); }
     .public-main .table td { display: block; width: auto; max-width: none; padding: 0; border: 0; text-align: left; white-space: normal; }
-    .public-main .table td[data-label]::before { content: attr(data-label) ": "; content: attr(data-label) ": " / ""; color: var(--muted); font-weight: 600; }
+    .public-main .table td[data-label]::before { content: attr(data-label) ": "; content: attr(data-label) ": " / ""; color: var(--muted); font-weight: 600; font-variant-numeric: normal; }
     .public-main .table .cell-main { order: -1; }
     .public-main .table td:empty::before { content: none; }
 }
