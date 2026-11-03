@@ -215,8 +215,8 @@ public sealed class RunCollectionJob(
             {
                 try
                 {
-                    var entry = await handoffs.LoadAsync(attempt.AttemptId, cancellationToken);
-                    if (entry.Request == attempt.Request)
+                    var entry = await LoadOrDiscardRefusedAsync(attempt.AttemptId, cancellationToken);
+                    if (entry?.Request == attempt.Request)
                     {
                         await verifier.VerifyAsync(entry.Request, entry.Receipt, Path.GetFullPath(artifactDirectory), cancellationToken);
                         var replay = await CollectionAttemptImporter.ImportAsync(attempt.AttemptId,
@@ -247,24 +247,23 @@ public sealed class RunCollectionJob(
         await using var recoveryLease = await handoffs.AcquireRecoveryLeaseAsync(cancellationToken);
         var handoffIds = await handoffs.ListAsync(cancellationToken);
         if (!handoffIds.Contains(attempt.AttemptId, StringComparer.Ordinal))
-        {
-            using var interruptionTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            return await lease.SettleAttemptAsync(attempt.AttemptId,
-                new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "ReceiptUnavailable"),
-                interruptionTimeout.Token);
-        }
+            return await SettleInterruptedAsync(lease, attempt.AttemptId, "ReceiptUnavailable");
 
-        PendingCollectionHandoff handoff;
+        PendingCollectionHandoff? handoff;
         try
         {
-            handoff = await handoffs.LoadAsync(attempt.AttemptId, cancellationToken);
-            if (handoff.Request != attempt.Request) return false;
-            await verifier.VerifyAsync(handoff.Request, handoff.Receipt, Path.GetFullPath(artifactDirectory), cancellationToken);
+            handoff = await LoadOrDiscardRefusedAsync(attempt.AttemptId, cancellationToken);
+            if (handoff is not null)
+            {
+                if (handoff.Request != attempt.Request) return false;
+                await verifier.VerifyAsync(handoff.Request, handoff.Receipt, Path.GetFullPath(artifactDirectory), cancellationToken);
+            }
         }
         catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException)
         {
             return false;
         }
+        if (handoff is null) return await SettleInterruptedAsync(lease, attempt.AttemptId, "HandoffRefused");
 
         if (!lease.IsOwned) return false;
         if (!await ImportReceiptAsync(attempt.AttemptId, handoff.Request, handoff.Receipt, cancellationToken))
@@ -277,6 +276,28 @@ public sealed class RunCollectionJob(
         try { await handoffs.DeleteAsync(attempt.AttemptId, settleHandoffTimeout.Token); }
         catch (Exception exception) when (exception is IOException or OperationCanceledException or UnauthorizedAccessException) { }
         return true;
+    }
+
+    private static async Task<bool> SettleInterruptedAsync(CollectionJobLeaseGuard lease, string attemptId, string errorCode)
+    {
+        using var interruptionTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        return await lease.SettleAttemptAsync(attemptId,
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, errorCode),
+            interruptionTimeout.Token);
+    }
+
+    private async Task<PendingCollectionHandoff?> LoadOrDiscardRefusedAsync(string attemptId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await handoffs.LoadAsync(attemptId, cancellationToken);
+        }
+        catch (InvalidDataException exception)
+        {
+            logger.LogError(exception, "The saved receipt of attempt {AttemptId} was refused and is removed, so the job fetches again.", attemptId);
+            await handoffs.DeleteAsync(attemptId, cancellationToken);
+            return null;
+        }
     }
 
     private async Task<bool> ImportReceiptAsync(string attemptId, CollectionRequest request,

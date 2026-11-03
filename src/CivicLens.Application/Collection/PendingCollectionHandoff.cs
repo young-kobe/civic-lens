@@ -6,18 +6,17 @@ namespace CivicLens.Application.Collection;
 public sealed record PendingCollectionHandoff(int Version, string AttemptId, CollectionRequest Request,
     CollectionResult Receipt)
 {
-    public const int ElapsedUnknownVersion = 1;
     public const int CurrentVersion = 2;
 
     public void Validate()
     {
-        if (Version is not (ElapsedUnknownVersion or CurrentVersion))
+        if (Version != CurrentVersion)
             throw new InvalidDataException($"Receipt handoff version {Version} is unsupported.");
         if (!IsValidAttemptId(AttemptId))
             throw new InvalidDataException("Receipt handoff attempt ID is invalid.");
         ArgumentNullException.ThrowIfNull(Request);
         ArgumentNullException.ThrowIfNull(Receipt);
-        if (Version == CurrentVersion && Receipt.ElapsedMilliseconds is null)
+        if (Receipt.ElapsedMilliseconds is null)
             throw new InvalidDataException("Receipt handoff version 2 needs an elapsed time.");
         Request.Validate();
         Receipt.ValidateAgainst(Request);

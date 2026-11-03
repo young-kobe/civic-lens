@@ -125,7 +125,7 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         await store.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("elapsed-range", request,
             Result(request.JobId, CollectionOutcome.Failed, Response: Metadata(404, null, null, null, []),
                 FailureCode: CollectionFailureCode.HttpError) with
-            { RequestCount = 2 }), default);
+            { RequestCount = 2, ElapsedMilliseconds = 10 }), default);
 
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -149,7 +149,7 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         await store.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("elapsed-cutoff", request,
             Result(request.JobId, CollectionOutcome.Failed, Response: Metadata(404, null, null, null, []),
                 FailureCode: CollectionFailureCode.HttpError) with
-            { RequestCount = 2 }), default);
+            { RequestCount = 2, ElapsedMilliseconds = 10 }), default);
 
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -164,7 +164,7 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
     }
 
     [Fact]
-    public async Task ARecoveredVersionOneHandoffStoresAnUnknownElapsedTime()
+    public async Task TheRecoveryCommandKeepsAVersionOneHandoffAsInvalidSoNoReceiptWithoutElapsedTimeIsImported()
     {
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         try
@@ -174,12 +174,11 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
                 VersionOneHandoff.Replace("ARTIFACTS", JsonSerializer.Serialize(Path.GetTempPath())[1..^1]));
 
             var completion = await new RecoverCollectionAttempts(handoffs, new CaptureArtifactVerifier(), store)
-                .ReplayAsync("legacy-elapsed", root);
+                .ReplayAllAsync(root);
 
-            Assert.True(completion.HandoffRemoved);
-            var stored = await store.GetAsync("legacy-elapsed", default);
-            Assert.NotNull(stored);
-            Assert.Null(stored.ElapsedMilliseconds);
+            Assert.Equal(CollectionRecoveryStatus.InvalidHandoff, Assert.Single(completion).Status);
+            Assert.Equal(["legacy-elapsed"], await handoffs.ListAsync(default));
+            Assert.Null(await store.GetAsync("legacy-elapsed", default));
         }
         finally { Directory.Delete(root, true); }
     }
