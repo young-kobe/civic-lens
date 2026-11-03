@@ -3528,7 +3528,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_publication_withdrawal_corrections_facts_unchanged", "note IS NULL OR NOT facts_unchanged");
 
-                            t.HasCheckConstraint("ck_publication_withdrawal_corrections_note", "note IS NULL OR char_length(note) BETWEEN 1 AND 500");
+                            t.HasCheckConstraint("ck_publication_withdrawal_corrections_note", "note IS NULL OR char_length(note) BETWEEN 1 AND 500 AND btrim(note) <> ''");
 
                             t.HasCheckConstraint("ck_publication_withdrawal_corrections_position", "\"position\" >= 0");
 
@@ -3579,7 +3579,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("publication_withdrawals", null, t =>
                         {
-                            t.HasCheckConstraint("ck_publication_withdrawals_note", "char_length(note) BETWEEN 1 AND 500");
+                            t.HasCheckConstraint("ck_publication_withdrawals_note", "char_length(note) BETWEEN 1 AND 500 AND btrim(note) <> ''");
 
                             t.HasCheckConstraint("ck_publication_withdrawals_range", "last_release IS NULL OR last_release >= first_release");
 

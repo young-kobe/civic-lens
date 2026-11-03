@@ -871,6 +871,8 @@ The command reads the manifest of the active release. It inserts a row for each 
 
 Until the backfill runs, a publish that adds a record of the active release stops with the message "Run releases first-published backfill". A guess could give one record two first times. The worker logs the error and tries again at its next wake. Run the backfill, and the next publish works. A rollback keeps the rows.
 
+The withdrawal tables add a second need. Every publish whose release lists a withdrawal, carried or new, also stops with the same message until the backfill runs. The database refuses a withdrawal row for a record that `published_records` lacks. On a deploy that adds the migration `PublicationWithdrawals`, do these steps in order: stop the worker, migrate, run `releases first-published backfill`, then start the worker.
+
 ### Take a record off the site
 
 Only the owner sees Take off site. It is on the editor of every record kind that releases publish, below the decision panel. The button shows only while the active release holds the record. Type a reason of 1 to 500 characters and press the button. The page then does these steps:

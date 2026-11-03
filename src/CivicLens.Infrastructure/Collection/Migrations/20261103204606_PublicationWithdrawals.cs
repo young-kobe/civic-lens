@@ -25,7 +25,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_publication_withdrawals", x => new { x.kind, x.record_id, x.first_release });
-                    table.CheckConstraint("ck_publication_withdrawals_note", "char_length(note) BETWEEN 1 AND 500");
+                    table.CheckConstraint("ck_publication_withdrawals_note", "char_length(note) BETWEEN 1 AND 500 AND btrim(note) <> ''");
                     table.CheckConstraint("ck_publication_withdrawals_range", "last_release IS NULL OR last_release >= first_release");
                     table.CheckConstraint("ck_publication_withdrawals_revision", "withdrawn_revision_number >= 1");
                     table.CheckConstraint("ck_publication_withdrawals_withdrawn_at_utc_ticks", "withdrawn_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
@@ -66,7 +66,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 {
                     table.PrimaryKey("PK_publication_withdrawal_corrections", x => new { x.kind, x.record_id, x.first_release, x.position });
                     table.CheckConstraint("ck_publication_withdrawal_corrections_facts_unchanged", "note IS NULL OR NOT facts_unchanged");
-                    table.CheckConstraint("ck_publication_withdrawal_corrections_note", "note IS NULL OR char_length(note) BETWEEN 1 AND 500");
+                    table.CheckConstraint("ck_publication_withdrawal_corrections_note", "note IS NULL OR char_length(note) BETWEEN 1 AND 500 AND btrim(note) <> ''");
                     table.CheckConstraint("ck_publication_withdrawal_corrections_position", "\"position\" >= 0");
                     table.CheckConstraint("ck_publication_withdrawal_corrections_published_at_utc_ticks", "published_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
                     table.CheckConstraint("ck_publication_withdrawal_corrections_revision", "replaced_revision_number >= 1");

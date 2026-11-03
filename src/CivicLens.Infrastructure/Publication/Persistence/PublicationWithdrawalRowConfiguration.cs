@@ -12,7 +12,7 @@ internal sealed class PublicationWithdrawalRowConfiguration : IEntityTypeConfigu
         {
             table.HasCheckConstraint("ck_publication_withdrawals_range", "last_release IS NULL OR last_release >= first_release");
             table.HasCheckConstraint("ck_publication_withdrawals_revision", "withdrawn_revision_number >= 1");
-            table.HasCheckConstraint("ck_publication_withdrawals_note", $"char_length(note) BETWEEN 1 AND {PublishedCorrection.MaximumNoteLength}");
+            table.HasCheckConstraint("ck_publication_withdrawals_note", $"char_length(note) BETWEEN 1 AND {PublishedCorrection.MaximumNoteLength} AND btrim(note) <> ''");
         });
         builder.HasKey(row => new { row.Kind, row.RecordId, row.FirstRelease });
         builder.Property(row => row.Kind).HasColumnName("kind").HasMaxLength(32).IsRequired();

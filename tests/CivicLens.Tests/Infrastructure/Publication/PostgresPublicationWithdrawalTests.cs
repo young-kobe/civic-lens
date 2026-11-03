@@ -102,7 +102,25 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
     }
 
     [Fact]
-    public async Task AReplayWritesNoSecondRowBecauseTheReleaseAlreadyExists()
+    public async Task AWithdrawalOfARolledBackReleaseOpensANewRowWhenALaterReleaseCarriesItAgain()
+    {
+        await SeedActionsAsync(A, B);
+        await PublishAsync(1, null, [A, B], added: [A, B]);
+        await SetStatusAsync(A, "ApprovalWithdrawn");
+        var withdrawal = Withdrawal(A, "Wrong.", First.AddDays(1));
+        await PublishAsync(2, 1, [B], withdrawn: [withdrawal]);
+        await SetStatusAsync(A, "Approved");
+        await PublishAsync(3, 2, [A, B], added: [A]);
+        await publications.ActivateAsync(2, (_, _) => Task.CompletedTask, default);
+
+        await PublishAsync(4, 2, [B], carried: [withdrawal]);
+
+        Assert.Equal(["2|2", "4|NULL"], await RangesAsync(A));
+        Assert.Equal(Json([withdrawal]), Json(await ReadWithdrawalsAsync(4)));
+    }
+
+    [Fact]
+    public async Task AReplayReturnsTheStoredSummaryAndWritesNoRow()
     {
         await SeedActionsAsync(A, B);
         await PublishAsync(1, null, [A, B], added: [A, B]);
@@ -120,6 +138,7 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
     [InlineData("ck_publication_withdrawals_range", "'action', 'KEY', 1, 5, 'Wrong.', 2, 1")]
     [InlineData("ck_publication_withdrawals_revision", "'action', 'KEY', 0, 5, 'Wrong.', 1, NULL")]
     [InlineData("ck_publication_withdrawals_note", "'action', 'KEY', 1, 5, '', 1, NULL")]
+    [InlineData("ck_publication_withdrawals_note", "'action', 'KEY', 1, 5, '   ', 1, NULL")]
     [InlineData("ck_publication_withdrawals_withdrawn_at_utc_ticks", "'action', 'KEY', 1, -1, 'Wrong.', 1, NULL")]
     public async Task TheWithdrawalTableRefusesEachBrokenRule(string check, string values)
     {
@@ -151,12 +170,15 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
         var noRelease = await Assert.ThrowsAsync<PostgresException>(() => InsertWithdrawalAsync($"'action', '{A}', 1, 5, 'Wrong.', 9, NULL"));
 
         Assert.Equal([PostgresErrorCodes.ForeignKeyViolation, PostgresErrorCodes.ForeignKeyViolation], [unpublished.SqlState, noRelease.SqlState]);
+        Assert.Equal(["FK_publication_withdrawals_published_records_kind_record_id", "FK_publication_withdrawals_publication_releases_first_release"],
+            [unpublished.ConstraintName!, noRelease.ConstraintName!]);
     }
 
     [Theory]
     [InlineData("ck_publication_withdrawal_corrections_position", "-1, 1, 5, NULL, false")]
     [InlineData("ck_publication_withdrawal_corrections_revision", "0, 0, 5, NULL, false")]
     [InlineData("ck_publication_withdrawal_corrections_note", "0, 1, 5, '', false")]
+    [InlineData("ck_publication_withdrawal_corrections_note", "0, 1, 5, '   ', false")]
     [InlineData("ck_publication_withdrawal_corrections_facts_unchanged", "0, 1, 5, 'Fixed.', true")]
     [InlineData("ck_publication_withdrawal_corrections_published_at_utc_ticks", "0, 1, -1, NULL, false")]
     public async Task TheCorrectionTableRefusesEachBrokenRule(string check, string values)

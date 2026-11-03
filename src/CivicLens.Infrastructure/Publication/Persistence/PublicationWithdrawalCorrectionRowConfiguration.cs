@@ -13,7 +13,7 @@ internal sealed class PublicationWithdrawalCorrectionRowConfiguration : IEntityT
             table.HasCheckConstraint("ck_publication_withdrawal_corrections_position", "\"position\" >= 0");
             table.HasCheckConstraint("ck_publication_withdrawal_corrections_revision", "replaced_revision_number >= 1");
             table.HasCheckConstraint("ck_publication_withdrawal_corrections_note",
-                $"note IS NULL OR char_length(note) BETWEEN 1 AND {PublishedCorrection.MaximumNoteLength}");
+                $"note IS NULL OR char_length(note) BETWEEN 1 AND {PublishedCorrection.MaximumNoteLength} AND btrim(note) <> ''");
             table.HasCheckConstraint("ck_publication_withdrawal_corrections_facts_unchanged", "note IS NULL OR NOT facts_unchanged");
         });
         builder.HasKey(row => new { row.Kind, row.RecordId, row.FirstRelease, row.Position });
