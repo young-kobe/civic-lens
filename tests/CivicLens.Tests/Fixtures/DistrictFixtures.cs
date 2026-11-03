@@ -9,9 +9,9 @@ internal static class DistrictFixtures
     public const string SourceId = "census-zcta-districts";
     public const string SourceUrl = "https://www2.census.gov/geo/docs/maps-data/data/rel2020/cd-sld/tab20_cd11920_zcta520_natl.txt";
 
-    // Excerpt of tab20_cd11920_zcta520_natl.txt from the U.S. Census Bureau (public domain, 17 U.S.C. 105), fetched 2026-11-03.
-    // The header with its byte order mark and the first two rows are copied from the file. The other rows are edited copies of
-    // those rows with other district and ZCTA values, so the Census values of those rows are not real.
+    // Excerpt of tab20_cd11920_zcta520_natl.txt from the U.S. Census Bureau (public domain, 17 U.S.C. 105).
+    // The header with its byte order mark and the first two rows are lines of the published file.
+    // The other rows are edited copies of those rows with other district and ZCTA values, so their Census values are not real.
     public static readonly string Text = "﻿" + ZctaDistrictParser.Header + "\n" + string.Join('\n',
         "2119035781135773|0101|Congressional District 1|18752973689|2274743296|G5200|N|||||||||558858619|1794806659",
         "2119035781135773|0101|Congressional District 1|18752973689|2274743296|G5200|N|221704258284549|36009|ZCTA5 36009|417245447|1545060|G6350|B5|S|4938464|0",
