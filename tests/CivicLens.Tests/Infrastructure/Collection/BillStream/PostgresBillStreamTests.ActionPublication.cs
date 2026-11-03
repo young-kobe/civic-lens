@@ -152,7 +152,7 @@ public sealed partial class PostgresBillStreamTests
                 PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),
                 PostgresVoteReviewStore.FromConnectionString(connectionString),
                 new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)), new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)),
-                PostgresExecutiveActionReviewStore.FromConnectionString(connectionString)),
+                PostgresExecutiveActionReviewStore.FromConnectionString(connectionString, TestCodeVersion.Current)),
             new PublicationCatalog(names, IssueConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System,
             new PruneReleases(store, releases, NullLogger<PruneReleases>.Instance));
 
@@ -236,7 +236,7 @@ public sealed partial class PostgresBillStreamTests
                 PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),
                 PostgresVoteReviewStore.FromConnectionString(connectionString),
                 new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)), new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)),
-                PostgresExecutiveActionReviewStore.FromConnectionString(connectionString)),
+                PostgresExecutiveActionReviewStore.FromConnectionString(connectionString, TestCodeVersion.Current)),
             new PublicationCatalog(names, IssueConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System,
             new PruneReleases(publications, releases, NullLogger<PruneReleases>.Instance));
         var summary = await publisher.ExecuteAsync(PublicationScenario.Owner,

@@ -37,7 +37,7 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        store = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        store = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         Directory.CreateDirectory(captureRoot);

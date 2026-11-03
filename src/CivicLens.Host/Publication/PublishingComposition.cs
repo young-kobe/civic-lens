@@ -23,7 +23,7 @@ internal sealed record PublishingComposition(AnalysisStage Stage, IWorkerWakeup 
         if (string.IsNullOrWhiteSpace(releaseRoot))
             throw new ArgumentException("Publishing needs CIVIC_LENS_RELEASE_DIRECTORY.");
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, codeVersion);
-        var (publish, loaders) = PublicationComposition.Create(connectionString, publications, new FileReleaseDirectory(releaseRoot),
+        var (publish, loaders) = PublicationComposition.Create(connectionString, codeVersion, publications, new FileReleaseDirectory(releaseRoot),
             collection, PublicationComposition.RequireIssues(issues), artifactRoot, loggers);
         var wakeup = PostgresPublishingWakeup.FromConnectionString(connectionString, PublishApprovedRecords.ReleaseGap);
         var publishApproved = new PublishApprovedRecords(publish, publications, loaders, loggers.CreateLogger<PublishApprovedRecords>(), beat, TimeProvider.System, wakeup);

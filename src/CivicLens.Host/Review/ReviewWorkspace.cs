@@ -242,7 +242,7 @@ internal static class ReviewWorkspace
         ConfigureStatementReview(services, contexts, issues);
         ConfigureActionReview(services, contexts);
         ConfigureVoteReview(services, contexts);
-        ConfigureExecutiveActionReview(services, contexts);
+        ConfigureExecutiveActionReview(services, contexts, codeVersion);
         ConfigureRelationshipReview(services, contexts);
         ConfigureBriefReview(services, contexts);
         ConfigureReportReview(services, contexts);
@@ -264,10 +264,10 @@ internal static class ReviewWorkspace
         else
         {
             services.AddScoped(provider => new GetRecentActivity(provider.GetRequiredService<IDocumentChangeReviewStore>(),
-                PostgresCollectionJobStore.FromConnectionString(connectionString),
+                PostgresCollectionJobStore.FromConnectionString(connectionString, codeVersion),
                 CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString)));
             services.AddScoped(_ => new CollectionWorkspace(collection,
-                PostgresCollectionJobStore.FromConnectionString(connectionString),
+                PostgresCollectionJobStore.FromConnectionString(connectionString, codeVersion),
                 PostgresCollectionAttemptStore.FromConnectionString(connectionString),
                 CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString)));
             if (configuredIssues is not null) ConfigurePublication(services, connectionString, codeVersion, collection, configuredIssues);
@@ -311,9 +311,10 @@ internal static class ReviewWorkspace
         services.AddScoped<GetVoteReview>();
     }
 
-    private static void ConfigureExecutiveActionReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
+    private static void ConfigureExecutiveActionReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts,
+        CodeVersion codeVersion)
     {
-        services.AddSingleton<IExecutiveActionReviewStore>(new PostgresExecutiveActionReviewStore(contexts));
+        services.AddSingleton<IExecutiveActionReviewStore>(new PostgresExecutiveActionReviewStore(contexts, codeVersion));
         services.AddScoped<DecideExecutiveActionReview>();
         services.AddScoped<GetExecutiveActionReview>();
     }
@@ -356,7 +357,7 @@ internal static class ReviewWorkspace
         services.AddScoped(_ => new ListBlockedPublished(publications, releases, new BlockedPublishedRecords(publications, releases)));
         services.AddSingleton(provider =>
         {
-            var parts = PublicationComposition.Create(connectionString, publications, releases, collection, issues,
+            var parts = PublicationComposition.Create(connectionString, codeVersion, publications, releases, collection, issues,
                 PublicationComposition.RequireArtifactRoot(), provider.GetRequiredService<ILoggerFactory>());
             return new TakeOffSite(parts.Publish, publications, releases, parts.Loaders, provider.GetRequiredService<ILogger<TakeOffSite>>());
         });

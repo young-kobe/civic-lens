@@ -136,7 +136,7 @@ if (args is [] or ["--help"] or ["help"])
 CodeVersion codeVersion;
 try
 {
-    codeVersion = BuildCodeVersion.ReadFor(args, Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY"), typeof(Program).Assembly);
+    codeVersion = BuildCodeVersion.ReadFor(args, typeof(Program).Assembly);
 }
 catch (InvalidOperationException exception)
 {
@@ -205,7 +205,7 @@ try
             throw new ArgumentException("Worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.");
         var evidenceConcurrency = EvidenceProcessingConfiguration.ReadConcurrency();
         var collectionConcurrency = CollectionLaneConfiguration.ReadConcurrency();
-        var jobs = CreateJobs();
+        var jobs = CreateJobs(codeVersion);
         var attempts = CreateDatabase();
         var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!;
         var queue = PostgresCollectionWorkerQueue.FromConnectionString(connectionString);
@@ -365,7 +365,7 @@ try
     if (BillBackfillCommand.Matches(args))
     {
         var (_, owner) = OwnerCommand.ReadEnvironment();
-        var jobs = CreateJobs();
+        var jobs = CreateJobs(codeVersion);
         var responses = new ApiResponseReader(CreateDatabase(), new CaptureBodyReader());
         var artifactRoot = PublicationComposition.RequireArtifactRoot();
         executing = true;
@@ -407,7 +407,7 @@ try
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, codeVersion);
         var releases = new FileReleaseDirectory(releaseRoot);
         using var loggers = CreateLoggers();
-        var (publish, _) = PublicationComposition.Create(connectionString, publications, releases, publishConfiguration, issueConfiguration,
+        var (publish, _) = PublicationComposition.Create(connectionString, codeVersion, publications, releases, publishConfiguration, issueConfiguration,
             artifactRoot, loggers);
         executing = true;
         var blocked = new BlockedPublishedRecords(publications, releases);
@@ -443,7 +443,7 @@ try
     {
         var config = ConfigurationFile.ReadCollection(discoveryConfigPath);
         var source = new ConfiguredCollectionSource(config, discoverySourceId, admissionAsOf);
-        var jobs = CreateJobs();
+        var jobs = CreateJobs(codeVersion);
         executing = true;
         return await DiscoveryCommand.AdmitAsync(jobs, source, discoveryAttemptId, admissionKey, cancellation.Token);
     }
@@ -452,7 +452,7 @@ try
     {
         var config = ConfigurationFile.ReadCollection(configPath);
         var source = new ConfiguredCollectionSource(config, sourceId, admissionAsOf);
-        var jobs = CreateJobs();
+        var jobs = CreateJobs(codeVersion);
         executing = true;
         return await CollectionJobCommand.EnqueueAsync(jobs, source, idempotencyKey, cancellation.Token);
     }
@@ -460,7 +460,7 @@ try
     if (args[0] == "jobs")
     {
         CollectionJobCommand.ValidateArguments(args);
-        var jobs = CreateJobs();
+        var jobs = CreateJobs(codeVersion);
         executing = true;
         return await CollectionJobCommand.ExecuteAsync(args, jobs, cancellation.Token);
     }
@@ -546,9 +546,9 @@ static PostgresCollectionAttemptStore CreateDatabase()
     return PostgresCollectionAttemptStore.FromConnectionString(connectionString);
 }
 
-static PostgresCollectionJobStore CreateJobs()
+static PostgresCollectionJobStore CreateJobs(CodeVersion codeVersion)
 {
     var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
     if (string.IsNullOrWhiteSpace(connectionString)) throw new ArgumentException("CIVIC_LENS_DATABASE is required.");
-    return PostgresCollectionJobStore.FromConnectionString(connectionString);
+    return PostgresCollectionJobStore.FromConnectionString(connectionString, codeVersion);
 }

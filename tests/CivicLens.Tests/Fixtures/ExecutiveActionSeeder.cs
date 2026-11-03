@@ -16,7 +16,7 @@ internal sealed class ExecutiveActionSeeder
     public ExecutiveActionSeeder(string connectionString, string captureRoot)
     {
         this.connectionString = connectionString;
-        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var documents = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         Directory.CreateDirectory(captureRoot);
         var candidates = new StatementCandidateSeeder(PostgresCollectionAttemptStore.FromConnectionString(connectionString), documents,

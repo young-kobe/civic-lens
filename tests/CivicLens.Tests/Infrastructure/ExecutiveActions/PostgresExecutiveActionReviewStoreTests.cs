@@ -33,7 +33,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        store = PostgresExecutiveActionReviewStore.FromConnectionString(connectionString);
+        store = PostgresExecutiveActionReviewStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         executiveActions = new ExecutiveActionSeeder(connectionString, captureRoot);
     }
 
@@ -116,6 +116,25 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         var review = (await store.GetAsync(recordId, default))!.Review;
         Assert.Equal(1, review.CurrentRevision.RevisionNumber);
         Assert.Equal(ReviewStatus.Rejected, review.CurrentStatus);
+    }
+
+    [Fact]
+    public async Task AnAdmittedRevisionStoresTheBuildShaBecauseTheCodeThatWroteTheFactsMustBeTraceable()
+    {
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
+
+        Assert.Equal(TestCodeVersion.Sha, await ScalarAsync($"SELECT code_version FROM executive_action_revisions WHERE record_id = '{recordId}' AND revision_number = 1"));
+    }
+
+    [Fact]
+    public async Task ARevisionAppendedByAPersonApprovalStoresTheBuildShaBecauseCodeWritesItAndNotThePerson()
+    {
+        var recordId = await RejectedRecordWithTwoWaitingCorrectionsAsync();
+        var changes = await DecideAsync(recordId, 4, ReviewDecisionKind.RequestChanges, "Look again.");
+
+        await DecideAsync(recordId, 5, ReviewDecisionKind.Approve, "Looked again.", [(await ConcernIdsAsync(recordId)).Single(id => id != changes.DecisionId), changes.DecisionId]);
+
+        Assert.Equal(TestCodeVersion.Sha, await ScalarAsync($"SELECT code_version FROM executive_action_revisions WHERE record_id = '{recordId}' AND revision_number = 2"));
     }
 
     [Fact]

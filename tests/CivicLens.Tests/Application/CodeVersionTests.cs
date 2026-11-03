@@ -50,33 +50,26 @@ public sealed class CodeVersionTests
     [InlineData("worker", "collector.dll", "artifacts")]
     [InlineData("worker", "collector.dll", "artifacts", "--once")]
     [InlineData("releases", "publish", "key")]
-    public void AWorkerAndAReleasePublishRefuseToStartWithoutAValidShaSoNoCodeWriteFailsLaterAfterAModelCall(params string[] args)
+    [InlineData("review")]
+    [InlineData("review", "5000")]
+    public void AWorkerAReleasePublishAndAReviewServerRefuseToStartWithoutAValidShaSoNoCodeWriteFailsLaterAfterAModelCall(params string[] args)
     {
         var failure = Assert.Throws<InvalidOperationException>(() =>
-            BuildCodeVersion.ReadFor(args, null, TestCodeVersion.AssemblyVersioned("1.0.0+abc123")));
+            BuildCodeVersion.ReadFor(args, TestCodeVersion.AssemblyVersioned("1.0.0+abc123")));
 
         Assert.Contains("'abc123'", failure.Message);
-        Assert.Throws<InvalidOperationException>(() => BuildCodeVersion.ReadFor(args, null, TestCodeVersion.AssemblyVersioned("1.0.0")));
-        Assert.Equal(Sha, BuildCodeVersion.ReadFor(args, null, TestCodeVersion.AssemblyVersioned($"1.0.0+{Sha}")).Sha);
+        Assert.Throws<InvalidOperationException>(() => BuildCodeVersion.ReadFor(args, TestCodeVersion.AssemblyVersioned("1.0.0")));
+        Assert.Equal(Sha, BuildCodeVersion.ReadFor(args, TestCodeVersion.AssemblyVersioned($"1.0.0+{Sha}")).Sha);
     }
 
     [Theory]
     [InlineData("worker", "health")]
     [InlineData("releases", "list")]
     [InlineData("releases", "activate", "1")]
-    [InlineData("review")]
     public void ACommandThatWritesNoCodeRevisionOrReleaseStartsWithoutAValidSha(params string[] args)
     {
-        var codeVersion = BuildCodeVersion.ReadFor(args, null, TestCodeVersion.AssemblyVersioned("1.0.0"));
+        var codeVersion = BuildCodeVersion.ReadFor(args, TestCodeVersion.AssemblyVersioned("1.0.0"));
 
         Assert.Throws<InvalidOperationException>(() => codeVersion.Sha);
-    }
-
-    [Fact]
-    public void AReviewServerThatCanTakeARecordOffSiteRefusesToStartWithoutAValidShaSoNoWithdrawalStopsHalfway()
-    {
-        Assert.Throws<InvalidOperationException>(() =>
-            BuildCodeVersion.ReadFor(["review"], "/releases", TestCodeVersion.AssemblyVersioned("1.0.0")));
-        Assert.Equal(Sha, BuildCodeVersion.ReadFor(["review", "5000"], "/releases", TestCodeVersion.AssemblyVersioned($"1.0.0+{Sha}")).Sha);
     }
 }

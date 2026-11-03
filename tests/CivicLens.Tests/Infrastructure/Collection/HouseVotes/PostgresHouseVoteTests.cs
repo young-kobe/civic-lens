@@ -30,7 +30,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        store = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        store = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var documents = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         Directory.CreateDirectory(captureRoot);
         var seeder = new StatementCandidateSeeder(PostgresCollectionAttemptStore.FromConnectionString(connectionString), documents,

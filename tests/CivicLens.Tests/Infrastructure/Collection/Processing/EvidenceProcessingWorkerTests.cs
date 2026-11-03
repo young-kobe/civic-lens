@@ -43,7 +43,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         processing = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
         extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
