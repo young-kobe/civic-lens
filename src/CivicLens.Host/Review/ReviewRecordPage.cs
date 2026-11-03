@@ -105,7 +105,7 @@ public abstract class ReviewRecordPage : ComponentBase
     protected async Task<string?> RunCommandAsync(Func<Task<string>> command, ReviewFailureMessages messages,
         Func<Task> reloadAfterConflict)
     {
-        var (target, failure) = await ReviewCommand.RunAsync(command, HttpContext.Response, Logger, RequestAborted);
+        var (target, failure, detail) = await ReviewCommand.RunAsync(command, HttpContext.Response, Logger, RequestAborted);
         switch (failure)
         {
             case ReviewCommandFailure.AccessDenied:
@@ -118,8 +118,8 @@ public abstract class ReviewRecordPage : ComponentBase
             case ReviewCommandFailure.NothingToSave:
                 error = new NothingToSaveException().Message;
                 break;
-            case ReviewCommandFailure.ReversalRefused:
-                error = new ReversalRefusedException().Message;
+            case ReviewCommandFailure.ApprovalStale:
+                error = detail;
                 break;
             case ReviewCommandFailure.CycleFull:
                 error = new ReviewCycleFullException().Message;

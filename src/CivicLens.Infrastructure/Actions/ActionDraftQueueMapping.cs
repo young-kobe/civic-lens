@@ -51,6 +51,8 @@ internal sealed class ActionDraftQueueMapping(Func<CollectionAttemptDbContext, s
     {
         if (settlement.Run is null && settlement.Checkpoint.ErrorCode is ActionDraftErrorCodes.Unchanged or ActionDraftErrorCodes.NoTrackedOfficial)
             throw new ArgumentException("A bypassed settlement needs its run.", nameof(settlement));
+        if (settlement.Run is { Reason: ActionDraftErrorCodes.RecordRejected } refusedRun && settlement.Checkpoint is not ActionDraftCheckpoint { Revision: not null })
+            return await ConfirmRefusalAsync(db, row, settlement, refusedRun, cancellationToken);
         if (settlement.Checkpoint is not ActionDraftCheckpoint { Revision: { } revision } checkpoint || settlement.Run is not { } run)
             return settlement;
         if (run.Run.Outcome is not (AnalysisRunOutcome.Drafted or AnalysisRunOutcome.Bypassed))
@@ -71,5 +73,20 @@ internal sealed class ActionDraftQueueMapping(Func<CollectionAttemptDbContext, s
             RetryDelay = AnalysisPolicy.RetryDelay(row.Attempts),
             Revision = null
         }, discarded);
+    }
+
+    // The step read the record as rejected before it settled. A person may have changed it since, so the mark needs the review key.
+    private static async Task<AnalysisSettlement<ActionDraftRun>> ConfirmRefusalAsync(CollectionAttemptDbContext db, ActionAnalysisRow row,
+        AnalysisSettlement<ActionDraftRun> settlement, ActionDraftRun refusedRun, CancellationToken cancellationToken)
+    {
+        await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.ActionReview, cancellationToken);
+        if (await ActionDraftRows.IsRejectedForCandidateAsync(db, row.CandidateId, cancellationToken)) return settlement;
+        row.RetryOfRunId = null;
+        return new(settlement.Checkpoint with
+        {
+            Status = AnalysisState.RetryWaiting,
+            ErrorCode = ActionDraftErrorCodes.RecordRejected,
+            RetryDelay = AnalysisPolicy.RetryDelay(row.Attempts)
+        }, refusedRun with { Reason = null });
     }
 }

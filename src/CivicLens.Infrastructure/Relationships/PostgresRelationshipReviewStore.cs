@@ -65,7 +65,8 @@ public sealed class PostgresRelationshipReviewStore(IDbContextFactory<Collection
     {
         current.ValidateForApproval();
         if ((await RelationshipCitedReader.FindChangedAsync(db, [current.Statement, current.Target], cancellationToken)).Count > 0)
-            throw new ArgumentException("Approval needs the cited statement and the cited target to be at their approved revisions.");
+            throw new StaleApprovalException("Approval needs the cited statement and the cited target to be at their approved revisions. A cited record changed. " +
+                "Do these steps. 1. Press Request changes. 2. Ask the owner to run the command: relationships draft refresh. 3. Approve the new draft when it appears.");
     }
 
     public async Task<RelationshipReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken)

@@ -9,4 +9,7 @@ public interface IActionDraftStore : IAnalysisQueueStore<ActionDraftRun, ActionD
     Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken);
 
     Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken);
+
+    /// <summary>Requeues the candidates that the worker refused while their record was rejected.</summary>
+    Task<int> RequeueRefusedAsync(CancellationToken cancellationToken);
 }

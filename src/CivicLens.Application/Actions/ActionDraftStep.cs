@@ -35,9 +35,6 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
             return await attempt.CompleteAsync(State.Blocked, read.ErrorCode!, cancellationToken);
         var choice = BillIssueChoice.For(snapshot.Bill.PolicyArea, snapshot.Subjects, BillGate.DayOf(snapshot.Bill.UpdateDate), issueConfiguration);
         attempt.ContextJson = ActionDraftPrompt.SerializeContext(snapshot, choice, issues.Id);
-        if (evidence.IsRejected)
-            return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken,
-                ActionDraftErrorCodes.RecordRejected);
         if (snapshot.Sponsorships.IsEmpty)
             return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.NoTrackedOfficial, cancellationToken);
         if (snapshot.Sponsorships.Length > ActionDraftRevision.MaximumSponsorships)
@@ -46,13 +43,17 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
             return await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.TitleTooLong, cancellationToken);
         var policyAreaId = issueConfiguration.PolicyAreaIdFor(snapshot.Bill.PolicyArea);
         var context = new ActionDraftContext(evidence, snapshot, choice, policyAreaId, issues.Id);
-        return context.ChangeSinceCurrent() switch
+        var change = context.ChangeSinceCurrent();
+        if (evidence.IsRejected)
+            return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken,
+                change == ActionChange.None ? null : ActionDraftErrorCodes.RecordRejected);
+        return change switch
         {
             ActionChange.None =>
                 await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken),
             ActionChange.SponsorshipsOnly => await SettleRevisionWithoutCallAsync(attempt, context, ActionDraftErrorCodes.SponsorshipsChanged,
                 ActionDraftResolver.CopyText, cancellationToken),
-            var change => await DraftOrWriteAsync(attempt, context, change, cancellationToken)
+            _ => await DraftOrWriteAsync(attempt, context, change, cancellationToken)
         };
     }
 

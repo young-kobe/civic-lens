@@ -23,9 +23,9 @@ public static class ExecutiveActionRevisions
             Ordered(notices));
     }
 
-    /// <summary>The next revision keeps the original facts and adds the notice.</summary>
-    public static ExecutiveActionRevision Add(ExecutiveActionRevision current, DateTimeOffset createdAtUtc, ExecutiveActionNotice notice) =>
-        current with { RevisionNumber = current.RevisionNumber + 1, CreatedAtUtc = createdAtUtc, Notices = Ordered([.. current.Notices, notice]) };
+    /// <summary>The next revision keeps the original facts and adds the notices.</summary>
+    public static ExecutiveActionRevision Add(ExecutiveActionRevision current, DateTimeOffset createdAtUtc, params IEnumerable<ExecutiveActionNotice> notices) =>
+        current with { RevisionNumber = current.RevisionNumber + 1, CreatedAtUtc = createdAtUtc, Notices = Ordered([.. current.Notices, .. notices]) };
 
     public static ExecutiveActionNotice NoticeOf(FederalRegisterEvidence correction)
     {

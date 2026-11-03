@@ -65,6 +65,13 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Blocked, errorCode, null, null, cancellationToken);
 
+    public Task<int> RequeueRefusedAsync(CancellationToken cancellationToken) =>
+        queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
+        {
+            var refused = await ActionDraftRows.RefusedCandidateIdsAsync(db, [.. settled.Select(row => row.CandidateId)], token);
+            return settled.Where(row => refused.Contains(row.CandidateId));
+        }, cancellationToken);
+
     public Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
         {

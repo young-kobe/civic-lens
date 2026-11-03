@@ -166,9 +166,43 @@ public sealed partial class PostgresHouseVoteTests
         await SettleAsync(second, await RevisionAsync(second, 2));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_analysis_runs WHERE reason = 'recordRejected'"));
 
-        await Assert.ThrowsAsync<ReversalRefusedException>(() => DecideAsync(recordId, 1, 1, ReviewDecisionKind.Approve));
+        var refused = await Assert.ThrowsAsync<StaleApprovalException>(() => DecideAsync(recordId, 1, 1, ReviewDecisionKind.Approve));
 
+        Assert.Contains("votes draft requeue --refused", refused.Message, StringComparison.Ordinal);
         Assert.Equal("Rejected", await ScalarAsync($"SELECT review_status FROM vote_drafts WHERE record_id = '{recordId}'"));
+    }
+
+    [Fact]
+    public async Task RequestChangesThenApproveAndAPersonEditAreRefusedToo()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        await SettleAsync(second, await RevisionAsync(second, 2));
+        var changes = await DecideAsync(recordId, 1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
+
+        await Assert.ThrowsAsync<StaleApprovalException>(() => new DecideVoteReview(VoteReviews()).ExecuteAsync(Reviewer,
+            new(recordId, 1, 2, ReviewDecisionKind.Approve, "Looked again.", [changes.DecisionId], Guid.NewGuid().ToString("N"))));
+        var edited = await SaveAsync(recordId, 1, SuggestionChoice.Keep, "save-2");
+        await Assert.ThrowsAsync<StaleApprovalException>(() => new DecideVoteReview(VoteReviews()).ExecuteAsync(Reviewer,
+            new(recordId, edited.RevisionNumber, 2, ReviewDecisionKind.Approve, "Looked again.", [changes.DecisionId], Guid.NewGuid().ToString("N"))));
+    }
+
+    [Fact]
+    public async Task TheRequeueCommandSendsOnlyTheRefusedVoteBackAndOnlyTheOwnerRunsIt()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        await SettleAsync(second, await RevisionAsync(second, 2));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new RequeueRefusedVoteDrafts(VoteStore()).ExecuteAsync(Reviewer));
+        Assert.Equal(1, await new RequeueRefusedVoteDrafts(VoteStore()).ExecuteAsync(new ReviewActor("auth0|owner", ReviewRole.Owner)));
+        Assert.Equal(0, await new RequeueRefusedVoteDrafts(VoteStore()).ExecuteAsync(new ReviewActor("auth0|owner", ReviewRole.Owner)));
     }
 
     [Fact]

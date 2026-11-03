@@ -3,6 +3,7 @@ using CivicLens.Application.Review;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Actions.Persistence;
+using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
 using CivicLens.Infrastructure.Review;
@@ -41,18 +42,32 @@ internal static class ActionDraftRows
                 newer.Congress == candidate.Congress && newer.BillType == candidate.BillType && newer.BillNumber == candidate.BillNumber)
             .Where(ActionCandidateInputs.Supersedes(candidate.UpdateDate.UtcTicks, candidate.IncludesSummaries, candidate.IncludesSubjects));
 
-    /// <summary>Refuses to reverse a rejection when the worker refused a newer candidate, because the old revision holds old facts.
-    /// The refusal shows in the <c>reason</c> column of the run.</summary>
-    public static async Task RequireNoRefusedNewerCandidateAsync(CollectionAttemptDbContext db, ActionDraftRow draft, CancellationToken cancellationToken)
+    /// <summary>Refuses a person approval while the worker has refused a newer candidate, because the revision holds old facts. The refusal
+    /// shows in the <c>reason</c> column of the latest run of that candidate.</summary>
+    internal static async Task RequireNoRefusedNewerCandidateAsync(CollectionAttemptDbContext db, ActionDraftRow draft, CancellationToken cancellationToken)
     {
         var current = await db.Set<ActionCandidateRow>().AsNoTracking().SingleOrDefaultAsync(row => row.CandidateId == draft.CandidateId, cancellationToken);
         if (current is null) return;
         var candidate = new ActionDraftCandidate(current.CandidateId, draft.RecordId, current.SourceId, current.Congress, current.BillType,
             current.BillNumber, new DateTimeOffset(current.UpdateDateUtcTicks, TimeSpan.Zero), current.IncludesSummaries, current.IncludesSubjects);
-        var refused = await NewerCandidates(db, candidate).AnyAsync(newer => db.Set<ActionAnalysisRunRow>().Any(run =>
-            run.CandidateId == newer.CandidateId && run.Task == ActionDraftTask.Task && run.Reason == ActionDraftErrorCodes.RecordRejected), cancellationToken);
-        if (refused) throw new ReversalRefusedException();
+        var newer = await NewerCandidates(db, candidate).Select(row => row.CandidateId).ToArrayAsync(cancellationToken);
+        if ((await RefusedCandidateIdsAsync(db, newer, cancellationToken)).Length > 0) throw new StaleApprovalException(StaleApprovalMessage);
     }
+
+    internal const string StaleApprovalMessage = "A newer update of this bill arrived while the record was rejected, so approving it now would publish old facts. " +
+        "Do these steps. 1. If the record is still rejected, press Request changes. 2. Ask the owner to run the command: actions draft requeue --refused. " +
+        "3. Approve the new draft when it appears.";
+
+    /// <summary>The candidates whose latest run was refused because the record was rejected. A later run clears the mark.</summary>
+    internal static Task<string[]> RefusedCandidateIdsAsync(CollectionAttemptDbContext db, string[] candidateIds, CancellationToken cancellationToken) =>
+        AnalysisRunLookup.Latest<ActionAnalysisRunRow>(db, ActionDraftTask.Task, nameof(ActionAnalysisRunRow.CandidateId), candidateIds)
+            .Where(run => run.Reason == ActionDraftErrorCodes.RecordRejected).Select(run => run.CandidateId).ToArrayAsync(cancellationToken);
+
+    /// <summary>True while the draft of the bill of this candidate is rejected.</summary>
+    internal static Task<bool> IsRejectedForCandidateAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken) =>
+        db.Set<ActionDraftRow>().AsNoTracking().AnyAsync(draft => draft.ReviewStatus == ReviewStatus.Rejected &&
+            db.Set<ActionCandidateRow>().Any(candidate => candidate.CandidateId == candidateId && candidate.SourceId == draft.SourceId &&
+                candidate.Congress == draft.Congress && candidate.BillType == draft.BillType && candidate.BillNumber == draft.BillNumber), cancellationToken);
 
     public static async Task<ActionDraftRevision?> ReadCurrentAsync(CollectionAttemptDbContext db, string recordId,
         CancellationToken cancellationToken)

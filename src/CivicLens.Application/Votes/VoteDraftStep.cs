@@ -32,9 +32,6 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
             return await attempt.CompleteAsync(State.Blocked, read.ErrorCode!, cancellationToken);
         var choice = BillIssueChoice.For(snapshot.PolicyArea, snapshot.Subjects, snapshot.Day, issueConfiguration);
         attempt.ContextJson = VoteDraftPrompt.SerializeContext(snapshot, choice, issues.Id);
-        if (evidence.IsRejected)
-            return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken,
-                VoteDraftErrorCodes.RecordRejected);
         if (snapshot.Members.IsEmpty)
             return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.NoTrackedMember, cancellationToken);
         if (snapshot.Members.Length > VoteDraftRevision.MaximumMembers)
@@ -44,7 +41,11 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
         if (HasTooLongField(evidence, snapshot))
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.FieldTooLong, cancellationToken);
         var context = new VoteDraftContext(evidence, snapshot, choice, issues.Id);
-        return context.ChangeSinceCurrent() switch
+        var change = context.ChangeSinceCurrent();
+        if (evidence.IsRejected)
+            return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken,
+                change == VoteChange.None ? null : VoteDraftErrorCodes.RecordRejected);
+        return change switch
         {
             VoteChange.None => await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken),
             VoteChange.MemberVotesOnly => await CopyTextAsync(attempt, context, VoteDraftErrorCodes.MemberVotesChanged, cancellationToken),

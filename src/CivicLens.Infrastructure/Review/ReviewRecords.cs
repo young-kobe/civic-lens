@@ -12,7 +12,7 @@ namespace CivicLens.Infrastructure.Review;
 /// <summary>The shared store core. Reads hold one review cycle: the current revision, the last approved revision, and the
 /// decisions since that approval.</summary>
 internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevision>(string lockKey, string draftName,
-    string recordIdProperty, Action<TDraftRow, TRevision>? revised = null, ReversalRules<TDraftRow>? reversal = null)
+    string recordIdProperty, Action<TDraftRow, TRevision>? revised = null, PersonApprovalRules<TDraftRow>? personApproval = null)
     where TDraftRow : class, IReviewDraftRow
     where TRevisionRow : class, IReviewRevisionRow
     where TDecisionRow : class, IReviewDecisionRow, new()
@@ -111,7 +111,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     /// A failed approval check keeps its message as the held reason of the draft. The caller runs
     /// <see cref="AfterCodeApprovalAsync"/> once the rest of the transaction rows are tracked.</summary>
     public async Task AppendCodeApprovedAsync(CollectionAttemptDbContext db, TDraftRow draft, TRevision revision, TRevisionRow row,
-        ImmutableArray<ReviewDecision> cycle, Func<Task<ApprovalCheck>> approvalChecks)
+        ImmutableArray<ReviewDecision> cycle, Func<Task<ApprovalCheck>> approvalChecks, string? correctionNote = null)
     {
         AppendRevision(db, draft, revision, row, cycle);
         if (!ReviewPolicy.GetUnresolvedConcerns(cycle).IsEmpty || revision is IHeadlineSummaryRevision { TextOrigin: ReviewTextOrigin.Person })
@@ -123,7 +123,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             return;
         }
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), draft.RecordId, revision.RevisionNumber, draft.ReviewStateVersion + 1,
-            ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, null, [], new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero));
+            ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, null, [], new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero), correctionNote);
         ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, cycle, decision);
         RecordDecision(db, draft, cycle, decision);
     }
@@ -197,11 +197,11 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             expectedReviewStateVersion, decision);
         ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, history.Decisions, decision);
         await validateDecision(db, draft, history);
-        var reverses = decision.Kind == ReviewDecisionKind.Approve && history.CurrentStatus == ReviewStatus.Rejected;
-        if (reverses && reversal?.Check is { } check) await check(db, draft, cancellationToken);
+        var approves = decision.Kind == ReviewDecisionKind.Approve;
+        if (approves && personApproval?.Check is { } check) await check(db, draft, cancellationToken);
         RecordDecision(db, draft, history.Decisions, decision);
         await afterDecision(db, draft.RecordId, decision.RevisionNumber, cancellationToken);
-        if (reverses && reversal?.Apply is { } apply) await apply(db, draft, decision.CreatedAtUtc, cancellationToken);
+        if (approves && personApproval?.Apply is { } apply) await apply(db, draft, decision, cancellationToken);
         return decision;
     }
 

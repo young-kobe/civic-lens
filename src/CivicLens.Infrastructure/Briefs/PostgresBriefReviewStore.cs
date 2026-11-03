@@ -53,7 +53,9 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
     {
         current.ValidateForApproval();
         if ((await BriefRecordReader.FindChangedInActiveReleaseAsync(db, current.Citations, cancellationToken)).Count > 0)
-            throw new ArgumentException("Approval needs every cited revision to be approved and in the active release.");
+            throw new StaleApprovalException("Approval needs every cited revision to be approved and in the active release. A cited record changed. " +
+                "Do these steps. 1. Press Request changes. 2. Ask the owner to run the command: brief redraft --week with the Monday that starts the week of this brief. " +
+                "3. Approve the new draft when it appears.");
     }
 
     public async Task<BriefReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken)

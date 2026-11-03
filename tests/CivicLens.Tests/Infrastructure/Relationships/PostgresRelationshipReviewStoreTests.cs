@@ -113,7 +113,7 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
     {
         await ChangeAsync(change);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => DecideAsync(1, 0, ReviewDecisionKind.Approve));
+        await Assert.ThrowsAsync<StaleApprovalException>(() => DecideAsync(1, 0, ReviewDecisionKind.Approve));
 
         Assert.Equal("0", await ReadAsync("SELECT count(*) FROM relationship_review_decisions"));
         var read = (await reviews.GetAsync(recordId, default))!;
@@ -125,13 +125,28 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
     [Theory]
     [InlineData("statement")]
     [InlineData("target")]
+    public async Task ReversingARejectionAfterACitedRecordChangedIsRefusedWithTheStepsThatFixItBecauseThePageMustSayWhatToDo(string change)
+    {
+        _ = await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.NotRelated);
+        await ChangeAsync(change);
+
+        var refused = await Assert.ThrowsAsync<StaleApprovalException>(() => DecideAsync(1, 1, ReviewDecisionKind.Approve));
+
+        Assert.Contains("relationships draft refresh", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Request changes", refused.Message, StringComparison.Ordinal);
+        Assert.Equal("Rejected", await ReadAsync($"SELECT review_status FROM relationship_drafts WHERE record_id = '{recordId}'"));
+    }
+
+    [Theory]
+    [InlineData("statement")]
+    [InlineData("target")]
     public async Task ASaveWhoseApprovalFailsBecauseACitedRecordChangedWritesNoRevisionAndNoDecision(string change)
     {
         await ChangeAsync(change);
         var request = new SaveRelationshipDraftRequest(recordId, 1, RelationshipType.ClaimsCreditFor, "She claims credit for the bill.",
             Span(BillSentence), "F1", "save-and-approve", new ApprovalWithSave(0, null, [], null));
 
-        await Assert.ThrowsAsync<ArgumentException>(() => new SaveRelationshipDraft(reviews).ExecuteAsync(Reviewer, request));
+        await Assert.ThrowsAsync<StaleApprovalException>(() => new SaveRelationshipDraft(reviews).ExecuteAsync(Reviewer, request));
 
         Assert.Equal(("1", "0"), (await ReadAsync("SELECT count(*) FROM relationship_revisions"),
             await ReadAsync("SELECT count(*) FROM relationship_review_decisions")));
@@ -149,7 +164,7 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
 
         Assert.False(approving.IsCompleted);
         await holder.DisposeAsync();
-        await Assert.ThrowsAsync<ArgumentException>(() => approving);
+        await Assert.ThrowsAsync<StaleApprovalException>(() => approving);
         Assert.Equal("0", await ReadAsync("SELECT count(*) FROM relationship_review_decisions"));
     }
 
@@ -224,9 +239,10 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
         string key = "save-2") =>
         new SaveRelationshipDraft(reviews).ExecuteAsync(Reviewer, new(recordId, expected, type, reason, quote, factId, key));
 
-    private Task<ReviewDecision> DecideAsync(int revision, int stateVersion, ReviewDecisionKind kind, string? note = null) =>
+    private Task<ReviewDecision> DecideAsync(int revision, int stateVersion, ReviewDecisionKind kind, string? note = null,
+        ReviewReasonCode? reason = null) =>
         new DecideRelationshipReview(reviews).ExecuteAsync(Reviewer, new(recordId, revision, stateVersion, kind, note, [],
-            Guid.NewGuid().ToString("N")));
+            Guid.NewGuid().ToString("N"), ReasonCode: reason));
 
     private async Task ChangeAsync(string change)
     {

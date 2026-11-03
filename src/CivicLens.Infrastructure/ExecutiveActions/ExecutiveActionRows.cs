@@ -44,22 +44,29 @@ internal static class ExecutiveActionRows
         return revision;
     }
 
-    /// <summary>A person reversed a rejection. The notices that waited for the record now revise it, oldest first, and code approves each
-    /// revision. The decision is saved first, because the cycle read needs it.</summary>
-    private static async Task ApplyWaitingNoticesAsync(CollectionAttemptDbContext db, ExecutiveActionDraftRow draft, DateTimeOffset now,
+    /// <summary>A person approved a revision. The notices that waited for the record now revise it, and the correction note of the person moves to
+    /// the code approval of the new revision, because that approval is the one that publishes. The decision is saved first, because the cycle read needs it.</summary>
+    private static async Task ApplyWaitingNoticesAsync(CollectionAttemptDbContext db, ExecutiveActionDraftRow draft, ReviewDecision approval,
         CancellationToken cancellationToken)
     {
+        await db.SaveChangesAsync(cancellationToken);
+        await AppendWaitingNoticesAsync(db, draft, null, approval.CreatedAtUtc, cancellationToken, approval.CorrectionNote);
+    }
+
+    /// <summary>Appends one revision that holds every waiting notice of the record, with the new one if the document brings it. Code approves it.</summary>
+    private static async Task<ExecutiveActionRevision?> AppendWaitingNoticesAsync(CollectionAttemptDbContext db, ExecutiveActionDraftRow draft,
+        ExecutiveActionDocumentRow? arriving, DateTimeOffset now, CancellationToken cancellationToken, string? correctionNote = null)
+    {
         var waiting = await db.Set<ExecutiveActionDocumentRow>().Where(row => row.RecordId == draft.RecordId && row.NoticeJson != null &&
-            row.RevisionNumber == null).OrderBy(row => row.PublishedOn).ThenBy(row => row.DocumentNumber).ToListAsync(cancellationToken);
-        foreach (var row in waiting)
-        {
-            await db.SaveChangesAsync(cancellationToken);
-            var current = await Records.FindRevisionAsync(db, draft.RecordId, draft.CurrentRevisionNumber, cancellationToken)
-                ?? throw new InvalidOperationException("Current executive action revision is missing.");
-            var revision = ExecutiveActionRevisions.Add(current, now, ReviewJson.Deserialize<ExecutiveActionNotice>(row.NoticeJson!, "notice"));
-            await AppendApprovedAsync(db, draft, revision, cancellationToken);
-            row.RevisionNumber = revision.RevisionNumber;
-        }
+            row.RevisionNumber == null).ToListAsync(cancellationToken);
+        if (arriving is not null) waiting.Add(arriving);
+        if (waiting.Count == 0) return null;
+        var current = await Records.FindRevisionAsync(db, draft.RecordId, draft.CurrentRevisionNumber, cancellationToken)
+            ?? throw new InvalidOperationException("Current executive action revision is missing.");
+        var revision = ExecutiveActionRevisions.Add(current, now, waiting.Select(row => ReviewJson.Deserialize<ExecutiveActionNotice>(row.NoticeJson!, "notice")));
+        await AppendApprovedAsync(db, draft, revision, cancellationToken, correctionNote);
+        foreach (var row in waiting) row.RevisionNumber = revision.RevisionNumber;
+        return revision;
     }
 
     private static async Task<bool> CorrectsACorrectionAsync(CollectionAttemptDbContext db, string sourceId, string documentNumber,
@@ -88,23 +95,18 @@ internal static class ExecutiveActionRows
     private static async Task<ExecutiveActionRevision?> AddNoticeAsync(CollectionAttemptDbContext db, string recordId,
         ExecutiveActionDocumentRow row, FederalRegisterEvidence evidence, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var notice = ExecutiveActionRevisions.NoticeOf(evidence);
-        row.NoticeJson = ReviewJson.Serialize(notice);
+        row.NoticeJson = ReviewJson.Serialize(ExecutiveActionRevisions.NoticeOf(evidence));
         var draft = await db.Set<ExecutiveActionDraftRow>().SingleOrDefaultAsync(candidate => candidate.RecordId == recordId, cancellationToken);
         if (draft is null || draft.ReviewStatus == ReviewStatus.Rejected) return null;
-        var current = await Records.FindRevisionAsync(db, recordId, draft.CurrentRevisionNumber, cancellationToken)
-            ?? throw new InvalidOperationException("Current executive action revision is missing.");
-        var revision = ExecutiveActionRevisions.Add(current, now, notice);
-        await AppendApprovedAsync(db, draft, revision, cancellationToken);
-        return revision;
+        return await AppendWaitingNoticesAsync(db, draft, row, now, cancellationToken);
     }
 
     private static async Task AppendApprovedAsync(CollectionAttemptDbContext db, ExecutiveActionDraftRow draft, ExecutiveActionRevision revision,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string? correctionNote = null)
     {
         revision.ValidateShape();
         await Records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision), await Records.ReadCycleAsync(db, draft, cancellationToken),
-            () => ApprovalCheck.OfAsync(() => PostgresExecutiveActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)));
+            () => ApprovalCheck.OfAsync(() => PostgresExecutiveActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)), correctionNote);
     }
 
     private static void Revised(ExecutiveActionDraftRow draft, ExecutiveActionRevision revision)

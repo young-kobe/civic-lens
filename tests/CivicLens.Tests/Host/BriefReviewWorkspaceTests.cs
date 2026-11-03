@@ -94,6 +94,25 @@ public sealed class BriefReviewWorkspaceTests(PostgresCollection postgres) : IAs
     }
 
     [Fact]
+    public async Task AnApprovalRefusedBecauseACitationChangedShowsTheStepsThatFixItOnThePage()
+    {
+        await seeder.ReleaseCitedRecordsAsync();
+        await seeder.ReviewableBriefAsync(ReviewableRevision());
+        await seeder.DecisionAsync(PublishedRecordKind.Statement, CitedStatement, 1, 2, ReviewDecisionKind.WithdrawApproval);
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var decision = Fields((await host.GetDocumentAsync($"/Review/Briefs/{RecordId}")).QuerySelector("#decision-form")!);
+        decision.Add(new("kind", "Approve"));
+
+        using var refused = await host.Client.PostAsync($"/Review/Briefs/{RecordId}", new FormUrlEncodedContent(decision));
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        var page = await new AngleSharp.Html.Parser.HtmlParser().ParseDocumentAsync(await refused.Content.ReadAsStringAsync());
+        var notice = page.QuerySelector(".notice")!.TextContent;
+        Assert.Contains("1. Press Request changes.", notice, StringComparison.Ordinal);
+        Assert.Contains("brief redraft --week", notice, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ASaveBindsEachParagraphToItsTickedCitationsAndDropsACitationNoParagraphKeeps()
     {
         await seeder.ReleaseCitedRecordsAsync();

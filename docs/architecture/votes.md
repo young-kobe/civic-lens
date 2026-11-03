@@ -294,7 +294,7 @@ The prompt holds the fact lines and the candidate issues. It tells the model tha
 | Blocked | `evidenceUnavailable`, `tooManyMembers`, `factTooLong`, `fieldTooLong`, `extractionVersionChanged`, `renderedTextMismatch`, `overByteCap` | The input cannot be drafted |
 | Failed | `outputRejected`, a stop code, or `attemptsExhausted` | Owner requeue needed |
 
-A run that makes no call has the reason `unchanged`, `noTrackedMember`, `memberVotesChanged`, or `kindChanged`.
+A run that makes no call has the reason `unchanged`, `noTrackedMember`, `memberVotesChanged`, `kindChanged`, or `recordRejected`. The last one marks a candidate that the worker refused because the record was rejected; see [review](review.md#invariants).
 
 ### Redraft
 
@@ -345,6 +345,7 @@ A person cannot edit the member votes.
 |---|---|
 | `votes draft status` | JSON with `queue` (the status, `chargedToday`, and `counts` for each view) and `waitingForBill` |
 | `votes draft list [view] [limit]` | Entries in a view: `drafted`, `unchanged`, `superseded`, `no-member`, `pending`, or `failed` |
+| `votes draft requeue --refused` | Succeeded rows whose latest run holds the reason `recordRejected`, and no others, back to Pending. Run it after Request changes on the rejected record |
 | `votes draft requeue <candidate-id\|--all>` | Failed rows, and no others, back to Pending |
 | `votes draft requeue --blocked --code <block-code>` | Blocked rows with exactly that code, and no others, back to Pending. The code is required and must not be empty |
 | `votes draft redraft` | Succeeded `drafted` and `unchanged` rows of votes with a bill and an older prompt version, and no others, back to Pending. Older entries of a stale roll call requeue too and settle as superseded, so the printed count is entries, not roll calls. Needs no argument and calls no model itself |
