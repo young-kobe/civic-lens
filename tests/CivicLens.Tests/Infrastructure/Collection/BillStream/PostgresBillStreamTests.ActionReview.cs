@@ -173,18 +173,18 @@ public sealed partial class PostgresBillStreamTests
     {
         var candidate = await CandidateWithoutSummariesAsync();
 
-        await SettleAsync(candidate, Revision(candidate, 1));
+        await SettleAsync(candidate, CitingTextThatIsNotThere(Revision(candidate, 1)));
 
         Assert.Empty(await ActionDecisionsAsync());
         Assert.Equal("AwaitingReview", await ScalarAsync("SELECT review_status FROM action_drafts"));
-        Assert.Equal("An action citation names a missing extraction.", await HeldReasonAsync());
+        Assert.Equal("Span must fit within the extracted text.", await HeldReasonAsync());
     }
 
     [Fact]
     public async Task APersonDecisionOrEditRemovesTheHeldReasonOfAnActionBecauseItDescribesTheNewestRevisionOnly()
     {
         var candidate = await CandidateWithoutSummariesAsync();
-        await SettleAsync(candidate, Revision(candidate, 1));
+        await SettleAsync(candidate, CitingTextThatIsNotThere(Revision(candidate, 1)));
         Assert.NotNull(await HeldReasonAsync());
 
         await DecideAsync(1, 0, ReviewDecisionKind.RequestChanges, "Add the summary.");
@@ -199,7 +199,7 @@ public sealed partial class PostgresBillStreamTests
     public async Task ACodeThatLeavesARevisionForAnOpenConcernStoresNoHeldReasonBecauseTheStatusShowsTheConcern()
     {
         var candidate = await CandidateWithoutSummariesAsync();
-        await SettleAsync(candidate, Revision(candidate, 1));
+        await SettleAsync(candidate, CitingTextThatIsNotThere(Revision(candidate, 1)));
         await DecideAsync(1, 0, ReviewDecisionKind.RequestChanges, "Add the summary.");
         await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = 'Pending' WHERE candidate_id = '{candidate}'");
 

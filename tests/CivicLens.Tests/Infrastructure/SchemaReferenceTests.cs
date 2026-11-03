@@ -25,7 +25,7 @@ public sealed partial class SchemaReferenceTests(PostgresCollection postgres) : 
         ("statements", ["statement_analysis", "statement_analysis_budget", "statement_analysis_runs", "statement_candidates",
             "statement_drafts", "statement_gate_labels", "statement_review_decision_resolutions", "statement_review_decisions", "statement_revisions"]),
         ("actions", ["action_analysis", "action_analysis_budget", "action_analysis_runs", "action_drafts", "action_review_decision_resolutions", "action_review_decisions",
-            "action_revisions"]),
+            "action_revision_issues", "action_revision_sponsorship_citations", "action_revision_sponsorships", "action_revisions"]),
         ("votes", ["vote_analysis", "vote_analysis_budget", "vote_analysis_runs", "vote_candidates", "vote_drafts", "vote_member_list_entries",
             "vote_member_lists", "vote_review_decision_resolutions", "vote_review_decisions", "vote_revision_facts", "vote_revision_issues",
             "vote_revisions", "vote_versions"]),
@@ -39,7 +39,7 @@ public sealed partial class SchemaReferenceTests(PostgresCollection postgres) : 
             "document_change_revisions"]),
         ("roster", ["roster_snapshots", "roster_members", "roster_terms", "executive_officials", "executive_terms", "official_photos"]),
         ("reports", ["reader_report_cursor", "reader_reports"]),
-        ("publication", ["publication_record_states", "publication_releases"])
+        ("publication", ["publication_record_states", "publication_releases", "published_records"])
     ];
 
     private string connectionString = null!;

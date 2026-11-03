@@ -387,7 +387,8 @@ try
         var blocked = new BlockedPublishedRecords(publications, releases);
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
             new ListBlockedPublished(publications, releases, blocked),
-            new ActivatePublicationRelease(publications, releases, blocked, loggers.CreateLogger<ActivatePublicationRelease>()), owner,
+            new ActivatePublicationRelease(publications, releases, blocked, loggers.CreateLogger<ActivatePublicationRelease>()),
+            new BackfillFirstPublished(publications, releases), owner,
             Console.Out, Console.Error, cancellation.Token);
     }
 
