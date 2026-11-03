@@ -10,6 +10,7 @@ using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Briefs.Persistence;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
@@ -20,7 +21,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
     private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefCheckRun> checkQueue = BriefCheckQueue.Create(contextFactory);
 
     internal static readonly ReviewRecords<BriefDraftRow, BriefRevisionRow, BriefReviewDecisionRow, BriefRevision> Records =
-        new(PostgresAdvisoryLock.BriefReview, "Brief", nameof(BriefDraftRow.RecordId));
+        new(PostgresAdvisoryLock.BriefReview, PublishedRecordKind.Brief, "Brief", nameof(BriefDraftRow.RecordId));
 
     private const string SaveOperation = "brief-save";
     private const string DecideOperation = "brief-decide";

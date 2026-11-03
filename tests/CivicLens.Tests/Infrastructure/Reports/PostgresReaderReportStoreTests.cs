@@ -192,6 +192,43 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
         Assert.Equal([open.ReportId], await ReportsOfRecordAsync());
     }
 
+    [Fact]
+    public async Task TheLimitOf64CountsOnlyOpenReportsSoWaitingCorrectionsNeverHideAnOpenOne()
+    {
+        await SeedRelationshipDraftAsync(RelationshipId, currentRevision: 3);
+        var waiting = Enumerable.Range(0, 3).Select(index => OnRelationship(1) with { ReceivedAtUtc = Start.AddMinutes(index) }).ToArray();
+        var open = Enumerable.Range(0, 66).Select(index => OnRelationship(1) with { ReceivedAtUtc = Start.AddMinutes(10 + index) }).ToArray();
+        await store.SavePulledAsync(Batch([.. waiting, .. open]), default);
+        await MarkWaitingAsync(waiting);
+
+        var listed = await store.ListForRecordAsync(PublishedRecordKind.Relationship, RelationshipId, default);
+
+        Assert.Equal([.. waiting.Select(report => report.ReportId), .. open.Take(64).Select(report => report.ReportId)],
+            listed.Reports.Select(report => report.ReportId));
+        Assert.Equal(2, listed.MoreOpen);
+    }
+
+    [Fact]
+    public async Task SixtyFourWaitingCorrectionsStillLeaveRoomForEveryOpenReportAndItsDismiss()
+    {
+        await SeedRelationshipDraftAsync(RelationshipId, currentRevision: 3);
+        var waiting = Enumerable.Range(0, 64).Select(index => OnRelationship(1) with { ReceivedAtUtc = Start.AddMinutes(index) }).ToArray();
+        var open = Enumerable.Range(0, 2).Select(index => OnRelationship(1) with { ReceivedAtUtc = Start.AddMinutes(100 + index) }).ToArray();
+        await store.SavePulledAsync(Batch([.. waiting, .. open]), default);
+        await MarkWaitingAsync(waiting);
+
+        var listed = await store.ListForRecordAsync(PublishedRecordKind.Relationship, RelationshipId, default);
+
+        Assert.Equal(open.Select(report => report.ReportId), listed.Reports.Where(report => report.Status == ReaderReportStatus.Open).Select(report => report.ReportId));
+        Assert.Equal(66, listed.Reports.Count);
+        Assert.Equal(0, listed.MoreOpen);
+    }
+
+    private Task MarkWaitingAsync(IEnumerable<PulledReport> reports) => seeder.ExecuteAsync("""
+        UPDATE reader_reports SET status = 'CorrectionNeeded', note = 'Fixed.', resolved_by = 'auth0|friend', resolved_at_utc_ticks = 1, version = 1
+        WHERE report_id = ANY(@ids)
+        """, ("ids", reports.Select(report => report.ReportId).ToArray()));
+
     private static PulledReport OnRelationship(int revision) =>
         Report() with { RecordId = RelationshipId, Kind = PublishedRecordKind.Relationship, RevisionNumber = revision };
 

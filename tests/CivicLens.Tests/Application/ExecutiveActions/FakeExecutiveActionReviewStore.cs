@@ -7,6 +7,7 @@ namespace CivicLens.Tests.Application.ExecutiveActions;
 internal sealed class FakeExecutiveActionReviewStore : IExecutiveActionReviewStore
 {
     public List<ReviewDecision> Decided { get; } = [];
+    public List<ImmutableArray<Guid>> ReportIds { get; } = [];
     public Dictionary<string, PublishableExecutiveAction> Publishable { get; } = [];
     public List<UnpublishedApprovedExecutiveAction> Unpublished { get; } = [];
 
@@ -15,6 +16,7 @@ internal sealed class FakeExecutiveActionReviewStore : IExecutiveActionReviewSto
         ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken)
     {
         Decided.Add(decision);
+        ReportIds.Add(correctedReportIds);
         return Task.FromResult(decision);
     }
 

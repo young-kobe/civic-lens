@@ -1,6 +1,7 @@
 using CivicLens.Application.Reports;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Reports.Persistence;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
 
@@ -20,13 +21,13 @@ internal static class ReaderReportResolution
 
     /// <summary>Closes the listed open reports of the record whose revision is older than the approved revision. The caller runs
     /// this in the transaction of the approval.</summary>
-    public static async Task CloseCorrectedAsync(CollectionAttemptDbContext db, string actorSubject, string recordId,
-        IReadOnlyCollection<Guid> reportIds, int approvedRevisionNumber, CancellationToken cancellationToken)
+    public static async Task CloseCorrectedAsync(CollectionAttemptDbContext db, string actorSubject, PublishedRecordKind kind,
+        string recordId, IReadOnlyCollection<Guid> reportIds, int approvedRevisionNumber, CancellationToken cancellationToken)
     {
         if (reportIds.Count == 0) return;
         var now = await DatabaseClock.ReadAsync(db, cancellationToken);
         await db.Set<ReaderReportRow>()
-            .Where(row => reportIds.Contains(row.ReportId) && row.RecordId == recordId && row.Status == ReaderReportStatus.Open &&
+            .Where(row => reportIds.Contains(row.ReportId) && row.Kind == kind && row.RecordId == recordId && row.Status == ReaderReportStatus.Open &&
                 row.RevisionNumber < approvedRevisionNumber)
             .ExecuteUpdateAsync(set => Resolve(set, ReaderReportStatus.CorrectionNeeded, CorrectionNote, actorSubject, now.Ticks), cancellationToken);
     }

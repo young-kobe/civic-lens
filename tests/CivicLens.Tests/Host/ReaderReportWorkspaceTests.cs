@@ -4,7 +4,9 @@ using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Reports;
 using CivicLens.Application.Publication;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Analysis;
+using CivicLens.Infrastructure.ExecutiveActions;
 using CivicLens.Infrastructure.Reports;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
@@ -208,21 +210,64 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
     }
 
     [Fact]
-    public async Task OnlyTheOldest64ReportsShowAndCloseAndTheRestAreCountedBecauseOneApprovalNamesAtMost64()
+    public async Task OnlyTheOldest64OpenReportsShowWithTheirIdsInTheFormAndTheRestAreCounted()
     {
         await SeedRelationshipAsync();
+        var saved = new List<PulledReport>();
         for (var index = 0; index < 66; index++)
-            await SaveReportAsync(OnRelationship() with { ReceivedAtUtc = OnRelationship().ReceivedAtUtc.AddMinutes(index) });
+            saved.Add(await SaveReportAsync(OnRelationship() with { ReceivedAtUtc = OnRelationship().ReceivedAtUtc.AddMinutes(index) }));
 
         var page = await host.GetDocumentAsync(editor);
 
-        Assert.Equal(64, page.QuerySelectorAll("[id^='reader-report-']").Length);
-        Assert.Equal(64, page.QuerySelectorAll("input[form='draft-form'][name='correctedReportIds']").Length);
+        var oldest = saved.Take(64).Select(report => report.ReportId.ToString()).ToArray();
+        Assert.Equal(oldest, page.QuerySelectorAll("input[form='draft-form'][name='correctedReportIds']").Select(input => input.GetAttribute("value")!));
+        Assert.Equal(oldest, page.QuerySelectorAll("[id^='reader-report-']").Select(section => section.Id!["reader-report-".Length..]));
         Assert.Equal("2 more reports stay open.", page.QuerySelector("#reader-reports-more")!.TextContent.Trim());
     }
 
     [Fact]
-    public void EveryEditorShowsTheReportPanelOfItsOwnKindAndOnlyAnEditableOneCanCloseByApproval()
+    public async Task AnExecutiveApproveClosesTheListedOlderReportAndARequestForChangesClosesNothing()
+    {
+        var (recordId, reportId) = await SeedExecutiveCorrectionAsync();
+        var url = $"/Review/ExecutiveActions/{recordId}";
+        var page = await host.GetDocumentAsync(url);
+        var decision = ExecutiveDecisionFields(page);
+
+        using var requested = await host.Client.PostAsync(url, new FormUrlEncodedContent(decision));
+
+        Assert.Equal(HttpStatusCode.Redirect, requested.StatusCode);
+        Assert.Equal(ReaderReportStatus.Open, (await store.GetAsync(reportId, default))!.Report.Status);
+        decision = ExecutiveDecisionFields(await host.GetDocumentAsync(url), "Approve");
+
+        using var approved = await host.Client.PostAsync(url, new FormUrlEncodedContent(decision));
+
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        Assert.Equal(ReaderReportStatus.CorrectionNeeded, (await store.GetAsync(reportId, default))!.Report.Status);
+    }
+
+    [Fact]
+    public async Task TheExecutiveHintOffersApprovalOnlyWhileThereIsANewRevisionToApprove()
+    {
+        var (recordId, reportId) = await SeedExecutiveCorrectionAsync();
+        var url = $"/Review/ExecutiveActions/{recordId}";
+
+        var waiting = (await host.GetDocumentAsync(url)).QuerySelector($"#reader-report-{reportId:D}")!.TextContent;
+
+        Assert.Contains("No person edits this record. To close the report, approve a newer revision. If the report is wrong, dismiss it.", waiting, StringComparison.Ordinal);
+        Assert.DoesNotContain("already approved", waiting, StringComparison.Ordinal);
+        using var approved = await host.Client.PostAsync(url, new FormUrlEncodedContent(ExecutiveDecisionFields(await host.GetDocumentAsync(url), "Approve")));
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        var later = await SaveReportAsync(Report() with { RecordId = recordId, Kind = PublishedRecordKind.ExecutiveAction });
+
+        var text = (await host.GetDocumentAsync(url)).QuerySelector($"#reader-report-{later.ReportId:D}")!.TextContent;
+
+        Assert.DoesNotContain("approve a newer revision", text, StringComparison.Ordinal);
+        Assert.Contains("No person edits this record. If the report is wrong, dismiss it. The owner can take the record off the site.", text, StringComparison.Ordinal);
+        Assert.Contains("The current revision is already approved. Dismiss this report if it fixes the problem.", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EveryEditorShowsThePanelOfItsOwnKindAndClosesFromItsSaveFormOrTheExecutiveDecisionForm()
     {
         var editors = new (string File, PublishedRecordKind Kind, string idParameter)[]
         {
@@ -244,6 +289,7 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
             Assert.Contains($"Kind=\"PublishedRecordKind.{kind}\"", panel, StringComparison.Ordinal);
             Assert.Contains($"RecordId=\"@{idParameter}\"", panel, StringComparison.Ordinal);
             Assert.Equal(editable, panel.Contains("ApprovalFormId=\"draft-form\"", StringComparison.Ordinal));
+            Assert.Equal(!editable, panel.Contains("ApprovalFormId=\"@ReviewDecisionPanel.FormId\"", StringComparison.Ordinal));
             Assert.Equal(editable, markup.Contains("id=\"draft-form\"", StringComparison.Ordinal));
             Assert.Equal(editable, code.Contains("RunSaveAsync(", StringComparison.Ordinal));
         }
@@ -338,6 +384,34 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
     {
         await store.SavePulledAsync(Batch(report), default);
         return report;
+    }
+
+    private async Task<(string RecordId, Guid ReportId)> SeedExecutiveCorrectionAsync()
+    {
+        var executiveActions = new ExecutiveActionSeeder(host.ConnectionString, host.ArtifactDirectory);
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
+        var withdrawal = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
+            "Check the date.", [], DateTimeOffset.UtcNow);
+        await PostgresExecutiveActionReviewStore.FromConnectionString(host.ConnectionString)
+            .DecideAsync("auth0|owner", withdrawal, 1, 1, "withdraw", new string('a', 64), [], default);
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
+        var report = await SaveReportAsync(Report() with { RecordId = recordId, Kind = PublishedRecordKind.ExecutiveAction });
+        return (recordId, report.ReportId);
+    }
+
+    private static List<KeyValuePair<string, string>> ExecutiveDecisionFields(IDocument page, string kind = "RequestChanges")
+    {
+        var fields = Fields(page.QuerySelector("#decision-form")!);
+        fields.AddRange(page.QuerySelectorAll("input[form='decision-form']")
+            .Select(input => new KeyValuePair<string, string>(input.GetAttribute("name")!, input.GetAttribute("value") ?? "")));
+        if (kind == "Approve")
+            fields.AddRange(page.QuerySelectorAll("#decision-form input[name='Decision.ResolvedDecisionIds']")
+                .Select(input => new KeyValuePair<string, string>("Decision.ResolvedDecisionIds", input.GetAttribute("value")!)));
+        Set(fields, "Decision.Note", "Checked.");
+        if (kind == "Approve") Set(fields, "Decision.CorrectionNote", "The date is fixed.");
+        Set(fields, "idempotencyKey", Guid.NewGuid().ToString("N"));
+        Set(fields, "kind", kind);
+        return fields;
     }
 
     private static PulledReport OnRelationship() => Report() with

@@ -123,6 +123,39 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     }
 
     [Fact]
+    public async Task ARequestForChangesClosesNothingAndAnApprovalClosesOnlyAListedReportOfItsOwnKind()
+    {
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
+        var withdrawal = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
+            "Check the date.", [], DateTimeOffset.UtcNow);
+        await store.DecideAsync("auth0|owner", withdrawal, 1, 1, "key-1", new string('a', 64), [], default);
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
+        var review = (await store.GetAsync(recordId, default))!.Review;
+        var onThisRecord = Guid.NewGuid();
+        var ofAnotherKind = Guid.NewGuid();
+        foreach (var (id, kind) in new[] { (onThisRecord, "ExecutiveAction"), (ofAnotherKind, "Statement") })
+            await ExecuteAsync($"""
+                INSERT INTO reader_reports (report_id, record_id, kind, revision_number, category, body, received_at_utc_ticks, status, version)
+                VALUES ('{id}', '{recordId}', '{kind}', 1, 'other', 'text', 1, 'Open', 0)
+                """);
+        var requestChanges = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 2, review.ReviewStateVersion + 1,
+            ReviewDecisionKind.RequestChanges, "auth0|owner", "Still wrong.", [], DateTimeOffset.UtcNow);
+
+        await store.DecideAsync("auth0|owner", requestChanges, 2, review.ReviewStateVersion, "key-2", new string('d', 64), [onThisRecord, ofAnotherKind], default);
+
+        Assert.Equal(("Open", "Open"), (await ScalarAsync($"SELECT status FROM reader_reports WHERE report_id = '{onThisRecord}'"),
+            await ScalarAsync($"SELECT status FROM reader_reports WHERE report_id = '{ofAnotherKind}'")));
+        var after = (await store.GetAsync(recordId, default))!.Review;
+        var approval = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 2, after.ReviewStateVersion + 1, ReviewDecisionKind.Approve,
+            "auth0|owner", "Checked.", [.. after.UnresolvedConcerns.Select(concern => concern.DecisionId)], DateTimeOffset.UtcNow, "The date is fixed.");
+
+        await store.DecideAsync("auth0|owner", approval, 2, after.ReviewStateVersion, "key-3", new string('e', 64), [onThisRecord, ofAnotherKind], default);
+
+        Assert.Equal(("CorrectionNeeded", "Open"), (await ScalarAsync($"SELECT status FROM reader_reports WHERE report_id = '{onThisRecord}'"),
+            await ScalarAsync($"SELECT status FROM reader_reports WHERE report_id = '{ofAnotherKind}'")));
+    }
+
+    [Fact]
     public async Task ARecordPublishesWithItsRealPageThenLeavesTheReadyListAndWithdrawsFromTheSite()
     {
         var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");

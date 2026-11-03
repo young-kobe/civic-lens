@@ -6,13 +6,14 @@ using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Reports;
 using CivicLens.Infrastructure.Review.Persistence;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Review;
 
 /// <summary>The shared store core. Reads hold one review cycle: the current revision, the last approved revision, and the
 /// decisions since that approval.</summary>
-internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevision>(string lockKey, string draftName,
+internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevision>(string lockKey, PublishedRecordKind kind, string draftName,
     string recordIdProperty, Action<TDraftRow, TRevision>? revised = null)
     where TDraftRow : class, IReviewDraftRow
     where TRevisionRow : class, IReviewRevisionRow
@@ -204,7 +205,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         RecordDecision(db, draft, history.Decisions, decision);
         await afterDecision(db, draft.RecordId, decision.RevisionNumber, cancellationToken);
         if (decision.Kind == ReviewDecisionKind.Approve)
-            await ReaderReportResolution.CloseCorrectedAsync(db, decision.ActorSubject, draft.RecordId, correctedReportIds,
+            await ReaderReportResolution.CloseCorrectedAsync(db, decision.ActorSubject, kind, draft.RecordId, correctedReportIds,
                 decision.RevisionNumber, cancellationToken);
         return decision;
     }

@@ -25,7 +25,7 @@ namespace CivicLens.Infrastructure.Review;
 public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewStore
 {
     internal static readonly ReviewRecords<DocumentChangeDraftRow, DocumentChangeRevisionRow, ReviewDecisionRow, DocumentChangeDraftRevision>
-        Records = new(PostgresAdvisoryLock.DocumentChangeReview, "Document-change", nameof(DocumentChangeDraftRow.DraftId));
+        Records = new(PostgresAdvisoryLock.DocumentChangeReview, PublishedRecordKind.DocumentChange, "Document-change", nameof(DocumentChangeDraftRow.DraftId));
 
     private const string CreateOperation = "create";
     private const string SaveOperation = "save";

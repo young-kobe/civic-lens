@@ -4,6 +4,7 @@ using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Relationships.Persistence;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Relationships;
@@ -11,7 +12,7 @@ namespace CivicLens.Infrastructure.Relationships;
 internal static class RelationshipDraftRows
 {
     internal static readonly ReviewRecords<RelationshipDraftRow, RelationshipRevisionRow, RelationshipReviewDecisionRow, RelationshipRevision> Records =
-        new(PostgresAdvisoryLock.RelationshipReview, "Relationship", nameof(RelationshipDraftRow.RecordId));
+        new(PostgresAdvisoryLock.RelationshipReview, PublishedRecordKind.Relationship, "Relationship", nameof(RelationshipDraftRow.RecordId));
 
     public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, RelationshipRevision revision, string runId,
         CancellationToken cancellationToken)

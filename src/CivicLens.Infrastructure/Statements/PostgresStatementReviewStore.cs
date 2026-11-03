@@ -22,7 +22,7 @@ namespace CivicLens.Infrastructure.Statements;
 public sealed class PostgresStatementReviewStore : IStatementReviewStore
 {
     internal static readonly ReviewRecords<StatementDraftRow, StatementRevisionRow, StatementReviewDecisionRow, StatementDraftRevision>
-        Records = new(PostgresAdvisoryLock.StatementReview, "Statement", nameof(StatementDraftRow.CandidateId));
+        Records = new(PostgresAdvisoryLock.StatementReview, PublishedRecordKind.Statement, "Statement", nameof(StatementDraftRow.CandidateId));
 
     private readonly AdmittingRevisionReader admittingRevisions = new();
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;

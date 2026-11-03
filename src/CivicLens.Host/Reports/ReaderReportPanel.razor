@@ -17,9 +17,7 @@
             <Notice Tone="Tone.Warn" Title="A reader reported a problem.">
                 @ReportLabels.Category(report.Category)@(string.IsNullOrWhiteSpace(report.Text) ? "." : ": " + report.Text)<br />
                 A reader wrote this text. It may be wrong. Check it against the record.
-                @(CanEdit
-                    ? "To fix it, change the wording and press Save and approve. If the report is wrong, dismiss it."
-                    : "No person edits this record. To close the report, approve a newer revision. If the report is wrong, dismiss it. The owner can take the record off the site.")
+                @Hint
                 @if (CurrentRevisionApproved && reports.CurrentRevisionNumber > report.RevisionNumber)
                 {
                     <br />@("The current revision is already approved. Dismiss this report if it fixes the problem.")
@@ -43,6 +41,14 @@
 }
 
 @code {
+    private const string ExecutiveTail = "If the report is wrong, dismiss it. The owner can take the record off the site.";
+
+    private string Hint => CanEdit
+        ? "To fix it, change the wording and press Save and approve. If the report is wrong, dismiss it."
+        : CurrentRevisionApproved
+            ? "No person edits this record. " + ExecutiveTail
+            : "No person edits this record. To close the report, approve a newer revision. " + ExecutiveTail;
+
     private RecordReports reports = new([], 0, null);
     private bool failed;
 
