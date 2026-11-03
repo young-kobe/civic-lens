@@ -5,19 +5,24 @@ namespace CivicLens.Application;
 
 public sealed partial class CodeVersion
 {
-    public static readonly CodeVersion Unknown = new(null);
-
-    private readonly string? sha;
-
-    private CodeVersion(string? sha) => this.sha = sha;
-
-    public string Sha => sha ?? throw new InvalidOperationException(
+    public static readonly CodeVersion Unknown = new(null,
         "This build has no git commit SHA. Build from a git checkout, or pass -p:SourceRevisionId=<40 hex digits>.");
 
-    public static CodeVersion Of(string sha)
+    private readonly string? sha;
+    private readonly string problem;
+
+    private CodeVersion(string? sha, string problem)
     {
-        if (!ShaPattern().IsMatch(sha)) throw new ArgumentException("A code version is 40 lowercase hex digits.", nameof(sha));
-        return new(sha);
+        this.sha = sha;
+        this.problem = problem;
+    }
+
+    public string Sha => sha ?? throw new InvalidOperationException(problem);
+
+    public CodeVersion Require()
+    {
+        _ = Sha;
+        return this;
     }
 
     public static CodeVersion FromAssembly(Assembly assembly)
@@ -26,7 +31,9 @@ public sealed partial class CodeVersion
         var plus = informational?.IndexOf('+') ?? -1;
         if (plus < 0) return Unknown;
         var candidate = informational![(plus + 1)..];
-        return ShaPattern().IsMatch(candidate) ? new(candidate) : Unknown;
+        return ShaPattern().IsMatch(candidate)
+            ? new(candidate, string.Empty)
+            : new(null, $"The git commit SHA of this build is '{candidate}'. It must be 40 lowercase hex digits.");
     }
 
     [GeneratedRegex(@"^[0-9a-f]{40}\z")]

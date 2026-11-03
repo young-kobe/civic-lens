@@ -3,11 +3,11 @@ FROM mcr.microsoft.com/dotnet/sdk@sha256:de4fe90a98845d75910b9769662465c84de1a93
 WORKDIR /src
 COPY global.json Directory.Build.props ./
 COPY src ./src
-ARG SOURCE_REVISION_ID
-RUN test -n "$SOURCE_REVISION_ID"
 RUN dotnet restore src/CivicLens.Host --locked-mode \
  && dotnet restore src/CivicLens.Collector --locked-mode \
  && dotnet restore src/CivicLens.PublicApi --locked-mode
+ARG SOURCE_REVISION_ID
+RUN test -n "$SOURCE_REVISION_ID" || (echo "SOURCE_REVISION_ID is required" >&2; exit 1)
 RUN dotnet publish src/CivicLens.Host --no-restore -c Release -p:UseAppHost=false -p:SourceRevisionId=$SOURCE_REVISION_ID -o /out/host \
  && dotnet publish src/CivicLens.Collector --no-restore -c Release -p:UseAppHost=false -p:SourceRevisionId=$SOURCE_REVISION_ID -o /out/collector \
  && dotnet publish src/CivicLens.PublicApi --no-restore -c Release -p:UseAppHost=false -p:SourceRevisionId=$SOURCE_REVISION_ID -o /out/search

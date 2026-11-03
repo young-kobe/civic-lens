@@ -128,6 +128,8 @@ if (args is [] or ["--help"] or ["help"])
     return 0;
 }
 
+var codeVersion = BuildCodeVersion.ReadFor(args, typeof(Program).Assembly);
+
 if (args.Length > 0 && args[0] == "review")
 {
     if (args.Length > 2 || (args.Length == 2 &&
@@ -140,7 +142,7 @@ if (args.Length > 0 && args[0] == "review")
     var port = args.Length == 1 ? 5081 : int.Parse(args[1], CultureInfo.InvariantCulture);
     using var reviewCancellation = new CancellationTokenSource();
     Console.CancelKeyPress += (_, e) => { e.Cancel = true; reviewCancellation.Cancel(); };
-    return await ReviewWorkspace.RunAsync(port, reviewCancellation.Token);
+    return await ReviewWorkspace.RunAsync(port, codeVersion, reviewCancellation.Token);
 }
 
 var coverageAsOf = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -206,7 +208,7 @@ try
         var textExtractor = new CaptureDocumentTextExtractor();
         var apiResponses = new ApiResponseReader(attempts, new CaptureBodyReader());
         var artifactRoot = CollectionWorkerCommand.ArtifactRootOf(args);
-        var actionDrafting = ActionDraftComposition.Create(analysisContexts, connectionString, CodeVersion.FromAssembly(typeof(Program).Assembly), jobs, apiResponses, textExtractor, issues,
+        var actionDrafting = ActionDraftComposition.Create(analysisContexts, connectionString, codeVersion, jobs, apiResponses, textExtractor, issues,
             artifactRoot, BeatOf(WorkerLoopNames.ActionDrafting), loggers);
         await using var actionDraftingWakeup = actionDrafting.Wakeup;
         var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, issues, artifactRoot, BeatOf(WorkerLoopNames.VoteDrafting), loggers);
@@ -217,7 +219,7 @@ try
         await using var briefDraftingWakeup = briefDrafting.Wakeup;
         var briefChecking = BriefCheckComposition.Create(analysisContexts, connectionString, BeatOf(WorkerLoopNames.BriefChecking), loggers);
         await using var briefCheckingWakeup = briefChecking.Wakeup;
-        var publishing = PublishingComposition.Create(connectionString, CodeVersion.FromAssembly(typeof(Program).Assembly), workerConfiguration, issueConfiguration, artifactRoot, BeatOf(WorkerLoopNames.Publishing), loggers);
+        var publishing = PublishingComposition.Create(connectionString, codeVersion, workerConfiguration, issueConfiguration, artifactRoot, BeatOf(WorkerLoopNames.Publishing), loggers);
         await using var publishingWakeup = publishing?.Wakeup;
         var reportPull = ReportPullComposition.Create(analysisContexts, connectionString, BeatOf(WorkerLoopNames.ReportPull), loggers);
         await using var reportPullWakeup = reportPull?.Wakeup;
@@ -268,7 +270,7 @@ try
         executing = true;
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         var capacity = string.IsNullOrWhiteSpace(releaseRoot) ? null
-            : new ReadReleaseCapacity(PostgresPublicationStore.FromConnectionString(connectionString, CodeVersion.FromAssembly(typeof(Program).Assembly)), new FileReleaseDirectory(releaseRoot));
+            : new ReadReleaseCapacity(PostgresPublicationStore.FromConnectionString(connectionString, codeVersion), new FileReleaseDirectory(releaseRoot));
         return await WorkerHealthCommand.ExecuteAsync(PostgresWorkerHeartbeatStore.FromConnectionString(connectionString), capacity, Console.Out, cancellation.Token);
     }
 
@@ -301,7 +303,7 @@ try
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
-        var draftStore = new PostgresActionDraftStore(contexts, CodeVersion.FromAssembly(typeof(Program).Assembly));
+        var draftStore = new PostgresActionDraftStore(contexts, codeVersion);
         var draftCommands = new AnalysisQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
         var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), new RequeueRefusedActionDrafts(draftStore), new RedraftActionDrafts(draftStore), owner);
@@ -378,7 +380,7 @@ try
             ? PublicationComposition.RequireIssues(ConfigurationFile.ReadIssuesFromEnvironment())
             : IssueConfiguration.None;
         var artifactRoot = args is ["releases", "publish", ..] ? PublicationComposition.RequireArtifactRoot() : string.Empty;
-        var publications = PostgresPublicationStore.FromConnectionString(connectionString, CodeVersion.FromAssembly(typeof(Program).Assembly));
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, codeVersion);
         var releases = new FileReleaseDirectory(releaseRoot);
         using var loggers = CreateLoggers();
         var (publish, _) = PublicationComposition.Create(connectionString, publications, releases, publishConfiguration, issueConfiguration,

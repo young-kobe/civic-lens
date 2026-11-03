@@ -774,10 +774,10 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Theory]
-    [InlineData("Code", "civic-lens:code", "C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0")]
-    [InlineData("Code", "civic-lens:code", "ccccccccccccccccccccccccccccccccccccccc")]
-    [InlineData("Analysis", "civic-lens:analysis", "cccccccccccccccccccccccccccccccccccccccc")]
-    public async Task TheDatabaseRefusesAMalformedCodeVersionAndOneOnARevisionNotWrittenByCode(string authorKind, string authorSubject, string codeVersion)
+    [InlineData("Code", "civic-lens:code", "C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0", "ck_action_revisions_code_version")]
+    [InlineData("Code", "civic-lens:code", "ccccccccccccccccccccccccccccccccccccccc", "ck_action_revisions_code_version")]
+    [InlineData("Analysis", "civic-lens:analysis", "cccccccccccccccccccccccccccccccccccccccc", "ck_action_revisions_code_version_author")]
+    public async Task TheDatabaseRefusesAMalformedCodeVersionAndOneOnARevisionNotWrittenByCode(string authorKind, string authorSubject, string codeVersion, string constraint)
     {
         var candidate = await CandidateWithoutSummariesAsync();
         var run = await InsertRunAsync(candidate, ActionDraftTask.PromptVersion, 1, "Bypassed", ActionDraftErrorCodes.CodeWritten);
@@ -792,7 +792,7 @@ public sealed partial class PostgresBillStreamTests
             VALUES ('{RecordId}', 1, '{authorSubject}', '{authorKind}', '{run}', '{codeVersion}', 'x', 0)
             """));
 
-        Assert.Equal(PostgresErrorCodes.CheckViolation, refused.SqlState);
+        Assert.Equal((PostgresErrorCodes.CheckViolation, constraint), (refused.SqlState, refused.ConstraintName));
     }
 
     [Fact]

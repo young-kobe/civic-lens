@@ -125,7 +125,7 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
 
         var refused = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync("UPDATE publication_releases SET code_version = @id", value));
 
-        Assert.Equal(PostgresErrorCodes.CheckViolation, refused.SqlState);
+        Assert.Equal((PostgresErrorCodes.CheckViolation, "ck_publication_releases_code_version"), (refused.SqlState, refused.ConstraintName));
     }
 
     [Fact]

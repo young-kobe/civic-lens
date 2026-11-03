@@ -250,14 +250,13 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task APersonEditAndAnAnalysisRevisionStoreNoCodeVersion()
+    public async Task APersonEditStoresNoCodeVersion()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
 
         await SaveAsync(1, SuggestionChoice.Keep, "save-2");
 
-        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
-        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_revisions WHERE code_version IS NOT NULL"));
+        Assert.Equal(("Person", "none"), await TupleAsync($"SELECT author_kind, coalesce(code_version, 'none') FROM action_revisions WHERE record_id = '{RecordId}' AND revision_number = 2"));
     }
 
     [Fact]

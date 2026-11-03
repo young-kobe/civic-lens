@@ -132,15 +132,19 @@ internal static class ActionDraftRows
         CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
     };
 
-    public static ActionRevisionRow NewRevision(ActionDraftRevision revision, string? runId, CodeVersion? codeVersion) => new()
+    public static ActionRevisionRow NewRevision(ActionDraftRevision revision, string? runId, CodeVersion codeVersion)
     {
-        RecordId = revision.RecordId,
-        RevisionNumber = revision.RevisionNumber,
-        AuthorSubject = revision.AuthorSubject,
-        AuthorKind = ReviewAuthor.KindOf(revision.AuthorSubject),
-        RunId = runId,
-        CodeVersion = ReviewAuthor.IsCode(revision.AuthorSubject) ? (codeVersion ?? throw new ArgumentNullException(nameof(codeVersion))).Sha : null,
-        RevisionJson = ReviewJson.Serialize(revision),
-        CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
-    };
+        var authorKind = ReviewAuthor.KindOf(revision.AuthorSubject);
+        return new()
+        {
+            RecordId = revision.RecordId,
+            RevisionNumber = revision.RevisionNumber,
+            AuthorSubject = revision.AuthorSubject,
+            AuthorKind = authorKind,
+            RunId = runId,
+            CodeVersion = authorKind == ReviewAuthorKind.Code ? codeVersion.Sha : null,
+            RevisionJson = ReviewJson.Serialize(revision),
+            CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
+        };
+    }
 }

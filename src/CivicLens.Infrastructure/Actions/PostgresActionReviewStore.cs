@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Data;
+using CivicLens.Application;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
@@ -58,7 +59,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
             {
                 revision.ValidatePersonEditOf(current);
                 return Task.FromResult(revision);
-            }, saved => ActionDraftRows.NewRevision(saved, null, null), null,
+            }, saved => ActionDraftRows.NewRevision(saved, null, CodeVersion.Unknown), null,
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
                 afterDecision, revision => revision.ComparableForm(), correctedReportIds), cancellationToken);
 
