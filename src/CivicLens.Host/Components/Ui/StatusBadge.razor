@@ -1,6 +1,7 @@
-<span class="badge badge-@ToneClass.Suffix(Tone)">@Text</span>
+<span class="badge badge-@ToneClass.Suffix(Tone)">@if (Icon is { } icon) {<Icon Name="icon" />}@Text</span>
 
 @code {
     [Parameter] public Tone Tone { get; set; }
+    [Parameter] public IconName? Icon { get; set; }
     [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
 }

@@ -7,6 +7,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.ExecutiveActions.Persistence;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.ExecutiveActions;
@@ -14,8 +15,8 @@ namespace CivicLens.Infrastructure.ExecutiveActions;
 internal static class ExecutiveActionRows
 {
     internal static readonly ReviewRecords<ExecutiveActionDraftRow, ExecutiveActionRevisionRow, ExecutiveActionReviewDecisionRow, ExecutiveActionRevision> Records =
-        new(PostgresAdvisoryLock.ExecutiveActionReview, "Executive action", nameof(ExecutiveActionDraftRow.RecordId), Revised,
-            new(Apply: ApplyWaitingNoticesAsync));
+        new(PostgresAdvisoryLock.ExecutiveActionReview, PublishedRecordKind.ExecutiveAction, "Executive action", nameof(ExecutiveActionDraftRow.RecordId),
+            Revised, new(Apply: ApplyWaitingNoticesAsync));
 
     /// <summary>Records one document. An original makes revision 1 with the correction notices that waited for it. A correction appends a revision
     /// to the record of its original, or waits when the original is not recorded. Code approves each revision in the same transaction.

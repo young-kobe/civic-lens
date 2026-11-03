@@ -26,7 +26,7 @@
                     </Head>
                     <Row Context="item">
                         <td>
-                            <a class="cell-title" href="@ReportRoutes.Detail(item.Report.ReportId)">@ReportLabels.Category(item.Report.Category)</a>
+                            <a class="cell-title" href="@ReportLabels.LinkOf(item)">@ReportLabels.Category(item.Report.Category)</a>
                             <span class="cell-sub">@ReportLabels.Excerpt(item.Report.Text)</span>
                         </td>
                         <td>
@@ -43,7 +43,7 @@
                         </td>
                         <td><Timestamp Value="item.Report.ReceivedAtUtc" /></td>
                         <td><StatusBadge Tone="@(item.Report.Status == ReaderReportStatus.Open ? Tone.Warn : Tone.Neutral)" Text="@ReportLabels.Status(item.Report.Status)" /></td>
-                        <td class="act"><Button Small="true" Href="@ReportRoutes.Detail(item.Report.ReportId)">Open</Button></td>
+                        <td class="act"><Button Small="true" Href="@ReportLabels.LinkOf(item)">Open</Button></td>
                     </Row>
                     <Empty>
                         <EmptyState Title="@ReportsEmpty.Title" Text="@ReportsEmpty.Text" />

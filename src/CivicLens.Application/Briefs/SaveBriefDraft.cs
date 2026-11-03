@@ -36,7 +36,8 @@ public sealed class SaveBriefDraft(IBriefReviewStore store)
         revision.ValidatePersonEditOf(expected);
         return await store.SaveRevisionAsync(actor.Subject, revision, request.ExpectedRevisionNumber,
             ReviewValidation.CreateApprovalOf(actor, recordId, revision.RevisionNumber, request.Approval), request.IdempotencyKey,
-            ReviewValidation.HashPayload(request), cancellationToken);
+            ReviewValidation.HashPayload(request),
+            ReviewValidation.ValidateReportIds(request.Approval?.CorrectedReportIds), cancellationToken);
     }
 
     private static ImmutableArray<BriefCitation> CitationsUsedBy(

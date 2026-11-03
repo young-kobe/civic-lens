@@ -10,6 +10,7 @@ using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Briefs.Persistence;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
@@ -20,7 +21,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
     private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefCheckRun> checkQueue = BriefCheckQueue.Create(contextFactory);
 
     internal static readonly ReviewRecords<BriefDraftRow, BriefRevisionRow, BriefReviewDecisionRow, BriefRevision> Records =
-        new(PostgresAdvisoryLock.BriefReview, "Brief", nameof(BriefDraftRow.RecordId));
+        new(PostgresAdvisoryLock.BriefReview, PublishedRecordKind.Brief, "Brief", nameof(BriefDraftRow.RecordId));
 
     private const string SaveOperation = "brief-save";
     private const string DecideOperation = "brief-decide";
@@ -32,7 +33,8 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
     }
 
     public Task<BriefRevision> SaveRevisionAsync(string actorSubject, BriefRevision revision, int expectedRevisionNumber,
-        ReviewDecision? approval, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
+        ReviewDecision? approval, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds,
+        CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
             payloadHash, (_, _, current) =>
             {
@@ -41,14 +43,15 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
             }, saved => BriefDraftRows.NewRevision(saved, null),
             (db, saved) => BriefCheckQueue.QueueAsync(checkQueue, db, saved, cancellationToken),
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
-                NoAfterDecision, revision => revision.ComparableForm()), cancellationToken);
+                NoAfterDecision, revision => revision.ComparableForm(), correctedReportIds), cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
+        int expectedReviewStateVersion, string idempotencyKey, string payloadHash,
+        CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash, (db, _, history) => decision.Kind == ReviewDecisionKind.Approve
                 ? ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken)
-                : Task.CompletedTask, NoAfterDecision, cancellationToken);
+                : Task.CompletedTask, NoAfterDecision, [], cancellationToken);
 
     private static Task NoAfterDecision(CollectionAttemptDbContext db, string recordId, int revisionNumber, CancellationToken cancellationToken) =>
         Task.CompletedTask;

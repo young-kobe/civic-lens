@@ -7,6 +7,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Votes;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Votes.Persistence;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Votes;
@@ -14,7 +15,7 @@ namespace CivicLens.Infrastructure.Votes;
 internal static class VoteDraftRows
 {
     internal static readonly ReviewRecords<VoteDraftRow, VoteRevisionRow, VoteReviewDecisionRow, VoteDraftRevision> Records =
-        new(PostgresAdvisoryLock.VoteReview, "Vote", nameof(VoteDraftRow.RecordId), Revised,
+        new(PostgresAdvisoryLock.VoteReview, PublishedRecordKind.Vote, "Vote", nameof(VoteDraftRow.RecordId), Revised,
             new(RequireNoRefusedUpdateAsync));
 
     public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, VoteDraftRevision revision, string runId,

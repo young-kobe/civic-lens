@@ -61,9 +61,7 @@ public sealed partial class ActionEditor
     private async Task<string?> TrySaveAsync()
     {
         if (detail is null) return null;
-        var target = await RunCommandAsync(PersistDraftAsync, SaveMessages, ReloadAfterSaveConflictAsync);
-        hasUnsavedInput = target is null;
-        return target;
+        return await RunSaveAsync(PersistDraftAsync, ReloadAfterSaveConflictAsync);
     }
 
     private async Task<string> PersistDraftAsync()

@@ -22,7 +22,7 @@
         @Checklist
     }
     <Notice Tone="Tone.Warn" id="decision-unsaved-warning" hidden="@CanDecide">You have edits that are not saved. Press Save and approve to keep them, or reload the page. Requesting changes and withdrawing approval apply only to saved wording.</Notice>
-    <form id="decision-form" class="form" method="post" @formname="decide" @onsubmit="OnDecide">
+    <form id="@FormId" class="form" method="post" @formname="decide" @onsubmit="OnDecide">
         <AntiforgeryToken />
         <FieldSet Id="decision-controls" Legend="Your decision" Disabled="@(!CanDecide)">
             <input type="hidden" name="expectedRevisionNumber" value="@RevisionNumber" />
@@ -71,6 +71,8 @@
 </Panel>
 
 @code {
+    public const string FormId = "decision-form";
+
     private bool CanReject => Status is not (ReviewStatus.Approved or ReviewStatus.Rejected);
 
     private string? NextStep => Status switch

@@ -157,9 +157,11 @@ public sealed class PublishReleaseTests
         scenario.SeedRelease(PublicationProtocol.MaximumRecordsPerRelease, withFiles: false);
         var draft = scenario.AddDraft('a');
 
-        await Assert.ThrowsAsync<ArgumentException>(() =>
+        var full = await Assert.ThrowsAsync<ReleaseFullException>(() =>
             scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft)));
 
+        Assert.Equal(0, full.FreeSlots);
+        Assert.Equal(draft, Assert.Single(full.NewRecords).RecordId);
         Assert.Equal(0, scenario.Releases.BeginCount);
         Assert.Single(scenario.Publications.Committed);
         Assert.Empty(scenario.Releases.Activated);

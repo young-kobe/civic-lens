@@ -10,5 +10,13 @@ public enum IconName
     Light,
     Dark,
     System,
-    SignOut
+    SignOut,
+    Vote,
+    Bill,
+    ExecutiveAction,
+    Brief,
+    Relationship,
+    DocumentChange,
+    Info,
+    Search
 }

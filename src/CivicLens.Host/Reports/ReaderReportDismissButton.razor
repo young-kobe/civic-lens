@@ -1,0 +1,20 @@
+@using System.Globalization
+@using CivicLens.Application.Reports
+
+<Button Type="submit" form="@FormId" name="@FieldName" value="@($"{Report.ReportId:D}:{Report.Version}")">Dismiss this report</Button>
+
+@code {
+    public const string FormId = "dismiss-report";
+    public const string FieldName = "report";
+
+    [Parameter, EditorRequired] public ReaderReport Report { get; set; } = default!;
+
+    public static (Guid ReportId, int Version) Parse(string? value)
+    {
+        var parts = (value ?? "").Split(':');
+        if (parts.Length != 2 || !Guid.TryParse(parts[0], out var reportId) ||
+            !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var version))
+            throw new ArgumentException("The report to dismiss is missing.");
+        return (reportId, version);
+    }
+}

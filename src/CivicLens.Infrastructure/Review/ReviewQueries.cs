@@ -66,6 +66,27 @@ internal static class ReviewQueries
         WHERE d.review_status = 'Approved'
         """;
 
+    private const string CountApprovedOutsideActiveRelease = $$"""
+        WITH {{ActivePublishedRecords}}
+        SELECT count(*)::int AS "Value" FROM (
+            SELECT 'action' AS kind, record_id AS id FROM action_drafts WHERE review_status = 'Approved'
+            UNION ALL SELECT 'brief', record_id FROM brief_drafts WHERE review_status = 'Approved'
+            UNION ALL SELECT 'documentChange', draft_id FROM document_change_drafts WHERE review_status = 'Approved'
+            UNION ALL SELECT 'executiveAction', record_id FROM executive_action_drafts WHERE review_status = 'Approved'
+            UNION ALL SELECT 'relationship', record_id FROM relationship_drafts WHERE review_status = 'Approved'
+            UNION ALL SELECT 'statement', candidate_id FROM statement_drafts WHERE review_status = 'Approved'
+            UNION ALL SELECT 'vote', record_id FROM vote_drafts WHERE review_status = 'Approved') approved
+        WHERE NOT EXISTS (SELECT 1 FROM active a WHERE a.kind = approved.kind AND a.record_id = approved.id)
+          AND NOT EXISTS (SELECT 1 FROM unnest({0}::text[], {1}::text[]) AS w(kind, id) WHERE w.kind = approved.kind AND w.id = approved.id)
+        """;
+
+    // A withdrawn record has no state row in the active release, but it never publishes again. It must not count as waiting.
+    public static Task<int> CountApprovedOutsideActiveReleaseAsync(CollectionAttemptDbContext db,
+        IReadOnlyCollection<PublishedRecordReference> withdrawn, CancellationToken cancellationToken) =>
+        db.Database.SqlQueryRaw<int>(CountApprovedOutsideActiveRelease,
+            withdrawn.Select(record => PublishedRecordReference.NameOf(record.Kind)).ToArray(),
+            withdrawn.Select(record => record.RecordId).ToArray()).SingleAsync(cancellationToken);
+
     public static readonly string UnpublishedApprovedDrafts = UnpublishedApproved("documentChange", "document_change_drafts", "draft_id");
 
     private sealed class ReleaseRecordRow

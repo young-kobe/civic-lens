@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Emails once when the disk is low or the worker is unhealthy. A marker file stops repeat email until the problem clears.
+# Emails once for each problem: low disk, unhealthy worker, or full release. Each problem has its own marker file. A marker stops repeat email until its problem clears.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
@@ -33,15 +33,21 @@ fi
 report disk "$disk_failed" "Civic Lens: disk space low" \
   "Free space under $CIVIC_LENS_ROOT is $free_gb GB. The limit is $min_free_gb GB."
 
+release_full_exit_code=3
 worker_failed=no
+release_full=no
 worker_status=0
 timeout --kill-after=10 120 "${compose_command[@]}" run --rm --no-deps -T cli worker health || worker_status=$?
-if ((worker_status != 0)); then
+if ((worker_status == release_full_exit_code)); then
+  release_full=yes
+elif ((worker_status != 0)); then
   worker_failed=yes
   echo "worker health exit status $worker_status (124 means the 120 second limit)" >&2
 fi
 report worker "$worker_failed" "Civic Lens: worker unhealthy" \
   "The command worker health failed. Run civic-lens-ops worker health to read its line."
+report release-full "$release_full" "Civic Lens: release is full" \
+  "The worker is healthy. The release holds the maximum number of records, so new records wait for room. Ask the developer to raise the cap. Run civic-lens-ops worker health to read the counts."
 
 if [[ $send_failed == yes ]]; then
   exit 1

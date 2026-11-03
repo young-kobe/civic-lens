@@ -55,4 +55,31 @@ public sealed class WorkerHealthCommandTests(PostgresCollection postgres) : IAsy
         Assert.Equal(1, result.ExitCode);
         Assert.Contains("no heartbeat", result.Output);
     }
+
+    [Fact]
+    public async Task TheReleaseDirectoryMakesHealthReadTheActiveReleaseWhenRecordsWaitBecauseProgramMustWireTheCapCheck()
+    {
+        await BriefWorldSeeder.RunAsync(connectionString, ApprovalDrafts.DropForeignKeys);
+        await BriefWorldSeeder.RunAsync(connectionString, ApprovalDrafts.Inserts["executive_action_drafts"].Replace("'AwaitingReview'", "'Approved'"));
+        await BriefWorldSeeder.RunAsync(connectionString, """
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES (1, '000001-' || md5('missing'), 'owner', 0, 0, true)
+            """);
+        await store.BeatAsync("collection", default);
+        var folder = Directory.CreateTempSubdirectory("worker-health-");
+        try
+        {
+            var without = await HostProcess.RunAsync(connectionString, "worker", "health");
+            var with = await HostProcess.RunWithEnvironmentAsync(connectionString, null,
+                new Dictionary<string, string> { ["CIVIC_LENS_RELEASE_DIRECTORY"] = folder.FullName }, "worker", "health");
+
+            Assert.Equal(0, without.ExitCode);
+            Assert.NotEqual(0, with.ExitCode);
+            Assert.Contains("Command failed", with.Error);
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
 }

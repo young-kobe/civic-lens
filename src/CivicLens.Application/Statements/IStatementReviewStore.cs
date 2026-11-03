@@ -13,11 +13,10 @@ public interface IStatementReviewStore
 
     Task<StatementDraftRevision> SaveRevisionAsync(string actorSubject, StatementDraftRevision revision, int expectedRevisionNumber,
         bool statementDateChecked, ReviewDecision? approval,
-        StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
+        StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken);
 
     Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash,
-        CancellationToken cancellationToken);
+        int expectedReviewStateVersion, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
 
     Task<StatementReviewRead?> GetAsync(string candidateId, CancellationToken cancellationToken);
 

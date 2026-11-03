@@ -173,7 +173,7 @@ public sealed class ReleaseRendererTests
         var notice = html.IndexOf("Search needs JavaScript", StringComparison.Ordinal);
         Assert.True(noscriptStart >= 0);
         Assert.InRange(notice, noscriptStart, noscriptEnd);
-        Assert.True(noscriptEnd < html.IndexOf("<form", StringComparison.Ordinal));
+        Assert.True(noscriptEnd < html.IndexOf("<form class=\"release-search\"", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -183,7 +183,7 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
 
         Assert.Contains("Search is not available", html, StringComparison.Ordinal);
-        Assert.Null(document.QuerySelector("form"));
+        Assert.Null(document.QuerySelector("main form"));
     }
 
     [Fact]
@@ -192,8 +192,8 @@ public sealed class ReleaseRendererTests
         var index = await new ReleaseRenderer(null, null).RenderAllRecordsAsync(ReleaseOf(1), 1, CancellationToken.None);
         var record = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.Contains("href=\"search.html\"", index, StringComparison.Ordinal);
-        Assert.Contains("href=\"../search.html\"", record, StringComparison.Ordinal);
+        Assert.Contains("action=\"search.html\"", index, StringComparison.Ordinal);
+        Assert.Contains("action=\"../search.html\"", record, StringComparison.Ordinal);
         Assert.DoesNotContain("data-release-search", index, StringComparison.Ordinal);
     }
 
@@ -458,7 +458,7 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
 
         Assert.Contains("Reporting is not available", html, StringComparison.Ordinal);
-        Assert.Null(document.QuerySelector("form"));
+        Assert.Null(document.QuerySelector("main form"));
         Assert.DoesNotContain("data-sitekey", html, StringComparison.Ordinal);
         Assert.DoesNotContain("challenges.cloudflare.com", html, StringComparison.Ordinal);
         Assert.DoesNotContain("api.example.test", html, StringComparison.Ordinal);
@@ -2533,9 +2533,10 @@ public sealed class ReleaseRendererTests
     {
         foreach (var (name, _, html, section) in await RenderEveryPageTypeAsync())
         {
-            var current = new HtmlParser().ParseDocument(html).QuerySelectorAll("nav[aria-label='Site'] [aria-current]");
+            var current = new HtmlParser().ParseDocument(html).QuerySelectorAll("nav[aria-label='Site'] [aria-current], nav[aria-label='Footer'] [aria-current]");
+            var linkText = section == "Briefs" ? "Weekly briefs" : section;
 
-            Assert.True(section is null ? current.Length == 0 : current.Length == 1 && current[0].TextContent == section, name);
+            Assert.True(section is null ? current.Length == 0 : current.Length == 1 && current[0].TextContent == linkText, name);
         }
     }
 
@@ -2548,7 +2549,7 @@ public sealed class ReleaseRendererTests
             var links = document.QuerySelectorAll("nav[aria-label='Site'] a, nav[aria-label='Footer'] a")
                 .Select(link => link.GetAttribute("href")!).ToList();
 
-            Assert.Equal(11, links.Count);
+            Assert.Equal(8, links.Count);
             Assert.All(links, href => Assert.True(WrittenRootPages.Contains(ReleasePath(pagePath, href)), $"{name}: {href}"));
         }
     }
@@ -2633,7 +2634,7 @@ public sealed class ReleaseRendererTests
             ("past congress", pastOfficial.PagePath, await renderer.RenderOfficialAsync(pastOfficial, PublicationCatalogs.None, CancellationToken.None), "Officials"),
             ("officials", PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync([new OfficialListing(profile, 0)], DateTimeOffset.UnixEpoch, CancellationToken.None), "Officials"),
             ("board", OfficialBoard.All[0].PagePath, await renderer.RenderBoardAsync(OfficialBoardPage.All([], []).First(), CancellationToken.None), "Officials"),
-            ("search", PublicationProtocol.SearchPagePath, await renderer.RenderSearchAsync(release, facets, CancellationToken.None), "Search"),
+            ("search", PublicationProtocol.SearchPagePath, await renderer.RenderSearchAsync(release, facets, CancellationToken.None), null),
             ("method", PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(CancellationToken.None), null),
             ("about", PublicationProtocol.AboutPagePath, await renderer.RenderAboutAsync(CancellationToken.None), "About"),
             ("glossary", PublicationProtocol.GlossaryPagePath, await renderer.RenderGlossaryAsync(CancellationToken.None), "Glossary"),
@@ -2843,7 +2844,7 @@ public sealed class ReleaseRendererTests
         var assets = new ReleaseRenderer(null, null).Assets;
 
         foreach (var path in new[] { "assets/css/theme.css", "assets/css/app.css", "assets/css/public.css", "assets/js/theme.js", "assets/js/app.js", "assets/js/public.js",
-                     "assets/fonts/instrument-sans.woff2", "assets/fonts/newsreader.woff2", "assets/favicon.svg" })
+                     "assets/fonts/schibsted-grotesk.woff2", "assets/fonts/newsreader.woff2", "assets/favicon.svg" })
             Assert.Contains(assets, asset => asset.RelativePath == path && asset.Content.Length > 0);
     }
 
@@ -2856,13 +2857,13 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task EveryPageTypePreloadsInstrumentSansAndOnlyPagesWithNewsreaderTextAboveTheFoldPreloadNewsreader()
+    public async Task EveryPageTypePreloadsSchibstedGroteskAndOnlyPagesWithNewsreaderTextAboveTheFoldPreloadNewsreader()
     {
         string[] newsreaderPages = ["record", "statement", "action", "vote", "relationship", "brief", "withdrawal"];
 
         foreach (var (name, pagePath, html, _) in await RenderEveryPageTypeAsync())
         {
-            string[] expected = newsreaderPages.Contains(name) ? [InstrumentSansFont, NewsreaderFont] : [InstrumentSansFont];
+            string[] expected = newsreaderPages.Contains(name) ? [UiFont, NewsreaderFont] : [UiFont];
             Assert.True(expected.SequenceEqual(FontPreloads(html, pagePath)), name);
         }
     }
@@ -2872,10 +2873,10 @@ public sealed class ReleaseRendererTests
     {
         var html = await new ReleaseRenderer(null, null).RenderHomeAsync(ReleaseOf(1), Brief(), NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None);
 
-        Assert.Equal([InstrumentSansFont, NewsreaderFont], FontPreloads(html, PublicationProtocol.HomePath));
+        Assert.Equal([UiFont, NewsreaderFont], FontPreloads(html, PublicationProtocol.HomePath));
     }
 
-    private const string InstrumentSansFont = "assets/fonts/instrument-sans.woff2";
+    private const string UiFont = "assets/fonts/schibsted-grotesk.woff2";
     private const string NewsreaderFont = "assets/fonts/newsreader.woff2";
 
     private static string[] FontPreloads(string html, string pagePath)

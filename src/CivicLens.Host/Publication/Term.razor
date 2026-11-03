@@ -3,10 +3,13 @@
 }
 @if (Use.IsFirstUse(Key))
 {
-    <button type="button" class="term" popovertarget="@term.PopoverId">@ChildContent</button><span class="term-popover" id="@term.PopoverId" popover>
-        <span class="term-means">@term.Means</span>
-        <span class="term-why">@term.WhyItMatters</span>
-    </span>
+    <InfoPopover Id="@term.PopoverId" TriggerClass="term">
+        <Trigger>@ChildContent</Trigger>
+        <ChildContent>
+            <span class="term-means">@term.Means</span>
+            <span class="term-why">@term.WhyItMatters</span>
+        </ChildContent>
+    </InfoPopover>
 }
 else
 {
