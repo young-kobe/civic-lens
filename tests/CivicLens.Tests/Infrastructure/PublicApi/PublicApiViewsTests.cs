@@ -8,7 +8,6 @@ using CivicLens.Tests.Application.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection;
-using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.PublicApi;
@@ -130,8 +129,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         var empty = await postgres.CreateEmptyDatabaseAsync();
         try
         {
-            await using (var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(empty).Options))
-                await db.Database.MigrateAsync();
+            await PostgresCollectionAttemptStore.FromConnectionString(empty).MigrateAsync();
 
             Assert.Equal(["false true"], await QueryAsync($"SELECT has_database_privilege('{Role}', current_database(), 'TEMPORARY') || ' ' || has_database_privilege('{Role}', current_database(), 'CONNECT')", empty));
         }
@@ -222,7 +220,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
-    public async Task AVoteRevisionWithNoWrittenColumnsAppearsInNoVoteRowBecauseItHoldsNothingToShow()
+    public async Task AVoteRevisionWithNoWrittenColumnsAppearsInNoVoteViewBecauseItHoldsNothingToShow()
     {
         await ExecuteAsync("""
             SET session_replication_role = replica;
@@ -231,8 +229,58 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('vote', 'old', 1, 1, NULL);
             INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
               VALUES ('old', 1, 'test', 'Person', 'x', 1);
+            INSERT INTO vote_revision_issues (record_id, revision_number, issue_id, position, is_tracked) VALUES ('old', 1, 'health', 0, true);
             """);
         Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.votes"));
+        Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.vote_members"));
+        Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.vote_issues"));
+    }
+
+    [Fact]
+    public async Task TheGrantsStepRunTwiceChangesNothingBecauseEveryDbMigrateRunsIt()
+    {
+        var store = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
+        await store.MigrateAsync();
+        var before = await GrantStateAsync();
+
+        await store.MigrateAsync();
+
+        Assert.Equal(before, await GrantStateAsync());
+    }
+
+    [Fact]
+    public async Task TheGrantsStepRestoresWhatARestoreWithNoPrivilegesDropsBecauseDbMigrateMustCloseTheGapAfterARestore()
+    {
+        var store = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
+        await store.MigrateAsync();
+        var before = await GrantStateAsync();
+        await ExecuteAsync($"""
+            REVOKE SELECT ON ALL TABLES IN SCHEMA public_api FROM {Role};
+            REVOKE USAGE ON SCHEMA public_api FROM {Role};
+            REVOKE SELECT ON publication_releases, publication_record_states, vote_revisions, vote_member_list_entries, vote_revision_issues FROM {Owner};
+            ALTER ROLE {Role} RESET ALL;
+            ALTER ROLE {Role} CONNECTION LIMIT -1;
+            GRANT TEMPORARY ON DATABASE {new NpgsqlConnectionStringBuilder(connectionString).Database} TO PUBLIC;
+            GRANT EXECUTE ON FUNCTION pg_advisory_lock(bigint), pg_try_advisory_lock(bigint), pg_try_advisory_xact_lock(bigint) TO PUBLIC;
+            """);
+        await SeedAsync();
+        await using (var broken = await OpenPublicAsync())
+            await AssertDeniedAsync(broken, "SELECT count(*) FROM public_api.votes");
+
+        await store.MigrateAsync();
+
+        Assert.Equal(["a", "c", "d"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.votes ORDER BY 1"));
+        Assert.Equal(["False"], await QueryAsync("SELECT has_database_privilege('public', current_database(), 'TEMPORARY')", connectionString));
+        Assert.Equal(["0"], await QueryAsync("""
+            SELECT count(*) FROM pg_proc p WHERE p.pronamespace = 'pg_catalog'::regnamespace AND p.proname LIKE 'pg\_%advisory\_%'
+               AND has_function_privilege('public', p.oid, 'EXECUTE')
+            """, connectionString));
+        Assert.Equal(before, await GrantStateAsync());
+        Assert.Equal(["default_transaction_read_only=on", "idle_in_transaction_session_timeout=10s", "idle_session_timeout=60s", "statement_timeout=2s"],
+            await QueryAsync($"SELECT unnest(setconfig) FROM pg_db_role_setting WHERE setrole = '{Role}'::regrole ORDER BY 1", connectionString));
+        await using var restored = await OpenPublicAsync();
+        await AssertDeniedAsync(restored, "SELECT pg_advisory_lock(1)");
+        await AssertDeniedAsync(restored, "SELECT * FROM public.vote_revisions");
     }
 
     private async Task SeedAsync()
@@ -301,6 +349,19 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         INSERT INTO vote_member_list_entries (list_id, "position", person_id, bioguide_id, vote_cast, citation_extraction_id, citation_start, citation_length)
         VALUES ('{list}', {position}, 'p{position}', 'B{position:000000}', '{cast}', 'ext', 0, 1);
         """;
+
+    private async Task<string[]> GrantStateAsync() => await QueryAsync($"""
+        SELECT x FROM (
+          SELECT 'rel ' || n.nspname || '.' || c.relname || ' ' || coalesce(c.relacl::text, '') AS x FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE n.nspname = 'public_api'
+          UNION ALL SELECT 'column ' || c.relname || '.' || a.attname || ' ' || a.attacl::text FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+           WHERE a.attacl IS NOT NULL AND c.relnamespace = 'public'::regnamespace
+          UNION ALL SELECT 'schema ' || nspacl::text FROM pg_namespace WHERE nspname = 'public_api'
+          UNION ALL SELECT 'database ' || datacl::text FROM pg_database WHERE datname = current_database()
+          UNION ALL SELECT 'role ' || rolconnlimit || ' ' || coalesce(rolconfig::text, '') FROM pg_roles
+           WHERE rolname = '{Role}'
+        ) t ORDER BY x
+        """, connectionString);
 
     private static string ReadOnlyGrantsScript() => string.Join('\n',
         File.ReadAllLines(Path.Combine(RepositoryRoot.FullName, "deploy", "scripts", "readonly-grants.sql")).Where(line => !line.StartsWith('\\')));
