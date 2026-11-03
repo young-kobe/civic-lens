@@ -16,7 +16,7 @@ namespace CivicLens.Tests.Infrastructure.ExecutiveActions;
 [Trait("Category", "Postgres")]
 public sealed class ExecutiveActionRevisionColumnsMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private const string Migration = "20261103180809_ExecutiveActionRevisionColumns";
+    private const string Migration = "20261103195249_ExecutiveActionRevisionColumns";
     private static readonly string RecordId = new('a', 64);
     private static readonly string ExtractionId = new('e', 64);
     private static readonly ExecutiveActionNotice Notice = new("R1-2024-26714", new DateOnly(2024, 11, 20), "https://example.test/notice", new(ExtractionId, 12, 34));

@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CivicLens.Infrastructure.Collection.Migrations
 {
     [DbContext(typeof(CollectionAttemptDbContext))]
-    [Migration("20261103180809_ExecutiveActionRevisionColumns")]
-    partial class ExecutiveActionRevisionColumns
+    [Migration("20261103165049_ActionRevisionColumns")]
+    partial class ActionRevisionColumns
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -387,6 +387,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("RecordId");
 
+                    b.HasAlternateKey("RecordId", "SourceId", "Congress", "BillType", "BillNumber")
+                        .HasName("ux_action_drafts_record_bill");
+
                     b.HasIndex("CandidateId");
 
                     b.HasIndex("IssueIds")
@@ -499,6 +502,40 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionIssueRow", b =>
+                {
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<string>("IssueId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("issue_id");
+
+                    b.Property<bool>("IsTracked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_tracked");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.HasKey("RecordId", "RevisionNumber", "IssueId");
+
+                    b.ToTable("action_revision_issues", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_action_revision_issues_issue", "length(btrim(issue_id)) > 0");
+
+                            t.HasCheckConstraint("ck_action_revision_issues_position", "position >= 0");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionRow", b =>
                 {
                     b.Property<string>("RecordId")
@@ -522,9 +559,99 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("author_subject");
 
+                    b.Property<string>("BillCitationExtractionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("bill_citation_extraction_id");
+
+                    b.Property<int?>("BillCitationLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("bill_citation_length");
+
+                    b.Property<int?>("BillCitationStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("bill_citation_start");
+
+                    b.Property<int?>("BillNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("bill_number");
+
+                    b.Property<string>("BillTitle")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("bill_title");
+
+                    b.Property<string>("BillType")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("bill_type");
+
+                    b.Property<string>("CandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("candidate_id");
+
+                    b.Property<bool?>("CandidateIncludesSubjects")
+                        .HasColumnType("boolean")
+                        .HasColumnName("candidate_includes_subjects");
+
+                    b.Property<bool?>("CandidateIncludesSummaries")
+                        .HasColumnType("boolean")
+                        .HasColumnName("candidate_includes_summaries");
+
+                    b.Property<long?>("CandidateUpdateUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("candidate_update_utc_ticks");
+
+                    b.Property<int?>("Congress")
+                        .HasColumnType("integer")
+                        .HasColumnName("congress");
+
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<string>("Fingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("fingerprint");
+
+                    b.Property<string>("Headline")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("headline");
+
+                    b.Property<bool?>("IssueCandidatesRecorded")
+                        .HasColumnType("boolean")
+                        .HasColumnName("issue_candidates_recorded");
+
+                    b.Property<string>("IssueRevisionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("issue_revision_id");
+
+                    b.Property<string>("PolicyArea")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("policy_area");
+
+                    b.Property<string>("PolicyAreaCitationExtractionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("policy_area_citation_extraction_id");
+
+                    b.Property<int?>("PolicyAreaCitationLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("policy_area_citation_length");
+
+                    b.Property<int?>("PolicyAreaCitationStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("policy_area_citation_start");
+
+                    b.Property<string>("PolicyAreaId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("policy_area_id");
 
                     b.Property<string>("RevisionJson")
                         .IsRequired()
@@ -536,20 +663,233 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("run_id");
 
+                    b.Property<string>("SourceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("source_id");
+
+                    b.Property<string>("SubjectsHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("subjects_hash");
+
+                    b.Property<string>("SuggestionFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("suggestion_fingerprint");
+
+                    b.Property<string>("SuggestionHeadline")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("suggestion_headline");
+
+                    b.Property<string>("SuggestionRunId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("suggestion_run_id");
+
+                    b.Property<string>("SuggestionSummary")
+                        .HasColumnType("text")
+                        .HasColumnName("suggestion_summary");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("text")
+                        .HasColumnName("summary");
+
+                    b.Property<string>("SummaryCitationExtractionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("summary_citation_extraction_id");
+
+                    b.Property<int?>("SummaryCitationLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("summary_citation_length");
+
+                    b.Property<int?>("SummaryCitationStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("summary_citation_start");
+
+                    b.Property<string>("SummaryVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("summary_version");
+
+                    b.Property<string>("TextOrigin")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("text_origin");
+
                     b.HasKey("RecordId", "RevisionNumber");
+
+                    b.HasIndex("BillCitationExtractionId");
+
+                    b.HasIndex("CandidateId");
+
+                    b.HasIndex("PolicyAreaCitationExtractionId");
 
                     b.HasIndex("RunId")
                         .IsUnique();
+
+                    b.HasIndex("SuggestionRunId");
+
+                    b.HasIndex("SummaryCitationExtractionId");
+
+                    b.HasIndex("RecordId", "SourceId", "Congress", "BillType", "BillNumber");
 
                     b.ToTable("action_revisions", null, t =>
                         {
                             t.HasCheckConstraint("ck_action_revisions_author_kind", "author_kind IN ('Person','Analysis','Code')");
 
+                            t.HasCheckConstraint("ck_action_revisions_bill", "congress >= 1 AND bill_number >= 1");
+
+                            t.HasCheckConstraint("ck_action_revisions_bill_citation", "(bill_citation_extraction_id IS NULL) = (bill_citation_start IS NULL) AND (bill_citation_extraction_id IS NULL) = (bill_citation_length IS NULL) AND bill_citation_start >= 0 AND bill_citation_length > 0");
+
+                            t.HasCheckConstraint("ck_action_revisions_candidate", "candidate_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_action_revisions_candidate_update_utc_ticks", "candidate_update_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_action_revisions_code_bill_citation", "author_kind <> 'Code' OR headline IS NULL OR bill_citation_extraction_id IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_action_revisions_columns_written", "num_nulls(headline, summary, text_origin, source_id, congress, bill_type, bill_number, candidate_id, candidate_update_utc_ticks, candidate_includes_summaries, candidate_includes_subjects, fingerprint, bill_title, issue_revision_id, issue_candidates_recorded) IN (0, 15)");
+
                             t.HasCheckConstraint("ck_action_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_action_revisions_fingerprint", "fingerprint ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_action_revisions_headline", "length(btrim(headline)) BETWEEN 1 AND 256");
+
+                            t.HasCheckConstraint("ck_action_revisions_issue_revision", "issue_revision_id ~ '^[0-9a-f]{64}$'");
 
                             t.HasCheckConstraint("ck_action_revisions_number", "revision_number >= 1");
 
+                            t.HasCheckConstraint("ck_action_revisions_person_text", "author_kind <> 'Person' OR text_origin = 'Person'");
+
+                            t.HasCheckConstraint("ck_action_revisions_policy_area", "(policy_area IS NULL) = (policy_area_citation_extraction_id IS NULL)");
+
+                            t.HasCheckConstraint("ck_action_revisions_policy_area_citation", "(policy_area_citation_extraction_id IS NULL) = (policy_area_citation_start IS NULL) AND (policy_area_citation_extraction_id IS NULL) = (policy_area_citation_length IS NULL) AND policy_area_citation_start >= 0 AND policy_area_citation_length > 0");
+
+                            t.HasCheckConstraint("ck_action_revisions_policy_area_id", "policy_area_id IS NULL OR policy_area IS NOT NULL");
+
                             t.HasCheckConstraint("ck_action_revisions_run", "(author_kind <> 'Person') = (run_id IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_action_revisions_subjects_hash", "subjects_hash ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_action_revisions_suggestion", "(suggestion_headline IS NULL) = (suggestion_summary IS NULL) AND (suggestion_headline IS NULL) = (suggestion_run_id IS NULL) AND (suggestion_headline IS NULL) = (suggestion_fingerprint IS NULL)");
+
+                            t.HasCheckConstraint("ck_action_revisions_summary", "length(summary) BETWEEN 1 AND 8000");
+
+                            t.HasCheckConstraint("ck_action_revisions_summary_citation", "(summary_citation_extraction_id IS NULL) = (summary_citation_start IS NULL) AND (summary_citation_extraction_id IS NULL) = (summary_citation_length IS NULL) AND summary_citation_start >= 0 AND summary_citation_length > 0");
+
+                            t.HasCheckConstraint("ck_action_revisions_summary_version", "(summary_version IS NULL) = (summary_citation_extraction_id IS NULL)");
+
+                            t.HasCheckConstraint("ck_action_revisions_text_origin", "text_origin IN ('Model', 'Person', 'Code')");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionSponsorshipCitationRow", b =>
+                {
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<short>("SponsorshipPosition")
+                        .HasColumnType("smallint")
+                        .HasColumnName("sponsorship_position");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.Property<string>("CitationExtractionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("citation_extraction_id");
+
+                    b.Property<int>("CitationLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("citation_length");
+
+                    b.Property<int>("CitationStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("citation_start");
+
+                    b.HasKey("RecordId", "RevisionNumber", "SponsorshipPosition", "Position");
+
+                    b.HasIndex("CitationExtractionId");
+
+                    b.ToTable("action_revision_sponsorship_citations", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_action_revision_sponsorship_citations_citation", "citation_start >= 0 AND citation_length > 0");
+
+                            t.HasCheckConstraint("ck_action_revision_sponsorship_citations_position", "position BETWEEN 0 AND 1");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionSponsorshipRow", b =>
+                {
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.Property<string>("BioguideId")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("bioguide_id");
+
+                    b.Property<bool>("IsOriginal")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_original");
+
+                    b.Property<string>("PersonId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("person_id");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("role");
+
+                    b.Property<DateOnly>("SponsoredOn")
+                        .HasColumnType("date")
+                        .HasColumnName("sponsored_on");
+
+                    b.Property<DateOnly?>("WithdrawnOn")
+                        .HasColumnType("date")
+                        .HasColumnName("withdrawn_on");
+
+                    b.HasKey("RecordId", "RevisionNumber", "Position");
+
+                    b.HasIndex("PersonId", "RecordId", "RevisionNumber")
+                        .HasDatabaseName("ix_action_revision_sponsorships_person");
+
+                    b.ToTable("action_revision_sponsorships", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_action_revision_sponsorships_person", "length(btrim(person_id)) > 0 AND length(btrim(bioguide_id)) > 0");
+
+                            t.HasCheckConstraint("ck_action_revision_sponsorships_position", "position >= 0");
+
+                            t.HasCheckConstraint("ck_action_revision_sponsorships_role", "role IN ('Sponsor', 'Cosponsor')");
+
+                            t.HasCheckConstraint("ck_action_revision_sponsorships_withdrawn", "withdrawn_on >= sponsored_on");
                         });
                 });
 
@@ -2839,23 +3179,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("document_job_id");
 
-                    b.Property<string>("NoticeCitationExtractionId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("notice_citation_extraction_id");
-
-                    b.Property<int?>("NoticeCitationLength")
-                        .HasColumnType("integer")
-                        .HasColumnName("notice_citation_length");
-
-                    b.Property<int?>("NoticeCitationStart")
-                        .HasColumnType("integer")
-                        .HasColumnName("notice_citation_start");
-
-                    b.Property<string>("NoticeUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("notice_url");
+                    b.Property<string>("NoticeJson")
+                        .HasColumnType("text")
+                        .HasColumnName("notice_json");
 
                     b.Property<DateOnly>("PublishedOn")
                         .HasColumnType("date")
@@ -2875,8 +3201,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("DocumentJobId");
 
-                    b.HasIndex("NoticeCitationExtractionId");
-
                     b.HasIndex("RecordId", "RevisionNumber");
 
                     b.HasIndex("SourceId", "PublishedOn")
@@ -2884,11 +3208,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("executive_action_documents", null, t =>
                         {
-                            t.HasCheckConstraint("ck_executive_action_documents_notice", "(notice_url IS NULL) = (notice_citation_extraction_id IS NULL) AND (notice_url IS NULL OR btrim(notice_url) <> '' AND length(notice_url) <= 1000)");
-
-                            t.HasCheckConstraint("ck_executive_action_documents_notice_citation", "(notice_citation_extraction_id IS NULL) = (notice_citation_start IS NULL) AND (notice_citation_extraction_id IS NULL) = (notice_citation_length IS NULL) AND notice_citation_start >= 0 AND notice_citation_length > 0");
-
-                            t.HasCheckConstraint("ck_executive_action_documents_pending", "revision_number IS NOT NULL OR notice_url IS NOT NULL");
+                            t.HasCheckConstraint("ck_executive_action_documents_pending", "revision_number IS NOT NULL OR notice_json IS NOT NULL");
 
                             t.HasCheckConstraint("ck_executive_action_documents_revision", "revision_number >= 1");
                         });
@@ -3051,87 +3371,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
-            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionFactRow", b =>
-                {
-                    b.Property<string>("RecordId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("record_id");
-
-                    b.Property<int>("RevisionNumber")
-                        .HasColumnType("integer")
-                        .HasColumnName("revision_number");
-
-                    b.Property<short>("Position")
-                        .HasColumnType("smallint")
-                        .HasColumnName("position");
-
-                    b.Property<string>("CitationExtractionId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("citation_extraction_id");
-
-                    b.Property<int>("CitationLength")
-                        .HasColumnType("integer")
-                        .HasColumnName("citation_length");
-
-                    b.Property<int>("CitationStart")
-                        .HasColumnType("integer")
-                        .HasColumnName("citation_start");
-
-                    b.HasKey("RecordId", "RevisionNumber", "Position");
-
-                    b.HasIndex("CitationExtractionId");
-
-                    b.ToTable("executive_action_revision_facts", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_executive_action_revision_facts_citation", "citation_start >= 0 AND citation_length > 0");
-
-                            t.HasCheckConstraint("ck_executive_action_revision_facts_position", "position >= 0");
-                        });
-                });
-
-            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionNoticeRow", b =>
-                {
-                    b.Property<string>("RecordId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("record_id");
-
-                    b.Property<int>("RevisionNumber")
-                        .HasColumnType("integer")
-                        .HasColumnName("revision_number");
-
-                    b.Property<short>("Position")
-                        .HasColumnType("smallint")
-                        .HasColumnName("position");
-
-                    b.Property<string>("DocumentNumber")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("document_number");
-
-                    b.Property<string>("SourceId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("source_id");
-
-                    b.HasKey("RecordId", "RevisionNumber", "Position");
-
-                    b.HasIndex("SourceId", "DocumentNumber");
-
-                    b.HasIndex("RecordId", "RevisionNumber", "DocumentNumber")
-                        .IsUnique();
-
-                    b.ToTable("executive_action_revision_notices", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_executive_action_revision_notices_position", "position >= 0");
-                        });
-                });
-
             modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", b =>
                 {
                     b.Property<string>("RecordId")
@@ -3143,97 +3382,20 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("revision_number");
 
-                    b.Property<string>("AuthorKind")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("author_kind");
-
-                    b.Property<string>("AuthorSubject")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("author_subject");
-
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
-
-                    b.Property<string>("DocumentNumber")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("document_number");
-
-                    b.Property<string>("DocumentUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("document_url");
-
-                    b.Property<string>("FederalRegisterCitation")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("federal_register_citation");
-
-                    b.Property<string>("Kind")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("kind");
-
-                    b.Property<string>("PersonId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("person_id");
-
-                    b.Property<string>("PresidentName")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("president_name");
-
-                    b.Property<string>("PresidentialNumber")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("presidential_number");
-
-                    b.Property<DateOnly?>("PublishedOn")
-                        .HasColumnType("date")
-                        .HasColumnName("published_on");
 
                     b.Property<string>("RevisionJson")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("revision_json");
 
-                    b.Property<DateOnly?>("SignedOn")
-                        .HasColumnType("date")
-                        .HasColumnName("signed_on");
-
-                    b.Property<string>("SourceId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("source_id");
-
-                    b.Property<string>("Title")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("title");
-
                     b.HasKey("RecordId", "RevisionNumber");
 
                     b.ToTable("executive_action_revisions", null, t =>
                         {
-                            t.HasCheckConstraint("ck_executive_action_revisions_author", "author_kind = 'Code' AND author_subject = 'civic-lens:code'");
-
-                            t.HasCheckConstraint("ck_executive_action_revisions_columns_written", "num_nulls(source_id, document_number, kind, title, signed_on, published_on, federal_register_citation, president_name, person_id, document_url) IN (0, 10)");
-
                             t.HasCheckConstraint("ck_executive_action_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
-
-                            t.HasCheckConstraint("ck_executive_action_revisions_dates", "signed_on <> '0001-01-01' AND published_on <> '0001-01-01'");
-
-                            t.HasCheckConstraint("ck_executive_action_revisions_fields", "(document_number IS NULL OR (btrim(document_number) <> '' AND length(document_number) <= 1000 AND document_number !~ '[\\r\\n]')) AND (title IS NULL OR (btrim(title) <> '' AND length(title) <= 1000 AND title !~ '[\\r\\n]')) AND (federal_register_citation IS NULL OR (btrim(federal_register_citation) <> '' AND length(federal_register_citation) <= 1000 AND federal_register_citation !~ '[\\r\\n]')) AND (president_name IS NULL OR (btrim(president_name) <> '' AND length(president_name) <= 1000 AND president_name !~ '[\\r\\n]')) AND (document_url IS NULL OR (btrim(document_url) <> '' AND length(document_url) <= 1000 AND document_url !~ '[\\r\\n]')) AND (presidential_number IS NULL OR (btrim(presidential_number) <> '' AND length(presidential_number) <= 1000 AND presidential_number !~ '[\\r\\n]'))");
-
-                            t.HasCheckConstraint("ck_executive_action_revisions_ids", "length(btrim(source_id)) > 0 AND length(btrim(person_id)) > 0");
-
-                            t.HasCheckConstraint("ck_executive_action_revisions_kind", "kind IN ('ExecutiveOrder', 'Proclamation', 'Notice', 'Memorandum')");
 
                             t.HasCheckConstraint("ck_executive_action_revisions_number", "revision_number >= 1");
                         });
@@ -6061,8 +6223,32 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionIssueRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionRow", null)
+                        .WithMany("Issues")
+                        .HasForeignKey("RecordId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionRow", b =>
                 {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("BillCitationExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.BillStream.ActionCandidateRow", null)
+                        .WithMany()
+                        .HasForeignKey("CandidateId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("PolicyAreaCitationExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionDraftRow", null)
                         .WithMany()
                         .HasForeignKey("RecordId")
@@ -6073,6 +6259,46 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .WithMany()
                         .HasForeignKey("RunId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionAnalysisRunRow", null)
+                        .WithMany()
+                        .HasForeignKey("SuggestionRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("SummaryCitationExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionDraftRow", null)
+                        .WithMany()
+                        .HasForeignKey("RecordId", "SourceId", "Congress", "BillType", "BillNumber")
+                        .HasPrincipalKey("RecordId", "SourceId", "Congress", "BillType", "BillNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionSponsorshipCitationRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("CitationExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionSponsorshipRow", null)
+                        .WithMany("Citations")
+                        .HasForeignKey("RecordId", "RevisionNumber", "SponsorshipPosition")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionSponsorshipRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionRow", null)
+                        .WithMany("Sponsorships")
+                        .HasForeignKey("RecordId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Analysis.Persistence.DocumentChangeAnalysisRow", b =>
@@ -6455,11 +6681,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
-                        .WithMany()
-                        .HasForeignKey("NoticeCitationExtractionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", null)
                         .WithMany()
                         .HasForeignKey("RecordId", "RevisionNumber")
@@ -6471,36 +6692,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", null)
                         .WithMany()
                         .HasForeignKey("RecordId", "RevisionNumber")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionFactRow", b =>
-                {
-                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
-                        .WithMany()
-                        .HasForeignKey("CitationExtractionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", null)
-                        .WithMany("Facts")
-                        .HasForeignKey("RecordId", "RevisionNumber")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionNoticeRow", b =>
-                {
-                    b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", null)
-                        .WithMany("Notices")
-                        .HasForeignKey("RecordId", "RevisionNumber")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionDocumentRow", null)
-                        .WithMany()
-                        .HasForeignKey("SourceId", "DocumentNumber")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -7014,11 +7205,16 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
-            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", b =>
+            modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionRow", b =>
                 {
-                    b.Navigation("Facts");
+                    b.Navigation("Issues");
 
-                    b.Navigation("Notices");
+                    b.Navigation("Sponsorships");
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionSponsorshipRow", b =>
+                {
+                    b.Navigation("Citations");
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionRow", b =>

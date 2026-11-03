@@ -71,15 +71,32 @@ internal sealed class PostgresDeadlineWakeup(string connectionString, string cha
                 notifiedDeadline = null;
                 return;
             }
-            // Npgsql treats 0 ms as infinite.
-            var timeout = ticksUntilDue is null ? Timeout.Infinite :
-                (int)Math.Clamp(Math.Ceiling(ticksUntilDue.Value / (double)TimeSpan.TicksPerMillisecond), 1, int.MaxValue);
-            if (!await current.WaitAsync(timeout, cancellationToken))
+            if (ticksUntilDue is not { } due)
             {
-                notifiedDeadline = null;
-                return;
+                await current.WaitAsync(cancellationToken);
+                continue;
             }
+            if (await current.WaitAsync(TimeoutMilliseconds(due), cancellationToken)) continue;
+            notifiedDeadline = null;
+            await WaitForDatabaseClockAsync(current, deadline.DatabaseTicks + due, cancellationToken);
+            return;
         }
+    }
+
+    // Npgsql treats 0 ms as infinite.
+    private static int TimeoutMilliseconds(long ticks) =>
+        (int)Math.Clamp(Math.Ceiling(ticks / (double)TimeSpan.TicksPerMillisecond), 1, int.MaxValue);
+
+    private async Task WaitForDatabaseClockAsync(NpgsqlConnection listener, long deadlineTicks, CancellationToken cancellationToken)
+    {
+        var now = await ReadDatabaseTicksAsync(listener, cancellationToken);
+        while (now < deadlineTicks && !hasNotification)
+        {
+            await listener.WaitAsync(TimeoutMilliseconds(deadlineTicks - now), cancellationToken);
+            now = await ReadDatabaseTicksAsync(listener, cancellationToken);
+        }
+        hasNotification = false;
+        if (notifiedDeadline <= deadlineTicks) notifiedDeadline = null;
     }
 
     public async ValueTask DisposeAsync() => await DisposeConnectionAsync();
