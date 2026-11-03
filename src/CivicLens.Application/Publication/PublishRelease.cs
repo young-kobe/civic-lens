@@ -105,7 +105,6 @@ public sealed class PublishRelease
         return summary;
     }
 
-    // A record that an active entry or withdrawal holds, and that has no stored time, needs the backfill. Guessing its time here could split it in two.
     private static void RequireFirstPublished(PreviousRelease previous, ImmutableArray<PublishedRecordReference> references,
         IReadOnlyDictionary<PublishedRecordReference, DateTimeOffset> firstPublished)
     {
