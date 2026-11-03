@@ -67,9 +67,11 @@ public sealed class PublishRelease
         var previous = await PreviousRelease.LoadAsync(releases, state.Active, cancellationToken);
         if (previous.DirectoryName is null && references.IsEmpty && request.Withdrawals.IsEmpty)
             throw new ArgumentException("A publish with no record needs an active release.");
-        var firstPublished = await publications.ReadFirstPublishedAsync(references, cancellationToken);
-        RequireFirstPublished(previous, references, firstPublished);
         var withdrawn = ImmutableArray.CreateRange(withdrawalNotes.Keys);
+        var listedWithdrawals = previous.Withdrawals.Select(withdrawal => new PublishedRecordReference(withdrawal.Kind, withdrawal.RecordId))
+            .Concat(withdrawn.Where(reference => previous.Find(reference.Kind, reference.RecordId) is not null)).ToArray();
+        var firstPublished = await publications.ReadFirstPublishedAsync([.. references.Concat(listedWithdrawals).Distinct()], cancellationToken);
+        RequireFirstPublished(previous, references, listedWithdrawals, firstPublished);
         var corrections = await PublicationCorrections.LoadAsync(releases, previous, now, [.. references, .. withdrawn],
             cancellationToken);
         var newWithdrawals = PublicationWithdrawals.Create(previous, corrections, now, withdrawalNotes);
@@ -97,6 +99,7 @@ public sealed class PublishRelease
             [.. additions.Select(addition => addition.Expectation)])
         {
             WithdrawnRecords = withdrawn,
+            Withdrawals = [.. withdrawals],
             FirstPublications = [.. additions.Select(addition => new PublishedFirstPublication(addition.Entry.Kind, addition.RecordId, addition.Entry.FirstPublishedAtUtc))]
         };
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
@@ -106,10 +109,10 @@ public sealed class PublishRelease
     }
 
     private static void RequireFirstPublished(PreviousRelease previous, ImmutableArray<PublishedRecordReference> references,
-        IReadOnlyDictionary<PublishedRecordReference, DateTimeOffset> firstPublished)
+        PublishedRecordReference[] listedWithdrawals, IReadOnlyDictionary<PublishedRecordReference, DateTimeOffset> firstPublished)
     {
-        var unrecorded = references.FirstOrDefault(reference => !firstPublished.ContainsKey(reference) &&
-            (previous.Find(reference.Kind, reference.RecordId) is not null || previous.IsWithdrawn(reference.RecordId)));
+        var unrecorded = references.Where(reference => previous.Find(reference.Kind, reference.RecordId) is not null || previous.IsWithdrawn(reference.RecordId))
+            .Concat(listedWithdrawals).FirstOrDefault(reference => !firstPublished.ContainsKey(reference));
         if (unrecorded is null) return;
         throw new FirstPublishedMissingException(
             $"The first publication time of {unrecorded} is not stored. Run releases first-published backfill, then publish again.");
