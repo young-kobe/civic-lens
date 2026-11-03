@@ -119,10 +119,10 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
     }
 
     [Fact]
-    public async Task TheDatabaseRefusesElapsedTimeOutsideItsRangeAndKeepsOldRowsNull()
+    public async Task TheDatabaseRefusesElapsedTimeOutsideItsRangeSoNoRowKeepsAnImpossibleDuration()
     {
-        var request = Request("elapsed-check");
-        await store.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("elapsed-check", request,
+        var request = Request("elapsed-range");
+        await store.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("elapsed-range", request,
             Result(request.JobId, CollectionOutcome.Failed, Response: Metadata(404, null, null, null, []),
                 FailureCode: CollectionFailureCode.HttpError) with
             { RequestCount = 2 }), default);
@@ -133,17 +133,34 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         foreach (var refused in new[] { -1, limit + 1 })
         {
             await using var command = new NpgsqlCommand(
-                $"UPDATE collection_attempts SET elapsed_milliseconds = {refused} WHERE attempt_id = 'elapsed-check'", connection);
+                $"UPDATE collection_attempts SET elapsed_milliseconds = {refused} WHERE attempt_id = 'elapsed-range'", connection);
             var failure = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
             Assert.Equal("ck_collection_attempts_elapsed_milliseconds", failure.ConstraintName);
         }
         await using var accepted = new NpgsqlCommand(
-            $"UPDATE collection_attempts SET elapsed_milliseconds = {limit} WHERE attempt_id = 'elapsed-check'", connection);
+            $"UPDATE collection_attempts SET elapsed_milliseconds = {limit} WHERE attempt_id = 'elapsed-range'", connection);
         Assert.Equal(1, await accepted.ExecuteNonQueryAsync());
-        await using var cleared = new NpgsqlCommand(
-            "UPDATE collection_attempts SET elapsed_milliseconds = NULL WHERE attempt_id = 'elapsed-check'", connection);
-        Assert.Equal(1, await cleared.ExecuteNonQueryAsync());
-        Assert.Null((await store.GetAsync("elapsed-check", default))!.ElapsedMilliseconds);
+    }
+
+    [Fact]
+    public async Task OnlyARowObservedBeforeTheMigrationMayHaveNoElapsedTimeSoNoNewRowCanLoseIt()
+    {
+        var request = Request("elapsed-cutoff");
+        await store.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("elapsed-cutoff", request,
+            Result(request.JobId, CollectionOutcome.Failed, Response: Metadata(404, null, null, null, []),
+                FailureCode: CollectionFailureCode.HttpError) with
+            { RequestCount = 2 }), default);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var newRow = new NpgsqlCommand(
+            "UPDATE collection_attempts SET elapsed_milliseconds = NULL WHERE attempt_id = 'elapsed-cutoff'", connection);
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => newRow.ExecuteNonQueryAsync());
+        Assert.Equal("ck_collection_attempts_elapsed_measured", failure.ConstraintName);
+
+        await using var oldRow = new NpgsqlCommand(
+            "UPDATE collection_attempts SET observed_at_utc_ticks = 0, elapsed_milliseconds = NULL WHERE attempt_id = 'elapsed-cutoff'", connection);
+        Assert.Equal(1, await oldRow.ExecuteNonQueryAsync());
     }
 
     [Fact]
