@@ -8,7 +8,10 @@ internal sealed class ExecutiveActionDocumentRow
     public string DocumentNumber { get; set; } = string.Empty;
     public string RecordId { get; set; } = string.Empty;
     public int? RevisionNumber { get; set; }
-    public string? NoticeJson { get; set; }
+    public string? NoticeUrl { get; set; }
+    public string? NoticeCitationExtractionId { get; set; }
+    public int? NoticeCitationStart { get; set; }
+    public int? NoticeCitationLength { get; set; }
     public DateOnly PublishedOn { get; set; }
     public string DocumentJobId { get; set; } = string.Empty;
 }

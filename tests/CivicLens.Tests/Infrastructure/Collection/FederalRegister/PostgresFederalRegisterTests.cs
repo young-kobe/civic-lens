@@ -97,10 +97,10 @@ public sealed class PostgresFederalRegisterTests(PostgresCollection postgres) : 
         Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM executive_action_revisions"));
         Assert.Equal(2, await ScalarAsync("SELECT current_revision_number FROM executive_action_drafts"));
         Assert.Equal("Approved", await ScalarAsync("SELECT review_status FROM executive_action_drafts"));
-        Assert.Equal("2024-26714", await ScalarAsync("SELECT revision_json::jsonb ->> 'documentNumber' FROM executive_action_revisions WHERE revision_number = 2"));
-        Assert.Equal("2024-11-13", await ScalarAsync("SELECT revision_json::jsonb ->> 'publishedOn' FROM executive_action_revisions WHERE revision_number = 2"));
-        Assert.Equal("R1-2024-26714", await ScalarAsync("SELECT revision_json::jsonb -> 'notices' -> 0 ->> 'documentNumber' FROM executive_action_revisions WHERE revision_number = 2"));
-        Assert.Equal(0, await ScalarAsync("SELECT jsonb_array_length(revision_json::jsonb -> 'notices') FROM executive_action_revisions WHERE revision_number = 1"));
+        Assert.Equal("2024-26714", await ScalarAsync("SELECT document_number FROM executive_action_revisions WHERE revision_number = 2"));
+        Assert.Equal(new DateOnly(2024, 11, 13), await ScalarAsync("SELECT published_on FROM executive_action_revisions WHERE revision_number = 2"));
+        Assert.Equal("R1-2024-26714", await ScalarAsync("SELECT document_number FROM executive_action_revision_notices WHERE revision_number = 2 AND position = 0"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM executive_action_revision_notices WHERE revision_number = 1"));
         Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM executive_action_documents"));
     }
 
@@ -110,7 +110,7 @@ public sealed class PostgresFederalRegisterTests(PostgresCollection postgres) : 
         await AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
 
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM executive_action_drafts"));
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM executive_action_documents WHERE revision_number IS NULL AND notice_json IS NOT NULL"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM executive_action_documents WHERE revision_number IS NULL AND notice_url IS NOT NULL"));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_jobs WHERE idempotency_key LIKE '%/document/2024-26714'"));
 
         await AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
@@ -118,10 +118,26 @@ public sealed class PostgresFederalRegisterTests(PostgresCollection postgres) : 
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM executive_action_drafts"));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM executive_action_revisions"));
         Assert.Equal("Approved", await ScalarAsync("SELECT review_status FROM executive_action_drafts"));
-        Assert.Equal("2024-26714", await ScalarAsync("SELECT revision_json::jsonb ->> 'documentNumber' FROM executive_action_revisions"));
-        Assert.Equal("2024-11-13", await ScalarAsync("SELECT revision_json::jsonb ->> 'publishedOn' FROM executive_action_revisions"));
-        Assert.Equal("R1-2024-26714", await ScalarAsync("SELECT revision_json::jsonb -> 'notices' -> 0 ->> 'documentNumber' FROM executive_action_revisions"));
+        Assert.Equal("2024-26714", await ScalarAsync("SELECT document_number FROM executive_action_revisions"));
+        Assert.Equal(new DateOnly(2024, 11, 13), await ScalarAsync("SELECT published_on FROM executive_action_revisions"));
+        Assert.Equal("R1-2024-26714", await ScalarAsync("SELECT document_number FROM executive_action_revision_notices"));
         Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM executive_action_documents WHERE revision_number = 1"));
+    }
+
+    [Fact]
+    public async Task ADocumentRowThatARevisionCitesNeverChangesWhenLaterNoticesAndReplaysArrive()
+    {
+        await AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
+        var firstCorrection = await AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
+        var citedRows = "SELECT string_agg(row_to_json(d)::text, '|' ORDER BY d.document_number) FROM executive_action_documents d WHERE d.document_number IN ('2024-26714', 'R1-2024-26714')";
+        var before = await ScalarAsync(citedRows);
+
+        await AdmitAsync(SecondCorrection, "joe-biden");
+        await store.AdmitDocumentAsync(Source(), firstCorrection.JobId, firstCorrection.Evidence, default);
+
+        Assert.Equal(3, await ScalarAsync("SELECT current_revision_number FROM executive_action_drafts"));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM executive_action_revision_notices WHERE revision_number = 3"));
+        Assert.Equal(before, await ScalarAsync(citedRows));
     }
 
     [Fact]
@@ -193,6 +209,10 @@ public sealed class PostgresFederalRegisterTests(PostgresCollection postgres) : 
         await store.AdmitDocumentAsync(Source(), jobId, evidence, default);
         return new(jobId, evidence);
     }
+
+    private static readonly string SecondCorrection = FederalRegisterFixtures.BidenProclamationCorrection
+        .Replace("\"document_number\":\"R1-2024-26714\"", "\"document_number\":\"R1-2024-26799\"")
+        .Replace("\"publication_date\":\"2024-11-20\"", "\"publication_date\":\"2024-11-21\"");
 
     private static readonly string CorrectionOfCorrection = FederalRegisterFixtures.BidenProclamationCorrection
         .Replace("\"document_number\":\"R1-2024-26714\"", "\"document_number\":\"R1-2024-26799\"")

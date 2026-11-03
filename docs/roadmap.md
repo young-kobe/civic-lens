@@ -96,16 +96,16 @@ The owner accepted these designs. Each item holds its choices until the code and
 - R-63: Move our own data out of JSON. Our data and our schemas are a first class feature, so the database must enforce their rules. Decisions, revisions, and other data we define move to columns and child tables. Stored JSON stays only for text that must stay verbatim: the hashed configuration revision, the byte-compared document comparison, and raw model and collector input and output. Before a kind drops its JSON, a check rebuilds each revision from the new rows and compares it to the stored JSON. Public release files stay JSON, because they are the published product and not our storage. Each link between records becomes a real row with a foreign key, so that later insights can follow it. The revision steps start after R-51 PR 3 and PR 4. Depends on: none. [Architecture](architecture.md)
   - [x] Survey every JSON column
   - [x] Agree the direction
-  - [x] Stop parsing JSON where a column already holds the value
-  - [x] Move review decisions to columns, and read them there
-  - [ ] Drop the decision JSON, after a read-only check of production rows
-  - [ ] Add tick bounds and missing foreign keys, after a read-only check of production rows
+  - [x] Stop parsing JSON where a column already holds the value (#261)
+  - [x] Move review decisions to columns, and read them there (#266, #272)
+  - [x] Drop the decision JSON, after a read-only check of production rows
+  - [x] Add tick bounds and missing foreign keys, after a read-only check of production rows
   - [x] Agree the table design from one pilot on vote revisions, with measured row counts
   - [x] Vote pilot 1: write both, so every vote revision writes columns and child rows beside its JSON
-  - [ ] Vote pilot 2: backfill old vote revisions and verify them with a C# command that compares each revision to its JSON
-  - [ ] Vote pilot 3: move the vote readers to the columns
+  - [x] Vote pilot 2: backfill old vote revisions and verify them with a C# command that compares each revision to its JSON
+  - [x] Vote pilot 3: move the vote readers to the columns
   - [ ] Vote pilot 4: drop the vote revision JSON, after the read-only function stops reading it
-  - [ ] Move the other revision kinds, one PR for each
+  - [ ] Move the other revision kinds, one PR for each. Executive action revisions are done in code through step 3. The production backfill and the JSON drop stay open
   - [ ] Move release entries to a table: one immutable row for each record revision, with a foreign key to that revision. `publication_record_states` gives the release membership
   - [ ] Write `release.json` from the tables, and stop reading the previous manifest in a publish
 
