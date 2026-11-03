@@ -246,7 +246,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             var expected = CollectionJobLifecycle.Resolve(evidence);
             if (expected.Outcome != resolution.Outcome || expected.RetryDelay != resolution.RetryDelay ||
                 expected.RobotsCrawlDelayMilliseconds != resolution.RobotsCrawlDelayMilliseconds ||
-                expected.Outcome != CollectionJobAttemptOutcome.Succeeded && expected.ErrorCode != resolution.ErrorCode ||
+                !ErrorCodeMatches(expected, resolution) ||
                 evidence.AttemptResult.SourceId != request.SourceId || evidence.AttemptResult.RequestedUrl != request.Url)
                 throw new InvalidOperationException("Job settlement does not match imported evidence.");
         }
@@ -369,6 +369,11 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
     private static Task<CollectorSlotRow?> ReadSlotAsync(CollectionAttemptDbContext db, string pacingKey,
         CancellationToken cancellationToken) =>
         db.Set<CollectorSlotRow>().SingleOrDefaultAsync(item => item.PacingKey == pacingKey, cancellationToken);
+
+    private static bool ErrorCodeMatches(CollectionAttemptResolution expected, CollectionAttemptResolution resolution) =>
+        expected.Outcome == CollectionJobAttemptOutcome.Succeeded
+            ? resolution.ErrorCode is null or CollectionJobLifecycle.EvidenceAlreadyImported
+            : expected.ErrorCode == resolution.ErrorCode;
 
     private static void ValidateResolution(CollectionAttemptResolution resolution)
     {

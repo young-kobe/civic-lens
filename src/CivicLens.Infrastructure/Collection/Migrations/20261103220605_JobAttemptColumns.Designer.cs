@@ -2521,7 +2521,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_job_attempt_request_credential", "request_credential IS NULL OR request_mode = 'Api'");
 
-                            t.HasCheckConstraint("ck_job_attempt_request_identity", "request_version > 0 AND length(btrim(request_job_id)) > 0 AND length(btrim(request_source_id)) > 0 AND length(btrim(request_url)) > 0");
+                            t.HasCheckConstraint("ck_job_attempt_request_identity", "request_version = 1 AND length(btrim(request_job_id)) > 0 AND length(btrim(request_source_id)) > 0 AND length(btrim(request_url)) > 0 AND length(btrim(request_allowed_origin)) > 0 AND length(btrim(request_allowed_path_prefix)) > 0 AND length(btrim(request_artifact_directory)) > 0");
 
                             t.HasCheckConstraint("ck_job_attempt_request_last_modified_utc_ticks", "request_last_modified_utc_ticks IS NULL OR request_last_modified_utc_ticks BETWEEN 0 AND 3155378975999999999");
 

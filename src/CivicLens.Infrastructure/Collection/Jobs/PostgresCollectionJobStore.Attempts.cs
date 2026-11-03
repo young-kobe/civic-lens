@@ -33,7 +33,7 @@ public sealed partial class PostgresCollectionJobStore
             StartedAt = startedAt
         };
 
-    private static CollectionRequest ToRequest(JobAttemptRow row) => new()
+    internal static CollectionRequest ToRequest(JobAttemptRow row) => new()
     {
         Version = row.RequestVersion,
         JobId = row.RequestJobId,

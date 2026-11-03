@@ -6,6 +6,8 @@ namespace CivicLens.Application.Collection.Jobs;
 /// <summary>Pure job retry, outcome, and reserved-budget decisions shared with persistence adapters.</summary>
 public static class CollectionJobLifecycle
 {
+    public const string EvidenceAlreadyImported = "EvidenceAlreadyImported";
+
     public static CollectionAttemptResolution Resolve(CollectionResult receipt)
     {
         ArgumentNullException.ThrowIfNull(receipt);
@@ -29,7 +31,7 @@ public static class CollectionJobLifecycle
         ArgumentNullException.ThrowIfNull(retained);
         var attempt = retained.AttemptResult;
         if (attempt is CapturedAttemptResult or NotModifiedAttemptResult)
-            return new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, "EvidenceAlreadyImported",
+            return new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, EvidenceAlreadyImported,
                 RobotsCrawlDelayMilliseconds: retained.RobotsCrawlDelayMilliseconds);
         var failureCode = attempt switch
         {

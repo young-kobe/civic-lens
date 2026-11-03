@@ -139,7 +139,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task SettlementRejectsDifferentEvidenceBeforeRefundingBudget()
+    public async Task SettlementThatContradictsImportedEvidenceIsRejectedAndLeavesTheAttemptUnresolvedBecauseTheImportAlreadyFixedTheCharge()
     {
         var claim = await EnqueueClaimAsync("binding", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
@@ -153,6 +153,66 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.Null(Assert.Single(unchanged.Attempts).Resolution);
         Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId,
             CollectionJobLifecycle.Resolve(receipt), default));
+    }
+
+    [Fact]
+    public async Task SettlementRefusesAnErrorCodeOnASuccessOtherThanTheEvidenceMarkerBecauseTheCodeIsRecordedForDiagnosis()
+    {
+        var claim = await EnqueueClaimAsync("success-code", Source());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var hash = new string('a', 64);
+        var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404) with
+        {
+            Outcome = CollectionOutcome.Captured,
+            Response = new HttpResponseMetadata { StatusCode = 200, ContentEncodings = [] },
+            FailureCode = null,
+            Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = 10 },
+            BytesReceived = 10
+        };
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId,
+            CollectionJobLifecycle.Resolve(receipt) with { ErrorCode = nameof(CollectionFailureCode.Timeout) }, default));
+
+        Assert.Null(Assert.Single((await jobs.GetAsync(claim.Job.JobId, default))!.Attempts).Resolution);
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId,
+            CollectionJobLifecycle.Resolve(receipt) with { ErrorCode = CollectionJobLifecycle.EvidenceAlreadyImported }, default));
+    }
+
+    [Fact]
+    public async Task OperatorReplayOfAHandoffWithADifferentRequestChargesTheFullReservationBecauseTheTransferIsNotBoundToWhatWasReserved()
+    {
+        var claim = await EnqueueClaimAsync("replay-different", Source());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var reserved = start.Attempt!.Request;
+
+        await ReplayHandoffAsync(start.Attempt.AttemptId, reserved with { MaxRequests = reserved.MaxRequests + 1 });
+
+        var charges = CollectionJobCharges.Of((await jobs.GetAsync(claim.Job.JobId, default))!.Attempts);
+        Assert.Equal(reserved.MaxRequests, charges.Requests);
+        Assert.Equal(reserved.MaxBytes, charges.Bytes);
+    }
+
+    [Fact]
+    public async Task OperatorReplayOfAHandoffWithTheReservedRequestChargesTheMeasuredTransferBecauseTheUnusedAllowanceIsRefunded()
+    {
+        var claim = await EnqueueClaimAsync("replay-same", Source());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+
+        var receipt = await ReplayHandoffAsync(start.Attempt!.AttemptId, start.Attempt.Request);
+
+        var charges = CollectionJobCharges.Of((await jobs.GetAsync(claim.Job.JobId, default))!.Attempts);
+        Assert.Equal(receipt.RequestCount, charges.Requests);
+        Assert.Equal(receipt.BytesReceived, charges.Bytes);
+    }
+
+    private async Task<CollectionResult> ReplayHandoffAsync(string attemptId, CollectionRequest request)
+    {
+        var receipt = ReceiptCollector.Result(request, 404);
+        var handoffs = new FileCollectionReceiptHandoffStore(root);
+        await handoffs.SaveAsync(new PendingCollectionHandoff(1, attemptId, request, receipt), default);
+        await new RecoverCollectionAttempts(handoffs, new CaptureArtifactVerifier(), evidence).ReplayAsync(attemptId, root);
+        return receipt;
     }
 
     [Fact]

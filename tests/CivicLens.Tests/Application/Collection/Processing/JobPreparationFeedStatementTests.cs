@@ -90,6 +90,7 @@ public sealed class JobPreparationFeedStatementTests
 
     private sealed class FixedAttempt(StoredCollectionAttempt stored) : ICollectionAttemptStore
     {
+        public Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> GetManyAsync(IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken) =>
             Task.FromResult<StoredCollectionAttempt?>(stored);
 

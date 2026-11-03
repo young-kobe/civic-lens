@@ -56,7 +56,7 @@ public sealed class CollectionWorkspace
         var selected = jobId is null ? null : await ReadSelectedJobAsync(recentJobs, jobId, cancellationToken);
         IReadOnlyList<CollectionJobRecord> listed = selected is null ? recentJobs : [.. recentJobs, selected];
         var progress = await ReadProgressAsync(listed.Concat(latest), cancellationToken);
-        var retained = selected is null
+        IReadOnlyDictionary<string, StoredCollectionAttempt> retained = selected is null
             ? new Dictionary<string, StoredCollectionAttempt>(StringComparer.Ordinal)
             : await ReadRetainedAttemptsAsync(selected, cancellationToken);
         return new CollectionWorkspaceSources(recentJobs, selected, retained, SourceHealthResolver.ByJob(listed, progress),
@@ -69,20 +69,14 @@ public sealed class CollectionWorkspace
             ?? await jobs.GetAsync(jobId, cancellationToken)
             ?? throw new ArgumentException("Collection job was not found.");
 
-    private async Task<Dictionary<string, StoredCollectionAttempt>> ReadRetainedAttemptsAsync(CollectionJobRecord job,
+    private async Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> ReadRetainedAttemptsAsync(CollectionJobRecord job,
         CancellationToken cancellationToken)
     {
-        var retained = new Dictionary<string, StoredCollectionAttempt>(StringComparer.Ordinal);
-        var attemptIds = job.Attempts.Select(item => item.AttemptId).Distinct(StringComparer.Ordinal);
-        foreach (var attemptId in attemptIds)
-        {
-            var attempt = await attempts.GetAsync(attemptId, cancellationToken);
-            if (attempt is null) continue;
-            if (attempt.AttemptResult.SourceId != job.Definition.SourceId ||
-                attempt.AttemptResult.RequestedUrl != job.Definition.Url)
-                throw new InvalidDataException("Retained attempt does not match its collection job.");
-            retained.Add(attemptId, attempt);
-        }
+        var retained = await attempts.GetManyAsync(
+            job.Attempts.Select(item => item.AttemptId).Distinct(StringComparer.Ordinal).ToArray(), cancellationToken);
+        if (retained.Values.Any(item => item.AttemptResult.SourceId != job.Definition.SourceId ||
+                item.AttemptResult.RequestedUrl != job.Definition.Url))
+            throw new InvalidDataException("Retained attempt does not match its collection job.");
         return retained;
     }
 

@@ -74,6 +74,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     WHERE (s.res ->> 'retryDelay' IS NOT NULL AND t.retry_delay_ticks IS NULL)
                         OR (s.req ->> 'lastModified' IS NOT NULL AND t.request_last_modified_utc_ticks IS NULL)
                         OR (s.req ->> 'credential' IS NOT NULL AND t.request_credential IS NULL)
+                        OR (jsonb_typeof(s.res -> 'receipt') = 'object' AND NOT EXISTS
+                            (SELECT 1 FROM collection_attempts a WHERE a.attempt_id = t.attempt_id AND a.request_count IS NOT NULL))
                     ORDER BY attempt_id LIMIT 1;
                     IF lost IS NOT NULL THEN
                         RAISE EXCEPTION 'Cannot drop request_json and resolution_json: a value of attempt % did not reach its column', lost;
@@ -96,7 +98,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 ALTER TABLE collection_job_attempts DROP COLUMN request_json, DROP COLUMN resolution_json;
                 CREATE UNIQUE INDEX "IX_collection_job_attempts_job_id" ON collection_job_attempts (job_id) WHERE completed_at IS NULL;
                 ALTER TABLE collection_job_attempts
-                    ADD CONSTRAINT ck_job_attempt_request_identity CHECK (request_version > 0 AND length(btrim(request_job_id)) > 0 AND length(btrim(request_source_id)) > 0 AND length(btrim(request_url)) > 0),
+                    ADD CONSTRAINT ck_job_attempt_request_identity CHECK (request_version = {{CollectionProtocol.Version}} AND length(btrim(request_job_id)) > 0 AND length(btrim(request_source_id)) > 0 AND length(btrim(request_url)) > 0 AND length(btrim(request_allowed_origin)) > 0 AND length(btrim(request_allowed_path_prefix)) > 0 AND length(btrim(request_artifact_directory)) > 0),
                     ADD CONSTRAINT ck_job_attempt_request_mode CHECK (request_mode IN ('Page','Feed','Html','Api')),
                     ADD CONSTRAINT ck_job_attempt_request_budgets CHECK (request_max_candidates BETWEEN 1 AND 1000 AND request_max_requests BETWEEN 2 AND 20 AND request_max_bytes BETWEEN 1 AND 100000000 AND request_timeout_seconds BETWEEN 1 AND 300 AND request_min_delay_milliseconds BETWEEN 0 AND 60000),
                     ADD CONSTRAINT ck_job_attempt_request_last_modified_utc_ticks CHECK (request_last_modified_utc_ticks IS NULL OR request_last_modified_utc_ticks BETWEEN 0 AND 3155378975999999999),

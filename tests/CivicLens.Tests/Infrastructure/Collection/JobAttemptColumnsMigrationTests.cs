@@ -60,6 +60,31 @@ public sealed class JobAttemptColumnsMigrationTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task TheMigrationFailsAndKeepsTheJsonWhenARetryDelayCannotBeReadBecauseDroppingTheJsonWouldLoseTheValue()
+    {
+        await MigrateToAsync(Before());
+        await SeedOldAttemptAsync("negative-delay", Request("negative-delay"), new OldResolution(
+            CollectionJobAttemptOutcome.RetryableFailure, null, "RateLimited", TimeSpan.FromSeconds(-1), null));
+
+        await Assert.ThrowsAsync<PostgresException>(() => MigrateToAsync(Migration));
+
+        Assert.Single(await ReadAsync("SELECT 1 FROM information_schema.columns WHERE column_name = 'request_json' AND table_name = 'collection_job_attempts'"));
+    }
+
+    [Fact]
+    public async Task TheMigrationFailsAndKeepsTheJsonWhenAReceiptTransferHasNoAttemptRowBecauseDroppingTheJsonWouldLoseTheTransfer()
+    {
+        await MigrateToAsync(Before());
+        var request = Request("orphan-receipt");
+        await SeedOldAttemptAsync("orphan-receipt", request, new OldResolution(
+            CollectionJobAttemptOutcome.PermanentFailure, Receipt(request, 3, 77), "HttpError", null, null), importEvidence: false);
+
+        await Assert.ThrowsAsync<PostgresException>(() => MigrateToAsync(Migration));
+
+        Assert.Single(await ReadAsync("SELECT 1 FROM information_schema.columns WHERE column_name = 'request_json' AND table_name = 'collection_job_attempts'"));
+    }
+
+    [Fact]
     public async Task TheRollbackRebuildsJsonThatReadsBackAsTheSameRequestAndResolutionBecauseARollbackMustLoseNothingTheColumnsHold()
     {
         await MigrateToAsync(Before());
@@ -89,6 +114,10 @@ public sealed class JobAttemptColumnsMigrationTests(PostgresCollection postgres)
 
     [Theory]
     [InlineData("job_attempt_request_identity", "request_url = ' '")]
+    [InlineData("job_attempt_request_identity", "request_allowed_origin = ' '")]
+    [InlineData("job_attempt_request_identity", "request_allowed_path_prefix = ' '")]
+    [InlineData("job_attempt_request_identity", "request_artifact_directory = ' '")]
+    [InlineData("job_attempt_request_identity", "request_version = 2")]
     [InlineData("job_attempt_request_mode", "request_mode = 'Other'")]
     [InlineData("job_attempt_request_budgets", "request_max_requests = 1")]
     [InlineData("job_attempt_request_last_modified_utc_ticks", "request_last_modified_utc_ticks = -1")]
@@ -161,7 +190,8 @@ public sealed class JobAttemptColumnsMigrationTests(PostgresCollection postgres)
         BytesReceived = bytes
     };
 
-    private async Task SeedOldAttemptAsync(string attemptId, CollectionRequest request, OldResolution? resolution)
+    private async Task SeedOldAttemptAsync(string attemptId, CollectionRequest request, OldResolution? resolution,
+        bool importEvidence = true)
     {
         var jobId = "job-" + attemptId;
         var requestJson = Quote(JsonSerializer.Serialize(request, CollectionProtocol.JsonOptions));
@@ -173,7 +203,7 @@ public sealed class JobAttemptColumnsMigrationTests(PostgresCollection postgres)
             INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at, resolution_json, completed_at)
             VALUES ('{{attemptId}}', '{{jobId}}', 1, {{requestJson}}, 0, {{resolutionJson}}, {{(resolution is null ? "NULL" : "1")}});
             """);
-        if (resolution is null) return;
+        if (resolution is null || !importEvidence) return;
         await ExecuteAsync($"""
             INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks, outcome, has_response,
                 has_sent_validators, failure_code)

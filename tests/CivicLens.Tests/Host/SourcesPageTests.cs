@@ -252,9 +252,10 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
             People = [new PersonConfiguration { Id = "person", Name = "Official" }],
             Sources = [new WatchedSourceConfiguration { Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = request.Url, AllowedOrigin = request.AllowedOrigin, AllowedPathPrefix = request.AllowedPathPrefix }]
         }, "source"), "key", CollectionJobState.Failed, Retry, null, false,
-            [new CollectionJobAttempt("attempt", request, new CollectionAttemptResolution(CollectionJobAttemptOutcome.PermanentFailure), Retry, Retry)]);
+            [new CollectionJobAttempt("attempt", request, new CollectionAttemptResolution(CollectionJobAttemptOutcome.PermanentFailure), Retry, Retry,
+                new AttemptTransfer(failed.RequestCount, failed.BytesReceived))]);
         var retained = new StoredCollectionAttempt(new FailedAttemptResult("attempt", request.SourceId, request.Url, request.Url,
-            DateTimeOffset.UnixEpoch, nameof(CollectionFailureCode.HttpError)), null, null, transfer: new AttemptTransfer(failed.RequestCount, failed.BytesReceived));
+            DateTimeOffset.UnixEpoch, nameof(CollectionFailureCode.HttpError)), null, null);
 
         var item = Assert.Single(CheckTimeline.Build(job, new Dictionary<string, StoredCollectionAttempt> { ["attempt"] = retained }));
 

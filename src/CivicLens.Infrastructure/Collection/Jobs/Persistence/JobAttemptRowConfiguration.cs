@@ -11,7 +11,7 @@ internal sealed class JobAttemptRowConfiguration : IEntityTypeConfiguration<JobA
         builder.ToTable("collection_job_attempts", table =>
         {
             table.HasCheckConstraint("ck_job_attempt_sequence", "sequence > 0");
-            table.HasCheckConstraint("ck_job_attempt_request_identity", "request_version > 0 AND length(btrim(request_job_id)) > 0 AND length(btrim(request_source_id)) > 0 AND length(btrim(request_url)) > 0");
+            table.HasCheckConstraint("ck_job_attempt_request_identity", $"request_version = {CollectionProtocol.Version} AND length(btrim(request_job_id)) > 0 AND length(btrim(request_source_id)) > 0 AND length(btrim(request_url)) > 0 AND length(btrim(request_allowed_origin)) > 0 AND length(btrim(request_allowed_path_prefix)) > 0 AND length(btrim(request_artifact_directory)) > 0");
             table.HasCheckConstraint("ck_job_attempt_request_mode", "request_mode IN ('Page','Feed','Html','Api')");
             table.HasCheckConstraint("ck_job_attempt_request_budgets", "request_max_candidates BETWEEN 1 AND 1000 AND request_max_requests BETWEEN 2 AND 20 AND request_max_bytes BETWEEN 1 AND 100000000 AND request_timeout_seconds BETWEEN 1 AND 300 AND request_min_delay_milliseconds BETWEEN 0 AND 60000");
             table.HasCheckConstraint("ck_job_attempt_request_last_modified_utc_ticks", "request_last_modified_utc_ticks IS NULL OR request_last_modified_utc_ticks BETWEEN 0 AND 3155378975999999999");

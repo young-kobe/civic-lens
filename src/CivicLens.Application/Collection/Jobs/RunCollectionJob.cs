@@ -226,7 +226,7 @@ public sealed class RunCollectionJob(
                 }
                 catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
                 {
-                    // Retained evidence still settles safely with the full reservation.
+                    // The handoff stays on disk. Settlement uses the retained evidence, whose charge was fixed at import.
                 }
             }
 

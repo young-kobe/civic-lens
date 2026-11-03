@@ -229,6 +229,7 @@ internal sealed class ActionBillWorld
     internal sealed class FixtureStores(Dictionary<string, CollectionJobRecord> jobs, Dictionary<string, string> bodies)
         : ICollectionJobStore, ICollectionAttemptStore, ICaptureBodyReader
     {
+        Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> ICollectionAttemptStore.GetManyAsync(IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken) =>
             Task.FromResult(jobs.GetValueOrDefault(jobId));
 

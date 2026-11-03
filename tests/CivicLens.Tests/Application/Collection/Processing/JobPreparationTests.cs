@@ -1058,6 +1058,7 @@ public sealed class JobPreparationTests
 
     private sealed class CapturedAttempts(string contentType) : ICollectionAttemptStore
     {
+        public Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> GetManyAsync(IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken) =>
             Task.FromResult<StoredCollectionAttempt?>(new StoredCollectionAttempt(
                 new CapturedAttemptResult(attemptId, "congress-bills", "https://api.congress.gov/v3/bill",

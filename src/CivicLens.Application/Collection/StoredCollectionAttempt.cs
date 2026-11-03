@@ -8,8 +8,7 @@ namespace CivicLens.Application.Collection;
 public sealed class StoredCollectionAttempt
 {
     public StoredCollectionAttempt(CollectionAttemptResult attemptResult, SentValidators? sentValidators,
-        CapturedAttemptResult? priorCapturedAttempt, DiscoveryEvidence? discovery = null, long? robotsCrawlDelayMilliseconds = null,
-        AttemptTransfer? transfer = null)
+        CapturedAttemptResult? priorCapturedAttempt, DiscoveryEvidence? discovery = null, long? robotsCrawlDelayMilliseconds = null)
     {
         ArgumentNullException.ThrowIfNull(attemptResult);
         if (attemptResult is not NotModifiedAttemptResult && priorCapturedAttempt is not null)
@@ -20,7 +19,6 @@ public sealed class StoredCollectionAttempt
         if (robotsCrawlDelayMilliseconds is < 0 or > CollectionProtocol.MaximumCrawlDelayMilliseconds)
             throw new ArgumentOutOfRangeException(nameof(robotsCrawlDelayMilliseconds));
         RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds;
-        Transfer = transfer;
         Discovery = discovery;
         AttemptResult = attemptResult;
         SentValidators = sentValidators;
@@ -32,7 +30,6 @@ public sealed class StoredCollectionAttempt
     }
 
     public long? RobotsCrawlDelayMilliseconds { get; }
-    public AttemptTransfer? Transfer { get; }
     public DiscoveryEvidence? Discovery { get; }
     public CollectionAttemptResult AttemptResult { get; }
     public SentValidators? SentValidators { get; }
