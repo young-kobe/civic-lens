@@ -41,7 +41,7 @@ Each line gives the rule, what enforces it, and the test that protects it.
 - An open concern, such as a withdrawal by the owner, blocks a new code approval. Enforced by `ReviewRecords.AppendCodeApprovedAsync`. Test: `PostgresExecutiveActionReviewStoreTests.ACorrectionAfterAWithdrawalWaitsForAPersonBecauseTheOpenConcernBlocksCodeApproval`.
 - The contract labels equal the labels that code writes. Enforced by a test. Test: `PublishedExecutiveActionTests.TheLabelsThatTheContractChecksEqualTheLabelsThatCodeWrites`.
 - A published record cites its title, dates, citation, and link. Enforced by `PublishedExecutiveAction.Validate`. Tests: `PublishedExecutiveActionTests.AHeadlineThatIsNotTheCitedTitleIsRefusedSoTheOfficialTitleCannotDrift`, `PublishedExecutiveActionTests.ASigningDateThatTheEvidenceDoesNotShowIsRefused`.
-- The worker publishes a record that code approved and leaves a record that a person approved. Enforced by `ExecutiveActionReviewQueries`. Test: `PublishExecutiveActionTests.TheWorkerPublishesARecordThatCodeApprovedAndLeavesOneThatAPersonApproved`.
+- The worker publishes each approved, unpublished record, whoever approved it. Enforced by `ExecutiveActionReviewQueries`. Test: `PublishExecutiveActionTests.TheWorkerPublishesAnExecutiveActionWhoeverApprovedIt`.
 - Search accepts the kind. Enforced by `RecordReader`. Test: `RecordReaderTests.AnExecutiveActionIndexesNoSummaryAndItsSavedRecordAsSourceSoSearchAcceptsTheNewKind`.
 
 ## Behavior
