@@ -85,11 +85,13 @@ if (args is [] or ["--help"] or ["help"])
           actions draft status
           actions draft list [drafted|unchanged|superseded|no-official|pending|failed] [limit]
           actions draft requeue <candidate-id|--all>
+          actions draft requeue --refused
           actions draft redraft
           votes draft status
           votes draft list [drafted|unchanged|superseded|no-member|pending|failed] [limit]
           votes draft requeue <candidate-id|--all>
           votes draft requeue --blocked --code <block-code>
+          votes draft requeue --refused
           votes draft redraft
           bills subjects backfill [limit]
           bills status backfill [limit]
@@ -301,7 +303,7 @@ try
         var draftStore = new PostgresActionDraftStore(contexts);
         var draftCommands = new AnalysisQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
-        var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), new RedraftActionDrafts(draftStore), owner);
+        var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), new RequeueRefusedActionDrafts(draftStore), new RedraftActionDrafts(draftStore), owner);
         executing = true;
         return await actions.ExecuteAsync(args, cancellation.Token);
     }
@@ -315,7 +317,7 @@ try
         var draftCommands = new AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, VoteDraftTask.Task));
         var votes = new VoteCommand(draftCommands, new GetVoteDraftStatus(draftCommands.Status, draftStore),
-            new RequeueBlockedVoteDrafts(draftStore), new RedraftVoteDrafts(draftStore),
+            new RequeueBlockedVoteDrafts(draftStore), new RequeueRefusedVoteDrafts(draftStore), new RedraftVoteDrafts(draftStore),
             new BackfillVoteRevisions(backfillStore), new VerifyVoteRevisions(backfillStore), owner);
         executing = true;
         return await votes.ExecuteAsync(args, cancellation.Token);

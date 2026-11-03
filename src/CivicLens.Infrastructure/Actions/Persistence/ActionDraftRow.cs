@@ -3,7 +3,7 @@ using CivicLens.Infrastructure.Review.Persistence;
 
 namespace CivicLens.Infrastructure.Actions.Persistence;
 
-internal sealed class ActionDraftRow : IListedDraftRow, IHeldDraftRow
+internal sealed class ActionDraftRow : IListedDraftRow, IHeldDraftRow, IRefusedDraftRow
 {
     public string RecordId { get; set; } = string.Empty;
     public string SourceId { get; set; } = string.Empty;
@@ -20,4 +20,5 @@ internal sealed class ActionDraftRow : IListedDraftRow, IHeldDraftRow
     public string[] IssueIds { get; set; } = [];
     public string[] OfficialIds { get; set; } = [];
     public string? HeldReason { get; set; }
+    public string? RefusedCandidateId { get; set; }
 }

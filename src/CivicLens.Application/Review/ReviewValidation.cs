@@ -104,7 +104,7 @@ internal static class ReviewValidation
 
     public static ReviewDecision CreateDecision(ReviewActor actor, string recordId, int expectedRevisionNumber,
         int expectedReviewStateVersion, ReviewDecisionKind kind, string? note, ImmutableArray<string> resolvedDecisionIds,
-        string? correctionNote)
+        string? correctionNote, ReviewReasonCode? reasonCode = null)
     {
         if (expectedRevisionNumber < 1) throw new ArgumentOutOfRangeException(nameof(expectedRevisionNumber));
         if (expectedReviewStateVersion < 0) throw new ArgumentOutOfRangeException(nameof(expectedReviewStateVersion));
@@ -115,7 +115,7 @@ internal static class ReviewValidation
             throw new ArgumentException("Only an approval takes a correction note.", nameof(correctionNote));
         return new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, expectedRevisionNumber,
             expectedReviewStateVersion + 1, kind, actor.Subject, note, resolutions, DateTimeOffset.UtcNow,
-            correctionNote is null ? null : CorrectionNoteText.Validate(correctionNote, nameof(correctionNote)));
+            correctionNote is null ? null : CorrectionNoteText.Validate(correctionNote, nameof(correctionNote)), reasonCode);
     }
 
     public static ReviewDecision? CreateApprovalOf(ReviewActor actor, string recordId, int revisionNumber, ApprovalWithSave? approval) =>

@@ -22,7 +22,7 @@ internal static class BriefStaleness
         SELECT b.record_id AS "Value" FROM {{PostgresBriefDraftStore.Table}} b
         WHERE b.task = {2}
           AND (b.status <> 'Blocked' OR b.error_code = '{{BriefDraftErrorCodes.NoCitableRecords}}')
-          AND NOT EXISTS (SELECT 1 FROM brief_drafts d WHERE d.record_id = b.record_id AND d.review_status = 'Approved')
+          AND NOT EXISTS (SELECT 1 FROM brief_drafts d WHERE d.record_id = b.record_id AND d.review_status IN ('Approved', 'Rejected'))
           AND EXISTS (SELECT 1 FROM first_published f
                       WHERE f.ticks >= {{BriefWeekSql.StartTicks("b.week_start")}} AND f.ticks < {{BriefWeekSql.EndTicks("b.week_start")}})
         """;

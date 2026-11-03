@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Relationships;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
@@ -66,11 +67,20 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
             await ReadBillDetailAsync(db, row, cancellationToken),
             hasNewerCandidate ? [] : await ReadBillSubjectsAsync(db, row, cancellationToken),
             await VoteDraftRows.ReadCurrentAsync(db, recordId, cancellationToken), hasNewerCandidate,
-            !hasNewerCandidate && (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId));
+            !hasNewerCandidate && (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId),
+            await VoteDraftRows.IsRejectedAsync(db, recordId, cancellationToken));
     }
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Blocked, errorCode, null, null, cancellationToken);
+
+    public Task<int> RequeueRefusedAsync(CancellationToken cancellationToken) =>
+        queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
+        {
+            var refused = await db.Set<VoteDraftRow>().AsNoTracking().Where(draft => draft.RefusedCandidateId != null && draft.ReviewStatus != ReviewStatus.Rejected)
+                .Select(draft => draft.RefusedCandidateId!).ToArrayAsync(token);
+            return settled.Where(row => refused.Contains(row.CandidateId));
+        }, cancellationToken);
 
     public Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
@@ -150,7 +160,7 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
                 AND d.session_number = c.session_number AND d.roll_call_number = c.roll_call_number
             JOIN vote_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
             WHERE c.candidate_id = ANY({candidateIds})
-              AND (d.review_status IN ('AwaitingReviewWithConcerns', 'ChangesRequested', 'ApprovalWithdrawn') OR r.revision_json::jsonb ->> 'textOrigin' = 'Person')
+              AND (d.review_status IN ('AwaitingReviewWithConcerns', 'ChangesRequested', 'ApprovalWithdrawn', 'Rejected') OR r.revision_json::jsonb ->> 'textOrigin' = 'Person')
             """).ToArrayAsync(cancellationToken);
 
     private static async Task<VoteDraftPage?> ReadBillDetailAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate,

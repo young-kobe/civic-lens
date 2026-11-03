@@ -1,5 +1,6 @@
 @using System.Collections.Immutable
 @using CivicLens.Application.Publication
+@using CivicLens.Application.Review
 @using CivicLens.Core.Review
 @using CivicLens.Publication.Contracts
 
@@ -7,6 +8,14 @@
     @if (WithdrawnRevisionNumber is not null)
     {
         <p id="take-off-site-off" class="small">This record is off the public site. It returns only when a person approves a newer revision with a correction note.</p>
+    }
+    @if (OnSite && CanReject)
+    {
+        <Notice Tone="Tone.Warn" id="reject-live-warning">This record is on the public site. Rejecting this revision leaves the published text live. To remove it, take the record off the site.</Notice>
+    }
+    @if (NextStep is not null)
+    {
+        <p id="decision-next-step" class="small">@NextStep</p>
     }
     @if (CanApprove)
     {
@@ -19,9 +28,21 @@
             <input type="hidden" name="expectedRevisionNumber" value="@RevisionNumber" />
             <input type="hidden" name="expectedReviewStateVersion" value="@ReviewStateVersion" />
             <input type="hidden" name="idempotencyKey" value="@IdempotencyKey" />
-            <Field Label="Note" For="Decision_Note" Hint="@(CanApprove ? "Requesting changes and withdrawing approval need a reason. Resolving concerns needs a note." : "Requesting changes and withdrawing approval need a reason.")">
+            <Field Label="Note" For="Decision_Note" Hint="@(CanApprove ? "Requesting changes and withdrawing approval need a reason. Resolving concerns needs a note. A note on a rejection is optional." : "Requesting changes and withdrawing approval need a reason. A note on a rejection is optional.")">
                 <textarea id="Decision_Note" class="plain" name="Decision.Note" maxlength="4000" aria-describedby="Decision_Note-hint" value="@Note"></textarea>
             </Field>
+            @if (CanReject)
+            {
+                <Field Label="Reason for rejecting" For="Decision_ReasonCode" Hint="Only Reject uses this. A rejected revision leaves the review queue and does not publish. A person can still approve it later.">
+                    <select id="Decision_ReasonCode" name="Decision.ReasonCode" aria-describedby="Decision_ReasonCode-hint">
+                        <option value="" selected="@(ReasonCode is null)">Choose a reason</option>
+                        @foreach (var reason in ReviewReasons.For(RecordKind))
+                        {
+                            <option value="@reason" selected="@(reason == ReasonCode)">@DraftStatusDisplay.Label(reason)</option>
+                        }
+                    </select>
+                </Field>
+            }
             @if (CanApprove && Status != ReviewStatus.Approved)
             {
                 <ApprovalInputs Prefix="Decision" Concerns="Concerns" CorrectionNote="@CorrectionNote" />
@@ -32,6 +53,10 @@
                     <Button Variant="ButtonVariant.Primary" Type="submit" name="kind" value="Approve">Approve</Button>
                 }
                 <Button Type="submit" name="kind" value="RequestChanges">Request changes</Button>
+                @if (CanReject)
+                {
+                    <Button Variant="ButtonVariant.Danger" Type="submit" name="kind" value="Reject">Reject</Button>
+                }
                 @if (Status == ReviewStatus.Approved)
                 {
                     <Button Variant="ButtonVariant.Danger" Type="submit" name="kind" value="WithdrawApproval">Withdraw approval</Button>
@@ -48,6 +73,16 @@
 @code {
     public const string FormId = "decision-form";
 
+    private bool CanReject => Status is not (ReviewStatus.Approved or ReviewStatus.Rejected);
+
+    private string? NextStep => Status switch
+    {
+        ReviewStatus.Rejected when CanApprove => "Approve to reverse the rejection.",
+        ReviewStatus.Rejected => "Save a change to send this record back to review. Save and approve to reverse the rejection.",
+        ReviewStatus.Approved => "To reject this record, withdraw the approval first.",
+        _ => null
+    };
+
     private bool CannotReturn => WithdrawnRevisionNumber is { } withdrawn && !PublishedRecordRules.CanReturn(RevisionNumber, withdrawn);
 
     [Parameter, EditorRequired] public int RevisionNumber { get; set; }
@@ -57,8 +92,11 @@
     [Parameter, EditorRequired] public bool CanDecide { get; set; }
     [Parameter] public bool CanApprove { get; set; } = true;
     [Parameter, EditorRequired] public string IdempotencyKey { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public PublishedRecordKind RecordKind { get; set; }
+    [Parameter] public bool OnSite { get; set; }
     [Parameter] public int? WithdrawnRevisionNumber { get; set; }
     [Parameter] public string? Note { get; set; }
+    [Parameter] public ReviewReasonCode? ReasonCode { get; set; }
     [Parameter] public string? CorrectionNote { get; set; }
     [Parameter, EditorRequired] public EventCallback OnDecide { get; set; }
     [Parameter] public RenderFragment? Checklist { get; set; }

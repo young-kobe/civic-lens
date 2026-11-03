@@ -10,5 +10,8 @@ public interface IVoteDraftStore : IAnalysisQueueStore<VoteDraftRun, VoteDraftVi
 
     Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken);
 
+    /// <summary>Requeues the candidates that the worker refused while their record was rejected.</summary>
+    Task<int> RequeueRefusedAsync(CancellationToken cancellationToken);
+
     Task<int> CountWaitingForBillAsync(CancellationToken cancellationToken);
 }

@@ -38,5 +38,5 @@ public sealed class DecideExecutiveActionReviewTests
     }
 
     private static DecideExecutiveActionReviewRequest Request(ImmutableArray<Guid> reportIds) =>
-        new(RecordId, 1, 0, ReviewDecisionKind.Approve, null, [], "key", null, reportIds);
+        new(RecordId, 1, 0, ReviewDecisionKind.Approve, null, [], "key", null, CorrectedReportIds: reportIds);
 }

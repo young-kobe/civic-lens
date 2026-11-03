@@ -53,7 +53,7 @@ internal sealed class BriefDraftQueueMapping(IDbContextFactory<CollectionAttempt
             return settlement;
         }
         var discarded = run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } };
-        if (refusal == BriefDraftErrorCodes.AlreadyApproved)
+        if (refusal is BriefDraftErrorCodes.AlreadyApproved or BriefDraftErrorCodes.RecordRejected)
             return new(checkpoint with { ErrorCode = BriefDraftErrorCodes.Unchanged, Revision = null }, discarded);
         row.RetryOfRunId = null;
         return new(checkpoint with

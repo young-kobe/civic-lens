@@ -15,4 +15,5 @@ public static class VoteDraftErrorCodes
     public const string KindChanged = "kindChanged";
     public const string SupersededByNewerCandidate = "supersededByNewerCandidate";
     public const string RevisionConflict = "revisionConflict";
+    public const string RecordRejected = "recordRejected";
 }

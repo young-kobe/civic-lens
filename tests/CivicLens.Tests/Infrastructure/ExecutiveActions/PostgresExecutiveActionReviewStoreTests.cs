@@ -101,6 +101,110 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     }
 
     [Fact]
+    public async Task ACorrectionOfARejectedRecordWaitsAndDoesNotReopenItBecauseARejectionStays()
+    {
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
+        var withdrawal = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
+            "Check the date.", [], DateTimeOffset.UtcNow);
+        await store.DecideAsync("auth0|owner", withdrawal, 1, 1, "key-1", new string('a', 64), [], default);
+        var rejection = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 3, ReviewDecisionKind.Reject, "auth0|owner",
+            null, [], DateTimeOffset.UtcNow, ReasonCode: ReviewReasonCode.Duplicate);
+        await store.DecideAsync("auth0|owner", rejection, 1, 2, "key-2", new string('b', 64), [], default);
+
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
+
+        var review = (await store.GetAsync(recordId, default))!.Review;
+        Assert.Equal(1, review.CurrentRevision.RevisionNumber);
+        Assert.Equal(ReviewStatus.Rejected, review.CurrentStatus);
+    }
+
+    [Fact]
+    public async Task ReversingARejectionAppliesTheCorrectionThatWaitedAndCodeApprovesTheNewRevisionBecauseOldFactsMustNotPublish()
+    {
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
+        var withdrawal = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
+            "Check the date.", [], DateTimeOffset.UtcNow);
+        await store.DecideAsync("auth0|owner", withdrawal, 1, 1, "key-1", new string('a', 64), [], default);
+        var rejection = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 3, ReviewDecisionKind.Reject, "auth0|owner",
+            null, [], DateTimeOffset.UtcNow, ReasonCode: ReviewReasonCode.Duplicate);
+        await store.DecideAsync("auth0|owner", rejection, 1, 2, "key-2", new string('b', 64), [], default);
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
+        var reversal = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 4, ReviewDecisionKind.Approve, "auth0|owner",
+            "Rejected by mistake.", [withdrawal.DecisionId], DateTimeOffset.UtcNow, "Clarified the date.");
+
+        await store.DecideAsync("auth0|owner", reversal, 1, 3, "key-3", new string('c', 64), [], default);
+
+        var review = (await store.GetAsync(recordId, default))!.Review;
+        Assert.Equal(2, review.CurrentRevision.RevisionNumber);
+        Assert.Equal(ReviewStatus.Approved, review.CurrentStatus);
+        Assert.Equal(ReviewAuthor.CodeSubject, review.Decisions[^1].ActorSubject);
+        Assert.Single(review.CurrentRevision.Notices);
+        Assert.Equal("Clarified the date.", review.Decisions[^1].CorrectionNote);
+    }
+
+    [Fact]
+    public async Task ApprovingAfterRequestChangesAppliesTheWaitingCorrectionsInOneRevisionBecauseNoPersonDecisionMaySkipThem()
+    {
+        var recordId = await RejectedRecordWithTwoWaitingCorrectionsAsync();
+        var changes = await DecideAsync(recordId, 4, ReviewDecisionKind.RequestChanges, "Look again.");
+
+        await DecideAsync(recordId, 5, ReviewDecisionKind.Approve, "Looked again.", [(await ConcernIdsAsync(recordId)).Single(id => id != changes.DecisionId), changes.DecisionId]);
+
+        var review = (await store.GetAsync(recordId, default))!.Review;
+        Assert.Equal(2, review.CurrentRevision.RevisionNumber);
+        Assert.Equal(2, review.CurrentRevision.Notices.Length);
+        Assert.Equal(ReviewStatus.Approved, review.CurrentStatus);
+    }
+
+    [Fact]
+    public async Task ReversingARejectionAppliesTwoWaitingCorrectionsInOneRevisionBecauseTheOriginalAdmissionDoesTheSame()
+    {
+        var recordId = await RejectedRecordWithTwoWaitingCorrectionsAsync();
+
+        await DecideAsync(recordId, 4, ReviewDecisionKind.Approve, "Rejected by mistake.", await ConcernIdsAsync(recordId));
+
+        var review = (await store.GetAsync(recordId, default))!.Review;
+        Assert.Equal(2, review.CurrentRevision.RevisionNumber);
+        Assert.Equal(2, review.CurrentRevision.Notices.Length);
+    }
+
+    [Fact]
+    public async Task ACorrectionThatArrivesAfterRequestChangesCarriesTheCorrectionsThatWaitedBecauseNoneMayBeLost()
+    {
+        var recordId = await RejectedRecordWithTwoWaitingCorrectionsAsync(admitSecond: false);
+        await DecideAsync(recordId, 4, ReviewDecisionKind.RequestChanges, "Look again.");
+
+        await executiveActions.AdmitAsync(SecondCorrection, "joe-biden");
+
+        var review = (await store.GetAsync(recordId, default))!.Review;
+        Assert.Equal(2, review.CurrentRevision.RevisionNumber);
+        Assert.Equal(2, review.CurrentRevision.Notices.Length);
+    }
+
+    private static string SecondCorrection => FederalRegisterFixtures.BidenProclamationCorrection.Replace("R1-2024-26714", "R2-2024-26714", StringComparison.Ordinal);
+
+    private async Task<string> RejectedRecordWithTwoWaitingCorrectionsAsync(bool admitSecond = true)
+    {
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
+        await DecideAsync(recordId, 2, ReviewDecisionKind.WithdrawApproval, "Check the date.");
+        await DecideAsync(recordId, 3, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.Duplicate);
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
+        if (admitSecond) await executiveActions.AdmitAsync(SecondCorrection, "joe-biden");
+        return recordId;
+    }
+
+    private async Task<string[]> ConcernIdsAsync(string recordId) =>
+        [.. (await store.GetAsync(recordId, default))!.Review.UnresolvedConcerns.Select(concern => concern.DecisionId)];
+
+    private async Task<ReviewDecision> DecideAsync(string recordId, int version, ReviewDecisionKind kind, string? note, string[]? resolved = null,
+        ReviewReasonCode? reason = null)
+    {
+        var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, version, kind, "auth0|owner", note, [.. resolved ?? []],
+            DateTimeOffset.UtcNow, ReasonCode: reason);
+        return await store.DecideAsync("auth0|owner", decision, 1, version - 1, Guid.NewGuid().ToString("N"), new string('a', 64), [], default);
+    }
+
+    [Fact]
     public async Task ApprovingTheNewRevisionClosesTheListedOlderReportInTheSameTransactionBecauseAPersonHasNoOtherWayToEditThisRecord()
     {
         var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
@@ -279,13 +383,5 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         return await command.ExecuteScalarAsync() as string;
-    }
-
-    private async Task ExecuteAsync(string sql)
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
     }
 }

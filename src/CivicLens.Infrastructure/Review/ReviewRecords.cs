@@ -14,7 +14,7 @@ namespace CivicLens.Infrastructure.Review;
 /// <summary>The shared store core. Reads hold one review cycle: the current revision, the last approved revision, and the
 /// decisions since that approval.</summary>
 internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevision>(string lockKey, PublishedRecordKind kind, string draftName,
-    string recordIdProperty, Action<TDraftRow, TRevision>? revised = null)
+    string recordIdProperty, Action<TDraftRow, TRevision>? revised = null, PersonApprovalRules<TDraftRow>? personApproval = null)
     where TDraftRow : class, IReviewDraftRow
     where TRevisionRow : class, IReviewRevisionRow
     where TDecisionRow : class, IReviewDecisionRow, new()
@@ -113,12 +113,13 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
 
     /// <summary>The analysis worker appends a revision of a fact record. Code approves it in the same transaction when no concern
     /// is open, the revision holds no text that a person wrote, and the record's own approval checks pass. Otherwise it waits for a person.
-    /// A failed approval check keeps its message as the held reason of the draft. The caller runs
+    /// A failed approval check keeps its message as the held reason of the draft. A worker revision also clears the refused update block of the draft. The caller runs
     /// <see cref="AfterCodeApprovalAsync"/> once the rest of the transaction rows are tracked.</summary>
     public async Task AppendCodeApprovedAsync(CollectionAttemptDbContext db, TDraftRow draft, TRevision revision, TRevisionRow row,
-        ImmutableArray<ReviewDecision> cycle, Func<Task<ApprovalCheck>> approvalChecks)
+        ImmutableArray<ReviewDecision> cycle, Func<Task<ApprovalCheck>> approvalChecks, string? correctionNote = null)
     {
         AppendRevision(db, draft, revision, row, cycle);
+        if (draft is IRefusedDraftRow refused) refused.RefusedCandidateId = null;
         if (!ReviewPolicy.GetUnresolvedConcerns(cycle).IsEmpty || revision is IHeadlineSummaryRevision { TextOrigin: ReviewTextOrigin.Person })
             return;
         var check = await approvalChecks();
@@ -128,7 +129,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             return;
         }
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), draft.RecordId, revision.RevisionNumber, draft.ReviewStateVersion + 1,
-            ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, null, [], new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero));
+            ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, null, [], new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero), correctionNote);
         ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, cycle, decision);
         RecordDecision(db, draft, cycle, decision);
     }
@@ -168,6 +169,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         ActorSubject = decision.ActorSubject,
         Note = decision.Note,
         CorrectionNote = decision.CorrectionNote,
+        ReasonCode = decision.ReasonCode,
         CreatedAtUtcTicks = decision.CreatedAtUtc.UtcTicks
     };
 
@@ -202,11 +204,14 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             expectedReviewStateVersion, decision);
         ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, history.Decisions, decision);
         await validateDecision(db, draft, history);
+        var approves = decision.Kind == ReviewDecisionKind.Approve;
+        if (approves && personApproval?.Check is { } check) await check(db, draft, cancellationToken);
         RecordDecision(db, draft, history.Decisions, decision);
         await afterDecision(db, draft.RecordId, decision.RevisionNumber, cancellationToken);
-        if (decision.Kind == ReviewDecisionKind.Approve)
+        if (approves)
             await ReaderReportResolution.CloseCorrectedAsync(db, decision.ActorSubject, kind, draft.RecordId, correctedReportIds,
                 decision.RevisionNumber, cancellationToken);
+        if (approves && personApproval?.Apply is { } apply) await apply(db, draft, decision, cancellationToken);
         return decision;
     }
 
@@ -216,14 +221,15 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         return filter switch
         {
             DraftStatusFilter.All => drafts,
-            DraftStatusFilter.NeedsAction => drafts.Where(draft => draft.ReviewStatus != ReviewStatus.Approved),
+            DraftStatusFilter.NeedsAction => drafts.Where(draft => draft.ReviewStatus != ReviewStatus.Approved && draft.ReviewStatus != ReviewStatus.Rejected),
             DraftStatusFilter.Approved => drafts.Where(draft => draft.ReviewStatus == ReviewStatus.Approved),
             _ => throw new ArgumentOutOfRangeException(nameof(filter))
         };
     }
 
-    public async Task<(int NeedsAction, int Approved)> CountAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
-        (await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken),
+    public async Task<(int All, int NeedsAction, int Approved)> CountAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
+        (await Drafts(db, DraftStatusFilter.All).CountAsync(cancellationToken),
+            await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken),
             await Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken));
 
     public Task<TDraftRow[]> ReadDraftsAsync(CollectionAttemptDbContext db, string[] recordIds, CancellationToken cancellationToken) =>
@@ -241,7 +247,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         {
             var history = histories[draft.RecordId];
             return new QueueRead<TRevision>(history.CurrentRevision!, history.CurrentStatus, history.UnresolvedConcerns.Length,
-                (draft as IHeldDraftRow)?.HeldReason);
+                (draft as IHeldDraftRow)?.HeldReason, history.RejectReason);
         }, StringComparer.Ordinal);
         return (readable, errors);
     }
@@ -364,7 +370,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         var resolutions = await db.Set<ReviewDecisionResolutionRow<TDecisionRow>>().AsNoTracking()
             .Where(resolution => approvalIds.Contains(resolution.DecisionId))
             .OrderBy(resolution => resolution.DecisionId).ThenBy(resolution => resolution.ResolvedDecisionId)
-            .Take(approvalIds.Length * ReviewPolicy.MaximumOpenConcerns).ToArrayAsync(cancellationToken);
+            .Take(approvalIds.Length * ReviewPolicy.MaximumBlockersPerCycle).ToArrayAsync(cancellationToken);
         return resolutions.ToLookup(resolution => resolution.DecisionId, resolution => resolution.ResolvedDecisionId, StringComparer.Ordinal);
     }
 

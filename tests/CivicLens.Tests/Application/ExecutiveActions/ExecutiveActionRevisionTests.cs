@@ -43,7 +43,7 @@ public sealed class ExecutiveActionRevisionTests
         var original = Create(FederalRegisterFixtures.BidenProclamation).Revision;
         var correction = Evidence(FederalRegisterFixtures.BidenProclamationCorrection, new string('c', 64));
 
-        var next = ExecutiveActionRevisions.Add(original, Now.AddDays(1), ExecutiveActionRevisions.NoticeOf(correction));
+        var next = ExecutiveActionRevisions.Add(original, Now.AddDays(1), [ExecutiveActionRevisions.NoticeOf(correction)]);
 
         Assert.Equal(original.RecordId, next.RecordId);
         Assert.Equal(2, next.RevisionNumber);

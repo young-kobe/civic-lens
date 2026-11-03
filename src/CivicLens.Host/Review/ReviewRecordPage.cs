@@ -27,7 +27,7 @@ public abstract class ReviewRecordPage : ComponentBase
 
     protected static readonly ReviewFailureMessages DecideFailures = new(
         "The revision or review state changed after you opened this page. Check the latest state before you record a decision.",
-        "The decision needs valid details. Requesting changes and withdrawing approval need a reason. Approval must resolve every open concern.",
+        "The decision needs valid details. Requesting changes and withdrawing approval need a reason. Rejecting needs a reason from the list. Approval must resolve every open concern.",
         "The decision could not be saved. The current review state shows below. Try again.");
 
     protected readonly string saveKey = Guid.NewGuid().ToString("N");
@@ -111,7 +111,7 @@ public abstract class ReviewRecordPage : ComponentBase
     protected async Task<string?> RunCommandAsync(Func<Task<string>> command, ReviewFailureMessages messages,
         Func<Task> reloadAfterConflict)
     {
-        var (target, failure) = await ReviewCommand.RunAsync(command, HttpContext.Response, Logger, RequestAborted);
+        var (target, failure, detail) = await ReviewCommand.RunAsync(command, HttpContext.Response, Logger, RequestAborted);
         switch (failure)
         {
             case ReviewCommandFailure.AccessDenied:
@@ -123,6 +123,12 @@ public abstract class ReviewRecordPage : ComponentBase
                 break;
             case ReviewCommandFailure.NothingToSave:
                 error = new NothingToSaveException().Message;
+                break;
+            case ReviewCommandFailure.ApprovalStale:
+                error = detail;
+                break;
+            case ReviewCommandFailure.CycleFull:
+                error = new ReviewCycleFullException().Message;
                 break;
             case ReviewCommandFailure.Invalid:
                 error = messages.Invalid;
@@ -153,6 +159,9 @@ public abstract class ReviewRecordPage : ComponentBase
 
     protected string? CorrectionNoteOfApproval() =>
         ParseDecisionKind(Kind) == ReviewDecisionKind.Approve ? EmptyToNull(Decision?.CorrectionNote) : null;
+
+    protected ReviewReasonCode? ReasonCodeOfRejection() =>
+        ParseDecisionKind(Kind) == ReviewDecisionKind.Reject ? Decision?.ReasonCode : null;
 
     protected static ImmutableArray<Guid>? ReportIds(Guid[]? ids) => ids is { Length: > 0 } ? [.. ids] : null;
 

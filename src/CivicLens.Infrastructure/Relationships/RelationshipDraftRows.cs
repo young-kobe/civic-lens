@@ -22,6 +22,7 @@ internal static class RelationshipDraftRows
         var draft = await db.Set<RelationshipDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return RelationshipDraftErrorCodes.RevisionConflict;
         if (draft?.ReviewStatus == ReviewStatus.Approved) return RelationshipDraftErrorCodes.AlreadyApproved;
+        if (draft?.ReviewStatus == ReviewStatus.Rejected) return RelationshipDraftErrorCodes.RecordRejected;
         if (draft is not null && await KeepsPersonEditAsync(db, revision, cancellationToken)) return RelationshipDraftErrorCodes.PersonEditKept;
         if (draft is null) db.Add(draft = NewDraft(revision));
         Records.AppendRevision(db, draft, revision, NewRevision(revision, runId), await Records.ReadCycleAsync(db, draft, cancellationToken));
