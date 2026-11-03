@@ -8,6 +8,6 @@ public static class BriefDraftErrorCodes
     public const string NoCitableRecords = "noCitableRecords";
     public const string Unchanged = "unchanged";
     public const string RevisionConflict = "revisionConflict";
-    public const string RecordRejected = Review.RejectedRecordRefusal.Reason;
+    public const string RecordRejected = "recordRejected";
     public const string AlreadyApproved = "alreadyApproved";
 }

@@ -1299,7 +1299,7 @@ public sealed class ActionDraftStepTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ARejectedRecordWithTheSameFactsLeavesNoMarkEvenWhenThePromptIsOlderBecauseNothingWasRefused(bool olderPrompt)
+    public async Task ARejectedRecordWithTheSameFactsLeavesNoBlockEvenWhenThePromptIsOlderBecauseNothingWasRefused(bool olderPrompt)
     {
         var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
         var drafted = Assert.Single(first.Revisions);

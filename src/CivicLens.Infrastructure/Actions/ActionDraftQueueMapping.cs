@@ -79,12 +79,14 @@ internal sealed class ActionDraftQueueMapping(Func<CollectionAttemptDbContext, s
         }, discarded);
     }
 
-    // The step read the record as rejected before it settled. A person may have changed it since, so the block needs the review key.
-    // The retry writes no run, because the run would look like a settlement.
+    // The step read the record as rejected before it settled. A newer update or a person may have come since, so the block needs the review key.
+    // A newer update supersedes this one with no run and no block. The retry writes no run, because the run would look like a settlement.
     private static async Task<AnalysisSettlement<ActionDraftRun>> ConfirmRefusalAsync(CollectionAttemptDbContext db, ActionAnalysisRow row,
         AnalysisSettlement<ActionDraftRun> settlement, CancellationToken cancellationToken)
     {
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.ActionReview, cancellationToken);
+        if (await ActionDraftRows.IsSupersededAsync(db, row.CandidateId, cancellationToken))
+            return new(settlement.Checkpoint with { ErrorCode = ActionDraftErrorCodes.SupersededByNewerCandidate }, null);
         if (await ActionDraftRows.ConfirmRefusalAsync(db, row.CandidateId, cancellationToken)) return settlement;
         row.RetryOfRunId = null;
         return new(settlement.Checkpoint with
@@ -95,10 +97,10 @@ internal sealed class ActionDraftQueueMapping(Func<CollectionAttemptDbContext, s
         }, null);
     }
 
-    // An update with the same facts, or with no tracked official, ends the block. The review key is taken only when a draft holds one.
+    // An update with the same facts, or with no tracked official, ends the block. On a record that is rejected or holds a block, the review key comes first, so the settlement never reads "no block" while a refusal commits.
     private static async Task ClearRefusalAsync(CollectionAttemptDbContext db, ActionAnalysisRow row, CancellationToken cancellationToken)
     {
-        if (!await ActionDraftRows.HoldsRefusalAsync(db, row.CandidateId, cancellationToken)) return;
+        if (!await ActionDraftRows.IsRejectedOrBlockedAsync(db, row.CandidateId, cancellationToken)) return;
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.ActionReview, cancellationToken);
         await ActionDraftRows.ClearRefusalAsync(db, row.CandidateId, cancellationToken);
     }

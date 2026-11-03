@@ -24,7 +24,7 @@ internal static class ActionDraftRows
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return ActionDraftErrorCodes.RevisionConflict;
         if (draft?.ReviewStatus == ReviewStatus.Rejected)
         {
-            await RecordRefusalAsync(db, draft, revision.CandidateId, cancellationToken);
+            if (revision.CandidateId != draft.CandidateId) draft.RefusedCandidateId = revision.CandidateId;
             return ActionDraftErrorCodes.RecordRejected;
         }
         if (draft is null) db.Add(draft = NewDraft(revision));
@@ -51,25 +51,16 @@ internal static class ActionDraftRows
 
     private const string StaleApprovalMessage = "A newer update of this bill arrived while the record was rejected, so approving it now would publish old facts. " +
         "Do these steps. 1. If the record is still rejected, press Request changes. 2. Ask the owner to run the command: actions draft requeue --refused. " +
-        "If that update is Failed or Blocked, the owner runs actions draft requeue <candidate-id> or actions draft requeue --blocked --code instead. " +
+        "If the update failed, the owner runs actions draft requeue <candidate-id>. " +
+        "If it is blocked, the owner runs actions draft requeue --blocked --code <block-code>. " +
         "3. Approve the new draft when it appears.";
 
-    /// <summary>Names the candidate on the rejected draft when it is newer than the candidate of the draft and than any candidate it already names.
-    /// An older late update never sets it. The caller holds the review key.</summary>
-    private static async Task RecordRefusalAsync(CollectionAttemptDbContext db, ActionDraftRow draft, string candidateId, CancellationToken cancellationToken)
-    {
-        if (!await IsNewerAsync(db, candidateId, draft.CandidateId, cancellationToken)) return;
-        if (draft.RefusedCandidateId is not null && draft.RefusedCandidateId != candidateId &&
-            !await IsNewerAsync(db, candidateId, draft.RefusedCandidateId, cancellationToken)) return;
-        draft.RefusedCandidateId = candidateId;
-    }
-
     /// <summary>The settlement refused an update of a record that it read as rejected. Under the review key, this reads the status again.
-    /// It returns false when a person changed the record first, so the worker may draft the update.</summary>
+    /// It returns false when a person changed the record first, so the worker may draft the update. The candidate of the revision itself is no newer update, so it sets no block.</summary>
     internal static async Task<bool> ConfirmRefusalAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken)
     {
         if (await FindDraftOfCandidateAsync(db, candidateId, cancellationToken) is not { ReviewStatus: ReviewStatus.Rejected } draft) return false;
-        await RecordRefusalAsync(db, draft, candidateId, cancellationToken);
+        if (candidateId != draft.CandidateId) draft.RefusedCandidateId = candidateId;
         return true;
     }
 
@@ -80,10 +71,19 @@ internal static class ActionDraftRows
         if (refused == candidateId || await IsNewerAsync(db, candidateId, refused, cancellationToken)) draft.RefusedCandidateId = null;
     }
 
-    internal static async Task<bool> HoldsRefusalAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken)
+    /// <summary>True when a newer candidate of the bill exists now. The caller holds the review key.</summary>
+    internal static async Task<bool> IsSupersededAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken)
     {
         var candidate = await db.Set<ActionCandidateRow>().AsNoTracking().SingleOrDefaultAsync(row => row.CandidateId == candidateId, cancellationToken);
-        return candidate is not null && await db.Set<ActionDraftRow>().AsNoTracking().AnyAsync(draft => draft.RefusedCandidateId != null &&
+        return candidate is not null && await HasNewerCandidateAsync(db, new ActionDraftCandidate(candidate.CandidateId, string.Empty, candidate.SourceId,
+            candidate.Congress, candidate.BillType, candidate.BillNumber, new DateTimeOffset(candidate.UpdateDateUtcTicks, TimeSpan.Zero),
+            candidate.IncludesSummaries, candidate.IncludesSubjects), cancellationToken);
+    }
+
+    internal static async Task<bool> IsRejectedOrBlockedAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken)
+    {
+        var candidate = await db.Set<ActionCandidateRow>().AsNoTracking().SingleOrDefaultAsync(row => row.CandidateId == candidateId, cancellationToken);
+        return candidate is not null && await db.Set<ActionDraftRow>().AsNoTracking().AnyAsync(draft => (draft.RefusedCandidateId != null || draft.ReviewStatus == ReviewStatus.Rejected) &&
             draft.SourceId == candidate.SourceId && draft.Congress == candidate.Congress && draft.BillType == candidate.BillType &&
             draft.BillNumber == candidate.BillNumber, cancellationToken);
     }

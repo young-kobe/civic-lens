@@ -35,7 +35,7 @@ public sealed class RefusedCandidateMigrationTests(PostgresCollection postgres) 
     [Theory]
     [InlineData("action")]
     [InlineData("vote")]
-    public async Task TheMigrationGoesDownAndDropsTheColumnBecauseNoDataNeedsBackfillingBeforeTheFirstDeploy(string prefix)
+    public async Task TheMigrationGoesDownAndDropsTheColumnBecauseRejectedRunReasonWasNeverDeployedSoNoBlockExistsInProduction(string prefix)
     {
         await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
 

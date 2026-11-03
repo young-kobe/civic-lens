@@ -335,7 +335,7 @@ public sealed partial class PostgresBillStreamTests
     public async Task ARejectionThatLandsWhileTheModelRunsDiscardsTheDraftBecauseTheAppendStepRefusesARejectedRecord()
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
-        _ = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
+        var newer = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
         var model = new FakeHeadlineSummaryModel().Reply(async _ =>
         {
             await ExecuteAsync(connectionString, $"UPDATE action_drafts SET review_status = 'Rejected' WHERE record_id = '{RecordId}'");
@@ -347,6 +347,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal("Rejected", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
         Assert.Equal(1, await ScalarAsync("SELECT current_revision_number FROM action_drafts"));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE outcome = 'DraftDiscarded'"));
+        await AssertBlockAsync(newer);
     }
 
     private async Task<string> RejectAndRefuseANewerUpdateAsync()
@@ -395,6 +396,7 @@ public sealed partial class PostgresBillStreamTests
     public async Task ABypassedConflictKeepsTheBlockBecauseABypassedRunIsNotANewDraft()
     {
         var newer = await RejectAndRefuseANewerUpdateAsync();
+        await DecideAsync(1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
         var claim = await ClaimAfterRequeueAsync(newer);
         var bypassed = DraftedRun(Guid.NewGuid().ToString("N"), newer);
         bypassed = bypassed with { Run = bypassed.Run with { Outcome = AnalysisRunOutcome.Bypassed, ChargedTokens = 0, Usage = AnalysisTokenUsage.None } };
@@ -413,11 +415,43 @@ public sealed partial class PostgresBillStreamTests
         var newer = await RejectAndRefuseANewerUpdateAsync();
         var newest = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(2), title: "A third title");
         await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = '{newestStatus}' WHERE candidate_id = '{newest}'");
+        await DecideAsync(1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
         var claim = await ClaimAfterRequeueAsync(newer);
 
         Assert.True(await ActionStore().CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Succeeded, ActionDraftErrorCodes.SupersededByNewerCandidate), null, default));
 
         await AssertBlockAsync(newer);
+        Assert.Equal(0, await new RequeueRefusedActionDrafts(ActionStore()).ExecuteAsync(Owner));
+    }
+
+    [Fact]
+    public async Task TheRefusedRequeueSkipsARecordThatIsStillRejectedSoItsCountReachesZeroUntilRequestChanges()
+    {
+        await RejectAndRefuseANewerUpdateAsync();
+
+        Assert.Equal(0, await new RequeueRefusedActionDrafts(ActionStore()).ExecuteAsync(Owner));
+
+        await DecideAsync(1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
+        Assert.Equal(1, await new RequeueRefusedActionDrafts(ActionStore()).ExecuteAsync(Owner));
+    }
+
+    [Fact]
+    public async Task ASettlementOfAnUnchangedUpdateOfARejectedRecordWaitsForTheReviewKeyBecauseItMustNotReadNoBlockWhileARefusalCommits()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        var second = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
+        var third = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(2), title: "A third title");
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-action-review");
+
+        var settling = SettleBypassedAsync(third, ActionDraftErrorCodes.Unchanged, ActionDraftErrorCodes.Unchanged);
+        await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-action-review");
+        await ExecuteAsync(connectionString, $"UPDATE action_drafts SET refused_candidate_id = '{second}'");
+
+        Assert.False(settling.IsCompleted);
+        await holder.DisposeAsync();
+        await settling;
+        await AssertBlockAsync(null);
     }
 
     [Fact]
@@ -430,6 +464,74 @@ public sealed partial class PostgresBillStreamTests
 
         await AssertBlockAsync(null);
         await DecideAsync(1, 1, ReviewDecisionKind.Approve);
+    }
+
+    private async Task SettleBypassedAsync(string candidate, string code, string reason)
+    {
+        var claim = (await ActionStore().TryClaimAsync(candidate, Lease, default))!;
+        var bypass = DraftedRun(Guid.NewGuid().ToString("N"), candidate);
+        bypass = bypass with { Run = bypass.Run with { Outcome = AnalysisRunOutcome.Bypassed, ChargedTokens = 0, Usage = AnalysisTokenUsage.None }, Reason = reason };
+        Assert.True(await ActionStore().CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Succeeded, code), bypass, default));
+    }
+
+    [Fact]
+    public async Task ARefusalOfTheCandidateOfTheRevisionItselfSetsNoBlockBecauseItIsNoNewerUpdate()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        var own = (string)(await ScalarAsync("SELECT candidate_id FROM action_drafts"))!;
+        await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = 'Pending' WHERE candidate_id = '{own}'");
+
+        await SettleBypassedAsync(own, ActionDraftErrorCodes.Unchanged, ActionDraftErrorCodes.RecordRejected);
+
+        await AssertBlockAsync(null);
+    }
+
+    [Fact]
+    public async Task ARefusalThatMeetsANewerUpdateAtTheSettlementIsSupersededWithNoRunAndNoBlockBecauseTheNewerUpdateDecides()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        var second = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
+        var claim = (await ActionStore().TryClaimAsync(second, Lease, default))!;
+        _ = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(2), title: "A third title");
+        var bypass = DraftedRun(Guid.NewGuid().ToString("N"), second);
+        bypass = bypass with { Run = bypass.Run with { Outcome = AnalysisRunOutcome.Bypassed, ChargedTokens = 0, Usage = AnalysisTokenUsage.None }, Reason = ActionDraftErrorCodes.RecordRejected };
+
+        Assert.True(await ActionStore().CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Succeeded, ActionDraftErrorCodes.Unchanged), bypass, default));
+
+        await AssertBlockAsync(null);
+        Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM action_analysis_runs WHERE candidate_id = '{second}'"));
+        Assert.Equal(ActionDraftErrorCodes.SupersededByNewerCandidate, await ScalarAsync($"SELECT error_code FROM action_analysis WHERE candidate_id = '{second}'"));
+    }
+
+    [Fact]
+    public async Task ALateRefusalOfAnOlderUpdateLeavesTheBlockOfTheNewerOneBecauseTheNewestRefusedUpdateMustStayNamed()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        var second = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
+        var third = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(2), title: "A third title");
+        await SettleBypassedAsync(third, ActionDraftErrorCodes.Unchanged, ActionDraftErrorCodes.RecordRejected);
+        await AssertBlockAsync(third);
+
+        await SettleBypassedAsync(second, ActionDraftErrorCodes.Unchanged, ActionDraftErrorCodes.RecordRejected);
+
+        await AssertBlockAsync(third);
+    }
+
+    [Fact]
+    public async Task ALateUnchangedSettlementOfAnOlderUpdateKeepsTheBlockBecauseOnlyAnUpdateNotOlderThanTheRefusedOneMayEndIt()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        var second = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
+        var third = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(2), title: "A third title");
+        await SettleBypassedAsync(third, ActionDraftErrorCodes.Unchanged, ActionDraftErrorCodes.RecordRejected);
+
+        await SettleBypassedAsync(second, ActionDraftErrorCodes.Unchanged, ActionDraftErrorCodes.Unchanged);
+
+        await AssertBlockAsync(third);
     }
 
     [Fact]
@@ -486,7 +588,7 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task AnUpdateWithTheSameFactsLeavesNoMarkSoReversingStillWorks()
+    public async Task AnUpdateWithTheSameFactsLeavesNoBlockSoReversingStillWorks()
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
@@ -512,7 +614,7 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task TheRequeueCommandSendsOnlyRefusedEntriesBackAndALaterRunClearsTheMarkSoApprovingWorksAgain()
+    public async Task TheRequeueCommandSendsOnlyRefusedEntriesBackAndANewDraftClearsTheBlockSoApprovingWorksAgain()
     {
         await RejectAndRefuseANewerUpdateAsync();
         var edited = await SaveAsync(1, SuggestionChoice.Keep, "save-2");
@@ -548,7 +650,7 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task AMarkIsNotWrittenWhenThePersonChangedTheRecordBeforeTheSettlementBecauseTheWorkerMayDraftIt()
+    public async Task ABlockIsNotWrittenWhenThePersonChangedTheRecordBeforeTheSettlementBecauseTheWorkerMayDraftIt()
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);

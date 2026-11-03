@@ -22,7 +22,7 @@ public sealed class RejectedRunReasonMigrationTests(PostgresCollection postgres)
     [Theory]
     [InlineData("action")]
     [InlineData("vote")]
-    public async Task ARunKeepsTheReasonThatMarksARefusalBecauseTheReversalCheckReadsItFromTheColumn(string prefix)
+    public async Task ARunKeepsTheReasonThatRecordsARefusalBecauseTheCheckAllowsIt(string prefix)
     {
         await InsertRunAsync(prefix, "recordRejected");
 

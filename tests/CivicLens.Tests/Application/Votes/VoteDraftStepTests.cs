@@ -879,7 +879,7 @@ public sealed class VoteDraftStepTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ARejectedRecordWithTheSameFactsLeavesNoMarkEvenWhenThePromptIsOlderBecauseNothingWasRefused(bool olderPrompt)
+    public async Task ARejectedRecordWithTheSameFactsLeavesNoBlockEvenWhenThePromptIsOlderBecauseNothingWasRefused(bool olderPrompt)
     {
         var current = await FirstRevisionAsync(Create());
         var evidence = Create().Evidence(current, null, false, olderPrompt) with { IsRejected = true };

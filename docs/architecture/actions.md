@@ -250,7 +250,7 @@ An approved action record with no open concern publishes in a static release, li
 | `actions draft list [view] [limit]` | Entries. Views: `drafted`, `unchanged`, `superseded`, `no-official`, `pending`, `failed` |
 | `actions draft requeue <candidate-id\|--all>` | Failed rows, and no others, back to Pending |
 | `actions draft requeue --blocked --code <block-code>` | Blocked rows with exactly that code, and no others, back to Pending. The code is required and must not be empty |
-| `actions draft requeue --refused` | The candidate that a draft names in `refused_candidate_id`, and no other, back to Pending. Run it after Request changes on the rejected record. If that update is Failed or Blocked, use `requeue <candidate-id>` or `requeue --blocked --code` instead |
+| `actions draft requeue --refused` | The candidate that a reopened draft names in `refused_candidate_id`, and no other, back to Pending. Run it after Request changes on the rejected record. If the update failed, run `actions draft requeue <candidate-id>`. If it is blocked, run `actions draft requeue --blocked --code <block-code>` |
 | `actions draft redraft` | Succeeded `drafted` and `unchanged` rows of bills with an older prompt version, and no others, back to Pending. Older entries of a stale bill requeue too and settle as superseded, so the printed count is entries, not bills. Needs no argument and calls no model itself |
 
 All are owner commands. Variables and examples are in [operations](../operations.md#action-drafting).
@@ -295,6 +295,7 @@ All are owner commands. Variables and examples are in [operations](../operations
 
 ## Limits and planned work
 
+- A newer update that Blocks before the rejection check sets no block. Code cannot tell whether that update changed facts. A blocked update shows in the blocked list, and old facts can publish until someone clears the blocked update.
 - `PublishedRecordLoader` tags only `ArgumentException` with the record. A record whose `Validate` throws `InvalidDataException` fails the whole publish batch. No test covers this path.
 - Requeued entries keep their created time. A fresh bill at the same priority can wait behind a redraft backlog, as with failed requeue and regate.
 - Action records can produce about 110 revisions a day, about half of them sponsorship changes on approved records. Those revisions copy the text and need no model call. Code approves them.

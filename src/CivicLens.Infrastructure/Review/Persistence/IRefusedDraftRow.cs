@@ -4,5 +4,5 @@ namespace CivicLens.Infrastructure.Review.Persistence;
 /// because the newest revision holds old facts. A person approval stops while it is set.</summary>
 internal interface IRefusedDraftRow
 {
-    string? RefusedCandidateId { get; set; }
+    string? RefusedCandidateId { set; }
 }

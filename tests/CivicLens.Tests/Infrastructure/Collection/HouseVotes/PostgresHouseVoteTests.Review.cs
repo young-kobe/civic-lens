@@ -203,12 +203,7 @@ public sealed partial class PostgresHouseVoteTests
         return (recordId, second);
     }
 
-    private async Task BypassAsync(string candidate, string code)
-    {
-        var store = VoteStore();
-        var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
-        Assert.True(await store.CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Succeeded, code), Bypassed(candidate, code), default));
-    }
+    private Task BypassAsync(string candidate, string code) => SettleBypassedAsync(candidate, code, code);
 
     private async Task AssertBlockAsync(string? candidate) =>
         Assert.Equal(candidate, await ScalarAsync("SELECT refused_candidate_id FROM vote_drafts") as string);
@@ -252,7 +247,8 @@ public sealed partial class PostgresHouseVoteTests
     [Fact]
     public async Task ABypassedConflictKeepsTheBlockBecauseABypassedRunIsNotANewDraft()
     {
-        var (_, second) = await RejectAndRefuseANewerUpdateAsync();
+        var (recordId, second) = await RejectAndRefuseANewerUpdateAsync();
+        await DecideAsync(recordId, 1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
         var claim = await ClaimAfterRequeueAsync(second);
 
         Assert.True(await VoteStore().CheckpointAsync(VoteDraftCheckpoint.From(claim, await RevisionAsync(second, 5)),
@@ -267,14 +263,44 @@ public sealed partial class PostgresHouseVoteTests
     [InlineData("Failed")]
     public async Task ASupersededDiscardKeepsTheBlockWhateverTheNewestUpdateDoesBecauseNoDraftExistsYet(string newestStatus)
     {
-        var (_, second) = await RejectAndRefuseANewerUpdateAsync();
+        var (recordId, second) = await RejectAndRefuseANewerUpdateAsync();
         var newest = await PendingCandidateAsync(Updated.AddDays(2));
         await ExecuteAsync($"UPDATE vote_analysis SET status = '{newestStatus}' WHERE candidate_id = '{newest}'");
+        await DecideAsync(recordId, 1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
         var claim = await ClaimAfterRequeueAsync(second);
 
         Assert.True(await VoteStore().CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Succeeded, VoteDraftErrorCodes.SupersededByNewerCandidate), null, default));
 
         await AssertBlockAsync(second);
+        Assert.Equal(0, await new RequeueRefusedVoteDrafts(VoteStore()).ExecuteAsync(new ReviewActor("auth0|owner", ReviewRole.Owner)));
+    }
+
+    [Fact]
+    public async Task TheRefusedRequeueSkipsARecordThatIsStillRejectedSoItsCountReachesZeroUntilRequestChanges()
+    {
+        var (recordId, _) = await RejectAndRefuseANewerUpdateAsync();
+        var owner = new ReviewActor("auth0|owner", ReviewRole.Owner);
+
+        Assert.Equal(0, await new RequeueRefusedVoteDrafts(VoteStore()).ExecuteAsync(owner));
+
+        await DecideAsync(recordId, 1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
+        Assert.Equal(1, await new RequeueRefusedVoteDrafts(VoteStore()).ExecuteAsync(owner));
+    }
+
+    [Fact]
+    public async Task ASettlementOfAnUnchangedUpdateOfARejectedRecordWaitsForTheReviewKeyBecauseItMustNotReadNoBlockWhileARefusalCommits()
+    {
+        var (_, second, third) = await RejectWithTwoNewerUpdatesAsync();
+        await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-vote-review");
+
+        var settling = SettleBypassedAsync(third, VoteDraftErrorCodes.Unchanged, VoteDraftErrorCodes.Unchanged);
+        await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-vote-review");
+        await ExecuteAsync($"UPDATE vote_drafts SET refused_candidate_id = '{second}'");
+
+        Assert.False(settling.IsCompleted);
+        await holder.DisposeAsync();
+        await settling;
+        await AssertBlockAsync(null);
     }
 
     [Fact]
@@ -286,6 +312,88 @@ public sealed partial class PostgresHouseVoteTests
 
         await AssertBlockAsync(null);
         await DecideAsync(recordId, 1, 1, ReviewDecisionKind.Approve);
+    }
+
+    private async Task<(string RecordId, string Second, string Third)> RejectWithTwoNewerUpdatesAsync()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+        var third = await PendingCandidateAsync(Updated.AddDays(2));
+        return (recordId, second, third);
+    }
+
+    private async Task SettleBypassedAsync(string candidate, string code, string reason)
+    {
+        var store = VoteStore();
+        var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
+        Assert.True(await store.CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Succeeded, code), Bypassed(candidate, reason), default));
+    }
+
+    [Fact]
+    public async Task ANoCallRefusalOfARejectedRecordNamesTheNewerUpdateBecauseTheApprovalCheckReadsOnlyTheDraft()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        var second = await PendingCandidateAsync(Updated.AddDays(1));
+
+        await SettleBypassedAsync(second, VoteDraftErrorCodes.Unchanged, VoteDraftErrorCodes.RecordRejected);
+
+        await AssertBlockAsync(second);
+        await Assert.ThrowsAsync<StaleApprovalException>(() => DecideAsync(recordId, 1, 1, ReviewDecisionKind.Approve));
+    }
+
+    [Fact]
+    public async Task ARefusalOfTheCandidateOfTheRevisionItselfSetsNoBlockBecauseItIsNoNewerUpdate()
+    {
+        var first = await PendingCandidateAsync();
+        await SettleForReviewAsync(first, await RevisionAsync(first, 1));
+        var recordId = await RecordIdAsync(first);
+        await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        await ExecuteAsync($"UPDATE vote_analysis SET status = 'Pending' WHERE candidate_id = '{first}'");
+
+        await SettleBypassedAsync(first, VoteDraftErrorCodes.Unchanged, VoteDraftErrorCodes.RecordRejected);
+
+        await AssertBlockAsync(null);
+    }
+
+    [Fact]
+    public async Task ARefusalThatMeetsANewerUpdateAtTheSettlementIsSupersededWithNoRunAndNoBlockBecauseTheNewerUpdateDecides()
+    {
+        var (_, second, _) = await RejectWithTwoNewerUpdatesAsync();
+
+        await SettleBypassedAsync(second, VoteDraftErrorCodes.Unchanged, VoteDraftErrorCodes.RecordRejected);
+
+        await AssertBlockAsync(null);
+        Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM vote_analysis_runs WHERE candidate_id = '{second}'"));
+        Assert.Equal(VoteDraftErrorCodes.SupersededByNewerCandidate, await ScalarAsync($"SELECT error_code FROM vote_analysis WHERE candidate_id = '{second}'"));
+    }
+
+    [Fact]
+    public async Task ALateRefusalOfAnOlderUpdateLeavesTheBlockOfTheNewerOneBecauseTheNewestRefusedUpdateMustStayNamed()
+    {
+        var (_, second, third) = await RejectWithTwoNewerUpdatesAsync();
+        await SettleBypassedAsync(third, VoteDraftErrorCodes.Unchanged, VoteDraftErrorCodes.RecordRejected);
+        await AssertBlockAsync(third);
+
+        await SettleBypassedAsync(second, VoteDraftErrorCodes.Unchanged, VoteDraftErrorCodes.RecordRejected);
+
+        await AssertBlockAsync(third);
+    }
+
+    [Fact]
+    public async Task ALateUnchangedSettlementOfAnOlderUpdateKeepsTheBlockBecauseOnlyAnUpdateNotOlderThanTheRefusedOneMayEndIt()
+    {
+        var (_, second, third) = await RejectWithTwoNewerUpdatesAsync();
+        await SettleBypassedAsync(third, VoteDraftErrorCodes.Unchanged, VoteDraftErrorCodes.RecordRejected);
+
+        await SettleBypassedAsync(second, VoteDraftErrorCodes.Unchanged, VoteDraftErrorCodes.Unchanged);
+
+        await AssertBlockAsync(third);
     }
 
     [Fact]
@@ -318,7 +426,7 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task AMarkIsNotWrittenWhenThePersonChangedTheRecordBeforeTheSettlementBecauseTheWorkerMayDraftIt()
+    public async Task ABlockIsNotWrittenWhenThePersonChangedTheRecordBeforeTheSettlementBecauseTheWorkerMayDraftIt()
     {
         var first = await PendingCandidateAsync();
         await SettleForReviewAsync(first, await RevisionAsync(first, 1));
@@ -338,7 +446,7 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task TheRequeueCommandSendsOnlyTheRefusedVoteBackAndOnlyTheOwnerRunsIt()
+    public async Task TheRequeueCommandSendsOnlyTheRefusedVoteBackAndARealNewDraftClearsTheBlockSoTheCountReachesZero()
     {
         var first = await PendingCandidateAsync();
         await SettleForReviewAsync(first, await RevisionAsync(first, 1));
@@ -346,10 +454,15 @@ public sealed partial class PostgresHouseVoteTests
         await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
         var second = await PendingCandidateAsync(Updated.AddDays(1));
         await SettleAsync(second, await RevisionAsync(second, 2));
+        await DecideAsync(recordId, 1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
+        var owner = new ReviewActor("auth0|owner", ReviewRole.Owner);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new RequeueRefusedVoteDrafts(VoteStore()).ExecuteAsync(Reviewer));
-        Assert.Equal(1, await new RequeueRefusedVoteDrafts(VoteStore()).ExecuteAsync(new ReviewActor("auth0|owner", ReviewRole.Owner)));
-        Assert.Equal(0, await new RequeueRefusedVoteDrafts(VoteStore()).ExecuteAsync(new ReviewActor("auth0|owner", ReviewRole.Owner)));
+        Assert.Equal(1, await new RequeueRefusedVoteDrafts(VoteStore()).ExecuteAsync(owner));
+        await SettleAsync(second, await RevisionAsync(second, 2));
+
+        await AssertBlockAsync(null);
+        Assert.Equal(0, await new RequeueRefusedVoteDrafts(VoteStore()).ExecuteAsync(owner));
     }
 
     [Fact]

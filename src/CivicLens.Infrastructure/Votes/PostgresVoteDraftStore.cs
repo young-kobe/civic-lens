@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Relationships;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
@@ -76,7 +77,7 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
     public Task<int> RequeueRefusedAsync(CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
         {
-            var refused = await db.Set<VoteDraftRow>().AsNoTracking().Where(draft => draft.RefusedCandidateId != null)
+            var refused = await db.Set<VoteDraftRow>().AsNoTracking().Where(draft => draft.RefusedCandidateId != null && draft.ReviewStatus != ReviewStatus.Rejected)
                 .Select(draft => draft.RefusedCandidateId!).ToArrayAsync(token);
             return settled.Where(row => refused.Contains(row.CandidateId));
         }, cancellationToken);

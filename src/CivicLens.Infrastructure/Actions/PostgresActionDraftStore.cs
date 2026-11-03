@@ -68,7 +68,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
     public Task<int> RequeueRefusedAsync(CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
         {
-            var refused = await db.Set<ActionDraftRow>().AsNoTracking().Where(draft => draft.RefusedCandidateId != null)
+            var refused = await db.Set<ActionDraftRow>().AsNoTracking().Where(draft => draft.RefusedCandidateId != null && draft.ReviewStatus != ReviewStatus.Rejected)
                 .Select(draft => draft.RefusedCandidateId!).ToArrayAsync(token);
             return settled.Where(row => refused.Contains(row.CandidateId));
         }, cancellationToken);
