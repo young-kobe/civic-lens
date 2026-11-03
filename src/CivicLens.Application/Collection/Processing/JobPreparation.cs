@@ -7,6 +7,7 @@ using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Votes;
+using CivicLens.Application.Districts;
 using CivicLens.Application.Documents;
 using CivicLens.Application.ExecutiveActions;
 using CivicLens.Application.Issues;
@@ -27,6 +28,7 @@ public sealed class JobPreparation(
     IFederalRegisterAdmissionStore federalRegisterAdmissions,
     IMemberRosterStore roster,
     IExecutiveRosterStore executives,
+    IZctaDistrictStore districts,
     ICaptureBodyReader bodies,
     IEvidenceProcessingStore processing,
     IDocumentExtractionStore extractions,
@@ -141,6 +143,7 @@ public sealed class JobPreparation(
             ApiResource.VoteviewVotes => AdmitVoteviewVotesAsync(job, artifactRoot, cancellationToken),
             ApiResource.MemberRoster => AdmitMemberRosterAsync(job, artifactRoot, cancellationToken),
             ApiResource.ExecutiveRoster => AdmitExecutiveRosterAsync(job, artifactRoot, cancellationToken),
+            ApiResource.ZctaDistricts => AdmitZctaDistrictsAsync(job, artifactRoot, cancellationToken),
             ApiResource.MemberPhoto => AdmitMemberPhotoAsync(job, artifactRoot, cancellationToken),
             ApiResource.FederalRegisterList => AdmitFederalRegisterListAsync(job, artifactRoot, cancellationToken),
             ApiResource.FederalRegisterDocument => AdmitFederalRegisterDocumentAsync(job, artifactRoot, cancellationToken),
@@ -379,6 +382,16 @@ public sealed class JobPreparation(
         var attemptId = response.Captured.AttemptId;
         if (!await executives.HasSnapshotOfCaptureAsync(attemptId, cancellationToken))
             await executives.AdmitAsync(attemptId, ExecutiveRosterParser.Parse(response.Body), cancellationToken);
+        return JobPreparationResult.Prepared();
+    }
+
+    private async Task<JobPreparationResult> AdmitZctaDistrictsAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
+        var attemptId = response.Captured.AttemptId;
+        if (!await districts.HasSnapshotOfCaptureAsync(attemptId, cancellationToken))
+            await districts.AdmitAsync(attemptId, ZctaDistrictParser.Parse(response.Body), cancellationToken);
         return JobPreparationResult.Prepared();
     }
 

@@ -78,6 +78,37 @@ public sealed class PublishFirstPublishedTests
     }
 
     [Fact]
+    public async Task ANewWithdrawalOfARecordThatTheTableLacksRefusesThePublishAndCommitsNothing()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c');
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", action));
+        scenario.Publications.FirstPublished.Clear();
+
+        await Assert.ThrowsAsync<FirstPublishedMissingException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "k2") { Withdrawals = [new(PublishedRecordKind.Action, action, "Wrong.")] }));
+
+        Assert.Single(scenario.Publications.Committed);
+    }
+
+    [Fact]
+    public async Task ACarriedWithdrawalOfARecordThatTheTableLacksRefusesALaterPublishAndCommitsNothing()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c');
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", action));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "k2") { Withdrawals = [new(PublishedRecordKind.Action, action, "Wrong.")] });
+        scenario.Publications.FirstPublished.Clear();
+        var draft = scenario.AddDraft('a');
+
+        await Assert.ThrowsAsync<FirstPublishedMissingException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", draft)));
+
+        Assert.Equal(2, scenario.Publications.Committed.Count);
+    }
+
+    [Fact]
     public async Task ARecordWithNoRowAndNoActiveEntryIsNewSoItTakesTheClockAndTheCommitCarriesItsRow()
     {
         var scenario = new PublicationScenario();
