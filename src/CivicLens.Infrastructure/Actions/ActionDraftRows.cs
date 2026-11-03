@@ -30,7 +30,7 @@ internal static class ActionDraftRows
         }
         if (draft is null) db.Add(draft = NewDraft(revision));
         var records = PostgresActionReviewStore.Records;
-        await records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision, runId, codeVersion), await records.ReadCycleAsync(db, draft, cancellationToken),
+        await records.AppendCodeApprovedAsync(db, draft, revision, ActionRevisionRows.Create(revision, runId, codeVersion), await records.ReadCycleAsync(db, draft, cancellationToken),
             () => ApprovalCheck.OfAsync(() => PostgresActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)));
         return null;
     }
@@ -131,20 +131,4 @@ internal static class ActionDraftRows
         BillNumber = revision.BillNumber,
         CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
     };
-
-    public static ActionRevisionRow NewRevision(ActionDraftRevision revision, string? runId, CodeVersion codeVersion)
-    {
-        var authorKind = ReviewAuthor.KindOf(revision.AuthorSubject);
-        return new()
-        {
-            RecordId = revision.RecordId,
-            RevisionNumber = revision.RevisionNumber,
-            AuthorSubject = revision.AuthorSubject,
-            AuthorKind = authorKind,
-            RunId = runId,
-            CodeVersion = authorKind == ReviewAuthorKind.Code ? codeVersion.Sha : null,
-            RevisionJson = ReviewJson.Serialize(revision),
-            CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
-        };
-    }
 }

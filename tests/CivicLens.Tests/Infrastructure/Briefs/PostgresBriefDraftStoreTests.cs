@@ -573,7 +573,12 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
     public async Task TheBriefWakeupFiresAtTheNextMondayMidnightInNewYorkEvenWithNoQueuedWork(string databaseNow)
     {
         var database = new NpgsqlConnectionStringBuilder(connectionString);
-        await seeder.ExecuteAsync($"CREATE FUNCTION public.clock_timestamp() RETURNS timestamptz LANGUAGE sql STABLE AS $$ SELECT timestamptz '{databaseNow}' $$");
+        await seeder.ExecuteAsync($"""
+            DO $do$ BEGIN
+            EXECUTE format('CREATE FUNCTION public.clock_timestamp() RETURNS timestamptz LANGUAGE sql VOLATILE AS $f$ SELECT pg_catalog.clock_timestamp() + %L::interval $f$',
+                timestamptz '{databaseNow}' - pg_catalog.clock_timestamp());
+            END $do$
+            """);
         await seeder.ExecuteAsync($"ALTER DATABASE \"{database.Database}\" SET search_path = public, pg_catalog");
         database.Pooling = false;
         await using var wakeup = PostgresBriefDraftStore.Wakeup(database.ConnectionString);

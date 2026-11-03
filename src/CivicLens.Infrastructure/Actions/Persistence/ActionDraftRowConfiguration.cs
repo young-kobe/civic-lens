@@ -37,5 +37,7 @@ internal sealed class ActionDraftRowConfiguration : IEntityTypeConfiguration<Act
         builder.HasOne<ActionCandidateRow>().WithMany().HasForeignKey(row => row.CandidateId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(row => new { row.SourceId, row.Congress, row.BillType, row.BillNumber }).IsUnique()
             .HasDatabaseName("ux_action_drafts_bill");
+        builder.HasAlternateKey(row => new { row.RecordId, row.SourceId, row.Congress, row.BillType, row.BillNumber })
+            .HasName("ux_action_drafts_record_bill");
     }
 }

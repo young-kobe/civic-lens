@@ -320,7 +320,7 @@ public sealed partial class PostgresBillStreamTests
         var candidate = await ThreeCandidatesWithSubjectsAsync();
         var claim = (await ActionStore().TryClaimAsync(candidate, Lease, default))!;
         var run = await ReserveAsync(ActionStore(), claim);
-        Assert.True(await ActionStore().CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1, includesSummaries: true, includesSubjects: true)),
+        Assert.True(await ActionStore().CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1, includesSummaries: true, includesSubjects: true))),
             DraftedRun(run, candidate), default));
 
         var exception = await Assert.ThrowsAnyAsync<Exception>(RollBackAsync);
@@ -687,9 +687,9 @@ public sealed partial class PostgresBillStreamTests
         await InsertRevisionAsync(authorKind, authorSubject, runId);
     }
 
-    private Task InsertRevisionAsync(string authorKind, string authorSubject, string? runId) => ExecuteAsync(connectionString, $"""
+    private Task InsertRevisionAsync(string authorKind, string authorSubject, string? runId, int number = 1) => ExecuteAsync(connectionString, $"""
         INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-        VALUES ('{RecordId}', 1, '{authorSubject}', '{authorKind}', {SqlLiteral(runId)}, 'x', 0)
+        VALUES ('{RecordId}', {number}, '{authorSubject}', '{authorKind}', {SqlLiteral(runId)}, 'x', 0)
         """);
 
     private async Task<(string Older, string Newer)> TwoSettledCandidatesAsync(string? olderCode, string? newerCode)
@@ -725,7 +725,7 @@ public sealed partial class PostgresBillStreamTests
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
         var runId = await ReserveAsync(store, claim);
 
-        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1)),
+        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1))),
             DraftedRun(runId, candidate), default);
 
         Assert.True(settled);
@@ -824,7 +824,7 @@ public sealed partial class PostgresBillStreamTests
             VALUES ('{RecordId}', 1, 'auth0|editor', 'Person', NULL, 'x', 0)
             """);
 
-        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1)),
+        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1))),
             DraftedRun(runId, candidate), default);
 
         Assert.True(settled);
@@ -853,7 +853,7 @@ public sealed partial class PostgresBillStreamTests
         var bypassed = new ActionDraftRun(run.Run with { Outcome = AnalysisRunOutcome.Bypassed, Usage = AnalysisTokenUsage.None, ChargedTokens = 0 },
             ActionDraftErrorCodes.SponsorshipsChanged);
 
-        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1)), bypassed, default));
+        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1))), bypassed, default));
 
         var row = Assert.Single(await QueueAsync());
         Assert.Equal(("RetryWaiting", ActionDraftErrorCodes.RevisionConflict), (row.Status, row.ErrorCode));
@@ -871,7 +871,7 @@ public sealed partial class PostgresBillStreamTests
         Task<bool> settling;
         await using (var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-action-review"))
         {
-            settling = store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1)),
+            settling = store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1))),
                 DraftedRun(runId, candidate), default);
             await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-action-review");
             Assert.False(settling.IsCompleted);
@@ -1021,13 +1021,32 @@ public sealed partial class PostgresBillStreamTests
         return model;
     }
 
-    private async Task SettleAsync(string candidate, ActionDraftRevision revision)
+    private async Task<ActionDraftRevision> SettleAsync(string candidate, ActionDraftRevision revision)
     {
         var store = ActionStore();
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
         var runId = await ReserveAsync(store, claim);
-        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, revision),
-            DraftedRun(runId, candidate), default));
+        var stored = await CitingStoredTextAsync(revision);
+        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, stored), DraftedRun(runId, candidate), default));
+        return stored;
+    }
+
+    private static ActionDraftRevision CitingTextThatIsNotThere(ActionDraftRevision revision) => revision with
+    {
+        Sponsorships = [.. revision.Sponsorships.Select(item => item with { Citations = [new(item.Citations[0].ExtractionId, 1_000_000, 5)] })]
+    };
+
+    private async Task<ActionDraftRevision> CitingStoredTextAsync(ActionDraftRevision revision)
+    {
+        var extractionId = (string)(await ScalarAsync("SELECT min(extraction_id) FROM document_extractions"))!;
+        SourceSpan Swap(SourceSpan span) => span with { ExtractionId = extractionId };
+        return revision with
+        {
+            SummaryCitation = revision.SummaryCitation is { } summary ? Swap(summary) : null,
+            PolicyAreaCitation = revision.PolicyAreaCitation is { } area ? Swap(area) : null,
+            BillCitation = revision.BillCitation is { } bill ? Swap(bill) : null,
+            Sponsorships = [.. revision.Sponsorships.Select(item => item with { Citations = [.. item.Citations.Select(Swap)] })]
+        };
     }
 
     private static async Task<string> ReserveAsync(PostgresActionDraftStore store, AnalysisClaim claim)
