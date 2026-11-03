@@ -786,9 +786,10 @@ public sealed class CollectorTests
             _ => Slow(Response(HttpStatusCode.OK, "body")));
         using var directoryOwner = new TemporaryDirectory();
         using var collector = new HttpCollector(handler);
-        var result = await collector.FetchAsync(Request(directoryOwner.Path));
+        var request = Request(directoryOwner.Path);
+        var result = await collector.FetchAsync(request);
         Assert.Equal(CollectionOutcome.Captured, result.Outcome);
-        Assert.InRange(result.ElapsedMilliseconds, 100, CollectionProtocol.MaximumElapsedMilliseconds);
+        Assert.InRange(result.ElapsedMilliseconds, 100, CollectionProtocol.MaximumElapsedMilliseconds(request.TimeoutSeconds));
     }
 
     [Fact]
@@ -797,9 +798,10 @@ public sealed class CollectorTests
         var handler = new QueueHandler(_ => Slow(Response(HttpStatusCode.OK, "User-agent: *\nDisallow: /watch*\n")));
         using var directoryOwner = new TemporaryDirectory();
         using var collector = new HttpCollector(handler);
-        var result = await collector.FetchAsync(Request(directoryOwner.Path));
+        var request = Request(directoryOwner.Path);
+        var result = await collector.FetchAsync(request);
         Assert.Equal(CollectionFailureCode.RobotsDenied, result.FailureCode);
-        Assert.InRange(result.ElapsedMilliseconds, 50, CollectionProtocol.MaximumElapsedMilliseconds);
+        Assert.InRange(result.ElapsedMilliseconds, 50, CollectionProtocol.MaximumElapsedMilliseconds(request.TimeoutSeconds));
     }
 
     [Fact]
@@ -807,9 +809,10 @@ public sealed class CollectorTests
     {
         using var directoryOwner = new TemporaryDirectory();
         using var collector = new HttpCollector(new HangAfterRobotsHandler());
-        var result = await collector.FetchAsync(Request(directoryOwner.Path) with { TimeoutSeconds = 1, MinDelayMilliseconds = 0 });
+        var request = Request(directoryOwner.Path) with { TimeoutSeconds = 1, MinDelayMilliseconds = 0 };
+        var result = await collector.FetchAsync(request);
         Assert.Equal(CollectionFailureCode.Timeout, result.FailureCode);
-        Assert.InRange(result.ElapsedMilliseconds, 900, CollectionProtocol.MaximumElapsedMilliseconds);
+        Assert.InRange(result.ElapsedMilliseconds, 900, CollectionProtocol.MaximumElapsedMilliseconds(request.TimeoutSeconds));
     }
 
     [Fact]

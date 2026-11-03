@@ -71,7 +71,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
         await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
         var handoffs = new FileCollectionReceiptHandoffStore(root);
-        await handoffs.SaveAsync(new PendingCollectionHandoff(1, start.Attempt.AttemptId, start.Attempt.Request,
+        await handoffs.SaveAsync(new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, start.Attempt.AttemptId, start.Attempt.Request,
             receipt with { FinalUrl = receipt.FinalUrl + "/different" }), default);
         await jobs.ReleaseCollectorAsync(claim.Lease, start.CollectorLease!, default);
         await jobs.ReleaseClaimAsync(claim.Lease, default);
@@ -512,7 +512,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
         var handoffs = new FileCollectionReceiptHandoffStore(root);
-        await handoffs.SaveAsync(new PendingCollectionHandoff(1, start.Attempt.AttemptId, start.Attempt.Request, receipt), default);
+        await handoffs.SaveAsync(new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, start.Attempt.AttemptId, start.Attempt.Request, receipt), default);
         await jobs.ReleaseCollectorAsync(claim.Lease, start.CollectorLease!, default);
         await jobs.ReleaseClaimAsync(claim.Lease, default);
         await jobs.CancelAsync(claim.Job.JobId, default);

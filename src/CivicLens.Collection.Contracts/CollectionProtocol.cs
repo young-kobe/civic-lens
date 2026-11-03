@@ -7,7 +7,9 @@ public static class CollectionProtocol
 {
     public const int Version = 1;
     public const long MaximumCrawlDelayMilliseconds = (long.MaxValue / TimeSpan.TicksPerSecond) * 1000;
-    public const long MaximumElapsedMilliseconds = 3_600_000;
+    public const int CollectorGraceSeconds = 5;
+
+    public static long MaximumElapsedMilliseconds(int timeoutSeconds) => (timeoutSeconds + CollectorGraceSeconds) * 1000L;
 
     public const int MaximumManifestBytes = 64 * 1024;
     // A page receipt repeats request identity and URLs and adds escaped response metadata.

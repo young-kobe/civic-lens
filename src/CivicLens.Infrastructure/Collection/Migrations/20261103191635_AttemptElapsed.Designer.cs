@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CivicLens.Infrastructure.Collection.Migrations
 {
     [DbContext(typeof(CollectionAttemptDbContext))]
-    [Migration("20261103182320_AttemptElapsed")]
+    [Migration("20261103191635_AttemptElapsed")]
     partial class AttemptElapsed
     {
         /// <inheritdoc />
@@ -2252,7 +2252,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.Property<long?>("ElapsedMilliseconds")
                         .HasColumnType("bigint")
-                        .HasColumnName("elapsed_ms");
+                        .HasColumnName("elapsed_milliseconds");
 
                     b.Property<string>("FailureCode")
                         .HasColumnType("text")
@@ -2358,7 +2358,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("collection_attempts", null, t =>
                         {
-                            t.HasCheckConstraint("ck_collection_attempts_elapsed", "elapsed_ms IS NULL OR elapsed_ms >= 0");
+                            t.HasCheckConstraint("ck_collection_attempts_elapsed_milliseconds", "elapsed_milliseconds IS NULL OR elapsed_milliseconds BETWEEN 0 AND 305000");
 
                             t.HasCheckConstraint("ck_collection_attempts_identity", "length(btrim(attempt_id)) > 0 AND length(btrim(source_id)) > 0 AND length(btrim(requested_url)) > 0 AND length(btrim(final_url)) > 0");
 

@@ -14,7 +14,7 @@ public sealed class FileCollectionReceiptHandoffStoreTests
         {
             var store = new FileCollectionReceiptHandoffStore(root);
             var request = Request();
-            var handoff = new PendingCollectionHandoff(1, "attempt-1", request, Receipt(request));
+            var handoff = new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, "attempt-1", request, Receipt(request));
             await store.SaveAsync(handoff, CancellationToken.None);
 
             Assert.Equal(new[] { "attempt-1" }, await store.ListAsync(CancellationToken.None));
@@ -49,6 +49,31 @@ public sealed class FileCollectionReceiptHandoffStoreTests
     }
 
     [Fact]
+    public async Task ALoadedVersionOneHandoffHasNoElapsedTimeAndAVersionTwoHandoffWithoutOneIsRefused()
+    {
+        var root = TempDirectory();
+        try
+        {
+            var store = new FileCollectionReceiptHandoffStore(root);
+            var request = Request();
+            var current = new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, "attempt-1", request, Receipt(request));
+            var withoutElapsed = System.Text.Json.JsonSerializer.Serialize(current, CivicLens.Collection.Contracts.CollectionProtocol.JsonOptions)
+                .Replace("\"elapsedMilliseconds\":250,", "");
+            Assert.DoesNotContain("elapsedMilliseconds", withoutElapsed);
+
+            await File.WriteAllTextAsync(Path.Combine(root, ".pending", "attempt-1.json"), withoutElapsed);
+            await Assert.ThrowsAsync<InvalidDataException>(() => store.LoadAsync("attempt-1", CancellationToken.None));
+
+            await File.WriteAllTextAsync(Path.Combine(root, ".pending", "attempt-1.json"),
+                withoutElapsed.Replace("\"version\":2", "\"version\":1"));
+            var loaded = await store.LoadAsync("attempt-1", CancellationToken.None);
+            Assert.Null(loaded.ElapsedMilliseconds);
+            Assert.Equal(250, current.ElapsedMilliseconds);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public async Task RejectsUnsupportedEnvelopeVersionAndSerializesRecoveryLeases()
     {
         var root = TempDirectory();
@@ -56,7 +81,7 @@ public sealed class FileCollectionReceiptHandoffStoreTests
         {
             var store = new FileCollectionReceiptHandoffStore(root);
             var request = Request();
-            var handoff = new PendingCollectionHandoff(2, "attempt-1", request, Receipt(request));
+            var handoff = new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion + 1, "attempt-1", request, Receipt(request));
             await File.WriteAllTextAsync(Path.Combine(root, ".pending", "attempt-1.json"),
                 System.Text.Json.JsonSerializer.Serialize(handoff, CivicLens.Collection.Contracts.CollectionProtocol.JsonOptions));
             await Assert.ThrowsAsync<InvalidDataException>(() => store.LoadAsync("attempt-1", CancellationToken.None));
@@ -100,7 +125,7 @@ public sealed class FileCollectionReceiptHandoffStoreTests
         {
             var store = new FileCollectionReceiptHandoffStore(root);
             var request = Request();
-            var handoff = new PendingCollectionHandoff(1, "attempt-1", request, Receipt(request));
+            var handoff = new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, "attempt-1", request, Receipt(request));
             var json = System.Text.Json.JsonSerializer.Serialize(handoff,
                 CivicLens.Collection.Contracts.CollectionProtocol.JsonOptions);
             var node = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();

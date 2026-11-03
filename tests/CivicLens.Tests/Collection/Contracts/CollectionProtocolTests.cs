@@ -261,17 +261,18 @@ public sealed class CollectionProtocolTests
     }
 
     [Theory]
-    [InlineData(-1)]
-    [InlineData(CollectionProtocol.MaximumElapsedMilliseconds + 1)]
-    public void ElapsedTimeOutsideTheSupportedRangeIsRejected(long elapsed)
+    [InlineData(1, 6_000)]
+    [InlineData(300, 305_000)]
+    public void ElapsedTimeMustStayWithinTheTimeoutPlusTheCollectorGrace(int timeoutSeconds, long limit)
     {
-        var request = Request();
+        var request = Request() with { TimeoutSeconds = timeoutSeconds };
         var receipt = Receipt(request);
 
-        receipt.ValidateAgainst(request);
+        Assert.Equal(limit, CollectionProtocol.MaximumElapsedMilliseconds(timeoutSeconds));
         (receipt with { ElapsedMilliseconds = 0 }).ValidateAgainst(request);
-        (receipt with { ElapsedMilliseconds = CollectionProtocol.MaximumElapsedMilliseconds }).ValidateAgainst(request);
-        Assert.Throws<InvalidDataException>(() => (receipt with { ElapsedMilliseconds = elapsed }).ValidateAgainst(request));
+        (receipt with { ElapsedMilliseconds = limit }).ValidateAgainst(request);
+        Assert.Throws<InvalidDataException>(() => (receipt with { ElapsedMilliseconds = -1 }).ValidateAgainst(request));
+        Assert.Throws<InvalidDataException>(() => (receipt with { ElapsedMilliseconds = limit + 1 }).ValidateAgainst(request));
     }
 
     [Theory]

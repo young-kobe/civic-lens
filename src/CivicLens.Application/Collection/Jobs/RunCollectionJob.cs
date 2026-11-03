@@ -165,7 +165,7 @@ public sealed class RunCollectionJob(
                     return new CollectionJobRunResult(CollectionJobRunStatus.LostOwnership,
                         await ReadJobBoundedAsync(lease.JobId));
 
-                imported = await ImportReceiptAsync(attempt.AttemptId, attempt.Request, receipt, preservationTimeout.Token);
+                imported = await ImportHandoffAsync(handoff, preservationTimeout.Token);
                 if (!imported)
                     return new CollectionJobRunResult(CollectionJobRunStatus.ImportPending,
                         await ReadJobBoundedAsync(lease.JobId));
@@ -267,7 +267,7 @@ public sealed class RunCollectionJob(
         }
 
         if (!lease.IsOwned) return false;
-        if (!await ImportReceiptAsync(attempt.AttemptId, handoff.Request, handoff.Receipt, cancellationToken))
+        if (!await ImportHandoffAsync(handoff, cancellationToken))
             return false;
         using var settleHandoffTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         if (!lease.IsOwned) return false;
@@ -279,12 +279,11 @@ public sealed class RunCollectionJob(
         return true;
     }
 
-    private async Task<bool> ImportReceiptAsync(string attemptId, CollectionRequest request,
-        CollectionResult receipt, CancellationToken cancellationToken)
+    private async Task<bool> ImportHandoffAsync(PendingCollectionHandoff handoff, CancellationToken cancellationToken)
     {
         try
         {
-            await CollectionAttemptImporter.ImportAsync(attemptId, request, receipt, attempts, cancellationToken);
+            await CollectionAttemptImporter.ImportAsync(handoff, attempts, cancellationToken);
             return true;
         }
         catch (Exception exception) when (exception is IOException or InvalidDataException or OperationCanceledException)

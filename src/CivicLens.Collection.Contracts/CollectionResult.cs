@@ -126,7 +126,7 @@ public sealed record CollectionResult
         if (BytesReceived < 0 || BytesReceived > request.MaxBytes || RequestCount < 0 ||
             RequestCount > request.MaxRequests || RetryAfterSeconds is < 0)
             throw new InvalidDataException("Collector result exceeds its request budgets.");
-        if (ElapsedMilliseconds is < 0 or > CollectionProtocol.MaximumElapsedMilliseconds)
+        if (ElapsedMilliseconds is < 0 || ElapsedMilliseconds > CollectionProtocol.MaximumElapsedMilliseconds(request.TimeoutSeconds))
             throw new InvalidDataException("Collector result elapsed time is outside the supported range.");
         if ((Response is not null && ContentRequestCount < 1) || (BytesReceived > 0 && RequestCount == 0))
             throw new InvalidDataException("Response metadata and received bytes require corresponding requests.");

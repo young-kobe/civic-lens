@@ -202,7 +202,7 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
     }
 
     private static AttemptRow ToRow(CollectionAttemptResult result, CapturedAttemptResult? prior,
-        SentValidators? validators, long? robotsCrawlDelayMilliseconds, long elapsedMilliseconds)
+        SentValidators? validators, long? robotsCrawlDelayMilliseconds, long? elapsedMilliseconds)
     {
         var row = new AttemptRow
         {

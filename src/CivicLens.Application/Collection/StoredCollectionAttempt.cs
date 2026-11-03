@@ -19,7 +19,7 @@ public sealed class StoredCollectionAttempt
             throw new ArgumentException("Discovery must belong to the captured attempt.", nameof(discovery));
         if (robotsCrawlDelayMilliseconds is < 0 or > CollectionProtocol.MaximumCrawlDelayMilliseconds)
             throw new ArgumentOutOfRangeException(nameof(robotsCrawlDelayMilliseconds));
-        if (elapsedMilliseconds is < 0 or > CollectionProtocol.MaximumElapsedMilliseconds)
+        if (elapsedMilliseconds is < 0)
             throw new ArgumentOutOfRangeException(nameof(elapsedMilliseconds));
         RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds;
         ElapsedMilliseconds = elapsedMilliseconds;

@@ -14,8 +14,7 @@ public sealed class RecoverCollectionAttempts(ICollectionReceiptHandoffStore han
     {
         await using var lease = await handoffs.AcquireRecoveryLeaseAsync(cancellationToken);
         var handoff = await LoadAndVerifyAsync(handoffId, artifactRoot, cancellationToken);
-        var decision = await CollectionAttemptImporter.ImportAsync(handoff.AttemptId, handoff.Request,
-            handoff.Receipt, store, cancellationToken);
+        var decision = await CollectionAttemptImporter.ImportAsync(handoff, store, cancellationToken);
         return await RemoveHandoffAsync(handoffId, decision, handoffs, cancellationToken);
     }
 
@@ -117,8 +116,7 @@ public sealed class RecoverCollectionAttempts(ICollectionReceiptHandoffStore han
         CollectionImportDecision decision;
         try
         {
-            decision = await CollectionAttemptImporter.ImportAsync(handoff.AttemptId, handoff.Request,
-                handoff.Receipt, store, cancellationToken);
+            decision = await CollectionAttemptImporter.ImportAsync(handoff, store, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception)
