@@ -44,7 +44,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("LOCK TABLE executive_action_documents, executive_action_revisions IN SHARE ROW EXCLUSIVE MODE");
+            migrationBuilder.Sql("LOCK TABLE executive_action_documents, executive_action_revisions IN ACCESS EXCLUSIVE MODE");
 
             migrationBuilder.DropCheckConstraint(
                 name: "ck_executive_action_documents_pending",
