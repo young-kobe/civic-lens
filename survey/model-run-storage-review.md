@@ -83,3 +83,12 @@ Raw inserts into run tables (`GateLabelRuns.cs:12`, `RelationshipWorldSeeder.cs:
 ## Verdict
 
 Mostly accurate on facts, but PR 1 has no caller and PR 2 would fail to read legacy rows, so fix those two before any code.
+
+## Resolution
+
+The survey now applies every finding above, checked on `origin/main` at `c3c116b9` with `git grep` and file reads. PR 1 is folded into PR 2. The plan now has five PRs. These claims were rejected:
+
+- `PostgresBriefCheckStoreTests.cs:318` (`output_json`) needs no edit. Option B keeps `output_json`. Only line 319 (`validation_json`) changes, in the PR that drops that column.
+- `briefs.md:237` needs no edit. It names only `output_json`, which stays.
+- The production figures (run count, user message size, database size) are not in the repo. The survey no longer states them. It tells the owner to measure after PR 1.
+- The review says PR 5 and PR 6 are fine. PR 5 (old PR 6) has no verify step. The survey states that cost in D1 and leaves the choice to the owner.
