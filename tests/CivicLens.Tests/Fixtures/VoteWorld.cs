@@ -106,7 +106,7 @@ internal sealed class VoteWorld
         bool draftedUnderOlderPrompt = false) =>
         new(new VoteDraftCandidate(CandidateId, RecordId, SourceId, Chamber.House, 119, 1, 100, "hconres", 14, updatedAt ?? UpdatedAt, null), Revision,
             Page("detail", HouseVoteParser.ExtractionVersion), Page("members", HouseVoteMembersParser.ExtractionVersion), BillPage(),
-            hasSubjects ? [Page("subjects", CongressBillSubjectsParser.ExtractionVersion)] : [], current, hasNewerCandidate, draftedUnderOlderPrompt);
+            hasSubjects ? [Page("subjects", CongressBillSubjectsParser.ExtractionVersion)] : [], current, hasNewerCandidate, draftedUnderOlderPrompt, IsRejected: false);
 
     public static string ExtractionIdOf(string jobId) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(jobId)));
 

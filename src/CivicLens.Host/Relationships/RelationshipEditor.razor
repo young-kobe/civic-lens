@@ -46,7 +46,7 @@ else
         {
             <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
         }
-        <ReaderReportBanner Actor="actor" Kind="PublishedRecordKind.Relationship" RecordId="@RecordId" />
+        <ReaderReportPanel Actor="actor" Kind="PublishedRecordKind.Relationship" RecordId="@RecordId" ApprovalFormId="draft-form" CurrentRevisionApproved="@(review.CurrentStatus == ReviewStatus.Approved)" />
         @if (ReviewAuthor.IsAnalysis(revision.AuthorSubject))
         {
             <Notice Tone="Tone.Warn">The AI drafter wrote this revision. It is not a human decision. Code found the pair and the matched words. Check the type, the reason, the quote, and the fact against both records before you approve.</Notice>
@@ -156,7 +156,7 @@ else
         </Panel>
 
         <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="review.CurrentStatus"
-                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" CanApprove="false" OnDecide="DecideAsync" />
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" ReasonCode="@Decision?.ReasonCode" RecordKind="PublishedRecordKind.Relationship" OnSite="TakeOffView.Status.OnSite" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" CanApprove="false" OnDecide="DecideAsync" />
 
         <TakeOffSitePanel View="TakeOffView" RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
                           IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />

@@ -72,7 +72,7 @@
         <input type="hidden" name="idempotencyKey" value="@renderKey" />
     </form>
 
-    @if (changes is not null && queue is not null)
+    @if (changes is not null && queue is not null && rejected is not null)
     {
         <StatStrip Label="Review summary">
             <Stat Value="openReports" Label="Reader reports open" Tone="Tone.Warn" Href="@ReportRoutes.List" />
@@ -126,6 +126,37 @@
                             </Empty>
                         </DataTable>
                         <Pager Label="Needs a person pages" NewerHref="@QueueHref(queue.NewerCursor)" OlderHref="@QueueHref(queue.OlderCursor)" />
+                    </ChildContent>
+                </Panel>
+
+                <Panel Title="Rejected" Id="rejected">
+                    <Aside>@Count(rejected.Total, "record", "records")</Aside>
+                    <ChildContent>
+                        <DataTable Items="RejectedRows" Caption="Rejected records">
+                            <Head>
+                                <th class="queue-record">Record</th>
+                                <th class="hide-narrow">Kind</th>
+                                <th>Why it was rejected</th>
+                                <th class="time hide-narrow">Last revised</th>
+                                <th class="act hide-narrow"><span class="visually-hidden">Action</span></th>
+                            </Head>
+                            <Row Context="row">
+                                <td class="queue-record"><CellTitle Href="@RecordRoutes.Editor(row.Kind, row.RecordId)">@DraftStatusDisplay.DraftName(row.Headline)</CellTitle></td>
+                                <td class="hide-narrow">@PublishedRecordLabels.Kind(row.Kind)</td>
+                                <td>
+                                    <StatusBadge Tone="row.Tone" Text="@row.StatusLabel" />
+                                    <span class="actions-hint">@row.Reason</span>
+                                </td>
+                                <td class="time hide-narrow">
+                                    @if (row.RevisedAtUtc is { } revised) { <Timestamp Value="revised" /> }
+                                </td>
+                                <td class="act hide-narrow"><Button Small="true" Href="@RecordRoutes.Editor(row.Kind, row.RecordId)">Open</Button></td>
+                            </Row>
+                            <Empty>
+                                <EmptyState Title="No rejected records" Text="A record that a person rejects shows here. Open it to approve it again if the rejection was a mistake." />
+                            </Empty>
+                        </DataTable>
+                        <Pager Label="Rejected pages" NewerHref="@RejectedHref(rejected.NewerCursor)" OlderHref="@RejectedHref(rejected.OlderCursor)" />
                     </ChildContent>
                 </Panel>
 

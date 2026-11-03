@@ -43,13 +43,17 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
             return await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.TitleTooLong, cancellationToken);
         var policyAreaId = issueConfiguration.PolicyAreaIdFor(snapshot.Bill.PolicyArea);
         var context = new ActionDraftContext(evidence, snapshot, choice, policyAreaId, issues.Id);
-        return context.ChangeSinceCurrent() switch
+        var change = context.ChangeSinceCurrent();
+        if (evidence.IsRejected)
+            return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken,
+                change is ActionChange.None or ActionChange.OlderPromptOnly ? null : ActionDraftErrorCodes.RecordRejected);
+        return change switch
         {
             ActionChange.None =>
                 await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken),
             ActionChange.SponsorshipsOnly => await SettleRevisionWithoutCallAsync(attempt, context, ActionDraftErrorCodes.SponsorshipsChanged,
                 ActionDraftResolver.CopyText, cancellationToken),
-            var change => await DraftOrWriteAsync(attempt, context, change, cancellationToken)
+            _ => await DraftOrWriteAsync(attempt, context, change, cancellationToken)
         };
     }
 
@@ -112,9 +116,9 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
     }
 
     private static Task<bool> SettleWithoutCallAsync(IAnalysisAttempt<ActionDraftRun> attempt, string inputHash, string code,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string? runReason = null)
     {
         var run = attempt.BypassRun(ActionDraftTask.Model, inputHash, null);
-        return attempt.SettleAsync(new ActionDraftRun(run, code), State.Succeeded, code, cancellationToken);
+        return attempt.SettleAsync(new ActionDraftRun(run, runReason ?? code), State.Succeeded, code, cancellationToken);
     }
 }

@@ -22,7 +22,7 @@ namespace CivicLens.Infrastructure.Statements;
 public sealed class PostgresStatementReviewStore : IStatementReviewStore
 {
     internal static readonly ReviewRecords<StatementDraftRow, StatementRevisionRow, StatementReviewDecisionRow, StatementDraftRevision>
-        Records = new(PostgresAdvisoryLock.StatementReview, "Statement", nameof(StatementDraftRow.CandidateId));
+        Records = new(PostgresAdvisoryLock.StatementReview, PublishedRecordKind.Statement, "Statement", nameof(StatementDraftRow.CandidateId));
 
     private readonly AdmittingRevisionReader admittingRevisions = new();
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
@@ -62,7 +62,7 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
 
     public Task<StatementDraftRevision> SaveRevisionAsync(string actorSubject, StatementDraftRevision revision,
         int expectedRevisionNumber, bool statementDateChecked, ReviewDecision? approval, StatementAllowedSelections? approvalSelections,
-        string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
+        string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
             payloadHash, async (db, draft, current) =>
             {
@@ -75,16 +75,15 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
             }, saved => StatementDraftRows.NewRevision(saved, null), null,
             approval is null ? null : new(approval,
                 (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, approvalSelections, cancellationToken), afterDecision,
-                revision => revision.ComparableForm(), current => AiProposedDate.IsProposed(current.AuthorSubject, current.StatementDate)),
+                revision => revision.ComparableForm(), correctedReportIds, current => AiProposedDate.IsProposed(current.AuthorSubject, current.StatementDate)),
             cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash,
-        CancellationToken cancellationToken) =>
+        int expectedReviewStateVersion, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash, (db, _, history) => decision.Kind == ReviewDecisionKind.Approve
                 ? ValidateApprovalAsync(db, history.CurrentRevision!, approvalSelections, cancellationToken)
-                : Task.CompletedTask, afterDecision, cancellationToken);
+                : Task.CompletedTask, afterDecision, [], cancellationToken);
 
     public async Task<StatementReviewRead?> GetAsync(string candidateId, CancellationToken cancellationToken)
     {
@@ -126,8 +125,8 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
     public async Task<StatementReviewCounts> CountAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var (needsAction, approved) = await Records.CountAsync(db, cancellationToken);
-        return new(needsAction, approved);
+        var (all, needsAction, approved) = await Records.CountAsync(db, cancellationToken);
+        return new(all, needsAction, approved);
     }
 
     public async Task<StatementNotInReviewPage> ListNotInReviewAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken)

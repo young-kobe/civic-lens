@@ -1,4 +1,6 @@
+using CivicLens.Application.Review;
 using CivicLens.Core.Review;
+using CivicLens.Publication.Contracts;
 using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Infrastructure.Briefs.Persistence;
 using CivicLens.Infrastructure.ExecutiveActions.Persistence;
@@ -15,13 +17,22 @@ internal static class ReviewDecisionTableConfiguration
     private static readonly string KindCheck = "kind IN (" + string.Join(", ",
         Enum.GetNames<ReviewDecisionKind>().Select(name => $"'{name}'")) + ")";
 
-    public static void ConfigureDecisionColumns<TRow>(EntityTypeBuilder<TRow> builder, string table, string recordIdProperty)
+    private static string ReasonCodeCheck(PublishedRecordKind kind) => "reason_code IN (" + string.Join(", ",
+        ReviewReasons.For(kind).Select(code => $"'{code}'")) + ")";
+
+    public static void ConfigureDecisionColumns<TRow>(EntityTypeBuilder<TRow> builder, PublishedRecordKind kind, string table, string recordIdProperty)
         where TRow : class, IReviewDecisionRow
     {
         builder.Property(row => row.ActorSubject).HasColumnName("actor_subject").HasMaxLength(ReviewAuthor.MaximumSubjectLength).IsRequired();
         builder.Property(row => row.Note).HasColumnName("note");
         builder.Property(row => row.CorrectionNote).HasColumnName("correction_note");
-        builder.ToTable(table, tableBuilder => tableBuilder.HasCheckConstraint($"ck_{table}_kind", KindCheck));
+        builder.Property(row => row.ReasonCode).HasColumnName("reason_code").HasConversion<string>();
+        builder.ToTable(table, tableBuilder =>
+        {
+            tableBuilder.HasCheckConstraint($"ck_{table}_kind", KindCheck);
+            tableBuilder.HasCheckConstraint($"ck_{table}_reason_code", ReasonCodeCheck(kind));
+            tableBuilder.HasCheckConstraint($"ck_{table}_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
+        });
         builder.HasAlternateKey(nameof(IReviewDecisionRow.DecisionId), recordIdProperty);
     }
 

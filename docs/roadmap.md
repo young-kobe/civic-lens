@@ -38,14 +38,6 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 
 **Public site**
 
-- R-45: Publish on change. An approval sends `pg_notify`. The worker groups approvals for about 1 minute and then publishes. The hourly timer stays as a fallback. The static release flow stays. The scale problem of the full `records_json` in each `publication_releases` row is fixed: the table `publication_record_states` holds the records of each release. Depends on: none. [Publication](architecture/publication.md#limits-and-planned-work)
-  - [x] Keep releases by age and count (#238)
-  - [x] Add the per-record table (#242)
-  - [x] Page cache of 60 seconds and search poll of 30 seconds (#246)
-  - [x] Move readers to the per-record table (#251)
-  - [x] Drop `records_json` and the drift check (#276)
-  - [x] Check the row count inside each publish, after `records_json` is dropped (#287)
-  - [ ] `pg_notify` on approval, after the action draft drain
 - R-47: Insight boards. One contract PR adds vote fields to vote entries, a per-official summary roll-up, and a cosponsor field on action entries. Then build boards for party breakers, loyalists, and missed votes, as static pages for each chamber and party. Then add list badges and home cards for the closest vote, the most breaks, and the newest executive actions. Then add a bill status line, sponsored bills that moved, and bipartisan cosponsorship. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
   - [x] Contract PR (#258), with one operator rewrite of carried entries and no reset, not yet run
   - [x] Boards (#269)
@@ -59,14 +51,14 @@ The owner accepted these designs in October 2026. Each item holds its choices un
 
 **Review and approval**
 
-- R-51: Cut the review pages. Make one "Needs a person" queue that says why each record needs a person. Delete the relationship and brief list pages, and the home panels that the queue replaces. Add an owner "Take off site" action in the editor, using the existing withdrawal code. Send a reader report correction straight to the editor with its note filled in. Delete the gate label pages after D-13. Depends on: none. [Review](architecture/review.md#limits-and-planned-work)
+- R-51: Cut the review pages. Make one "Needs a person" queue that says why each record needs a person. Delete the relationship and brief list pages, and the home panels that the queue replaces. Add an owner "Take off site" action in the editor, using the existing withdrawal code. Send a reader report straight to the editor, with the reader's words on top. Delete the gate label pages after D-13. Depends on: none. [Review](architecture/review.md#limits-and-planned-work)
   - [x] "Needs a person" queue, and delete list pages and home panels (#257, #259, #263, #265, #267, #268)
   - [x] "Take off site" action (#270)
-  - [ ] Report to editor
+  - [x] Report to editor
   - [ ] Delete gate label pages, after D-13
 - R-65: One page for each review job. A reader report opens the record editor with the reader's words on top. The person dismisses it, or edits, types the public text, and clicks "Save and approve". After a decision, the page moves to the next item. A failed approval keeps the typed text. Every approval check stays. PR #271, which filled public text from the private note, is closed. Depends on: R-51 take off site (#270). [Review](architecture/review.md#limits-and-planned-work)
   - [ ] Save and approve in one transaction, and open the edit form by default
-  - [ ] Reader reports in the editor, closed by the approval
+  - [x] Reader reports in the editor, closed by the approval
   - [ ] Move to the next item after a decision
 - R-52: Approve factual links by code. The types are "statement about a vote" and "describes own bill". The types "states position on" and "claims credit for" stay with a person. The public wording "a reviewer approved each link" must change with it. Depends on: R-51. [Review](architecture/review.md#limits-and-planned-work)
   - [ ] Code approval of factual links, and new public wording

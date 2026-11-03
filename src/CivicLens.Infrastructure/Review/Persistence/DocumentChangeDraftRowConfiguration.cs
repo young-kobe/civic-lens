@@ -12,7 +12,7 @@ internal sealed class DocumentChangeDraftRowConfiguration : IEntityTypeConfigura
             table.HasCheckConstraint("ck_document_change_drafts_id", "draft_id ~ '^[0-9a-f]{32}$'");
             table.HasCheckConstraint("ck_document_change_drafts_versions", "current_revision_number >= 1 AND review_state_version >= 0");
             table.HasCheckConstraint("ck_document_change_drafts_review_status",
-                "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
+                ReviewDraftTableConfiguration.StatusCheck(allowNotDrafted: false));
         });
         builder.HasKey(row => row.DraftId);
         builder.Property(row => row.DraftId).HasColumnName("draft_id").HasMaxLength(32);

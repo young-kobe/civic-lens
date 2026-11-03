@@ -13,8 +13,6 @@ namespace CivicLens.Tests.Host;
 [Trait("Category", "Postgres")]
 public sealed class BillLinksWorkspaceTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private const string SponsorText = "Sponsor: Warren, Elizabeth\nCosponsor: Other, Person\n";
-
     private readonly ReviewWorkspaceHost host = new(postgres)
     {
         Issues = StatementGateFixtures.Configuration(),
@@ -163,29 +161,8 @@ public sealed class BillLinksWorkspaceTests(PostgresCollection postgres) : IAsyn
         Assert.Contains("Code check", page.QuerySelectorAll("td.hide-narrow").Select(cell => cell.TextContent));
     }
 
-    private async Task<ActionDraftRevision> SeedActionAsync(string type = "hr", int congress = 119, int number = 1234)
-    {
-        var extraction = await host.SaveExtractionAsync(SponsorText);
-        var action = ActionRevisionFixtures.Model(1) with
-        {
-            BillType = type,
-            Congress = congress,
-            BillNumber = number,
-            Sponsorships = [ActionRevisionFixtures.Sponsorship() with { Citations = [new(extraction.ExtractionId, 0, 26), new(extraction.ExtractionId, 27, 24)] }],
-            TrackedIssueIds = []
-        };
-        var configuration = CollectionConfigurationRevision.Create(HouseVoteFixtures.Configuration());
-        await Seeder.ExecuteAsync("""
-            SET session_replication_role = replica;
-            INSERT INTO collection_configuration_revisions (revision_id, json, created_at) VALUES (@revision, @configuration, 1);
-            INSERT INTO action_candidates (candidate_id, source_id, congress, bill_type, bill_number, update_date_utc_ticks, detail_job_id,
-                configuration_revision_id, created_at_utc_ticks, includes_summaries)
-            VALUES (@candidate, @source, @congress, @type, @number, 1, 'detail', @revision, 1, false)
-            """, ("revision", configuration.Id), ("configuration", configuration.Json), ("candidate", action.CandidateId),
-            ("source", action.SourceId), ("congress", congress), ("type", type), ("number", number));
-        await Seeder.ActionAsync(action, "AwaitingReview");
-        return action;
-    }
+    private Task<ActionDraftRevision> SeedActionAsync(string type = "hr", int congress = 119, int number = 1234) =>
+        ActionPageSeed.SeedAsync(host, Seeder, type, congress, number);
 
     // The seeder gives every candidate the same job IDs, so each roll call needs its own candidate row first.
     private async Task SeedVoteAsync(int roll, int bill, DateOnly votedOn, string status = "AwaitingReview", int congress = 119, int session = 1)

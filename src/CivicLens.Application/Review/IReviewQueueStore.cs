@@ -6,6 +6,9 @@ public interface IReviewQueueStore
 {
     Task<ReviewQueuePage> ListAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken);
 
+    /// <summary>Lists the rejected records of every kind, newest revision first.</summary>
+    Task<ReviewQueuePage> ListRejectedAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken);
+
     /// <summary>Finds approved links that no longer match, newest revision first, without the excluded records. Total counts all of them.</summary>
     Task<ReviewQueuePage> ListUnmatchedApprovedLinksAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
         CancellationToken cancellationToken);

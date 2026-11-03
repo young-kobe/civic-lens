@@ -172,6 +172,8 @@ a.cell-title:hover { text-decoration: underline; }
 }
 @media (max-width: 760px) {
     html { scroll-padding-top: 0; }
+    .notice { flex-wrap: wrap; }
+    .notice strong { flex-basis: 100%; }
     .side-by-side { grid-template-columns: minmax(0, 1fr); }
     .facts { grid-template-columns: minmax(0, 1fr); row-gap: 0; }
     .facts dd + dt { margin-top: var(--s2); }

@@ -30,13 +30,14 @@ public sealed class PostgresExecutiveActionReviewStore(IDbContextFactory<Collect
     }
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
+        int expectedReviewStateVersion, string idempotencyKey, string payloadHash,
+        ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash, async (db, _, history) =>
             {
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
                 await ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken);
-            }, static (_, _, _, _) => Task.CompletedTask, cancellationToken);
+            }, static (_, _, _, _) => Task.CompletedTask, correctedReportIds, cancellationToken);
 
     public async Task<ExecutiveActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken)
     {

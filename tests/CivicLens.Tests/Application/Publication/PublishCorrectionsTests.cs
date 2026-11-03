@@ -75,6 +75,18 @@ public sealed class PublishCorrectionsTests
     }
 
     [Fact]
+    public async Task ACodeApprovalThatCarriesAPersonNoteGivesTheCorrectionThatNoteBecauseTheNoteMovedToTheApprovalThatPublishes()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        scenario.ReviseAction(action, 2, ReviewAuthor.CodeSubject, correctionNote: "Clarified the date.");
+
+        var next = await scenario.Publisher().ExecuteAsync(Code, Request("k2", action));
+
+        var entry = Assert.Single(ReadAction(scenario, next.DirectoryName, action).Corrections);
+        Assert.Equal((1, "Clarified the date."), (entry.ReplacedRevisionNumber, entry.Note));
+    }
+
+    [Fact]
     public async Task ACodeUpdateAfterAPersonCorrectionAddsOneEntryAndKeepsTheCorrection()
     {
         var (scenario, action) = await PublishedActionAsync();

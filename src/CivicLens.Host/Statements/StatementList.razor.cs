@@ -93,7 +93,7 @@ public sealed partial class StatementList
         ? DraftStatusDisplay.Label(draft.CurrentStatus, 0) : DraftStatusDisplay.DraftName(draft.CurrentRevision.Headline);
 
     private IReadOnlyList<FilterTab> DraftTabs =>
-        DraftFilterTabs.For(Filter, name => StatementHref(name, null, NotInReviewCursor, "drafts"), counts!.NeedsAction, counts.Approved);
+        DraftFilterTabs.For(Filter, name => StatementHref(name, null, NotInReviewCursor, "drafts"), counts!.All, counts.NeedsAction, counts.Approved);
 
     private string? DraftsHref(string? cursor) =>
         cursor is null ? null : StatementHref(DraftFilterNames.NameOf(Filter), cursor, NotInReviewCursor, "drafts");
@@ -106,7 +106,7 @@ public sealed partial class StatementList
 
     private (string Title, string Text) DraftsEmpty => Filter switch
     {
-        DraftStatusFilter.NeedsAction => ("No statements need action", "Every draft is approved, or no draft exists yet."),
+        DraftStatusFilter.NeedsAction => ("No statements need action", "Every draft is approved or rejected, or no draft exists yet."),
         DraftStatusFilter.Approved => ("No approved statements", "Approved statements show here. Approval keeps them private."),
         _ => ("No statement drafts yet", "The AI drafter writes a draft for each article that passes the gate. You can also start one below.")
     };

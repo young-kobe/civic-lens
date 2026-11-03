@@ -49,7 +49,7 @@ internal sealed class RelationshipDraftQueueMapping : IAnalysisQueueMapping<Rela
         if (refusal is null) return settlement;
         var discarded = run.Run.Outcome == AnalysisRunOutcome.Drafted
             ? run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } } : run;
-        if (refusal is RelationshipDraftErrorCodes.AlreadyApproved or RelationshipDraftErrorCodes.PersonEditKept)
+        if (refusal is RelationshipDraftErrorCodes.AlreadyApproved or RelationshipDraftErrorCodes.PersonEditKept or RelationshipDraftErrorCodes.RecordRejected)
             return new(checkpoint with { ErrorCode = RelationshipDraftErrorCodes.Unchanged, Revision = null }, discarded);
         row.RetryOfRunId = null;
         return new(checkpoint with

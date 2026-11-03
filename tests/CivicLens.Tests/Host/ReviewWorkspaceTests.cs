@@ -87,7 +87,7 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         home = await host.GetDocumentAsync("/Review");
         Assert.Empty(ChangeIds(home));
         Assert.Equal([editorUrl], QueueUrls(home));
-        Assert.Equal("No new changes", home.QuerySelector(".empty h3")!.TextContent);
+        Assert.Equal("No new changes", home.QuerySelector("[aria-labelledby='new-changes'] .empty h3")!.TextContent);
         Assert.Contains("You started an untitled draft.", home.QuerySelector(".feed")!.TextContent, StringComparison.Ordinal);
     }
 
@@ -304,6 +304,50 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task RejectingNeedsAReasonFromTheListAndTheEditorShowsTheRejectionAndAPersonCanStillApproveItAsync()
+    {
+        await SaveComparisonAsync("Hours: 9 to 5.\n", "Hours: 10 to 4.\n");
+        SignIn(Owner);
+        var editorUrl = await StartFirstDraftAsync();
+        await SaveReadyRevisionAsync(editorUrl, "Office hours shortened");
+
+        var before = await host.GetDocumentAsync(editorUrl);
+        Assert.Equal(["Choose a reason", "Summary does not match the source", "Duplicate of another record", "Too little substance"],
+            before.QuerySelectorAll("#Decision_ReasonCode option").Select(option => option.TextContent));
+
+        using var withoutReason = await DecideAsync(editorUrl, "Reject");
+        Assert.Equal(HttpStatusCode.BadRequest, withoutReason.StatusCode);
+        var invalid = await ParseAsync(withoutReason);
+        Assert.Contains("Rejecting needs a reason from the list.", invalid.QuerySelector(".notice")!.TextContent, StringComparison.Ordinal);
+
+        using var rejected = await DecideAsync(editorUrl, "Reject", reasonCode: "LowSubstance");
+        Assert.Equal(HttpStatusCode.Redirect, rejected.StatusCode);
+
+        var editor = await host.GetDocumentAsync(editorUrl);
+        Assert.Equal("Rejected", editor.QuerySelector(".page-header .badge")!.TextContent);
+        Assert.Contains("badge-neutral", editor.QuerySelector(".page-header .badge")!.ClassName, StringComparison.Ordinal);
+        Assert.Contains("badge-neutral", editor.QuerySelector("[aria-labelledby='history'] .badge")!.ClassName, StringComparison.Ordinal);
+        Assert.Equal("Save a change to send this record back to review. Save and approve to reverse the rejection.",
+            editor.QuerySelector("#decision-next-step")!.TextContent);
+        Assert.Null(editor.QuerySelector("#reject-live-warning"));
+        var home = (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='rejected']")!;
+        Assert.Contains("Reason: Too little substance.", home.TextContent, StringComparison.Ordinal);
+        Assert.Contains(editorUrl, home.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
+        Assert.DoesNotContain("Office hours shortened", (await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='needs-a-person']")!.TextContent, StringComparison.Ordinal);
+        Assert.Null(editor.QuerySelector("#decision-form button[value='Reject']"));
+        Assert.Null(editor.QuerySelector("#Decision_ReasonCode"));
+        Assert.Contains("Reason: Too little substance.", editor.QuerySelector("[aria-labelledby='history'] tbody")!.TextContent, StringComparison.Ordinal);
+
+        await ApproveAsync(editorUrl);
+
+        editor = await host.GetDocumentAsync(editorUrl);
+        Assert.Equal("Approved, private", editor.QuerySelector(".page-header .badge")!.TextContent);
+        Assert.Equal("To reject this record, withdraw the approval first.", editor.QuerySelector("#decision-next-step")!.TextContent);
+        Assert.Null(editor.QuerySelector("#Decision_ReasonCode"));
+        Assert.Null((await host.GetDocumentAsync("/Review")).QuerySelector("[aria-labelledby='rejected'] tbody a"));
+    }
+
+    [Fact]
     public async Task RetainedEvidenceIsShownAsTextNeverAsMarkupAsync()
     {
         const string untrustedSource = "<img src=x onerror=alert(1)>";
@@ -442,6 +486,37 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
         Assert.Contains("Fee rose to 12 dollars", queue.TextContent, StringComparison.Ordinal);
         Assert.Contains("A reviewer withdrew the approval. Review the draft again.", queue.TextContent, StringComparison.Ordinal);
         Assert.Equal(1, queue.QuerySelectorAll($"tbody a.cell-title[href='{draftUrl}']").Length);
+    }
+
+    [Fact]
+    public async Task ALiveRecordWarnsThatARejectionLeavesTheOldTextLiveAndThenShowsACannotPublishRowAsync()
+    {
+        SignIn(Owner);
+        var (draftUrl, draftId) = await ApprovedDraftAsync();
+        await PublishWithCliAsync("k1", $"documentChange:{draftId}");
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose again");
+
+        var editor = await host.GetDocumentAsync(draftUrl);
+        Assert.Equal("This record is on the public site. Rejecting this revision leaves the published text live. To remove it, take the record off the site.",
+            editor.QuerySelector("#reject-live-warning")!.TextContent.Trim());
+
+        using var rejected = await DecideAsync(draftUrl, "Reject", reasonCode: "Duplicate");
+
+        Assert.Equal(HttpStatusCode.Redirect, rejected.StatusCode);
+        Assert.Null((await host.GetDocumentAsync(draftUrl)).QuerySelector("#reject-live-warning"));
+        var queue = QueuePanel(await host.GetDocumentAsync("/Review"));
+        Assert.Contains("Cannot publish", queue.TextContent, StringComparison.Ordinal);
+        Assert.Contains("the published text stays on the site", queue.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnUnpublishedRecordShowsNoLiveWarningBecauseNothingOfItIsOnTheSiteAsync()
+    {
+        SignIn(Owner);
+        var (draftUrl, _) = await ApprovedDraftAsync();
+        await SaveReadyRevisionAsync(draftUrl, "Fee rose again");
+
+        Assert.Null((await host.GetDocumentAsync(draftUrl)).QuerySelector("#reject-live-warning"));
     }
 
     [Fact]
@@ -726,11 +801,12 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     private async Task<HttpResponseMessage> DecideAsync(string editorUrl, string kind, string? note = null,
-        IEnumerable<string>? resolved = null, string? correctionNote = null)
+        IEnumerable<string>? resolved = null, string? correctionNote = null, string? reasonCode = null)
     {
         var editor = await host.GetDocumentAsync(editorUrl);
         var fields = Fields(editor.QuerySelector("#decision-form")!);
         Set(fields, "kind", kind);
+        if (reasonCode is not null) Set(fields, "Decision.ReasonCode", reasonCode);
         if (note is not null) Set(fields, "Decision.Note", note);
         if (correctionNote is not null) Set(fields, "Decision.CorrectionNote", correctionNote);
         foreach (var id in resolved ?? []) fields.Add(new("Decision.ResolvedDecisionIds", id));

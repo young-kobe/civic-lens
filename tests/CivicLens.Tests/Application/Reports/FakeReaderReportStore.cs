@@ -8,7 +8,7 @@ internal sealed class FakeReaderReportStore : IReaderReportStore
 {
     public string? Cursor { get; private set; }
     public List<Guid> Stored { get; } = [];
-    public List<(string Actor, Guid ReportId, int ExpectedVersion, ReaderReportStatus Status, string? Note)> Resolutions { get; } = [];
+    public List<(string Actor, Guid ReportId, int ExpectedVersion)> Dismissals { get; } = [];
 
     public Task<string?> GetCursorAsync(CancellationToken cancellationToken) => Task.FromResult(Cursor);
 
@@ -19,10 +19,9 @@ internal sealed class FakeReaderReportStore : IReaderReportStore
         return Task.CompletedTask;
     }
 
-    public Task ResolveAsync(string actorSubject, Guid reportId, int expectedVersion, ReaderReportStatus status, string? note,
-        CancellationToken cancellationToken)
+    public Task DismissAsync(string actorSubject, Guid reportId, int expectedVersion, CancellationToken cancellationToken)
     {
-        Resolutions.Add((actorSubject, reportId, expectedVersion, status, note));
+        Dismissals.Add((actorSubject, reportId, expectedVersion));
         return Task.CompletedTask;
     }
 
@@ -42,6 +41,6 @@ internal sealed class FakeReaderReportStore : IReaderReportStore
 
     public Task<ReaderReportListItem?> GetAsync(Guid reportId, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<IReadOnlyList<ReaderReport>> ListUnansweredCorrectionsAsync(PublishedRecordKind kind, string recordId,
-        CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<RecordReports> ListForRecordAsync(PublishedRecordKind kind, string recordId, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
 }

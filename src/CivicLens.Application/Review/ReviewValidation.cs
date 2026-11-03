@@ -33,6 +33,7 @@ internal static class ReviewValidation
 {
     private const int MaximumIdempotencyKeyLength = 256;
     private const int MaximumFilterIdLength = 128;
+    private const int MaximumReportIds = CivicLens.Application.Reports.ListRecordReports.MaximumShown;
 
     public static void ValidateIdempotencyKey(string value)
     {
@@ -103,7 +104,7 @@ internal static class ReviewValidation
 
     public static ReviewDecision CreateDecision(ReviewActor actor, string recordId, int expectedRevisionNumber,
         int expectedReviewStateVersion, ReviewDecisionKind kind, string? note, ImmutableArray<string> resolvedDecisionIds,
-        string? correctionNote)
+        string? correctionNote, ReviewReasonCode? reasonCode = null)
     {
         if (expectedRevisionNumber < 1) throw new ArgumentOutOfRangeException(nameof(expectedRevisionNumber));
         if (expectedReviewStateVersion < 0) throw new ArgumentOutOfRangeException(nameof(expectedReviewStateVersion));
@@ -114,12 +115,19 @@ internal static class ReviewValidation
             throw new ArgumentException("Only an approval takes a correction note.", nameof(correctionNote));
         return new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, expectedRevisionNumber,
             expectedReviewStateVersion + 1, kind, actor.Subject, note, resolutions, DateTimeOffset.UtcNow,
-            correctionNote is null ? null : CorrectionNoteText.Validate(correctionNote, nameof(correctionNote)));
+            correctionNote is null ? null : CorrectionNoteText.Validate(correctionNote, nameof(correctionNote)), reasonCode);
     }
 
     public static ReviewDecision? CreateApprovalOf(ReviewActor actor, string recordId, int revisionNumber, ApprovalWithSave? approval) =>
         approval is null ? null : CreateDecision(actor, recordId, revisionNumber, approval.ExpectedReviewStateVersion,
             ReviewDecisionKind.Approve, approval.Note, approval.ResolvedDecisionIds, approval.CorrectionNote);
+
+    public static ImmutableArray<Guid> ValidateReportIds(ImmutableArray<Guid>? ids)
+    {
+        if (ids is not { IsDefaultOrEmpty: false } listed) return [];
+        if (listed.Length > MaximumReportIds) throw new ArgumentException($"At most {MaximumReportIds} report IDs may be supplied.", nameof(ids));
+        return [.. listed.Distinct()];
+    }
 
     public static ImmutableArray<string> ValidateDecisionIds(ImmutableArray<string> ids)
     {

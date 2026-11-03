@@ -862,6 +862,34 @@ public sealed class VoteDraftStepTests
         TextOrigin = ReviewTextOrigin.Person
     };
 
+    [Fact]
+    public async Task ARejectedRecordSettlesAsUnchangedWithoutACallEvenWhenTheVoteChangedBecauseTheTokensWouldBeWasted()
+    {
+        var current = await FirstRevisionAsync(Create());
+        var evidence = Create(result: "Failed").Evidence(current, UpdatedAt.AddDays(1)) with { IsRejected = true };
+
+        var (store, model) = await RunAsync(Create(result: "Failed"), new FakeHeadlineSummaryModel(), evidence: evidence);
+
+        Assert.Empty(model.Requests);
+        Assert.DoesNotContain(store.Revisions, revision => revision.RevisionNumber > 1);
+        Assert.Equal((State.Succeeded, VoteDraftErrorCodes.Unchanged), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Equal(VoteDraftErrorCodes.RecordRejected, store.Runs.Last().Reason);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ARejectedRecordWithTheSameFactsLeavesNoBlockEvenWhenThePromptIsOlderBecauseNothingWasRefused(bool olderPrompt)
+    {
+        var current = await FirstRevisionAsync(Create());
+        var evidence = Create().Evidence(current, null, false, olderPrompt) with { IsRejected = true };
+
+        var (store, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel(), evidence: evidence);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal(VoteDraftErrorCodes.Unchanged, store.Runs.Last().Reason);
+    }
+
     private static async Task<VoteDraftRevision> FirstRevisionAsync(VoteWorld world)
     {
         var (store, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Drafted));

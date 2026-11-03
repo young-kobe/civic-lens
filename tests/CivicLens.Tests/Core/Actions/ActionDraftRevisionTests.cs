@@ -219,6 +219,101 @@ public sealed class ActionDraftRevisionTests
     }
 
     [Fact]
+    public void ASourceIdOverTheColumnLimitFailsBecauseTheColumnCannotHoldItAndACutIdWouldNameAnotherSource()
+    {
+        (Model() with { SourceId = new string('s', ActionDraftRevision.MaximumSourceIdLength) }).ValidateShape();
+        Assert.Throws<ArgumentException>(() =>
+            (Model() with { SourceId = new string('s', ActionDraftRevision.MaximumSourceIdLength + 1) }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Model() with { SourceId = " " }).ValidateShape());
+    }
+
+    [Fact]
+    public void ABillTypeOverTheColumnLimitFailsBecauseTheColumnCannotHoldItAndACutTypeWouldNameAnotherBill()
+    {
+        (Model() with { BillType = new string('t', ActionDraftRevision.MaximumBillTypeLength) }).ValidateShape();
+        Assert.Throws<ArgumentException>(() =>
+            (Model() with { BillType = new string('t', ActionDraftRevision.MaximumBillTypeLength + 1) }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Model() with { BillType = " " }).ValidateShape());
+    }
+
+    [Fact]
+    public void APolicyAreaOverTheColumnLimitFailsBecauseTheColumnCannotHoldItAndACutLabelWouldStateAnotherArea()
+    {
+        var area = Model() with { PolicyAreaCitation = new(ExtractionId, 0, 5) };
+        (area with { PolicyArea = new string('p', ActionDraftRevision.MaximumPolicyAreaLength) }).ValidateShape();
+        Assert.Throws<ArgumentException>(() =>
+            (area with { PolicyArea = new string('p', ActionDraftRevision.MaximumPolicyAreaLength + 1) }).ValidateShape());
+    }
+
+    [Fact]
+    public void APolicyAreaIdOverTheColumnLimitFailsBecauseTheColumnCannotHoldItAndACutIdWouldNameAnotherArea()
+    {
+        var area = Model() with { PolicyArea = "Housing", PolicyAreaCitation = new(ExtractionId, 0, 5) };
+        (area with { PolicyAreaId = new string('i', ActionDraftRevision.MaximumPolicyAreaIdLength) }).ValidateShape();
+        Assert.Throws<ArgumentException>(() =>
+            (area with { PolicyAreaId = new string('i', ActionDraftRevision.MaximumPolicyAreaIdLength + 1) }).ValidateShape());
+    }
+
+    [Fact]
+    public void ASummaryVersionOverTheColumnLimitFailsBecauseTheColumnCannotHoldItAndACutVersionWouldNameAnotherSummary()
+    {
+        var versioned = Model() with { SummaryCitation = new(ExtractionId, 0, 5) };
+        (versioned with { SummaryVersion = new string('v', ActionDraftRevision.MaximumSummaryVersionLength) }).ValidateShape();
+        Assert.Throws<ArgumentException>(() =>
+            (versioned with { SummaryVersion = new string('v', ActionDraftRevision.MaximumSummaryVersionLength + 1) }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (versioned with { SummaryVersion = " " }).ValidateShape());
+    }
+
+    [Fact]
+    public void ASponsorshipPersonIdOverTheColumnLimitFailsBecauseTheColumnCannotHoldItAndACutIdWouldNameAnotherPerson()
+    {
+        (Model() with { Sponsorships = [Sponsorship() with { PersonId = new string('p', ActionDraftRevision.MaximumPersonIdLength) }] }).ValidateShape();
+        Assert.Throws<ArgumentException>(() => (Model() with
+        {
+            Sponsorships = [Sponsorship() with { PersonId = new string('p', ActionDraftRevision.MaximumPersonIdLength + 1) }]
+        }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Model() with { Sponsorships = [Sponsorship() with { PersonId = " " }] }).ValidateShape());
+    }
+
+    [Fact]
+    public void ASponsorshipBioguideIdOverTheColumnLimitFailsBecauseTheColumnCannotHoldItAndACutIdWouldNameAnotherMember()
+    {
+        (Model() with { Sponsorships = [Sponsorship(new string('b', ActionDraftRevision.MaximumBioguideIdLength))] }).ValidateShape();
+        Assert.Throws<ArgumentException>(() =>
+            (Model() with { Sponsorships = [Sponsorship(new string('b', ActionDraftRevision.MaximumBioguideIdLength + 1))] }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Model() with { Sponsorships = [Sponsorship(" ")] }).ValidateShape());
+    }
+
+    [Fact]
+    public void ATrackedIssueIdOverTheColumnLimitFailsBecauseTheColumnCannotHoldItAndACutIdWouldNameAnotherIssue()
+    {
+        var atLimit = new string('t', ActionDraftRevision.MaximumIssueIdLength);
+        (Model() with { TrackedIssueIds = [atLimit], IssueCandidateIds = [atLimit] }).ValidateShape();
+        var over = atLimit + "t";
+        Assert.Throws<ArgumentException>(() => (Model() with { TrackedIssueIds = [over], IssueCandidateIds = [over] }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Model() with { TrackedIssueIds = [" "], IssueCandidateIds = [" "] }).ValidateShape());
+    }
+
+    [Fact]
+    public void ACandidateIssueIdOverTheColumnLimitFailsBecauseTheColumnCannotHoldItAndACutIdWouldNameAnotherIssue()
+    {
+        var atLimit = new string('c', ActionDraftRevision.MaximumIssueIdLength);
+        (Model() with { IssueCandidateIds = [atLimit] }).ValidateShape();
+        Assert.Throws<ArgumentException>(() => (Model() with { IssueCandidateIds = [atLimit + "c"] }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Model() with { IssueCandidateIds = [""] }).ValidateShape());
+    }
+
+    [Fact]
+    public void ADuplicateIssueIdFailsBecauseTheIssueListIsASetAndARepeatWouldStoreTwoRowsForOneIssue()
+    {
+        (Model() with { TrackedIssueIds = ["a", "b"], IssueCandidateIds = ["a", "b"] }).ValidateShape();
+        var tracked = Assert.Throws<ArgumentException>(() => (Model() with { TrackedIssueIds = ["a", "a"], IssueCandidateIds = ["a"] }).ValidateShape());
+        Assert.Equal(nameof(ActionDraftRevision.TrackedIssueIds), tracked.ParamName);
+        var candidates = Assert.Throws<ArgumentException>(() => (Model() with { TrackedIssueIds = ["a"], IssueCandidateIds = ["a", "a"] }).ValidateShape());
+        Assert.Equal(nameof(ActionDraftRevision.IssueCandidateIds), candidates.ParamName);
+    }
+
+    [Fact]
     public void TheRevisionRoundTripsThroughJsonWithEnumsAsNamesAndNoLoss()
     {
         var revision = Model() with

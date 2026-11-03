@@ -68,6 +68,17 @@ public sealed class ListBlockedPublishedTests
     }
 
     [Fact]
+    public void ARejectedNewerRevisionOfALiveRecordTellsTheOwnerThatTheTextStaysLiveBecauseRejectingDoesNotRemoveIt()
+    {
+        var record = new BlockedPublishedRecord(PublishedRecordKind.Action, "id", "Headline", 1, ReviewStatus.Rejected, BlockedReason.ReviewBlocksIt);
+        var queued = record with { ReviewStatus = ReviewStatus.ChangesRequested };
+
+        Assert.Equal("A person rejected the newer revision of this record, so the published text stays on the site. Take the record off the site to remove it.",
+            record.StuckText());
+        Assert.Null(queued.StuckText());
+    }
+
+    [Fact]
     public async Task AWithdrawnRecordAtTheCapWithAPersonRevisionIsListedBecauseItCannotReturn()
     {
         var (scenario, action) = await PublishedAtCapAsync(PublishedCorrection.MaximumNotedEntries);

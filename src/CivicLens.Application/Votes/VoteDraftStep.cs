@@ -41,7 +41,11 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
         if (HasTooLongField(evidence, snapshot))
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.FieldTooLong, cancellationToken);
         var context = new VoteDraftContext(evidence, snapshot, choice, issues.Id);
-        return context.ChangeSinceCurrent() switch
+        var change = context.ChangeSinceCurrent();
+        if (evidence.IsRejected)
+            return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken,
+                change is VoteChange.None or VoteChange.OlderPromptOnly ? null : VoteDraftErrorCodes.RecordRejected);
+        return change switch
         {
             VoteChange.None => await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken),
             VoteChange.MemberVotesOnly => await CopyTextAsync(attempt, context, VoteDraftErrorCodes.MemberVotesChanged, cancellationToken),
@@ -82,9 +86,9 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
     }
 
     private static Task<bool> SettleWithoutCallAsync(IAnalysisAttempt<VoteDraftRun> attempt, string inputHash, string code,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string? runReason = null)
     {
         var run = attempt.BypassRun(VoteDraftTask.Model, inputHash, null);
-        return attempt.SettleAsync(new VoteDraftRun(run, code), State.Succeeded, code, cancellationToken);
+        return attempt.SettleAsync(new VoteDraftRun(run, runReason ?? code), State.Succeeded, code, cancellationToken);
     }
 }

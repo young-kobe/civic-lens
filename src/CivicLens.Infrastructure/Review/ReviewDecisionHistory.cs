@@ -9,7 +9,7 @@ internal static class ReviewDecisionHistory
 {
     public static ReviewDecision ToDecision(IReviewDecisionRow row, ImmutableArray<string> resolvedDecisionIds) =>
         new(row.DecisionId, row.RecordId, row.RevisionNumber, row.ReviewStateVersion, row.Kind, row.ActorSubject, row.Note,
-            resolvedDecisionIds, new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero), row.CorrectionNote);
+            resolvedDecisionIds, new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero), row.CorrectionNote, row.ReasonCode);
 
     public static ImmutableArray<ReviewDecision> RequireContiguousCycle(int reviewStateVersion, ImmutableArray<ReviewDecision> decisions)
     {

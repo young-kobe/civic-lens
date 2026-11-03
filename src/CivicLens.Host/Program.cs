@@ -85,11 +85,13 @@ if (args is [] or ["--help"] or ["help"])
           actions draft status
           actions draft list [drafted|unchanged|superseded|no-official|pending|failed] [limit]
           actions draft requeue <candidate-id|--all>
+          actions draft requeue --refused
           actions draft redraft
           votes draft status
           votes draft list [drafted|unchanged|superseded|no-member|pending|failed] [limit]
           votes draft requeue <candidate-id|--all>
           votes draft requeue --blocked --code <block-code>
+          votes draft requeue --refused
           votes draft redraft
           bills subjects backfill [limit]
           bills status backfill [limit]
@@ -120,7 +122,7 @@ if (args is [] or ["--help"] or ["help"])
         worker also drafts weekly briefs when CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also checks weekly briefs when CIVIC_LENS_BRIEF_CHECKING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
-        Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
+        Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration, 3 worker health: healthy worker and a full release.
         """);
     return 0;
 }
@@ -263,7 +265,10 @@ try
         var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
         if (string.IsNullOrWhiteSpace(connectionString)) throw new ArgumentException("worker health requires CIVIC_LENS_DATABASE.");
         executing = true;
-        return await WorkerHealthCommand.ExecuteAsync(PostgresWorkerHeartbeatStore.FromConnectionString(connectionString), Console.Out, cancellation.Token);
+        var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
+        var capacity = string.IsNullOrWhiteSpace(releaseRoot) ? null
+            : new ReadReleaseCapacity(PostgresPublicationStore.FromConnectionString(connectionString), new FileReleaseDirectory(releaseRoot));
+        return await WorkerHealthCommand.ExecuteAsync(PostgresWorkerHeartbeatStore.FromConnectionString(connectionString), capacity, Console.Out, cancellation.Token);
     }
 
     if (AnalysisCommand.Matches(args))
@@ -298,7 +303,7 @@ try
         var draftStore = new PostgresActionDraftStore(contexts);
         var draftCommands = new AnalysisQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
-        var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), new RedraftActionDrafts(draftStore), owner);
+        var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), new RequeueRefusedActionDrafts(draftStore), new RedraftActionDrafts(draftStore), owner);
         executing = true;
         return await actions.ExecuteAsync(args, cancellation.Token);
     }
@@ -312,7 +317,7 @@ try
         var draftCommands = new AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, VoteDraftTask.Task));
         var votes = new VoteCommand(draftCommands, new GetVoteDraftStatus(draftCommands.Status, draftStore),
-            new RequeueBlockedVoteDrafts(draftStore), new RedraftVoteDrafts(draftStore),
+            new RequeueBlockedVoteDrafts(draftStore), new RequeueRefusedVoteDrafts(draftStore), new RedraftVoteDrafts(draftStore),
             new BackfillVoteRevisions(backfillStore), new VerifyVoteRevisions(backfillStore), owner);
         executing = true;
         return await votes.ExecuteAsync(args, cancellation.Token);

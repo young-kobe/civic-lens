@@ -390,16 +390,15 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task ThePageWithoutAnOfficialKeepsTheSansHeaderBecauseOnlyAProfileIsAboutOnePerson()
+    public async Task ThePageWithoutAnOfficialHasNoPortraitBecauseOnlyAProfileIsAboutOnePerson()
     {
         var html = await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None);
 
-        Assert.DoesNotContain("page-header-serif", html);
         Assert.DoesNotContain("page-header-portrait", html);
     }
 
     [Fact]
-    public async Task TheHeaderHoldsTheSerifNameThePortraitAndTheLinksRowSoTheyReadAsOneIntroduction()
+    public async Task TheHeaderHoldsTheNameThePortraitAndTheLinksRowSoTheyReadAsOneIntroduction()
     {
         var page = Current([], []) with
         {
@@ -412,7 +411,7 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var header = new HtmlParser().ParseDocument(html).QuerySelector("header.page-header-serif")!;
+        var header = new HtmlParser().ParseDocument(html).QuerySelector("header.page-header")!;
         Assert.Equal("Rita Rep", header.QuerySelector("h1")!.TextContent);
         Assert.NotNull(header.QuerySelector(".page-header-portrait figure.portrait img"));
         Assert.Contains("Party: Democrat", header.QuerySelector(".page-header-lede")!.TextContent, StringComparison.Ordinal);
@@ -420,13 +419,13 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task APastCongressHeaderKeepsTheSerifNameButHasNoPortraitOrLinksRow()
+    public async Task APastCongressHeaderHasNoPortraitOrLinksRow()
     {
         var past = new ReleaseOfficialPage(Profile() with { Website = "https://mayor.example.gov" }, true, 118, false, [], [], [], ListPublishedAtUtc);
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(past, PublicationCatalogs.None, CancellationToken.None);
 
-        var header = new HtmlParser().ParseDocument(html).QuerySelector("header.page-header-serif")!;
+        var header = new HtmlParser().ParseDocument(html).QuerySelector("header.page-header")!;
         Assert.Null(header.QuerySelector(".page-header-portrait"));
         Assert.Null(header.QuerySelector(".page-header-meta"));
     }

@@ -298,7 +298,7 @@ The prompt holds the fact lines and the candidate issues. It tells the model tha
 | Blocked | `evidenceUnavailable`, `tooManyMembers`, `factTooLong`, `fieldTooLong`, `extractionVersionChanged`, `renderedTextMismatch`, `overByteCap` | The input cannot be drafted |
 | Failed | `outputRejected`, a stop code, or `attemptsExhausted` | Owner requeue needed |
 
-A run that makes no call has the reason `unchanged`, `noTrackedMember`, `memberVotesChanged`, or `kindChanged`.
+A run that makes no call has the reason `unchanged`, `noTrackedMember`, `memberVotesChanged`, `kindChanged`, or `recordRejected`. The last one is a record of a candidate that the worker refused because the record was rejected. The block is the column `vote_drafts.refused_candidate_id`, with a foreign key to `vote_candidates`; see [review](review.md#invariants). The `Down` of the migration `RejectDecision` fails while a run holds the reason `recordRejected`, and it rolls back.
 
 ### Redraft
 
@@ -349,6 +349,7 @@ A person cannot edit the member votes.
 |---|---|
 | `votes draft status` | JSON with `queue` (the status, `chargedToday`, and `counts` for each view) and `waitingForBill` |
 | `votes draft list [view] [limit]` | Entries in a view: `drafted`, `unchanged`, `superseded`, `no-member`, `pending`, or `failed` |
+| `votes draft requeue --refused` | The candidate that a reopened draft names in `refused_candidate_id`, and no other, back to Pending. Run it after Request changes on the rejected record. If the update failed, run `votes draft requeue <candidate-id>`. If it is blocked, run `votes draft requeue --blocked --code <block-code>` |
 | `votes draft requeue <candidate-id\|--all>` | Failed rows, and no others, back to Pending |
 | `votes draft requeue --blocked --code <block-code>` | Blocked rows with exactly that code, and no others, back to Pending. The code is required and must not be empty |
 | `votes draft redraft` | Succeeded `drafted` and `unchanged` rows of votes with a bill and an older prompt version, and no others, back to Pending. Older entries of a stale roll call requeue too and settle as superseded, so the printed count is entries, not roll calls. Needs no argument and calls no model itself |
@@ -437,6 +438,7 @@ A version row has the roll call job as its detail job. Its update time is the ca
 
 ## Limits and planned work
 
+- A newer update that Blocks before the rejection check sets no block. Code cannot tell whether that update changed facts. A blocked update shows in the blocked list, and old facts can publish until someone clears the blocked update.
 - The R-63 vote pilot has four steps; see [roadmap](../roadmap.md). Steps 1 and 2 are done in code: both write paths write the columns and `revision_json`, and `votes revisions backfill` and `votes revisions verify` move and check old revisions. The runbook is in [operations](../operations.md#vote-revision-backfill). Readers read the JSON. The next steps move the readers and drop the JSON, The gate for step 3 is in the [runbook](../operations.md#vote-revision-backfill).
 - A skipped revision stays legacy, and every run examines it again. Fix the cause. The runbook says when step 3 may start.
 - `readonly_access.revisions` selects `t.revision_json`. Step 4 of the pilot drops that column, so step 4 must change the function first.

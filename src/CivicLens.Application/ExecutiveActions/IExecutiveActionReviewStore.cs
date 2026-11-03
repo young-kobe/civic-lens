@@ -6,7 +6,8 @@ namespace CivicLens.Application.ExecutiveActions;
 public interface IExecutiveActionReviewStore
 {
     Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
+        int expectedReviewStateVersion, string idempotencyKey, string payloadHash,
+        ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken);
 
     Task<ExecutiveActionReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken);
 

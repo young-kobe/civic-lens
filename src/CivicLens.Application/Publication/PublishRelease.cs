@@ -86,8 +86,7 @@ public sealed class PublishRelease
         if (request.RewriteEntries) carried = await ReleaseEntryRewrite.RebuildAsync(releases, carried, previous, cancellationToken);
         var removed = previous.Entries.Where(entry => withdrawalNotes.ContainsKey(new(entry.Kind, entry.RecordId))).ToList();
         List<PublishedWithdrawal> withdrawals = [.. previous.Withdrawals.Where(withdrawal => !build.Returned.Any(record => record.RecordId == withdrawal.RecordId)), .. newWithdrawals];
-        if (carried.Count + additions.Count + withdrawals.Count > PublicationProtocol.MaximumRecordsPerRelease)
-            throw new ArgumentException("The release would exceed the maximum record count.", nameof(request));
+        RequireRoom(previous, carried.Count + additions.Count + withdrawals.Count, additions);
 
         var number = state.LatestReleaseNumber + 1;
         var (directory, entries) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, statuses, roster, photos, request.RewriteOfficials, request.RewriteEntries, request.RewritePages, cancellationToken);
@@ -101,6 +100,15 @@ public sealed class PublishRelease
         await ServeActiveReleaseAsync(cancellationToken);
         await prune.ExecuteAsync(cancellationToken);
         return summary;
+    }
+
+    private static void RequireRoom(PreviousRelease previous, int total, List<PendingRecord> additions)
+    {
+        if (total <= PublicationProtocol.MaximumRecordsPerRelease) return;
+        var held = previous.Entries.Select(entry => entry.RecordId).Concat(previous.Withdrawals.Select(withdrawal => withdrawal.RecordId)).ToHashSet();
+        ImmutableArray<PublishedRecordReference> added =
+            [.. additions.Where(addition => !held.Contains(addition.RecordId)).Select(addition => new PublishedRecordReference(addition.Entry.Kind, addition.RecordId))];
+        throw new ReleaseFullException(PublicationProtocol.MaximumRecordsPerRelease - (total - added.Length), added);
     }
 
     // The worker asks this when no record is ready. Reading the previous files and one status query is much cheaper than staging a release.
