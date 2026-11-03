@@ -344,7 +344,7 @@ public sealed class CollectionAttemptImporterTests
             var decision = attempt.Decide(Existing, Prior);
             if (decision.Disposition == ImportDisposition.NewAttempt)
                 Existing = new StoredCollectionAttempt(decision.AttemptResult, decision.SentValidators,
-                    decision.PriorCapturedAttempt);
+                    decision.PriorCapturedAttempt, elapsedMilliseconds: attempt.ElapsedMilliseconds);
             if (LoseAcknowledgmentOnce)
             {
                 LoseAcknowledgmentOnce = false;

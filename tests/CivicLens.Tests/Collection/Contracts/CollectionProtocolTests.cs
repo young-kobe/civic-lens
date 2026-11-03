@@ -261,8 +261,23 @@ public sealed class CollectionProtocolTests
     }
 
     [Theory]
+    [InlineData(-1)]
+    [InlineData(CollectionProtocol.MaximumElapsedMilliseconds + 1)]
+    public void ElapsedTimeOutsideTheSupportedRangeIsRejected(long elapsed)
+    {
+        var request = Request();
+        var receipt = Receipt(request);
+
+        receipt.ValidateAgainst(request);
+        (receipt with { ElapsedMilliseconds = 0 }).ValidateAgainst(request);
+        (receipt with { ElapsedMilliseconds = CollectionProtocol.MaximumElapsedMilliseconds }).ValidateAgainst(request);
+        Assert.Throws<InvalidDataException>(() => (receipt with { ElapsedMilliseconds = elapsed }).ValidateAgainst(request));
+    }
+
+    [Theory]
     [InlineData(",\"outOfScopeCount\":0", "")]
     [InlineData("\"robotsRequestCount\":1,", "")]
+    [InlineData("\"elapsedMilliseconds\":250,", "")]
     public void ResultsWithoutRequiredCountsAreRejected(string original, string replacement)
     {
         var request = Request() with { Mode = CollectionMode.Feed };

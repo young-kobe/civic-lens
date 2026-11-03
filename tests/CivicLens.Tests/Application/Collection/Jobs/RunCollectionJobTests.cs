@@ -356,7 +356,7 @@ public sealed class RunCollectionJobTests
             var decision = attempt.DecideFromCandidates(existing,
                 retained.Values.Select(value => value.AttemptResult).OfType<CapturedAttemptResult>());
             retained[attempt.AttemptResult.AttemptId] = new StoredCollectionAttempt(decision.AttemptResult,
-                decision.SentValidators, decision.PriorCapturedAttempt);
+                decision.SentValidators, decision.PriorCapturedAttempt, elapsedMilliseconds: attempt.ElapsedMilliseconds);
             return Task.FromResult(decision);
         }
     }

@@ -9,14 +9,16 @@ public sealed class CollectionAttemptImport
     private readonly CollectionImportPolicy policy = new();
 
     internal CollectionAttemptImport(CollectionAttemptResult attemptResult, SentValidators? sentValidators,
-        DiscoveryEvidence? discovery = null, long? robotsCrawlDelayMilliseconds = null)
+        long elapsedMilliseconds, DiscoveryEvidence? discovery = null, long? robotsCrawlDelayMilliseconds = null)
     {
+        ElapsedMilliseconds = elapsedMilliseconds;
         AttemptResult = attemptResult;
         SentValidators = sentValidators;
         Discovery = discovery;
         RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds;
     }
 
+    public long ElapsedMilliseconds { get; }
     public long? RobotsCrawlDelayMilliseconds { get; }
     public CollectionAttemptResult AttemptResult { get; }
     public SentValidators? SentValidators { get; }
@@ -39,6 +41,8 @@ public sealed class CollectionAttemptImport
             throw new InvalidOperationException("An attempt ID was reused with conflicting discovery evidence.");
         if (existing is not null && existing.RobotsCrawlDelayMilliseconds != RobotsCrawlDelayMilliseconds)
             throw new InvalidOperationException("An attempt ID was reused with conflicting robots crawl delay.");
+        if (existing is not null && existing.ElapsedMilliseconds != ElapsedMilliseconds)
+            throw new InvalidOperationException("An attempt ID was reused with conflicting elapsed time.");
         return policy.DecideFromCandidates(AttemptResult, priorCaptures, existing?.ToDecision(policy), SentValidators);
     }
 }

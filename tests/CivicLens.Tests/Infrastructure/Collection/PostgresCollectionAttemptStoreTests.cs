@@ -99,6 +99,46 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
     }
 
     [Fact]
+    public async Task ElapsedTimeSurvivesImportAndCannotChangeOnReplay()
+    {
+        var request = Request("elapsed");
+        var receipt = Result(request.JobId, CollectionOutcome.Failed,
+            Response: Metadata(404, null, null, null, []), FailureCode: CollectionFailureCode.HttpError) with
+        {
+            RequestCount = 2,
+            ElapsedMilliseconds = 1_234
+        };
+        var import = CollectionAttemptImporter.CreateImport("elapsed", request, receipt);
+        await store.ImportAtomicallyAsync(import, default);
+        var retained = await store.GetAsync("elapsed", default);
+        Assert.Equal(1_234, retained!.ElapsedMilliseconds);
+        Assert.Equal(ImportDisposition.DuplicateAttempt, (await store.ImportAtomicallyAsync(import, default)).Disposition);
+        var conflict = CollectionAttemptImporter.CreateImport("elapsed", request, receipt with { ElapsedMilliseconds = 1_235 });
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.ImportAtomicallyAsync(conflict, default));
+    }
+
+    [Fact]
+    public async Task TheDatabaseRefusesANegativeElapsedTimeAndKeepsOldRowsNull()
+    {
+        var request = Request("elapsed-check");
+        await store.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("elapsed-check", request,
+            Result(request.JobId, CollectionOutcome.Failed, Response: Metadata(404, null, null, null, []),
+                FailureCode: CollectionFailureCode.HttpError) with
+            { RequestCount = 2 }), default);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var negative = new NpgsqlCommand(
+            "UPDATE collection_attempts SET elapsed_ms = -1 WHERE attempt_id = 'elapsed-check'", connection);
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => negative.ExecuteNonQueryAsync());
+        Assert.Equal("ck_collection_attempts_elapsed", failure.ConstraintName);
+        await using var cleared = new NpgsqlCommand(
+            "UPDATE collection_attempts SET elapsed_ms = NULL WHERE attempt_id = 'elapsed-check'", connection);
+        Assert.Equal(1, await cleared.ExecuteNonQueryAsync());
+        Assert.Null((await store.GetAsync("elapsed-check", default))!.ElapsedMilliseconds);
+    }
+
+    [Fact]
     public async Task DiscoveryIsAtomicImmutableAndRejectsConflictingReplay()
     {
         var request = Request("feed") with { Mode = CollectionMode.Feed };

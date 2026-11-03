@@ -258,7 +258,7 @@ public sealed class RecoverCollectionAttemptsTests
             var decision = attempt.DecideFromCandidates(existing,
                 retained.Values.Select(item => item.AttemptResult).OfType<CapturedAttemptResult>());
             retained[attempt.AttemptResult.AttemptId] = new StoredCollectionAttempt(decision.AttemptResult,
-                decision.SentValidators, decision.PriorCapturedAttempt);
+                decision.SentValidators, decision.PriorCapturedAttempt, elapsedMilliseconds: attempt.ElapsedMilliseconds);
             if (importCount == cancelAfterCommitOnImportNumber)
                 cancellation.Cancel();
             return Task.FromResult(decision);

@@ -77,7 +77,7 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
                     await RetainCaptureAsync(db, captured.Capture, cancellationToken);
                     await db.SaveChangesAsync(cancellationToken);
                 }
-                db.Attempts.Add(ToRow(decision.AttemptResult, decision.PriorCapturedAttempt, decision.SentValidators, attempt.RobotsCrawlDelayMilliseconds));
+                db.Attempts.Add(ToRow(decision.AttemptResult, decision.PriorCapturedAttempt, decision.SentValidators, attempt.RobotsCrawlDelayMilliseconds, attempt.ElapsedMilliseconds));
                 if (attempt.Discovery is { } discovery)
                     db.Add(new DiscoveryRow
                     {
@@ -161,7 +161,8 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
         var discovery = discoveryRow is null ? null : new DiscoveryEvidence(
             JsonSerializer.Deserialize<CollectionRequest>(discoveryRow.RequestJson, CollectionProtocol.JsonOptions)!,
             JsonSerializer.Deserialize<DiscoveryResult>(discoveryRow.DiscoveryJson, CollectionProtocol.JsonOptions)!);
-        return new StoredCollectionAttempt(result, row.HasSentValidators ? ReadSentValidators(row) : null, prior, discovery, row.RobotsCrawlDelayMilliseconds);
+        return new StoredCollectionAttempt(result, row.HasSentValidators ? ReadSentValidators(row) : null, prior, discovery, row.RobotsCrawlDelayMilliseconds,
+            row.ElapsedMilliseconds);
     }
 
     internal static async Task<IReadOnlyList<StoredCollectionAttempt>> ReadEvidenceAsync(CollectionAttemptDbContext db,
@@ -195,17 +196,18 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
                     ?? throw new InvalidOperationException("Stored prior evidence is not a captured attempt.");
             evidence.Add(new StoredCollectionAttempt(results[row.AttemptId],
                 row.HasSentValidators ? ReadSentValidators(row) : null, prior,
-                robotsCrawlDelayMilliseconds: row.RobotsCrawlDelayMilliseconds));
+                robotsCrawlDelayMilliseconds: row.RobotsCrawlDelayMilliseconds, elapsedMilliseconds: row.ElapsedMilliseconds));
         }
         return evidence;
     }
 
     private static AttemptRow ToRow(CollectionAttemptResult result, CapturedAttemptResult? prior,
-        SentValidators? validators, long? robotsCrawlDelayMilliseconds)
+        SentValidators? validators, long? robotsCrawlDelayMilliseconds, long elapsedMilliseconds)
     {
         var row = new AttemptRow
         {
             RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds,
+            ElapsedMilliseconds = elapsedMilliseconds,
             AttemptId = result.AttemptId,
             SourceId = result.SourceId,
             RequestedUrl = result.RequestedUrl,

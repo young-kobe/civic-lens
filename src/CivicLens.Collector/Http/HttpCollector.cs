@@ -150,6 +150,7 @@ public sealed class HttpCollector : IDisposable
                 Discovery = discovery,
                 BytesReceived = bytes,
                 RequestCount = requests,
+                ElapsedMilliseconds = elapsed.ElapsedMilliseconds,
                 RobotsRequestCount = robotsRequests,
                 RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds,
                 RobotsCacheHit = robotsCacheHit,
