@@ -790,6 +790,8 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ro
 
 Enable the source `executive-officials` the same way to capture the executive file, which lists presidents and vice presidents. Publish reads it to write the terms of a configured person with a Wikidata ID.
 
+Enable the source `census-zcta-districts` to capture the Census file that maps each ZCTA to the districts of the 119th Congress. It needs no credential. It checks once a week. Nothing reads the tables yet. See [districts](architecture/districts.md).
+
 Enable the source `member-photos` to capture one portrait for each configured member. It needs no credential. Each member roster job then enqueues the photo jobs, and each person gets a new job every 30 days. The first run makes about 540 jobs, paced at one request a second. Run the roster source first. See [roster](architecture/roster.md#member-photos).
 
 The output lists the members to add and the configured people who left the roster. Edit the configuration by hand and commit it. Press sources of a new member are a manual step. See [roster](architecture/roster.md#proposals).

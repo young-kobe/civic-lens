@@ -6,6 +6,7 @@ using CivicLens.Application;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Issues;
 using CivicLens.Core.Analysis;
+using CivicLens.Infrastructure.Districts;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
@@ -242,6 +243,7 @@ try
         var processing = new EvidenceProcessingWorker(jobs,
             new JobPreparation(jobs, attempts, jobs, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString),
                 PostgresExecutiveRosterStore.FromConnectionString(connectionString),
+                PostgresZctaDistrictStore.FromConnectionString(connectionString),
                 new CaptureBodyReader(), processingStore, extractions, textExtractor, issues, loggers.CreateLogger<JobPreparation>()),
             processingStore,
             new ExtractDocument(attempts, textExtractor, extractions),
