@@ -10,9 +10,6 @@ using Microsoft.EntityFrameworkCore.Storage;
 
 namespace CivicLens.Infrastructure.ExecutiveActions;
 
-/// <summary>Moves legacy executive action revisions into columns and child rows, and checks each moved revision against its JSON.
-/// The backfill takes the executive action review lock, and only that lock, for each batch. It writes only rows whose columns are null.
-/// It proves each row inside its savepoint: it reads the row back, rebuilds the revision, and compares it to the stored JSON.</summary>
 public sealed class PostgresExecutiveActionRevisionBackfillStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IRevisionBackfillStore
 {
     private const string Savepoint = "executive_action_revision_backfill";

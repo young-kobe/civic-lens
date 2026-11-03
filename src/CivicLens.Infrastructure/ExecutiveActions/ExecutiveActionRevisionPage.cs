@@ -6,13 +6,11 @@ using CivicLens.Infrastructure.Review;
 
 namespace CivicLens.Infrastructure.ExecutiveActions;
 
-/// <summary>Executive action revision rows with their fact rows, notice rows, and the documents that the notice rows name. A page costs a fixed number of queries.</summary>
 internal sealed record ExecutiveActionRevisionPage(IReadOnlyList<ExecutiveActionRevisionRow> Rows,
     ILookup<(string RecordId, int RevisionNumber), ExecutiveActionRevisionFactRow> Facts,
     ILookup<(string RecordId, int RevisionNumber), ExecutiveActionRevisionNoticeRow> Notices,
     IReadOnlyDictionary<(string SourceId, string DocumentNumber), ExecutiveActionDocumentRow> Documents)
 {
-    /// <summary>Rebuilds the revision of a row. A row with null columns or a notice without its document fails here, and the JSON is no fallback.</summary>
     public ExecutiveActionRevision Rebuild(ExecutiveActionRevisionRow row)
     {
         if (row.SourceId is null)
