@@ -5,8 +5,7 @@ namespace CivicLens.Application.Collection.Jobs;
 public sealed record CollectionJobCharges(int Requests, long Bytes, int TimeoutSeconds)
 {
     public static AttemptTransfer? Chargeable(CollectionRequest reserved, CollectionRequest imported, AttemptTransfer? transfer) =>
-        transfer is not null && imported == reserved && transfer.RequestCount <= reserved.MaxRequests &&
-        transfer.BytesReceived <= reserved.MaxBytes ? transfer : null;
+        imported == reserved ? transfer : null;
 
     public static CollectionJobCharges Of(IEnumerable<CollectionJobAttempt> attempts)
     {

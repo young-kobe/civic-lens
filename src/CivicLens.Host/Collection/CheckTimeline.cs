@@ -38,7 +38,7 @@ public static class CheckTimeline
     {
         if (retained is not null && attempt.Transfer is { } transfer) return Describe(retained, transfer);
         if (retained is not null)
-            return $"Saved evidence is kept, but the transfer receipt is missing. Observed {Moment.Full(retained.AttemptResult.ObservedAt)}.";
+            return $"Saved evidence is kept. Its transfer was not counted, so the full reservation is charged. Observed {Moment.Full(retained.AttemptResult.ObservedAt)}.";
         if (attempt.Resolution is null) return "No result yet. The check may still be running or waiting to recover.";
         var recorded = attempt.Resolution.ErrorCode is { } code ? $" Recorded outcome: {code}." : "";
         return $"No transfer receipt is available. Open the saved versions to find any kept evidence.{recorded}";

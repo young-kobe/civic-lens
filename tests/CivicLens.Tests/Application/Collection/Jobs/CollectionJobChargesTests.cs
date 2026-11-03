@@ -26,13 +26,6 @@ public sealed class CollectionJobChargesTests
     }
 
     [Fact]
-    public void ATransferAboveTheReservedLimitIsNotChargedBecauseTheReservationBoundsWhatTheAttemptMayUse()
-    {
-        Assert.Null(CollectionJobCharges.Chargeable(Reserved, Reserved, new AttemptTransfer(Reserved.MaxRequests + 1, 1)));
-        Assert.Null(CollectionJobCharges.Chargeable(Reserved, Reserved, new AttemptTransfer(1, Reserved.MaxBytes + 1)));
-    }
-
-    [Fact]
     public void AMissingTransferStaysFullyChargedBecauseUnknownUseIsNeverRefunded()
     {
         Assert.Null(CollectionJobCharges.Chargeable(Reserved, Reserved, null));

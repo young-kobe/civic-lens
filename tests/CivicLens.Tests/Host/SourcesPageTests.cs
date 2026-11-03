@@ -199,7 +199,7 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
 
         var details = await workspace.GetSourcesAsync(Owner, job.JobId, null);
         var timeline = CheckTimeline.Build(details.SelectedJob!, details.RetainedAttempts);
-        Assert.StartsWith("Saved evidence is kept, but the transfer receipt is missing.", Assert.Single(timeline).Text, StringComparison.Ordinal);
+        Assert.StartsWith("Saved evidence is kept. Its transfer was not counted, so the full reservation is charged.", Assert.Single(timeline).Text, StringComparison.Ordinal);
 
         var key = Guid.NewGuid().ToString("N");
         var again = await workspace.RecollectAsync(Owner, job.JobId, key, default);
