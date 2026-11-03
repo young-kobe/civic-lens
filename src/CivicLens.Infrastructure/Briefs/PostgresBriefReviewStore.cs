@@ -41,12 +41,12 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
                 NoAfterDecision, revision => revision.ComparableForm(), correctedReportIds), cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds,
+        int expectedReviewStateVersion, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash, (db, _, history) => decision.Kind == ReviewDecisionKind.Approve
                 ? ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken)
-                : Task.CompletedTask, NoAfterDecision, correctedReportIds, cancellationToken);
+                : Task.CompletedTask, NoAfterDecision, [], cancellationToken);
 
     private static Task NoAfterDecision(CollectionAttemptDbContext db, string recordId, int revisionNumber, CancellationToken cancellationToken) =>
         Task.CompletedTask;

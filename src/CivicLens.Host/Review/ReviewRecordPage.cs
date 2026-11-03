@@ -59,7 +59,6 @@ public abstract class ReviewRecordPage : ComponentBase
     [SupplyParameterFromForm(FormName = DecideForm, Name = "idempotencyKey")] protected string? DecideKey { get; set; }
     [SupplyParameterFromForm(FormName = DecideForm, Name = "kind")] protected string? Kind { get; set; }
     [SupplyParameterFromForm(FormName = SaveForm, Name = CorrectedReportsField)] protected Guid[]? SaveCorrectedReportIds { get; set; }
-    [SupplyParameterFromForm(FormName = DecideForm, Name = CorrectedReportsField)] protected Guid[]? DecideCorrectedReportIds { get; set; }
 
     protected CancellationToken RequestAborted => HttpContext.RequestAborted;
     protected bool CanDecide => !hasUnsavedInput && !isConflict && error is null;
@@ -155,10 +154,7 @@ public abstract class ReviewRecordPage : ComponentBase
     protected string? CorrectionNoteOfApproval() =>
         ParseDecisionKind(Kind) == ReviewDecisionKind.Approve ? EmptyToNull(Decision?.CorrectionNote) : null;
 
-    protected ImmutableArray<Guid>? ApprovedReportIds() =>
-        ParseDecisionKind(Kind) == ReviewDecisionKind.Approve ? ReportIds(DecideCorrectedReportIds) : null;
-
-    private static ImmutableArray<Guid>? ReportIds(Guid[]? ids) => ids is { Length: > 0 } ? [.. ids] : null;
+    protected static ImmutableArray<Guid>? ReportIds(Guid[]? ids) => ids is { Length: > 0 } ? [.. ids] : null;
 
     protected static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 }

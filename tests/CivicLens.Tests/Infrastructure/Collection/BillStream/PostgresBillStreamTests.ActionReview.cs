@@ -281,7 +281,7 @@ public sealed partial class PostgresBillStreamTests
             new(RecordId, 1, 0, ReviewDecisionKind.Approve, null, [], Guid.NewGuid().ToString("N"))));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => ActionReviews().DecideAsync(ReviewAuthor.CodeSubject,
             new(Guid.NewGuid().ToString("N"), RecordId, 1, 1, ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, null, [], DateTimeOffset.UtcNow),
-            1, 0, "key", new string('a', 64), [], default));
+            1, 0, "key", new string('a', 64), default));
         Assert.Empty(await ActionDecisionsAsync());
     }
 

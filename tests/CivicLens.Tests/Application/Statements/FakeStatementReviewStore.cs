@@ -34,8 +34,7 @@ internal sealed class FakeStatementReviewStore : IStatementReviewStore
     }
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash,
-        ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken)
+        int expectedReviewStateVersion, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
     {
         DecideCalled = true;
         Decided = decision;

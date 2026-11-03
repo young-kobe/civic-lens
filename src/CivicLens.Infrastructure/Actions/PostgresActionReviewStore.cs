@@ -62,7 +62,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
                 afterDecision, revision => revision.ComparableForm(), correctedReportIds), cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds,
+        int expectedReviewStateVersion, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash, async (db, _, history) =>
@@ -70,7 +70,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
                 var current = history.CurrentRevision!;
                 await ValidateApprovalAsync(db, current, cancellationToken);
-            }, afterDecision, correctedReportIds, cancellationToken);
+            }, afterDecision, [], cancellationToken);
 
     public async Task<string?> FindRecordIdByBillAsync(int congress, string billType, int billNumber, CancellationToken cancellationToken)
     {

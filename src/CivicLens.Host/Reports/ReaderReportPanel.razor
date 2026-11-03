@@ -9,7 +9,7 @@
 {
     <Notice Tone="Tone.Warn">Reader reports could not load for this record. Refresh the page to try again.</Notice>
 }
-@foreach (var report in reports)
+@foreach (var report in reports.Reports)
 {
     <section class="stack" id="@($"reader-report-{report.ReportId:D}")">
         @if (report.Status == ReaderReportStatus.Open)
@@ -17,29 +17,33 @@
             <Notice Tone="Tone.Warn" Title="A reader reported a problem.">
                 @ReportLabels.Category(report.Category)@(string.IsNullOrWhiteSpace(report.Text) ? "." : ": " + report.Text)<br />
                 A reader wrote this text. It may be wrong. Check it against the record.
-                @(EditFormId is null
-                    ? "No person edits this record. Dismiss the report if it is wrong. The owner can take the record off the site."
-                    : "To fix it, change the wording and press Save and approve. If the report is wrong, dismiss it.")
+                @(CanEdit
+                    ? "To fix it, change the wording and press Save and approve. If the report is wrong, dismiss it."
+                    : "No person edits this record. To close the report, approve a newer revision. If the report is wrong, dismiss it. The owner can take the record off the site.")
+                @if (CurrentRevisionApproved && reports.CurrentRevisionNumber > report.RevisionNumber)
+                {
+                    <br />@("The current revision is already approved. Dismiss this report if it fixes the problem.")
+                }
             </Notice>
-            @if (EditFormId is not null)
-            {
-                <input type="hidden" form="@EditFormId" name="@ReviewRecordPage.CorrectedReportsField" value="@report.ReportId" />
-                <input type="hidden" form="@ReviewDecisionPanel.FormId" name="@ReviewRecordPage.CorrectedReportsField" value="@report.ReportId" />
-            }
+            <input type="hidden" form="@ApprovalFormId" name="@ReviewRecordPage.CorrectedReportsField" value="@report.ReportId" />
             <ReaderReportDismissButton Report="report" />
         }
         else
         {
             <Notice Tone="Tone.Neutral" Title="A correction was approved.">
                 @ReportLabels.Category(report.Category)@(string.IsNullOrWhiteSpace(report.Text) ? "." : ": " + report.Text)<br />
-                You approved a correction for this report. This notice goes away when the corrected record is published.
+                A person approved a correction for this report. This notice goes away when the corrected record is published.
             </Notice>
         }
     </section>
 }
+@if (reports.MoreOpen > 0)
+{
+    <Notice Tone="Tone.Neutral" id="reader-reports-more">@(reports.MoreOpen == 1 ? "1 more report stays open." : $"{reports.MoreOpen} more reports stay open.")</Notice>
+}
 
 @code {
-    private IReadOnlyList<ReaderReport> reports = [];
+    private RecordReports reports = new([], 0, null);
     private bool failed;
 
     [Inject] private ListRecordReports ListReports { get; set; } = default!;
@@ -51,8 +55,12 @@
     [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
     [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;
 
-    /// <summary>The id of the form whose Save and approve closes the open reports. Null when no person edits the record.</summary>
-    [Parameter] public string? EditFormId { get; set; }
+    /// <summary>The id of the form whose approval closes the open reports.</summary>
+    [Parameter, EditorRequired] public string ApprovalFormId { get; set; } = string.Empty;
+
+    [Parameter] public bool CanEdit { get; set; } = true;
+
+    [Parameter, EditorRequired] public bool CurrentRevisionApproved { get; set; }
 
     protected override async Task OnInitializedAsync()
     {

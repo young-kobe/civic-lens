@@ -51,7 +51,7 @@ internal sealed class FakeBriefReviewStore : IBriefReviewStore
         ReviewDecision? approval, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken) =>
+        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
     public Task<BriefReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken) => throw new NotSupportedException();

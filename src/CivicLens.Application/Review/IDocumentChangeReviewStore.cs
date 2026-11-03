@@ -15,8 +15,7 @@ public interface IDocumentChangeReviewStore
 
     Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision,
         int expectedRevisionNumber, int expectedReviewStateVersion, string idempotencyKey,
-        string payloadHash, ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds,
-        ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken);
+        string payloadHash, ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds, CancellationToken cancellationToken);
 
     Task<DocumentChangeReview?> GetAsync(string draftId, CancellationToken cancellationToken);
     Task<IReadOnlyDictionary<string, PublishableDocumentChange>> GetForPublicationAsync(

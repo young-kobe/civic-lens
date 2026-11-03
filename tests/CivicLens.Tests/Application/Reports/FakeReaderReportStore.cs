@@ -41,6 +41,6 @@ internal sealed class FakeReaderReportStore : IReaderReportStore
 
     public Task<ReaderReportListItem?> GetAsync(Guid reportId, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<IReadOnlyList<ReaderReport>> ListForRecordAsync(PublishedRecordKind kind, string recordId, CancellationToken cancellationToken) =>
+    public Task<RecordReports> ListForRecordAsync(PublishedRecordKind kind, string recordId, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 }

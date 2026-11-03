@@ -118,7 +118,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), entry.DraftId!, 1, 1, ReviewDecisionKind.Approve,
             ReviewAuthor.AnalysisSubject, null, [], DateTimeOffset.UtcNow);
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => reviews.DecideAsync(ReviewAuthor.AnalysisSubject, decision, 1, 0,
-            "key", new string('a', 64), [], [], [], default));
+            "key", new string('a', 64), [], [], default));
 
         var saved = await new SaveDocumentChangeDraft(reviews, new ReviewCatalog([], [])).ExecuteAsync(Owner,
             new SaveDocumentChangeDraftRequest(entry.DraftId!, 1, "Edited headline", revision.Summary, null, revision.Limits,

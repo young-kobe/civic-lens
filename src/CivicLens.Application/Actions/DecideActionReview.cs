@@ -15,7 +15,6 @@ public sealed class DecideActionReview(IActionReviewStore store)
         var decision = ReviewValidation.CreateDecision(actor, recordId, request.ExpectedRevisionNumber,
             request.ExpectedReviewStateVersion, request.Kind, request.Note, request.ResolvedDecisionIds, request.CorrectionNote);
         return store.DecideAsync(actor.Subject, decision, request.ExpectedRevisionNumber, request.ExpectedReviewStateVersion,
-            request.IdempotencyKey, ReviewValidation.HashPayload(request),
-            ReviewValidation.ValidateReportIds(request.CorrectedReportIds), cancellationToken);
+            request.IdempotencyKey, ReviewValidation.HashPayload(request), cancellationToken);
     }
 }

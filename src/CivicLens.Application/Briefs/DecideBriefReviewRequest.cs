@@ -5,4 +5,4 @@ namespace CivicLens.Application.Briefs;
 
 public sealed record DecideBriefReviewRequest(string RecordId, int ExpectedRevisionNumber, int ExpectedReviewStateVersion,
     ReviewDecisionKind Kind, string? Note, ImmutableArray<string> ResolvedDecisionIds, string IdempotencyKey,
-    string? CorrectionNote = null, ImmutableArray<Guid>? CorrectedReportIds = null);
+    string? CorrectionNote = null);

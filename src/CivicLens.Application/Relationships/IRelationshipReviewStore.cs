@@ -14,7 +14,7 @@ public interface IRelationshipReviewStore
         ReviewDecision? approval, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken);
 
     Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken);
+        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken);
 
     Task<RelationshipReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken);
 

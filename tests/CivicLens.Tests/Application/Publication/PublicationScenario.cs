@@ -762,8 +762,7 @@ internal sealed class FakeReviewStore : IDocumentChangeReviewStore
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, string idempotencyKey, string payloadHash,
-        ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds,
-        ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken) => throw new NotSupportedException();
+        ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<NewDocumentChangePage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
         CancellationToken cancellationToken) => throw new NotSupportedException();

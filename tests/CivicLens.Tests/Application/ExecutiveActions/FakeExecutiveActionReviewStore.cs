@@ -11,7 +11,8 @@ internal sealed class FakeExecutiveActionReviewStore : IExecutiveActionReviewSto
     public List<UnpublishedApprovedExecutiveAction> Unpublished { get; } = [];
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
+        int expectedReviewStateVersion, string idempotencyKey, string payloadHash,
+        ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken)
     {
         Decided.Add(decision);
         return Task.FromResult(decision);

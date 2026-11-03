@@ -105,7 +105,7 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
         Assert.Null(panel.QuerySelector("script"));
         Assert.True(panel.CompareDocumentPosition(page.QuerySelector("#draft-form")!).HasFlag(DocumentPositions.Following));
         Assert.Equal(report.ReportId.ToString(), page.QuerySelector("input[form='draft-form'][name='correctedReportIds']")!.GetAttribute("value"));
-        Assert.Equal(report.ReportId.ToString(), page.QuerySelector("input[form='decision-form'][name='correctedReportIds']")!.GetAttribute("value"));
+        Assert.Null(page.QuerySelector("input[form='decision-form'][name='correctedReportIds']"));
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
         Assert.Equal("0", (await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions r WHERE r::text LIKE '%alert(%'")).Single().Single());
         Assert.Equal("1", (await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions r WHERE r::text LIKE '%The typed public reason.%'")).Single().Single());
         var waiting = await host.GetDocumentAsync(editor);
-        Assert.Contains("A correction was approved", waiting.QuerySelector($"#reader-report-{report.ReportId:D}")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("A person approved a correction", waiting.QuerySelector($"#reader-report-{report.ReportId:D}")!.TextContent, StringComparison.Ordinal);
         Assert.Null(waiting.QuerySelector("input[name='correctedReportIds']"));
         Assert.Contains("Corrected", await StatusLabelAsync(), StringComparison.Ordinal);
 
@@ -190,25 +190,35 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
     }
 
     [Fact]
-    public async Task ASeparateApproveOfASavedFixClosesTheReportInTheSameRequestBecauseThePageSendsItsIdWithTheDecision()
+    public async Task AReportOnAnOlderRevisionOfAnApprovedRecordTellsThePersonToDismissItBecauseNoEditCanApproveAgain()
     {
         await SeedRelationshipAsync();
-        var report = await SaveReportAsync(OnRelationship());
         var fields = EditorFields(await host.GetDocumentAsync(editor));
-        fields.RemoveAll(field => field.Key == "approve");
-        Set(fields, "Input.Reason", "Saved first.");
-        using var saved = await host.Client.PostAsync(editor, new FormUrlEncodedContent(fields));
-        Assert.Equal(ReaderReportStatus.Open, (await store.GetAsync(report.ReportId, default))!.Report.Status);
-        var page = await host.GetDocumentAsync(editor);
-        var decision = Fields(page.QuerySelector("#decision-form")!);
-        decision.AddRange(page.QuerySelectorAll("input[form='decision-form']")
-            .Select(input => new KeyValuePair<string, string>(input.GetAttribute("name")!, input.GetAttribute("value") ?? "")));
-        Set(decision, "kind", "Approve");
-
-        using var approved = await host.Client.PostAsync(editor, new FormUrlEncodedContent(decision));
-
+        Set(fields, "Input.Reason", "The approved wording.");
+        using var approved = await host.Client.PostAsync(editor, new FormUrlEncodedContent(fields));
         Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
-        Assert.Equal(ReaderReportStatus.CorrectionNeeded, (await store.GetAsync(report.ReportId, default))!.Report.Status);
+        var older = await SaveReportAsync(OnRelationship());
+        var current = await SaveReportAsync(OnRelationship() with { RevisionNumber = 2 });
+
+        var page = await host.GetDocumentAsync(editor);
+
+        const string Sentence = "The current revision is already approved. Dismiss this report if it fixes the problem.";
+        Assert.Contains(Sentence, page.QuerySelector($"#reader-report-{older.ReportId:D}")!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain(Sentence, page.QuerySelector($"#reader-report-{current.ReportId:D}")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OnlyTheOldest64ReportsShowAndCloseAndTheRestAreCountedBecauseOneApprovalNamesAtMost64()
+    {
+        await SeedRelationshipAsync();
+        for (var index = 0; index < 66; index++)
+            await SaveReportAsync(OnRelationship() with { ReceivedAtUtc = OnRelationship().ReceivedAtUtc.AddMinutes(index) });
+
+        var page = await host.GetDocumentAsync(editor);
+
+        Assert.Equal(64, page.QuerySelectorAll("[id^='reader-report-']").Length);
+        Assert.Equal(64, page.QuerySelectorAll("input[form='draft-form'][name='correctedReportIds']").Length);
+        Assert.Equal("2 more reports stay open.", page.QuerySelector("#reader-reports-more")!.TextContent.Trim());
     }
 
     [Fact]
@@ -233,7 +243,7 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
             var editable = kind != PublishedRecordKind.ExecutiveAction;
             Assert.Contains($"Kind=\"PublishedRecordKind.{kind}\"", panel, StringComparison.Ordinal);
             Assert.Contains($"RecordId=\"@{idParameter}\"", panel, StringComparison.Ordinal);
-            Assert.Equal(editable, panel.Contains("EditFormId=\"draft-form\"", StringComparison.Ordinal));
+            Assert.Equal(editable, panel.Contains("ApprovalFormId=\"draft-form\"", StringComparison.Ordinal));
             Assert.Equal(editable, markup.Contains("id=\"draft-form\"", StringComparison.Ordinal));
             Assert.Equal(editable, code.Contains("RunSaveAsync(", StringComparison.Ordinal));
         }
@@ -241,7 +251,7 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
     }
 
     [Fact]
-    public async Task AnExecutiveActionReportCanBeDismissedButOffersNoApprovalToCloseIt()
+    public async Task AnExecutiveActionReportCanBeDismissedOrClosedByApprovingANewRevisionBecauseThePageHasNoSaveForm()
     {
         var recordId = await new ExecutiveActionSeeder(host.ConnectionString, host.ArtifactDirectory)
             .AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
@@ -252,7 +262,8 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
         var panel = shown.QuerySelector($"#reader-report-{report.ReportId:D}")!;
         Assert.Contains("No person edits this record", panel.TextContent, StringComparison.Ordinal);
         Assert.NotNull(panel.QuerySelector("button[form='dismiss-report']"));
-        Assert.Null(shown.QuerySelector("input[name='correctedReportIds']"));
+        Assert.Equal(report.ReportId.ToString(), shown.QuerySelector("input[form='decision-form'][name='correctedReportIds']")!.GetAttribute("value"));
+        Assert.Null(shown.QuerySelector("input[form='draft-form']"));
     }
 
     [Fact]

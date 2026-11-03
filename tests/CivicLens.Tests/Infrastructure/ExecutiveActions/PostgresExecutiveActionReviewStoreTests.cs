@@ -66,7 +66,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         Assert.Equal("An executive action fact must equal the text of its citation.", await HeldReasonAsync());
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 1, ReviewDecisionKind.RequestChanges, "auth0|owner",
             "The quotes do not match.", [], DateTimeOffset.UtcNow);
-        await store.DecideAsync("auth0|owner", decision, 1, 0, "key-held", new string('b', 64), default);
+        await store.DecideAsync("auth0|owner", decision, 1, 0, "key-held", new string('b', 64), [], default);
 
         Assert.Null(await HeldReasonAsync());
     }
@@ -78,7 +78,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
             "The title is wrong.", [], DateTimeOffset.UtcNow);
 
-        await store.DecideAsync("auth0|owner", decision, 1, 1, "key-1", new string('a', 64), default);
+        await store.DecideAsync("auth0|owner", decision, 1, 1, "key-1", new string('a', 64), [], default);
 
         Assert.Empty(await store.ListUnpublishedApprovedAsync(10, [], default));
         Assert.Equal(ReviewStatus.ApprovalWithdrawn, (await store.GetAsync(recordId, default))!.Review.CurrentStatus);
@@ -90,7 +90,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
             "Check the date.", [], DateTimeOffset.UtcNow);
-        await store.DecideAsync("auth0|owner", decision, 1, 1, "key-1", new string('a', 64), default);
+        await store.DecideAsync("auth0|owner", decision, 1, 1, "key-1", new string('a', 64), [], default);
 
         await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
 
@@ -98,6 +98,28 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         var review = (await store.GetAsync(recordId, default))!.Review;
         Assert.Equal(2, review.CurrentRevision.RevisionNumber);
         Assert.Single(review.UnresolvedConcerns);
+    }
+
+    [Fact]
+    public async Task ApprovingTheNewRevisionClosesTheListedOlderReportInTheSameTransactionBecauseAPersonHasNoOtherWayToEditThisRecord()
+    {
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
+        var withdrawal = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
+            "Check the date.", [], DateTimeOffset.UtcNow);
+        await store.DecideAsync("auth0|owner", withdrawal, 1, 1, "key-1", new string('a', 64), [], default);
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
+        var review = (await store.GetAsync(recordId, default))!.Review;
+        var reportId = Guid.NewGuid();
+        await ExecuteAsync($"""
+            INSERT INTO reader_reports (report_id, record_id, kind, revision_number, category, body, received_at_utc_ticks, status, version)
+            VALUES ('{reportId}', '{recordId}', 'ExecutiveAction', 1, 'other', 'text', 1, 'Open', 0)
+            """);
+        var approval = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 2, review.ReviewStateVersion + 1, ReviewDecisionKind.Approve,
+            "auth0|owner", "Checked.", [review.UnresolvedConcerns.Single().DecisionId], DateTimeOffset.UtcNow, "The date is fixed.");
+
+        await store.DecideAsync("auth0|owner", approval, 2, review.ReviewStateVersion, "key-2", new string('c', 64), [reportId], default);
+
+        Assert.Equal("CorrectionNeeded", await ScalarAsync($"SELECT status FROM reader_reports WHERE report_id = '{reportId}'"));
     }
 
     [Fact]
@@ -127,7 +149,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
 
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
             "The title is wrong.", [], DateTimeOffset.UtcNow);
-        await store.DecideAsync("auth0|owner", decision, 1, 1, "key-1", new string('a', 64), default);
+        await store.DecideAsync("auth0|owner", decision, 1, 1, "key-1", new string('a', 64), [], default);
         clock.Now = clock.Now.AddMinutes(1);
         var withdrawn = await publisher.ExecuteAsync(PublicationScenario.Owner,
             new PublishReleaseRequest([], "withdraw") { Withdrawals = [new(PublishedRecordKind.ExecutiveAction, recordId, "The title is wrong.")] });
@@ -136,6 +158,14 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     }
 
     private Task<string?> HeldReasonAsync() => ScalarAsync("SELECT held_reason FROM executive_action_drafts");
+
+    private async Task ExecuteAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
 
     private async Task<string?> ScalarAsync(string sql)
     {

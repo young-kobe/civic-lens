@@ -197,7 +197,7 @@ public sealed partial class DraftEditor
     {
         var request = new DecideDocumentChangeReviewRequest(DraftId, DecideExpectedRevision, DecideExpectedStateVersion,
             ParseDecisionKind(Kind), EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "",
-            CorrectionNoteOfApproval(), ApprovedReportIds());
+            CorrectionNoteOfApproval());
         _ = await DecideReview.ExecuteAsync(actor, request, RequestAborted);
         return DocumentRoutes.Editor(DraftId, "decided");
     }

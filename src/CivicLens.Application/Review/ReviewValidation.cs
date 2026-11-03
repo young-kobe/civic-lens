@@ -33,7 +33,7 @@ internal static class ReviewValidation
 {
     private const int MaximumIdempotencyKeyLength = 256;
     private const int MaximumFilterIdLength = 128;
-    private const int MaximumReportIds = 64;
+    private const int MaximumReportIds = CivicLens.Application.Reports.ListRecordReports.MaximumShown;
 
     public static void ValidateIdempotencyKey(string value)
     {

@@ -79,12 +79,11 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
             cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash,
-        ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken) =>
+        int expectedReviewStateVersion, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash, (db, _, history) => decision.Kind == ReviewDecisionKind.Approve
                 ? ValidateApprovalAsync(db, history.CurrentRevision!, approvalSelections, cancellationToken)
-                : Task.CompletedTask, afterDecision, correctedReportIds, cancellationToken);
+                : Task.CompletedTask, afterDecision, [], cancellationToken);
 
     public async Task<StatementReviewRead?> GetAsync(string candidateId, CancellationToken cancellationToken)
     {

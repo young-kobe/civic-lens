@@ -95,15 +95,14 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision,
         int expectedRevisionNumber, int expectedReviewStateVersion, string idempotencyKey,
-        string payloadHash, ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds,
-        ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken) =>
+        string payloadHash, ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds, CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash,
             async (db, draft, history) => ValidateDecision(draft, history, decision,
                 await ReadVerifiedComparisonAsync(db, draft.ComparisonId, cancellationToken)
                     ?? throw new InvalidOperationException("Retained draft comparison is no longer valid."),
                 allowedOfficialIds, allowedIssueIds),
-            afterDecision, correctedReportIds, cancellationToken);
+            afterDecision, [], cancellationToken);
 
     private static void ValidateDecision(DocumentChangeDraftRow draft, ReviewHistory<DocumentChangeDraftRevision> history,
         ReviewDecision decision, VerifiedComparison verified, ImmutableHashSet<string> allowedOfficialIds,

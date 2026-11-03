@@ -17,7 +17,6 @@ public sealed class DecideStatementReview(IStatementReviewStore store, Statement
         var approvalSelections = request.Kind == ReviewDecisionKind.Approve
             ? (await contextReader.ReadAsync(candidateId, cancellationToken)).Allowed : null;
         return await store.DecideAsync(actor.Subject, decision, request.ExpectedRevisionNumber, request.ExpectedReviewStateVersion,
-            approvalSelections, request.IdempotencyKey, ReviewValidation.HashPayload(request),
-            ReviewValidation.ValidateReportIds(request.CorrectedReportIds), cancellationToken);
+            approvalSelections, request.IdempotencyKey, ReviewValidation.HashPayload(request), cancellationToken);
     }
 }

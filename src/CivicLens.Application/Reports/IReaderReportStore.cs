@@ -23,6 +23,6 @@ public interface IReaderReportStore
     /// <summary>Deletes the closed reports that were resolved more than <see cref="ReaderReportProtocol.ClosedRetentionDays"/> days ago by the database clock. An open report stays. Returns the number deleted.</summary>
     Task<int> DeleteExpiredClosedAsync(CancellationToken cancellationToken);
 
-    /// <summary>Lists the open reports of the record, and the reports closed with a correction until the published revision passes the revision of the report.</summary>
-    Task<IReadOnlyList<ReaderReport>> ListForRecordAsync(PublishedRecordKind kind, string recordId, CancellationToken cancellationToken);
+    /// <summary>Lists the oldest <see cref="ListRecordReports.MaximumShown"/> open reports of the record, and the reports closed with a correction until the published revision passes the revision of the report.</summary>
+    Task<RecordReports> ListForRecordAsync(PublishedRecordKind kind, string recordId, CancellationToken cancellationToken);
 }

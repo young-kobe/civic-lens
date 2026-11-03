@@ -231,25 +231,29 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
     }
 
     [Fact]
-    public async Task ASeparateApprovalClosesAReportOfAnOlderRevisionAndKeepsOneOnTheApprovedRevisionBecauseNoNewWordingAnsweredIt()
+    public async Task ASaveAndApproveWithNoEditClosesAReportOfAnOlderRevisionAndKeepsOneOnTheApprovedRevisionBecauseTheApprovedWordingIsNewerThanTheFirst()
     {
         _ = await SaveAsync(1, RelationshipType.StatesPositionOn, "Person reason.", Span(BillSentence), "F1");
         var older = await OpenReportAsync(1);
         var onApproved = await OpenReportAsync(2);
 
-        _ = await ApproveWithReportsAsync(2, [older, onApproved]);
+        _ = await SaveAndApproveUnchangedAsync([older, onApproved]);
 
         Assert.Equal(("CorrectionNeeded", "Open"), (await ReportAsync(older, "status"), await ReportAsync(onApproved, "status")));
+        Assert.Equal("2", await ReadAsync("SELECT count(*) FROM relationship_revisions"));
     }
 
     [Fact]
-    public async Task AnApprovalOfTheRevisionThatTheReportNamesClosesNothing()
+    public async Task AForgedIdOfADismissedOrAlreadyCorrectedReportChangesNothingBecauseOnlyOpenReportsClose()
     {
-        var onCurrent = await OpenReportAsync(1);
+        _ = await SaveAsync(1, RelationshipType.StatesPositionOn, "Person reason.", Span(BillSentence), "F1");
+        var dismissed = await ResolvedReportAsync("Dismissed", "NULL");
+        var corrected = await ResolvedReportAsync("CorrectionNeeded", "'First note.'");
+        var before = await ReadAsync("SELECT string_agg(status || coalesce(note, '') || coalesce(resolved_by, '') || coalesce(resolved_at_utc_ticks, 0) || version, ',' ORDER BY report_id) FROM reader_reports");
 
-        _ = await ApproveWithReportsAsync(1, [onCurrent]);
+        _ = await SaveAndApproveUnchangedAsync([dismissed, corrected]);
 
-        Assert.Equal("Open", await ReportAsync(onCurrent, "status"));
+        Assert.Equal(before, await ReadAsync("SELECT string_agg(status || coalesce(note, '') || coalesce(resolved_by, '') || coalesce(resolved_at_utc_ticks, 0) || version, ',' ORDER BY report_id) FROM reader_reports"));
     }
 
     [Fact]
@@ -263,7 +267,7 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
                 FOR EACH ROW EXECUTE FUNCTION refuse_idempotency_row();
             """);
 
-        await Assert.ThrowsAnyAsync<Exception>(() => ApproveWithReportsAsync(2, [report]));
+        await Assert.ThrowsAnyAsync<Exception>(() => SaveAndApproveUnchangedAsync([report]));
 
         Assert.Equal(("Open", "0"), (await ReportAsync(report, "status"), await ReadAsync("SELECT count(*) FROM relationship_review_decisions")));
     }
@@ -277,15 +281,24 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
             "save-and-approve", new ApprovalWithSave(0, null, [], null, [report]));
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new SaveRelationshipDraft(reviews).ExecuteAsync(outsider, save));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new DecideRelationshipReview(reviews).ExecuteAsync(outsider,
-            new(recordId, 1, 0, ReviewDecisionKind.Approve, null, [], "decide-1", null, [report])));
 
         Assert.Equal("Open", await ReportAsync(report, "status"));
     }
 
-    private Task<ReviewDecision> ApproveWithReportsAsync(int revision, ImmutableArray<Guid> reportIds) =>
-        new DecideRelationshipReview(reviews).ExecuteAsync(Reviewer, new(recordId, revision, 0, ReviewDecisionKind.Approve, null, [],
-            Guid.NewGuid().ToString("N"), null, reportIds));
+    private Task<RelationshipRevision> SaveAndApproveUnchangedAsync(ImmutableArray<Guid> reportIds) =>
+        new SaveRelationshipDraft(reviews).ExecuteAsync(Reviewer, new SaveRelationshipDraftRequest(recordId, 2, RelationshipType.StatesPositionOn,
+            "Person reason.", Span(BillSentence), "F1", Guid.NewGuid().ToString("N"), new ApprovalWithSave(0, null, [], null, reportIds)));
+
+    private async Task<Guid> ResolvedReportAsync(string status, string note)
+    {
+        var id = Guid.NewGuid();
+        await seeder.ExecuteAsync($"""
+            INSERT INTO reader_reports (report_id, record_id, kind, revision_number, category, body, received_at_utc_ticks, status, note,
+                resolved_by, resolved_at_utc_ticks, version)
+            VALUES (@id, @record, 'Relationship', 1, 'other', 'text', 1, '{status}', {note}, 'auth0|first', 5, 1)
+            """, ("id", id), ("record", recordId));
+        return id;
+    }
 
     private async Task<Guid> OpenReportAsync(int revision, string? record = null)
     {

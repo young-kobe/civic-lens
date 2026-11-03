@@ -254,7 +254,7 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
     }
 
     private async Task<Guid[]> ReportsOfRecordAsync() =>
-        [.. (await store.ListForRecordAsync(PublishedRecordKind.Relationship, RelationshipId, default)).Select(report => report.ReportId).Order()];
+        [.. (await store.ListForRecordAsync(PublishedRecordKind.Relationship, RelationshipId, default)).Reports.Select(report => report.ReportId).Order()];
 
     private Task PublishAsync(int number, int revision) =>
         releases.ReplaceActiveReleaseAsync(number, Start, new PublishedRevisionBinding(PublishedRecordKind.Relationship, RelationshipId, revision));

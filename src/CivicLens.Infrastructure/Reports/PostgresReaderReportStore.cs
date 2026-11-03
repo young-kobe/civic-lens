@@ -111,16 +111,19 @@ public sealed class PostgresReaderReportStore(IDbContextFactory<CollectionAttemp
             .ExecuteDeleteAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<ReaderReport>> ListForRecordAsync(PublishedRecordKind kind, string recordId,
-        CancellationToken cancellationToken)
+    public async Task<RecordReports> ListForRecordAsync(PublishedRecordKind kind, string recordId, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var rows = await db.Set<ReaderReportRow>().AsNoTracking()
             .Where(row => row.RecordId == recordId && row.Kind == kind && row.Status != ReaderReportStatus.Dismissed)
             .OrderBy(row => row.ReceivedAtUtcTicks).ThenBy(row => row.ReportId).ToArrayAsync(cancellationToken);
-        if (rows.Length == 0) return [];
+        if (rows.Length == 0) return new([], 0, null);
         var published = await ReviewQueries.ReadActiveRevisionNumberAsync(db, kind, recordId, cancellationToken);
-        return [.. rows.Where(row => row.Status == ReaderReportStatus.Open || published is null || published <= row.RevisionNumber).Select(ToReport)];
+        var listed = rows.Where(row => row.Status == ReaderReportStatus.Open || published is null || published <= row.RevisionNumber).ToArray();
+        var revisions = await ReadCurrentRevisionsAsync(db, rows, cancellationToken);
+        return new([.. listed.Take(ListRecordReports.MaximumShown).Select(ToReport)],
+            listed.Skip(ListRecordReports.MaximumShown).Count(row => row.Status == ReaderReportStatus.Open),
+            revisions.TryGetValue((kind, recordId), out var current) ? current : null);
     }
 
     private static async Task<Dictionary<(PublishedRecordKind Kind, string RecordId), int>> ReadCurrentRevisionsAsync(

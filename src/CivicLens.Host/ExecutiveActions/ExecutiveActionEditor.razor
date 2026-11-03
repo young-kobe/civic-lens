@@ -40,7 +40,7 @@ else
         {
             <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
         }
-        <ReaderReportPanel Actor="actor" Kind="PublishedRecordKind.ExecutiveAction" RecordId="@RecordId" />
+        <ReaderReportPanel Actor="actor" Kind="PublishedRecordKind.ExecutiveAction" RecordId="@RecordId" ApprovalFormId="@ReviewDecisionPanel.FormId" CanEdit="false" CurrentRevisionApproved="@(review.CurrentStatus == ReviewStatus.Approved)" />
         <Notice Tone="Tone.Neutral">Code wrote this record from the Federal Register and approved it. No person edits it. The owner can take it off the public site with the Take off site action below. Withdrawing approval alone does not change the public site.</Notice>
         @if (concerns.Length > 0)
         {
