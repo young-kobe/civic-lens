@@ -22,7 +22,7 @@ public sealed record PublishedRecordReference(PublishedRecordKind Kind, string R
 
     public override string ToString() => NameOf(Kind) + Separator + RecordId;
 
-    private static bool TryParseKind(string name, out PublishedRecordKind kind)
+    public static bool TryParseKind(string name, out PublishedRecordKind kind)
     {
         foreach (var candidate in Enum.GetValues<PublishedRecordKind>())
         {

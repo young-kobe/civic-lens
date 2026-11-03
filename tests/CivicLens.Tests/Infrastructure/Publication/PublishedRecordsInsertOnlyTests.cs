@@ -16,7 +16,8 @@ public sealed class PublishedRecordsInsertOnlyTests
 
         var writes = new Regex(@"\b(UPDATE|DELETE\s+FROM|TRUNCATE(\s+TABLE)?)\s+(ONLY\s+)?(public\.)?published_records\b", RegexOptions.IgnoreCase);
         Assert.Empty(files.Where(file => writes.IsMatch(file.Value)).Select(file => file.Key));
-        Assert.Equal(["CivicLens.Infrastructure/Publication/Persistence/PublishedRecordRow.cs",
+        Assert.Equal(["CivicLens.Infrastructure/Publication/Persistence/PublishedEntryRowConfiguration.cs",
+            "CivicLens.Infrastructure/Publication/Persistence/PublishedRecordRow.cs",
             "CivicLens.Infrastructure/Publication/Persistence/PublishedRecordRowConfiguration.cs"], files.Where(file => Regex.IsMatch(file.Value, @"\bPublishedRecordRow\b")).Select(file => file.Key).Order());
         Assert.Equal(["CivicLens.Infrastructure/Publication/PublishedRecords.cs"], files.Where(file => Regex.IsMatch(file.Value, @"\bpublished_records\b")
             && !file.Key.Contains("/PublishedRecordRow", StringComparison.Ordinal)).Select(file => file.Key));

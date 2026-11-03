@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
@@ -8,5 +9,5 @@ public sealed record PublicationCommit(int ReleaseNumber, int? BaseReleaseNumber
 {
     public ImmutableArray<PublishedRecordReference> WithdrawnRecords { get; init; } = [];
 
-    public ImmutableArray<PublishedFirstPublication> FirstPublications { get; init; } = [];
+    public ImmutableArray<PublishedRecordEntry> AddedEntries { get; init; } = [];
 }

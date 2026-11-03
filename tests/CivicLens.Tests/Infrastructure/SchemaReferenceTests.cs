@@ -39,7 +39,8 @@ public sealed partial class SchemaReferenceTests(PostgresCollection postgres) : 
             "document_change_revisions"]),
         ("roster", ["roster_snapshots", "roster_members", "roster_terms", "executive_officials", "executive_terms", "official_photos"]),
         ("reports", ["reader_report_cursor", "reader_reports"]),
-        ("publication", ["publication_record_states", "publication_releases", "published_records"])
+        ("publication", ["publication_record_states", "publication_releases", "published_entries", "published_entry_cosponsors", "published_entry_issues",
+            "published_entry_officials", "published_entry_policy_areas", "published_records"])
     ];
 
     private string connectionString = null!;

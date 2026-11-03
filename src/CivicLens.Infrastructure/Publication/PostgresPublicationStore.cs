@@ -189,8 +189,10 @@ public sealed class PostgresPublicationStore : IPublicationStore
         ReviewIdempotency.Add(db, actorSubject, PublishOperation, idempotencyKey, payloadHash, ReviewJson.Serialize(summary));
         await SaveAsync(db, cancellationToken);
         await PublicationRecordStates.RecordAsync(db, commit, cancellationToken);
-        await PublishedRecords.InsertAsync(db, commit.FirstPublications, cancellationToken);
-        await PublishedRecords.RequireStoredTimesAsync(db, commit.FirstPublications, cancellationToken);
+        var firstPublications = commit.AddedEntries.Select(entry => new PublishedFirstPublication(entry.Kind, entry.RecordId, entry.FirstPublishedAtUtc)).ToArray();
+        await PublishedRecords.InsertAsync(db, firstPublications, cancellationToken);
+        await PublishedRecords.RequireStoredTimesAsync(db, firstPublications, cancellationToken);
+        await PublishedEntries.InsertAsync(db, commit.AddedEntries, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return summary;
     }
