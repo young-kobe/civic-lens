@@ -158,7 +158,7 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
     private static IReadOnlyList<string> DifferingFields(VoteRevisionRow row, VoteRevisionPage page)
     {
         var members = page.MembersOf(row);
-        var fields = VoteRevisionComparison.DifferingKeys(row.RevisionJson, VoteRevisionRows.Rebuild(row, members)).ToList();
+        var fields = VoteRevisionComparison.DifferingKeys(row.RevisionJson, VoteRevisionRows.Rebuild(row, members, page.FactsOf(row), page.IssuesOf(row))).ToList();
         if (row.MemberListId != VoteMemberLists.IdOf(members)) fields.Add("memberListId");
         if (page.MemberCounts.GetValueOrDefault(row.MemberListId!) != members.Length) fields.Add("memberCount");
         return fields;

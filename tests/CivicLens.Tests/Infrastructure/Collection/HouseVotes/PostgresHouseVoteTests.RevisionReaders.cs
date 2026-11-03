@@ -1,22 +1,25 @@
+using System.Data.Common;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
+using CivicLens.Application.Votes;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Infrastructure.Votes;
 using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using CivicLens.Application.Publication;
-using CivicLens.Infrastructure.Votes;
-using System.Data.Common;
 
 namespace CivicLens.Tests.Infrastructure.Collection.HouseVotes;
 
 public sealed partial class PostgresHouseVoteTests
 {
+    private static readonly string SuggestionRunId = new('7', 32);
     private static readonly JsonSerializerOptions ReaderJson = new(JsonSerializerDefaults.Web);
 
     [Fact]
@@ -69,10 +72,42 @@ public sealed partial class PostgresHouseVoteTests
         await Assert.ThrowsAsync<InvalidDataException>(() => VoteStore().ReadEvidenceAsync(candidate, default));
         await Assert.ThrowsAsync<InvalidDataException>(() => reviews.GetForPublicationAsync([recordId], default));
         await Assert.ThrowsAsync<InvalidDataException>(() => reviews.ReadMembersAsync([.. named], default));
-        await Assert.ThrowsAnyAsync<Exception>(() => reviews.FindBillActionRecordIdsOfVotesAsync([.. named], default));
-        await Assert.ThrowsAnyAsync<Exception>(() => new PostgresReviewQueueStore(QueueFactory()).SearchApprovedAsync("Headline", null, 10, default));
-        await Assert.ThrowsAnyAsync<Exception>(() => VoteStore().RequeueOlderPromptAsync(default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => reviews.FindBillActionRecordIdsOfVotesAsync([.. named], default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => new PostgresReviewQueueStore(QueueFactory()).SearchApprovedAsync("Headline", null, 10, default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => VoteStore().RequeueOlderPromptAsync(default));
+        await using var db = await QueueFactory().CreateDbContextAsync();
+        var bill = await db.Database.SqlQueryRaw<LegacyBill>("SELECT congress AS \"Congress\", bill_type AS \"BillType\", bill_number AS \"BillNumber\" FROM vote_candidates").SingleAsync();
+        await Assert.ThrowsAsync<InvalidDataException>(() => InvokeInternalAsync("CivicLens.Infrastructure.Votes.BillVoteDrafts", "ReadAsync",
+            db, bill.Congress, bill.BillType, bill.BillNumber, CancellationToken.None));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_revisions WHERE headline IS NULL"));
+    }
+
+    [Fact]
+    public async Task ARevisionKeepsItsFactsAndIssuesWhenAWriteCommitsBetweenTheParentReadAndTheChildReadsBecauseTheChildRowsComeByExactKeys()
+    {
+        var (recordId, candidate, written) = await SettledFullRevisionAsync();
+        var racing = new WriteAfterFirstVoteRevisionRead(async () => await SaveAsync(recordId, 1, SuggestionChoice.Keep, "save-race"));
+        var store = new PostgresVoteDraftStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(racing).Options));
+
+        var evidence = await store.ReadEvidenceAsync(candidate, default);
+
+        Assert.True(racing.Fired, "The write did not run between the reads.");
+        Assert.Equal(2, Convert.ToInt32(await ScalarAsync("SELECT current_revision_number FROM vote_drafts")));
+        Assert.Equal(1, evidence!.Current!.RevisionNumber);
+        Assert.Equal(written.Facts.Select(fact => fact.Text), evidence.Current.Facts.Select(fact => fact.Text));
+        Assert.Equal([.. written.IssueCandidateIds], [.. evidence.Current.IssueCandidateIds]);
+        Assert.Equal([.. written.TrackedIssueIds], [.. evidence.Current.TrackedIssueIds]);
+    }
+
+    // No public path reaches this method with the vote kind.
+    [Fact]
+    public async Task ReadRevisionJsonRefusesTheVoteKindBecauseAVoteIsReadFromItsColumns()
+    {
+        await using var db = await QueueFactory().CreateDbContextAsync();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => InvokeInternalAsync("CivicLens.Infrastructure.Review.CitedRevisions", "ReadRevisionJsonAsync",
+            db, PublishedRecordKind.Vote, new[] { new PublishedRevisionBinding(PublishedRecordKind.Vote, "any", 1) }, CancellationToken.None));
     }
 
     [Fact]
@@ -109,8 +144,10 @@ public sealed partial class PostgresHouseVoteTests
             Members = [basis.Members[0], new("with-id-b", "B000002", "Nay", span), new("with-id-c", "C000003", "Not Voting", span)],
             IssueCandidateIds = ["issue-a", "issue-b", "issue-c"],
             TrackedIssueIds = ["issue-b"],
-            SubjectsHash = new string('5', 64)
+            SubjectsHash = new string('5', 64),
+            Suggestion = new("Suggested headline", "Suggested summary.", SuggestionRunId, new string('6', 64))
         };
+        await InsertRunAsync(candidate, VoteDraftTask.PromptVersion, 1, "Bypassed", SuggestionRunId);
         await SettleAsync(candidate, full);
         return (full.RecordId, candidate, full);
     }
@@ -123,8 +160,28 @@ public sealed partial class PostgresHouseVoteTests
         return revision.RecordId;
     }
 
+    // The project grants no internals to the tests. The readers of the internal helper types run through reflection.
+    private static Task InvokeInternalAsync(string typeName, string method, params object[] arguments) =>
+        (Task)typeof(PostgresVoteReviewStore).Assembly.GetType(typeName)!.GetMethod(method)!.Invoke(null, arguments)!;
+
+    private sealed record LegacyBill(int Congress, string BillType, int BillNumber);
+
     private IDbContextFactory<CollectionAttemptDbContext> QueueFactory() => new PooledDbContextFactory<CollectionAttemptDbContext>(
         new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
+
+    private sealed class WriteAfterFirstVoteRevisionRead(Func<Task> write) : DbCommandInterceptor
+    {
+        public bool Fired { get; private set; }
+
+        public override async ValueTask<DbDataReader> ReaderExecutedAsync(DbCommand command, CommandExecutedEventData eventData,
+            DbDataReader result, CancellationToken cancellationToken = default)
+        {
+            if (Fired || !command.CommandText.Contains("vote_revisions", StringComparison.Ordinal)) return result;
+            Fired = true;
+            await write();
+            return result;
+        }
+    }
 
     private sealed class ReaderQueryCounter : DbCommandInterceptor
     {

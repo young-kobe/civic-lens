@@ -275,8 +275,9 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal(1, (await running).Moved);
     }
 
+    // The new revision belongs to another record. The same-record interleave is not tested here, because the vote review lock orders those writers.
     [Fact]
-    public async Task ABackfillAndANewRevisionAtTheSameTimeBothEndWithColumnsBecauseTheBackfillTouchesOnlyLegacyRows()
+    public async Task ABackfillAndANewRevisionOfAnotherRecordAtTheSameTimeBothEndWithColumnsBecauseTheBackfillTouchesOnlyLegacyRows()
     {
         var first = await SettledLegacyAsync(basis => basis);
         var newer = await PendingCandidateAsync(Updated.AddDays(1), roll: 101);

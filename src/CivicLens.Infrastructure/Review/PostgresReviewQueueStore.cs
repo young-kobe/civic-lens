@@ -102,7 +102,8 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         var fetched = await ReviewKeyset.Page(matches, cursor, key => key.LastRevisedAtUtcTicks, key => key.QueueId)
             .Take(limit + 1).ToArrayAsync(cancellationToken);
         var slice = KeysetSlice<ApprovedKey>.Create(fetched, limit, cursor, key => (key.LastRevisedAtUtcTicks, key.QueueId));
-        return new([.. slice.Items.Select(key => new ApprovedRecordHit(KindsByCode[key.KindCode].Kind, key.RecordId, key.Headline))],
+        return new([.. slice.Items.Select(key => new ApprovedRecordHit(KindsByCode[key.KindCode].Kind, key.RecordId,
+            key.Headline ?? throw VoteRevisionRows.NotBackfilled($"The current revision of vote {key.RecordId}")))],
             slice.NewerCursor, slice.OlderCursor);
     }
 
@@ -168,6 +169,6 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
 
     private sealed class ApprovedKey : QueueKey
     {
-        public string Headline { get; set; } = "";
+        public string? Headline { get; set; }
     }
 }

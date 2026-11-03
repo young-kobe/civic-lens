@@ -28,6 +28,7 @@ internal static class CitedRevisions
     public static async Task<string[]> ReadRevisionJsonAsync(CollectionAttemptDbContext db, PublishedRecordKind kind,
         IEnumerable<PublishedRevisionBinding> named, CancellationToken cancellationToken)
     {
+        if (kind == PublishedRecordKind.Vote) throw new ArgumentException("A vote revision is read from its columns, not from its JSON.", nameof(kind));
         var requested = named.Distinct().ToArray();
         var stored = await ReadStoredRevisionsAsync(db, kind, requested, cancellationToken);
         if (stored.Length != requested.Length) throw NotStored(kind);
