@@ -632,6 +632,16 @@ internal sealed class FakePublicationStore : IPublicationStore
         return Task.FromResult<PublicationReleaseSummary?>(receipt.Summary);
     }
 
+    public Dictionary<PublishedRecordReference, DateTimeOffset> FirstPublished { get; } = [];
+
+    public Task<IReadOnlyDictionary<PublishedRecordReference, DateTimeOffset>> ReadFirstPublishedAsync(
+        IReadOnlyCollection<PublishedRecordReference> records, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<PublishedRecordReference, DateTimeOffset>>(records.Where(FirstPublished.ContainsKey)
+            .ToDictionary(record => record, record => FirstPublished[record]));
+
+    public Task<int> AddFirstPublishedAsync(IReadOnlyCollection<PublishedFirstPublication> records, CancellationToken cancellationToken) =>
+        Task.FromResult(records.Count(record => FirstPublished.TryAdd(new(record.Kind, record.RecordId), record.FirstPublishedAtUtc)));
+
     public Task<PublicationReleaseSummary> CommitAsync(string actorSubject, PublicationCommit commit,
         string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
     {
@@ -639,6 +649,7 @@ internal sealed class FakePublicationStore : IPublicationStore
         if (FailOnCommit is not null) throw FailOnCommit;
         if (ConcurrentWinner is not null) return Task.FromResult(ConcurrentWinner);
         LastCommit = commit;
+        foreach (var record in commit.FirstPublications) FirstPublished.TryAdd(new(record.Kind, record.RecordId), record.FirstPublishedAtUtc);
         var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName, DateTimeOffset.UnixEpoch, commit.Records.Length);
         Committed.Add(summary);
         ActiveReleaseNumber = summary.ReleaseNumber;

@@ -88,6 +88,8 @@ case "$*" in
     ;;
   # usage: votes revisions verify
   "votes revisions verify") "$compose" run --rm cli votes revisions verify ;;
+  # usage: releases first-published backfill
+  "releases first-published backfill") "$compose" run --rm cli releases first-published backfill ;;
   # usage: releases publish <key> [--rewrite-entries] [--rewrite-officials] [--rewrite-pages]
   "releases publish "*) shift 2; publish "$@" ;;
   *) refuse ;;
