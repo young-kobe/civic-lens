@@ -33,13 +33,7 @@ internal static class VoteRevisionRows
     /// <summary>Sets every column and child row of the revision. It leaves the key, the author, the run, and the JSON as they are.</summary>
     public static void FillColumns(VoteRevisionRow row, VoteDraftRevision revision)
     {
-        row.Headline = revision.Headline;
-        row.Summary = revision.Summary;
-        row.TextOrigin = revision.TextOrigin;
-        row.SuggestionHeadline = revision.Suggestion?.Headline;
-        row.SuggestionSummary = revision.Suggestion?.Summary;
-        row.SuggestionRunId = revision.Suggestion?.RunId;
-        row.SuggestionFingerprint = revision.Suggestion?.Fingerprint;
+        ReviewTextRows.Fill(row, revision);
         row.SourceId = revision.SourceId;
         row.VoteSource = revision.Source;
         row.Chamber = revision.Chamber;
@@ -124,7 +118,7 @@ internal static class VoteRevisionRows
         var recorded = row.IssueCandidatesRecorded!.Value;
         var tracked = issues.Where(issue => issue.IsTracked).Select(issue => issue.IssueId);
         return new(row.RecordId, row.RevisionNumber, row.AuthorSubject, new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero),
-            row.Headline!, row.Summary!, row.TextOrigin!.Value, SuggestionOf(row),
+            row.Headline!, row.Summary!, row.TextOrigin!.Value, ReviewTextRows.SuggestionOf(row),
             row.SourceId!, row.VoteSource!.Value, row.Chamber!.Value, row.Congress!.Value, row.SessionNumber!.Value, row.RollCallNumber!.Value,
             row.BillType, row.BillNumber, row.CandidateId!, new DateTimeOffset(row.CandidateUpdateUtcTicks!.Value, TimeSpan.Zero),
             [.. factRows.OrderBy(fact => fact.Position).Select(fact => new VoteFact(fact.FactText, new(fact.CitationExtractionId, fact.CitationStart, fact.CitationLength)))],
@@ -133,10 +127,6 @@ internal static class VoteRevisionRows
             [.. recorded ? tracked.Order(StringComparer.Ordinal) : tracked],
             recorded ? [.. issues.Select(issue => issue.IssueId)] : default, row.IssueRevisionId!, row.SubjectsHash);
     }
-
-    private static ReviewTextSuggestion? SuggestionOf(VoteRevisionRow row) => row.SuggestionHeadline is null
-        ? null
-        : new(row.SuggestionHeadline, row.SuggestionSummary!, row.SuggestionRunId!, row.SuggestionFingerprint!);
 
     private static VoteRevisionFactRow FactRow(VoteDraftRevision revision, VoteFact fact, int position) => new()
     {

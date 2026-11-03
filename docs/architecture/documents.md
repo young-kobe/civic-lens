@@ -138,6 +138,7 @@ A malformed link returns 400, and missing evidence returns 404. A storage or rec
 | Profile mapping | `src/CivicLens.Application/Documents/DocumentProfileConfiguration.cs` |
 | Text extraction | `src/CivicLens.Infrastructure/Documents/CaptureDocumentTextExtractor.cs` |
 | Postgres stores | `src/CivicLens.Infrastructure/Documents/PostgresDocumentExtractionStore.cs` (`SaveAsync` and `SaveFeedItemsAsync` share one insert), `src/CivicLens.Infrastructure/Documents/PostgresDocumentHistoryStore.cs`, `src/CivicLens.Infrastructure/Documents/PostgresDocumentComparisonStore.cs` |
+| Source span columns | `src/CivicLens.Infrastructure/Documents/Persistence/SourceSpanColumns.cs` (the three columns, the extraction key, and the bounds check of a cited span, for every feature that cites one) |
 | Evidence pages and CLI | `src/CivicLens.Host/Documents/ComparisonPage.razor`, `src/CivicLens.Host/Documents/HistoryPage.razor`, `src/CivicLens.Host/Documents/CitationPage.razor`, `src/CivicLens.Host/Documents/ExtractionPage.razor`, `src/CivicLens.Host/Documents/DocumentCommand.cs` |
 | Parser parity test | `tests/CivicLens.Tests/Infrastructure/Documents/HtmlParseParityTests.cs` |
 

@@ -1,4 +1,5 @@
 using CivicLens.Core.Votes;
+using CivicLens.Infrastructure.Documents.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -20,7 +21,7 @@ internal sealed class VoteMemberListEntryRowConfiguration : IEntityTypeConfigura
         builder.Property(row => row.PersonId).HasColumnName("person_id").HasMaxLength(VoteDraftRevision.MaximumPersonIdLength).IsRequired();
         builder.Property(row => row.BioguideId).HasColumnName("bioguide_id").HasMaxLength(VoteDraftRevision.MaximumBioguideIdLength).IsRequired();
         builder.Property(row => row.VoteCast).HasColumnName("vote_cast").HasMaxLength(VoteDraftRevision.MaximumCastLength).IsRequired();
-        VoteCitationColumns.Configure(builder, "vote_member_list_entries", "Citation", "citation", optional: false);
+        SourceSpanColumns.Configure(builder, "vote_member_list_entries", "Citation", "citation", optional: false);
         builder.HasOne<VoteMemberListRow>().WithMany().HasForeignKey(row => row.ListId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(row => new { row.PersonId, row.ListId }).HasDatabaseName("ix_vote_member_list_entries_person");
     }

@@ -6,7 +6,7 @@ namespace CivicLens.Infrastructure.Votes.Persistence;
 
 /// <summary>The columns after <see cref="CreatedAtUtcTicks"/> copy <see cref="RevisionJson"/>. They stay null on a row that
 /// older code wrote.</summary>
-internal sealed class VoteRevisionRow : IReviewRevisionRow
+internal sealed class VoteRevisionRow : IReviewRevisionRow, IReviewTextRow
 {
     public string RecordId { get; set; } = string.Empty;
     public int RevisionNumber { get; set; }

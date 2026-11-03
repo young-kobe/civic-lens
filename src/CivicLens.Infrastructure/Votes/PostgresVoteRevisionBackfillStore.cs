@@ -1,38 +1,32 @@
 using System.Collections.Immutable;
 using System.Data;
 using System.Text.Json.Nodes;
-using CivicLens.Application.Votes;
+using CivicLens.Application.Review;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Votes.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
-using Npgsql;
 
 namespace CivicLens.Infrastructure.Votes;
 
 /// <summary>Moves legacy vote revisions into columns and child rows, and checks each moved revision against its JSON.
 /// The backfill takes the vote review lock, and only that lock, for each batch. It writes only rows whose columns are null.
 /// It proves each row inside its savepoint: it reads the row back, rebuilds the revision, and compares it to the stored JSON.</summary>
-public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IVoteRevisionBackfillStore
+public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IRevisionBackfillStore
 {
-    private const string UnreadableJson = "UnreadableJson";
     private const string UnprovenSource = "UnprovenSource";
-    private const string InvalidShape = "InvalidShape";
-    private const string DuplicateIssueId = "DuplicateIssueId";
-    private const string RebuildMismatch = "RebuildMismatch";
-    private const string DatabasePrefix = "database:";
 
     private const string Savepoint = "vote_revision_backfill";
     private const int VerifyPageSize = 50;
 
-    public async Task<VoteRevisionBackfillBatch> BackfillBatchAsync(VoteRevisionKey? after, int size, CancellationToken cancellationToken)
+    public async Task<RevisionBackfillBatch> BackfillBatchAsync(RevisionKey? after, int size, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.VoteReview, cancellationToken);
         var rows = await LegacyRows(db, after).Take(size).ToListAsync(cancellationToken);
-        var skipped = ImmutableArray.CreateBuilder<SkippedVoteRevision>();
+        var skipped = ImmutableArray.CreateBuilder<SkippedRevision>();
         foreach (var row in rows)
             if (await TryMoveAsync(db, transaction, row, cancellationToken) is { } reason)
                 skipped.Add(new(row.RecordId, row.RevisionNumber, reason));
@@ -40,12 +34,12 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
         return new(rows.Count, skipped.ToImmutable(), rows.Count == 0 ? null : new(rows[^1].RecordId, rows[^1].RevisionNumber));
     }
 
-    public async Task<VoteRevisionVerification> VerifyAsync(int mismatchLimit, CancellationToken cancellationToken)
+    public async Task<RevisionVerification> VerifyAsync(int mismatchLimit, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         int checkedCount = 0, legacy = 0, mismatched = 0;
-        var first = new List<VoteRevisionMismatch>();
-        VoteRevisionKey? after = null;
+        var first = new List<RevisionMismatch>();
+        RevisionKey? after = null;
         while (await ReadVerifyPageAsync(db, after, cancellationToken) is { Rows.Count: > 0 } page)
         {
             foreach (var row in page.Rows)
@@ -61,10 +55,10 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
         return new(checkedCount, legacy, mismatched, first);
     }
 
-    private static IQueryable<VoteRevisionRow> LegacyRows(CollectionAttemptDbContext db, VoteRevisionKey? after) =>
+    private static IQueryable<VoteRevisionRow> LegacyRows(CollectionAttemptDbContext db, RevisionKey? after) =>
         InKeyOrderAfter(db.Set<VoteRevisionRow>().AsNoTracking().Where(row => row.Headline == null), after);
 
-    private static IQueryable<VoteRevisionRow> InKeyOrderAfter(IQueryable<VoteRevisionRow> rows, VoteRevisionKey? after) =>
+    private static IQueryable<VoteRevisionRow> InKeyOrderAfter(IQueryable<VoteRevisionRow> rows, RevisionKey? after) =>
         rows.Where(row => after == null || row.RecordId.CompareTo(after.RecordId) > 0 || row.RecordId == after.RecordId && row.RevisionNumber > after.RevisionNumber)
             .OrderBy(row => row.RecordId).ThenBy(row => row.RevisionNumber);
 
@@ -78,9 +72,9 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
         {
             refusal = await WriteAndProveAsync(db, row, revision, cancellationToken);
         }
-        catch (Exception exception) when (RefusalOf(exception) is { } refusedBy)
+        catch (Exception exception) when (RevisionBackfillReasons.RefusalOf(exception) is { } refusedBy)
         {
-            refusal = DatabasePrefix + refusedBy;
+            refusal = RevisionBackfillReasons.DatabasePrefix + refusedBy;
         }
         if (refusal is null)
         {
@@ -100,12 +94,12 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
         await VoteMemberLists.EnsureAsync(db, revision, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         var stored = await VoteRevisionRows.ReadPageAsync(db, db.Set<VoteRevisionRow>().AsNoTracking().Where(candidate => candidate.RecordId == row.RecordId && candidate.RevisionNumber == row.RevisionNumber), cancellationToken);
-        return DifferingFields(stored.Rows.Single(), stored).Count == 0 ? null : RebuildMismatch;
+        return DifferingFields(stored.Rows.Single(), stored).Count == 0 ? null : RevisionBackfillReasons.RebuildMismatch;
     }
 
     private static (VoteDraftRevision? Revision, string? Refusal) ReadMovable(VoteRevisionRow row)
     {
-        if (VoteRevisionComparison.TryParseObject(row.RevisionJson) is not { } stored) return (null, UnreadableJson);
+        if (RevisionJsonComparison.TryParseObject(row.RevisionJson) is not { } stored) return (null, RevisionBackfillReasons.UnreadableJson);
         VoteDraftRevision revision;
         try
         {
@@ -113,41 +107,31 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
         }
         catch (Exception exception) when (ReviewJson.IsUnreadableStoredData(exception))
         {
-            return (null, UnreadableJson);
+            return (null, RevisionBackfillReasons.UnreadableJson);
         }
         if (!stored.ContainsKey(VoteRevisionComparison.SourceKey))
         {
             if (!VoteRevisionComparison.MayOmitSource(stored)) return (null, UnprovenSource);
             revision = revision with { Source = VoteSource.CongressGov };
         }
-        if (HasNullElements(revision)) return (null, InvalidShape);
+        if (HasNullElements(revision)) return (null, RevisionBackfillReasons.InvalidShape);
         try
         {
             revision.ValidateShape();
         }
         catch (ArgumentException)
         {
-            return (null, InvalidShape);
+            return (null, RevisionBackfillReasons.InvalidShape);
         }
-        if (HasDuplicates(revision.TrackedIssueIds) || !revision.IssueCandidateIds.IsDefault && HasDuplicates(revision.IssueCandidateIds))
-            return (null, DuplicateIssueId);
+        if (RevisionBackfillReasons.HasDuplicates(revision.TrackedIssueIds) || !revision.IssueCandidateIds.IsDefault && RevisionBackfillReasons.HasDuplicates(revision.IssueCandidateIds))
+            return (null, RevisionBackfillReasons.DuplicateIssueId);
         return (revision, null);
     }
 
     private static bool HasNullElements(VoteDraftRevision revision) =>
         !revision.Facts.IsDefault && revision.Facts.Any(fact => fact is null) || !revision.Members.IsDefault && revision.Members.Any(member => member is null);
 
-    private static bool HasDuplicates(ImmutableArray<string> ids) => ids.Distinct(StringComparer.Ordinal).Count() != ids.Length;
-
-    private static string? RefusalOf(Exception exception)
-    {
-        var fault = exception as PostgresException ?? (exception as DbUpdateException)?.InnerException as PostgresException;
-        return fault is { SqlState: { } state } && (state.StartsWith("23", StringComparison.Ordinal) || state is PostgresErrorCodes.StringDataRightTruncation or PostgresErrorCodes.CharacterNotInRepertoire)
-            ? fault.ConstraintName ?? state
-            : null;
-    }
-
-    private static async Task<VoteRevisionPage> ReadVerifyPageAsync(CollectionAttemptDbContext db, VoteRevisionKey? after, CancellationToken cancellationToken)
+    private static async Task<VoteRevisionPage> ReadVerifyPageAsync(CollectionAttemptDbContext db, RevisionKey? after, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var page = await VoteRevisionRows.ReadPageAsync(db, InKeyOrderAfter(db.Set<VoteRevisionRow>().AsNoTracking(), after).Take(VerifyPageSize), cancellationToken);

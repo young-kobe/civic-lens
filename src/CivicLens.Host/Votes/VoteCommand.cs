@@ -1,3 +1,4 @@
+using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
 using CivicLens.Host.Analysis;
@@ -5,8 +6,8 @@ using CivicLens.Host.Analysis;
 namespace CivicLens.Host.Votes;
 
 internal sealed class VoteCommand(AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem> drafts, GetVoteDraftStatus status,
-    RequeueBlockedVoteDrafts requeueBlocked, RequeueRefusedVoteDrafts requeueRefused, RedraftVoteDrafts redraft, BackfillVoteRevisions backfill,
-    VerifyVoteRevisions verify, ReviewActor owner)
+    RequeueBlockedVoteDrafts requeueBlocked, RequeueRefusedVoteDrafts requeueRefused, RedraftVoteDrafts redraft, BackfillRevisions backfill,
+    VerifyRevisions verify, ReviewActor owner)
 {
     private const string Usage = "Use votes draft status, votes draft list [drafted|unchanged|superseded|no-member|pending|failed] [limit], " +
         "votes draft requeue <candidate-id|--all>, votes draft requeue --blocked --code <block-code>, votes draft requeue --refused, votes draft redraft, " +

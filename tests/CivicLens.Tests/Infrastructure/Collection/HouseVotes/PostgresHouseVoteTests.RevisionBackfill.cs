@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
@@ -110,7 +111,7 @@ public sealed partial class PostgresHouseVoteTests
         var result = await BackfillAsync(10);
 
         Assert.Equal((3, 2, 1), (result.Examined, result.Moved, result.Skipped));
-        Assert.Equal(new SkippedVoteRevision(first.RecordId, 2, "InvalidShape"), Assert.Single(result.SkippedRevisions));
+        Assert.Equal(new SkippedRevision(first.RecordId, 2, "InvalidShape"), Assert.Single(result.SkippedRevisions));
         Assert.Equal([2], (await LinesAsync("SELECT revision_number::text FROM vote_revisions WHERE headline IS NULL")).Select(int.Parse));
     }
 
@@ -589,9 +590,9 @@ public sealed partial class PostgresHouseVoteTests
         await command.ExecuteNonQueryAsync();
     }
 
-    private Task<VoteRevisionBackfillResult> BackfillAsync(int limit) => new BackfillVoteRevisions(BackfillStore()).ExecuteAsync(BackfillOwner, limit);
+    private Task<RevisionBackfillResult> BackfillAsync(int limit) => new BackfillRevisions(BackfillStore()).ExecuteAsync(BackfillOwner, limit);
 
-    private Task<VoteRevisionVerification> VerifyAsync() => new VerifyVoteRevisions(BackfillStore()).ExecuteAsync(BackfillOwner);
+    private Task<RevisionVerification> VerifyAsync() => new VerifyRevisions(BackfillStore()).ExecuteAsync(BackfillOwner);
 
     private PostgresVoteRevisionBackfillStore BackfillStore() => new(new PooledDbContextFactory<CollectionAttemptDbContext>(
         new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));

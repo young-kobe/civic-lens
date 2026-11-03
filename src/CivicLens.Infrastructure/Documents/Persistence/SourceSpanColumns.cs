@@ -1,12 +1,11 @@
-using CivicLens.Infrastructure.Documents.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace CivicLens.Infrastructure.Votes.Persistence;
+namespace CivicLens.Infrastructure.Documents.Persistence;
 
 /// <summary>Owns the three columns, the extraction key, and the bounds check of one source span.
 /// An optional span has all three columns null or all three set.</summary>
-internal static class VoteCitationColumns
+internal static class SourceSpanColumns
 {
     public static void Configure<TRow>(EntityTypeBuilder<TRow> builder, string table, string property, string column, bool optional)
         where TRow : class
