@@ -57,6 +57,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "UPDATE public.vote_revisions SET headline = 'x'");
         await AssertDeniedAsync(connection, "DELETE FROM public.publication_record_states");
         await AssertDeniedAsync(connection, "SELECT pg_advisory_lock(1)");
+        await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
+        await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
         foreach (var view in new[] { "active_records", "votes", "vote_members", "vote_issues" })
         {
             // A view with a join or a group cannot take a write at all, so Postgres refuses with 55000 before it checks a privilege.

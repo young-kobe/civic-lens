@@ -24,7 +24,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
               lock_function regprocedure;
             BEGIN
               FOR lock_function IN SELECT p.oid::regprocedure FROM pg_proc p
-                                    WHERE p.pronamespace = 'pg_catalog'::regnamespace AND p.proname LIKE 'pg\_advisory\_%'
+                                    WHERE p.pronamespace = 'pg_catalog'::regnamespace AND p.proname LIKE 'pg\_%advisory\_%'
               LOOP
                 EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', lock_function);
               END LOOP;
@@ -108,7 +108,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
               EXECUTE format('REVOKE CONNECT ON DATABASE %I FROM civic_lens_public', current_database());
               EXECUTE format('GRANT TEMPORARY ON DATABASE %I TO PUBLIC', current_database());
               FOR lock_function IN SELECT p.oid::regprocedure FROM pg_proc p
-                                    WHERE p.pronamespace = 'pg_catalog'::regnamespace AND p.proname LIKE 'pg\_advisory\_%'
+                                    WHERE p.pronamespace = 'pg_catalog'::regnamespace AND p.proname LIKE 'pg\_%advisory\_%'
               LOOP
                 EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO PUBLIC', lock_function);
               END LOOP;

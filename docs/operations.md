@@ -275,7 +275,7 @@ CIVIC_LENS_WRITE_SCHEMA_DOCS=1 dotnet test CivicLens.slnx --configuration Releas
 
 The migration `PublicApiViews` creates the roles `civic_lens_public` and `civic_lens_public_owner`. Both have no login and no password. It also creates the schema `public_api` with its views and grants. The migration holds no secret, because a secret in a migration lands in Git. `readonly-grants.sql` creates `civic_lens_readonly` with LOGIN and no password. The public role must log in over the network, so it needs a login and a password.
 
-The migration also revokes `TEMPORARY` on the database and `EXECUTE` on the `pg_advisory_*` functions from `PUBLIC`. So `db migrate` for this migration needs a superuser. The app role of the compose database is one. The role `civic_lens_public` then creates no temporary table and takes no advisory lock.
+The migration also revokes `TEMPORARY` on the database and `EXECUTE` on the `pg_advisory_*` and `pg_try_advisory_*` functions from `PUBLIC`. So `db migrate` for this migration needs a superuser. The app role of the compose database is one. The role `civic_lens_public` then creates no temporary table and takes no advisory lock.
 
 Enable the login by hand, after the first deploy that holds the migration. Open an interactive `psql` session on the database host as the database owner. Run `ALTER ROLE civic_lens_public LOGIN PASSWORD` with a long random password. Keep the password out of shell history, logs, and Git. Store it only where the future `PublicApi` reads its settings.
 
