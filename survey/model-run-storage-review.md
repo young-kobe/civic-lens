@@ -107,3 +107,16 @@ Each item was checked on `origin/main` with `git show` and `git grep`. All were 
 - P3 D5 option C: names the token `user_message` exactly, and cites `PostgresBriefCheckStoreTests.cs:316`.
 - P3 text cap: proposed 100 000 as one constant. All eight tasks set `MaximumPromptBytes = 100_000`. It stays open for the owner.
 - P3 ORDER BY: kept. The text now says that settles of one kind already lock the budget day row (`PostgresAnalysisQueue.cs:238`), so the order adds little. It still guards settles of different kinds, which use different budget tables.
+
+## Round 3 resolution
+
+Each item was checked on `origin/main` with `git show` and `git grep`. All were applied. None was rejected.
+
+- P1a (DraftDiscarded keeps the fingerprint): confirmed at `RelationshipDraftQueueMapping.cs:50-51`. The check now allows DraftDiscarded. Clearing the fingerprint adds code and loses data. Staleness filters on outcome (`RelationshipStaleness.cs:64`).
+- P1b (backfill filter): confirmed at `AnalysisWorker.cs:187,266`. The backfill UPDATE has `WHERE outcome IN ('Drafted','DraftDiscarded','Bypassed')`. PR 5 also counts null results for Drafted and DraftDiscarded rows before the check.
+- P2a (D9 precedent): confirmed. Navigations with Restrict exist in four row configurations. The repo has no `Include(`, so the explicit load is the one new piece. D9 now recommends A.
+- P2b (owned types): kept as a likely limit, with the Restrict rule cited at `actions.md:42,62` and `collection.md:369`. A spike must prove it.
+- P2c (constructor sites): confirmed. Section 3.4 lists all seven sites. `SettleWithoutCallAsync` gets a nullable fingerprint parameter, and the unmatched path passes null.
+- P3a (check SQL): section 3.4 states it. The test text matches it.
+- P3b (`"old"`): PR 5 says to write a 64-character hex value at `PostgresRelationshipDraftStoreTests.cs:511`.
+- P3c (prompt cap owner): the eight tasks use the one Core constant. A test that ties two values would keep two owners.
