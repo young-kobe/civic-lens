@@ -40,6 +40,10 @@ internal static class AnalysisWorkers
         BriefDraftSettings settings, IReadOnlyDictionary<string, string> officialNames, TimeProvider clock) =>
         new(new BriefDraftStep(store, model, settings, officialNames), status, clock, NullLogger<AnalysisWorker<BriefDraftRun>>.Instance, TestBeat.Create(), null, store.EnqueueClosedWeeksAsync);
 
+    public static AnalysisWorker<BriefCheckRun> BriefChecking(IBriefCheckStore store, IAnalysisStatusStore status, IBriefCheckModel model,
+        BriefCheckSettings settings, TimeProvider clock) =>
+        new(new BriefCheckStep(store, model, settings), status, clock, NullLogger<AnalysisWorker<BriefCheckRun>>.Instance, TestBeat.Create());
+
     public static AnalysisWorker<RelationshipDraftRun> RelationshipDrafting(IRelationshipDraftStore store, IAnalysisStatusStore status,
         IRelationshipDraftModel model, RelationshipDraftSettings settings, IReadOnlyDictionary<string, string> officialNames, TimeProvider clock) =>
         new(new RelationshipDraftStep(store, model, settings, officialNames), status, clock, NullLogger<AnalysisWorker<RelationshipDraftRun>>.Instance, TestBeat.Create());
