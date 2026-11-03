@@ -12,7 +12,8 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
     private static readonly string[] WrittenTogether =
     [
         "headline", "summary", "text_origin", "source_id", "congress", "bill_type", "bill_number", "candidate_id", "candidate_update_utc_ticks",
-        "candidate_includes_summaries", "candidate_includes_subjects", "fingerprint", "bill_title", "issue_revision_id", "issue_candidates_recorded"
+        "candidate_includes_summaries", "candidate_includes_subjects", "fingerprint", "bill_title", "issue_revision_id", "issue_candidates_recorded",
+        "event_on", "cosponsor_count"
     ];
 
     public void Configure(EntityTypeBuilder<ActionRevisionRow> builder)
@@ -33,6 +34,7 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
             table.HasCheckConstraint("ck_action_revisions_policy_area_id", "policy_area_id IS NULL OR policy_area IS NOT NULL");
             table.HasCheckConstraint("ck_action_revisions_code_bill_citation",
                 "author_kind <> 'Code' OR headline IS NULL OR bill_citation_extraction_id IS NOT NULL");
+            table.HasCheckConstraint("ck_action_revisions_cosponsor_count", "cosponsor_count >= 0");
             table.HasCheckConstraint("ck_action_revisions_columns_written", $"num_nulls({string.Join(", ", WrittenTogether)}) IN (0, {WrittenTogether.Length})");
         });
         builder.HasKey(row => new { row.RecordId, row.RevisionNumber });
@@ -59,11 +61,14 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.IssueRevisionId).HasColumnName("issue_revision_id").HasMaxLength(64);
         builder.Property(row => row.SubjectsHash).HasColumnName("subjects_hash").HasMaxLength(64);
         builder.Property(row => row.IssueCandidatesRecorded).HasColumnName("issue_candidates_recorded");
+        builder.Property(row => row.EventOn).HasColumnName("event_on");
+        builder.Property(row => row.CosponsorCount).HasColumnName("cosponsor_count");
         ReviewTextColumns.Configure(builder, "action_revisions", ActionDraftRevision.MaximumHeadlineLength, ActionDraftRevision.MaximumSummaryLength);
         SourceSpanColumns.Configure(builder, "action_revisions", "SummaryCitation", "summary_citation", optional: true);
         SourceSpanColumns.Configure(builder, "action_revisions", "PolicyAreaCitation", "policy_area_citation", optional: true);
         SourceSpanColumns.Configure(builder, "action_revisions", "BillCitation", "bill_citation", optional: true);
         builder.HasIndex(row => row.RunId).IsUnique();
+        builder.HasIndex(row => row.EventOn).HasDatabaseName("ix_action_revisions_event_on");
         builder.HasOne<ActionDraftRow>().WithMany().HasForeignKey(row => row.RecordId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<ActionAnalysisRunRow>().WithMany().HasForeignKey(row => row.RunId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<ActionAnalysisRunRow>().WithMany().HasForeignKey(row => row.SuggestionRunId).OnDelete(DeleteBehavior.Restrict);

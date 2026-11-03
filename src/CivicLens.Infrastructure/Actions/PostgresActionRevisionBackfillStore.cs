@@ -67,6 +67,9 @@ public sealed class PostgresActionRevisionBackfillStore(IDbContextFactory<Collec
             return [ColumnsKey];
         }
         if (RevisionJsonComparison.TryParseObject(row.RevisionJson) is not { } stored) return [RevisionJsonComparison.UnreadableKey];
-        return RevisionJsonComparison.DifferingKeys(stored, ReviewJson.ToObject(rebuilt), NoAllowedAbsences);
+        var fields = RevisionJsonComparison.DifferingKeys(stored, ReviewJson.ToObject(rebuilt), NoAllowedAbsences).ToList();
+        if (row.EventOn != rebuilt.EventOn()) fields.Add("eventOn");
+        if (row.CosponsorCount != rebuilt.CosponsorCount()) fields.Add("cosponsorCount");
+        return fields;
     }
 }

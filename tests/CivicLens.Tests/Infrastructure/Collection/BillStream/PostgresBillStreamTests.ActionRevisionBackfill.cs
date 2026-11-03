@@ -23,7 +23,7 @@ public sealed partial class PostgresBillStreamTests
         summary_version = NULL, summary_citation_extraction_id = NULL, summary_citation_start = NULL, summary_citation_length = NULL,
         policy_area = NULL, policy_area_citation_extraction_id = NULL, policy_area_citation_start = NULL, policy_area_citation_length = NULL,
         policy_area_id = NULL, bill_title = NULL, bill_citation_extraction_id = NULL, bill_citation_start = NULL, bill_citation_length = NULL,
-        issue_revision_id = NULL, subjects_hash = NULL, issue_candidates_recorded = NULL
+        issue_revision_id = NULL, subjects_hash = NULL, issue_candidates_recorded = NULL, event_on = NULL, cosponsor_count = NULL
         """;
 
     [Fact]
@@ -188,6 +188,8 @@ public sealed partial class PostgresBillStreamTests
     [InlineData("UPDATE action_revisions SET candidate_includes_summaries = NOT candidate_includes_summaries", "candidateIncludesSummaries")]
     [InlineData("UPDATE action_revisions SET candidate_includes_subjects = false", "candidateIncludesSubjects")]
     [InlineData("UPDATE action_revisions SET policy_area = 'Private area'", "policyArea")]
+    [InlineData("UPDATE action_revisions SET event_on = event_on + 1", "eventOn")]
+    [InlineData("UPDATE action_revisions SET cosponsor_count = cosponsor_count + 1", "cosponsorCount")]
     [InlineData("UPDATE action_revision_issues SET is_tracked = NOT is_tracked WHERE issue_id = 'issue-a'", "trackedIssueIds")]
     [InlineData("DELETE FROM action_revision_issues WHERE issue_id = 'issue-c'", "issueCandidateIds")]
     [InlineData("UPDATE action_revision_sponsorships SET person_id = 'private-person' WHERE position = 0", "sponsorships")]

@@ -54,6 +54,8 @@ internal static class ActionRevisionRows
         row.IssueRevisionId = revision.IssueRevisionId;
         row.SubjectsHash = revision.SubjectsHash;
         row.IssueCandidatesRecorded = !revision.IssueCandidateIds.IsDefault;
+        row.EventOn = revision.EventOn();
+        row.CosponsorCount = revision.CosponsorCount();
         row.Issues = [.. IssueIds(revision).Select((issueId, position) => IssueRow(revision, issueId, position))];
         row.Sponsorships = [.. revision.Sponsorships.Select((sponsorship, position) => SponsorshipRow(revision, sponsorship, position))];
     }

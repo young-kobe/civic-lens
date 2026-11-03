@@ -46,6 +46,8 @@ internal sealed class ActionRevisionRow : IReviewRevisionRow, IReviewTextRow
     public string? IssueRevisionId { get; set; }
     public string? SubjectsHash { get; set; }
     public bool? IssueCandidatesRecorded { get; set; }
+    public DateOnly? EventOn { get; set; }
+    public int? CosponsorCount { get; set; }
     public List<ActionRevisionIssueRow> Issues { get; set; } = [];
     public List<ActionRevisionSponsorshipRow> Sponsorships { get; set; } = [];
 }
