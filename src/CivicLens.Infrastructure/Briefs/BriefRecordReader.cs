@@ -22,6 +22,10 @@ internal static class BriefRecordReader
     public static PublishedRevisionBinding BindingOf(BriefCitation citation) =>
         new(BriefCitationKinds.PublishedKindOf(citation.Kind), citation.RecordId, citation.RevisionNumber);
 
+    public static BriefRecord RecordOf(BriefCitation citation, ImmutableArray<BriefRecord> records) =>
+        records.Single(candidate => candidate.Kind == citation.Kind && candidate.RecordId == citation.RecordId &&
+            candidate.RevisionNumber == citation.RevisionNumber);
+
     public static Task<HashSet<PublishedRevisionBinding>> FindChangedInActiveReleaseAsync(CollectionAttemptDbContext db,
         IEnumerable<BriefCitation> citations, CancellationToken cancellationToken) =>
         CitedRevisions.FindNotCurrentInActiveReleaseAsync(db, citations.Select(BindingOf), cancellationToken);

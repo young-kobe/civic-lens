@@ -33,7 +33,7 @@ public sealed partial class SchemaReferenceTests(PostgresCollection postgres) : 
             "executive_action_revisions"]),
         ("relationships", ["relationship_analysis", "relationship_analysis_budget", "relationship_analysis_runs", "relationship_drafts",
             "relationship_review_decision_resolutions", "relationship_review_decisions", "relationship_revisions"]),
-        ("briefs", ["brief_analysis", "brief_analysis_budget", "brief_analysis_runs", "brief_drafts",
+        ("briefs", ["brief_analysis", "brief_analysis_budget", "brief_analysis_runs", "brief_check_flags", "brief_drafts",
             "brief_review_decision_resolutions", "brief_review_decisions", "brief_revisions", "brief_schedule"]),
         ("review", ["document_change_drafts", "document_change_review_decision_resolutions", "document_change_review_decisions", "document_change_review_idempotency",
             "document_change_revisions"]),

@@ -162,7 +162,7 @@ internal sealed class BriefWorldSeeder(string connectionString)
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("SELECT status || ':' || attempts FROM brief_analysis WHERE week_start = @week", connection);
+        await using var command = new NpgsqlCommand("SELECT status || ':' || attempts FROM brief_analysis WHERE week_start = @week AND task = 'brief-draft'", connection);
         command.Parameters.AddWithValue("week", week);
         return (string)(await command.ExecuteScalarAsync())!;
     }
