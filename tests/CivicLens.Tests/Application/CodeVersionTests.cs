@@ -50,9 +50,20 @@ public sealed class CodeVersionTests
     [InlineData("worker", "collector.dll", "artifacts")]
     [InlineData("worker", "collector.dll", "artifacts", "--once")]
     [InlineData("releases", "publish", "key")]
+    public void AWorkerAndAReleasePublishRefuseToStartWithoutAValidShaSoNoCodeWriteFailsLaterAfterAModelCall(params string[] args)
+    {
+        AssertRefusesWithoutAValidSha(args);
+    }
+
+    [Theory]
     [InlineData("review")]
     [InlineData("review", "5000")]
-    public void AWorkerAReleasePublishAndAReviewServerRefuseToStartWithoutAValidShaSoNoCodeWriteFailsLaterAfterAModelCall(params string[] args)
+    public void AReviewServerRefusesToStartWithoutAValidShaBecauseAPersonApprovalOrTakeOffSiteWritesARevisionOrARelease(params string[] args)
+    {
+        AssertRefusesWithoutAValidSha(args);
+    }
+
+    private static void AssertRefusesWithoutAValidSha(string[] args)
     {
         var failure = Assert.Throws<InvalidOperationException>(() =>
             BuildCodeVersion.ReadFor(args, TestCodeVersion.AssemblyVersioned("1.0.0+abc123")));
