@@ -67,6 +67,8 @@ public sealed class PublishRelease
         var previous = await PreviousRelease.LoadAsync(releases, state.Active, cancellationToken);
         if (previous.DirectoryName is null && references.IsEmpty && request.Withdrawals.IsEmpty)
             throw new ArgumentException("A publish with no record needs an active release.");
+        var firstPublished = await publications.ReadFirstPublishedAsync(references, cancellationToken);
+        RequireFirstPublished(previous, references, firstPublished);
         var withdrawn = ImmutableArray.CreateRange(withdrawalNotes.Keys);
         var corrections = await PublicationCorrections.LoadAsync(releases, previous, now, [.. references, .. withdrawn],
             cancellationToken);
@@ -75,10 +77,8 @@ public sealed class PublishRelease
         var roster = await officials.ReadRosterAsync(cancellationToken);
         var photos = await officials.ReadPhotosAsync(cancellationToken);
         var statuses = await ReleaseBillStatuses.LoadAsync(loaders.Actions, previous, references, cancellationToken);
-        var firstPublished = await publications.ReadFirstPublishedAsync(references, cancellationToken);
-        RequireFirstPublished(previous, references, firstPublished);
-        var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster, byCode)
-            .WithRemoved(withdrawn).WithReturned(returned).WithBillStatuses(statuses).WithFirstPublished(firstPublished);
+        var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster, byCode, firstPublished)
+            .WithRemoved(withdrawn).WithReturned(returned).WithBillStatuses(statuses);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
         var released = build.WithAdded(additions);
         await WithdrawalCascade.RequireNoCitersAsync(releases, loaders, previous, withdrawn, additions, cancellationToken);

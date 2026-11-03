@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace CivicLens.Infrastructure.Publication.Persistence;
 
-/// <summary>The first publication time of a record. Code only inserts rows. A rollback of a release keeps them.</summary>
 internal sealed class PublishedRecordRowConfiguration : IEntityTypeConfiguration<PublishedRecordRow>
 {
     public void Configure(EntityTypeBuilder<PublishedRecordRow> builder)

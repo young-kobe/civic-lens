@@ -3,7 +3,6 @@ using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Infrastructure.Publication;
 
-// No precedent scans for a write-only table, so this test scans the production source, as the editor-page test of the report workspace scans markup.
 public sealed class PublishedRecordsInsertOnlyTests
 {
     [Fact]

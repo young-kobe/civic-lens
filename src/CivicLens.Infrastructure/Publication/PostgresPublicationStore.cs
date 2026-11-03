@@ -190,6 +190,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         await SaveAsync(db, cancellationToken);
         await PublicationRecordStates.RecordAsync(db, commit, cancellationToken);
         await PublishedRecords.InsertAsync(db, commit.FirstPublications, cancellationToken);
+        await PublishedRecords.RequireStoredTimesAsync(db, commit.FirstPublications, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return summary;
     }

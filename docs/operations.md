@@ -867,7 +867,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 
 The command reads the manifest of the active release. It inserts a row for each record and each withdrawal, with the `firstPublishedAtUtc` of the entry. It never changes a row that exists, so a repeat is safe. It prints `examined`, `added`, and `alreadyPresent` as JSON. A record that no active entry or withdrawal names gets no row. Its row comes with the publish that adds it.
 
-Until the backfill runs, a publish that adds a record of the active release stops with the message "Run releases first-published backfill". This protects the first time of the record. A guess could give one record two first times. The worker logs the error and tries again at its next wake. Run the backfill, and the next publish works. A rollback keeps the rows. The command needs no `--rewrite` option.
+Until the backfill runs, a publish that adds a record of the active release stops with the message "Run releases first-published backfill". A guess could give one record two first times. The worker logs the error and tries again at its next wake. Run the backfill, and the next publish works. A rollback keeps the rows.
 
 ### Take a record off the site
 

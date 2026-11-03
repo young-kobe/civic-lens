@@ -52,11 +52,22 @@ public sealed class PostgresPublishedRecordsTests(PostgresCollection postgres) :
         await PublishAsync(2, 1, [(A, First.AddDays(1))]);
         await publications.ActivateAsync(1, (_, _) => Task.CompletedTask, default);
 
-        await PublishAsync(3, 1, [(A, First.AddDays(7))]);
+        await PublishAsync(3, 1, [(A, First.AddDays(1))]);
 
         Assert.Equal(First.AddDays(1), (await publications.ReadFirstPublishedAsync([Reference(A)], default))[Reference(A)]);
         Assert.Equal(["action|" + A + "|" + First.AddDays(1).UtcTicks, "action|" + B + "|" + First.UtcTicks],
             await ReadAsync("SELECT kind || '|' || record_id || '|' || first_published_at_utc_ticks FROM published_records ORDER BY 1"));
+    }
+
+    [Fact]
+    public async Task ACommitWhoseTimeDiffersFromTheStoredTimeConflictsAndWritesNoReleaseBecauseTheReleaseFileWouldSplitTheFirstTime()
+    {
+        await SeedActionsAsync(A);
+        await publications.AddFirstPublishedAsync([new(PublishedRecordKind.Action, A, First)], default);
+
+        await Assert.ThrowsAsync<PublicationConflictException>(() => PublishAsync(1, null, [(A, First.AddDays(3))]));
+
+        Assert.Empty(await ReadAsync("SELECT release_number FROM publication_releases"));
     }
 
     [Fact]

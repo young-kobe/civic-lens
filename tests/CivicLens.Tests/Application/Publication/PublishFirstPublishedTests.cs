@@ -54,6 +54,30 @@ public sealed class PublishFirstPublishedTests
     }
 
     [Fact]
+    public async Task AWithdrawnRecordThatTheTableLacksRefusesItsReturnUntilTheBackfillCopiesTheTimeOfTheWithdrawal()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c');
+        var firstTime = scenario.Clock.Now;
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", action));
+        scenario.Clock.Now = firstTime.AddDays(1);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "k2") { Withdrawals = [new(PublishedRecordKind.Action, action, "Wrong.")] });
+        scenario.Publications.FirstPublished.Clear();
+        scenario.ReviseAction(action, 2, correctionNote: "Fixed.");
+        scenario.Clock.Now = firstTime.AddDays(5);
+
+        await Assert.ThrowsAsync<FirstPublishedMissingException>(() =>
+            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k3", action)));
+        await new BackfillFirstPublished(scenario.Publications, scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
+        var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k3", action));
+
+        var manifest = JsonSerializer.Deserialize<PublicationRelease>(
+            scenario.Releases.Directories[returned.DirectoryName][PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
+        Assert.Equal(firstTime, Assert.Single(manifest.Records).FirstPublishedAtUtc);
+    }
+
+    [Fact]
     public async Task ARecordWithNoRowAndNoActiveEntryIsNewSoItTakesTheClockAndTheCommitCarriesItsRow()
     {
         var scenario = new PublicationScenario();
@@ -71,16 +95,25 @@ public sealed class PublishFirstPublishedTests
         var scenario = new PublicationScenario();
         var kept = scenario.AddDraft('a');
         var other = scenario.AddDraft('b');
+        var withdrawn = scenario.AddAction('c');
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", kept, other));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", withdrawn));
+        scenario.Clock.Now = scenario.Clock.Now.AddDays(1);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            new PublishReleaseRequest([], "k2") { Withdrawals = [new(PublishedRecordKind.Action, withdrawn, "Wrong.")] });
+        var withdrawnTime = scenario.Publications.FirstPublished[new(PublishedRecordKind.Action, withdrawn)];
         scenario.Publications.FirstPublished.Remove(new(PublishedRecordKind.DocumentChange, other));
+        scenario.Publications.FirstPublished.Remove(new(PublishedRecordKind.Action, withdrawn));
         var backfill = new BackfillFirstPublished(scenario.Publications, scenario.Releases);
 
         var first = await backfill.ExecuteAsync(PublicationScenario.Owner);
         var second = await backfill.ExecuteAsync(PublicationScenario.Owner);
 
-        Assert.Equal(new FirstPublishedBackfillResult(2, 1, 1), first);
-        Assert.Equal(new FirstPublishedBackfillResult(2, 0, 2), second);
-        Assert.Equal(scenario.Clock.Now, scenario.Publications.FirstPublished[new(PublishedRecordKind.DocumentChange, other)]);
+        Assert.Equal(new FirstPublishedBackfillResult(3, 2, 1), first);
+        Assert.Equal(new FirstPublishedBackfillResult(3, 0, 3), second);
+        Assert.Equal(scenario.Publications.FirstPublished[new(PublishedRecordKind.DocumentChange, kept)],
+            scenario.Publications.FirstPublished[new(PublishedRecordKind.DocumentChange, other)]);
+        Assert.Equal(withdrawnTime, scenario.Publications.FirstPublished[new(PublishedRecordKind.Action, withdrawn)]);
     }
 
     [Fact]

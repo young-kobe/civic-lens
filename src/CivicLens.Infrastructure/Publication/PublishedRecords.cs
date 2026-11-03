@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Publication;
 
-/// <summary>Reads and inserts the stored first publication times. No code updates or deletes a row.</summary>
 internal static class PublishedRecords
 {
     private const string Insert = """
@@ -37,6 +36,14 @@ internal static class PublishedRecords
         return await db.Database.ExecuteSqlRawAsync(Insert, [records.Select(record => PublishedRecordReference.NameOf(record.Kind)).ToArray(),
             records.Select(record => record.RecordId).ToArray(), records.Select(record => record.FirstPublishedAtUtc.UtcTicks).ToArray()],
             cancellationToken);
+    }
+
+    public static async Task RequireStoredTimesAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedFirstPublication> records,
+        CancellationToken cancellationToken)
+    {
+        var stored = await ReadAsync(db, [.. records.Select(record => new PublishedRecordReference(record.Kind, record.RecordId))], cancellationToken);
+        if (records.Any(record => stored[new(record.Kind, record.RecordId)] != record.FirstPublishedAtUtc))
+            throw new PublicationConflictException("The first publication time of a record changed after the release was built. Rebuild it.");
     }
 
     private sealed class FirstPublishedRow

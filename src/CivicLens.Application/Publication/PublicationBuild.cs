@@ -6,7 +6,8 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset Now, PublishedRecordRules Rules,
-    IReleaseRenderer Renderer, PublicationCatalog Catalog, PublicationCorrections Corrections, IReadOnlyList<RosterMember> Roster, bool ByCode)
+    IReleaseRenderer Renderer, PublicationCatalog Catalog, PublicationCorrections Corrections, IReadOnlyList<RosterMember> Roster, bool ByCode,
+    IReadOnlyDictionary<PublishedRecordReference, DateTimeOffset> FirstPublished)
 {
     public ImmutableArray<PublishedRevisionBinding> ReleaseRecords { get; private init; } =
         [.. Previous.Entries.Select(PublishedRevisionBinding.Of)];
@@ -20,13 +21,6 @@ internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset
 
     public ImmutableArray<PublishedRecordReference> Returned { get; private init; } = [];
 
-    public IReadOnlyDictionary<PublishedRecordReference, DateTimeOffset> FirstPublished { get; private init; } =
-        new Dictionary<PublishedRecordReference, DateTimeOffset>();
-
-    public PublicationBuild WithFirstPublished(IReadOnlyDictionary<PublishedRecordReference, DateTimeOffset> firstPublished) =>
-        this with { FirstPublished = firstPublished };
-
-    /// <summary>The stored first publication time of a record. A record with no row is new and has none.</summary>
     public DateTimeOffset? FirstPublishedAt(PublishedRecordKind kind, string recordId) =>
         FirstPublished.TryGetValue(new(kind, recordId), out var firstPublishedAt) ? firstPublishedAt : null;
 

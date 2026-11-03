@@ -3,7 +3,6 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Publication;
 
-/// <summary>Copies the first publication times of the active release into the store. Run it once after the migration that adds the table.</summary>
 public sealed class BackfillFirstPublished(IPublicationStore publications, IReleaseDirectory releases)
 {
     public async Task<FirstPublishedBackfillResult> ExecuteAsync(ReviewActor actor, CancellationToken cancellationToken = default)
