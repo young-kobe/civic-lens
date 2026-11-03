@@ -6,8 +6,8 @@ namespace CivicLens.Host.Review;
 internal static class DraftFilterTabs
 {
     public static IReadOnlyList<FilterTab> For(DraftStatusFilter selected, Func<string?, string> hrefOf,
-        int? needsActionCount = null, int? approvedCount = null) => [
-        Tab("All", DraftStatusFilter.All, selected, hrefOf, needsActionCount + approvedCount),
+        int? allCount = null, int? needsActionCount = null, int? approvedCount = null) => [
+        Tab("All", DraftStatusFilter.All, selected, hrefOf, allCount),
         Tab("Needs action", DraftStatusFilter.NeedsAction, selected, hrefOf, needsActionCount),
         Tab("Approved", DraftStatusFilter.Approved, selected, hrefOf, approvedCount)
     ];

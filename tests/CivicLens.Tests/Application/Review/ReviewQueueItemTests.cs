@@ -48,6 +48,12 @@ public sealed class ReviewQueueItemTests
     }
 
     [Fact]
+    public void ARecordRejectedAfterTheListWasReadTellsTheReaderToRefresh()
+    {
+        Assert.Equal("This record is rejected. Refresh the page.", Item(PublishedRecordKind.Statement, ReviewStatus.Rejected).Reason);
+    }
+
+    [Fact]
     public void AnUnreadableRecordSaysPlainlyThatItCannotBeReadAndSendsTheOwnerToTheLogsBecauseTheEditorShowsNoError()
     {
         var item = ReviewQueueItem.Unreadable(PublishedRecordKind.Vote, "abc", DateTimeOffset.UnixEpoch, new InvalidOperationException("bad json"));
@@ -55,6 +61,18 @@ public sealed class ReviewQueueItemTests
         Assert.Equal("abc", item.Headline);
         Assert.Equal("This record cannot be read, so its status is not known. The owner must check the logs for this record ID.",
             item.Reason);
+    }
+
+    [Fact]
+    public async Task TheRejectedListLogsAnUnreadableRecordLikeTheQueueBecauseBothUseOneReader()
+    {
+        var cause = new InvalidOperationException("Stored revision is invalid.");
+        var page = new ReviewQueuePage([ReviewQueueItem.Unreadable(PublishedRecordKind.Vote, "vote-1", DateTimeOffset.UnixEpoch, cause)], 1, null, null);
+        var logger = new CapturingLogger<ListReviewQueue>();
+
+        await new ListReviewQueue(new StubStore(page), logger).ExecuteRejectedAsync(new ReviewActor("auth0|reviewer", ReviewRole.Reviewer), null);
+
+        Assert.Same(cause, Assert.Single(logger.Entries).Exception);
     }
 
     [Fact]
@@ -86,6 +104,8 @@ public sealed class ReviewQueueItemTests
     private sealed class StubStore(ReviewQueuePage page) : IReviewQueueStore
     {
         public Task<ReviewQueuePage> ListAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken) => Task.FromResult(page);
+
+        public Task<ReviewQueuePage> ListRejectedAsync(PageCursor? cursor, int limit, CancellationToken cancellationToken) => Task.FromResult(page);
 
         public Task<ReviewQueuePage> ListUnmatchedApprovedLinksAsync(int limit, IReadOnlyCollection<string> excludedRecordIds,
             CancellationToken cancellationToken) => Task.FromResult(page);

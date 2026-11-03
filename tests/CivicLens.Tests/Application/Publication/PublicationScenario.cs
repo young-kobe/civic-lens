@@ -131,8 +131,8 @@ internal sealed class PublicationScenario
         BillTitle = new string('t', 250)
     };
 
-    public void SeedRelease(int recordCount, bool withFiles) =>
-        SeedRelease(withFiles, [.. Enumerable.Range(0, recordCount).Select(index => new PublishedRecordEntry
+    public void SeedRelease(int recordCount, bool withFiles, PublishedWithdrawal[]? withdrawals = null) =>
+        SeedRelease(withFiles, withdrawals: withdrawals, entries: [.. Enumerable.Range(0, recordCount).Select(index => new PublishedRecordEntry
         {
             IssueIds = [],
             Kind = PublishedRecordKind.DocumentChange,
@@ -144,7 +144,7 @@ internal sealed class PublicationScenario
             FirstPublishedAtUtc = ApprovedAt.AddMinutes(-index)
         })]);
 
-    public void SeedRelease(bool withFiles, PublishedRecordEntry[] entries)
+    public void SeedRelease(bool withFiles, PublishedRecordEntry[] entries, PublishedWithdrawal[]? withdrawals = null)
     {
         var recordCount = entries.Length;
         var manifest = new PublicationRelease
@@ -152,7 +152,7 @@ internal sealed class PublicationScenario
             SchemaVersion = PublicationProtocol.SchemaVersion,
             ReleaseNumber = 1,
             PublishedAtUtc = ApprovedAt,
-            Withdrawals = [],
+            Withdrawals = withdrawals ?? [],
             Records = entries
         };
         var files = new Dictionary<string, byte[]>
@@ -170,6 +170,32 @@ internal sealed class PublicationScenario
         Releases.Active = "seeded";
         Publications.Committed.Add(new(1, "seeded", ApprovedAt, recordCount));
         Publications.ActiveReleaseNumber = 1;
+    }
+
+    // Adds filler entries to the active release, so that it leaves the given number of free slots.
+    public void FillActiveReleaseToTheCap(int freeSlots)
+    {
+        var directory = Releases.Directories[Publications.Committed[^1].DirectoryName];
+        var manifest = JsonSerializer.Deserialize<PublicationRelease>(directory[PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
+        var fillers = Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease - freeSlots - manifest.Records.Length - manifest.Withdrawals.Length)
+            .Select(index => new PublishedRecordEntry
+            {
+                IssueIds = [],
+                Kind = PublishedRecordKind.DocumentChange,
+                Officials = [],
+                PolicyAreaIds = [],
+                RecordId = index.ToString("x32"),
+                RevisionNumber = 1,
+                Headline = $"Filler {index}",
+                FirstPublishedAtUtc = ApprovedAt
+            }).ToArray();
+        foreach (var filler in fillers)
+        {
+            directory[PublicationProtocol.RecordDataPath(filler.RecordId)] = [];
+            directory[PublicationProtocol.RecordPagePath(filler.RecordId)] = [];
+        }
+        directory[PublicationProtocol.ManifestPath] =
+            JsonSerializer.SerializeToUtf8Bytes(manifest with { Records = [.. manifest.Records, .. fillers] }, PublicationProtocol.JsonOptions);
     }
 
     public void SeedReleaseOfAnotherSchemaVersion()
@@ -277,7 +303,7 @@ internal sealed class PublicationScenario
                 {
                     RevisionNumber = revisionNumber,
                     ActorSubject = approver,
-                    CorrectionNote = ReviewAuthor.IsCode(approver) ? null : correctionNote
+                    CorrectionNote = ReviewAuthor.IsCode(approver) && correctionNote == PersonNote ? null : correctionNote
                 }),
                 ReviewStateVersion = revisionNumber
             }
@@ -529,6 +555,22 @@ internal sealed class FakePublicationStore : IPublicationStore
     public bool InsidePrune { get; private set; }
     public int? PrunedKeep { get; private set; }
 
+    public TimeSpan? AgeOfNewestRelease { get; set; }
+
+    public Task<TimeSpan?> ReadAgeOfNewestReleaseAsync(CancellationToken cancellationToken) => Task.FromResult(AgeOfNewestRelease);
+
+    public int ApprovedOutsideActiveRelease { get; set; }
+
+    public List<PublishedRecordReference> ApprovedAgain { get; } = [];
+
+    public int CountCalls { get; private set; }
+
+    public Task<int> CountApprovedOutsideActiveReleaseAsync(IReadOnlyCollection<PublishedRecordReference> withdrawn, CancellationToken cancellationToken)
+    {
+        CountCalls++;
+        return Task.FromResult(ApprovedOutsideActiveRelease + ApprovedAgain.Count(record => !withdrawn.Contains(record)));
+    }
+
     public Task<PublicationState> GetStateAsync(CancellationToken cancellationToken) =>
         Task.FromResult(new PublicationState(Committed.Select(item => item.ReleaseNumber).DefaultIfEmpty().Max(),
             Committed.SingleOrDefault(item => item.ReleaseNumber == ActiveReleaseNumber)));
@@ -758,12 +800,11 @@ internal sealed class FakeReviewStore : IDocumentChangeReviewStore
     public Task<DocumentChangeDraftRevision> SaveRevisionAsync(string actorSubject, DocumentChangeDraftRevision revision,
         int expectedRevisionNumber, bool changeDateChecked, ReviewDecision? approval, ImmutableHashSet<string> allowedOfficialIds,
         ImmutableHashSet<string> allowedIssueIds, string idempotencyKey, string payloadHash,
-        CancellationToken cancellationToken) => throw new NotSupportedException();
+        ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, string idempotencyKey, string payloadHash,
-        ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds,
-        CancellationToken cancellationToken) => throw new NotSupportedException();
+        ImmutableHashSet<string> allowedOfficialIds, ImmutableHashSet<string> allowedIssueIds, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<NewDocumentChangePage> ListEligibleComparisonsAsync(PageCursor? cursor, int limit,
         CancellationToken cancellationToken) => throw new NotSupportedException();

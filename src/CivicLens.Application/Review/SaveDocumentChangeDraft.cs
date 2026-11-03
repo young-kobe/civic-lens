@@ -28,6 +28,7 @@ public sealed class SaveDocumentChangeDraft(IDocumentChangeReviewStore store, Re
             officialIds, issueIds, citations);
         return store.SaveRevisionAsync(actor.Subject, revision, request.ExpectedRevisionNumber, request.ChangeDateChecked,
             ReviewValidation.CreateApprovalOf(actor, draftId, revision.RevisionNumber, request.Approval), catalog.OfficialIds, catalog.IssueIds,
-            request.IdempotencyKey, ReviewValidation.HashPayload(request), cancellationToken);
+            request.IdempotencyKey, ReviewValidation.HashPayload(request),
+            ReviewValidation.ValidateReportIds(request.Approval?.CorrectedReportIds), cancellationToken);
     }
 }

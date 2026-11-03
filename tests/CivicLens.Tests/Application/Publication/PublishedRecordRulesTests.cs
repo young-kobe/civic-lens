@@ -14,6 +14,17 @@ public sealed class PublishedRecordRulesTests
     public void EveryTextOriginHasItsOwnPublishedOriginSoCodeTextIsNeverLabeledAsAModelSummary(ReviewTextOrigin origin, PublishedTextOrigin published) =>
         Assert.Equal(published, PublishedRecordRules.TextOriginOf(origin));
 
+    [Theory]
+    [InlineData(ReviewStatus.Approved, true, false)]
+    [InlineData(ReviewStatus.Rejected, false, true)]
+    [InlineData(ReviewStatus.AwaitingReview, false, false)]
+    public void OnlyAnApprovedRecordPublishesAndARejectedNewerRevisionOfAPublishedRecordCanBeTakenOffTheSite(
+        ReviewStatus status, bool publishable, bool withdrawable)
+    {
+        Assert.Equal(publishable, PublishedRecordRules.IsPublishable(status, 0));
+        Assert.Equal(withdrawable, PublishedRecordRules.IsWithdrawable(status));
+    }
+
     [Fact]
     public void ApproverAndTimeComeFromTheSameDecisionWhenCodeApprovedThenAPersonApprovedAfterAReopen()
     {

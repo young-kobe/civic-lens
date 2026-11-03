@@ -1,0 +1,50 @@
+@using CivicLens.Application.Reports
+@using CivicLens.Core.Review
+@using CivicLens.Host.Review
+@using Microsoft.Extensions.Logging
+
+@if (error is not null)
+{
+    <Notice Tone="Tone.Bad">@error</Notice>
+}
+<form id="@ReaderReportDismissButton.FormId" method="post" @formname="@ReaderReportDismissButton.FormId" @onsubmit="DismissAsync">
+    <AntiforgeryToken />
+</form>
+
+@code {
+    private static readonly ReviewFailureMessages Failures = new(
+        "Someone resolved this report after you opened the page. Reload the page to see the current state.",
+        "The report could not be dismissed. Reload the page and try again.",
+        "The report could not be dismissed. Try again.");
+
+    private string? error;
+
+    [Inject] private DismissReaderReport Dismiss { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+    [Inject] private ILogger<ReaderReportDismissForm> Logger { get; set; } = default!;
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    [Parameter, EditorRequired] public ReviewActor Actor { get; set; } = default!;
+
+    private async Task DismissAsync()
+    {
+        var (target, failure, _) = await ReviewCommand.RunAsync(DismissOpenReportAsync, HttpContext.Response, Logger, HttpContext.RequestAborted);
+        error = failure switch
+        {
+            ReviewCommandFailure.Conflict => Failures.Conflict,
+            ReviewCommandFailure.Invalid => Failures.Invalid,
+            ReviewCommandFailure.Unavailable => Failures.Unavailable,
+            _ => null
+        };
+        if (failure == ReviewCommandFailure.AccessDenied) Navigation.NavigateTo(ReviewCommand.AccessDenied);
+        else if (target is not null) Navigation.NavigateTo(target);
+    }
+
+    private async Task<string> DismissOpenReportAsync()
+    {
+        var (reportId, version) = ReaderReportDismissButton.Parse(HttpContext.Request.Form[ReaderReportDismissButton.FieldName]);
+        await Dismiss.ExecuteAsync(Actor, reportId, version, HttpContext.RequestAborted);
+        return ReportRoutes.WithDismissedStatus(HttpContext.Request.Path);
+    }
+}

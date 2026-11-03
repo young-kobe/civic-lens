@@ -67,7 +67,7 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
         var first = Report();
         var second = Report();
         await store.SavePulledAsync(Batch(first, second), default);
-        await store.ResolveAsync("auth0|friend", first.ReportId, 0, ReaderReportStatus.Dismissed, null, default);
+        await store.DismissAsync("auth0|friend", first.ReportId, 0, default);
 
         await store.SavePulledAsync(Batch(first, second, Report()) with { NextCursor = "other-epoch.3" }, default);
 
@@ -95,7 +95,7 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
     {
         var reports = new[] { Received(0), Received(2), Received(1), Received(1), Received(3) };
         await store.SavePulledAsync(Batch(reports), default);
-        foreach (var report in reports) await store.ResolveAsync("auth0|friend", report.ReportId, 0, ReaderReportStatus.Dismissed, null, default);
+        foreach (var report in reports) await store.DismissAsync("auth0|friend", report.ReportId, 0, default);
         await store.SavePulledAsync(Batch(Received(9)), default);
         var expected = reports.OrderByDescending(report => report.ReceivedAtUtc).ThenByDescending(report => report.ReportId.ToString("D"), StringComparer.Ordinal)
             .Select(report => report.ReportId.ToString("D")).ToArray();
@@ -111,11 +111,11 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
         var report = Report();
         await store.SavePulledAsync(Batch(report, Report()), default);
 
-        await store.ResolveAsync("auth0|friend", report.ReportId, 0, ReaderReportStatus.CorrectionNeeded, "Fix the quote.", default);
+        await store.DismissAsync("auth0|friend", report.ReportId, 0, default);
 
         Assert.Equal(1, await store.CountOpenAsync(default));
         var resolved = Assert.Single((await store.ListAsync(null, 10, ReaderReportFilter.Resolved, default)).Items).Report;
-        Assert.Equal((report.ReportId, ReaderReportStatus.CorrectionNeeded, "Fix the quote.", "auth0|friend", 1),
+        Assert.Equal((report.ReportId, ReaderReportStatus.Dismissed, (string?)null, "auth0|friend", 1),
             (resolved.ReportId, resolved.Status, resolved.Note, resolved.ResolvedBy, resolved.Version));
         Assert.NotNull(resolved.ResolvedAtUtc);
         Assert.DoesNotContain(report.ReportId, (await store.ListAsync(null, 10, ReaderReportFilter.Open, default)).Items.Select(item => item.Report.ReportId));
@@ -126,12 +126,12 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
     {
         var report = Report();
         await store.SavePulledAsync(Batch(report), default);
-        await Assert.ThrowsAsync<ReviewConflictException>(() => store.ResolveAsync("auth0|friend", report.ReportId, 5, ReaderReportStatus.Dismissed, null, default));
-        await store.ResolveAsync("auth0|friend", report.ReportId, 0, ReaderReportStatus.Dismissed, null, default);
+        await Assert.ThrowsAsync<ReviewConflictException>(() => store.DismissAsync("auth0|friend", report.ReportId, 5, default));
+        await store.DismissAsync("auth0|friend", report.ReportId, 0, default);
 
-        await Assert.ThrowsAsync<ReviewConflictException>(() => store.ResolveAsync("auth0|owner", report.ReportId, 1, ReaderReportStatus.CorrectionNeeded, "Late.", default));
-        await Assert.ThrowsAsync<ReviewConflictException>(() => store.ResolveAsync("auth0|owner", report.ReportId, 0, ReaderReportStatus.CorrectionNeeded, "Late.", default));
-        await Assert.ThrowsAsync<ArgumentException>(() => store.ResolveAsync("auth0|owner", Guid.NewGuid(), 0, ReaderReportStatus.Dismissed, null, default));
+        await Assert.ThrowsAsync<ReviewConflictException>(() => store.DismissAsync("auth0|owner", report.ReportId, 1, default));
+        await Assert.ThrowsAsync<ReviewConflictException>(() => store.DismissAsync("auth0|owner", report.ReportId, 0, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.DismissAsync("auth0|owner", Guid.NewGuid(), 0, default));
 
         var kept = (await store.GetAsync(report.ReportId, default))!.Report;
         Assert.Equal((ReaderReportStatus.Dismissed, "auth0|friend"), (kept.Status, kept.ResolvedBy));
@@ -171,23 +171,66 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
     public static IEnumerable<object[]> EveryRecordKind() => Enum.GetValues<PublishedRecordKind>().Select(kind => new object[] { kind });
 
     [Fact]
-    public async Task ACorrectionStaysUnansweredUntilThePublishedRevisionPassesTheRevisionOfTheReport()
+    public async Task ARecordShowsItsOpenReportsAndAClosedCorrectionUntilThePublishedRevisionPassesTheRevisionOfTheReport()
     {
         await SeedRelationshipDraftAsync(RelationshipId, currentRevision: 3);
-        var report = Report() with { RecordId = RelationshipId, Kind = PublishedRecordKind.Relationship, RevisionNumber = 2 };
-        var dismissed = Report() with { RecordId = RelationshipId, Kind = PublishedRecordKind.Relationship, RevisionNumber = 2 };
+        var corrected = OnRelationship(2);
+        var open = OnRelationship(2);
+        var dismissed = OnRelationship(2);
         var elsewhere = Report() with { RecordId = new string('b', 64), Kind = PublishedRecordKind.Relationship, RevisionNumber = 2 };
-        await store.SavePulledAsync(Batch(report, dismissed, elsewhere), default);
-        await store.ResolveAsync("auth0|friend", report.ReportId, 0, ReaderReportStatus.CorrectionNeeded, "Fix it.", default);
-        await store.ResolveAsync("auth0|friend", dismissed.ReportId, 0, ReaderReportStatus.Dismissed, "Fine.", default);
-        await store.ResolveAsync("auth0|friend", elsewhere.ReportId, 0, ReaderReportStatus.CorrectionNeeded, "Fix it.", default);
+        await store.SavePulledAsync(Batch(corrected, open, dismissed, elsewhere), default);
+        await seeder.ExecuteAsync("""
+            UPDATE reader_reports SET status = 'CorrectionNeeded', note = 'Fixed.', resolved_by = 'auth0|friend', resolved_at_utc_ticks = 1, version = 1
+            WHERE report_id = @id
+            """, ("id", corrected.ReportId));
+        await store.DismissAsync("auth0|friend", dismissed.ReportId, 0, default);
 
-        Assert.Equal([report.ReportId], await UnansweredAsync());
+        Assert.Equal(new[] { corrected.ReportId, open.ReportId }.Order(), await ReportsOfRecordAsync());
         await PublishAsync(1, revision: 2);
-        Assert.Equal([report.ReportId], await UnansweredAsync());
+        Assert.Equal(new[] { corrected.ReportId, open.ReportId }.Order(), await ReportsOfRecordAsync());
         await PublishAsync(2, revision: 3);
-        Assert.Empty(await UnansweredAsync());
+        Assert.Equal([open.ReportId], await ReportsOfRecordAsync());
     }
+
+    [Fact]
+    public async Task TheLimitOf64CountsOnlyOpenReportsSoWaitingCorrectionsNeverHideAnOpenOne()
+    {
+        await SeedRelationshipDraftAsync(RelationshipId, currentRevision: 3);
+        var waiting = Enumerable.Range(0, 3).Select(index => OnRelationship(1) with { ReceivedAtUtc = Start.AddMinutes(index) }).ToArray();
+        var open = Enumerable.Range(0, 66).Select(index => OnRelationship(1) with { ReceivedAtUtc = Start.AddMinutes(10 + index) }).ToArray();
+        await store.SavePulledAsync(Batch([.. waiting, .. open]), default);
+        await MarkWaitingAsync(waiting);
+
+        var listed = await store.ListForRecordAsync(PublishedRecordKind.Relationship, RelationshipId, default);
+
+        Assert.Equal([.. waiting.Select(report => report.ReportId), .. open.Take(64).Select(report => report.ReportId)],
+            listed.Reports.Select(report => report.ReportId));
+        Assert.Equal(2, listed.MoreOpen);
+    }
+
+    [Fact]
+    public async Task SixtyFourWaitingCorrectionsStillLeaveRoomForEveryOpenReportAndItsDismiss()
+    {
+        await SeedRelationshipDraftAsync(RelationshipId, currentRevision: 3);
+        var waiting = Enumerable.Range(0, 64).Select(index => OnRelationship(1) with { ReceivedAtUtc = Start.AddMinutes(index) }).ToArray();
+        var open = Enumerable.Range(0, 2).Select(index => OnRelationship(1) with { ReceivedAtUtc = Start.AddMinutes(100 + index) }).ToArray();
+        await store.SavePulledAsync(Batch([.. waiting, .. open]), default);
+        await MarkWaitingAsync(waiting);
+
+        var listed = await store.ListForRecordAsync(PublishedRecordKind.Relationship, RelationshipId, default);
+
+        Assert.Equal(open.Select(report => report.ReportId), listed.Reports.Where(report => report.Status == ReaderReportStatus.Open).Select(report => report.ReportId));
+        Assert.Equal(66, listed.Reports.Count);
+        Assert.Equal(0, listed.MoreOpen);
+    }
+
+    private Task MarkWaitingAsync(IEnumerable<PulledReport> reports) => seeder.ExecuteAsync("""
+        UPDATE reader_reports SET status = 'CorrectionNeeded', note = 'Fixed.', resolved_by = 'auth0|friend', resolved_at_utc_ticks = 1, version = 1
+        WHERE report_id = ANY(@ids)
+        """, ("ids", reports.Select(report => report.ReportId).ToArray()));
+
+    private static PulledReport OnRelationship(int revision) =>
+        Report() with { RecordId = RelationshipId, Kind = PublishedRecordKind.Relationship, RevisionNumber = revision };
 
     [Fact]
     public async Task TheDatabaseRefusesACorrectionWithoutANoteAndAnOpenReportWithAResolverBecauseTheQueueRulesDoNotDependOnTheCode()
@@ -247,8 +290,8 @@ public sealed class PostgresReaderReportStoreTests(PostgresCollection postgres) 
         return ([.. page.Items.Select(item => item.Report.ReportId.ToString("D"))], page.NewerCursor, page.OlderCursor);
     }
 
-    private async Task<Guid[]> UnansweredAsync() =>
-        [.. (await store.ListUnansweredCorrectionsAsync(PublishedRecordKind.Relationship, RelationshipId, default)).Select(report => report.ReportId)];
+    private async Task<Guid[]> ReportsOfRecordAsync() =>
+        [.. (await store.ListForRecordAsync(PublishedRecordKind.Relationship, RelationshipId, default)).Reports.Select(report => report.ReportId).Order()];
 
     private Task PublishAsync(int number, int revision) =>
         releases.ReplaceActiveReleaseAsync(number, Start, new PublishedRevisionBinding(PublishedRecordKind.Relationship, RelationshipId, revision));

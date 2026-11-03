@@ -1,0 +1,5 @@
+<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">@ChildContent</svg>
+
+@code {
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+}

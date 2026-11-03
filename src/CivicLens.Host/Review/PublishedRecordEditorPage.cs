@@ -40,6 +40,13 @@ public abstract class PublishedRecordEditorPage : ReviewRecordPage
         ? "The record is off the public site. Its page now shows a notice."
         : base.StatusText();
 
+    protected async Task<string?> RunSaveAsync(Func<Task<string>> persist, Func<Task> reloadAfterConflict)
+    {
+        var target = await RunCommandAsync(persist, SaveMessages, reloadAfterConflict);
+        hasUnsavedInput = target is null;
+        return target;
+    }
+
     protected async Task<string?> RunTakeOffSiteAsync(ReviewStatus status, Func<ReviewDecisionKind, string, Task> recordDecision,
         Func<Task> reload)
     {

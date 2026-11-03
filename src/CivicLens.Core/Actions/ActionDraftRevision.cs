@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
+using CivicLens.Core.Votes;
 
 namespace CivicLens.Core.Actions;
 
@@ -23,6 +24,14 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     public const int MaximumSponsorships = 600;
     public const int MaximumTitleLength = 4_000;
     public const int MaximumCitationsPerSponsorship = 2;
+    public const int MaximumSourceIdLength = 128;
+    public const int MaximumBillTypeLength = VoteDraftRevision.MaximumBillTypeLength;
+    public const int MaximumPolicyAreaLength = 128;
+    public const int MaximumPolicyAreaIdLength = 64;
+    public const int MaximumSummaryVersionLength = 64;
+    public const int MaximumPersonIdLength = VoteDraftRevision.MaximumPersonIdLength;
+    public const int MaximumBioguideIdLength = VoteDraftRevision.MaximumBioguideIdLength;
+    public const int MaximumIssueIdLength = VoteDraftRevision.MaximumIssueIdLength;
 
     public ReviewAuthorKind AuthorKind => ReviewAuthor.KindOf(AuthorSubject);
 
@@ -46,13 +55,22 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
             throw new ArgumentException("An action revision subjects hash must be 64 lowercase hex characters.");
         if (!ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc))
             throw new ArgumentException("An action revision needs a number, an author, and a UTC creation time.");
-        if (string.IsNullOrWhiteSpace(SourceId) || Congress < 1 || BillNumber < 1 || string.IsNullOrWhiteSpace(BillType))
-            throw new ArgumentException("An action revision needs a source and a bill identity.");
+        if (Congress < 1 || BillNumber < 1)
+            throw new ArgumentException("An action revision needs a Congress and a bill number.");
+        ReviewTextRules.ValidateText(SourceId, MaximumSourceIdLength, nameof(SourceId));
+        ReviewTextRules.ValidateText(BillType, MaximumBillTypeLength, nameof(BillType));
         ReviewTextRules.ValidateHeadlineAndSummary(this, MaximumHeadlineLength, MaximumSummaryLength);
         ReviewTextRules.ValidateText(BillTitle, MaximumTitleLength, nameof(BillTitle));
         if (TrackedIssueIds.IsDefault || TrackedIssueIds.Length > StatementDraftRevision.MaximumSelections || Sponsorships.IsDefaultOrEmpty ||
             Sponsorships.Length > MaximumSponsorships)
             throw new ArgumentException("An action revision needs 1 to 600 sponsorships and at most 64 tracked issues.");
+        ValidateIssueIds(TrackedIssueIds, nameof(TrackedIssueIds));
+        if (!IssueCandidateIds.IsDefault) ValidateIssueIds(IssueCandidateIds, nameof(IssueCandidateIds));
+        foreach (var item in Sponsorships)
+        {
+            ReviewTextRules.ValidateText(item.PersonId, MaximumPersonIdLength, nameof(ActionSponsorship.PersonId));
+            ReviewTextRules.ValidateText(item.BioguideId, MaximumBioguideIdLength, nameof(ActionSponsorship.BioguideId));
+        }
         if (!IssueCandidateIds.IsDefault && !TrackedIssueIds.All(IssueCandidateIds.Contains))
             throw new ArgumentException("The tracked issues of an action revision must come from its issue candidates.");
         if (Sponsorships.Any(item => item.Citations.IsDefaultOrEmpty || item.Citations.Length > MaximumCitationsPerSponsorship ||
@@ -67,8 +85,18 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
             throw new ArgumentException("Code text states the bill title and date, so the revision cites the bill page.");
         if ((SummaryVersion is null) != (SummaryCitation is null) || (PolicyArea is null) != (PolicyAreaCitation is null))
             throw new ArgumentException("A summary version and a policy area each need their citation.");
-        if (PolicyAreaId is not null && (PolicyArea is null || string.IsNullOrWhiteSpace(PolicyAreaId)))
+        if (PolicyAreaId is not null && PolicyArea is null)
             throw new ArgumentException("A policy area ID needs a policy area and text.");
+        if (SummaryVersion is not null) ReviewTextRules.ValidateText(SummaryVersion, MaximumSummaryVersionLength, nameof(SummaryVersion));
+        if (PolicyArea is not null) ReviewTextRules.ValidateText(PolicyArea, MaximumPolicyAreaLength, nameof(PolicyArea));
+        if (PolicyAreaId is not null) ReviewTextRules.ValidateText(PolicyAreaId, MaximumPolicyAreaIdLength, nameof(PolicyAreaId));
+    }
+
+    private static void ValidateIssueIds(ImmutableArray<string> ids, string name)
+    {
+        foreach (var id in ids) ReviewTextRules.ValidateText(id, MaximumIssueIdLength, name);
+        if (ids.Distinct(StringComparer.Ordinal).Count() != ids.Length)
+            throw new ArgumentException("An issue ID appears once in a list.", name);
     }
 
     public void ValidateAsWorkerRevision(ActionDraftRevision? previous)

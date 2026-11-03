@@ -61,9 +61,7 @@ public sealed partial class RelationshipEditor
     private async Task<string?> TrySaveAsync()
     {
         if (detail is null) return null;
-        var target = await RunCommandAsync(PersistDraftAsync, SaveMessages, ReloadAfterSaveConflictAsync);
-        hasUnsavedInput = target is null;
-        return target;
+        return await RunSaveAsync(PersistDraftAsync, ReloadAfterSaveConflictAsync);
     }
 
     private async Task<string> PersistDraftAsync()
@@ -101,7 +99,7 @@ public sealed partial class RelationshipEditor
     {
         var request = new DecideRelationshipReviewRequest(RecordId, DecideExpectedRevision, DecideExpectedStateVersion,
             ParseDecisionKind(Kind), EmptyToNull(Decision?.Note), [.. Decision?.ResolvedDecisionIds ?? []], DecideKey ?? "",
-            CorrectionNoteOfApproval());
+            CorrectionNoteOfApproval(), ReasonCodeOfRejection());
         _ = await DecideReview.ExecuteAsync(actor, request, RequestAborted);
         return RelationshipRoutes.Editor(RecordId, "decided");
     }

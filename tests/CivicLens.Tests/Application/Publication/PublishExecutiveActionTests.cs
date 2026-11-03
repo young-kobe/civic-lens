@@ -108,7 +108,7 @@ public sealed class PublishExecutiveActionTests
         var byCode = scenario.AddExecutiveAction('a', [PublicationScenario.Decision(new string('a', 64), 1, ReviewDecisionKind.Approve) with { ActorSubject = ReviewAuthor.CodeSubject }], unpublished: true);
         var byPerson = scenario.AddExecutiveAction('b', unpublished: true);
         var worker = new PublishApprovedRecords(scenario.Publisher(), scenario.Publications, scenario.Loaders(),
-            new CapturingLogger<PublishApprovedRecords>(), TestBeat.Create());
+            new CapturingLogger<PublishApprovedRecords>(), TestBeat.Create(), TimeProvider.System, new CountingWakeup());
         scenario.Publications.BeforeServe = () =>
         {
             var published = scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId).ToHashSet();

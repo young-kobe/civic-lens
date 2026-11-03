@@ -62,6 +62,37 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
     }
 
     [Fact]
+    public async Task ApprovingARejectedActionWhileANewerUpdateWasRefusedShowsTheStepsAndTheCommandOnThePageAsync()
+    {
+        var seeder = new RelationshipWorldSeeder(host.ConnectionString);
+        var action = await ActionPageSeed.SeedAsync(host, seeder);
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var url = $"/Review/Actions/{action.RecordId}";
+        var rejecting = Fields((await host.GetDocumentAsync(url)).QuerySelector("#decision-form")!);
+        Set(rejecting, "kind", "Reject");
+        Set(rejecting, "Decision.ReasonCode", "InaccurateSummary");
+        using var rejected = await host.Client.PostAsync(url, new FormUrlEncodedContent(rejecting));
+        Assert.Equal(HttpStatusCode.Redirect, rejected.StatusCode);
+        await seeder.ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO action_candidates (candidate_id, source_id, congress, bill_type, bill_number, update_date_utc_ticks, detail_job_id,
+                configuration_revision_id, created_at_utc_ticks, includes_summaries, includes_subjects)
+            SELECT '{new string('9', 64)}', source_id, congress, bill_type, bill_number, 2, 'detail-2', configuration_revision_id, 2, false, false
+            FROM action_candidates WHERE candidate_id = '{action.CandidateId}';
+            UPDATE action_drafts SET refused_candidate_id = '{new string('9', 64)}' WHERE record_id = '{action.RecordId}';
+            """);
+        var approving = Fields((await host.GetDocumentAsync(url)).QuerySelector("#decision-form")!);
+        Set(approving, "kind", "Approve");
+
+        using var refused = await host.Client.PostAsync(url, new FormUrlEncodedContent(approving));
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        var notice = new AngleSharp.Html.Parser.HtmlParser().ParseDocument(await refused.Content.ReadAsStringAsync()).QuerySelector(".notice")!.TextContent;
+        Assert.Contains("1. If the record is still rejected, press Request changes.", notice, StringComparison.Ordinal);
+        Assert.Contains("actions draft requeue --refused", notice, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheReviewHomeQueueLeavesOutActionsAndVotesThatCodeApprovedAsync()
     {
         var seeder = new RelationshipWorldSeeder(host.ConnectionString);

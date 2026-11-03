@@ -16,7 +16,7 @@ internal sealed class ActionDraftRowConfiguration : IEntityTypeConfiguration<Act
             table.HasCheckConstraint("ck_action_drafts_revision", "current_revision_number >= 1");
             table.HasCheckConstraint("ck_action_drafts_review_state_version", "review_state_version >= 0");
             table.HasCheckConstraint("ck_action_drafts_review_status",
-                "review_status IN ('AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
+                ReviewDraftTableConfiguration.StatusCheck(allowNotDrafted: false));
         });
         builder.HasKey(row => row.RecordId);
         builder.Property(row => row.RecordId).HasColumnName("record_id").HasMaxLength(64);
@@ -31,6 +31,8 @@ internal sealed class ActionDraftRowConfiguration : IEntityTypeConfiguration<Act
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
         ReviewDraftTableConfiguration.ConfigureLastRevised(builder, "action_drafts", nameof(ActionDraftRow.RecordId));
         builder.Property(row => row.HeldReason).HasColumnName("held_reason");
+        builder.Property(row => row.RefusedCandidateId).HasColumnName("refused_candidate_id").HasMaxLength(64);
+        builder.HasOne<ActionCandidateRow>().WithMany().HasForeignKey(row => row.RefusedCandidateId).OnDelete(DeleteBehavior.Restrict);
         ListedDraftTableConfiguration.ConfigureListing(builder, "action_drafts");
         builder.HasOne<ActionCandidateRow>().WithMany().HasForeignKey(row => row.CandidateId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(row => new { row.SourceId, row.Congress, row.BillType, row.BillNumber }).IsUnique()

@@ -13,7 +13,7 @@ internal sealed class StatementDraftRowConfiguration : IEntityTypeConfiguration<
             table.HasCheckConstraint("ck_statement_drafts_revision", "current_revision_number >= 0");
             table.HasCheckConstraint("ck_statement_drafts_review_state_version", "review_state_version >= 0");
             table.HasCheckConstraint("ck_statement_drafts_review_status",
-                "review_status IN ('NotDrafted','AwaitingReview','AwaitingReviewWithConcerns','Approved','ChangesRequested','ApprovalWithdrawn')");
+                ReviewDraftTableConfiguration.StatusCheck(allowNotDrafted: true));
             table.HasCheckConstraint("ck_statement_drafts_not_drafted", "(current_revision_number = 0) = (review_status = 'NotDrafted')");
         });
         builder.HasKey(row => row.CandidateId);

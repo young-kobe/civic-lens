@@ -249,6 +249,28 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
         Assert.DoesNotContain(FlagText, second.QuerySelector("[aria-labelledby='needs-a-person']")!.TextContent, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ApprovingARejectedLinkAfterACitedRecordChangedShowsTheStepsThatFixItOnThePage()
+    {
+        await SeedAsync();
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var rejecting = Fields((await host.GetDocumentAsync(url)).QuerySelector("#decision-form")!);
+        Set(rejecting, "kind", "Reject");
+        Set(rejecting, "Decision.ReasonCode", "NotRelated");
+        using var rejected = await host.Client.PostAsync(url, new FormUrlEncodedContent(rejecting));
+        Assert.Equal(HttpStatusCode.Redirect, rejected.StatusCode);
+        await seeder.StatementAsync(Statement(revision: 2));
+        var approving = Fields((await host.GetDocumentAsync(url)).QuerySelector("#decision-form")!);
+        Set(approving, "kind", "Approve");
+
+        using var refused = await host.Client.PostAsync(url, new FormUrlEncodedContent(approving));
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        var notice = new HtmlParser().ParseDocument(await refused.Content.ReadAsStringAsync()).QuerySelector(".notice")!.TextContent;
+        Assert.Contains("1. Press Request changes.", notice, StringComparison.Ordinal);
+        Assert.Contains("relationships draft refresh", notice, StringComparison.Ordinal);
+    }
+
     private static string Id(int index) => index.ToString("x").PadLeft(64, 'a');
 
     private static int Links(string html) => new HtmlParser().ParseDocument("<body>" + html).QuerySelectorAll($"tbody a.cell-title[href='/Review/Relationships/{ActionPair().PairId}']").Length;

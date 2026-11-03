@@ -1281,6 +1281,36 @@ public sealed class ActionDraftStepTests
         Assert.Single(store.Revisions);
     }
 
+    [Fact]
+    public async Task ARejectedRecordSettlesAsUnchangedWithoutACallEvenWhenTheBillChangedBecauseTheTokensWouldBeWasted()
+    {
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+        var drafted = Assert.Single(first.Revisions);
+
+        var (rejected, model) = await RunAsync(Create(title: "A renamed bill"), new FakeHeadlineSummaryModel(), drafted,
+            shape: evidence => evidence with { IsRejected = true });
+
+        Assert.Empty(model.Requests);
+        Assert.Empty(rejected.Revisions);
+        Assert.Equal((State.Succeeded, ActionDraftErrorCodes.Unchanged), (rejected.Entries[0].Status, rejected.Entries[0].ErrorCode));
+        Assert.Equal(ActionDraftErrorCodes.RecordRejected, Assert.Single(rejected.Runs).Reason);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ARejectedRecordWithTheSameFactsLeavesNoBlockEvenWhenThePromptIsOlderBecauseNothingWasRefused(bool olderPrompt)
+    {
+        var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
+        var drafted = Assert.Single(first.Revisions);
+
+        var (rejected, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel(), drafted, hasOlderPromptDraft: olderPrompt,
+            shape: evidence => evidence with { IsRejected = true });
+
+        Assert.Empty(model.Requests);
+        Assert.Equal(ActionDraftErrorCodes.Unchanged, Assert.Single(rejected.Runs).Reason);
+    }
+
     private static async Task<(FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> RunAsync(ActionBillWorld world,
         FakeHeadlineSummaryModel model, ActionDraftRevision? current = null, DateTimeOffset? updatedAt = null, ActionDraftSettings? settings = null,
         IssueConfigurationRevision? issues = null, bool hasNewerCandidate = false, bool hasOlderPromptDraft = false,

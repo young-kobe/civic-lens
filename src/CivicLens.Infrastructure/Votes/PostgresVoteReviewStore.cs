@@ -49,7 +49,8 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
     }
 
     public Task<VoteDraftRevision> SaveRevisionAsync(string actorSubject, VoteDraftRevision revision, int expectedRevisionNumber,
-        ReviewDecision? approval, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
+        ReviewDecision? approval, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds,
+        CancellationToken cancellationToken) =>
         Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
             payloadHash, async (db, _, current) =>
             {
@@ -58,17 +59,18 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
                 return revision;
             }, saved => VoteRevisionRows.Create(saved, null), null,
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
-                afterDecision, revision => revision.ComparableForm()), cancellationToken);
+                afterDecision, revision => revision.ComparableForm(), correctedReportIds), cancellationToken);
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, string idempotencyKey, string payloadHash, CancellationToken cancellationToken) =>
+        int expectedReviewStateVersion, string idempotencyKey, string payloadHash,
+        CancellationToken cancellationToken) =>
         Records.DecideAsync(contextFactory, actorSubject, decision, expectedRevisionNumber, expectedReviewStateVersion, DecideOperation,
             idempotencyKey, payloadHash, async (db, _, history) =>
             {
                 if (decision.Kind != ReviewDecisionKind.Approve) return;
                 var current = history.CurrentRevision!;
                 await ValidateApprovalAsync(db, current, cancellationToken);
-            }, afterDecision, cancellationToken);
+            }, afterDecision, [], cancellationToken);
 
     public async Task<VoteReviewRead?> GetAsync(string recordId, CancellationToken cancellationToken)
     {

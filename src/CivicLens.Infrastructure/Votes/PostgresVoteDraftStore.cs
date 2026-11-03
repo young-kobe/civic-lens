@@ -67,11 +67,20 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
             await ReadBillDetailAsync(db, row, cancellationToken),
             hasNewerCandidate ? [] : await ReadBillSubjectsAsync(db, row, cancellationToken),
             await VoteDraftRows.ReadCurrentAsync(db, recordId, cancellationToken), hasNewerCandidate,
-            !hasNewerCandidate && (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId));
+            !hasNewerCandidate && (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId),
+            await VoteDraftRows.IsRejectedAsync(db, recordId, cancellationToken));
     }
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Blocked, errorCode, null, null, cancellationToken);
+
+    public Task<int> RequeueRefusedAsync(CancellationToken cancellationToken) =>
+        queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
+        {
+            var refused = await db.Set<VoteDraftRow>().AsNoTracking().Where(draft => draft.RefusedCandidateId != null && draft.ReviewStatus != ReviewStatus.Rejected)
+                .Select(draft => draft.RefusedCandidateId!).ToArrayAsync(token);
+            return settled.Where(row => refused.Contains(row.CandidateId));
+        }, cancellationToken);
 
     public Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
@@ -160,7 +169,7 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
     {
         if (row.TextOrigin is null)
             throw new InvalidDataException($"The current vote revision of candidate {row.CandidateId} has null columns. Run the vote revision backfill.");
-        return row.ReviewStatus is "AwaitingReviewWithConcerns" or "ChangesRequested" or "ApprovalWithdrawn" || row.TextOrigin == nameof(ReviewTextOrigin.Person);
+        return row.ReviewStatus is "AwaitingReviewWithConcerns" or "ChangesRequested" or "ApprovalWithdrawn" or "Rejected" || row.TextOrigin == nameof(ReviewTextOrigin.Person);
     }
 
     private sealed record DraftTextState(string CandidateId, string ReviewStatus, string? TextOrigin);

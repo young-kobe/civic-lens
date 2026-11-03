@@ -4,15 +4,17 @@ using System.Text.Json.Nodes;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Reports;
 using CivicLens.Infrastructure.Review.Persistence;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Review;
 
 /// <summary>The shared store core. Reads hold one review cycle: the current revision, the last approved revision, and the
 /// decisions since that approval.</summary>
-internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevision>(string lockKey, string draftName,
-    string recordIdProperty, Action<TDraftRow, TRevision>? revised = null,
+internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevision>(string lockKey, PublishedRecordKind kind, string draftName,
+    string recordIdProperty, Action<TDraftRow, TRevision>? revised = null, PersonApprovalRules<TDraftRow>? personApproval = null,
     Func<CollectionAttemptDbContext, IQueryable<TRevisionRow>, CancellationToken, Task<IReadOnlyList<StoredRevision<TRevisionRow, TRevision>>>>? readRevisions = null)
     where TDraftRow : class, IReviewDraftRow
     where TRevisionRow : class, IReviewRevisionRow
@@ -41,11 +43,12 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     public sealed record ApprovalAfterSave(ReviewDecision Decision,
         Func<CollectionAttemptDbContext, TDraftRow, ReviewHistory<TRevision>, Task> Validate,
         Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> AfterDecision,
-        Func<TRevision, TRevision> Comparable, Func<TRevision, bool>? MustWriteRevision = null);
+        Func<TRevision, TRevision> Comparable, ImmutableArray<Guid> CorrectedReportIds, Func<TRevision, bool>? MustWriteRevision = null);
 
     /// <summary>Saves a revision. With an approval, the same transaction then approves the saved revision with every check of a
     /// separate decision. A failed check rolls the saved revision back. When the input equals the current revision, no revision is
-    /// written and the approval binds to the current one. That refuses when the current revision is already approved. The
+    /// written and the approval binds to the current one. That refuses when the current revision is already approved. The approval
+    /// closes the listed reader reports in the same transaction, so a rollback leaves them open. The
     /// <paramref name="afterAppend"/> hook runs only when the save appends a revision.</summary>
     public async Task<TRevision> SaveRevisionAsync(IDbContextFactory<CollectionAttemptDbContext> contextFactory, string actorSubject,
         TRevision revision, int expectedRevisionNumber, string operation, string idempotencyKey, string payloadHash,
@@ -94,7 +97,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     private Task<ReviewDecision> ApproveSavedAsync(CollectionAttemptDbContext db, ApprovalAfterSave approval,
         CancellationToken cancellationToken) =>
         DecideInTransactionAsync(db, approval.Decision, approval.Decision.RevisionNumber, approval.Decision.ReviewStateVersion - 1,
-            approval.Validate, approval.AfterDecision, cancellationToken);
+            approval.Validate, approval.AfterDecision, approval.CorrectedReportIds, cancellationToken);
 
     /// <summary>The one step that appends a revision for a person or for analysis. It recomputes the stored status. It clears the
     /// held reason, because the reason described an older revision.</summary>
@@ -111,12 +114,13 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
 
     /// <summary>The analysis worker appends a revision of a fact record. Code approves it in the same transaction when no concern
     /// is open, the revision holds no text that a person wrote, and the record's own approval checks pass. Otherwise it waits for a person.
-    /// A failed approval check keeps its message as the held reason of the draft. The caller runs
+    /// A failed approval check keeps its message as the held reason of the draft. A worker revision also clears the refused update block of the draft. The caller runs
     /// <see cref="AfterCodeApprovalAsync"/> once the rest of the transaction rows are tracked.</summary>
     public async Task AppendCodeApprovedAsync(CollectionAttemptDbContext db, TDraftRow draft, TRevision revision, TRevisionRow row,
-        ImmutableArray<ReviewDecision> cycle, Func<Task<ApprovalCheck>> approvalChecks)
+        ImmutableArray<ReviewDecision> cycle, Func<Task<ApprovalCheck>> approvalChecks, string? correctionNote = null)
     {
         AppendRevision(db, draft, revision, row, cycle);
+        if (draft is IRefusedDraftRow refused) refused.RefusedCandidateId = null;
         if (!ReviewPolicy.GetUnresolvedConcerns(cycle).IsEmpty || revision is IHeadlineSummaryRevision { TextOrigin: ReviewTextOrigin.Person })
             return;
         var check = await approvalChecks();
@@ -126,7 +130,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             return;
         }
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), draft.RecordId, revision.RevisionNumber, draft.ReviewStateVersion + 1,
-            ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, null, [], new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero));
+            ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, null, [], new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero), correctionNote);
         ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, cycle, decision);
         RecordDecision(db, draft, cycle, decision);
     }
@@ -166,6 +170,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         ActorSubject = decision.ActorSubject,
         Note = decision.Note,
         CorrectionNote = decision.CorrectionNote,
+        ReasonCode = decision.ReasonCode,
         CreatedAtUtcTicks = decision.CreatedAtUtc.UtcTicks
     };
 
@@ -177,7 +182,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     public async Task<ReviewDecision> DecideAsync(IDbContextFactory<CollectionAttemptDbContext> contextFactory, string actorSubject,
         ReviewDecision decision, int expectedRevisionNumber, int expectedReviewStateVersion, string operation, string idempotencyKey,
         string payloadHash, Func<CollectionAttemptDbContext, TDraftRow, ReviewHistory<TRevision>, Task> validateDecision,
-        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision,
+        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision, ImmutableArray<Guid> correctedReportIds,
         CancellationToken cancellationToken)
     {
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
@@ -185,13 +190,14 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await ReviewIdempotency.WriteOnceAsync(db, lockKey, actorSubject, operation, idempotencyKey, payloadHash,
             () => DecideInTransactionAsync(db, decision, expectedRevisionNumber, expectedReviewStateVersion, validateDecision,
-                afterDecision, cancellationToken), cancellationToken);
+                afterDecision, correctedReportIds, cancellationToken), cancellationToken);
     }
 
     private async Task<ReviewDecision> DecideInTransactionAsync(CollectionAttemptDbContext db, ReviewDecision decision,
         int expectedRevisionNumber, int expectedReviewStateVersion,
         Func<CollectionAttemptDbContext, TDraftRow, ReviewHistory<TRevision>, Task> validateDecision,
-        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision, CancellationToken cancellationToken)
+        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision, ImmutableArray<Guid> correctedReportIds,
+        CancellationToken cancellationToken)
     {
         var draft = await ReadDraftForWriteAsync(db, decision.DraftId, cancellationToken);
         var history = (await ReadHistoriesAsync(db, [draft], cancellationToken))[draft.RecordId];
@@ -199,8 +205,14 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             expectedReviewStateVersion, decision);
         ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, history.Decisions, decision);
         await validateDecision(db, draft, history);
+        var approves = decision.Kind == ReviewDecisionKind.Approve;
+        if (approves && personApproval?.Check is { } check) await check(db, draft, cancellationToken);
         RecordDecision(db, draft, history.Decisions, decision);
         await afterDecision(db, draft.RecordId, decision.RevisionNumber, cancellationToken);
+        if (approves)
+            await ReaderReportResolution.CloseCorrectedAsync(db, decision.ActorSubject, kind, draft.RecordId, correctedReportIds,
+                decision.RevisionNumber, cancellationToken);
+        if (approves && personApproval?.Apply is { } apply) await apply(db, draft, decision, cancellationToken);
         return decision;
     }
 
@@ -210,14 +222,15 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         return filter switch
         {
             DraftStatusFilter.All => drafts,
-            DraftStatusFilter.NeedsAction => drafts.Where(draft => draft.ReviewStatus != ReviewStatus.Approved),
+            DraftStatusFilter.NeedsAction => drafts.Where(draft => draft.ReviewStatus != ReviewStatus.Approved && draft.ReviewStatus != ReviewStatus.Rejected),
             DraftStatusFilter.Approved => drafts.Where(draft => draft.ReviewStatus == ReviewStatus.Approved),
             _ => throw new ArgumentOutOfRangeException(nameof(filter))
         };
     }
 
-    public async Task<(int NeedsAction, int Approved)> CountAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
-        (await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken),
+    public async Task<(int All, int NeedsAction, int Approved)> CountAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
+        (await Drafts(db, DraftStatusFilter.All).CountAsync(cancellationToken),
+            await Drafts(db, DraftStatusFilter.NeedsAction).CountAsync(cancellationToken),
             await Drafts(db, DraftStatusFilter.Approved).CountAsync(cancellationToken));
 
     public Task<TDraftRow[]> ReadDraftsAsync(CollectionAttemptDbContext db, string[] recordIds, CancellationToken cancellationToken) =>
@@ -235,7 +248,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         {
             var history = histories[draft.RecordId];
             return new QueueRead<TRevision>(history.CurrentRevision!, history.CurrentStatus, history.UnresolvedConcerns.Length,
-                (draft as IHeldDraftRow)?.HeldReason);
+                (draft as IHeldDraftRow)?.HeldReason, history.RejectReason);
         }, StringComparer.Ordinal);
         return (readable, errors);
     }
@@ -255,15 +268,30 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {
         string[] excluded = [.. excludedRecordIds];
-        var keys = await db.Database.SqlQueryRaw<UnpublishedKey>(unpublishedApprovedSql)
+        var unpublished = db.Database.SqlQueryRaw<UnpublishedKey>(unpublishedApprovedSql)
             .Where(key => key.PublishedRevisionNumber == null || key.PublishedRevisionNumber != key.CurrentRevisionNumber)
-            .Where(key => !excluded.Contains(key.RecordId))
-            .OrderByDescending(key => key.CreatedAtUtcTicks).ThenByDescending(key => key.RecordId)
-            .Take(limit).ToArrayAsync(cancellationToken);
+            .Where(key => !excluded.Contains(key.RecordId));
+        var replacements = await unpublished.Where(key => key.PublishedRevisionNumber != null)
+            .OrderBy(key => key.CreatedAtUtcTicks).ThenBy(key => key.RecordId).Take(limit).ToArrayAsync(cancellationToken);
+        var added = await unpublished.Where(key => key.PublishedRevisionNumber == null)
+            .OrderBy(key => key.CreatedAtUtcTicks).ThenBy(key => key.RecordId).Take(limit).ToArrayAsync(cancellationToken);
+        var keys = ReplacementsFirstUpToHalf(replacements, added, limit);
         var drafts = (await ReadDraftsAsync(db, [.. keys.Select(key => key.RecordId)], cancellationToken))
             .ToDictionary(row => row.RecordId, StringComparer.Ordinal);
         var histories = await ReadHistoriesAsync(db, drafts.Values, cancellationToken);
         return [.. keys.Select(key => (drafts[key.RecordId], histories[key.RecordId]))];
+    }
+
+    // Replacements fill at most half of the batch while new records wait, so a flood of corrections cannot hold new records back.
+    // The two lists alternate, replacement first, so any share cut from the front keeps this bound.
+    private static UnpublishedKey[] ReplacementsFirstUpToHalf(UnpublishedKey[] replacements, UnpublishedKey[] added, int limit)
+    {
+        var replacementCount = Math.Min(replacements.Length, Math.Max(limit / 2, limit - added.Length));
+        var chosen = replacements.Take(replacementCount).ToArray();
+        var newCount = Math.Min(added.Length, limit - replacementCount);
+        return [.. Enumerable.Range(0, Math.Max(chosen.Length, newCount))
+            .SelectMany(position => new[] { position < chosen.Length ? chosen[position] : null, position < newCount ? added[position] : null })
+            .OfType<UnpublishedKey>()];
     }
 
     public async Task<Dictionary<string, ReviewHistory<TRevision>>> ReadHistoriesAsync(CollectionAttemptDbContext db,
@@ -343,7 +371,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         var resolutions = await db.Set<ReviewDecisionResolutionRow<TDecisionRow>>().AsNoTracking()
             .Where(resolution => approvalIds.Contains(resolution.DecisionId))
             .OrderBy(resolution => resolution.DecisionId).ThenBy(resolution => resolution.ResolvedDecisionId)
-            .Take(approvalIds.Length * ReviewPolicy.MaximumOpenConcerns).ToArrayAsync(cancellationToken);
+            .Take(approvalIds.Length * ReviewPolicy.MaximumBlockersPerCycle).ToArrayAsync(cancellationToken);
         return resolutions.ToLookup(resolution => resolution.DecisionId, resolution => resolution.ResolvedDecisionId, StringComparer.Ordinal);
     }
 

@@ -41,7 +41,7 @@ else
         {
             <Notice Tone="@(isConflict ? Tone.Warn : Tone.Ok)" Dismissible="@(!isConflict)">@statusMessage</Notice>
         }
-        <ReaderReportBanner Actor="actor" Kind="PublishedRecordKind.DocumentChange" RecordId="@DraftId" />
+        <ReaderReportPanel Actor="actor" Kind="PublishedRecordKind.DocumentChange" RecordId="@DraftId" ApprovalFormId="draft-form" CurrentRevisionApproved="@(status == ReviewStatus.Approved)" />
         @if (IsAiRevision)
         {
             <Notice Tone="Tone.Warn">The AI drafter wrote this revision. It is not a human decision. Check every sentence, date, and citation against the evidence before you approve it.</Notice>
@@ -226,7 +226,7 @@ else
         </div>
 
         <ReviewDecisionPanel RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion" Status="status"
-                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" CanApprove="false" OnDecide="DecideAsync" />
+                             Concerns="concerns" CanDecide="CanDecide" IdempotencyKey="@decisionKey" Note="@Decision?.Note" ReasonCode="@Decision?.ReasonCode" RecordKind="PublishedRecordKind.DocumentChange" OnSite="TakeOffView.Status.OnSite" WithdrawnRevisionNumber="TakeOffView.Status.WithdrawnRevisionNumber" CanApprove="false" OnDecide="DecideAsync" />
 
         <TakeOffSitePanel View="TakeOffView" RevisionNumber="revision.RevisionNumber" ReviewStateVersion="review.ReviewStateVersion"
                           IdempotencyKey="@TakeOffFormKey" Note="@TakeOffNote" Refusal="@takeOffRefusal" OnSubmit="TakeOffSiteAsync" />

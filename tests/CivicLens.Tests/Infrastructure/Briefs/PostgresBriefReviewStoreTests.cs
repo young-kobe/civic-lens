@@ -105,7 +105,7 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
         forged.ValidateShape();
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 1, null, "save-2", new string('6', 64), default));
+            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 1, null, "save-2", new string('6', 64), [], default));
 
         Assert.Equal(1, await ScalarAsync($"SELECT current_revision_number FROM brief_drafts WHERE record_id = '{RecordId}'"));
     }
@@ -138,7 +138,7 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
             Suggestion = third.Suggestion! with { Headline = "A forged suggestion" }
         };
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 5, null, "save-6", new string('6', 64), default));
+            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 5, null, "save-6", new string('6', 64), [], default));
         Assert.Equal(5, await ScalarAsync($"SELECT current_revision_number FROM brief_drafts WHERE record_id = '{RecordId}'"));
     }
 
@@ -176,7 +176,7 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
             Citations = [.. suggestion.Citations.Select(citation => citation with { RevisionNumber = citation.RevisionNumber + 1 })]
         };
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 3, null, "save-6", new string('6', 64), default));
+            reviews.SaveRevisionAsync(Reviewer.Subject, forged, 3, null, "save-6", new string('6', 64), [], default));
         Assert.Equal(3, await ScalarAsync($"SELECT current_revision_number FROM brief_drafts WHERE record_id = '{RecordId}'"));
         await Assert.ThrowsAsync<ArgumentException>(() =>
             SaveAsync(1, "Headline", ReviewableRevision().Paragraphs, "save-7", SuggestionChoice.Use));
@@ -212,7 +212,7 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
 
         Assert.False(approving.IsCompleted);
         await holder.DisposeAsync();
-        await Assert.ThrowsAsync<ArgumentException>(() => approving);
+        await Assert.ThrowsAsync<StaleApprovalException>(() => approving);
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM brief_review_decisions"));
     }
 
@@ -224,12 +224,28 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
     {
         await ChangeCitedStatementAsync(change);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => DecideAsync(1, 0, ReviewDecisionKind.Approve));
+        await Assert.ThrowsAsync<StaleApprovalException>(() => DecideAsync(1, 0, ReviewDecisionKind.Approve));
 
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM brief_review_decisions"));
         var read = (await reviews.GetAsync(RecordId, default))!;
         Assert.True(read.CitedRecordsChanged);
         Assert.Equal([("R1", true), ("R2", false), ("R3", false)], read.Cited.OrderBy(pair => pair.Key).Select(pair => (pair.Key, pair.Value.Changed)));
+    }
+
+    [Theory]
+    [InlineData("withdrawn")]
+    [InlineData("replaced")]
+    [InlineData("absent")]
+    public async Task ReversingARejectionAfterACitedRecordChangedIsRefusedWithTheStepsThatFixItBecauseThePageMustSayWhatToDo(string change)
+    {
+        _ = await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
+        await ChangeCitedStatementAsync(change);
+
+        var refused = await Assert.ThrowsAsync<StaleApprovalException>(() => DecideAsync(1, 1, ReviewDecisionKind.Approve));
+
+        Assert.Contains("brief redraft --week", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Request changes", refused.Message, StringComparison.Ordinal);
+        Assert.Equal("Rejected", await ScalarAsync($"SELECT review_status FROM brief_drafts WHERE record_id = '{RecordId}'"));
     }
 
     private async Task<string> CheckRowAsync() => (string)(await ScalarAsync(
@@ -247,7 +263,7 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
         var request = new SaveBriefDraftRequest(RecordId, 1, "Typed headline", ReviewableRevision().Paragraphs, SuggestionChoice.Keep,
             "save-and-approve", new ApprovalWithSave(0, null, [], null));
 
-        await Assert.ThrowsAsync<ArgumentException>(() => new SaveBriefDraft(reviews).ExecuteAsync(Reviewer, request));
+        await Assert.ThrowsAsync<StaleApprovalException>(() => new SaveBriefDraft(reviews).ExecuteAsync(Reviewer, request));
 
         Assert.Equal(checkBefore, await CheckRowAsync());
 
@@ -389,8 +405,10 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
         SuggestionChoice suggestion = SuggestionChoice.Keep) =>
         new SaveBriefDraft(reviews).ExecuteAsync(Reviewer, new(RecordId, expected, headline, [.. paragraphs], suggestion, key));
 
-    private Task<ReviewDecision> DecideAsync(int revision, int stateVersion, ReviewDecisionKind kind, string? note = null) =>
-        new DecideBriefReview(reviews).ExecuteAsync(Reviewer, new(RecordId, revision, stateVersion, kind, note, [], Guid.NewGuid().ToString("N")));
+    private Task<ReviewDecision> DecideAsync(int revision, int stateVersion, ReviewDecisionKind kind, string? note = null,
+        ReviewReasonCode? reason = null) =>
+        new DecideBriefReview(reviews).ExecuteAsync(Reviewer, new(RecordId, revision, stateVersion, kind, note, [], Guid.NewGuid().ToString("N"),
+            ReasonCode: reason));
 
     private async Task<object?> ScalarAsync(string sql)
     {

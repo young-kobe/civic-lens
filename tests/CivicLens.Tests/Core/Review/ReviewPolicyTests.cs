@@ -52,7 +52,7 @@ public sealed class ReviewPolicyTests
         }
 
         var full = Review(draftId, 1, cycle.Length, cycle);
-        Assert.Throws<ArgumentException>(() => Validate(full,
+        Assert.Throws<ReviewCycleFullException>(() => Validate(full,
             Decision(draftId, 1, cycle.Length + 1, ReviewDecisionKind.RequestChanges, "One more.")));
         Validate(full, Decision(draftId, 1, cycle.Length + 1, ReviewDecisionKind.Approve, "Resolved.",
             [.. cycle.Skip(1).Select(item => item.DecisionId)]));
@@ -107,6 +107,106 @@ public sealed class ReviewPolicyTests
 
     private sealed record State(string RecordId, int RevisionNumber, int Version, ImmutableArray<ReviewDecision> Decisions);
 
+    [Fact]
+    public void ARejectionNeedsAReasonCodeAndNoOtherDecisionTakesOneBecauseRejectionsAreCountedByCause()
+    {
+        var draftId = new string('1', 32);
+        var review = Review(draftId, 1, 0, []);
+
+        Assert.Throws<ArgumentException>(() => Validate(review, Decision(draftId, 1, 1, ReviewDecisionKind.Reject, "Junk.")));
+        Assert.Throws<ArgumentException>(() => Validate(review, Decision(draftId, 1, 1, ReviewDecisionKind.Reject, null, reason: (ReviewReasonCode)99)));
+        Assert.Throws<ArgumentException>(() => Validate(review, Decision(draftId, 1, 1, ReviewDecisionKind.RequestChanges, "Fix.",
+            reason: ReviewReasonCode.Duplicate)));
+        Validate(review, Decision(draftId, 1, 1, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.IndexPage));
+    }
+
+    [Fact]
+    public void ARejectedRevisionIsRejectedAndNotAConcernBecauseItLeavesTheQueueAndBlocksNothingElse()
+    {
+        var draftId = new string('2', 32);
+        var rejection = Decision(draftId, 1, 1, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.LowSubstance);
+
+        Assert.Equal(ReviewStatus.Rejected, ReviewPolicy.GetCurrentStatus(1, [rejection]));
+        Assert.Empty(ReviewPolicy.GetUnresolvedConcerns([rejection]));
+    }
+
+    [Fact]
+    public void ARevisionThatIsApprovedOrAlreadyRejectedCannotBeRejectedBecauseAnApprovalUsesWithdrawAndOneRejectionIsEnough()
+    {
+        var draftId = new string('3', 32);
+        var approval = Decision(draftId, 1, 1, ReviewDecisionKind.Approve, null);
+        var rejection = Decision(draftId, 1, 1, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.WrongSpeaker);
+
+        Assert.Throws<ArgumentException>(() => Validate(Review(draftId, 1, 1, [approval]),
+            Decision(draftId, 1, 2, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.Duplicate)));
+        Assert.Throws<ArgumentException>(() => Validate(Review(draftId, 1, 1, [rejection]),
+            Decision(draftId, 1, 2, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.Duplicate)));
+    }
+
+    [Fact]
+    public void ARejectionCanFollowAnApprovalOfAnOlderRevisionBecauseOnlyTheCurrentRevisionIsRejected()
+    {
+        var draftId = new string('4', 32);
+        var approval = Decision(draftId, 1, 1, ReviewDecisionKind.Approve, null);
+
+        var review = Review(draftId, 2, 1, [approval]);
+        Validate(review, Decision(draftId, 2, 2, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.InaccurateSummary));
+    }
+
+    [Fact]
+    public void APersonCanApproveARejectedRevisionAndTheHistoryKeepsBothDecisionsBecauseAReversalIsAnotherDecision()
+    {
+        var draftId = new string('5', 32);
+        var rejection = Decision(draftId, 1, 1, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.NotAStatement);
+        var approval = Decision(draftId, 1, 2, ReviewDecisionKind.Approve, null);
+
+        Validate(Review(draftId, 1, 1, [rejection]), approval);
+
+        Assert.Equal(ReviewStatus.Approved, ReviewPolicy.GetCurrentStatus(1, [rejection, approval]));
+    }
+
+    [Fact]
+    public void ANewRevisionOfARejectedRecordWaitsForAPersonAgainBecauseOnlyAPersonEditCanReachItAndTheWorkerIsRefusedElsewhere()
+    {
+        var rejection = Decision(new string('6', 32), 1, 1, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.Duplicate);
+
+        Assert.Equal(ReviewStatus.AwaitingReview, ReviewPolicy.GetCurrentStatus(2, [rejection]));
+    }
+
+    [Fact]
+    public void ARejectCountsAgainstTheCycleLimitBecauseTheCycleReadLoadsAtMostThatManyDecisions()
+    {
+        var draftId = new string('7', 32);
+        var cycle = ImmutableArray<ReviewDecision>.Empty;
+        for (var revision = 1; cycle.Length < ReviewPolicy.MaximumBlockersPerCycle; revision++)
+        {
+            var rejection = Decision(draftId, revision, cycle.Length + 1, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.Duplicate);
+            Validate(Review(draftId, revision, cycle.Length, cycle), rejection);
+            cycle = cycle.Add(rejection);
+        }
+
+        var full = Review(draftId, 65, cycle.Length, cycle);
+        var refused = Assert.Throws<ReviewCycleFullException>(() => Validate(full,
+            Decision(draftId, 65, cycle.Length + 1, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.Duplicate)));
+        Assert.Contains("Approve the record to start a new cycle", refused.Message);
+        Assert.Throws<ReviewCycleFullException>(() => Validate(full,
+            Decision(draftId, 65, cycle.Length + 1, ReviewDecisionKind.RequestChanges, "One more.")));
+        Validate(full, Decision(draftId, 65, cycle.Length + 1, ReviewDecisionKind.Approve, null));
+    }
+
+    [Fact]
+    public void ARequestForChangesOnARejectedRevisionReopensItBecauseAPersonChoseToAskAgain()
+    {
+        var draftId = new string('8', 32);
+        var rejection = Decision(draftId, 1, 1, ReviewDecisionKind.Reject, null, reason: ReviewReasonCode.LowSubstance);
+        var changes = Decision(draftId, 1, 2, ReviewDecisionKind.RequestChanges, "Look again.");
+
+        Validate(Review(draftId, 1, 1, [rejection]), changes);
+
+        Assert.Equal(ReviewStatus.ChangesRequested, ReviewPolicy.GetCurrentStatus(1, [rejection, changes]));
+        Assert.Same(changes, Assert.Single(ReviewPolicy.GetUnresolvedConcerns([rejection, changes])));
+    }
+
     private static State Review(string recordId, int revisionNumber, int version, ImmutableArray<ReviewDecision> decisions) =>
         new(recordId, revisionNumber, version, decisions);
 
@@ -114,7 +214,7 @@ public sealed class ReviewPolicyTests
         ReviewPolicy.ValidateDecision(state.RecordId, state.RevisionNumber, state.Version, state.Decisions, decision);
 
     private static ReviewDecision Decision(string draftId, int revision, int state,
-        ReviewDecisionKind kind, string? note, ImmutableArray<string> resolved = default) =>
+        ReviewDecisionKind kind, string? note, ImmutableArray<string> resolved = default, ReviewReasonCode? reason = null) =>
         new(Guid.NewGuid().ToString("N"), draftId, revision, state, kind, "reviewer", note,
-            resolved.IsDefault ? [] : resolved, DateTimeOffset.UnixEpoch);
+            resolved.IsDefault ? [] : resolved, DateTimeOffset.UnixEpoch, ReasonCode: reason);
 }

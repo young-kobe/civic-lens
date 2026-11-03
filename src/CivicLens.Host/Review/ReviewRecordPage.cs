@@ -1,5 +1,7 @@
+using System.Collections.Immutable;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
+using CivicLens.Host.Reports;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Logging;
@@ -11,19 +13,21 @@ public abstract class ReviewRecordPage : ComponentBase
     protected const string SaveForm = "save";
     protected const string DecideForm = "decide";
 
+    public const string CorrectedReportsField = "correctedReportIds";
+
     protected static readonly ReviewFailureMessages SaveFailures = new(
         "Someone saved a newer revision. Your wording is kept below. Compare both versions, then save again.",
         "Some fields or selections are not valid. Correct them and save again.",
         "The revision could not be saved. Your wording is kept in the form. Try again.");
 
     protected static readonly ReviewFailureMessages SaveAndApproveFailures = new(
-        "Someone changed this record after you opened the page. Nothing was saved or approved. Your wording is kept below. Compare both versions, then press Save and approve again.",
-        "Nothing was saved or approved. Some fields are not valid, or an approval check failed. Approval must resolve every open concern. Correct the form and press Save and approve again.",
-        "Nothing was saved or approved. Your wording is kept in the form. Press Save and approve again.");
+        "This record changed after you opened the page, or this form was already sent. Your wording is kept below. Check the current record first. Press Save and approve again only if your change is still needed.",
+        "Some fields are not valid, or an approval check failed. Approval must resolve every open concern. Your wording is kept in the form. Correct it and press Save and approve again.",
+        "The record could not be saved or approved. Your wording is kept in the form. Check the current record, then press Save and approve again if it is still needed.");
 
     protected static readonly ReviewFailureMessages DecideFailures = new(
         "The revision or review state changed after you opened this page. Check the latest state before you record a decision.",
-        "The decision needs valid details. Requesting changes and withdrawing approval need a reason. Approval must resolve every open concern.",
+        "The decision needs valid details. Requesting changes and withdrawing approval need a reason. Rejecting needs a reason from the list. Approval must resolve every open concern.",
         "The decision could not be saved. The current review state shows below. Try again.");
 
     protected readonly string saveKey = Guid.NewGuid().ToString("N");
@@ -54,6 +58,7 @@ public abstract class ReviewRecordPage : ComponentBase
     [SupplyParameterFromForm(FormName = DecideForm, Name = "expectedReviewStateVersion")] protected int DecideExpectedStateVersion { get; set; }
     [SupplyParameterFromForm(FormName = DecideForm, Name = "idempotencyKey")] protected string? DecideKey { get; set; }
     [SupplyParameterFromForm(FormName = DecideForm, Name = "kind")] protected string? Kind { get; set; }
+    [SupplyParameterFromForm(FormName = SaveForm, Name = CorrectedReportsField)] protected Guid[]? SaveCorrectedReportIds { get; set; }
 
     protected CancellationToken RequestAborted => HttpContext.RequestAborted;
     protected bool CanDecide => !hasUnsavedInput && !isConflict && error is null;
@@ -74,6 +79,7 @@ public abstract class ReviewRecordPage : ComponentBase
     {
         "saved" => "The new revision is saved. Review it before you record a decision.",
         "decided" => "Your decision on this revision is saved.",
+        ReportRoutes.DismissedStatus => "The report is dismissed.",
         _ => null
     };
 
@@ -105,7 +111,7 @@ public abstract class ReviewRecordPage : ComponentBase
     protected async Task<string?> RunCommandAsync(Func<Task<string>> command, ReviewFailureMessages messages,
         Func<Task> reloadAfterConflict)
     {
-        var (target, failure) = await ReviewCommand.RunAsync(command, HttpContext.Response, Logger, RequestAborted);
+        var (target, failure, detail) = await ReviewCommand.RunAsync(command, HttpContext.Response, Logger, RequestAborted);
         switch (failure)
         {
             case ReviewCommandFailure.AccessDenied:
@@ -117,6 +123,12 @@ public abstract class ReviewRecordPage : ComponentBase
                 break;
             case ReviewCommandFailure.NothingToSave:
                 error = new NothingToSaveException().Message;
+                break;
+            case ReviewCommandFailure.ApprovalStale:
+                error = detail;
+                break;
+            case ReviewCommandFailure.CycleFull:
+                error = new ReviewCycleFullException().Message;
                 break;
             case ReviewCommandFailure.Invalid:
                 error = messages.Invalid;
@@ -142,11 +154,16 @@ public abstract class ReviewRecordPage : ComponentBase
 
     protected ApprovalWithSave? ApprovalOfSave() => IsSaveAndApprove
         ? new(ApprovalExpectedStateVersion, EmptyToNull(Approval?.Note), [.. Approval?.ResolvedDecisionIds ?? []],
-            EmptyToNull(Approval?.CorrectionNote))
+            EmptyToNull(Approval?.CorrectionNote), ReportIds(SaveCorrectedReportIds))
         : null;
 
     protected string? CorrectionNoteOfApproval() =>
         ParseDecisionKind(Kind) == ReviewDecisionKind.Approve ? EmptyToNull(Decision?.CorrectionNote) : null;
+
+    protected ReviewReasonCode? ReasonCodeOfRejection() =>
+        ParseDecisionKind(Kind) == ReviewDecisionKind.Reject ? Decision?.ReasonCode : null;
+
+    protected static ImmutableArray<Guid>? ReportIds(Guid[]? ids) => ids is { Length: > 0 } ? [.. ids] : null;
 
     protected static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 }

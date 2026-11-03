@@ -1,30 +1,57 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Application.Publication;
 
 public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationStore publications, PublishedRecordLoaders loaders,
-    ILogger<PublishApprovedRecords> logger, WorkerBeat beat)
+    ILogger<PublishApprovedRecords> logger, WorkerBeat beat, TimeProvider clock, IIntervalWakeup wakeup)
 {
+    /// <summary>The least time between two releases of the stage. The database clock measures it from the stored time of the newest
+    /// release. A failed or conflicted tick starts the same gap on the clock of this process.</summary>
+    public static readonly TimeSpan ReleaseGap = TimeSpan.FromMinutes(10);
+
     private static readonly ReviewActor Actor = new(ReviewAuthor.CodeSubject, ReviewRole.Owner);
+
+    private long? failedAt;
 
     public async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
-        var published = 0;
+        if (await IsInsideGapAsync(cancellationToken)) return 0;
+        try
+        {
+            return await PublishOneReleaseAsync(cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            failedAt = clock.GetTimestamp();
+            throw;
+        }
+    }
+
+    private async Task<bool> IsInsideGapAsync(CancellationToken cancellationToken)
+    {
+        if (failedAt is { } failure && clock.GetElapsedTime(failure) < ReleaseGap) return true;
+        return await publications.ReadAgeOfNewestReleaseAsync(cancellationToken) < ReleaseGap;
+    }
+
+    private async Task<int> PublishOneReleaseAsync(CancellationToken cancellationToken)
+    {
         var skipped = new HashSet<string>();
+        ImmutableArray<ReadyToPublishRecord> fitted = default;
         while (true)
         {
             await beat.BeatIfDueAsync(cancellationToken);
             // After a rollback the active release is not the latest. The stage waits until the owner activates the latest release.
             var state = await publications.GetStateAsync(cancellationToken);
-            if (state.Active?.ReleaseNumber != state.LatestReleaseNumber && state.LatestReleaseNumber > 0) return published;
-            var ready = await ListReadyAsync(skipped, cancellationToken);
+            if (state.Active?.ReleaseNumber != state.LatestReleaseNumber && state.LatestReleaseNumber > 0) return 0;
+            var ready = fitted.IsDefault ? await ListReadyAsync(skipped, cancellationToken) : [.. fitted.Where(record => !skipped.Contains(record.RecordId))];
             if (ready.IsEmpty)
             {
-                await PublishStatusChangesAsync(state, cancellationToken);
-                return published;
+                if (wakeup.IntervalElapsed) await PublishStatusChangesAsync(state, cancellationToken);
+                return 0;
             }
             PublicationReleaseSummary summary;
             try
@@ -33,7 +60,13 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
             }
             catch (PublicationConflictException)
             {
-                return published;
+                failedAt = clock.GetTimestamp();
+                return 0;
+            }
+            catch (ReleaseFullException exception) when (fitted.IsDefault)
+            {
+                fitted = LeaveOutWhatDoesNotFit(ready, exception);
+                continue;
             }
             catch (Exception exception) when (exception is WithdrawnRecordException or MissingCorrectionNoteException or CorrectionLimitException)
             {
@@ -49,8 +82,7 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
                 continue;
             }
             // A release that is not new replayed a stored one, and the same batch would list again.
-            if (summary.ReleaseNumber <= state.LatestReleaseNumber) return published;
-            published += ready.Length;
+            return summary.ReleaseNumber <= state.LatestReleaseNumber ? 0 : ready.Length;
         }
     }
 
@@ -64,7 +96,19 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
         }
         catch (PublicationConflictException)
         {
+            failedAt = clock.GetTimestamp();
         }
+    }
+
+    // A replacement or a return adds no entry, so it always fits. New records share the free slots, as kinds share a batch.
+    private ImmutableArray<ReadyToPublishRecord> LeaveOutWhatDoesNotFit(ImmutableArray<ReadyToPublishRecord> ready, ReleaseFullException full)
+    {
+        var added = full.NewRecords.ToHashSet();
+        var fitting = ShareLimitBetweenKinds([.. ready.Where(record => added.Contains(record.Reference)).GroupBy(record => record.Kind)
+            .Select(kind => (IReadOnlyList<ReadyToPublishRecord>)[.. kind])], full.FreeSlots);
+        logger.LogError("The release holds {Cap} records. {Waiting} new records of this batch wait for room. Raise the cap.",
+            PublicationProtocol.MaximumRecordsPerRelease, added.Count - fitting.Length);
+        return [.. ready.Where(record => !added.Contains(record.Reference)), .. fitting];
     }
 
     private async Task<ImmutableArray<ReadyToPublishRecord>> ListReadyAsync(HashSet<string> skipped, CancellationToken cancellationToken)

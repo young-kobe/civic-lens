@@ -140,6 +140,7 @@ public sealed class TakeOffSiteTests
     [InlineData(ReviewStatus.ApprovalWithdrawn)]
     [InlineData(ReviewStatus.ChangesRequested)]
     [InlineData(ReviewStatus.AwaitingReviewWithConcerns)]
+    [InlineData(ReviewStatus.Rejected)]
     public async Task ABlockedRecordRecordsNoNewDecisionBecauseReviewAlreadyBlocksIt(ReviewStatus status)
     {
         var (scenario, action) = await PublishedActionAsync();
