@@ -634,7 +634,7 @@ The `worker` command drafts one action record for each bill that has a candidate
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key, shared with the other stages |
 | `CIVIC_LENS_ISSUES_CONFIG` | Absolute path of the issue configuration, shared with the Congress.gov bill stream |
-| `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` | Daily token limit for action drafting calls, per UTC day. It is separate from the other limits. |
+| `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` | Daily token limit for action drafting calls, per UTC day (about 2,000,000 is a good start). It is separate from the other limits. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
 Drafting uses Claude Haiku 5.5. The first run can spend up to the daily limit on queued candidates. Start with a low limit. A bill version whose summaries or subjects have closed has up to three queued candidates. Each older one settles as `supersededByNewerCandidate` with no call, also when the newest candidate blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
@@ -839,11 +839,12 @@ A page layout change, such as a new source link, reaches only the pages that a p
 
 Every publish writes `officials-summary.json`, the roll-up of the figures that rankings need. A touched official gets new figures. An untouched official keeps the figures of the previous release. A release from before the roll-up has none, so its untouched officials have no vote figures until `--rewrite-officials` runs. The four board pages are partial until then. A board leaves out an official with no vote figures and says so. The cosponsor counts come from the manifest entries of every publish. The count is null until `--rewrite-entries` gives every carried action its cosponsor data. A reader must not read null as 0.
 
-The rewrite also fills `previous` in each summary row. The voting boards need `previous` to keep an earlier Congress. Until it runs, a board shows the newest Congress, and a row without `previous` leaves its member off a kept board. After `releases activate` of a release older than this rewrite, run it again. Use a new key each time, because the same key and payload replay the old result with no rewrite:
+`--rewrite-officials` also fills `previous` in each summary row. The voting boards need `previous` to keep an earlier Congress. Until it runs, a board shows the newest Congress, and a row without `previous` leaves its member off a kept board. After `releases activate` of a release older than this rewrite, run it again. Use a new key each time, because the same key and payload replay the old result with no rewrite:
 
 ```sh
 sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --rewrite-entries --rewrite-officials
 ```
+
 ### First publication backfill
 
 The table `published_records` stores the first publication time of each record. A publish writes a row for each record that it adds. Run the backfill once after the migration `PublishedRecords`. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`.
