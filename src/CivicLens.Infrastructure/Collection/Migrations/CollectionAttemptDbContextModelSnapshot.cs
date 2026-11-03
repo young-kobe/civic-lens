@@ -3695,6 +3695,109 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublicationWithdrawalCorrectionRow", b =>
+                {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("FirstRelease")
+                        .HasColumnType("integer")
+                        .HasColumnName("first_release");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<bool>("FactsUnchanged")
+                        .HasColumnType("boolean")
+                        .HasColumnName("facts_unchanged");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
+                    b.Property<long>("PublishedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("published_at_utc_ticks");
+
+                    b.Property<int>("ReplacedRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("replaced_revision_number");
+
+                    b.HasKey("Kind", "RecordId", "FirstRelease", "Position");
+
+                    b.ToTable("publication_withdrawal_corrections", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_publication_withdrawal_corrections_facts_unchanged", "note IS NULL OR NOT facts_unchanged");
+
+                            t.HasCheckConstraint("ck_publication_withdrawal_corrections_note", "note IS NULL OR char_length(note) BETWEEN 1 AND 500 AND btrim(note) <> ''");
+
+                            t.HasCheckConstraint("ck_publication_withdrawal_corrections_position", "\"position\" >= 0");
+
+                            t.HasCheckConstraint("ck_publication_withdrawal_corrections_published_at_utc_ticks", "published_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_publication_withdrawal_corrections_revision", "replaced_revision_number >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublicationWithdrawalRow", b =>
+                {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("FirstRelease")
+                        .HasColumnType("integer")
+                        .HasColumnName("first_release");
+
+                    b.Property<int?>("LastRelease")
+                        .HasColumnType("integer")
+                        .HasColumnName("last_release");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
+                    b.Property<long>("WithdrawnAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("withdrawn_at_utc_ticks");
+
+                    b.Property<int>("WithdrawnRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("withdrawn_revision_number");
+
+                    b.HasKey("Kind", "RecordId", "FirstRelease");
+
+                    b.HasIndex("FirstRelease");
+
+                    b.HasIndex("LastRelease");
+
+                    b.ToTable("publication_withdrawals", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_publication_withdrawals_note", "char_length(note) BETWEEN 1 AND 500 AND btrim(note) <> ''");
+
+                            t.HasCheckConstraint("ck_publication_withdrawals_range", "last_release IS NULL OR last_release >= first_release");
+
+                            t.HasCheckConstraint("ck_publication_withdrawals_revision", "withdrawn_revision_number >= 1");
+
+                            t.HasCheckConstraint("ck_publication_withdrawals_withdrawn_at_utc_ticks", "withdrawn_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedRecordRow", b =>
                 {
                     b.Property<string>("Kind")
@@ -6998,6 +7101,35 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .WithMany()
                         .HasForeignKey("LastRelease")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublicationWithdrawalCorrectionRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationWithdrawalRow", null)
+                        .WithMany()
+                        .HasForeignKey("Kind", "RecordId", "FirstRelease")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublicationWithdrawalRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
+                        .WithMany()
+                        .HasForeignKey("FirstRelease")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
+                        .WithMany()
+                        .HasForeignKey("LastRelease")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedRecordRow", null)
+                        .WithMany()
+                        .HasForeignKey("Kind", "RecordId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Relationships.Persistence.RelationshipAnalysisRow", b =>

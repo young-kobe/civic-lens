@@ -40,7 +40,7 @@ public sealed partial class SchemaReferenceTests(PostgresCollection postgres) : 
         ("roster", ["roster_snapshots", "roster_members", "roster_terms", "executive_officials", "executive_terms", "official_photos"]),
         ("districts", ["zcta_districts"]),
         ("reports", ["reader_report_cursor", "reader_reports"]),
-        ("publication", ["publication_record_states", "publication_releases", "published_records"])
+        ("publication", ["publication_record_states", "publication_releases", "publication_withdrawal_corrections", "publication_withdrawals", "published_records"])
     ];
 
     private string connectionString = null!;

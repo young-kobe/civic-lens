@@ -50,6 +50,24 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
+    public async Task EveryCommitCarriesTheWithdrawalsOfItsManifestSoTheStoreRowsMatchTheFile()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        var withdrawn = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
+        AssertCommitHoldsManifestWithdrawals(scenario, withdrawn);
+        var statement = scenario.AddStatement('b');
+        var carried = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k3", new PublishedRecordReference(PublishedRecordKind.Statement, statement)));
+        AssertCommitHoldsManifestWithdrawals(scenario, carried);
+        scenario.ReviseAction(action, 2);
+
+        var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k4", Reference(action)));
+
+        AssertCommitHoldsManifestWithdrawals(scenario, returned);
+        Assert.Empty(scenario.Publications.LastCommit!.Withdrawals);
+    }
+
+    [Fact]
     public async Task ALaterPublishWritesTheNoticeAgainSoItHasTheCurrentHeadAndNeverBringsTheWithdrawnFileBack()
     {
         var (scenario, action) = await PublishedActionAsync();
@@ -682,6 +700,16 @@ public sealed class PublishWithdrawalsTests
 
     private static PublishedOfficialVote[] VoteRows(Dictionary<string, byte[]> files, string path) =>
         JsonSerializer.Deserialize<PublishedOfficialVotes>(files[path], PublicationProtocol.JsonOptions)!.Votes;
+
+    private static void AssertCommitHoldsManifestWithdrawals(PublicationScenario scenario, PublicationReleaseSummary release)
+    {
+        var committed = scenario.Publications.LastCommit!.Withdrawals;
+        var manifest = ReadManifest(scenario, release.DirectoryName).Withdrawals;
+        Assert.Equal(manifest.Length, committed.Length);
+        Assert.Equal(JsonSerializer.Serialize(manifest, PublicationProtocol.JsonOptions),
+            JsonSerializer.Serialize(committed.OrderByDescending(item => item.WithdrawnAtUtc).ThenBy(item => item.RecordId, StringComparer.Ordinal),
+                PublicationProtocol.JsonOptions));
+    }
 
     private static PublicationRelease ReadManifest(PublicationScenario scenario, string directory) =>
         JsonSerializer.Deserialize<PublicationRelease>(
