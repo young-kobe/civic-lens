@@ -9,7 +9,7 @@ namespace CivicLens.Infrastructure.ExecutiveActions;
 internal sealed record ExecutiveActionRevisionPage(IReadOnlyList<ExecutiveActionRevisionRow> Rows,
     ILookup<(string RecordId, int RevisionNumber), ExecutiveActionRevisionFactRow> Facts,
     ILookup<(string RecordId, int RevisionNumber), ExecutiveActionRevisionNoticeRow> Notices,
-    IReadOnlyDictionary<(string SourceId, string DocumentNumber), ExecutiveActionDocumentRow> Documents)
+    IReadOnlyDictionary<(string SourceId, string DocumentNumber), ExecutiveActionDocumentRow> Documents) : IRevisionRowPage<ExecutiveActionRevisionRow>
 {
     public ExecutiveActionRevision Rebuild(ExecutiveActionRevisionRow row)
     {
