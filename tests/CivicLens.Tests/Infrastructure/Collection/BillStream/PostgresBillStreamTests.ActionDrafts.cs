@@ -744,7 +744,7 @@ public sealed partial class PostgresBillStreamTests
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
         var runId = await ReserveAsync(store, claim);
 
-        await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1)), DraftedRun(runId, candidate), default);
+        await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1))), DraftedRun(runId, candidate), default);
 
         Assert.Equal(("Analysis", "none"), await TupleAsync($"SELECT author_kind, coalesce(code_version, 'none') FROM action_revisions WHERE record_id = '{RecordId}'"));
     }
