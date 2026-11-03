@@ -11,6 +11,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Votes;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -77,7 +78,7 @@ public sealed partial class PostgresHouseVoteTests
         await Assert.ThrowsAsync<InvalidDataException>(() => VoteStore().RequeueOlderPromptAsync(default));
         await using var db = await QueueFactory().CreateDbContextAsync();
         var bill = await db.Database.SqlQueryRaw<LegacyBill>("SELECT congress AS \"Congress\", bill_type AS \"BillType\", bill_number AS \"BillNumber\" FROM vote_candidates").SingleAsync();
-        await Assert.ThrowsAsync<InvalidDataException>(() => InvokeInternalAsync("CivicLens.Infrastructure.Votes.BillVoteDrafts", "ReadAsync",
+        await Assert.ThrowsAsync<InvalidDataException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Votes.BillVoteDrafts", "ReadAsync",
             db, bill.Congress, bill.BillType, bill.BillNumber, CancellationToken.None));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_revisions WHERE headline IS NULL"));
     }
@@ -106,7 +107,7 @@ public sealed partial class PostgresHouseVoteTests
     {
         await using var db = await QueueFactory().CreateDbContextAsync();
 
-        await Assert.ThrowsAsync<ArgumentException>(() => InvokeInternalAsync("CivicLens.Infrastructure.Review.CitedRevisions", "ReadRevisionJsonAsync",
+        await Assert.ThrowsAsync<ArgumentException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Review.CitedRevisions", "ReadRevisionJsonAsync",
             db, PublishedRecordKind.Vote, new[] { new PublishedRevisionBinding(PublishedRecordKind.Vote, "any", 1) }, CancellationToken.None));
     }
 
@@ -159,10 +160,6 @@ public sealed partial class PostgresHouseVoteTests
         await SettleAsync(candidate, revision);
         return revision.RecordId;
     }
-
-    // The project grants no internals to the tests. The readers of the internal helper types run through reflection.
-    private static Task InvokeInternalAsync(string typeName, string method, params object[] arguments) =>
-        (Task)typeof(PostgresVoteReviewStore).Assembly.GetType(typeName)!.GetMethod(method)!.Invoke(null, arguments)!;
 
     private sealed record LegacyBill(int Congress, string BillType, int BillNumber);
 

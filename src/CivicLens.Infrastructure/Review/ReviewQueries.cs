@@ -56,6 +56,9 @@ internal static class ReviewQueries
 
     // Published state comes from the active release, not the draft, so this stays a read query.
     // The map must stay in a subquery. As the inner side of a join, Postgres copies the whole map for each draft.
+    public static string RevisionChildren(string table) =>
+        $"SELECT c.* FROM {table} c JOIN unnest({{0}}, {{1}}) AS k(id, number) ON c.record_id = k.id AND c.revision_number = k.number";
+
     public static string UnpublishedApproved(string kind, string draftTable, string recordIdColumn) => $"""
         WITH {ActivePublishedRecords}
         SELECT d.{recordIdColumn} AS "RecordId", d.current_revision_number AS "CurrentRevisionNumber",

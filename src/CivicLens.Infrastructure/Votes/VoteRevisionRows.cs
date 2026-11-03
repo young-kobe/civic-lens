@@ -68,9 +68,9 @@ internal static class VoteRevisionRows
         var rows = await query.ToListAsync(cancellationToken);
         var recordIds = rows.Select(row => row.RecordId).ToArray();
         var numbers = rows.Select(row => row.RevisionNumber).ToArray();
-        var facts = (await db.Set<VoteRevisionFactRow>().FromSqlRaw(ChildrenSql("vote_revision_facts"), recordIds, numbers).AsNoTracking()
+        var facts = (await db.Set<VoteRevisionFactRow>().FromSqlRaw(ReviewQueries.RevisionChildren("vote_revision_facts"), recordIds, numbers).AsNoTracking()
             .ToListAsync(cancellationToken)).ToLookup(fact => (fact.RecordId, fact.RevisionNumber));
-        var issues = (await db.Set<VoteRevisionIssueRow>().FromSqlRaw(ChildrenSql("vote_revision_issues"), recordIds, numbers).AsNoTracking()
+        var issues = (await db.Set<VoteRevisionIssueRow>().FromSqlRaw(ReviewQueries.RevisionChildren("vote_revision_issues"), recordIds, numbers).AsNoTracking()
             .ToListAsync(cancellationToken)).ToLookup(issue => (issue.RecordId, issue.RevisionNumber));
         var listIds = rows.Select(row => row.MemberListId).OfType<string>().Distinct().ToArray();
         var lists = await db.Set<VoteMemberListRow>().AsNoTracking().Where(list => listIds.Contains(list.ListId))
@@ -79,9 +79,6 @@ internal static class VoteRevisionRows
             .OrderBy(entry => entry.ListId).ThenBy(entry => entry.Position).ToListAsync(cancellationToken)).ToLookup(entry => entry.ListId, StringComparer.Ordinal);
         return new(rows, facts, issues, lists, entries);
     }
-
-    private static string ChildrenSql(string table) =>
-        $"SELECT c.* FROM {table} c JOIN unnest({{0}}, {{1}}) AS k(id, number) ON c.record_id = k.id AND c.revision_number = k.number";
 
     /// <summary>The failure of a reader that meets a vote revision row with null columns. Only the backfill fixes such a row.</summary>
     public static InvalidDataException NotBackfilled(string revision) =>

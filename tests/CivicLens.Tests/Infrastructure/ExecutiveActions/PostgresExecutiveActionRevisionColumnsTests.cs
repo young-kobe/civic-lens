@@ -274,10 +274,8 @@ public sealed class PostgresExecutiveActionRevisionColumnsTests(PostgresCollecti
     {
         await using var db = await ContextFactory().CreateDbContextAsync();
 
-        var method = typeof(PostgresExecutiveActionReviewStore).Assembly.GetType("CivicLens.Infrastructure.Review.CitedRevisions")!.GetMethod("ReadRevisionJsonAsync")!;
-
-        await Assert.ThrowsAsync<ArgumentException>(() => (Task)method.Invoke(null,
-            [db, PublishedRecordKind.ExecutiveAction, new[] { new PublishedRevisionBinding(PublishedRecordKind.ExecutiveAction, "any", 1) }, CancellationToken.None])!);
+        await Assert.ThrowsAsync<ArgumentException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Review.CitedRevisions", "ReadRevisionJsonAsync",
+            db, PublishedRecordKind.ExecutiveAction, new[] { new PublishedRevisionBinding(PublishedRecordKind.ExecutiveAction, "any", 1) }, CancellationToken.None));
     }
 
     [Theory]
@@ -292,6 +290,7 @@ public sealed class PostgresExecutiveActionRevisionColumnsTests(PostgresCollecti
     [InlineData("UPDATE executive_action_revisions SET signed_on = '0001-01-01'", "ck_executive_action_revisions_dates")]
     [InlineData("UPDATE executive_action_revision_facts SET citation_length = 0", "ck_executive_action_revision_facts_citation")]
     [InlineData("UPDATE executive_action_revision_facts SET position = -1 WHERE position = 0", "ck_executive_action_revision_facts_position")]
+    [InlineData("UPDATE executive_action_revision_notices SET position = -1", "ck_executive_action_revision_notices_position")]
     [InlineData("UPDATE executive_action_documents SET notice_url = NULL WHERE notice_url IS NOT NULL", "ck_executive_action_documents_notice")]
     [InlineData("UPDATE executive_action_documents SET notice_url = ' ' WHERE notice_url IS NOT NULL", "ck_executive_action_documents_notice")]
     [InlineData("UPDATE executive_action_documents SET notice_citation_length = 0 WHERE notice_url IS NOT NULL", "ck_executive_action_documents_notice_citation")]

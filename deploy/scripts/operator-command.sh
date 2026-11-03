@@ -88,6 +88,14 @@ case "$*" in
     ;;
   # usage: votes revisions verify
   "votes revisions verify") "$compose" run --rm cli votes revisions verify ;;
+  # usage: executive-actions revisions backfill <count>
+  "executive-actions revisions backfill "*)
+    [[ $# -eq 4 ]] || refuse
+    number "$4"
+    "$compose" run --rm cli executive-actions revisions backfill "$4"
+    ;;
+  # usage: executive-actions revisions verify
+  "executive-actions revisions verify") "$compose" run --rm cli executive-actions revisions verify ;;
   # usage: releases publish <key> [--rewrite-entries] [--rewrite-officials] [--rewrite-pages]
   "releases publish "*) shift 2; publish "$@" ;;
   *) refuse ;;

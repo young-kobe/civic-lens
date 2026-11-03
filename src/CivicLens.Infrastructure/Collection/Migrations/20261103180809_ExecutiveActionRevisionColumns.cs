@@ -13,6 +13,18 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             DECLARE mismatch text;
             BEGIN
                 SELECT d.source_id || ' ' || d.document_number INTO mismatch FROM executive_action_documents d
+                WHERE d.notice_json IS NOT NULL AND NOT pg_input_is_valid(d.notice_json, 'jsonb')
+                ORDER BY d.source_id, d.document_number LIMIT 1;
+                IF mismatch IS NOT NULL THEN
+                    RAISE EXCEPTION 'Cannot drop notice_json: the notice of document % is not valid JSON', mismatch;
+                END IF;
+                SELECT r.record_id || ' ' || r.revision_number INTO mismatch FROM executive_action_revisions r
+                WHERE NOT pg_input_is_valid(r.revision_json, 'jsonb')
+                ORDER BY r.record_id, r.revision_number LIMIT 1;
+                IF mismatch IS NOT NULL THEN
+                    RAISE EXCEPTION 'Cannot set the code author: revision % is not valid JSON', mismatch;
+                END IF;
+                SELECT d.source_id || ' ' || d.document_number INTO mismatch FROM executive_action_documents d
                 WHERE d.notice_json IS NOT NULL AND (d.document_number IS DISTINCT FROM d.notice_json::jsonb ->> 'documentNumber'
                     OR d.published_on IS DISTINCT FROM (d.notice_json::jsonb ->> 'publishedOn')::date)
                 ORDER BY d.source_id, d.document_number LIMIT 1;
@@ -32,6 +44,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("LOCK TABLE executive_action_documents, executive_action_revisions IN SHARE ROW EXCLUSIVE MODE");
+
             migrationBuilder.DropCheckConstraint(
                 name: "ck_executive_action_documents_pending",
                 table: "executive_action_documents");
@@ -154,7 +168,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 nullable: true);
 
             migrationBuilder.Sql("ALTER TABLE executive_action_revisions ALTER COLUMN author_kind DROP DEFAULT, ALTER COLUMN author_subject DROP DEFAULT");
-            migrationBuilder.Sql("LOCK TABLE executive_action_documents, executive_action_revisions IN SHARE ROW EXCLUSIVE MODE");
             migrationBuilder.Sql(CheckSql);
             migrationBuilder.Sql("""
                 UPDATE executive_action_documents SET notice_url = notice_json::jsonb ->> 'url',

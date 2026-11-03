@@ -1,6 +1,9 @@
 using System.Text.Json;
+using CivicLens.Application.Review;
 using CivicLens.Core.ExecutiveActions;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.ExecutiveActions;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -60,6 +63,20 @@ public sealed class ExecutiveActionRevisionColumnsMigrationTests(PostgresCollect
         Assert.Single(await ReadAsync("SELECT 1 FROM information_schema.columns WHERE column_name = 'notice_json'"));
     }
 
+    [Theory]
+    [InlineData("UPDATE executive_action_documents SET notice_json = 'not json' WHERE notice_json IS NOT NULL", "R1-2024-26714")]
+    [InlineData("UPDATE executive_action_revisions SET revision_json = 'not json'", "aaaaaaaa")]
+    public async Task AnUnreadableJsonFailsTheMigrationAndNamesItsRowBecauseAGenericCastErrorDoesNotSayWhichRowToFix(string change, string row)
+    {
+        await InsertRecordAsync(Notice, "civic-lens:code");
+        await ExecuteAsync(change);
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => MigrateToAsync(Migration));
+
+        Assert.Contains("is not valid JSON", failure.MessageText);
+        Assert.Contains(row, failure.MessageText);
+    }
+
     [Fact]
     public async Task ARevisionOfAnotherAuthorFailsTheMigrationBecauseCodeIsTheOnlyAuthorOfThisKind()
     {
@@ -86,9 +103,37 @@ public sealed class ExecutiveActionRevisionColumnsMigrationTests(PostgresCollect
         Assert.Equal(columns, await ReadAsync("SELECT notice_url || notice_citation_start || notice_citation_length FROM executive_action_documents WHERE notice_url IS NOT NULL"));
     }
 
-    private Task InsertRecordAsync(ExecutiveActionNotice notice, string authorSubject)
+    [Fact]
+    public async Task ARevisionOfTheOldShapeMovesToColumnsAfterTheMigrationAndVerifiesWithNoMismatchBecauseTheColumnsRebuildTheOriginalRevision()
     {
-        var revision = JsonSerializer.Serialize(new { recordId = RecordId, revisionNumber = 2, authorSubject }, JsonSerializerOptions.Web);
+        var original = OldShapeRevision();
+        await InsertRecordAsync(Notice, "civic-lens:code", JsonSerializer.Serialize(original, JsonSerializerOptions.Web), original.CreatedAtUtc.UtcTicks);
+        await MigrateToAsync(Migration);
+        var contexts = new PooledDbContextFactory<CollectionAttemptDbContext>(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
+        var owner = new ReviewActor("auth0|owner", ReviewRole.Owner);
+        var store = new PostgresExecutiveActionRevisionBackfillStore(contexts);
+
+        var moved = await new BackfillRevisions(store).ExecuteAsync(owner, 10);
+        var verification = await new VerifyRevisions(store).ExecuteAsync(owner);
+
+        Assert.Equal((1, 1, 0), (moved.Examined, moved.Moved, moved.Skipped));
+        Assert.Equal((1, 0, 0), (verification.Checked, verification.Legacy, verification.Mismatched));
+        Assert.Equal([JsonSerializer.Serialize(original, JsonSerializerOptions.Web)], await ReadAsync("SELECT revision_json FROM executive_action_revisions"));
+    }
+
+    private static ExecutiveActionRevision OldShapeRevision()
+    {
+        var facts = ExecutiveActionFacts.Of("2024-26714", ExecutiveActionKind.Proclamation, null, "A Title", new DateOnly(2024, 11, 5),
+            new DateOnly(2024, 11, 8), "89 FR 1", "Joe Biden", "https://example.test/document");
+        return new(RecordId, 2, "civic-lens:code", new DateTimeOffset(2024, 11, 8, 0, 0, 0, TimeSpan.Zero), "federal-register-documents", "2024-26714",
+            ExecutiveActionKind.Proclamation, null, "A Title", new DateOnly(2024, 11, 5), new DateOnly(2024, 11, 8), "89 FR 1", "Joe Biden", "joe-biden",
+            "https://example.test/document", [.. facts.Select((fact, position) => new ExecutiveActionFact(fact.Label, fact.Value, new(ExtractionId, position * 10, 5)))],
+            [Notice]);
+    }
+
+    private Task InsertRecordAsync(ExecutiveActionNotice notice, string authorSubject, string? revisionJson = null, long createdAtUtcTicks = 0)
+    {
+        var revision = revisionJson ?? JsonSerializer.Serialize(new { recordId = RecordId, revisionNumber = 2, authorSubject }, JsonSerializerOptions.Web);
         var noticeJson = JsonSerializer.Serialize(notice, JsonSerializerOptions.Web);
         return ExecuteAsync($"""
             SET session_replication_role = replica;
@@ -97,7 +142,7 @@ public sealed class ExecutiveActionRevisionColumnsMigrationTests(PostgresCollect
             INSERT INTO executive_action_drafts (record_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
             VALUES ('{RecordId}', 2, 0, 'AwaitingReview', 0, 0);
             INSERT INTO executive_action_revisions (record_id, revision_number, revision_json, created_at_utc_ticks)
-            VALUES ('{RecordId}', 2, '{revision}', 0);
+            VALUES ('{RecordId}', 2, '{revision}', {createdAtUtcTicks});
             INSERT INTO executive_action_documents (source_id, document_number, record_id, revision_number, notice_json, published_on, document_job_id)
             VALUES ('federal-register-documents', '2024-26714', '{RecordId}', 2, NULL, '2024-11-08', 'job-1'),
                    ('federal-register-documents', '{notice.DocumentNumber}', '{RecordId}', 2, '{noticeJson}', '{notice.PublishedOn:yyyy-MM-dd}', 'job-2')

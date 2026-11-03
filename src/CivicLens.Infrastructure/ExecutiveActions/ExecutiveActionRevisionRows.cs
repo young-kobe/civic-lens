@@ -47,9 +47,9 @@ internal static class ExecutiveActionRevisionRows
         var rows = await query.ToListAsync(cancellationToken);
         var recordIds = rows.Select(row => row.RecordId).ToArray();
         var numbers = rows.Select(row => row.RevisionNumber).ToArray();
-        var facts = (await db.Set<ExecutiveActionRevisionFactRow>().FromSqlRaw(ChildrenSql("executive_action_revision_facts"), recordIds, numbers)
+        var facts = (await db.Set<ExecutiveActionRevisionFactRow>().FromSqlRaw(ReviewQueries.RevisionChildren("executive_action_revision_facts"), recordIds, numbers)
             .AsNoTracking().ToListAsync(cancellationToken)).ToLookup(fact => (fact.RecordId, fact.RevisionNumber));
-        var notices = (await db.Set<ExecutiveActionRevisionNoticeRow>().FromSqlRaw(ChildrenSql("executive_action_revision_notices"), recordIds, numbers)
+        var notices = (await db.Set<ExecutiveActionRevisionNoticeRow>().FromSqlRaw(ReviewQueries.RevisionChildren("executive_action_revision_notices"), recordIds, numbers)
             .AsNoTracking().ToListAsync(cancellationToken)).ToLookup(notice => (notice.RecordId, notice.RevisionNumber));
         var named = notices.SelectMany(group => group).ToArray();
         var documents = await db.Set<ExecutiveActionDocumentRow>().FromSqlRaw("""
@@ -70,9 +70,6 @@ internal static class ExecutiveActionRevisionRows
         document.NoticeCitationStart = notice.Citation.Start;
         document.NoticeCitationLength = notice.Citation.Length;
     }
-
-    private static string ChildrenSql(string table) =>
-        $"SELECT c.* FROM {table} c JOIN unnest({{0}}, {{1}}) AS k(id, number) ON c.record_id = k.id AND c.revision_number = k.number";
 
     public static InvalidDataException NotBackfilled(string revision) =>
         new($"{revision} has null columns. Run the executive action revision backfill.");
