@@ -195,6 +195,7 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
             [.. records.Where(record => added.Contains(record.Id))
                 .Select(record => new ReviewStateExpectation(PublishedRecordKind.Action, record.Id, record.Revision, 1))])
         {
+            Withdrawals = [],
             WithdrawnRecords = [.. withdrawn.Select(id => new PublishedRecordReference(PublishedRecordKind.Action, id))]
         };
 

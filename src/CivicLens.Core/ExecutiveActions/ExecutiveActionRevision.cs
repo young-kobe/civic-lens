@@ -29,8 +29,8 @@ public sealed record ExecutiveActionRevision(string RecordId, int RevisionNumber
         foreach (var (_, value) in ExpectedFacts())
             if (string.IsNullOrWhiteSpace(value) || value.Length > MaximumFieldLength || value.Contains('\0') || value.Contains('\n') || value.Contains('\r'))
                 throw new ArgumentException($"A fact of an executive action revision has 1 to {MaximumFieldLength} characters on one line.");
-        ReviewTextRules.ValidateText(SourceId, 128, nameof(SourceId));
-        ReviewTextRules.ValidateText(PersonId, 128, nameof(PersonId));
+        ReviewTextRules.ValidateText(SourceId, ReviewTextRules.MaximumConfigurationIdLength, nameof(SourceId));
+        ReviewTextRules.ValidateText(PersonId, ReviewTextRules.MaximumConfigurationIdLength, nameof(PersonId));
         if (Facts.IsDefault || !Facts.Select(fact => (fact.Label, fact.Value)).SequenceEqual(ExpectedFacts()) || Facts.Any(fact => !IsBounded(fact.Citation)))
             throw new ArgumentException("An executive action revision needs its fact lines, each with a bounded citation.");
         if (Notices.IsDefault || Notices.Length > MaximumNotices || Notices.Any(notice => !HasBoundedFields(notice) || !IsBounded(notice.Citation)) ||

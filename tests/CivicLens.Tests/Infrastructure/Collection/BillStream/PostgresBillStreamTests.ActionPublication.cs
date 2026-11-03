@@ -249,7 +249,8 @@ public sealed partial class PostgresBillStreamTests
 
     private static PublicationCommit ActionCommit(int reviewStateVersion) =>
         new(1, null, $"000001-{Guid.NewGuid():N}", [new(PublishedRecordKind.Action, RecordId, 1)],
-            [new(PublishedRecordKind.Action, RecordId, 1, reviewStateVersion)]);
+            [new(PublishedRecordKind.Action, RecordId, 1, reviewStateVersion)])
+        { Withdrawals = [] };
 
     private static string ReleaseHash(int seed) => Convert.ToHexStringLower(SHA256.HashData(BitConverter.GetBytes(seed)));
 }

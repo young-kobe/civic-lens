@@ -194,6 +194,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         await PublicationRecordStates.RecordAsync(db, commit, cancellationToken);
         await PublishedRecords.InsertAsync(db, commit.FirstPublications, cancellationToken);
         await PublishedRecords.RequireStoredTimesAsync(db, commit.FirstPublications, cancellationToken);
+        await PublicationWithdrawalRows.RecordAsync(db, commit, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return summary;
     }
@@ -452,7 +453,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         ReleasePaths.RequireDirectoryName(commit.DirectoryName);
         if (!commit.DirectoryName.StartsWith($"{commit.ReleaseNumber:D6}-", StringComparison.Ordinal))
             throw new ArgumentException("Release directory name does not match the release number.", nameof(commit));
-        if (commit.Records.IsDefault || commit.AddedRecords.IsDefault || commit.WithdrawnRecords.IsDefault)
+        if (commit.Records.IsDefault || commit.AddedRecords.IsDefault || commit.WithdrawnRecords.IsDefault || commit.Withdrawals.IsDefault)
             throw new ArgumentException("Release records are required.", nameof(commit));
     }
 }

@@ -29,13 +29,13 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         new(PublishedRecordKind.Action, "ac", "action_drafts", "headline",
             (db, ids, ct) => PostgresActionReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
         new(PublishedRecordKind.Vote, "vo", "vote_drafts", "headline",
-            (db, ids, ct) => VoteDraftRows.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct), HeadlineInColumn: true),
+            (db, ids, ct) => VoteDraftRows.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct), Column: new("headline", recordId => VoteRevisionRows.NotBackfilled($"The current revision of vote {recordId}"))),
         new(PublishedRecordKind.Brief, "br", "brief_drafts", "headline",
             (db, ids, ct) => PostgresBriefReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
         new(PublishedRecordKind.Relationship, "re", "relationship_drafts", null,
             ReadRelationshipsAsync),
         new(PublishedRecordKind.ExecutiveAction, "ea", "executive_action_drafts", "title",
-            (db, ids, ct) => ExecutiveActionRows.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Title, ct))
+            (db, ids, ct) => ExecutiveActionRows.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Title, ct), Column: new("title", recordId => ExecutiveActionRevisionRows.NotBackfilled($"The current revision of executive action {recordId}")))
     ];
 
     private static readonly Dictionary<string, QueueKind> KindsByCode = Kinds.ToDictionary(kind => kind.Code);
@@ -114,7 +114,7 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
             .Take(limit + 1).ToArrayAsync(cancellationToken);
         var slice = KeysetSlice<ApprovedKey>.Create(fetched, limit, cursor, key => (key.LastRevisedAtUtcTicks, key.QueueId));
         return new([.. slice.Items.Select(key => new ApprovedRecordHit(KindsByCode[key.KindCode].Kind, key.RecordId,
-            key.Headline ?? throw VoteRevisionRows.NotBackfilled($"The current revision of vote {key.RecordId}")))],
+            key.Headline ?? throw KindsByCode[key.KindCode].Column!.NotBackfilled(key.RecordId)))],
             slice.NewerCursor, slice.OlderCursor);
     }
 
@@ -160,15 +160,17 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
 
     private sealed record QueueKind(PublishedRecordKind Kind, string Code, string Table,
         string? HeadlineProperty,
-        Func<CollectionAttemptDbContext, string[], CancellationToken, Task<Dictionary<string, QueueDraft>>> Read, bool HeadlineInColumn = false)
+        Func<CollectionAttemptDbContext, string[], CancellationToken, Task<Dictionary<string, QueueDraft>>> Read, HeadlineColumn? Column = null)
     {
         public string IdColumn => ReviewTables.For(Kind).IdColumn;
 
-        public string HeadlineSql => HeadlineInColumn ? "revision.headline" : $"revision.revision_json::jsonb ->> '{HeadlineProperty}'";
+        public string HeadlineSql => Column is not null ? $"revision.{Column.Name}" : $"revision.revision_json::jsonb ->> '{HeadlineProperty}'";
 
         /// <summary>A kind with a headline column returns a row with a null headline, so that the read fails and the search does not skip the row.</summary>
-        public string NullHeadlineMatch => HeadlineInColumn ? $"{HeadlineSql} IS NULL OR " : "";
+        public string NullHeadlineMatch => Column is not null ? $"{HeadlineSql} IS NULL OR " : "";
     }
+
+    private sealed record HeadlineColumn(string Name, Func<string, InvalidDataException> NotBackfilled);
 
     private class QueueKey
     {

@@ -1038,7 +1038,7 @@ public sealed partial class PostgresBillStreamTests
 
     private async Task<ActionDraftRevision> CitingStoredTextAsync(ActionDraftRevision revision)
     {
-        var extractionId = (string)(await ScalarAsync("SELECT min(extraction_id) FROM document_extractions"))!;
+        var extractionId = (string)(await ScalarAsync("SELECT min(e.extraction_id) FROM document_extractions e JOIN collection_attempts a ON a.attempt_id = e.attempt_id"))!;
         SourceSpan Swap(SourceSpan span) => span with { ExtractionId = extractionId };
         return revision with
         {
