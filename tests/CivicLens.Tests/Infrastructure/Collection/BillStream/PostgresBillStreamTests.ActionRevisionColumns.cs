@@ -60,10 +60,12 @@ public sealed partial class PostgresBillStreamTests
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
         var runId = await ReserveAsync(store, claim);
 
-        await Assert.ThrowsAsync<DbUpdateException>(() => store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1)),
+        var failure = await Assert.ThrowsAsync<DbUpdateException>(() => store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1)),
             DraftedRun(runId, candidate), default));
 
+        Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, Assert.IsType<PostgresException>(failure.InnerException).SqlState);
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
+        Assert.Equal("Running", await ScalarAsync($"SELECT status FROM action_analysis WHERE candidate_id = '{candidate}'"));
     }
 
     [Fact]
@@ -154,7 +156,7 @@ public sealed partial class PostgresBillStreamTests
     private async Task<ActionDraftRevision> SettleFullRevisionAsync()
     {
         var candidate = await CandidateWithoutSummariesAsync();
-        var basis = Revision(candidate, 1, includesSummaries: true, includesSubjects: false);
+        var basis = Revision(candidate, 1, includesSummaries: true, includesSubjects: true);
         var extractionId = basis.Sponsorships[0].Citations[0].ExtractionId;
         var span = new SourceSpan(extractionId, 2, 3);
         var summarySpan = new SourceSpan(extractionId, 1, 4);

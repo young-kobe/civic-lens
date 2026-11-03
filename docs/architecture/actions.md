@@ -182,7 +182,7 @@ Code builds the citations from the line offsets of the saved extractions.
 - The policy area cites its line.
 - The summary cites only the block of the newest summary.
 
-A worker revision that names an extraction that is not stored fails the settlement on the foreign key and retries. It no longer holds the record.
+A worker revision that names an extraction that is not stored fails the settlement on the foreign key, and the transaction writes nothing. The entry then fails with a `ProcessingFailed` run until the owner requeues it. Test: `ARevisionThatNamesAnExtractionThatIsNotStoredFailsTheSettlementOnTheForeignKeyAndWritesNothing`.
 
 The summary block starts at its `Summary version:` line, which must match the code and the `Updated:` line of that summary. It ends at the next blank line or at the end of the page text.
 
