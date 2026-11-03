@@ -10,10 +10,10 @@ namespace CivicLens.Infrastructure.Publication;
 internal static class PublishedEntries
 {
     private const string InsertOfficials = """
-        INSERT INTO published_entry_officials (kind, record_id, revision_number, position, official_id, official_name, is_matched)
-        SELECT k.kind, k.record_id, k.revision_number, k.position, k.official_id, k.official_name, k.is_matched
-        FROM unnest({0}::text[], {1}::text[], {2}::int[], {3}::smallint[], {4}::text[], {5}::text[], {6}::boolean[])
-            AS k(kind, record_id, revision_number, position, official_id, official_name, is_matched)
+        INSERT INTO published_entry_officials (kind, record_id, revision_number, position, official_id, is_matched)
+        SELECT k.kind, k.record_id, k.revision_number, k.position, k.official_id, k.is_matched
+        FROM unnest({0}::text[], {1}::text[], {2}::int[], {3}::smallint[], {4}::text[], {5}::boolean[])
+            AS k(kind, record_id, revision_number, position, official_id, is_matched)
         """;
 
     private const string ReadEntries = """
@@ -22,26 +22,53 @@ internal static class PublishedEntries
             ON e.kind = k.kind AND e.record_id = k.record_id AND e.revision_number = k.revision_number
         """;
 
-    private static readonly Dictionary<PublishedRecordKind, string> InsertByKind = Enum.GetValues<PublishedRecordKind>().ToDictionary(kind => kind, kind =>
-    {
-        var (id, number) = PublishedEntryRevisionColumns.For(kind);
-        return $"INSERT INTO published_entries (kind, record_id, revision_number, {id}, {number}, headline, source_host, event_date, bill_title, " +
-            "link_type, statement_record_id, target_kind, target_record_id, document_type, yea_count, nay_count, alignment) " +
-            "VALUES ({0}, {1}, {2}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12}, {13}, {14}) ON CONFLICT DO NOTHING";
-    });
+    private static readonly string InsertEntries = BuildInsertEntries();
 
     public static async Task InsertAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,
         CancellationToken cancellationToken)
     {
-        var created = new List<PublishedRecordEntry>();
-        var existing = new List<PublishedRecordEntry>();
-        foreach (var entry in entries)
+        if (entries.Count == 0) return;
+        await RequireLinkedRecordsAsync(db, entries, cancellationToken);
+        var rows = await db.Database.SqlQueryRaw<EntryKeyRow>(InsertEntries, ScalarColumnsOf(entries)).ToArrayAsync(cancellationToken);
+        var created = rows.Select(row => (row.Kind, row.RecordId, row.RevisionNumber)).ToHashSet();
+        var createdEntries = entries.Where(entry => created.Contains(KeyOf(entry))).ToList();
+        await InsertChildrenAsync(db, createdEntries, cancellationToken);
+        await RequireSameAsync(db, [.. entries.Except(createdEntries)], cancellationToken);
+    }
+
+    private static string BuildInsertEntries()
+    {
+        var revisionColumns = Enum.GetValues<PublishedRecordKind>().Select(PublishedEntryRevisionColumns.For).ToArray();
+        var kinds = Enum.GetValues<PublishedRecordKind>().Select(PublishedRecordReference.NameOf).ToArray();
+        var columns = revisionColumns.SelectMany(pair => new[] { pair.RecordId, pair.RevisionNumber });
+        var values = kinds.SelectMany(kind => new[] { $"CASE WHEN k.kind = '{kind}' THEN k.record_id END", $"CASE WHEN k.kind = '{kind}' THEN k.revision_number END" });
+        return $$"""
+            INSERT INTO published_entries (kind, record_id, revision_number, {{string.Join(", ", columns)}}, headline, source_host, event_date, bill_title,
+                link_type, statement_record_id, target_kind, target_record_id, document_type)
+            SELECT k.kind, k.record_id, k.revision_number, {{string.Join(", ", values)}}, k.headline, k.source_host, k.event_date, k.bill_title,
+                k.link_type, k.statement_record_id, k.target_kind, k.target_record_id, k.document_type
+            FROM unnest({0}::text[], {1}::text[], {2}::int[], {3}::text[], {4}::text[], {5}::date[], {6}::text[], {7}::text[], {8}::text[],
+                {9}::text[], {10}::text[], {11}::text[])
+                AS k(kind, record_id, revision_number, headline, source_host, event_date, bill_title, link_type, statement_record_id, target_kind,
+                    target_record_id, document_type)
+            ON CONFLICT DO NOTHING
+            RETURNING kind AS "Kind", record_id AS "RecordId", revision_number AS "RevisionNumber"
+            """;
+    }
+
+    private static async Task RequireLinkedRecordsAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,
+        CancellationToken cancellationToken)
+    {
+        var linked = entries.Where(entry => entry.StatementRecordId is not null).SelectMany(entry => new[]
         {
-            var inserted = await db.Database.ExecuteSqlRawAsync(InsertByKind[entry.Kind], ScalarsOf(entry).Select(value => value!), cancellationToken);
-            (inserted == 1 ? created : existing).Add(entry);
-        }
-        await InsertChildrenAsync(db, created, cancellationToken);
-        await RequireSameAsync(db, existing, cancellationToken);
+            new PublishedRecordReference(PublishedRecordKind.Statement, entry.StatementRecordId!),
+            new PublishedRecordReference(entry.TargetKind!.Value, entry.TargetRecordId!)
+        }).Distinct().ToArray();
+        var stored = await PublishedRecords.ReadAsync(db, linked, cancellationToken);
+        var unrecorded = linked.FirstOrDefault(reference => !stored.ContainsKey(reference));
+        if (unrecorded is null) return;
+        throw new FirstPublishedMissingException(
+            $"The first publication time of {unrecorded} is not stored. Run releases first-published backfill, then publish again.");
     }
 
     private static async Task InsertChildrenAsync(CollectionAttemptDbContext db, List<PublishedRecordEntry> entries, CancellationToken cancellationToken)
@@ -49,11 +76,9 @@ internal static class PublishedEntries
         if (entries.Count == 0) return;
         var officials = Flatten(entries, entry => entry.Officials);
         await db.Database.ExecuteSqlRawAsync(InsertOfficials, [.. KeysOf(officials), officials.Select(row => row.Value.Id).ToArray(),
-            officials.Select(row => row.Value.Name).ToArray(),
             officials.Select(row => row.Value.Id == row.Entry.MatchedOfficialId).ToArray()], cancellationToken);
         await InsertValuesAsync(db, "published_entry_issues", "issue_id", Flatten(entries, entry => entry.IssueIds), cancellationToken);
         await InsertValuesAsync(db, "published_entry_policy_areas", "policy_area_id", Flatten(entries, entry => entry.PolicyAreaIds), cancellationToken);
-        await InsertValuesAsync(db, "published_entry_cosponsors", "official_id", Flatten(entries, entry => entry.CosponsorIds ?? []), cancellationToken);
     }
 
     private static Task InsertValuesAsync(CollectionAttemptDbContext db, string table, string column, List<ChildRow<string>> rows,
@@ -70,57 +95,37 @@ internal static class PublishedEntries
     private static async Task RequireSameAsync(CollectionAttemptDbContext db, List<PublishedRecordEntry> entries, CancellationToken cancellationToken)
     {
         if (entries.Count == 0) return;
-        var stored = await ReadAsync(db, entries, cancellationToken);
+        var stored = await ReadFactsAsync(db, entries, cancellationToken);
         foreach (var entry in entries)
         {
-            if (!stored.TryGetValue((entry.Kind, entry.RecordId, entry.RevisionNumber), out var existing) || Serialize(existing) != Serialize(entry))
+            if (!stored.TryGetValue(KeyOf(entry), out var existing) || Serialize(existing) != Serialize(FactsOf(entry)))
                 throw new PublicationConflictException(
                     $"The stored entry of {entry.RecordId} revision {entry.RevisionNumber} differs from the release entry. Rebuild the release.");
         }
     }
 
-    private static string Serialize(PublishedRecordEntry entry) => JsonSerializer.Serialize(entry, PublicationProtocol.JsonOptions);
+    private static string Serialize(EntryFacts facts) => JsonSerializer.Serialize(facts);
 
-    private static async Task<Dictionary<(PublishedRecordKind Kind, string RecordId, int RevisionNumber), PublishedRecordEntry>> ReadAsync(
-        CollectionAttemptDbContext db, List<PublishedRecordEntry> entries, CancellationToken cancellationToken)
+    private static EntryFacts FactsOf(PublishedRecordEntry entry) => new(entry.Headline, entry.SourceHost, entry.EventDate, entry.BillTitle, entry.LinkType,
+        entry.StatementRecordId, entry.TargetKind is { } target ? PublishedRecordReference.NameOf(target) : null, entry.TargetRecordId, entry.DocumentType,
+        [.. entry.Officials.Select(official => official.Id)], entry.MatchedOfficialId, entry.IssueIds, entry.PolicyAreaIds);
+
+    private static async Task<Dictionary<(string Kind, string RecordId, int RevisionNumber), EntryFacts>> ReadFactsAsync(CollectionAttemptDbContext db,
+        List<PublishedRecordEntry> entries, CancellationToken cancellationToken)
     {
         object[] keys = [entries.Select(entry => PublishedRecordReference.NameOf(entry.Kind)).ToArray(),
             entries.Select(entry => entry.RecordId).ToArray(), entries.Select(entry => entry.RevisionNumber).ToArray()];
         var rows = await db.Set<PublishedEntryRow>().FromSqlRaw(ReadEntries, keys).AsNoTracking().ToArrayAsync(cancellationToken);
-        var firstPublished = await PublishedRecords.ReadAsync(db, [.. entries.Select(entry => new PublishedRecordReference(entry.Kind, entry.RecordId))],
-            cancellationToken);
         var officials = await ReadChildrenAsync<PublishedEntryOfficialRow>(db, "published_entry_officials", keys, cancellationToken);
         var issues = await ReadChildrenAsync<PublishedEntryIssueRow>(db, "published_entry_issues", keys, cancellationToken);
         var policyAreas = await ReadChildrenAsync<PublishedEntryPolicyAreaRow>(db, "published_entry_policy_areas", keys, cancellationToken);
-        var cosponsors = await ReadChildrenAsync<PublishedEntryCosponsorRow>(db, "published_entry_cosponsors", keys, cancellationToken);
-        return rows.ToDictionary(row => (Kind: KindOf(row.Kind), row.RecordId, row.RevisionNumber), row =>
+        return rows.ToDictionary(row => (row.Kind, row.RecordId, row.RevisionNumber), row =>
         {
-            var kind = KindOf(row.Kind);
             var key = (row.Kind, row.RecordId, row.RevisionNumber);
-            return new PublishedRecordEntry
-            {
-                Kind = kind,
-                RecordId = row.RecordId,
-                RevisionNumber = row.RevisionNumber,
-                Headline = row.Headline,
-                FirstPublishedAtUtc = firstPublished[new(kind, row.RecordId)],
-                Officials = [.. officials[key].Select(official => new PublishedOfficial { Id = official.OfficialId, Name = official.OfficialName })],
-                IssueIds = [.. issues[key].Select(issue => issue.Value)],
-                PolicyAreaIds = [.. policyAreas[key].Select(area => area.Value)],
-                SourceHost = row.SourceHost,
-                EventDate = row.EventDate,
-                BillTitle = row.BillTitle,
-                LinkType = row.LinkType,
-                StatementRecordId = row.StatementRecordId,
-                TargetKind = row.TargetKind is null ? null : KindOf(row.TargetKind),
-                TargetRecordId = row.TargetRecordId,
-                MatchedOfficialId = officials[key].SingleOrDefault(official => official.IsMatched)?.OfficialId,
-                DocumentType = row.DocumentType,
-                YeaCount = row.YeaCount,
-                NayCount = row.NayCount,
-                Alignment = row.Alignment,
-                CosponsorIds = kind == PublishedRecordKind.Action ? [.. cosponsors[key].Select(cosponsor => cosponsor.Value)] : null
-            };
+            return new EntryFacts(row.Headline, row.SourceHost, row.EventDate, row.BillTitle, row.LinkType, row.StatementRecordId, row.TargetKind,
+                row.TargetRecordId, row.DocumentType, [.. officials[key].Select(official => official.OfficialId)],
+                officials[key].SingleOrDefault(official => official.IsMatched)?.OfficialId,
+                [.. issues[key].Select(issue => issue.Value)], [.. policyAreas[key].Select(area => area.Value)]);
         });
     }
 
@@ -136,12 +141,19 @@ internal static class PublishedEntries
         return rows.ToLookup(row => (row.Kind, row.RecordId, row.RevisionNumber));
     }
 
-    private static object?[] ScalarsOf(PublishedRecordEntry entry) =>
+    private static object[] ScalarColumnsOf(IReadOnlyCollection<PublishedRecordEntry> entries) =>
     [
-        PublishedRecordReference.NameOf(entry.Kind), entry.RecordId, entry.RevisionNumber, entry.Headline, entry.SourceHost, entry.EventDate,
-        entry.BillTitle, entry.LinkType?.ToString(), entry.StatementRecordId, entry.TargetKind is { } target ? PublishedRecordReference.NameOf(target) : null,
-        entry.TargetRecordId, entry.DocumentType?.ToString(), entry.YeaCount, entry.NayCount, entry.Alignment?.ToString()
+        entries.Select(entry => PublishedRecordReference.NameOf(entry.Kind)).ToArray(), entries.Select(entry => entry.RecordId).ToArray(),
+        entries.Select(entry => entry.RevisionNumber).ToArray(), entries.Select(entry => entry.Headline).ToArray(),
+        entries.Select(entry => entry.SourceHost).ToArray(), entries.Select(entry => entry.EventDate).ToArray(),
+        entries.Select(entry => entry.BillTitle).ToArray(), entries.Select(entry => entry.LinkType?.ToString()).ToArray(),
+        entries.Select(entry => entry.StatementRecordId).ToArray(),
+        entries.Select(entry => entry.TargetKind is { } target ? PublishedRecordReference.NameOf(target) : null).ToArray(),
+        entries.Select(entry => entry.TargetRecordId).ToArray(), entries.Select(entry => entry.DocumentType?.ToString()).ToArray()
     ];
+
+    private static (string Kind, string RecordId, int RevisionNumber) KeyOf(PublishedRecordEntry entry) =>
+        (PublishedRecordReference.NameOf(entry.Kind), entry.RecordId, entry.RevisionNumber);
 
     private static List<ChildRow<T>> Flatten<T>(List<PublishedRecordEntry> entries, Func<PublishedRecordEntry, IEnumerable<T>> children) =>
         [.. entries.SelectMany(entry => children(entry).Select((value, position) => new ChildRow<T>(entry, (short)position, value)))];
@@ -152,8 +164,16 @@ internal static class PublishedEntries
         rows.Select(row => row.Entry.RevisionNumber).ToArray(), rows.Select(row => row.Position).ToArray()
     ];
 
-    private static PublishedRecordKind KindOf(string name) =>
-        PublishedRecordReference.TryParseKind(name, out var kind) ? kind : throw new InvalidDataException($"Unknown record kind '{name}'.");
-
     private readonly record struct ChildRow<T>(PublishedRecordEntry Entry, short Position, T Value);
+
+    private sealed record EntryFacts(string Headline, string? SourceHost, DateOnly? EventDate, string? BillTitle, PublishedRelationshipType? LinkType,
+        string? StatementRecordId, string? TargetKind, string? TargetRecordId, PublishedExecutiveActionKind? DocumentType, string[] OfficialIds,
+        string? MatchedOfficialId, string[] IssueIds, string[] PolicyAreaIds);
+
+    private sealed class EntryKeyRow
+    {
+        public string Kind { get; set; } = "";
+        public string RecordId { get; set; } = "";
+        public int RevisionNumber { get; set; }
+    }
 }

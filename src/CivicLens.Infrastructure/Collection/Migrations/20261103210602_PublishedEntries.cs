@@ -41,10 +41,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     statement_kind = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true, computedColumnSql: "CASE WHEN statement_record_id IS NULL THEN NULL ELSE 'statement' END", stored: true),
                     target_kind = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
                     target_record_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
-                    document_type = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
-                    yea_count = table.Column<int>(type: "integer", nullable: true),
-                    nay_count = table.Column<int>(type: "integer", nullable: true),
-                    alignment = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true)
+                    document_type = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -58,7 +55,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     table.CheckConstraint("ck_published_entries_revision_key", "(kind = 'documentChange' AND document_change_draft_id IS NOT DISTINCT FROM record_id AND document_change_revision_number IS NOT DISTINCT FROM revision_number AND num_nonnulls(statement_candidate_id, statement_revision_number, action_record_id, action_revision_number, brief_record_id, brief_revision_number, vote_record_id, vote_revision_number, relationship_record_id, relationship_revision_number, executive_action_record_id, executive_action_revision_number) = 0) OR (kind = 'statement' AND statement_candidate_id IS NOT DISTINCT FROM record_id AND statement_revision_number IS NOT DISTINCT FROM revision_number AND num_nonnulls(document_change_draft_id, document_change_revision_number, action_record_id, action_revision_number, brief_record_id, brief_revision_number, vote_record_id, vote_revision_number, relationship_record_id, relationship_revision_number, executive_action_record_id, executive_action_revision_number) = 0) OR (kind = 'action' AND action_record_id IS NOT DISTINCT FROM record_id AND action_revision_number IS NOT DISTINCT FROM revision_number AND num_nonnulls(document_change_draft_id, document_change_revision_number, statement_candidate_id, statement_revision_number, brief_record_id, brief_revision_number, vote_record_id, vote_revision_number, relationship_record_id, relationship_revision_number, executive_action_record_id, executive_action_revision_number) = 0) OR (kind = 'brief' AND brief_record_id IS NOT DISTINCT FROM record_id AND brief_revision_number IS NOT DISTINCT FROM revision_number AND num_nonnulls(document_change_draft_id, document_change_revision_number, statement_candidate_id, statement_revision_number, action_record_id, action_revision_number, vote_record_id, vote_revision_number, relationship_record_id, relationship_revision_number, executive_action_record_id, executive_action_revision_number) = 0) OR (kind = 'vote' AND vote_record_id IS NOT DISTINCT FROM record_id AND vote_revision_number IS NOT DISTINCT FROM revision_number AND num_nonnulls(document_change_draft_id, document_change_revision_number, statement_candidate_id, statement_revision_number, action_record_id, action_revision_number, brief_record_id, brief_revision_number, relationship_record_id, relationship_revision_number, executive_action_record_id, executive_action_revision_number) = 0) OR (kind = 'relationship' AND relationship_record_id IS NOT DISTINCT FROM record_id AND relationship_revision_number IS NOT DISTINCT FROM revision_number AND num_nonnulls(document_change_draft_id, document_change_revision_number, statement_candidate_id, statement_revision_number, action_record_id, action_revision_number, brief_record_id, brief_revision_number, vote_record_id, vote_revision_number, executive_action_record_id, executive_action_revision_number) = 0) OR (kind = 'executiveAction' AND executive_action_record_id IS NOT DISTINCT FROM record_id AND executive_action_revision_number IS NOT DISTINCT FROM revision_number AND num_nonnulls(document_change_draft_id, document_change_revision_number, statement_candidate_id, statement_revision_number, action_record_id, action_revision_number, brief_record_id, brief_revision_number, vote_record_id, vote_revision_number, relationship_record_id, relationship_revision_number) = 0)");
                     table.CheckConstraint("ck_published_entries_revision_number", "revision_number >= 1");
                     table.CheckConstraint("ck_published_entries_source_host", "source_host IS NULL OR length(btrim(source_host)) > 0");
-                    table.CheckConstraint("ck_published_entries_vote_facts", "(yea_count IS NULL) = (nay_count IS NULL) AND (yea_count IS NULL OR (kind = 'vote' AND yea_count >= 0 AND nay_count >= 0 AND yea_count + nay_count <= 600)) AND (alignment IS NULL OR (yea_count IS NOT NULL AND alignment IN ('Split', 'PartiesAgree', 'Mixed')))");
                     table.ForeignKey(
                         name: "FK_published_entries_action_revisions_action_record_id_action_~",
                         columns: x => new { x.action_record_id, x.action_revision_number },
@@ -122,31 +118,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "published_entry_cosponsors",
-                columns: table => new
-                {
-                    kind = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    record_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    revision_number = table.Column<int>(type: "integer", nullable: false),
-                    position = table.Column<short>(type: "smallint", nullable: false),
-                    official_id = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_published_entry_cosponsors", x => new { x.kind, x.record_id, x.revision_number, x.position });
-                    table.UniqueConstraint("AK_published_entry_cosponsors_kind_record_id_revision_number_o~", x => new { x.kind, x.record_id, x.revision_number, x.official_id });
-                    table.CheckConstraint("ck_published_entry_cosponsors_kind", "kind = 'action'");
-                    table.CheckConstraint("ck_published_entry_cosponsors_official_id", "length(btrim(official_id)) > 0");
-                    table.CheckConstraint("ck_published_entry_cosponsors_position", "position >= 0");
-                    table.ForeignKey(
-                        name: "FK_published_entry_cosponsors_published_entries_kind_record_id~",
-                        columns: x => new { x.kind, x.record_id, x.revision_number },
-                        principalTable: "published_entries",
-                        principalColumns: new[] { "kind", "record_id", "revision_number" },
-                        onDelete: ReferentialAction.Restrict);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "published_entry_issues",
                 columns: table => new
                 {
@@ -179,7 +150,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     revision_number = table.Column<int>(type: "integer", nullable: false),
                     position = table.Column<short>(type: "smallint", nullable: false),
                     official_id = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    official_name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     is_matched = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false)
                 },
                 constraints: table =>
@@ -188,7 +158,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     table.UniqueConstraint("AK_published_entry_officials_kind_record_id_revision_number_of~", x => new { x.kind, x.record_id, x.revision_number, x.official_id });
                     table.CheckConstraint("ck_published_entry_officials_matched_kind", "NOT is_matched OR kind = 'relationship'");
                     table.CheckConstraint("ck_published_entry_officials_official_id", "length(btrim(official_id)) > 0");
-                    table.CheckConstraint("ck_published_entry_officials_official_name", "length(btrim(official_name)) > 0");
                     table.CheckConstraint("ck_published_entry_officials_position", "position >= 0");
                     table.ForeignKey(
                         name: "FK_published_entry_officials_published_entries_kind_record_id_~",
@@ -278,9 +247,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "published_entry_cosponsors");
-
             migrationBuilder.DropTable(
                 name: "published_entry_issues");
 

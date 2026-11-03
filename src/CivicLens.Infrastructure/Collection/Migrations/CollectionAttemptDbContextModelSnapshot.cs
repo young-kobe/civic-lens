@@ -3483,46 +3483,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
-            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryCosponsorRow", b =>
-                {
-                    b.Property<string>("Kind")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("kind");
-
-                    b.Property<string>("RecordId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("record_id");
-
-                    b.Property<int>("RevisionNumber")
-                        .HasColumnType("integer")
-                        .HasColumnName("revision_number");
-
-                    b.Property<short>("Position")
-                        .HasColumnType("smallint")
-                        .HasColumnName("position");
-
-                    b.Property<string>("Value")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("official_id");
-
-                    b.HasKey("Kind", "RecordId", "RevisionNumber", "Position");
-
-                    b.HasAlternateKey("Kind", "RecordId", "RevisionNumber", "Value");
-
-                    b.ToTable("published_entry_cosponsors", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_published_entry_cosponsors_kind", "kind = 'action'");
-
-                            t.HasCheckConstraint("ck_published_entry_cosponsors_official_id", "length(btrim(official_id)) > 0");
-
-                            t.HasCheckConstraint("ck_published_entry_cosponsors_position", "position >= 0");
-                        });
-                });
-
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryIssueRow", b =>
                 {
                     b.Property<string>("Kind")
@@ -3593,12 +3553,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("official_id");
 
-                    b.Property<string>("OfficialName")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("official_name");
-
                     b.HasKey("Kind", "RecordId", "RevisionNumber", "Position");
 
                     b.HasAlternateKey("Kind", "RecordId", "RevisionNumber", "OfficialId");
@@ -3612,8 +3566,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_published_entry_officials_matched_kind", "NOT is_matched OR kind = 'relationship'");
 
                             t.HasCheckConstraint("ck_published_entry_officials_official_id", "length(btrim(official_id)) > 0");
-
-                            t.HasCheckConstraint("ck_published_entry_officials_official_name", "length(btrim(official_name)) > 0");
 
                             t.HasCheckConstraint("ck_published_entry_officials_position", "position >= 0");
                         });
@@ -3682,11 +3634,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("action_revision_number");
 
-                    b.Property<string>("Alignment")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("alignment");
-
                     b.Property<string>("BillTitle")
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)")
@@ -3737,10 +3684,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("link_type");
-
-                    b.Property<int?>("NayCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("nay_count");
 
                     b.Property<string>("RelationshipRecordId")
                         .HasMaxLength(64)
@@ -3796,10 +3739,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("vote_revision_number");
 
-                    b.Property<int?>("YeaCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("yea_count");
-
                     b.HasKey("Kind", "RecordId", "RevisionNumber");
 
                     b.HasIndex("ActionRecordId", "ActionRevisionNumber");
@@ -3839,8 +3778,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_published_entries_revision_number", "revision_number >= 1");
 
                             t.HasCheckConstraint("ck_published_entries_source_host", "source_host IS NULL OR length(btrim(source_host)) > 0");
-
-                            t.HasCheckConstraint("ck_published_entries_vote_facts", "(yea_count IS NULL) = (nay_count IS NULL) AND (yea_count IS NULL OR (kind = 'vote' AND yea_count >= 0 AND nay_count >= 0 AND yea_count + nay_count <= 600)) AND (alignment IS NULL OR (yea_count IS NOT NULL AND alignment IN ('Split', 'PartiesAgree', 'Mixed')))");
                         });
                 });
 
@@ -7103,15 +7040,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .WithMany()
                         .HasForeignKey("LastRelease")
                         .OnDelete(DeleteBehavior.Restrict);
-                });
-
-            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryCosponsorRow", b =>
-                {
-                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryRow", null)
-                        .WithMany()
-                        .HasForeignKey("Kind", "RecordId", "RevisionNumber")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryIssueRow", b =>

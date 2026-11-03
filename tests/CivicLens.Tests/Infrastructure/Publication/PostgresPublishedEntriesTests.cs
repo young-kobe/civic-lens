@@ -1,4 +1,7 @@
+using System.Text.Json;
 using CivicLens.Application.Publication;
+using CivicLens.Core.Documents;
+using CivicLens.Core.Relationships;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Publication.Contracts;
@@ -42,20 +45,18 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
             SELECT kind || '|' || record_id || '|' || revision_number || '|' || headline || '|' || source_host || '|' || event_date || '|' || bill_title
             FROM published_entries WHERE action_record_id = '{A}' AND action_revision_number = 1
             """));
-        Assert.Equal(["S000002|Sam Second", "S000001|Sam First"], await ReadAsync("SELECT official_id || '|' || official_name FROM published_entry_officials ORDER BY position"));
+        Assert.Equal(["S000002", "S000001"], await ReadAsync("SELECT official_id FROM published_entry_officials ORDER BY position"));
         Assert.Equal(["tax", "housing"], await ReadAsync("SELECT issue_id FROM published_entry_issues ORDER BY position"));
         Assert.Equal(["economics"], await ReadAsync("SELECT policy_area_id FROM published_entry_policy_areas ORDER BY position"));
-        Assert.Equal(["C000003", "C000001"], await ReadAsync("SELECT official_id FROM published_entry_cosponsors ORDER BY position"));
     }
 
     [Fact]
-    public async Task AnActionWithNoCosponsorsAndNoIssuesWritesNoChildRows()
+    public async Task AnActionWithNoIssuesWritesNoIssueRows()
     {
         await SeedActionAsync(A);
 
-        await CommitAsync(1, null, PublishedEntryFixtures.Action(A, First) with { CosponsorIds = [], IssueIds = [] });
+        await CommitAsync(1, null, PublishedEntryFixtures.Action(A, First) with { IssueIds = [] });
 
-        Assert.Empty(await ReadAsync("SELECT official_id FROM published_entry_cosponsors"));
         Assert.Empty(await ReadAsync("SELECT issue_id FROM published_entry_issues"));
         Assert.Single(await ReadAsync("SELECT kind FROM published_entries"));
     }
@@ -71,34 +72,88 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         await CommitAsync(3, 1, PublishedEntryFixtures.Action(A, First));
 
         Assert.Equal(["2"], await ReadAsync("SELECT count(*) FROM published_entries"));
-        Assert.Equal(["4", "2"], await ReadAsync("SELECT count(*) FROM published_entry_officials UNION ALL SELECT count(*) FROM published_entry_cosponsors WHERE record_id = '" + A + "'"));
+        Assert.Equal(["4"], await ReadAsync("SELECT count(*) FROM published_entry_officials"));
     }
 
     [Theory]
     [InlineData("headline")]
     [InlineData("officials")]
     [InlineData("issues")]
-    [InlineData("cosponsorOrder")]
+    [InlineData("matchedOfficial")]
     [InlineData("eventDate")]
     public async Task APublishOfTheSameRevisionWithADifferentEntryConflictsAndWritesNoReleaseBecauseOneRevisionHasOneEntry(string change)
+    {
+        await SeedActionAsync(B);
+        await SeedPublishableRelationshipAsync();
+        await CommitAsync(1, null, PublishedEntryFixtures.Action(B, First));
+        await CommitAsync(2, 1, PublishedEntryFixtures.Relationship(A, B, C, First), StatementAndAction);
+        await publications.ActivateAsync(1, (_, _) => Task.CompletedTask, default);
+        var entry = PublishedEntryFixtures.Relationship(A, B, C, First);
+        var changed = change switch
+        {
+            "headline" => entry with { Headline = "Another headline" },
+            "officials" => entry with { Officials = [entry.Officials[1], entry.Officials[0], entry.Officials[2]] },
+            "issues" => entry with { IssueIds = ["tax"] },
+            "matchedOfficial" => entry with { MatchedOfficialId = "S000003" },
+            _ => entry with { EventDate = new DateOnly(2026, 3, 2) }
+        };
+
+        await Assert.ThrowsAsync<PublicationConflictException>(() => CommitAsync(3, 1, changed, StatementAndAction));
+
+        Assert.Equal(["1", "2"], await ReadAsync("SELECT release_number FROM publication_releases ORDER BY 1"));
+    }
+
+    [Fact]
+    public async Task APublishOfTheSameRevisionWithADifferentOfficialNameIsAcceptedBecauseTheTableHoldsNoNames()
     {
         await SeedActionAsync(A, B);
         await CommitAsync(1, null, PublishedEntryFixtures.Action(B, First));
         await CommitAsync(2, 1, PublishedEntryFixtures.Action(A, First));
         await publications.ActivateAsync(1, (_, _) => Task.CompletedTask, default);
         var entry = PublishedEntryFixtures.Action(A, First);
-        var changed = change switch
-        {
-            "headline" => entry with { Headline = "Another headline" },
-            "officials" => entry with { Officials = [entry.Officials[1], entry.Officials[0]] },
-            "issues" => entry with { IssueIds = ["tax"] },
-            "cosponsorOrder" => entry with { CosponsorIds = ["C000001", "C000003"] },
-            _ => entry with { EventDate = new DateOnly(2026, 3, 2) }
-        };
 
-        await Assert.ThrowsAsync<PublicationConflictException>(() => CommitAsync(3, 1, changed));
+        await CommitAsync(3, 1, entry with { Officials = [.. entry.Officials.Select(official => official with { Name = "Renamed" })], YeaCount = null });
 
-        Assert.Equal(["1", "2"], await ReadAsync("SELECT release_number FROM publication_releases ORDER BY 1"));
+        Assert.Equal(["1", "2", "3"], await ReadAsync("SELECT release_number FROM publication_releases ORDER BY 1"));
+    }
+
+    [Fact]
+    public async Task ARelationshipEntryWritesOneMatchedFlagForEachOfficialBecauseOnlyTheSecondOfThreeMatched()
+    {
+        await SeedPublishableRelationshipAsync();
+
+        await CommitAsync(1, null, PublishedEntryFixtures.Relationship(A, B, C, First), StatementAndAction);
+
+        Assert.Equal(["S000001|false", "S000002|true", "S000003|false"],
+            await ReadAsync("SELECT official_id || '|' || is_matched FROM published_entry_officials ORDER BY position"));
+        Assert.Equal(["relationship|DescribesOwnBill|" + B + "|action|" + C], await ReadAsync(
+            "SELECT kind || '|' || link_type || '|' || statement_record_id || '|' || target_kind || '|' || target_record_id FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task ARelationshipWhoseTargetHasNoFirstPublicationTimeIsRefusedWithTheBackfillMessageAndNoReleaseIsWritten()
+    {
+        await SeedPublishableRelationshipAsync(withTargetTime: false);
+
+        var failure = await Assert.ThrowsAsync<FirstPublishedMissingException>(() =>
+            CommitAsync(1, null, PublishedEntryFixtures.Relationship(A, B, C, First), StatementAndAction));
+
+        Assert.Contains("releases first-published backfill", failure.Message);
+        Assert.Empty(await ReadAsync("SELECT release_number FROM publication_releases"));
+    }
+
+    [Fact]
+    public async Task AVoteEntryAndAnExecutiveActionEntryWriteTheirKindAndTheirEnumColumns()
+    {
+        await SeedVoteAsync(A);
+        await SeedExecutiveActionAsync(B);
+
+        await CommitAsync(1, null, PublishedEntryFixtures.Vote(A, First), PublishedEntryFixtures.ExecutiveAction(B, First));
+
+        Assert.Equal(["executiveAction|ExecutiveOrder|" + B + "|" + B, "vote||" + A + "|" + A], await ReadAsync("""
+            SELECT kind || '|' || COALESCE(document_type, '') || '|' || COALESCE(executive_action_record_id, vote_record_id) || '|' || record_id
+            FROM published_entries ORDER BY kind
+            """));
     }
 
     [Fact]
@@ -145,12 +200,6 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         { "ck_published_entries_link", [.. AsRelationship, "link_type", "'StatementAboutVote'"] },
         { "ck_published_entries_link", [.. AsRelationship, "target_kind", "'brief'"] },
         { "ck_published_entries_link", [.. AsRelationship, "statement_record_id", "'xyz'"] },
-        { "ck_published_entries_vote_facts", [.. AsVote, "bill_title", "NULL", "yea_count", "5"] },
-        { "ck_published_entries_vote_facts", [.. AsVote, "bill_title", "NULL", "yea_count", "-1", "nay_count", "5"] },
-        { "ck_published_entries_vote_facts", [.. AsVote, "bill_title", "NULL", "yea_count", "300", "nay_count", "301"] },
-        { "ck_published_entries_vote_facts", [.. AsVote, "bill_title", "NULL", "alignment", "'Split'"] },
-        { "ck_published_entries_vote_facts", [.. AsVote, "bill_title", "NULL", "yea_count", "1", "nay_count", "1", "alignment", "'Other'"] },
-        { "ck_published_entries_vote_facts", ["yea_count", "1", "nay_count", "1"] },
         { "ck_published_entries_revision_key", ["vote_record_id", "'" + new string('a', 64) + "'", "vote_revision_number", "1"] },
         { "ck_published_entries_revision_key", ["action_record_id", "NULL", "action_revision_number", "NULL"] },
         { "ck_published_entries_revision_key", ["action_record_id", "'" + new string('b', 64) + "'"] },
@@ -172,8 +221,6 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
     ];
 
     [Theory]
-    [InlineData("published_entry_cosponsors", "official_id", "'C000001'", "position", "0", "kind", "'vote'", "ck_published_entry_cosponsors_kind")]
-    [InlineData("published_entry_cosponsors", "official_id", "' '", "position", "0", "kind", "'action'", "ck_published_entry_cosponsors_official_id")]
     [InlineData("published_entry_issues", "issue_id", "'tax'", "position", "-1", "kind", "'action'", "ck_published_entry_issues_position")]
     [InlineData("published_entry_policy_areas", "policy_area_id", "' '", "position", "0", "kind", "'action'", "ck_published_entry_policy_areas_policy_area_id")]
     public async Task TheChildTablesRefuseARowThatBreaksOneRule(string table, string valueColumn, string value, string positionColumn, string position,
@@ -234,8 +281,8 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
     }
 
     private static string InsertOfficial(string id, int position, string matched, string kind = "relationship") => $"""
-        INSERT INTO published_entry_officials (kind, record_id, revision_number, position, official_id, official_name, is_matched)
-        VALUES ('{kind}', '{A}', 1, {position}, '{id}', 'Name', {matched})
+        INSERT INTO published_entry_officials (kind, record_id, revision_number, position, official_id, is_matched)
+        VALUES ('{kind}', '{A}', 1, {position}, '{id}', {matched})
         """;
 
     [Fact]
@@ -279,11 +326,20 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
             """;
     }
 
-    private Task CommitAsync(int number, int? baseNumber, PublishedRecordEntry entry) =>
+    private static readonly PublishedRevisionBinding[] StatementAndAction =
+        [new(PublishedRecordKind.Statement, B, 1), new(PublishedRecordKind.Action, C, 1)];
+
+    private Task CommitAsync(int number, int? baseNumber, PublishedRecordEntry entry, params PublishedRevisionBinding[] cited) =>
+        CommitAsync(number, baseNumber, [entry], cited);
+
+    private Task CommitAsync(int number, int? baseNumber, PublishedRecordEntry first, PublishedRecordEntry second) =>
+        CommitAsync(number, baseNumber, [first, second], []);
+
+    private Task CommitAsync(int number, int? baseNumber, PublishedRecordEntry[] entries, PublishedRevisionBinding[] cited) =>
         publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
-            [new PublishedRevisionBinding(PublishedRecordKind.Action, entry.RecordId, 1)],
-            [new ReviewStateExpectation(PublishedRecordKind.Action, entry.RecordId, 1, 1)])
-        { AddedEntries = [entry] },
+            [.. entries.Select(PublishedRevisionBinding.Of), .. cited],
+            [.. entries.Select(entry => new ReviewStateExpectation(entry.Kind, entry.RecordId, 1, 1))])
+        { AddedEntries = [.. entries] },
             $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
 
     private async Task SeedActionAsync(params string[] ids)
@@ -295,6 +351,45 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         }
     }
 
+    private async Task SeedVoteAsync(string id) => await ExecuteAsync($$"""
+        SET session_replication_role = replica;
+        INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version,
+            review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+        VALUES ('{{id}}', 'congress-house-votes', 'House', 119, 1, 100, 1, 1, 'Approved', 0, 0);
+        INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
+        VALUES ('{{id}}', 1, 'owner', 'Person', NULL, '{}', 0)
+        """);
+
+    private async Task SeedExecutiveActionAsync(string id) => await ExecuteAsync($$"""
+        SET session_replication_role = replica;
+        INSERT INTO executive_action_drafts (record_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+        VALUES ('{{id}}', 1, 1, 'Approved', 0, 0);
+        INSERT INTO executive_action_revisions (record_id, revision_number, revision_json, created_at_utc_ticks)
+        VALUES ('{{id}}', 1, '{}', 0)
+        """);
+
+    private async Task SeedPublishableRelationshipAsync(bool withTargetTime = true)
+    {
+        var span = new SourceSpan(A, 0, 10);
+        var revision = new RelationshipRevision(A, 1, "owner", First, new(RelationshipRecordKind.Statement, B, 1), new(RelationshipRecordKind.Action, C, 1),
+            new(RelationshipMatchBasis.BillNumber, span), RelationshipType.DescribesOwnBill, "The statement describes the bill.", span, "F2", "S000002");
+        var json = JsonSerializer.Serialize(revision, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        await ExecuteAsync($$"""
+            SET session_replication_role = replica;
+            INSERT INTO relationship_drafts (record_id, current_revision_number, review_state_version, review_status, no_longer_matches, created_at_utc_ticks,
+                last_revised_at_utc_ticks)
+            VALUES ('{{A}}', 1, 1, 'Approved', false, 0, 0);
+            INSERT INTO relationship_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
+            VALUES ('{{A}}', 1, 'owner', 'Person', '{{json}}', 0);
+            INSERT INTO statement_review_decisions (decision_id, candidate_id, revision_number, review_state_version, kind, actor_subject, created_at_utc_ticks)
+            VALUES ('{{Guid.NewGuid():N}}', '{{B}}', 1, 1, 'Approve', 'owner', 1);
+            INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, kind, actor_subject, created_at_utc_ticks)
+            VALUES ('{{Guid.NewGuid():N}}', '{{C}}', 1, 1, 'Approve', 'owner', 1);
+            INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('statement', '{{B}}', 1)
+            """);
+        if (withTargetTime) await ExecuteAsync($"INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('action', '{C}', 1)");
+    }
+
     private static string ActionDraftSql(string id, int number = 1) => $"""
         SET session_replication_role = replica;
         INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks,
@@ -304,12 +399,6 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
 
     private static PostgresException FindPostgres(Exception exception) =>
         exception as PostgresException ?? (PostgresException)exception.InnerException!;
-
-    private static async Task RunAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string sql)
-    {
-        await using var command = new NpgsqlCommand(sql, connection, transaction);
-        await command.ExecuteNonQueryAsync();
-    }
 
     private async Task ExecuteAsync(string sql)
     {

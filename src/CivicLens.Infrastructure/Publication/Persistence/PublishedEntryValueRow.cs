@@ -8,5 +8,3 @@ internal abstract class PublishedEntryValueRow : PublishedEntryChildRow
 internal sealed class PublishedEntryIssueRow : PublishedEntryValueRow;
 
 internal sealed class PublishedEntryPolicyAreaRow : PublishedEntryValueRow;
-
-internal sealed class PublishedEntryCosponsorRow : PublishedEntryValueRow;

@@ -13,7 +13,6 @@ internal abstract class PublishedEntryValueRowConfiguration<TRow>(string table, 
         {
             check.HasCheckConstraint($"ck_{table}_position", "position >= 0");
             check.HasCheckConstraint($"ck_{table}_{column}", $"length(btrim({column})) > 0");
-            ConfigureChecks(check);
         });
         builder.HasKey(row => new { row.Kind, row.RecordId, row.RevisionNumber, row.Position });
         builder.HasAlternateKey(row => new { row.Kind, row.RecordId, row.RevisionNumber, row.Value });
@@ -25,20 +24,9 @@ internal abstract class PublishedEntryValueRowConfiguration<TRow>(string table, 
         builder.HasOne<PublishedEntryRow>().WithMany().HasForeignKey(row => new { row.Kind, row.RecordId, row.RevisionNumber })
             .OnDelete(DeleteBehavior.Restrict);
     }
-
-    protected virtual void ConfigureChecks(TableBuilder<TRow> check)
-    {
-    }
 }
 
 internal sealed class PublishedEntryIssueRowConfiguration() : PublishedEntryValueRowConfiguration<PublishedEntryIssueRow>("published_entry_issues", "issue_id");
 
 internal sealed class PublishedEntryPolicyAreaRowConfiguration()
     : PublishedEntryValueRowConfiguration<PublishedEntryPolicyAreaRow>("published_entry_policy_areas", "policy_area_id");
-
-internal sealed class PublishedEntryCosponsorRowConfiguration()
-    : PublishedEntryValueRowConfiguration<PublishedEntryCosponsorRow>("published_entry_cosponsors", "official_id")
-{
-    protected override void ConfigureChecks(TableBuilder<PublishedEntryCosponsorRow> check) =>
-        check.HasCheckConstraint("ck_published_entry_cosponsors_kind", "kind = 'action'");
-}

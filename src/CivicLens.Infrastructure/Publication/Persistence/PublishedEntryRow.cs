@@ -31,7 +31,4 @@ internal sealed class PublishedEntryRow
     public string? TargetKind { get; set; }
     public string? TargetRecordId { get; set; }
     public PublishedExecutiveActionKind? DocumentType { get; set; }
-    public int? YeaCount { get; set; }
-    public int? NayCount { get; set; }
-    public PublishedVoteAlignment? Alignment { get; set; }
 }

@@ -1,7 +1,7 @@
 using CivicLens.Publication.Contracts;
 using Npgsql;
 
-namespace CivicLens.Tests.Fixtures;
+namespace CivicLens.Tests.Host;
 
 public static class PublishedEntryRows
 {
@@ -9,14 +9,13 @@ public static class PublishedEntryRows
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
-        var officials = await ReadChildrenAsync(connection, "published_entry_officials", "official_id || '|' || official_name || '|' || is_matched");
+        var officials = await ReadChildrenAsync(connection, "published_entry_officials", "official_id || '|' || is_matched");
         var issues = await ReadChildrenAsync(connection, "published_entry_issues", "issue_id");
         var policyAreas = await ReadChildrenAsync(connection, "published_entry_policy_areas", "policy_area_id");
-        var cosponsors = await ReadChildrenAsync(connection, "published_entry_cosponsors", "official_id");
         var entries = new List<PublishedRecordEntry>();
         await using var command = new NpgsqlCommand("""
             SELECT e.kind, e.record_id, e.revision_number, e.headline, p.first_published_at_utc_ticks, e.source_host, e.event_date, e.bill_title,
-                e.link_type, e.statement_record_id, e.target_kind, e.target_record_id, e.document_type, e.yea_count, e.nay_count, e.alignment
+                e.link_type, e.statement_record_id, e.target_kind, e.target_record_id, e.document_type
             FROM published_entries e JOIN published_records p ON p.kind = e.kind AND p.record_id = e.record_id
             ORDER BY e.kind, e.record_id, e.revision_number
             """, connection);
@@ -39,15 +38,11 @@ public static class PublishedEntryRows
                 StatementRecordId = Text(reader, 9),
                 TargetKind = Parse<PublishedRecordKind>(Text(reader, 10)),
                 TargetRecordId = Text(reader, 11),
-                MatchedOfficialId = officials[key].Select(value => value.Split('|')).SingleOrDefault(parts => parts[2] == "true")?.ElementAt(0),
+                MatchedOfficialId = officials[key].Select(value => value.Split('|')).SingleOrDefault(parts => parts[1] == "true")?.ElementAt(0),
                 DocumentType = Parse<PublishedExecutiveActionKind>(Text(reader, 12)),
-                YeaCount = reader.IsDBNull(13) ? null : reader.GetInt32(13),
-                NayCount = reader.IsDBNull(14) ? null : reader.GetInt32(14),
-                Alignment = Parse<PublishedVoteAlignment>(Text(reader, 15)),
-                Officials = [.. officials[key].Select(value => value.Split('|')).Select(parts => new PublishedOfficial { Id = parts[0], Name = parts[1] })],
+                Officials = [.. officials[key].Select(value => value.Split('|')).Select(parts => new PublishedOfficial { Id = parts[0], Name = string.Empty })],
                 IssueIds = [.. issues[key]],
-                PolicyAreaIds = [.. policyAreas[key]],
-                CosponsorIds = kind == PublishedRecordKind.Action ? [.. cosponsors[key]] : null
+                PolicyAreaIds = [.. policyAreas[key]]
             });
         }
         return entries;

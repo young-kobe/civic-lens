@@ -14,7 +14,6 @@ internal sealed class PublishedEntryOfficialRowConfiguration : IEntityTypeConfig
             table.HasCheckConstraint("ck_published_entry_officials_position", "position >= 0");
             table.HasCheckConstraint("ck_published_entry_officials_matched_kind", $"NOT is_matched OR kind = '{PublishedRecordReference.NameOf(PublishedRecordKind.Relationship)}'");
             table.HasCheckConstraint("ck_published_entry_officials_official_id", "length(btrim(official_id)) > 0");
-            table.HasCheckConstraint("ck_published_entry_officials_official_name", "length(btrim(official_name)) > 0");
         });
         builder.HasKey(row => new { row.Kind, row.RecordId, row.RevisionNumber, row.Position });
         builder.HasAlternateKey(row => new { row.Kind, row.RecordId, row.RevisionNumber, row.OfficialId });
@@ -23,7 +22,6 @@ internal sealed class PublishedEntryOfficialRowConfiguration : IEntityTypeConfig
         builder.Property(row => row.RevisionNumber).HasColumnName("revision_number");
         builder.Property(row => row.Position).HasColumnName("position");
         builder.Property(row => row.OfficialId).HasColumnName("official_id").HasMaxLength(PublishedRecordEntry.MaximumFilterValueLength);
-        builder.Property(row => row.OfficialName).HasColumnName("official_name").HasMaxLength(PublishedRecordEntry.MaximumFilterValueLength);
         builder.Property(row => row.IsMatched).HasColumnName("is_matched").HasDefaultValue(false);
         builder.HasIndex(row => new { row.Kind, row.RecordId, row.RevisionNumber }, "ux_published_entry_officials_matched").IsUnique()
             .HasFilter("is_matched");

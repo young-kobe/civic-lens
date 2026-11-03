@@ -39,10 +39,6 @@ internal sealed class PublishedEntryRowConfiguration : IEntityTypeConfiguration<
                 $"{EnumChecks.InList("target_kind", [Name(PublishedRecordKind.Action), Name(PublishedRecordKind.Vote)])} AND " +
                 $"statement_record_id ~ {RecordIdPattern} AND target_record_id ~ {RecordIdPattern} AND " +
                 $"(target_kind = '{Name(PublishedRecordKind.Vote)}') = (link_type = '{PublishedRelationshipType.StatementAboutVote}')))");
-            table.HasCheckConstraint("ck_published_entries_vote_facts",
-                $"(yea_count IS NULL) = (nay_count IS NULL) AND (yea_count IS NULL OR " +
-                $"(kind = '{Name(PublishedRecordKind.Vote)}' AND yea_count >= 0 AND nay_count >= 0 AND yea_count + nay_count <= {PublishedVote.MaximumMembers})) AND " +
-                $"(alignment IS NULL OR (yea_count IS NOT NULL AND {EnumChecks.InList("alignment", Enum.GetNames<PublishedVoteAlignment>())}))");
         });
         builder.HasKey(row => new { row.Kind, row.RecordId, row.RevisionNumber });
         builder.Property(row => row.Kind).HasColumnName("kind").HasMaxLength(32);
@@ -59,9 +55,6 @@ internal sealed class PublishedEntryRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.TargetKind).HasColumnName("target_kind").HasMaxLength(32);
         builder.Property(row => row.TargetRecordId).HasColumnName("target_record_id").HasMaxLength(64);
         builder.Property(row => row.DocumentType).HasColumnName("document_type").HasConversion<string>().HasMaxLength(32);
-        builder.Property(row => row.YeaCount).HasColumnName("yea_count");
-        builder.Property(row => row.NayCount).HasColumnName("nay_count");
-        builder.Property(row => row.Alignment).HasColumnName("alignment").HasConversion<string>().HasMaxLength(32);
 
         ConfigureRevisionColumns(builder);
         builder.HasOne<PublishedRecordRow>().WithMany().HasForeignKey(row => new { row.Kind, row.RecordId }).OnDelete(DeleteBehavior.Restrict);
