@@ -16,6 +16,8 @@ python3 tools/render-architecture.py --check
 python3 tools/check-docs.py --check
 ```
 
+CI runs the tests in 4 parallel jobs, each with its own Postgres container. `tools/test-shards.py` puts each test class in one job by a hash of its name. To run one job locally after the Release build, run `python3 tools/test-shards.py --shards 4 --index 0 --runsettings shard.runsettings`. Then run `dotnet test tests/CivicLens.Tests --configuration Release --no-build --settings shard.runsettings`.
+
 Tests never call the paid Claude API. They use a fake model at each drafting port. The live tests, in category `LiveAi`, are skipped unless you set `CIVIC_LENS_LIVE_AI=1` and `ANTHROPIC_API_KEY`. CI does not set them. Each live test sends paid requests, so run them on request only:
 
 ```sh
