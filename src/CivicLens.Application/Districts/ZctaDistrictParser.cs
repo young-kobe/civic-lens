@@ -15,7 +15,6 @@ public static class ZctaDistrictParser
     private const int ZctaColumn = 8;
     private const int LandPartColumn = 15;
     private const string NoDistrict = "ZZ";
-    private const string AtLarge = "00";
     private const string Delegate = "98";
 
     public static ZctaDistrict[] Parse(ReadOnlySpan<byte> file)
@@ -48,7 +47,7 @@ public static class ZctaDistrictParser
 
     private static int DistrictNumberOf(string district)
     {
-        if (district is AtLarge or Delegate) return 0;
+        if (district == Delegate) return 0;
         return district.All(char.IsAsciiDigit) ? int.Parse(district, CultureInfo.InvariantCulture)
             : throw new InvalidDataException("ZCTA district file has a malformed district.");
     }
