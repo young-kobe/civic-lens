@@ -92,3 +92,18 @@ The survey now applies every finding above, checked on `origin/main` at `c3c116b
 - `briefs.md:237` needs no edit. It names only `output_json`, which stays.
 - The production figures (run count, user message size, database size) are not in the repo. The survey no longer states them. It tells the owner to measure after PR 1.
 - The review says PR 5 and PR 6 are fine. PR 5 (old PR 6) has no verify step. The survey states that cost in D1 and leaves the choice to the owner.
+
+## Round 2 resolution
+
+Each item was checked on `origin/main` with `git show` and `git grep`. All were applied. None was rejected.
+
+- P1 (relationship fingerprint has no writer): applied in section 3.4, PR 5 and D1 option B. `RelationshipDraftRun` holds only `(Run, Reason)` and `AddRun` sets only `Reason` (`RelationshipDraftQueueMapping.cs:31-36`), as the review said. The plan now adds the field, sets it in `RelationshipDraftStep`, writes it in `AddRun`, adds an all-or-none check, and moves the `IS NOT NULL` filter at `RelationshipStaleness.cs:65`. The shared `Wrap` also builds rejected runs, so the plan sets the fingerprint at the accepted, recite and bypass sites instead. A new test shows that a settled pair is not stale.
+- P2a (two hash owners): applied. `AnalysisRunInput.TextHash(role, text)` in Core is the one recipe. `IdOf` is gone from the plan. `EnsureAsync` reads the `Input` hashes.
+- P2b (four helpers): applied. Only `PostgresBillStreamTests.ActionDrafts.cs:999` and `PostgresHouseVoteTests.Drafting.cs:518` pass an `Input`. The other two build Bypassed runs and must not (`ActionReview.cs:684-686`, `PostgresRelationshipDraftStoreTests.cs:282-284`).
+- P2c (write rule owner): applied. `CheckpointAsync` calls `Validate()` at `PostgresAnalysisQueue.cs:164` and `Interrupt` at `:301`. Both change to `ValidateForWrite()`, and that is the owner. `AnalysisRunRows.Create` gets no call.
+- P2d (CLR shape): added as D9, with options A, B and C. `OwnsMany` and `OwnsOne` have no use in `src`, and neither has `Include`. The recommendation is C, after a spike on restrict deletes. Section 3.3, section 4 and PR 2 refer to D9.
+- P3 count: there are ten queries, not nine. `PostgresStatementDraftStore.cs:47-49` reads the latest gate run by candidate. Fixed in section 1.2, section 4 and PR 2.
+- P3 `IAttempt`: the file is `IAnalysisAttempt.cs:8`. PR 5 now names it.
+- P3 D5 option C: names the token `user_message` exactly, and cites `PostgresBriefCheckStoreTests.cs:316`.
+- P3 text cap: proposed 100 000 as one constant. All eight tasks set `MaximumPromptBytes = 100_000`. It stays open for the owner.
+- P3 ORDER BY: kept. The text now says that settles of one kind already lock the budget day row (`PostgresAnalysisQueue.cs:238`), so the order adds little. It still guards settles of different kinds, which use different budget tables.

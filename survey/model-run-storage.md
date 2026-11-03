@@ -62,7 +62,7 @@ Run row writers, one per kind, all through `AnalysisRunRows.Create`:
 `StatementGateQueueMapping.cs:34,47-52`, `StatementDraftQueueMapping.cs:32-34`, `ActionDraftQueueMapping.cs:33-35`, `VoteDraftQueueMapping.cs:33-35`, `RelationshipDraftQueueMapping.cs:31-33`, `BriefDraftQueueMapping.cs:33-35`, `BriefCheckQueueMapping.cs:30-32`, `DocumentChangeAnalysisQueueMapping.cs:30,47-49`.
 The one caller of every `AddRun` is `PostgresAnalysisQueue.SettleRunAsync` (`:225-244`, call at `:242`) and the interrupt path (`:292-304`, call at `:302`).
 
-Run row readers: `AnalysisRunRows.ToRun` (`:35-46`). It is a static, synchronous mapper with no database access. It calls `Validate()` on every row it maps (`:44`). It has nine call sites: `PostgresStatementDraftStore.cs:38`, `PostgresStatementGateStore.cs:32` via `StatementGateQueueMapping.cs:56`, `PostgresActionDraftStore.cs:44`, `PostgresVoteDraftStore.cs:47`, `PostgresRelationshipDraftStore.cs:39`, `PostgresBriefDraftStore.cs:76`, `PostgresBriefCheckStore.cs:33`, `PostgresDocumentChangeAnalysisStore.cs:42,51`. `PostgresStatementDraftStore.cs:53` also reaches it through the gate mapping. Each site reads one run by exact ID. `GetAnalysisRun.cs:13` exposes it.
+Run row readers: `AnalysisRunRows.ToRun` (`:35-46`). It is a static, synchronous mapper with no database access. It calls `Validate()` on every row it maps (`:44`). It has ten queries that need the child read: `PostgresStatementDraftStore.cs:38`, `PostgresStatementDraftStore.cs:53` (through the gate mapping), `PostgresStatementGateStore.cs:32` via `StatementGateQueueMapping.cs:56`, `PostgresActionDraftStore.cs:44`, `PostgresVoteDraftStore.cs:47`, `PostgresRelationshipDraftStore.cs:39`, `PostgresBriefDraftStore.cs:76`, `PostgresBriefCheckStore.cs:33`, `PostgresDocumentChangeAnalysisStore.cs:42,51`. Nine of them read one run by exact ID. The tenth, `PostgresStatementDraftStore.cs:47-49`, reads the latest gate run by candidate. `GetAnalysisRun.cs:13` exposes the mapper.
 
 Other readers of run SQL: `AnalysisRunLookup.Latest` (`AnalysisRunLookup.cs:9-17`) filters on `started_at_utc_ticks` only. Its callers project IDs and load no run rows. `deploy/scripts/readonly-grants.sql` grants the read-only role every column not matching its hidden pattern. The pattern hides no run column today.
 
@@ -123,11 +123,11 @@ Checks, named like the repo's (`ck_{table}_{rule}`):
 
 - `ck_analysis_prompt_texts_id`: `text_sha256 ~ '^[0-9a-f]{64}$'`. Precedent: `ck_vote_member_lists_id`, `ck_collection_configuration_revisions_id`.
 - `ck_analysis_prompt_texts_role`: `role IN ('system','schema')`.
-- `ck_analysis_prompt_texts_text`: `char_length(text) BETWEEN 1 AND <cap>`. Mirror `AnalysisRun.MaximumOutputLength` (`AnalysisRun.cs:12`) or the task prompt cap.
+- `ck_analysis_prompt_texts_text`: `char_length(text) BETWEEN 1 AND 100000`. The cap is open for the owner. Proposal: one Core constant with the value 100 000, used also by `ck_{table}_user_message`. All eight task classes set `MaximumPromptBytes = 100_000` (for example `ActionDraftTask.cs:17`). Each builder rejects a prompt when system, user and schema together exceed it (`DocumentChangeDraftPrompt.cs:50-51`). A text length in chars is never above its byte count, so no valid text fails. `AnalysisRun.MaximumOutputLength` (`AnalysisRun.cs:12`, 1 000 000) is too loose for input.
 - `ck_analysis_prompt_texts_created_at_utc_ticks`: the standard tick range check every table has.
 - Optional, see decision D2: `text_sha256 = encode(sha256(convert_to(role || E'\n' || text, 'UTF8')), 'hex')`.
 
-Hash recipe, one only: SHA-256 over the UTF-8 bytes of `role`, a newline (`\n`), and `text`, written as lowercase hex. C# `IdOf(role, text)` and the D2 check use this exact recipe. The role in the hash means the same text under two roles gets two keys, so one key never has two roles.
+Hash recipe, one only: SHA-256 over the UTF-8 bytes of `role`, a newline (`\n`), and `text`, written as lowercase hex. One Core member owns it: `AnalysisRunInput.TextHash(role, text)`. The D2 check repeats it in SQL. The role in the hash means the same text under two roles gets two keys, so one key never has two roles.
 `VoteMemberLists.IdOf` adds a version tag (`vote-member-list-v1`, `VoteMemberLists.cs:15,30-31`). This table adds no tag, so that SQL can repeat the hash. A new recipe later needs a migration. The role set has no newline, so the join is unambiguous.
 
 ### 3.2 Run columns
@@ -150,18 +150,18 @@ Checks per run table, added in `ConfigureRun`:
 
 - `ck_{table}_input`: `(system_prompt_sha256 IS NULL) = (output_schema_sha256 IS NULL) AND (system_prompt_sha256 IS NULL) = (user_message IS NULL) AND (system_prompt_sha256 IS NULL) = (effort IS NULL) AND (effort IS NULL) = (max_output_tokens IS NULL)`. All set or all null. Precedent: all-or-none checks such as `ck_document_change_analysis_reservation`.
 - `ck_{table}_input_outcome`: `outcome NOT IN ('Bypassed','Interrupted') OR system_prompt_sha256 IS NULL`. A run without a call holds no request.
-- `ck_{table}_user_message`: `user_message IS NULL OR char_length(user_message) BETWEEN 1 AND <cap>`.
+- `ck_{table}_user_message`: `user_message IS NULL OR char_length(user_message) BETWEEN 1 AND 100000` (same constant as the text table).
 - `ck_{table}_max_output_tokens`: `max_output_tokens IS NULL OR max_output_tokens > 0`.
 
 Old runs have all nulls, so every check passes. No rebuild, as decided.
-A call run written by new code must carry its input. The DB cannot tell a new run from an old one. The write rule has one owner: `AnalysisRun.ValidateForWrite()` in Core, which `AnalysisRunRows.Create` calls (see PR 1). `AnalysisRun.Validate()` is the read rule. It does not require `Input`, because `ToRun` calls it on every legacy row. The verify command covers old data (see PR 3).
+A call run written by new code must carry its input. The DB cannot tell a new run from an old one. The write rule has one owner: `AnalysisRun.ValidateForWrite()` in Core. The queue calls it at the two write sites (section 4). `AnalysisRun.Validate()` is the read rule. It does not require `Input`, because `ToRun` calls it on every legacy row. The verify command covers old data (see PR 3).
 
 Indexes: EF adds an index per FK by default, as on `IX_document_change_analysis_runs_previous_run_id` (`schema/analysis.md`). Keep both. They answer "which runs used this prompt". Cost is small: two 64-byte keys per run. Deleting a text row is never done.
 EF already shortens long foreign key names (`InitialSchema.cs:1716`). The new check names collide with no name in `docs/architecture/schema/*.md`. The longest, `ck_document_change_analysis_runs_input_outcome`, has 46 characters and fits the 63 limit.
 
 ### 3.3 Validation child rows
 
-One child table per run table, built by one shared `ConfigureRunError` helper next to `ConfigureRun`. Names: `document_change_analysis_run_errors`, `statement_analysis_run_errors`, `action_...`, `vote_...`, `relationship_...`, `brief_analysis_run_errors`.
+One child table per run table, built by one shared `ConfigureRunError` helper next to `ConfigureRun`. The CLR shape of the six tables is open (D9). Names: `document_change_analysis_run_errors`, `statement_analysis_run_errors`, `action_...`, `vote_...`, `relationship_...`, `brief_analysis_run_errors`.
 
 | Column | Type |
 |---|---|
@@ -175,26 +175,34 @@ One child table per run table, built by one shared `ConfigureRunError` helper ne
 - Rule "only a rejected run has errors" stays in `AnalysisRun.Validate` (`:28-33`). Postgres cannot require a child row without a deferred trigger. AGENTS prefers C# when C# can hold it. The child FK plus a composite check cannot see the parent outcome. Option: add `outcome` to the child and a composite FK `(run_id, outcome)`. Not recommended. It is more machinery than the rule is worth.
 - Order of messages is the order of `error_number`. The writer numbers from 1 (as flags do, `BriefCheckQueueMapping.cs:40`).
 - Index: the PK serves the one read, `WHERE run_id = @id ORDER BY error_number`.
-- Read path: section 4 and PR 2.
+- Read path and CLR shape: D9, section 4 and PR 2.
 
 ### 3.4 Other column changes
 
 - `relationship_analysis_runs.input_fingerprint varchar(64) null`, with the hex check. `RelationshipStaleness.cs:58,65` needs the fingerprint of a Drafted or Bypassed run once `context_json` is gone. Precedent: `brief_analysis_runs.input_fingerprint` (`BriefAnalysisRunRowConfiguration.cs:26-28,35`). Backfill from `context_json::jsonb ->> 'fingerprint'` in the same migration, before the drop.
+
+The column needs a writer, or every new run gets null and every pair looks stale (`RelationshipStaleness.cs:32-33`), so paid redrafts repeat. Today `RelationshipDraftRun` holds only `(Run, Reason)`, and `RelationshipDraftQueueMapping.AddRun` sets only `Reason` (`:31-36`). The writer has four parts:
+
+- `RelationshipDraftRun` gains `InputFingerprint`, like `BriefCheckRun` (`BriefCheckRun.cs:5`).
+- `RelationshipDraftStep` sets it on each Drafted or Bypassed run built from a matched pair: the two runs in `SettleAcceptedAsync` (pass it the context), the recite run, and the `SettleWithoutCallAsync` runs for unchanged and no-relationship. The shared `Wrap` (`RelationshipDraftStep.cs:18`) also builds rejected runs, so it keeps a null fingerprint. The unmatched bypass stays null too, because it has no fingerprint today.
+- `AddRun` writes it, as `BriefCheckQueueMapping.cs:35` does.
+- A check `ck_relationship_analysis_runs_fingerprint`, built like `ck_brief_analysis_runs_fingerprint` (`BriefAnalysisRunRowConfiguration.cs:26-28`): non-null only for Drafted or Bypassed, and hex when set.
+
+The settled-run filter `r.context_json::jsonb ->> 'fingerprint' IS NOT NULL` (`RelationshipStaleness.cs:65`) also reads `context_json`. It moves to `r.input_fingerprint IS NOT NULL` in the same PR.
 - No other kind reads a context field. Statement gate `issue_revision_id` already is a column (`StatementAnalysisRunRowConfiguration.cs:22`).
 
 ## 4. Write path
 
 One owner: a new `AnalysisPromptTexts` static class in `src/CivicLens.Infrastructure/Analysis/`. Precedent: `VoteMemberLists` (`VoteMemberLists.cs:13-50`), which owns the identity and the `INSERT ... ON CONFLICT DO NOTHING` through raw SQL on the caller's transaction. A second precedent is the configuration revision insert (`JobRowWriter.cs:38`).
 
-- `IdOf(role, text)` computes the key.
-- `EnsureAsync(db, input, nowTicks, ct)` runs one statement: `INSERT INTO analysis_prompt_texts (...) SELECT ... FROM unnest(...) ORDER BY text_sha256 ON CONFLICT DO NOTHING`. Sorting by key gives every writer the same insert order, so two writers inserting the same pair cannot deadlock.
+- `EnsureAsync(db, input, nowTicks, ct)` runs one statement: `INSERT INTO analysis_prompt_texts (...) SELECT ... FROM unnest(...) ORDER BY text_sha256 ON CONFLICT DO NOTHING`. Sorting by key gives every writer the same insert order. Settles of one kind already lock the budget day row first (`PostgresAnalysisQueue.cs:238`), so they run one after another and the order adds little. Only Bypassed runs skip that lock, and they insert no text. Each kind has its own budget table, so settles of different kinds do not share a lock. The order still guards that case. Keep it, at no cost.
 - One caller: `PostgresAnalysisQueue.SettleRunAsync`, just before `mapping.AddRun` (`:242`). It runs in the checkpoint transaction under the subject row lock (`CheckpointAsync` `:161-180`). Every kind passes here, so no kind has its own insert.
 - The Interrupted path (`:302`) and the Bypassed branch (`:229-233`) skip it. They hold no input.
-- Hash once. A Core record `AnalysisRunInput(SystemPrompt, UserMessage, OutputSchema, Effort, MaximumOutputTokens)` carries the two text hashes, computed at construction. `AnalysisRunRows.Create` (`AnalysisRunRows.cs:9-33`) copies the hashes and `user_message`. `EnsureAsync` reuses the same hashes. No second hash pass.
+- Hash once, one owner. A Core record `AnalysisRunInput(SystemPrompt, UserMessage, OutputSchema, Effort, MaximumOutputTokens)` owns the recipe in a static `TextHash(role, text)` and computes the two text hashes at construction. Core already uses `SHA256` (`BriefWeek.cs`). `AnalysisRunRows.Create` (`AnalysisRunRows.cs:9-33`) copies the hashes and `user_message`. `EnsureAsync` reads the same hashes from the `Input`. No `IdOf` in Infrastructure, no second hash pass.
 - `AnalysisRun` (`AnalysisRun.cs:5-8`) gains `AnalysisRunInput? Input = null` as its last parameter. It sits beside `ContextJson`. It does not replace it, because `context_json` stays live until PR 5 (relationship staleness reads it, and the Interrupted rule needs it). `Attempt.Run` (`AnalysisWorker.cs:260-266`) builds the input from `request`. `BypassRun` (`:182-187`) passes null.
-- Write rule and read rule are separate. `AnalysisRun.Validate()` stays the read rule and accepts a null `Input`. `AnalysisRun.ValidateForWrite()` calls it, then requires `Input` for every outcome except Bypassed and Interrupted, and none for those two. `AnalysisRunRows.Create` calls `ValidateForWrite()`.
+- Write rule and read rule are separate. `AnalysisRun.Validate()` stays the read rule and accepts a null `Input`. `AnalysisRun.ValidateForWrite()` calls it, then requires `Input` for every outcome except Bypassed and Interrupted, and none for those two. The owner of the write rule is the queue, which already validates before it writes. `CheckpointAsync` calls `Validate()` before the transaction (`PostgresAnalysisQueue.cs:164`). Change that call to `ValidateForWrite()`. `Interrupt` calls `run.Validate()` at `:301`. Change it to `ValidateForWrite()` too, so both write sites use one rule. Do not add a third call in `AnalysisRunRows.Create`. `ToRun` keeps `Validate()` (`AnalysisRunRows.cs:44`).
 - Reads: `ToRun` leaves `Input` null. A reader needs the text only for an inspection command. Add that later, not now (AGENTS: no member without a caller).
-- Validation errors read through an EF navigation, not a new query in `ToRun`. `ToRun` stays static. `IAnalysisRunRow` gains an `Errors` collection. Each of the nine call sites already reads one run by exact ID. Each adds `Include(Errors)` ordered by `error_number` to that query, so the errors arrive with the run in one round trip. This is not an N+1 read: no site loops over many runs, and `AnalysisRunLookup.Latest` callers load no run rows. A rejected run without its errors makes `Validate()` throw ("at least one" error). So a missed `Include` fails the per-kind round-trip test. The resume path (`AnalysisValidationLoop.cs:22`) needs these rows for recovery.
+- Validation errors must arrive with the run, not through a new query in `ToRun`. `ToRun` stays static, and `IAnalysisRunRow` gains an `Errors` collection. The CLR shape of the six error tables and the way the rows load is open (D9). Ten queries need the rows (section 1.2). No site loops over many runs, and `AnalysisRunLookup.Latest` callers load no run rows, so this is not an N+1 read. A rejected run without its errors makes `Validate()` throw ("at least one" error). So a missed load fails the per-kind round-trip test. The resume path (`AnalysisValidationLoop.cs:22`) needs these rows for recovery.
 
 Concurrency: `ON CONFLICT DO NOTHING` on the PK makes two writers of one text safe. The second waits for the first to commit, then skips. The run FK sees a committed row.
 
@@ -205,20 +213,20 @@ Each PR starts from `origin/main`. No stacking. Each is a migration plus code th
 **PR 1. Prompt texts and run input, written by every kind.**
 The table has a production caller only when a run writes to it. So the table, its owner, and the run columns ship together.
 - Migration: `analysis_prompt_texts`, the five run columns, the four checks, and the two FKs on the six tables through `ConfigureRun`.
-- Code: `AnalysisPromptTexts` (`IdOf`, `EnsureAsync`), `AnalysisRunInput`, `Attempt.Run`, `AnalysisRunRows.Create`, `SettleRunAsync`. Add `Effort` to `AnalysisModelRequest`, and map it to the SDK enum at `AnthropicStructuredCall.cs:43` (D3).
+- Code: `AnalysisPromptTexts` (`EnsureAsync`), `AnalysisRunInput` (with `TextHash`), `Attempt.Run`, `AnalysisRunRows.Create`, `SettleRunAsync`. Add `Effort` to `AnalysisModelRequest`, and map it to the SDK enum at `AnthropicStructuredCall.cs:43` (D3).
 - `AnalysisRun` gains `Input` beside `ContextJson`. The context stays written and read. Nothing is swapped.
-- Rules: `Validate()` stays the read rule, so `ToRun` loads legacy rows with a null `Input`. `ValidateForWrite()` requires `Input` for call runs. Owner: `AnalysisRunRows.Create` (section 4).
+- Rules: `Validate()` stays the read rule, so `ToRun` loads legacy rows with a null `Input`. `ValidateForWrite()` requires `Input` for call runs. Owner: `PostgresAnalysisQueue.CheckpointAsync` and `Interrupt` (section 4).
 - Docs: `docs/architecture/analysis.md:198-200` says the run stores no prompt text. Rewrite it. Update the schema docs. Apply D5 to `deploy/scripts/readonly-grants.sql` if the owner chooses to hide columns.
 
 Tests:
-- New `AnalysisPromptTextsTests`: same text gives one row, role changes the key, parallel writers, insert order.
+- New `AnalysisPromptTextsTests`: same text gives one row, parallel writers, insert order. `AnalysisRunInputTests`: role changes the key.
 - `AnalysisRunTests`: `Validate()` accepts a null `Input`. `ValidateForWrite()` rejects it for call runs and for Bypassed and Interrupted runs that hold one.
 - `AnalysisPromptHashTests`: the hash equals the stored parts.
 - `AnthropicDocumentChangeDraftModelTests`: effort comes from the request.
 - Per kind: `PostgresDocumentChangeAnalysisStoreTests`, `PostgresStatementGateStoreTests`, `PostgresStatementDraftStoreTests`, `PostgresBillStreamTests.ActionDrafts`, `PostgresRelationshipDraftStoreTests`, `PostgresBriefCheckStoreTests`, and the vote and brief draft store tests. Each asserts that the stored user message, system text, and schema equal the request, and that a retry run holds its own user message.
 - A new test: Bypassed and Interrupted keep nulls, and a legacy row with null input loads through `ToRun`.
 - A migration test modeled on `VoteRevisionColumnsMigrationTests`. `SchemaReferenceTests` regenerates the schema doc. `ArchitectureTests` stays green.
-- Tests that build `new AnalysisRun(...)` compile unchanged, because `Input` defaults to null. Four Postgres helpers persist runs through `Create`, so they must pass an `Input`: `PostgresBillStreamTests.ActionDrafts.cs:999`, `PostgresBillStreamTests.ActionReview.cs:684`, `PostgresHouseVoteTests.Drafting.cs:518`, `PostgresRelationshipDraftStoreTests.cs:282`. The five in-memory builders need no edit: `FakeAnalysisStore.cs:41`, `FakeStatementDraftStore.cs:36`, `FakeStatementGateStore.cs:42`, `StatementCodeApprovalTests.cs:191`, `StatementGateCarryOverTests.cs:55`.
+- Tests that build `new AnalysisRun(...)` compile unchanged, because `Input` defaults to null. Two Postgres helpers build Drafted runs and persist them through the queue, so they must pass an `Input`: `PostgresBillStreamTests.ActionDrafts.cs:999` and `PostgresHouseVoteTests.Drafting.cs:518`. Two other helpers build Bypassed runs and must not pass one: `PostgresBillStreamTests.ActionReview.cs:684-686` and `PostgresRelationshipDraftStoreTests.cs:282-284`. The five in-memory builders need no edit: `FakeAnalysisStore.cs:41`, `FakeStatementDraftStore.cs:36`, `FakeStatementGateStore.cs:42`, `StatementCodeApprovalTests.cs:191`, `StatementGateCarryOverTests.cs:55`.
 - `DocumentChangeDraftPromptGoldenTests` stays unchanged. Raw inserts into run tables stay valid, because every new column is nullable: `GateLabelRuns.cs:12`, `RelationshipWorldSeeder.cs:92`, `PostgresBriefCheckStoreTests.cs:188`, `PostgresBillStreamTests.ActionDrafts.cs:711`, `PostgresHouseVoteTests.Drafting.cs:466`.
 
 **PR 2. Validation errors to child rows.**
@@ -226,8 +234,8 @@ Tests:
   `INSERT INTO <errors> (run_id, error_number, message) SELECT r.run_id, e.ordinality::smallint, e.value FROM <runs> r CROSS JOIN LATERAL jsonb_array_elements_text(r.validation_json::jsonb) WITH ORDINALITY AS e(value, ordinality) WHERE r.validation_json IS NOT NULL`.
   Precedent: `jsonb_array_elements_text` in `20261031041526_ReviewDecisionColumns.cs:563`.
 - Writer: `AnalysisRunRows.Create` plus `AddRun` add the child rows.
-- Reader: the `Errors` navigation and `Include` at the nine `ToRun` call sites (section 4). `validation_json` stays written this PR, for rollback safety. It is no longer read.
-- Tests: a store test per kind for a rejected run round trip, which loads its errors through the include. A migration test with legacy rows. A resume test for `AnalysisValidationLoop` that reads errors from rows. A test that `StatementGateQueueMapping.ToRun` and `PostgresStatementDraftStore.cs:53` load errors for a rejected gate run.
+- Reader: the load of `Errors` at the ten queries (section 4), in the shape that D9 chooses. `validation_json` stays written this PR, for rollback safety. It is no longer read.
+- Tests: a store test per kind for a rejected run round trip, which loads its errors through the include. A migration test with legacy rows. A resume test for `AnalysisValidationLoop` that reads errors from rows. A test that `StatementGateQueueMapping.ToRun` and `PostgresStatementDraftStore.cs:47-53` load errors for a rejected gate run.
 
 **PR 3. Verify command.**
 A read-only check, as R-63 requires before any drop. For each run, errors rebuilt from rows equal `validation_json`. For each new call run, `AnalysisPromptHash` recomputed from stored model, effort, max tokens, system, user, and schema equals `input_hash`. A join checks that each run's two keys point to rows with the right roles (D7). Prints counts and run IDs, never text. Exits 1 on mismatch. Precedent: `votes revisions verify` (`docs/architecture/votes.md:150`).
@@ -239,8 +247,10 @@ Tests: migration down and up test with rows. Schema doc regeneration. Edit `Post
 
 **PR 5. Drop `context_json`. No verify step.**
 This PR drops the column with no verify step, because the dropped fields have no rebuild source (see D1). R-63 asks for a check before a drop. The owner decides in D1.
-- Migration: add `relationship_analysis_runs.input_fingerprint`, backfill it from `context_json::jsonb ->> 'fingerprint'`, and move `RelationshipStaleness.cs:58` to the column. The store read (`PostgresRelationshipDraftStore.cs:18`) and the stale-pair query (`RelationshipStaleness.cs:32-33`) call that helper and need no change.
-- Code: remove `ContextJson` from `IAttempt`, `AnalysisWorker.cs:160,187,266`, `AnalysisRun.cs:34-35`, the row interface, and the column. Interrupted runs lose the special rule.
+- Migration: add `relationship_analysis_runs.input_fingerprint` with its check, and backfill it from `context_json::jsonb ->> 'fingerprint'`.
+- Writer (section 3.4): `RelationshipDraftRun.InputFingerprint`, set in `RelationshipDraftStep`, written in `RelationshipDraftQueueMapping.AddRun`.
+- Reader: move `RelationshipStaleness.cs:58` and the `IS NOT NULL` filter at `:65` to the column. The store read (`PostgresRelationshipDraftStore.cs:18`) and the stale-pair query (`RelationshipStaleness.cs:32-33`) call that helper and need no change.
+- Code: remove `ContextJson` from `IAnalysisAttempt` (`IAnalysisAttempt.cs:8`), `AnalysisWorker.cs:160,187,266`, `AnalysisRun.cs:34-35`, the row interface, and the column. Interrupted runs lose the special rule.
 - Remove nine context lines in eight step files: `ActionDraftStep.cs:37`, `DocumentChangeDraftStep.cs:31`, `BriefCheckStep.cs:27`, `BriefDraftStep.cs:26`, `RelationshipDraftStep.cs:27,31`, `StatementDraftStep.cs:31`, `StatementGateStep.cs:28`, `VoteDraftStep.cs:34`.
 - Remove nine context methods that lose their last production caller: six `SerializeContext` (action, brief check, brief draft, relationship, statement draft, vote), `SerializeCatalog`, `ToContextJson`, and `SerializeUnmatchedContext`.
 - Docs: `statements.md:385,491,493,509,581` describe `context_json`. `analysis.md` too.
@@ -249,6 +259,7 @@ Tests:
 - Two tests still call context methods and change: `ActionDraftPromptGoldenTests.cs:66` and `PostgresDocumentChangeAnalysisStoreTests.cs:115`.
 - Remove the context rule from `AnalysisRunTests.cs:27-28`.
 - Update `PostgresBillStreamTests.ActionDrafts.cs:484,503,505`, `StatementGateStepTests.cs:46`, `DocumentChangeDraftStepTests.cs:29`, `VoteDraftStepTests.cs:426`, `BriefCheckStepTests.cs:96`, and `RelationshipWorldSeeder.cs:93`.
+- A new test: a new relationship run, once settled, writes its fingerprint, and its pair is no longer stale at `RelationshipStaleness.cs:32`. A second test: the all-or-none check rejects a Drafted run with a null fingerprint.
 - `PostgresRelationshipDraftStoreTests.cs`: the raw insert at `:155` names `context_json`. The update at `:511` writes it. Rewrite both to use `input_fingerprint`. A settled fingerprint reads the column.
 - `ContextJson` sits in the middle of the `AnalysisRun` record. Removing it breaks every `new AnalysisRun(...)`. Edit the nine files: `FakeAnalysisStore.cs:41`, `FakeStatementDraftStore.cs:36`, `FakeStatementGateStore.cs:42`, `StatementCodeApprovalTests.cs:191`, `StatementGateCarryOverTests.cs:55`, `PostgresBillStreamTests.ActionDrafts.cs:999`, `PostgresBillStreamTests.ActionReview.cs:684`, `PostgresHouseVoteTests.Drafting.cs:518`, `PostgresRelationshipDraftStoreTests.cs:282`.
 
@@ -260,7 +271,7 @@ No separate docs PR. PR 1, 2, 4 and 5 all touch `AnalysisRunRows.cs`, so merge t
 Problem: contexts hold fields the user message lacks. Examples: `fingerprint`, `summaryVersion`, `considered`, each sent brief record's kind, record ID and revision number, and `omittedNotCited` (section 1.2). The brief draft prompt names records by citation ID only. The map from citation ID to record revision lives in `context_json` and in the accepted revision. A rejected or discarded brief run loses the map when the column goes.
 Options:
 - A. Drop all of it. Matches the plan. Rejected runs lose the record map.
-- B. Add one column where a reader exists (`input_fingerprint` on relationship runs). Drop the rest.
+- B. Add one column where a reader exists (`input_fingerprint` on relationship runs), with its writer, check and test (section 3.4). Drop the rest.
 - C. B plus a child table of sent records for brief runs.
 Cost, stated plainly: PR 5 drops `context_json` with no verify step. R-63 asks for a check before a drop. After the drop, nothing rebuilds the lost fields from the run. The user message replaces the context only in part. The owner keeps the choice: accept the loss, or add a verify step before PR 5.
 Facts: action and vote fingerprints already live on their revisions (`ActionRevisionRows.cs:38`). Bypassed action and vote runs pass the fingerprint into `input_hash` (`ActionDraftStep.cs:78`, `VoteDraftStep.cs:64`). Relationship Drafted runs do not, because their `input_hash` is the prompt hash. So only relationship runs need a column.
@@ -299,7 +310,7 @@ Problem: `readonly-grants.sql` grants every column not matching its hidden patte
 Options:
 - A. Leave them readable. Consistent with `output_json` and `validation_json`, which `briefs.md:93` says the role reads on purpose.
 - B. Hide `user_message` through the column pattern, and list `analysis_prompt_texts` under `hidden_table`. Add a test for the grants.
-- C. Hide only `user_message`.
+- C. Hide only `user_message`. Name the regex token `user_message` exactly. A bare `message` token would also hide `brief_check_flags.message` and fail `PostgresBriefCheckStoreTests.cs:316`.
 Recommendation: C. System and schema text is code-derived and helps debug. The user message carries evidence and is large. Hiding it keeps the role small. Reopen if the agent role needs it.
 Precedent checked: `deploy/scripts/readonly-grants.sql` (`hidden_column`, `hidden_table`), `docs/architecture/briefs.md:93`.
 
@@ -329,6 +340,16 @@ Options:
 - B. Move it to a child table in this work.
 Recommendation: A. It is gate output, not model input. Its readers are `StatementGateQueueMapping.cs:56` and the carry-over. Do it in its kind's step.
 Precedent checked: `brief_check_flags`, R-63 text.
+
+**D9. CLR shape of the six error tables.**
+Problem: PR 2 needs one child table per run table, and `ToRun` must see the errors with the run. The shape decides how the rows load, and a wrong load makes `Validate()` throw for a rejected run.
+Options:
+- A. Six row classes, each with an `Errors` navigation on its run row. Each of the ten queries adds an explicit `Include`. A missed `Include` shows only in a test.
+- B. One shared-type entity for all six tables. EF supports it, but a shared-type entity is used through `Set<T>(name)`, which gives a weak type and no clean navigation.
+- C. `OwnsMany(...).ToTable(...)` on each run row configuration. One error class maps to six tables. EF loads owned rows with their owner, so no `Include` is needed and a missed `Include` cannot happen.
+Precedent checked: `git grep` for `OwnsMany` and `OwnsOne` in `src` finds nothing. It also finds no `Include(` and no navigation property. The only child table precedent, `brief_check_flags`, is a plain row class with `HasOne<>().WithMany()` and no navigation (`BriefCheckFlagRowConfiguration.cs:27`, `BriefCheckQueueMapping.cs:53`). So A and C both depart from the repo, and C adds a first owned type.
+Tradeoffs: A is plain EF and costs ten `Include` calls. C removes the missed-load risk but is new to the repo. Check in a spike that C can use `DeleteBehavior.Restrict` (owned types cascade by default) and that the migration gives the PK and checks of section 3.3.
+Recommendation: C, if the spike confirms restrict deletes and the table shape. Otherwise A. B has the weakest typing.
 
 ## 7. Risks to keep in view
 
