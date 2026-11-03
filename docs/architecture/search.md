@@ -205,8 +205,8 @@ The poll interval is 30 seconds and the statement timeout is 2 seconds. Both are
 
 | Concern | Files |
 |---|---|
-| Startup and options | `src/CivicLens.PublicApi/Program.cs`, `src/CivicLens.PublicApi/PublicApiApp.cs`, `src/CivicLens.PublicApi/PublicApiOptions.cs`, `src/CivicLens.PublicApi/RecordKinds.cs` |
-| Schema | `src/CivicLens.PublicApi/Schema/SchemaMigrator.cs`, `src/CivicLens.PublicApi/Schema/SchemaStartup.cs`, `src/CivicLens.PublicApi/Schema/001_search_index.sql` |
+| Startup and options | `src/CivicLens.PublicApi/Program.cs`, `src/CivicLens.PublicApi/PublicApiApp.cs`, `src/CivicLens.PublicApi/PublicApiOptions.cs`, `src/CivicLens.PublicApi/RecordKinds.cs`, `src/CivicLens.PublicApi/SearchLocks.cs` |
+| Schema | `src/CivicLens.PublicApi/Schema/SchemaMigrator.cs`, `src/CivicLens.PublicApi/Schema/SchemaStartup.cs`, `src/CivicLens.PublicApi/Schema/001_search_index.sql`, `src/CivicLens.PublicApi/Schema/003_drop_report_release_number.sql` |
 | Ingest | `src/CivicLens.PublicApi/Ingest/IngestWorker.cs`, `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs`, `src/CivicLens.PublicApi/Ingest/ReleaseFeed.cs`, `src/CivicLens.PublicApi/Ingest/RecordReader.cs`, `src/CivicLens.PublicApi/Ingest/IndexedRecord.cs`, `src/CivicLens.PublicApi/Ingest/IndexTransaction.cs`, `src/CivicLens.PublicApi/Ingest/IngestResult.cs` |
 | Search and API | `src/CivicLens.PublicApi/Search/SearchEndpoints.cs`, `src/CivicLens.PublicApi/Search/SearchRequest.cs`, `src/CivicLens.PublicApi/Search/SearchIndex.cs`, `src/CivicLens.PublicApi/Search/SearchCursor.cs`, `src/CivicLens.PublicApi/Search/SearchSortKey.cs`, `src/CivicLens.PublicApi/Search/RecordHit.cs`, `src/CivicLens.PublicApi/Search/SearchPage.cs`, `src/CivicLens.PublicApi/Search/ReleaseInfo.cs` |
 | Rate limit | `src/CivicLens.PublicApi/Http/ClientAddress.cs` |
