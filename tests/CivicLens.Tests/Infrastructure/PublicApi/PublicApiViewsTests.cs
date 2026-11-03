@@ -220,6 +220,37 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task AMemberRowCarriesTheOfficialIdOfTheReleaseFilesAndHidesTheBioguideIdBecausePublicContractsKeyOfficialsByOurId()
+    {
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('d');
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k", new PublishedRecordReference(PublishedRecordKind.Vote, vote)));
+        var published = JsonSerializer.Deserialize<PublishedVote>(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(vote)],
+            PublicationProtocol.JsonOptions)!;
+        var officialId = Assert.Single(published.Members).Official.Id;
+        await SeedAsync();
+        await ExecuteAsync($"UPDATE vote_member_list_entries SET person_id = '{officialId}' WHERE list_id = '4444444444444444444444444444444444444444444444444444444444444444'");
+
+        Assert.Equal([officialId], await PublicAsync("SELECT official_id FROM public_api.vote_members WHERE record_id = 'c'"));
+        await using var connection = await OpenPublicAsync();
+        await AssertDeniedAsync(connection, "SELECT bioguide_id FROM public_api.vote_members", "42703");
+        await AssertDeniedAsync(connection, "SELECT bioguide_id FROM public.vote_member_list_entries");
+    }
+
+    [Fact]
+    public async Task AnUntrackedIssueNeverAppearsInTheIssueViewBecauseNoPublicViewMayShowIt()
+    {
+        await SeedAsync();
+        await ExecuteAsync("""
+            INSERT INTO vote_revision_issues (record_id, revision_number, issue_id, position, is_tracked) VALUES ('d', 1, 'tax', 1, false);
+            """);
+
+        Assert.Equal(["health"], await PublicAsync("SELECT issue_id FROM public_api.vote_issues WHERE record_id = 'd'"));
+        Assert.Empty(await PublicAsync("SELECT issue_id FROM public_api.vote_issues WHERE issue_id = 'tax'"));
+    }
+
+    [Fact]
     public async Task AVoteRevisionWithNoWrittenColumnsAppearsInNoVoteViewBecauseItHoldsNothingToShow()
     {
         await ExecuteAsync("""

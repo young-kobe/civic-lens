@@ -48,18 +48,18 @@ namespace CivicLens.Infrastructure.Collection.Migrations
              WHERE a.kind = 'vote' AND v.member_list_id IS NOT NULL;
 
             CREATE VIEW public_api.vote_members WITH (security_barrier = true) AS
-            SELECT a.record_id, a.revision_number, e."position", e.bioguide_id, e.vote_cast
+            SELECT a.record_id, a.revision_number, e."position", e.person_id AS official_id, e.vote_cast
               FROM public_api.active_records a
               JOIN public.vote_revisions v ON v.record_id = a.record_id AND v.revision_number = a.revision_number
               JOIN public.vote_member_list_entries e ON e.list_id = v.member_list_id
              WHERE a.kind = 'vote';
 
             CREATE VIEW public_api.vote_issues WITH (security_barrier = true) AS
-            SELECT a.record_id, a.revision_number, i.issue_id, i.is_tracked
+            SELECT a.record_id, a.revision_number, i.issue_id
               FROM public_api.active_records a
               JOIN public.vote_revisions v ON v.record_id = a.record_id AND v.revision_number = a.revision_number
               JOIN public.vote_revision_issues i ON i.record_id = v.record_id AND i.revision_number = v.revision_number
-             WHERE a.kind = 'vote' AND v.member_list_id IS NOT NULL;
+             WHERE a.kind = 'vote' AND v.member_list_id IS NOT NULL AND i.is_tracked;
 
             ALTER VIEW public_api.active_records OWNER TO civic_lens_public_owner;
             ALTER VIEW public_api.votes OWNER TO civic_lens_public_owner;

@@ -7,11 +7,10 @@ active_records release_number
 vote_issues record_id
 vote_issues revision_number
 vote_issues issue_id
-vote_issues is_tracked
 vote_members record_id
 vote_members revision_number
 vote_members position
-vote_members bioguide_id
+vote_members official_id
 vote_members vote_cast
 votes record_id
 votes revision_number
