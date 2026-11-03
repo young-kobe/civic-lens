@@ -15,7 +15,7 @@ The feature also captures one official portrait for each configured member. A ph
 - Only the current file is read. The historical file is out of scope. The 10 MB capture read limit stays as it is.
 - A roster source of either kind covers no people. It is still eligible on every date, because the file has no coverage list. `CollectionConfiguration.IsActiveOn` owns this rule for admission and for scheduled checks.
 - A snapshot is one header row in `roster_snapshots`, with the rows of one kind below it. The header holds the attempt ID of the capture. The source comes from the attempt. Every row holds that attempt ID. A row is never updated.
-- `RosterSnapshotRules` is the one owner of the snapshot rules for both kinds. The hash rule and the reader rule below read the headers of one source.
+- `RosterSnapshotRules` is the one owner of the snapshot rules for both kinds. The [districts](districts.md) feature also uses the header table and the hash rule. The hash rule and the reader rule below read the headers of one source.
 - The daily check is the body hash. The source downloads the file each day, with no ETag and no conditional request. `CollectionConfiguration` enforces this. A capture whose hash matches any snapshot of the source adds only its attempt row. Preparation checks the hash before it parses.
 - Readers take the newest captured attempt of the source whose hash matches some snapshot. They read the oldest snapshot with that hash. A file that changes back to an earlier body therefore reads as that earlier snapshot.
 - Admission takes no lock. Two concurrent captures of the same new body can both write a snapshot. The duplicate is harmless, because readers pick one snapshot by a fixed order.

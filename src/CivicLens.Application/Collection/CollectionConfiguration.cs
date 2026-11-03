@@ -141,7 +141,7 @@ public sealed record CollectionConfiguration
         IEnumerable<string> ids = source.ApiParser switch
         {
             ApiParser.CongressBillList or ApiParser.CongressHouseVoteList or ApiParser.SenateVoteList or ApiParser.VoteviewSenateVoteList => asOf < source.BackfillFrom ? [] : BioguidePersonIds(),
-            ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive or ApiParser.MemberPhotos or ApiParser.CongressBillText or ApiParser.FederalRegisterDocuments => [],
+            ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive or ApiParser.MemberPhotos or ApiParser.CensusZctaDistricts or ApiParser.CongressBillText or ApiParser.FederalRegisterDocuments => [],
             null => source.Coverage!.Where(coverage => new DateRange(coverage.StartsOn, coverage.EndsBefore).Contains(asOf))
                 .Select(coverage => coverage.PersonId),
             _ => throw new ArgumentOutOfRangeException(nameof(source))
@@ -192,6 +192,7 @@ public sealed record CollectionConfiguration
             case ApiParser.CongressLegislators:
             case ApiParser.CongressLegislatorsExecutive:
             case ApiParser.MemberPhotos:
+            case ApiParser.CensusZctaDistricts:
                 ValidatePublicFileSource(source);
                 break;
             case ApiParser.CongressBillText:
@@ -208,7 +209,7 @@ public sealed record CollectionConfiguration
     private const int VoteviewFollowOnJobs = 2;
 
     private static bool CoversNoPeople(ApiParser? parser) =>
-        IsRosterFile(parser) || parser is ApiParser.MemberPhotos or ApiParser.CongressBillText or ApiParser.FederalRegisterDocuments;
+        IsRosterFile(parser) || parser is ApiParser.MemberPhotos or ApiParser.CensusZctaDistricts or ApiParser.CongressBillText or ApiParser.FederalRegisterDocuments;
 
     private static bool IsRosterFile(ApiParser? parser) =>
         parser is ApiParser.CongressLegislators or ApiParser.CongressLegislatorsExecutive;

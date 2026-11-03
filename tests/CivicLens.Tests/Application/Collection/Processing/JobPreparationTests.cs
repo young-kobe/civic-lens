@@ -9,6 +9,7 @@ using CivicLens.Application.Collection.MemberPhotos;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Application.Collection.Votes;
+using CivicLens.Application.Districts;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Paging;
@@ -39,6 +40,7 @@ public sealed class JobPreparationTests
     private readonly RecordingFederalRegisterAdmissions federalRegister = new();
     private readonly RecordingRoster roster = new();
     private readonly RecordingExecutive executives = new();
+    private readonly RecordingDistricts districts = new();
     private readonly ThrowingProcessingStore processing = new();
     private readonly RecordingExtractions extractions = new();
     private readonly List<string> bodyReads = [];
@@ -371,6 +373,7 @@ public sealed class JobPreparationTests
         { ApiResource.VoteviewVotes, VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, ApiResource.VoteviewVotes, 119), VoteviewVoteFixtures.DefaultVotes },
         { ApiResource.MemberRoster, RosterFixtures.SourceUrl, RosterFixtures.Json },
         { ApiResource.ExecutiveRoster, ExecutiveFixtures.SourceUrl, ExecutiveFixtures.Json },
+        { ApiResource.ZctaDistricts, DistrictFixtures.SourceUrl, DistrictFixtures.Text },
         { ApiResource.MemberPhoto, MemberPhotoFixtures.PhotoUrl(), "the photo fixture replaces this text" },
         { ApiResource.FederalRegisterList, FederalRegisterListUrl, FederalRegisterFixtures.List },
         { ApiResource.FederalRegisterDocument, FederalRegisterDocumentUrl, FederalRegisterFixtures.TrumpOrder }
@@ -647,6 +650,30 @@ public sealed class JobPreparationTests
     }
 
     [Fact]
+    public async Task ADistrictJobIsParsedAndPassedToItsOwnStoreAndNotToTheRosterStores()
+    {
+        var result = await Prepare(ApiResource.ZctaDistricts, DistrictFixtures.SourceUrl, DistrictFixtures.Text, null);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        var call = Assert.Single(districts.Admissions);
+        Assert.Equal("attempt", call.AttemptId);
+        Assert.Equal(DistrictFixtures.Rows(), call.Rows);
+        Assert.Empty(roster.Admissions);
+        Assert.Empty(executives.Admissions);
+    }
+
+    [Fact]
+    public async Task AKnownDistrictCaptureIsNotParsedAndWritesNothing()
+    {
+        districts.Known = true;
+
+        var result = await Prepare(ApiResource.ZctaDistricts, DistrictFixtures.SourceUrl, "not a census file", null);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        Assert.Empty(districts.Admissions);
+    }
+
+    [Fact]
     public async Task AMemberPhotoJobPassesThePersonSourceUrlAndCreditWithItsAttemptToTheStore()
     {
         var result = await Prepare(ApiResource.MemberPhoto, MemberPhotoFixtures.PhotoUrl(), "", null);
@@ -739,6 +766,7 @@ public sealed class JobPreparationTests
         {
             ApiResource.MemberRoster => new ConfiguredCollectionSource(rosterConfiguration ?? RosterFixtures.Configuration(), RosterFixtures.SourceId, Backfill),
             ApiResource.ExecutiveRoster => new ConfiguredCollectionSource(ExecutiveFixtures.Configuration(), ExecutiveFixtures.SourceId, Backfill),
+            ApiResource.ZctaDistricts => new ConfiguredCollectionSource(DistrictFixtures.Configuration(), DistrictFixtures.SourceId, Backfill),
             ApiResource.MemberPhoto => new ConfiguredCollectionSource(
                 MemberPhotoFixtures.Configuration(RosterFixtures.Person("a-person", "A Person", MemberPhotoFixtures.Bioguide)),
                 MemberPhotoFixtures.SourceId, Backfill),
@@ -765,7 +793,7 @@ public sealed class JobPreparationTests
             ApiResource.BillText => BillTextChainOf(job, bytes, versionsBody ?? BillTextFixtures.Versions(IntroducedVersion), withVersionsJob),
             _ => ([job], _ => bytes)
         };
-        var preparation = new JobPreparation(new SingleJob(jobs), new CapturedAttempts(contentType), new NoDiscoveryAdmissions(), admissions, votes, federalRegister, roster, executives,
+        var preparation = new JobPreparation(new SingleJob(jobs), new CapturedAttempts(contentType), new NoDiscoveryAdmissions(), admissions, votes, federalRegister, roster, executives, districts,
             new FixedBody(bodyOf, bodyReads), processing, extractions, textExtractor, issues, warnings);
         return await preparation.PrepareAsync("job", "artifacts", default);
     }
@@ -1126,6 +1154,21 @@ public sealed class JobPreparationTests
 
         public Task<IReadOnlyList<CivicLens.Application.Roster.ExecutiveOfficial>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class RecordingDistricts : IZctaDistrictStore
+    {
+        public bool Known { get; set; }
+
+        public List<(string AttemptId, IReadOnlyList<ZctaDistrict> Rows)> Admissions { get; } = [];
+
+        public Task<bool> HasSnapshotOfCaptureAsync(string attemptId, CancellationToken cancellationToken) => Task.FromResult(Known);
+
+        public Task AdmitAsync(string attemptId, IReadOnlyList<ZctaDistrict> rows, CancellationToken cancellationToken)
+        {
+            Admissions.Add((attemptId, rows));
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class NoDiscoveryAdmissions : IDiscoveryAdmissionStore
