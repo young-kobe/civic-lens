@@ -6,6 +6,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
+using CivicLens.Core.Collection;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Tests.Application.Collection.Bills;
@@ -210,8 +211,9 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     {
         var receipt = ReceiptCollector.Result(request, 404);
         var handoffs = new FileCollectionReceiptHandoffStore(root);
-        await handoffs.SaveAsync(new PendingCollectionHandoff(1, attemptId, request, receipt), default);
-        await new RecoverCollectionAttempts(handoffs, new CaptureArtifactVerifier(), evidence).ReplayAsync(attemptId, root);
+        await handoffs.SaveAsync(new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, attemptId, request, receipt), default);
+        var completion = await new RecoverCollectionAttempts(handoffs, new CaptureArtifactVerifier(), evidence).ReplayAsync(attemptId, root);
+        Assert.Equal(ImportDisposition.NewAttempt, completion.Decision.Disposition);
         return receipt;
     }
 
