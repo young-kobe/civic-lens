@@ -262,6 +262,25 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     }
 
     [Fact]
+    public async Task SavingAndApprovingClosesTheListedOlderReportInTheSameTransactionAsTheRelationshipHook()
+    {
+        var candidate = await ApprovableAsync();
+        await Relationships.ActionAsync(RelationshipFixtures.Action(title: Quote));
+        var reportId = Guid.NewGuid();
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO reader_reports (report_id, record_id, kind, revision_number, category, body, received_at_utc_ticks, status, version)
+            VALUES ('{reportId}', '{candidate}', 'Statement', 1, 'other', 'text', 1, 'Open', 0)
+            """);
+        var request = await SaveRequestAsync(candidate, 2, "close-report") with { Approval = new(0, null, [], null, [reportId]) };
+
+        _ = await Save.ExecuteAsync(Owner, request);
+
+        Assert.Equal([["Pending", candidate, "Action"]], await Relationships.ReadAsync(
+            "SELECT status, statement_candidate_id, target_kind FROM relationship_analysis"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM reader_reports WHERE report_id = '{reportId}' AND status = 'CorrectionNeeded'"));
+    }
+
+    [Fact]
     public async Task ANoEditPressWithTheSpeakersInFormOrderWritesNoRevisionBecauseTheUiCannotReorderChips()
     {
         var configuration = StatementDraftFixtures.Configuration();

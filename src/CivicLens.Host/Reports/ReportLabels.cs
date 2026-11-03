@@ -23,7 +23,7 @@ internal static class ReportLabels
     {
         ReaderReportStatus.Open => "Open",
         ReaderReportStatus.Dismissed => "Dismissed",
-        ReaderReportStatus.CorrectionNeeded => "Correction needed",
+        ReaderReportStatus.CorrectionNeeded => "Corrected",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Report status has no label.")
     };
 
@@ -37,4 +37,7 @@ internal static class ReportLabels
 
     public static string? EditorOf(ReaderReportListItem item) =>
         item.CurrentRevisionNumber is null ? null : RecordRoutes.Editor(item.Report.Kind, item.Report.RecordId);
+
+    public static string LinkOf(ReaderReportListItem item) =>
+        item.Report.Status == ReaderReportStatus.Open && EditorOf(item) is { } editor ? editor : ReportRoutes.Detail(item.Report.ReportId);
 }

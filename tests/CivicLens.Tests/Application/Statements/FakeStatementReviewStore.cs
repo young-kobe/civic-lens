@@ -26,7 +26,7 @@ internal sealed class FakeStatementReviewStore : IStatementReviewStore
 
     public Task<StatementDraftRevision> SaveRevisionAsync(string actorSubject, StatementDraftRevision revision, int expectedRevisionNumber,
         bool statementDateChecked, ReviewDecision? approval, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash,
-        CancellationToken cancellationToken)
+        ImmutableArray<Guid> correctedReportIds, CancellationToken cancellationToken)
     {
         Saved = revision;
         SavedDateChecked = statementDateChecked;
@@ -34,8 +34,7 @@ internal sealed class FakeStatementReviewStore : IStatementReviewStore
     }
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
-        int expectedReviewStateVersion, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash,
-        CancellationToken cancellationToken)
+        int expectedReviewStateVersion, StatementAllowedSelections? approvalSelections, string idempotencyKey, string payloadHash, CancellationToken cancellationToken)
     {
         DecideCalled = true;
         Decided = decision;

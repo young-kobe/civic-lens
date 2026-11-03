@@ -4,14 +4,16 @@ using System.Text.Json.Nodes;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Reports;
 using CivicLens.Infrastructure.Review.Persistence;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Review;
 
 /// <summary>The shared store core. Reads hold one review cycle: the current revision, the last approved revision, and the
 /// decisions since that approval.</summary>
-internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevision>(string lockKey, string draftName,
+internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevision>(string lockKey, PublishedRecordKind kind, string draftName,
     string recordIdProperty, Action<TDraftRow, TRevision>? revised = null)
     where TDraftRow : class, IReviewDraftRow
     where TRevisionRow : class, IReviewRevisionRow
@@ -40,11 +42,12 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     public sealed record ApprovalAfterSave(ReviewDecision Decision,
         Func<CollectionAttemptDbContext, TDraftRow, ReviewHistory<TRevision>, Task> Validate,
         Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> AfterDecision,
-        Func<TRevision, TRevision> Comparable, Func<TRevision, bool>? MustWriteRevision = null);
+        Func<TRevision, TRevision> Comparable, ImmutableArray<Guid> CorrectedReportIds, Func<TRevision, bool>? MustWriteRevision = null);
 
     /// <summary>Saves a revision. With an approval, the same transaction then approves the saved revision with every check of a
     /// separate decision. A failed check rolls the saved revision back. When the input equals the current revision, no revision is
-    /// written and the approval binds to the current one. That refuses when the current revision is already approved. The
+    /// written and the approval binds to the current one. That refuses when the current revision is already approved. The approval
+    /// closes the listed reader reports in the same transaction, so a rollback leaves them open. The
     /// <paramref name="afterAppend"/> hook runs only when the save appends a revision.</summary>
     public async Task<TRevision> SaveRevisionAsync(IDbContextFactory<CollectionAttemptDbContext> contextFactory, string actorSubject,
         TRevision revision, int expectedRevisionNumber, string operation, string idempotencyKey, string payloadHash,
@@ -93,7 +96,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     private Task<ReviewDecision> ApproveSavedAsync(CollectionAttemptDbContext db, ApprovalAfterSave approval,
         CancellationToken cancellationToken) =>
         DecideInTransactionAsync(db, approval.Decision, approval.Decision.RevisionNumber, approval.Decision.ReviewStateVersion - 1,
-            approval.Validate, approval.AfterDecision, cancellationToken);
+            approval.Validate, approval.AfterDecision, approval.CorrectedReportIds, cancellationToken);
 
     /// <summary>The one step that appends a revision for a person or for analysis. It recomputes the stored status. It clears the
     /// held reason, because the reason described an older revision.</summary>
@@ -176,7 +179,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
     public async Task<ReviewDecision> DecideAsync(IDbContextFactory<CollectionAttemptDbContext> contextFactory, string actorSubject,
         ReviewDecision decision, int expectedRevisionNumber, int expectedReviewStateVersion, string operation, string idempotencyKey,
         string payloadHash, Func<CollectionAttemptDbContext, TDraftRow, ReviewHistory<TRevision>, Task> validateDecision,
-        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision,
+        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision, ImmutableArray<Guid> correctedReportIds,
         CancellationToken cancellationToken)
     {
         ReviewIdempotency.ValidateRequest(actorSubject, idempotencyKey, payloadHash);
@@ -184,13 +187,14 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await ReviewIdempotency.WriteOnceAsync(db, lockKey, actorSubject, operation, idempotencyKey, payloadHash,
             () => DecideInTransactionAsync(db, decision, expectedRevisionNumber, expectedReviewStateVersion, validateDecision,
-                afterDecision, cancellationToken), cancellationToken);
+                afterDecision, correctedReportIds, cancellationToken), cancellationToken);
     }
 
     private async Task<ReviewDecision> DecideInTransactionAsync(CollectionAttemptDbContext db, ReviewDecision decision,
         int expectedRevisionNumber, int expectedReviewStateVersion,
         Func<CollectionAttemptDbContext, TDraftRow, ReviewHistory<TRevision>, Task> validateDecision,
-        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision, CancellationToken cancellationToken)
+        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision, ImmutableArray<Guid> correctedReportIds,
+        CancellationToken cancellationToken)
     {
         var draft = await ReadDraftForWriteAsync(db, decision.DraftId, cancellationToken);
         var history = (await ReadHistoriesAsync(db, [draft], cancellationToken))[draft.RecordId];
@@ -200,6 +204,9 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         await validateDecision(db, draft, history);
         RecordDecision(db, draft, history.Decisions, decision);
         await afterDecision(db, draft.RecordId, decision.RevisionNumber, cancellationToken);
+        if (decision.Kind == ReviewDecisionKind.Approve)
+            await ReaderReportResolution.CloseCorrectedAsync(db, decision.ActorSubject, kind, draft.RecordId, correctedReportIds,
+                decision.RevisionNumber, cancellationToken);
         return decision;
     }
 

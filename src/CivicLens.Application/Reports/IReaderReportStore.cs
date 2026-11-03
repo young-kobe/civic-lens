@@ -17,14 +17,12 @@ public interface IReaderReportStore
 
     Task<ReaderReportListItem?> GetAsync(Guid reportId, CancellationToken cancellationToken);
 
-    /// <summary>Resolves an open report at the expected version. A report that is resolved or changed throws <see cref="ReviewConflictException"/>.</summary>
-    Task ResolveAsync(string actorSubject, Guid reportId, int expectedVersion, ReaderReportStatus status, string? note,
-        CancellationToken cancellationToken);
+    /// <summary>Dismisses an open report at the expected version. A report that is resolved or changed throws <see cref="ReviewConflictException"/>.</summary>
+    Task DismissAsync(string actorSubject, Guid reportId, int expectedVersion, CancellationToken cancellationToken);
 
     /// <summary>Deletes the closed reports that were resolved more than <see cref="ReaderReportProtocol.ClosedRetentionDays"/> days ago by the database clock. An open report stays. Returns the number deleted.</summary>
     Task<int> DeleteExpiredClosedAsync(CancellationToken cancellationToken);
 
-    /// <summary>Lists the reports that need a correction on the record, until the published revision passes the revision of the report.</summary>
-    Task<IReadOnlyList<ReaderReport>> ListUnansweredCorrectionsAsync(PublishedRecordKind kind, string recordId,
-        CancellationToken cancellationToken);
+    /// <summary>Lists the oldest <see cref="ListRecordReports.MaximumShown"/> open reports of the record, and the reports closed with a correction until the published revision passes the revision of the report.</summary>
+    Task<RecordReports> ListForRecordAsync(PublishedRecordKind kind, string recordId, CancellationToken cancellationToken);
 }
