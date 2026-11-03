@@ -1,8 +1,10 @@
 using System.Text.Json.Nodes;
+using CivicLens.Application.Actions;
 using CivicLens.Application.Review;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.Collection.BillStream;
@@ -28,6 +30,40 @@ public sealed partial class PostgresBillStreamTests
         await AssertColumnsEqualAsync(legacy);
         Assert.Equal(["issue-a|true", "issue-b|true"], await LinesAsync($"SELECT issue_id || '|' || is_tracked FROM action_revision_issues WHERE record_id = '{RecordId}' ORDER BY position"));
         Assert.Equal(false, await ScalarAsync("SELECT issue_candidates_recorded FROM action_revisions"));
+    }
+
+    [Fact]
+    public async Task ARevisionWithASuggestionWritesItsFourSuggestionColumnsBecauseAPersonRevisionKeepsTheModelTextThere()
+    {
+        var candidate = await CandidateWithoutSummariesAsync();
+        await SettleAsync(candidate, Revision(candidate, 1));
+        var firstRunId = (string)(await ScalarAsync("SELECT run_id FROM action_revisions WHERE revision_number = 1"))!;
+        var edited = await SaveAsync(1, SuggestionChoice.Keep, "save-suggestion");
+        await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = 'Pending' WHERE candidate_id = '{candidate}'");
+
+        var suggesting = await SettleAsync(candidate, Revision(candidate, 3) with
+        {
+            Headline = edited.Headline,
+            Summary = edited.Summary,
+            TextOrigin = ReviewTextOrigin.Person,
+            Suggestion = new("Model headline", "Model summary.", firstRunId, new string('7', 64))
+        });
+
+        await AssertColumnsEqualAsync(suggesting);
+    }
+
+    [Fact]
+    public async Task ARevisionThatNamesAnExtractionThatIsNotStoredFailsTheSettlementOnTheForeignKeyAndWritesNothing()
+    {
+        var candidate = await CandidateWithoutSummariesAsync();
+        var store = ActionStore();
+        var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
+        var runId = await ReserveAsync(store, claim);
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1)),
+            DraftedRun(runId, candidate), default));
+
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
     }
 
     [Fact]
@@ -118,17 +154,20 @@ public sealed partial class PostgresBillStreamTests
     private async Task<ActionDraftRevision> SettleFullRevisionAsync()
     {
         var candidate = await CandidateWithoutSummariesAsync();
-        var basis = Revision(candidate, 1);
+        var basis = Revision(candidate, 1, includesSummaries: true, includesSubjects: false);
         var extractionId = basis.Sponsorships[0].Citations[0].ExtractionId;
         var span = new SourceSpan(extractionId, 2, 3);
+        var summarySpan = new SourceSpan(extractionId, 1, 4);
+        var policyAreaSpan = new SourceSpan(extractionId, 6, 7);
+        var billSpan = new SourceSpan(extractionId, 3, 9);
         var full = basis with
         {
             SummaryVersion = "summary-v1",
-            SummaryCitation = span,
+            SummaryCitation = summarySpan,
             PolicyArea = "Housing",
-            PolicyAreaCitation = span,
+            PolicyAreaCitation = policyAreaSpan,
             PolicyAreaId = "housing",
-            BillCitation = span,
+            BillCitation = billSpan,
             IssueCandidateIds = ["issue-a", "issue-b", "issue-c"],
             TrackedIssueIds = ["issue-b"],
             SubjectsHash = new string('5', 64),

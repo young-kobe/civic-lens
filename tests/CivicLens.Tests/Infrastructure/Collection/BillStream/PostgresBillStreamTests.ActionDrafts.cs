@@ -976,7 +976,6 @@ public sealed partial class PostgresBillStreamTests
         Sponsorships = [.. revision.Sponsorships.Select(item => item with { Citations = [new(item.Citations[0].ExtractionId, 1_000_000, 5)] })]
     };
 
-    /// <summary>A citation names a stored extraction, so a revision of a fixture cites the first extraction in the database.</summary>
     private async Task<ActionDraftRevision> CitingStoredTextAsync(ActionDraftRevision revision)
     {
         var extractionId = (string)(await ScalarAsync("SELECT min(extraction_id) FROM document_extractions"))!;

@@ -435,11 +435,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 sql: "text_origin IN ('Model', 'Person', 'Code')");
 
             migrationBuilder.CreateIndex(
-                name: "ix_action_revision_issues_issue",
-                table: "action_revision_issues",
-                columns: new[] { "issue_id", "record_id", "revision_number" });
-
-            migrationBuilder.CreateIndex(
                 name: "IX_action_revision_sponsorship_citations_citation_extraction_id",
                 table: "action_revision_sponsorship_citations",
                 column: "citation_extraction_id");

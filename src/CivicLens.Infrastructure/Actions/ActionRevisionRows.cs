@@ -6,7 +6,6 @@ using CivicLens.Infrastructure.Review;
 
 namespace CivicLens.Infrastructure.Actions;
 
-/// <summary>Owns the mapping from an action revision to its row, issue rows, and sponsorship rows. The row also keeps the JSON.</summary>
 internal static class ActionRevisionRows
 {
     public static ActionRevisionRow Create(ActionDraftRevision revision, string? runId)
@@ -25,8 +24,7 @@ internal static class ActionRevisionRows
         return row;
     }
 
-    /// <summary>Sets every column and child row of the revision. It leaves the key, the author, the run, and the JSON as they are.</summary>
-    public static void FillColumns(ActionRevisionRow row, ActionDraftRevision revision)
+    private static void FillColumns(ActionRevisionRow row, ActionDraftRevision revision)
     {
         ReviewTextRows.Fill(row, revision);
         row.SourceId = revision.SourceId;

@@ -19,6 +19,5 @@ internal sealed class ActionRevisionIssueRowConfiguration : IEntityTypeConfigura
         builder.Property(row => row.IssueId).HasColumnName("issue_id").HasMaxLength(ActionDraftRevision.MaximumIssueIdLength);
         builder.Property(row => row.Position).HasColumnName("position");
         builder.Property(row => row.IsTracked).HasColumnName("is_tracked");
-        builder.HasIndex(row => new { row.IssueId, row.RecordId, row.RevisionNumber }).HasDatabaseName("ix_action_revision_issues_issue");
     }
 }

@@ -525,9 +525,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("RecordId", "RevisionNumber", "IssueId");
 
-                    b.HasIndex("IssueId", "RecordId", "RevisionNumber")
-                        .HasDatabaseName("ix_action_revision_issues_issue");
-
                     b.ToTable("action_revision_issues", null, t =>
                         {
                             t.HasCheckConstraint("ck_action_revision_issues_issue", "length(btrim(issue_id)) > 0");
