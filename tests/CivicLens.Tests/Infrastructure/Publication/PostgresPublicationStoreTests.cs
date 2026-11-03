@@ -256,8 +256,9 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
         var draft = await CreateDraftAsync();
         for (var number = 1; number <= ReleaseRetention.NewestKept + 10; number++)
             await publications.CommitAsync(Owner.Subject, Commit(number, draft, 1, 0), $"key-{number}", Hash(number), default);
-        await SetPublishedDaysAgoAsync(10, "release_number <= 3");
-        await SetPublishedDaysAgoAsync(3, "release_number IN (4, 5)");
+        await SetPublishedAtUtcMidnightAsync(10, "release_number <= 3");
+        await SetPublishedAtUtcMidnightAsync(3, "release_number IN (4, 5)");
+        await SetPublishedAtUtcMidnightAsync(0, "release_number > 5");
         ReleaseRetentionPlan? offered = null;
 
         await publications.PruneAsync((plan, _, _) => { offered = plan; return Task.CompletedTask; }, default);
@@ -839,12 +840,13 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
     private async Task<long> DatabaseTicksAsync() => await ScalarTicksAsync(
         $"SELECT {DatabaseClockTicksSql}");
 
-    private async Task SetPublishedDaysAgoAsync(int days, string where)
+    private async Task SetPublishedAtUtcMidnightAsync(int daysAgo, string where)
     {
+        var midnight = "(EXTRACT(EPOCH FROM date_trunc('day', clock_timestamp() AT TIME ZONE 'UTC'))::numeric * 10000000 + 621355968000000000)::bigint";
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
-            $"UPDATE publication_releases SET published_at_utc_ticks = published_at_utc_ticks - {days} * 864000000000 WHERE {where}", connection);
+            $"UPDATE publication_releases SET published_at_utc_ticks = {midnight} - {daysAgo} * {TimeSpan.TicksPerDay} WHERE {where}", connection);
         await command.ExecuteNonQueryAsync();
     }
 

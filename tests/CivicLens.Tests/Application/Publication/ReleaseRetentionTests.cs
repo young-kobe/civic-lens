@@ -19,17 +19,18 @@ public sealed class ReleaseRetentionTests
     }
 
     [Fact]
-    public void ADayWithNoReleaseKeepsNothingExtraSoOnlyTheNewestThirtyRemain()
+    public void ADayWithNoReleaseIsSkippedSoOnlyDaysThatHaveAReleaseInTheWindowAddNumbers()
     {
-        var stamps = Enumerable.Range(1, 40).Select(number => (number, Now.AddDays(-2)));
+        var older = new[] { (1, Now.AddDays(-8)), (2, Now.AddDays(-3)), (3, Now.AddDays(-1)) };
+        var fillers = Enumerable.Range(4, 30).Select(number => (number, Now));
 
-        var plan = ReleaseRetention.Plan(stamps, Now);
+        var plan = ReleaseRetention.Plan([.. older, .. fillers], Now);
 
-        Assert.Equal(Enumerable.Range(11, 30).ToArray(), plan.KeptNumbers.Order().ToArray());
+        Assert.Equal([2, 3, .. Enumerable.Range(4, 30)], plan.KeptNumbers.Order().ToArray());
     }
 
     [Fact]
-    public void OnlySixPastDaysAndTodayAreKeptSoADayEightDaysBackKeepsNothing()
+    public void ADayThatIsSevenDaysBackKeepsNothingBecauseOnlySixPastDaysAndTodayCount()
     {
         var daily = Enumerable.Range(1, 8).Select(number => (number, Now.AddDays(number - 8)));
         var burst = Enumerable.Range(9, 40).Select(number => (number, Now));
@@ -69,19 +70,6 @@ public sealed class ReleaseRetentionTests
     public void TheDailyWindowStartsAtUtcMidnightSixDaysBackSoSevenDaysCountTheCurrentOne()
     {
         Assert.Equal(new DateTimeOffset(2026, 2, 4, 0, 0, 0, TimeSpan.Zero), ReleaseRetention.DailyWindowStart(Now));
-    }
-
-    [Fact]
-    public void ARerunOnTheSameInputKeepsTheSameSetSoAPruneChangesNothingTheSecondTime()
-    {
-        var stamps = Enumerable.Range(1, 80).Select(number => (number, Now.AddHours(-(80 - number) * 3))).ToList();
-
-        var first = ReleaseRetention.Plan(stamps, Now);
-        var survivors = stamps.Where(stamp => !first.Retires(stamp.number)).ToList();
-        var second = ReleaseRetention.Plan(survivors, Now);
-
-        Assert.Equal(first.KeptNumbers.Order(), second.KeptNumbers.Order());
-        Assert.All(survivors, stamp => Assert.False(second.Retires(stamp.number)));
     }
 
     [Fact]

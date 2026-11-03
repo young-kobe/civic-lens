@@ -112,9 +112,11 @@ public sealed class PostgresPublicationStore : IPublicationStore
         var windowStartTicks = ReleaseRetention.DailyWindowStart(now).Ticks;
         var newest = await releases.OrderByDescending(row => row.ReleaseNumber).Take(ReleaseRetention.NewestKept)
             .Select(row => new { row.ReleaseNumber, row.PublishedAtUtcTicks }).ToListAsync(cancellationToken);
-        var recent = await releases.Where(row => row.PublishedAtUtcTicks >= windowStartTicks)
-            .Select(row => new { row.ReleaseNumber, row.PublishedAtUtcTicks }).ToListAsync(cancellationToken);
-        var plan = ReleaseRetention.Plan([.. newest.Concat(recent).Select(row => (row.ReleaseNumber,
+        var newestOfEachDay = await releases.Where(row => row.PublishedAtUtcTicks >= windowStartTicks)
+            .GroupBy(row => row.PublishedAtUtcTicks / TimeSpan.TicksPerDay)
+            .Select(day => new { ReleaseNumber = day.Max(row => row.ReleaseNumber), PublishedAtUtcTicks = day.Max(row => row.PublishedAtUtcTicks) })
+            .ToListAsync(cancellationToken);
+        var plan = ReleaseRetention.Plan([.. newest.Concat(newestOfEachDay).Select(row => (row.ReleaseNumber,
             new DateTimeOffset(row.PublishedAtUtcTicks, TimeSpan.Zero)))], now);
         var active = await releases.Where(row => row.IsActive).Select(row => row.DirectoryName).SingleOrDefaultAsync(cancellationToken);
         await retire(plan, active, cancellationToken);
