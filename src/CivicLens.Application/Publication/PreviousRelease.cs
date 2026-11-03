@@ -126,9 +126,6 @@ internal sealed class PreviousRelease
     public PublishedWithdrawal? FindWithdrawal(string recordId) =>
         Withdrawals.FirstOrDefault(withdrawal => withdrawal.RecordId == recordId);
 
-    public DateTimeOffset? FirstPublishedAt(PublishedRecordKind kind, string recordId) =>
-        Find(kind, recordId)?.FirstPublishedAtUtc ?? FindWithdrawal(recordId)?.FirstPublishedAtUtc;
-
     public PublishedRecordEntry? Find(PublishedRecordKind kind, string recordId) =>
         Entries.FirstOrDefault(entry => entry.Kind == kind && entry.RecordId == recordId);
 }

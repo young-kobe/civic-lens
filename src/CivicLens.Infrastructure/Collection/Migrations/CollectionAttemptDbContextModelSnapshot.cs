@@ -3661,6 +3661,34 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedRecordRow", b =>
+                {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<long>("FirstPublishedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("first_published_at_utc_ticks");
+
+                    b.HasKey("Kind", "RecordId");
+
+                    b.ToTable("published_records", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_published_records_first_published_at_utc_ticks", "first_published_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_published_records_kind", "kind IN ('documentChange', 'statement', 'action', 'brief', 'vote', 'relationship', 'executiveAction')");
+
+                            t.HasCheckConstraint("ck_published_records_record_id", "record_id ~ '^([0-9a-f]{32}|[0-9a-f]{64})$'");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Relationships.Persistence.RelationshipAnalysisBudgetRow", b =>
                 {
                     b.Property<DateOnly>("DayUtc")

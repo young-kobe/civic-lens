@@ -19,6 +19,11 @@ public interface IPublicationStore
     Task<IReadOnlyDictionary<PublishedRecordReference, ReviewedRecord>> ReadReviewStatusesAsync(
         IReadOnlyCollection<PublishedRevisionBinding> published, CancellationToken cancellationToken);
 
+    Task<IReadOnlyDictionary<PublishedRecordReference, DateTimeOffset>> ReadFirstPublishedAsync(
+        IReadOnlyCollection<PublishedRecordReference> records, CancellationToken cancellationToken);
+
+    Task<int> AddFirstPublishedAsync(IReadOnlyCollection<PublishedFirstPublication> records, CancellationToken cancellationToken);
+
     Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken);
 

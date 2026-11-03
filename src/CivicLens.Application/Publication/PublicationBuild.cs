@@ -6,7 +6,8 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset Now, PublishedRecordRules Rules,
-    IReleaseRenderer Renderer, PublicationCatalog Catalog, PublicationCorrections Corrections, IReadOnlyList<RosterMember> Roster, bool ByCode)
+    IReleaseRenderer Renderer, PublicationCatalog Catalog, PublicationCorrections Corrections, IReadOnlyList<RosterMember> Roster, bool ByCode,
+    IReadOnlyDictionary<PublishedRecordReference, DateTimeOffset> FirstPublished)
 {
     public ImmutableArray<PublishedRevisionBinding> ReleaseRecords { get; private init; } =
         [.. Previous.Entries.Select(PublishedRevisionBinding.Of)];
@@ -19,6 +20,9 @@ internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset
     public ImmutableArray<PublishedRecordReference> Removed { get; private init; } = [];
 
     public ImmutableArray<PublishedRecordReference> Returned { get; private init; } = [];
+
+    public DateTimeOffset? FirstPublishedAt(PublishedRecordKind kind, string recordId) =>
+        FirstPublished.TryGetValue(new(kind, recordId), out var firstPublishedAt) ? firstPublishedAt : null;
 
     public PublicationBuild WithBillStatuses(IReadOnlyDictionary<string, ActionBillStatus> statuses) => this with { BillStatuses = statuses };
 

@@ -96,6 +96,8 @@ case "$*" in
     ;;
   # usage: executive-actions revisions verify
   "executive-actions revisions verify") "$compose" run --rm cli executive-actions revisions verify ;;
+  # usage: releases first-published backfill
+  "releases first-published backfill") "$compose" run --rm cli releases first-published backfill ;;
   # usage: releases publish <key> [--rewrite-entries] [--rewrite-officials] [--rewrite-pages]
   "releases publish "*) shift 2; publish "$@" ;;
   *) refuse ;;
