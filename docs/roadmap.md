@@ -101,12 +101,12 @@ The owner accepted these designs in October 2026. Each item holds its choices un
   - [x] Agree the direction
   - [x] Stop parsing JSON where a column already holds the value (#261)
   - [x] Move review decisions to columns, and read them there (#266, #272)
-  - [ ] Drop the decision JSON, after a read-only check of production rows
-  - [ ] Add tick bounds and missing foreign keys, after a read-only check of production rows
+  - [x] Drop the decision JSON, after a read-only check of production rows
+  - [x] Add tick bounds and missing foreign keys, after a read-only check of production rows
   - [x] Agree the table design from one pilot on vote revisions, with measured row counts
   - [x] Vote pilot 1: write both, so every vote revision writes columns and child rows beside its JSON
-  - [ ] Vote pilot 2: backfill old vote revisions and verify them with a C# command that compares each revision to its JSON
-  - [ ] Vote pilot 3: move the vote readers to the columns
+  - [x] Vote pilot 2: backfill old vote revisions and verify them with a C# command that compares each revision to its JSON
+  - [x] Vote pilot 3: move the vote readers to the columns
   - [ ] Vote pilot 4: drop the vote revision JSON, after the read-only function stops reading it
   - [ ] Move the other revision kinds, one PR for each
   - [ ] Move release entries to a table: one immutable row for each record revision, with a foreign key to that revision. `publication_record_states` gives the release membership
