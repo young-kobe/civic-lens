@@ -303,10 +303,12 @@ try
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var draftStore = new PostgresVoteDraftStore(contexts);
+        var backfillStore = new PostgresVoteRevisionBackfillStore(contexts);
         var draftCommands = new AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, VoteDraftTask.Task));
         var votes = new VoteCommand(draftCommands, new GetVoteDraftStatus(draftCommands.Status, draftStore),
-            new RequeueBlockedVoteDrafts(draftStore), new RedraftVoteDrafts(draftStore), owner);
+            new RequeueBlockedVoteDrafts(draftStore), new RedraftVoteDrafts(draftStore),
+            new BackfillVoteRevisions(backfillStore), new VerifyVoteRevisions(backfillStore), owner);
         executing = true;
         return await votes.ExecuteAsync(args, cancellation.Token);
     }
