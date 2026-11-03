@@ -5,10 +5,12 @@ using CivicLens.Host.Analysis;
 namespace CivicLens.Host.Votes;
 
 internal sealed class VoteCommand(AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem> drafts, GetVoteDraftStatus status,
-    RequeueBlockedVoteDrafts requeueBlocked, RequeueRefusedVoteDrafts requeueRefused, RedraftVoteDrafts redraft, ReviewActor owner)
+    RequeueBlockedVoteDrafts requeueBlocked, RequeueRefusedVoteDrafts requeueRefused, RedraftVoteDrafts redraft, BackfillVoteRevisions backfill,
+    VerifyVoteRevisions verify, ReviewActor owner)
 {
     private const string Usage = "Use votes draft status, votes draft list [drafted|unchanged|superseded|no-member|pending|failed] [limit], " +
-        "votes draft requeue <candidate-id|--all>, votes draft requeue --blocked --code <block-code>, votes draft requeue --refused, or votes draft redraft.";
+        "votes draft requeue <candidate-id|--all>, votes draft requeue --blocked --code <block-code>, votes draft requeue --refused, votes draft redraft, " +
+        "votes revisions backfill <limit>, or votes revisions verify.";
     private const int DefaultListLimit = 100;
 
     public static bool Matches(string[] args) => args is ["votes", ..];
@@ -42,6 +44,14 @@ internal sealed class VoteCommand(AnalysisQueueCommands<VoteDraftRun, VoteDraftV
                 case ["votes", "draft", "redraft"]:
                     CommandOutput.Write(new { requeued = await redraft.ExecuteAsync(owner, cancellationToken) });
                     return 0;
+                case ["votes", "revisions", "backfill", var limit]:
+                    var backfilled = await backfill.ExecuteAsync(owner, OwnerCommand.ParseLimit(limit, Usage), cancellationToken);
+                    CommandOutput.Write(backfilled);
+                    return backfilled.Skipped == 0 ? 0 : 1;
+                case ["votes", "revisions", "verify"]:
+                    var verification = await verify.ExecuteAsync(owner, cancellationToken);
+                    CommandOutput.Write(verification);
+                    return verification.Mismatched == 0 && verification.Legacy == 0 ? 0 : 1;
                 case ["votes", "draft", "requeue", "--blocked", ..]:
                     Console.Error.WriteLine(Usage);
                     return 2;

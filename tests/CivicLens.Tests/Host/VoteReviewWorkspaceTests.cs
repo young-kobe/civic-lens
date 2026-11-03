@@ -51,6 +51,47 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
     }
 
     [Fact]
+    public async Task ApprovingARejectedVoteWhileANewerUpdateWasRefusedShowsTheStepsAndTheCommandOnThePage()
+    {
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var recordId = await SeedVoteDraftAsync();
+        var url = $"/Review/Votes/{recordId}";
+        var rejecting = Fields((await host.GetDocumentAsync(url)).QuerySelector("#decision-form")!);
+        Set(rejecting, "kind", "Reject");
+        Set(rejecting, "Decision.ReasonCode", "InaccurateSummary");
+        using var rejected = await host.Client.PostAsync(url, new FormUrlEncodedContent(rejecting));
+        Assert.Equal(HttpStatusCode.Redirect, rejected.StatusCode);
+        await RefuseANewerUpdateAsync(new string('b', 64), new string('c', 64));
+        var approving = Fields((await host.GetDocumentAsync(url)).QuerySelector("#decision-form")!);
+        Set(approving, "kind", "Approve");
+
+        using var refused = await host.Client.PostAsync(url, new FormUrlEncodedContent(approving));
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        var notice = new AngleSharp.Html.Parser.HtmlParser().ParseDocument(await refused.Content.ReadAsStringAsync()).QuerySelector(".notice")!.TextContent;
+        Assert.Contains("1. If the record is still rejected, press Request changes.", notice, StringComparison.Ordinal);
+        Assert.Contains("votes draft requeue --refused", notice, StringComparison.Ordinal);
+    }
+
+    private async Task RefuseANewerUpdateAsync(string currentCandidateId, string newerCandidateId)
+    {
+        await using var connection = new NpgsqlConnection(host.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand($"""
+            SET session_replication_role = replica;
+            UPDATE vote_drafts SET candidate_id = '{currentCandidateId}';
+            INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks,
+                detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
+            SELECT '{newerCandidateId}', source_id, chamber, congress, session_number, roll_call_number, 2, 'detail-2', 'members-2',
+                detail_extraction_id, members_extraction_id, configuration_revision_id, 2 FROM vote_candidates WHERE candidate_id = '{currentCandidateId}';
+            INSERT INTO vote_analysis_runs (run_id, candidate_id, task, task_version, model, prompt_version, schema_version, input_hash, outcome, reason,
+                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks)
+            VALUES (repeat('d', 32), '{newerCandidateId}', 'vote-draft', 'v', 'm', 'p', 's', repeat('e', 64), 'Bypassed', 'recordRejected', 0, 0, 0, 0, 0, 1, 1);
+            """, connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    [Fact]
     public async Task TheVotePageLinksTheActionDraftOfItsBillAndTheRollCallOnTheClerkSite()
     {
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));

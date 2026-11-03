@@ -248,14 +248,24 @@ public sealed class PostgresBriefReviewStoreTests(PostgresCollection postgres) :
         Assert.Equal("Rejected", await ScalarAsync($"SELECT review_status FROM brief_drafts WHERE record_id = '{RecordId}'"));
     }
 
+    private async Task<string> CheckRowAsync() => (string)(await ScalarAsync(
+        "SELECT status || '|' || attempts || '|' || fence FROM brief_analysis WHERE task = 'brief-check'"))!;
+
     [Fact]
     public async Task ASaveWhoseApprovalFailsBecauseACitationLeftTheActiveReleaseWritesNoRevisionAndNoDecision()
     {
         await ChangeCitedStatementAsync("absent");
+        await seeder.ExecuteAsync("""
+            INSERT INTO brief_analysis (record_id, task, week_start, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
+            SELECT record_id, 'brief-check', week_start, 'Succeeded', 0, 3, 0, 1 FROM brief_analysis WHERE task = 'brief-draft'
+            """);
+        var checkBefore = await CheckRowAsync();
         var request = new SaveBriefDraftRequest(RecordId, 1, "Typed headline", ReviewableRevision().Paragraphs, SuggestionChoice.Keep,
             "save-and-approve", new ApprovalWithSave(0, null, [], null));
 
         await Assert.ThrowsAsync<StaleApprovalException>(() => new SaveBriefDraft(reviews).ExecuteAsync(Reviewer, request));
+
+        Assert.Equal(checkBefore, await CheckRowAsync());
 
         Assert.Equal(1, await ScalarAsync($"SELECT current_revision_number FROM brief_drafts WHERE record_id = '{RecordId}'"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM brief_review_decisions"));

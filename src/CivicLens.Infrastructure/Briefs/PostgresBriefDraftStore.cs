@@ -55,7 +55,7 @@ public sealed class PostgresBriefDraftStore : PostgresAnalysisStore<BriefDraftRu
     private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> queue;
 
     public PostgresBriefDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-        : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping())) { }
+        : this(contextFactory, new(contextFactory, new BriefDraftQueueMapping(contextFactory))) { }
 
     private PostgresBriefDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
         PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefDraftRun> queue) : base(queue)
