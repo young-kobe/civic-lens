@@ -3,11 +3,12 @@
 import argparse
 import subprocess
 import sys
-import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TEST_PROJECT = 'tests/CivicLens.Tests'
+TIMINGS = ROOT / 'tools' / 'test-shard-timings.txt'
+UNKNOWN_SECONDS = 1
 
 
 def list_classes():
@@ -26,12 +27,32 @@ def list_classes():
     return sorted(classes)
 
 
-def shard_of(class_name, count):
-    return zlib.crc32(class_name.encode()) % count
+def read_timings(classes):
+    timings = {}
+    for line in TIMINGS.read_text().splitlines():
+        name, seconds = line.rsplit(' ', 1)
+        timings[name] = int(seconds)
+    stale = sorted(set(timings) - set(classes))
+    if stale:
+        sys.exit(f'{TIMINGS.name} lists classes that no longer exist: ' + ', '.join(stale))
+    return timings
+
+
+def assign(classes, count):
+    timings = read_timings(classes)
+    totals = [0] * count
+    shards = [[] for _ in range(count)]
+    known = sorted(timings, key=lambda name: (-timings[name], name))
+    unknown = [name for name in classes if name not in timings]
+    for name in known + unknown:
+        index = totals.index(min(totals))
+        shards[index].append(name)
+        totals[index] += timings.get(name, UNKNOWN_SECONDS)
+    return shards, totals
 
 
 def shard_classes(classes, index, count):
-    return [name for name in classes if shard_of(name, count) == index]
+    return sorted(assign(classes, count)[0][index])
 
 
 def filter_for(classes):
@@ -56,8 +77,8 @@ def check(classes, count):
     missing = sorted(set(classes) - set(seen))
     if missing:
         sys.exit('Classes in no shard: ' + ', '.join(missing))
-    sizes = [len(shard_classes(classes, index, count)) for index in range(count)]
-    print(f'{len(classes)} test classes in {count} shards. Classes per shard: {sizes}.')
+    totals = assign(classes, count)[1]
+    print(f'{len(classes)} test classes in {count} shards. Weighted seconds per shard: {totals}.')
 
 
 def main():

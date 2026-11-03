@@ -5,8 +5,12 @@ on:
 permissions:
   contents: read
 jobs:
-  verify:
+  test:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-dotnet@v6.0.0
@@ -18,7 +22,27 @@ jobs:
       - run: dotnet restore --locked-mode
       - run: dotnet build --no-restore --configuration Release
       - run: docker version
-      - run: dotnet test --no-build --configuration Release
+      - run: python3 tools/test-shards.py --shards 4 --index ${{ matrix.shard }} --runsettings ${{ runner.temp }}/shard.runsettings
+      - run: dotnet test --no-build --configuration Release --settings ${{ runner.temp }}/shard.runsettings
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6.0.0
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+      - run: dotnet restore --locked-mode
+      - run: dotnet build --no-restore --configuration Release
+      - run: python3 tools/test-shards.py --shards 4 --check
       - run: dotnet format CivicLens.slnx --verify-no-changes --no-restore
       - run: python3 tools/render-architecture.py --check
       - run: python3 tools/check-docs.py --check
+  verify:
+    if: always()
+    needs: [test, checks]
+    runs-on: ubuntu-24.04
+    steps:
+      - run: test "${{ needs.test.result }}" = success && test "${{ needs.checks.result }}" = success
