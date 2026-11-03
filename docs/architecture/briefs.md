@@ -317,7 +317,7 @@ Its required variables are in [operations](../operations.md#brief-drafting). A d
 |---|---|
 | `brief redraft --week <yyyy-MM-dd>` | Queues the week if it has no entry. Moves a Succeeded, Blocked, or Failed entry back to Pending. The date must be a Monday, and the week must have ended |
 
-This is an owner command. It prints the count of entries that it queued or moved. A week before the first brief week is allowed. A week that has not ended is invalid input, because its records can still change. The database clock decides. A week whose brief is approved is also invalid input. Withdraw the approval first.
+This is an owner command. It prints the count of entries that it queued or moved. A week before the first brief week is allowed. A week that has not ended is invalid input, because its records can still change. The database clock decides. A week whose brief is approved is also invalid input. Withdraw the approval first. A week whose brief is rejected is invalid input too.
 
 ## Storage and contracts
 
