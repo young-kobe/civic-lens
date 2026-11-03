@@ -71,14 +71,26 @@ internal sealed class PostgresDeadlineWakeup(string connectionString, string cha
                 notifiedDeadline = null;
                 return;
             }
-            // Npgsql treats 0 ms as infinite.
-            var timeout = ticksUntilDue is null ? Timeout.Infinite :
-                (int)Math.Clamp(Math.Ceiling(ticksUntilDue.Value / (double)TimeSpan.TicksPerMillisecond), 1, int.MaxValue);
-            if (!await current.WaitAsync(timeout, cancellationToken))
+            if (!await current.WaitAsync(TimeoutMilliseconds(ticksUntilDue), cancellationToken))
             {
+                await WaitForDatabaseClockAsync(current, deadline.DatabaseTicks + ticksUntilDue!.Value, cancellationToken);
                 notifiedDeadline = null;
                 return;
             }
+        }
+    }
+
+    // Npgsql treats 0 ms as infinite.
+    private static int TimeoutMilliseconds(long? ticks) =>
+        ticks is null ? Timeout.Infinite : (int)Math.Clamp(Math.Ceiling(ticks.Value / (double)TimeSpan.TicksPerMillisecond), 1, int.MaxValue);
+
+    private static async Task WaitForDatabaseClockAsync(NpgsqlConnection listener, long deadlineTicks, CancellationToken cancellationToken)
+    {
+        var now = await ReadDatabaseTicksAsync(listener, cancellationToken);
+        while (now < deadlineTicks)
+        {
+            await Task.Delay(TimeoutMilliseconds(deadlineTicks - now), cancellationToken);
+            now = await ReadDatabaseTicksAsync(listener, cancellationToken);
         }
     }
 
