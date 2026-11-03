@@ -481,7 +481,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
 
         Assert.Equal(PublishRelease.MaximumRecords, batch.Count);
         Assert.Equal(singleDraftReads, counter.ReadCount);
-        Assert.InRange(counter.ReadCount, 1, 7);
+        Assert.InRange(counter.ReadCount, 1, 10);
     }
 
     [Fact]

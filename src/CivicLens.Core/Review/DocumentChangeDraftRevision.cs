@@ -87,7 +87,7 @@ public sealed record DocumentChangeDraftRevision(string DraftId, int RevisionNum
     private static void ValidateSelections(ImmutableArray<string> values, string name)
     {
         if (values.IsDefault || values.Length > MaximumSelections || values.Any(string.IsNullOrWhiteSpace) ||
-            values.Any(value => value.Length > 128) || values.Distinct(StringComparer.Ordinal).Count() != values.Length)
+            values.Any(value => value.Length > ReviewTextRules.MaximumConfigurationIdLength) || values.Distinct(StringComparer.Ordinal).Count() != values.Length)
             throw new ArgumentException("Stored editorial selections are invalid.", name);
     }
 }
