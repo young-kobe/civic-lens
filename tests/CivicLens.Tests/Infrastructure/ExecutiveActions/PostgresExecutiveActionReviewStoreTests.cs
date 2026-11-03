@@ -135,6 +135,79 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
             PublicationProtocol.ManifestPath, PublicationProtocol.MaximumManifestBytes, default), PublicationProtocol.JsonOptions)!.Records);
     }
 
+    [Fact]
+    public async Task TheReadyListShowsAReplacementFirstThenTheOldestBecauseACorrectionMustReachReadersSoonest()
+    {
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenNotice, "joe-biden");
+        var ids = (await ScalarAsync("SELECT string_agg(record_id, ',' ORDER BY record_id) FROM executive_action_drafts"))!.Split(',');
+        var (replacement, oldest, newer) = (ids[0], ids[1], ids[2]);
+        await ExecuteAsync($"""
+            UPDATE executive_action_drafts SET created_at_utc_ticks = CASE record_id
+                WHEN '{oldest}' THEN 10 WHEN '{newer}' THEN 20 ELSE 30 END;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES (1, '000001-' || md5('order'), 'owner', 0, 1, true);
+            INSERT INTO publication_record_states (kind, record_id, revision_number, first_release)
+            VALUES ('executiveAction', '{replacement}', 0, 1);
+            """);
+
+        var listed = await store.ListUnpublishedApprovedAsync(10, [], default);
+
+        Assert.Equal([replacement, oldest, newer], listed.Select(item => item.Action.RecordId));
+    }
+
+    [Fact]
+    public async Task ReplacementsTakeAtMostHalfTheBatchWhileNewRecordsWaitBecauseCorrectionsMustNotHoldBackNewRecords()
+    {
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenNotice, "joe-biden");
+        var ids = (await ScalarAsync("SELECT string_agg(record_id, ',' ORDER BY record_id) FROM executive_action_drafts"))!.Split(',');
+        await ExecuteAsync($"""
+            UPDATE executive_action_drafts SET created_at_utc_ticks = CASE record_id WHEN '{ids[0]}' THEN 10 WHEN '{ids[1]}' THEN 20 ELSE 30 END;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES (1, '000001-' || md5('half'), 'owner', 0, 2, true);
+            INSERT INTO publication_record_states (kind, record_id, revision_number, first_release)
+            VALUES ('executiveAction', '{ids[0]}', 0, 1), ('executiveAction', '{ids[1]}', 0, 1);
+            """);
+
+        var batch = await store.ListUnpublishedApprovedAsync(2, [], default);
+        var replacementsOnly = await store.ListUnpublishedApprovedAsync(2, [ids[2]], default);
+
+        Assert.Equal([ids[0], ids[2]], batch.Select(item => item.Action.RecordId));
+        Assert.Equal([ids[0], ids[1]], replacementsOnly.Select(item => item.Action.RecordId));
+        Assert.Equal(1, await PostgresPublicationStore.FromConnectionString(connectionString).CountApprovedOutsideActiveReleaseAsync([], default));
+    }
+
+    [Theory]
+    [InlineData(1, new[] { 3 })]
+    [InlineData(4, new[] { 0, 3, 1, 4 })]
+    [InlineData(5, new[] { 0, 3, 1, 4, 5 })]
+    [InlineData(6, new[] { 0, 3, 1, 4, 2, 5 })]
+    public async Task ReplacementsAlternateWithNewRecordsUpToHalfTheLimitSoACutFromTheFrontKeepsTheBound(int limit, int[] expected)
+    {
+        var ids = await AdmitSixAsync();
+        await ExecuteAsync($"""
+            UPDATE executive_action_drafts SET created_at_utc_ticks = CASE record_id {string.Join(" ", ids.Select((id, index) => $"WHEN '{id}' THEN {(index + 1) * 10}"))} END;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES (1, '000001-' || md5('alternate'), 'owner', 0, 3, true);
+            INSERT INTO publication_record_states (kind, record_id, revision_number, first_release)
+            VALUES {string.Join(", ", ids.Take(3).Select(id => $"('executiveAction', '{id}', 0, 1)"))};
+            """);
+
+        var batch = await store.ListUnpublishedApprovedAsync(limit, [], default);
+
+        Assert.Equal(expected.Select(index => ids[index]), batch.Select(item => item.Action.RecordId));
+    }
+
+    private async Task<string[]> AdmitSixAsync()
+    {
+        foreach (var number in Enumerable.Range(1, 6))
+            await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder.Replace("2025-01900", $"2025-0190{number}"), "donald-trump");
+        return (await ScalarAsync("SELECT string_agg(record_id, ',' ORDER BY record_id) FROM executive_action_drafts"))!.Split(',');
+    }
+
     private Task<string?> HeldReasonAsync() => ScalarAsync("SELECT held_reason FROM executive_action_drafts");
 
     private async Task<string?> ScalarAsync(string sql)
@@ -143,5 +216,13 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         return await command.ExecuteScalarAsync() as string;
+    }
+
+    private async Task ExecuteAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
     }
 }

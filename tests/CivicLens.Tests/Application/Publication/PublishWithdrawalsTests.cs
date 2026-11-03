@@ -283,6 +283,24 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
+    public async Task AReturnTakesTheSlotOfItsWithdrawalSoOnlyAnotherNewRecordIsTurnedAwayAtTheCap()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
+        scenario.FillActiveReleaseToTheCap(0);
+        scenario.ReviseAction(action, 2, correctionNote: "Bill fixed.");
+        var other = scenario.AddDraft('b');
+        var both = new PublishReleaseRequest([Reference(action), new(PublishedRecordKind.DocumentChange, other)], "k3");
+
+        var full = await Assert.ThrowsAsync<ReleaseFullException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, both));
+
+        Assert.Equal(0, full.FreeSlots);
+        Assert.Equal(other, Assert.Single(full.NewRecords).RecordId);
+        var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k4", action));
+        Assert.Equal(PublicationProtocol.MaximumRecordsPerRelease, returned.RecordCount);
+    }
+
+    [Fact]
     public async Task AReturnWithoutANoteIsRefusedBecauseAReaderMustSeeWhyTheRecordCameBack()
     {
         var (scenario, action) = await PublishedActionAsync();

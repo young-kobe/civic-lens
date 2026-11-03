@@ -51,6 +51,30 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task ACodeApprovedFirstRevisionNotifiesPublishingBecauseTheDraftIsInsertedAlreadyApproved()
+    {
+        await using var notifications = await PublishingNotifications.ListenAsync(connectionString);
+
+        await DraftAsync(UpdatedAt, DraftableOutput);
+
+        Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Single(await notifications.DrainAsync());
+    }
+
+    [Fact]
+    public async Task ACodeApprovedNewRevisionNotifiesPublishingBecauseTheStatusStaysApprovedAndOnlyTheRevisionNumberChanges()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+        await using var notifications = await PublishingNotifications.ListenAsync(connectionString);
+
+        await AddSponsorAsync(UpdatedAt.AddDays(1));
+
+        Assert.Equal(2, await ScalarAsync($"SELECT current_revision_number FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal("Approved", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Single(await notifications.DrainAsync());
+    }
+
+    [Fact]
     public async Task ARevisionStoredBeforeTheModelChoiceHasNoCandidateSetAndStillPublishesOpensAndTakesAPersonEdit()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);

@@ -264,7 +264,7 @@ The page differs from the action page: it has no "Change since the last approval
 
 ### Publication
 
-The `publishing` stage publishes a brief with the same ready list as the other kinds; see [publication](publication.md#publish). A flagged brief waits, and a later batch of the same tick publishes it when its citations are current. `BriefRecordLoader` owns the Application side. The rules are:
+The `publishing` stage publishes a brief with the same ready list as the other kinds; see [publication](publication.md#publish). A flagged brief waits, and a later wake publishes it when its citations are current. `BriefRecordLoader` owns the Application side. The rules are:
 
 - The ready list holds an approved brief with no open concern. The active release must not hold its current revision. All citations must be current in the active release. `PostgresBriefReviewStore.ListUnpublishedApprovedAsync` reads the flags of the whole page with one `FindChangedAsync` call. A flagged approved brief stays approved but is not listed.
 - A publish reads each requested brief with `GetForPublicationAsync`. The call takes the records of the new release: the records of the base release, with each requested record replaced by its new revision. `PublishRelease` loads the briefs after the other kinds, so a record that the same publish adds or replaces counts. The new release must hold each cited revision. A brief is refused when the same publish replaces a cited record with a newer revision.

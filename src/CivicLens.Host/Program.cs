@@ -120,7 +120,7 @@ if (args is [] or ["--help"] or ["help"])
         worker also drafts weekly briefs when CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also checks weekly briefs when CIVIC_LENS_BRIEF_CHECKING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
-        Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
+        Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration, 3 worker health: healthy worker and a full release.
         """);
     return 0;
 }
@@ -263,7 +263,10 @@ try
         var connectionString = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE");
         if (string.IsNullOrWhiteSpace(connectionString)) throw new ArgumentException("worker health requires CIVIC_LENS_DATABASE.");
         executing = true;
-        return await WorkerHealthCommand.ExecuteAsync(PostgresWorkerHeartbeatStore.FromConnectionString(connectionString), Console.Out, cancellation.Token);
+        var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
+        var capacity = string.IsNullOrWhiteSpace(releaseRoot) ? null
+            : new ReadReleaseCapacity(PostgresPublicationStore.FromConnectionString(connectionString), new FileReleaseDirectory(releaseRoot));
+        return await WorkerHealthCommand.ExecuteAsync(PostgresWorkerHeartbeatStore.FromConnectionString(connectionString), capacity, Console.Out, cancellation.Token);
     }
 
     if (AnalysisCommand.Matches(args))

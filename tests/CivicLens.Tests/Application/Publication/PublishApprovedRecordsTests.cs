@@ -57,18 +57,98 @@ public sealed class PublishApprovedRecordsTests
     }
 
     [Fact]
-    public async Task ATickPublishesEveryReadyRecordInBatchesOfTheReleaseLimitAndThenStops()
+    public async Task AWakeMakesOneReleaseOfAtMostTheReleaseLimitAndTheNextWakeTakesTheRest()
     {
         var scenario = new PublicationScenario();
         var total = PublishRelease.MaximumRecords + 6;
         AddReadyActions(scenario, total);
         ListedUntilPublished(scenario);
+        var worker = Publisher(scenario);
 
-        var published = await Publisher(scenario).ExecuteAsync(default);
+        Assert.Equal(PublishRelease.MaximumRecords, await worker.ExecuteAsync(default));
+        Assert.Equal([PublishRelease.MaximumRecords], scenario.Publications.Committed.Select(release => release.RecordCount));
+        Assert.Equal(6, scenario.Actions.Unpublished.Count);
 
-        Assert.Equal(total, published);
-        Assert.Equal([PublishRelease.MaximumRecords, total], scenario.Publications.Committed.Select(release => release.RecordCount));
+        Assert.Equal(6, await worker.ExecuteAsync(default));
+        Assert.Equal([PublishRelease.MaximumRecords, PublishRelease.MaximumRecords + 6], scenario.Publications.Committed.Select(release => release.RecordCount));
         Assert.Empty(scenario.Actions.Unpublished);
+    }
+
+    [Fact]
+    public async Task AWakeInsideTheGapAfterTheNewestReleaseMakesNoReleaseBecausePublishesCostDisk()
+    {
+        var scenario = new PublicationScenario();
+        AddReadyActions(scenario, 2);
+        scenario.Publications.AgeOfNewestRelease = PublishApprovedRecords.ReleaseGap - TimeSpan.FromSeconds(1);
+        var worker = Publisher(scenario);
+
+        Assert.Equal(0, await worker.ExecuteAsync(default));
+        Assert.Equal(0, scenario.Releases.BeginCount);
+
+        scenario.Publications.AgeOfNewestRelease = PublishApprovedRecords.ReleaseGap;
+        Assert.Equal(2, await worker.ExecuteAsync(default));
+    }
+
+    [Fact]
+    public async Task ApprovalsDuringAPublishDoNotCauseAReleaseInsideTheGapBecauseTheNextWakeSeesTheNewRelease()
+    {
+        var scenario = new PublicationScenario();
+        AddReadyActions(scenario, 2);
+        ListedUntilPublished(scenario);
+        var removePublished = scenario.Publications.BeforeServe!;
+        scenario.Publications.BeforeServe = () =>
+        {
+            removePublished();
+            scenario.Publications.AgeOfNewestRelease = TimeSpan.Zero;
+            AddUnpublished(scenario, scenario.AddAction('d', ApprovedByCode('d')));
+        };
+        var wakeups = 0;
+        using var stop = new CancellationTokenSource();
+        var wakeup = new CountingWakeup(() =>
+        {
+            if (++wakeups == 2) stop.Cancel();
+        });
+        var worker = new StageWorker("publishing", Publisher(scenario).ExecuteAsync, wakeup, new CapturingLogger<StageWorker>(), TestBeat.Create());
+
+        await worker.ExecuteAsync(once: false, stop.Token);
+
+        Assert.Single(scenario.Publications.Committed);
+        Assert.Single(scenario.Actions.Unpublished);
+    }
+
+    [Fact]
+    public async Task AFailedTickIsNotRetriedInsideTheGapBecauseAFailingPublishMustNotRunOnEveryWake()
+    {
+        var scenario = new PublicationScenario();
+        AddReadyActions(scenario, 1);
+        scenario.Publications.FailOnCommit = new InvalidOperationException("disk full");
+        var clock = new ManualTimestampClock();
+        var worker = Publisher(scenario, clock: clock);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => worker.ExecuteAsync(default));
+        scenario.Publications.FailOnCommit = null;
+
+        clock.Advance(PublishApprovedRecords.ReleaseGap - TimeSpan.FromSeconds(1));
+        Assert.Equal(0, await worker.ExecuteAsync(default));
+        Assert.Empty(scenario.Publications.Committed);
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(1, await worker.ExecuteAsync(default));
+    }
+
+    [Fact]
+    public async Task AConflictStartsTheGapToo()
+    {
+        var scenario = new PublicationScenario();
+        AddReadyActions(scenario, 1);
+        scenario.Publications.ConflictOnCommit = true;
+        var clock = new ManualTimestampClock();
+        var worker = Publisher(scenario, clock: clock);
+        await worker.ExecuteAsync(default);
+        scenario.Publications.ConflictOnCommit = false;
+
+        Assert.Equal(0, await worker.ExecuteAsync(default));
+        clock.Advance(PublishApprovedRecords.ReleaseGap);
+        Assert.Equal(1, await worker.ExecuteAsync(default));
     }
 
     [Fact]
@@ -117,6 +197,107 @@ public sealed class PublishApprovedRecordsTests
 
         Assert.Single(scenario.Publications.Committed);
         Assert.Equal(begun, scenario.Releases.BeginCount);
+    }
+
+    [Fact]
+    public async Task AStatusOnlyReleaseRunsOnlyOnTheHourlyWakeBecauseTheGapEndWakeIsForTheBacklog()
+    {
+        var scenario = await ScenarioWithAMovedBillStatusAsync();
+        var wakeup = new CountingWakeup { IntervalElapsed = false };
+        var worker = Publisher(scenario, wakeup: wakeup);
+
+        Assert.Equal(0, await worker.ExecuteAsync(default));
+        Assert.Single(scenario.Publications.Committed);
+
+        wakeup.IntervalElapsed = true;
+        Assert.Equal(0, await worker.ExecuteAsync(default));
+        Assert.Equal(2, scenario.Publications.Committed.Count);
+    }
+
+    [Fact]
+    public async Task AConflictOnAStatusOnlyReleaseStartsTheGapBecauseTheNextWakeMustNotRetryAtOnce()
+    {
+        var scenario = await ScenarioWithAMovedBillStatusAsync();
+        scenario.Publications.ConflictOnCommit = true;
+        var clock = new ManualTimestampClock();
+        var worker = Publisher(scenario, clock: clock);
+        await worker.ExecuteAsync(default);
+        scenario.Publications.ConflictOnCommit = false;
+
+        await worker.ExecuteAsync(default);
+        Assert.Single(scenario.Publications.Committed);
+
+        clock.Advance(PublishApprovedRecords.ReleaseGap);
+        await worker.ExecuteAsync(default);
+        Assert.Equal(2, scenario.Publications.Committed.Count);
+    }
+
+    [Fact]
+    public async Task EachPassOfTheSkipLoopBeatsSoALongPublishDoesNotMakeTheWorkerLookDead()
+    {
+        var scenario = new PublicationScenario();
+        var good = scenario.AddAction('a', ApprovedByCode('a'));
+        var bad = scenario.AddAction('b', ApprovedByCode('b'), sponsorId: "nobody");
+        AddUnpublished(scenario, good, bad);
+        ListedUntilPublished(scenario);
+        var store = new RecordingHeartbeatStore();
+
+        await Publisher(scenario, beat: TestBeat.Create(store, TimeSpan.Zero)).ExecuteAsync(default);
+
+        Assert.Equal(2, store.Beats);
+    }
+
+    [Fact]
+    public async Task AtTheRecordCapAReplacementAndAsManyNewRecordsAsFitPublishAndTheRestWaitWithAnError()
+    {
+        var scenario = await ScenarioAtTheCapAsync(freeSlots: 1);
+        var replaced = scenario.Actions.Publishable.Keys.Single();
+        var first = scenario.AddAction('b', ApprovedByCode('b'));
+        var second = scenario.AddAction('c', ApprovedByCode('c'));
+        scenario.ReviseAction(replaced, 2, ReviewAuthor.CodeSubject);
+        AddUnpublished(scenario, replaced, first, second);
+        ListedUntilPublished(scenario);
+        var logger = new CapturingLogger<PublishApprovedRecords>();
+
+        Assert.Equal(2, await Publisher(scenario, logger).ExecuteAsync(default));
+
+        Assert.Equal([replaced, first], scenario.Publications.LastCommit!.AddedRecords.Select(added => added.RecordId));
+        var error = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.Contains("1 new records of this batch wait", error.Message);
+    }
+
+    [Fact]
+    public async Task AtTheRecordCapWithNoFreeSlotAReplacementStillPublishesAndNewRecordsWait()
+    {
+        var scenario = await ScenarioAtTheCapAsync(freeSlots: 0);
+        var replaced = scenario.Actions.Publishable.Keys.Single();
+        var added = scenario.AddAction('b', ApprovedByCode('b'));
+        scenario.ReviseAction(replaced, 2, ReviewAuthor.CodeSubject);
+        AddUnpublished(scenario, replaced, added);
+        ListedUntilPublished(scenario);
+        var logger = new CapturingLogger<PublishApprovedRecords>();
+
+        Assert.Equal(1, await Publisher(scenario, logger).ExecuteAsync(default));
+
+        Assert.Equal([replaced], scenario.Publications.LastCommit!.AddedRecords.Select(record => record.RecordId));
+        Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task AtTheRecordCapAStatusOnlyReleaseStillPublishesWhileNewRecordsWaitWithAnError()
+    {
+        var scenario = await ScenarioAtTheCapAsync(freeSlots: 0);
+        var replaced = scenario.Actions.Publishable.Keys.Single();
+        var waiting = scenario.AddAction('b', ApprovedByCode('b'));
+        AddUnpublished(scenario, waiting);
+        scenario.Actions.BillStatuses[replaced] = Status(replaced, "Became Public Law No: 119-1.");
+        var logger = new CapturingLogger<PublishApprovedRecords>();
+
+        Assert.Equal(0, await Publisher(scenario, logger).ExecuteAsync(default));
+
+        Assert.Equal(2, scenario.Publications.Committed.Count);
+        Assert.Empty(scenario.Publications.LastCommit!.AddedRecords);
+        Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
     }
 
     [Fact]
@@ -246,7 +427,7 @@ public sealed class PublishApprovedRecordsTests
     }
 
     [Fact]
-    public async Task ManyRowsThatAreNotReadyDoNotHideAnOlderReadyRecordBecauseTheReadRepeatsWithoutThem()
+    public async Task ManyRowsThatAreNotReadyDoNotHideAReadyRecordBecauseTheReadRepeatsWithoutThem()
     {
         var scenario = new PublicationScenario();
         for (var index = 0; index < PublishRelease.MaximumRecords + 6; index++)
@@ -272,19 +453,27 @@ public sealed class PublishApprovedRecordsTests
         var action = scenario.AddAction('a', ApprovedByCode('a'));
         AddUnpublished(scenario, action);
         ListedUntilPublished(scenario);
-        var firstBatch = new List<PublishedRecordReference>();
-        var removePublished = scenario.Publications.BeforeServe!;
-        scenario.Publications.BeforeServe = () =>
-        {
-            if (firstBatch.Count == 0)
-                firstBatch.AddRange(scenario.Publications.LastCommit!.AddedRecords.Select(added => new PublishedRecordReference(added.Kind, added.RecordId)));
-            removePublished();
-        };
+        var firstBatch = CaptureFirstBatch(scenario);
 
         await Publisher(scenario).ExecuteAsync(default);
 
         Assert.Equal(PublishRelease.MaximumRecords, firstBatch.Count);
         Assert.Contains(firstBatch, record => record.Kind == PublishedRecordKind.Action);
+    }
+
+    [Fact]
+    public async Task TheShareCutKeepsTheFrontOfAKindInTheOrderTheStoreListedItSoTheStoreAlternationSurvives()
+    {
+        var scenario = new PublicationScenario();
+        AddReadyStatements(scenario, PublishRelease.MaximumRecords + 6);
+        AddUnpublished(scenario, scenario.AddAction('a', ApprovedByCode('a')));
+        ListedUntilPublished(scenario);
+        var firstBatch = CaptureFirstBatch(scenario);
+
+        await Publisher(scenario).ExecuteAsync(default);
+
+        var statements = firstBatch.Where(record => record.Kind == PublishedRecordKind.Statement).Select(record => record.RecordId);
+        Assert.Equal(Enumerable.Range(0, PublishRelease.MaximumRecords - 1).Select(index => index.ToString("x64")), statements);
     }
 
     [Fact]
@@ -299,38 +488,6 @@ public sealed class PublishApprovedRecordsTests
         Assert.Equal(0, await Publisher(scenario).ExecuteAsync(default));
 
         Assert.Equal(2, scenario.Publications.Committed.Count);
-    }
-
-    [Fact]
-    public async Task EachBatchOfATickBeatsSoALongPublishDoesNotMakeTheWorkerLookDead()
-    {
-        var store = new RecordingHeartbeatStore();
-        var scenario = new PublicationScenario();
-        AddReadyActions(scenario, PublishRelease.MaximumRecords + 6);
-
-        await Publisher(scenario, beat: TestBeat.Create(store, TimeSpan.Zero)).ExecuteAsync(default);
-
-        Assert.True(store.Beats >= 2);
-    }
-
-    [Fact]
-    public async Task ARollbackBetweenBatchesStopsTheTickSoTheNextBatchDoesNotUndoIt()
-    {
-        var scenario = new PublicationScenario();
-        AddReadyActions(scenario, PublishRelease.MaximumRecords + 6);
-        ListedUntilPublished(scenario);
-        var removePublished = scenario.Publications.BeforeServe!;
-        scenario.Publications.BeforeServe = () =>
-        {
-            removePublished();
-            scenario.Publications.Committed.Add(new(2, "000002", DateTimeOffset.UnixEpoch, 0));
-        };
-
-        var published = await Publisher(scenario).ExecuteAsync(default);
-
-        Assert.Equal(PublishRelease.MaximumRecords, published);
-        Assert.Equal([1, 2], scenario.Publications.Committed.Select(release => release.ReleaseNumber));
-        Assert.Equal(6, scenario.Actions.Unpublished.Count);
     }
 
     [Fact]
@@ -514,10 +671,39 @@ public sealed class PublishApprovedRecordsTests
         Assert.DoesNotContain(logger.Entries, entry => entry.Level == LogLevel.Error);
     }
 
+    private static async Task<PublicationScenario> ScenarioWithAMovedBillStatusAsync()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a', ApprovedByCode('a'));
+        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
+        scenario.Actions.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.");
+        return scenario;
+    }
+
+    private static async Task<PublicationScenario> ScenarioAtTheCapAsync(int freeSlots)
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('a', ApprovedByCode('a'));
+        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
+        scenario.FillActiveReleaseToTheCap(freeSlots);
+        return scenario;
+    }
+
     private static PublishApprovedRecords Publisher(PublicationScenario scenario, CapturingLogger<PublishApprovedRecords>? logger = null,
-        WorkerBeat? beat = null) =>
+        WorkerBeat? beat = null, TimeProvider? clock = null, IIntervalWakeup? wakeup = null) =>
         new(scenario.Publisher(), scenario.Publications, scenario.Loaders(), logger ?? new CapturingLogger<PublishApprovedRecords>(),
-            beat ?? TestBeat.Create());
+            beat ?? TestBeat.Create(), clock ?? TimeProvider.System, wakeup ?? new CountingWakeup());
+
+    private sealed class ManualTimestampClock : TimeProvider
+    {
+        private long timestamp;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public override long GetTimestamp() => timestamp;
+        public void Advance(TimeSpan by) => timestamp += by.Ticks;
+    }
 
     private static ImmutableArray<ReviewDecision> ApprovedByCode(char id) =>
         [PublicationScenario.Decision(new string(id, 64), 1, ReviewDecisionKind.Approve) with { ActorSubject = ReviewAuthor.CodeSubject }];
@@ -545,6 +731,19 @@ public sealed class PublishApprovedRecordsTests
 
     private static void AddUnpublished(PublicationScenario scenario, params string[] actionIds) =>
         scenario.Actions.Unpublished.AddRange(actionIds.Select(id => new UnpublishedApprovedAction(scenario.Actions.Publishable[id].Review)));
+
+    private static List<PublishedRecordReference> CaptureFirstBatch(PublicationScenario scenario)
+    {
+        var firstBatch = new List<PublishedRecordReference>();
+        var removePublished = scenario.Publications.BeforeServe!;
+        scenario.Publications.BeforeServe = () =>
+        {
+            if (firstBatch.Count == 0)
+                firstBatch.AddRange(scenario.Publications.LastCommit!.AddedRecords.Select(added => new PublishedRecordReference(added.Kind, added.RecordId)));
+            removePublished();
+        };
+        return firstBatch;
+    }
 
     private static void AddReadyStatements(PublicationScenario scenario, int count)
     {

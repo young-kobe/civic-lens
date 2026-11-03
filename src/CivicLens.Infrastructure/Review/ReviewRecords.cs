@@ -254,15 +254,30 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
             IReadOnlyCollection<string> excludedRecordIds, CancellationToken cancellationToken)
     {
         string[] excluded = [.. excludedRecordIds];
-        var keys = await db.Database.SqlQueryRaw<UnpublishedKey>(unpublishedApprovedSql)
+        var unpublished = db.Database.SqlQueryRaw<UnpublishedKey>(unpublishedApprovedSql)
             .Where(key => key.PublishedRevisionNumber == null || key.PublishedRevisionNumber != key.CurrentRevisionNumber)
-            .Where(key => !excluded.Contains(key.RecordId))
-            .OrderByDescending(key => key.CreatedAtUtcTicks).ThenByDescending(key => key.RecordId)
-            .Take(limit).ToArrayAsync(cancellationToken);
+            .Where(key => !excluded.Contains(key.RecordId));
+        var replacements = await unpublished.Where(key => key.PublishedRevisionNumber != null)
+            .OrderBy(key => key.CreatedAtUtcTicks).ThenBy(key => key.RecordId).Take(limit).ToArrayAsync(cancellationToken);
+        var added = await unpublished.Where(key => key.PublishedRevisionNumber == null)
+            .OrderBy(key => key.CreatedAtUtcTicks).ThenBy(key => key.RecordId).Take(limit).ToArrayAsync(cancellationToken);
+        var keys = ReplacementsFirstUpToHalf(replacements, added, limit);
         var drafts = (await ReadDraftsAsync(db, [.. keys.Select(key => key.RecordId)], cancellationToken))
             .ToDictionary(row => row.RecordId, StringComparer.Ordinal);
         var histories = await ReadHistoriesAsync(db, drafts.Values, cancellationToken);
         return [.. keys.Select(key => (drafts[key.RecordId], histories[key.RecordId]))];
+    }
+
+    // Replacements fill at most half of the batch while new records wait, so a flood of corrections cannot hold new records back.
+    // The two lists alternate, replacement first, so any share cut from the front keeps this bound.
+    private static UnpublishedKey[] ReplacementsFirstUpToHalf(UnpublishedKey[] replacements, UnpublishedKey[] added, int limit)
+    {
+        var replacementCount = Math.Min(replacements.Length, Math.Max(limit / 2, limit - added.Length));
+        var chosen = replacements.Take(replacementCount).ToArray();
+        var newCount = Math.Min(added.Length, limit - replacementCount);
+        return [.. Enumerable.Range(0, Math.Max(chosen.Length, newCount))
+            .SelectMany(position => new[] { position < chosen.Length ? chosen[position] : null, position < newCount ? added[position] : null })
+            .OfType<UnpublishedKey>()];
     }
 
     public async Task<Dictionary<string, ReviewHistory<TRevision>>> ReadHistoriesAsync(CollectionAttemptDbContext db,
