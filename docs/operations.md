@@ -16,6 +16,8 @@ python3 tools/render-architecture.py --check
 python3 tools/check-docs.py --check
 ```
 
+CI runs the tests in 4 parallel jobs, each with its own Postgres container. `tools/test-shards.py` puts each test class in one job by a hash of its name. To run one job locally after the Release build, run `python3 tools/test-shards.py --shards 4 --index 0 --runsettings shard.runsettings`. Then run `dotnet test tests/CivicLens.Tests --configuration Release --no-build --settings shard.runsettings`.
+
 Tests never call the paid Claude API. They use a fake model at each drafting port. The live tests, in category `LiveAi`, are skipped unless you set `CIVIC_LENS_LIVE_AI=1` and `ANTHROPIC_API_KEY`. CI does not set them. Each live test sends paid requests, so run them on request only:
 
 ```sh
@@ -822,6 +824,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases list [limit]
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases blocked
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases activate <release-number>
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases first-published backfill
 ```
 
 A development database from before schema version 1 cannot publish. The publisher reads the active release and refuses a release of another schema version. Follow [Dev database reset](#dev-database-reset) once. The dates of the first publication of briefs start again after the reset. This is acceptable in development.
@@ -857,6 +860,18 @@ sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> -
 ```
 
 An image from before this change cannot read a release that the new image made, because it refuses the new entry members and the `previous` member of a summary row. To go back to that image, first activate a release that it made. See the [publication limits](architecture/publication.md#limits-and-planned-work).
+
+### First publication backfill
+
+The table `published_records` stores the first publication time of each record. A publish writes a row for each record that it adds. Run the backfill once after the migration `PublishedRecords`. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases first-published backfill
+```
+
+The command reads the manifest of the active release. It inserts a row for each record and each withdrawal, with the `firstPublishedAtUtc` of the entry. It never changes a row that exists, so a repeat is safe. It prints `examined`, `added`, and `alreadyPresent` as JSON. A record that no active entry or withdrawal names gets no row. Its row comes with the publish that adds it.
+
+Until the backfill runs, a publish that adds a record of the active release stops with the message "Run releases first-published backfill". A guess could give one record two first times. The worker logs the error and tries again at its next wake. Run the backfill, and the next publish works. A rollback keeps the rows.
 
 ### Take a record off the site
 
@@ -1215,11 +1230,11 @@ To end the access, delete `/etc/sudoers.d/civic-lens-operator` and the `authoriz
 
 The installer refuses a checkout that anyone other than root can write, because the commands run scripts from it as root. Run the same install command again after a migration, because a new table or column stays unreadable until then. Run it again after a restore too, because the restore leaves out the grants of the read-only role. Run it again when one of the scripts or `readonly-grants.sql` changes, because the installed copies and the grants do not follow the checkout. The commands expect the checkout at `/opt/civic-lens` and the data root at `/srv/civic-lens`. The `origin` remote must use HTTPS, because root has no SSH key for `deploy`.
 
-**Read-only SQL.** `/usr/local/bin/civic-lens-sql` reads SQL from stdin and runs it as the Postgres role `civic_lens_readonly`. The role has no write privilege on any table and cannot create temp objects. A statement stops after 30 seconds by default, but a query can change that limit, and a long query can delay a migration. The role cannot read review notes, reviewer identity, credentials, or raw collector requests. `deploy/scripts/readonly-grants.sql` owns that list of hidden columns. Revision JSON is hidden too. So are the headline, summary, fact text, and suggestion columns of vote revisions. `readonly_access.revisions('vote_revisions')` returns each revision row and its JSON without the author. It is the one exception: its `row_data` holds the vote revision text columns, the same text as the JSON. The command refuses a backslash, because a psql command can run a shell.
+**Read-only SQL.** `/usr/local/bin/civic-lens-sql` reads SQL from stdin and runs it as the Postgres role `civic_lens_readonly`. The role has no write privilege on any table and cannot create temp objects. A statement stops after 30 seconds by default, but a query can change that limit, and a long query can delay a migration. The role cannot read review notes, reviewer identity, credentials, or raw collector requests. `deploy/scripts/readonly-grants.sql` owns that list of hidden columns. Revision JSON is hidden too. So are the headline, summary, fact text, and suggestion columns of vote and action revisions. `readonly_access.revisions` takes any `_revisions` table, for example `'action_revisions'`. It returns each revision row and its JSON without the author. It is the one exception: its `row_data` holds the revision text columns, the same text as the JSON, for every such table. The command refuses a backslash, because a psql command can run a shell.
 
 Every result that an agent reads goes to its model vendor, so add a column to the hidden list before it holds private text.
 
-**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `votes revisions backfill`, `votes revisions verify`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
+**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `votes revisions backfill`, `votes revisions verify`, `releases first-published backfill`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
 
 `deploy` takes a full commit SHA on `origin/main` that is the checkout or newer. The scripts of that commit run as root, and a migration has no undo, so a rollback stays with the owner. It checks out the commit, runs `update.sh`, and runs `check-live.sh`. A merge to `main` is therefore the real approval. GitHub does not stop the agent from merging, because it uses the owner's token. Only the agent rules and the Claude Code permissions stop it.
 

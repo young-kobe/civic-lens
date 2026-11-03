@@ -10,7 +10,7 @@ internal sealed class ReaderReportRowConfiguration : IEntityTypeConfiguration<Re
     {
         builder.ToTable("reader_reports", table =>
         {
-            table.HasCheckConstraint("ck_reader_reports_record_id", "record_id ~ '^([0-9a-f]{32}|[0-9a-f]{64})$'");
+            table.HasCheckConstraint("ck_reader_reports_record_id", RecordIdChecks.AnyRecordId("record_id"));
             table.HasCheckConstraint("ck_reader_reports_revision", "revision_number >= 1");
             table.HasCheckConstraint("ck_reader_reports_status", "status IN ('Open','Dismissed','CorrectionNeeded')");
             table.HasCheckConstraint("ck_reader_reports_resolution",

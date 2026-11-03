@@ -31,6 +31,12 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
 
     public Task ActionAsync(ActionDraftRevision action, string reviewStatus = "Approved", long revisedAtTicks = 1) => ExecuteAsync("""
         SET session_replication_role = replica;
+        INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
+        VALUES (@extraction, 'attempt', 'extraction', 'action', @hash) ON CONFLICT DO NOTHING;
+        INSERT INTO action_candidates (candidate_id, source_id, congress, bill_type, bill_number, update_date_utc_ticks, detail_job_id,
+            configuration_revision_id, created_at_utc_ticks, includes_summaries)
+        VALUES (@candidate, @source, @congress, @type, @bill, 1, 'detail', @extraction, 1, false)
+        ON CONFLICT DO NOTHING;
         INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
                                    review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id, event_on, issue_ids, official_ids)
         VALUES (@id, @source, @congress, @type, @bill, @number, 0, @status, 1, @revised, @candidate, @eventOn, @issues, @officials)
@@ -42,7 +48,7 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         """, ("id", action.RecordId), ("source", action.SourceId), ("congress", action.Congress), ("type", action.BillType),
         ("bill", action.BillNumber), ("number", action.RevisionNumber), ("status", reviewStatus), ("json", JsonSerializer.Serialize(action, Web)),
         ("candidate", action.CandidateId), ("revised", revisedAtTicks), ("eventOn", action.EventOn()), ("issues", action.TrackedIssueIds.ToArray()),
-        ("officials", action.OfficialIds().ToArray()));
+        ("officials", action.OfficialIds().ToArray()), ("extraction", RelationshipFixtures.ExtractionId), ("hash", new string('f', 64)));
 
     public Task VoteAsync(VoteDraftRevision vote, string reviewStatus = "Approved", long revisedAtTicks = 1) => ExecuteAsync("""
         SET session_replication_role = replica;
