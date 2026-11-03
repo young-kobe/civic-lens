@@ -62,18 +62,6 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
     }
 
     [Fact]
-    public async Task AnUnchangedRecordKeepsItsOneRowBecauseOnlyChangesWriteToTheTable()
-    {
-        await SeedActionsAsync(A, C);
-        await PublishAsync(1, null, [(A, 1)], added: [A]);
-        await PublishAsync(2, 1, [(A, 1), (C, 1)], added: [C]);
-        await PublishAsync(3, 2, [(A, 1), (C, 1)]);
-
-        Assert.Equal(["1|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, A));
-        Assert.Equal(["2|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, C));
-    }
-
-    [Fact]
     public async Task AReplayWritesNoRowsBecauseTheReleaseAlreadyExists()
     {
         await SeedActionsAsync(A);

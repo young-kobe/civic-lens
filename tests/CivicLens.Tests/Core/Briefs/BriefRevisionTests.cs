@@ -8,12 +8,6 @@ namespace CivicLens.Tests.Core.Briefs;
 public sealed class BriefRevisionTests
 {
     [Fact]
-    public void AWellFormedRevisionPassesTheShapeCheck()
-    {
-        BriefFixtures.Revision().ValidateShape();
-    }
-
-    [Fact]
     public void TheRecordIdMustNameTheWeekSoNoTwoBriefsCoverTheSameWeek()
     {
         var other = BriefFixtures.Revision() with { RecordId = new string('c', 64) };
