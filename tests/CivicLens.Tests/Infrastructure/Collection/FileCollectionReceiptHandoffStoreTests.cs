@@ -92,7 +92,7 @@ public sealed class FileCollectionReceiptHandoffStoreTests
     }
 
     [Fact]
-    public async Task RejectsSymlinkedHandoffFile()
+    public async Task RejectsSymlinkedHandoffFileAndDeletingItLeavesTheLinkTargetIntact()
     {
         var root = TempDirectory();
         var outside = Path.Combine(TempDirectory(), "receipt.json");
@@ -102,6 +102,11 @@ public sealed class FileCollectionReceiptHandoffStoreTests
             var store = new FileCollectionReceiptHandoffStore(root);
             File.CreateSymbolicLink(Path.Combine(root, ".pending", "attempt-1.json"), outside);
             await Assert.ThrowsAsync<InvalidDataException>(() => store.LoadAsync("attempt-1", CancellationToken.None));
+
+            await store.DeleteAsync("attempt-1", CancellationToken.None);
+
+            Assert.Empty(await store.ListAsync(CancellationToken.None));
+            Assert.Equal("{}", await File.ReadAllTextAsync(outside));
         }
         finally
         {
