@@ -42,7 +42,7 @@ def write_runsettings(path, classes):
     expression = filter_for(classes).replace('&', '&amp;').replace('<', '&lt;')
     path.write_text(
         '<?xml version="1.0" encoding="utf-8"?>\n'
-        f'<RunSettings><RunConfiguration><TestCaseFilter>{expression}</TestCaseFilter>'
+        f'<RunSettings><RunConfiguration><TreatNoTestsAsError>true</TreatNoTestsAsError><TestCaseFilter>{expression}</TestCaseFilter>'
         '</RunConfiguration></RunSettings>\n')
 
 
@@ -55,6 +55,8 @@ def main():
     if not 0 <= args.index < args.shards:
         parser.error('Give --index from 0 to shards minus 1.')
     chosen = shard_classes(list_classes(), args.index, args.shards)
+    if not chosen:
+        sys.exit(f'Shard {args.index} of {args.shards} has no test classes. Use fewer shards.')
     write_runsettings(args.runsettings, chosen)
     print(f'Shard {args.index} of {args.shards}: {len(chosen)} test classes.')
 
