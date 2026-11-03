@@ -307,8 +307,10 @@ public sealed class ActionDraftRevisionTests
     public void ADuplicateIssueIdFailsBecauseTheIssueListIsASetAndARepeatWouldStoreTwoRowsForOneIssue()
     {
         (Model() with { TrackedIssueIds = ["a", "b"], IssueCandidateIds = ["a", "b"] }).ValidateShape();
-        Assert.Throws<ArgumentException>(() => (Model() with { TrackedIssueIds = ["a", "a"], IssueCandidateIds = ["a"] }).ValidateShape());
-        Assert.Throws<ArgumentException>(() => (Model() with { TrackedIssueIds = ["a"], IssueCandidateIds = ["a", "a"] }).ValidateShape());
+        var tracked = Assert.Throws<ArgumentException>(() => (Model() with { TrackedIssueIds = ["a", "a"], IssueCandidateIds = ["a"] }).ValidateShape());
+        Assert.Equal(nameof(ActionDraftRevision.TrackedIssueIds), tracked.ParamName);
+        var candidates = Assert.Throws<ArgumentException>(() => (Model() with { TrackedIssueIds = ["a"], IssueCandidateIds = ["a", "a"] }).ValidateShape());
+        Assert.Equal(nameof(ActionDraftRevision.IssueCandidateIds), candidates.ParamName);
     }
 
     [Fact]

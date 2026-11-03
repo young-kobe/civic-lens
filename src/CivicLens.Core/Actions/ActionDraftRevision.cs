@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
+using CivicLens.Core.Votes;
 
 namespace CivicLens.Core.Actions;
 
@@ -23,14 +24,14 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     public const int MaximumSponsorships = 600;
     public const int MaximumTitleLength = 4_000;
     public const int MaximumCitationsPerSponsorship = 2;
-    public const int MaximumSourceIdLength = 64;
-    public const int MaximumBillTypeLength = 16;
+    public const int MaximumSourceIdLength = 128;
+    public const int MaximumBillTypeLength = VoteDraftRevision.MaximumBillTypeLength;
     public const int MaximumPolicyAreaLength = 128;
     public const int MaximumPolicyAreaIdLength = 64;
     public const int MaximumSummaryVersionLength = 64;
-    public const int MaximumPersonIdLength = 64;
-    public const int MaximumBioguideIdLength = 16;
-    public const int MaximumIssueIdLength = 64;
+    public const int MaximumPersonIdLength = VoteDraftRevision.MaximumPersonIdLength;
+    public const int MaximumBioguideIdLength = VoteDraftRevision.MaximumBioguideIdLength;
+    public const int MaximumIssueIdLength = VoteDraftRevision.MaximumIssueIdLength;
 
     public ReviewAuthorKind AuthorKind => ReviewAuthor.KindOf(AuthorSubject);
 
@@ -55,7 +56,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         if (!ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc))
             throw new ArgumentException("An action revision needs a number, an author, and a UTC creation time.");
         if (Congress < 1 || BillNumber < 1)
-            throw new ArgumentException("An action revision needs a source and a bill identity.");
+            throw new ArgumentException("An action revision needs a Congress and a bill number.");
         ReviewTextRules.ValidateText(SourceId, MaximumSourceIdLength, nameof(SourceId));
         ReviewTextRules.ValidateText(BillType, MaximumBillTypeLength, nameof(BillType));
         ReviewTextRules.ValidateHeadlineAndSummary(this, MaximumHeadlineLength, MaximumSummaryLength);
