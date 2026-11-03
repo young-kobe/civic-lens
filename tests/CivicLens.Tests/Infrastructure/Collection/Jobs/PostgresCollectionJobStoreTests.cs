@@ -551,6 +551,28 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AVersionOneHandoffForEvidenceImportedWithoutElapsedTimeSettlesWithAnUnknownElapsedTimeAndIsDeleted()
+    {
+        var claim = await EnqueueClaimAsync("retained-version-one", Source());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404) with { ElapsedMilliseconds = null };
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
+        var versionOne = new PendingCollectionHandoff(1, start.Attempt.AttemptId, start.Attempt.Request, receipt);
+        var envelope = JsonNode.Parse(JsonSerializer.Serialize(versionOne, CollectionProtocol.JsonOptions))!.AsObject();
+        Assert.True(envelope["receipt"]!.AsObject().Remove("elapsedMilliseconds"));
+        var handoffs = new FileCollectionReceiptHandoffStore(root);
+        await File.WriteAllTextAsync(Path.Combine(root, ".pending", start.Attempt.AttemptId + ".json"), envelope.ToJsonString());
+        await jobs.ReleaseCollectorAsync(claim.Lease, start.CollectorLease!, default);
+        await jobs.ReleaseClaimAsync(claim.Lease, default);
+
+        var result = await Runner(new RejectCollector()).ExecuteAsync(claim.Job.JobId, root, LeaseDuration);
+
+        Assert.Equal(CollectionJobState.Failed, result.Job!.State);
+        Assert.Null(Assert.Single(result.Job.Attempts).Resolution!.Receipt!.ElapsedMilliseconds);
+        Assert.Empty(await handoffs.ListAsync(default));
+    }
+
+    [Fact]
     public async Task AJobAttemptSettledBeforeElapsedTimeExistedStillReadsAndSettlesAgain()
     {
         var claim = await EnqueueClaimAsync("settled-before-elapsed", Source());
