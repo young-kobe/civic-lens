@@ -4,7 +4,7 @@
 @using CivicLens.Publication.Contracts
 
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@Page.PagePath" Title="@Title" Description="@Description" RootPath="@Page.RootPath" Crumbs="Crumbs">
-    <PageHeader Title="@Page.Profile.Name" Lede="@Lede" Serif="true" Portrait="Portrait" Meta="Links" />
+    <PageHeader Title="@Page.Profile.Name" Lede="@Lede" Portrait="Portrait" Meta="Links" />
     @if (Page.Congresses.Length > 1)
     {
         <FilterTabs Label="@PublishedOfficialView.CongressTabsLabel(Page)" Tabs="PublishedOfficialView.CongressTabs(Page)" />

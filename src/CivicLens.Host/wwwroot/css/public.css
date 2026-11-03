@@ -22,7 +22,6 @@ table[data-paged]:focus { outline: none; }
 @media (max-width: 760px) { .home-lead { font-size: var(--t-md); } }
 .home-actions .btn { min-height: 44px; white-space: normal; text-align: center; }
 
-.page-header-serif h1 { font-family: var(--read); font-weight: 500; }
 .page-header-portrait { flex: none; }
 .page-header:has(.page-header-portrait) { align-items: center; justify-content: flex-start; }
 .page-header:has(.page-header-portrait) > div:not(.page-header-portrait) { flex: 1 1 16rem; min-width: 0; }
@@ -114,7 +113,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 
 .public-main .segmented { gap: var(--s2); padding: 0; background: none; box-shadow: none; }
 .public-main .segmented-thumb { display: none; }
-.public-main .segmented-item { min-height: 44px; padding: 0 var(--s4); border-radius: var(--r-control); box-shadow: inset 0 0 0 1px var(--control-line); color: var(--ink); font-size: var(--t-sm); }
+.public-main .segmented-item { transition: none; min-height: 44px; padding: 0 var(--s4); border-radius: var(--r-control); box-shadow: inset 0 0 0 1px var(--control-line); color: var(--ink); font-size: var(--t-sm); }
 .public-main .segmented-item[aria-pressed="true"], .public-main .segmented-item[aria-current="true"], .public-main .segmented:not(.is-measured) .segmented-item[aria-pressed="true"], .public-main .segmented:not(.is-measured) .segmented-item[aria-current="true"] { background: var(--primary); color: var(--primary-ink); box-shadow: none; }
 .public-main .segmented-item::after { display: none; }
 .public-main .segmented-count { color: inherit; }
