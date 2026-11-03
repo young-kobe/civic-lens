@@ -2,21 +2,19 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-/// <summary>The records and withdrawals of the active release, and the approved records that the cap leaves out of it.</summary>
-public sealed record ReleaseCapacity(int Held, int WaitingForRoom);
-
 public sealed class ReadReleaseCapacity(IPublicationStore publications, IReleaseDirectory releases)
 {
     public async Task<ReleaseCapacity> ExecuteAsync(CancellationToken cancellationToken)
     {
+        var waiting = await publications.CountApprovedOutsideActiveReleaseAsync([], cancellationToken);
+        if (waiting == 0) return new(0, 0);
         var state = await publications.GetStateAsync(cancellationToken);
-        var held = 0;
-        if (state.Active is { } active)
-        {
-            var manifest = await PreviousRelease.LoadManifestAsync(releases, active, cancellationToken);
-            held = manifest.Records.Length + manifest.Withdrawals.Length;
-        }
-        var waiting = await publications.CountApprovedOutsideActiveReleaseAsync(cancellationToken);
+        if (state.Active is not { } active) return new(0, Math.Max(0, waiting - PublicationProtocol.MaximumRecordsPerRelease));
+        var manifest = await PreviousRelease.LoadManifestAsync(releases, active, cancellationToken);
+        var held = manifest.Records.Length + manifest.Withdrawals.Length;
+        if (manifest.Withdrawals.Length > 0)
+            waiting = await publications.CountApprovedOutsideActiveReleaseAsync(
+                [.. manifest.Withdrawals.Select(withdrawal => new PublishedRecordReference(withdrawal.Kind, withdrawal.RecordId))], cancellationToken);
         return new(held, Math.Max(0, held + waiting - PublicationProtocol.MaximumRecordsPerRelease));
     }
 }

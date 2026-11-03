@@ -67,10 +67,11 @@ public sealed class PostgresPublicationStore : IPublicationStore
         return newest is null ? null : TimeSpan.FromTicks(now.Ticks - newest.Value);
     }
 
-    public async Task<int> CountApprovedOutsideActiveReleaseAsync(CancellationToken cancellationToken)
+    public async Task<int> CountApprovedOutsideActiveReleaseAsync(IReadOnlyCollection<PublishedRecordReference> withdrawn,
+        CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await ReviewQueries.CountApprovedOutsideActiveReleaseAsync(db, cancellationToken);
+        return await ReviewQueries.CountApprovedOutsideActiveReleaseAsync(db, withdrawn, cancellationToken);
     }
 
     public async Task<IReadOnlyList<PublicationReleaseSummary>> ListAsync(int limit, CancellationToken cancellationToken)

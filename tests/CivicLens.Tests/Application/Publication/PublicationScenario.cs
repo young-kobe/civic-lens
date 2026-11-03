@@ -131,8 +131,8 @@ internal sealed class PublicationScenario
         BillTitle = new string('t', 250)
     };
 
-    public void SeedRelease(int recordCount, bool withFiles) =>
-        SeedRelease(withFiles, [.. Enumerable.Range(0, recordCount).Select(index => new PublishedRecordEntry
+    public void SeedRelease(int recordCount, bool withFiles, PublishedWithdrawal[]? withdrawals = null) =>
+        SeedRelease(withFiles, withdrawals: withdrawals, entries: [.. Enumerable.Range(0, recordCount).Select(index => new PublishedRecordEntry
         {
             IssueIds = [],
             Kind = PublishedRecordKind.DocumentChange,
@@ -144,7 +144,7 @@ internal sealed class PublicationScenario
             FirstPublishedAtUtc = ApprovedAt.AddMinutes(-index)
         })]);
 
-    public void SeedRelease(bool withFiles, PublishedRecordEntry[] entries)
+    public void SeedRelease(bool withFiles, PublishedRecordEntry[] entries, PublishedWithdrawal[]? withdrawals = null)
     {
         var recordCount = entries.Length;
         var manifest = new PublicationRelease
@@ -152,7 +152,7 @@ internal sealed class PublicationScenario
             SchemaVersion = PublicationProtocol.SchemaVersion,
             ReleaseNumber = 1,
             PublishedAtUtc = ApprovedAt,
-            Withdrawals = [],
+            Withdrawals = withdrawals ?? [],
             Records = entries
         };
         var files = new Dictionary<string, byte[]>
@@ -561,7 +561,15 @@ internal sealed class FakePublicationStore : IPublicationStore
 
     public int ApprovedOutsideActiveRelease { get; set; }
 
-    public Task<int> CountApprovedOutsideActiveReleaseAsync(CancellationToken cancellationToken) => Task.FromResult(ApprovedOutsideActiveRelease);
+    public List<PublishedRecordReference> ApprovedAgain { get; } = [];
+
+    public int CountCalls { get; private set; }
+
+    public Task<int> CountApprovedOutsideActiveReleaseAsync(IReadOnlyCollection<PublishedRecordReference> withdrawn, CancellationToken cancellationToken)
+    {
+        CountCalls++;
+        return Task.FromResult(ApprovedOutsideActiveRelease + ApprovedAgain.Count(record => !withdrawn.Contains(record)));
+    }
 
     public Task<PublicationState> GetStateAsync(CancellationToken cancellationToken) =>
         Task.FromResult(new PublicationState(Committed.Select(item => item.ReleaseNumber).DefaultIfEmpty().Max(),

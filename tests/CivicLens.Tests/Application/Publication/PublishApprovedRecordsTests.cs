@@ -453,19 +453,27 @@ public sealed class PublishApprovedRecordsTests
         var action = scenario.AddAction('a', ApprovedByCode('a'));
         AddUnpublished(scenario, action);
         ListedUntilPublished(scenario);
-        var firstBatch = new List<PublishedRecordReference>();
-        var removePublished = scenario.Publications.BeforeServe!;
-        scenario.Publications.BeforeServe = () =>
-        {
-            if (firstBatch.Count == 0)
-                firstBatch.AddRange(scenario.Publications.LastCommit!.AddedRecords.Select(added => new PublishedRecordReference(added.Kind, added.RecordId)));
-            removePublished();
-        };
+        var firstBatch = CaptureFirstBatch(scenario);
 
         await Publisher(scenario).ExecuteAsync(default);
 
         Assert.Equal(PublishRelease.MaximumRecords, firstBatch.Count);
         Assert.Contains(firstBatch, record => record.Kind == PublishedRecordKind.Action);
+    }
+
+    [Fact]
+    public async Task TheShareCutKeepsTheFrontOfAKindInTheOrderTheStoreListedItSoTheStoreAlternationSurvives()
+    {
+        var scenario = new PublicationScenario();
+        AddReadyStatements(scenario, PublishRelease.MaximumRecords + 6);
+        AddUnpublished(scenario, scenario.AddAction('a', ApprovedByCode('a')));
+        ListedUntilPublished(scenario);
+        var firstBatch = CaptureFirstBatch(scenario);
+
+        await Publisher(scenario).ExecuteAsync(default);
+
+        var statements = firstBatch.Where(record => record.Kind == PublishedRecordKind.Statement).Select(record => record.RecordId);
+        Assert.Equal(Enumerable.Range(0, PublishRelease.MaximumRecords - 1).Select(index => index.ToString("x64")), statements);
     }
 
     [Fact]
@@ -723,6 +731,19 @@ public sealed class PublishApprovedRecordsTests
 
     private static void AddUnpublished(PublicationScenario scenario, params string[] actionIds) =>
         scenario.Actions.Unpublished.AddRange(actionIds.Select(id => new UnpublishedApprovedAction(scenario.Actions.Publishable[id].Review)));
+
+    private static List<PublishedRecordReference> CaptureFirstBatch(PublicationScenario scenario)
+    {
+        var firstBatch = new List<PublishedRecordReference>();
+        var removePublished = scenario.Publications.BeforeServe!;
+        scenario.Publications.BeforeServe = () =>
+        {
+            if (firstBatch.Count == 0)
+                firstBatch.AddRange(scenario.Publications.LastCommit!.AddedRecords.Select(added => new PublishedRecordReference(added.Kind, added.RecordId)));
+            removePublished();
+        };
+        return firstBatch;
+    }
 
     private static void AddReadyStatements(PublicationScenario scenario, int count)
     {
