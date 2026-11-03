@@ -67,6 +67,8 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
                     throw new InvalidDataException("Collector must emit exactly one JSONL result.");
                 var result = JsonSerializer.Deserialize<CollectionResult>(lines[0], CollectionProtocol.JsonOptions)
                     ?? throw new InvalidDataException("Collector emitted a null result.");
+                if (result.ElapsedMilliseconds is null)
+                    throw new InvalidDataException("Collector result has no elapsed time.");
                 result.ValidateAgainst(request);
                 var expectedExit = result.Outcome is CollectionOutcome.Captured or CollectionOutcome.NotModified ? 0 : 1;
                 if (process.ExitCode != expectedExit)

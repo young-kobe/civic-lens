@@ -117,7 +117,8 @@ public sealed class FileCollectionReceiptHandoffStore : ICollectionReceiptHandof
                     throw new InvalidDataException("Receipt handoff size is invalid.");
                 await contents.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
             }
-            var handoff = PendingCollectionHandoff.Read(contents.ToArray()) ?? throw new InvalidDataException("Receipt handoff is empty.");
+            var handoff = JsonSerializer.Deserialize<PendingCollectionHandoff>(contents.ToArray(),
+                CollectionProtocol.JsonOptions) ?? throw new InvalidDataException("Receipt handoff is empty.");
             handoff.Validate();
             if (!string.Equals(handoff.AttemptId, handoffId, StringComparison.Ordinal))
                 throw new InvalidDataException("Receipt handoff identity does not match its file name.");

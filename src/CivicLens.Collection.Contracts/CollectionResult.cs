@@ -49,8 +49,7 @@ public sealed record CollectionResult
     public long BytesReceived { get; init; }
     [JsonRequired]
     public int RequestCount { get; init; }
-    [JsonRequired]
-    public long ElapsedMilliseconds { get; init; }
+    public long? ElapsedMilliseconds { get; init; }
     [JsonRequired]
     public int RobotsRequestCount { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

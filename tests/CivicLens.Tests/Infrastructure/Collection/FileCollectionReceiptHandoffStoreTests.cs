@@ -49,7 +49,7 @@ public sealed class FileCollectionReceiptHandoffStoreTests
     }
 
     [Fact]
-    public async Task ALoadedVersionOneHandoffHasNoElapsedTimeAndAVersionTwoHandoffWithoutOneIsRefused()
+    public async Task AVersionOneHandoffWithoutElapsedTimeLoadsAndAVersionTwoHandoffWithoutOneIsRefused()
     {
         var root = TempDirectory();
         try
@@ -67,8 +67,7 @@ public sealed class FileCollectionReceiptHandoffStoreTests
             await File.WriteAllTextAsync(Path.Combine(root, ".pending", "attempt-1.json"),
                 withoutElapsed.Replace("\"version\":2", "\"version\":1"));
             var loaded = await store.LoadAsync("attempt-1", CancellationToken.None);
-            Assert.Null(loaded.ElapsedMilliseconds);
-            Assert.Equal(250, current.ElapsedMilliseconds);
+            Assert.Null(loaded.Receipt.ElapsedMilliseconds);
         }
         finally { Directory.Delete(root, true); }
     }

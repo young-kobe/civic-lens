@@ -418,6 +418,7 @@ public sealed class RunCollectionJobTests
         FailureCode = CollectionFailureCode.Timeout,
         BytesReceived = 0,
         RobotsRequestCount = 1,
-        RequestCount = 1
+        RequestCount = 1,
+        ElapsedMilliseconds = 1
     };
 }

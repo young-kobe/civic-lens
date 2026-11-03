@@ -1,6 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
 using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Application.Collection;
@@ -12,18 +9,6 @@ public sealed record PendingCollectionHandoff(int Version, string AttemptId, Col
     public const int ElapsedUnknownVersion = 1;
     public const int CurrentVersion = 2;
 
-    [JsonIgnore]
-    public long? ElapsedMilliseconds => Version == ElapsedUnknownVersion ? null : Receipt.ElapsedMilliseconds;
-
-    public static PendingCollectionHandoff? Read(ReadOnlySpan<byte> json)
-    {
-        var envelope = JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { AllowDuplicateProperties = false });
-        if (envelope?["version"] is JsonValue version && version.TryGetValue<int>(out var number) &&
-            number == ElapsedUnknownVersion && envelope["receipt"] is JsonObject receipt)
-            receipt["elapsedMilliseconds"] = 0;
-        return envelope.Deserialize<PendingCollectionHandoff>(CollectionProtocol.JsonOptions);
-    }
-
     public void Validate()
     {
         if (Version is not (ElapsedUnknownVersion or CurrentVersion))
@@ -32,6 +17,8 @@ public sealed record PendingCollectionHandoff(int Version, string AttemptId, Col
             throw new InvalidDataException("Receipt handoff attempt ID is invalid.");
         ArgumentNullException.ThrowIfNull(Request);
         ArgumentNullException.ThrowIfNull(Receipt);
+        if (Version == CurrentVersion && Receipt.ElapsedMilliseconds is null)
+            throw new InvalidDataException("Receipt handoff version 2 needs an elapsed time.");
         Request.Validate();
         Receipt.ValidateAgainst(Request);
     }

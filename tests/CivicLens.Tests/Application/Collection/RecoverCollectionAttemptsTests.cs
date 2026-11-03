@@ -180,7 +180,8 @@ public sealed class RecoverCollectionAttemptsTests
             ObservedAt = ObservedAt,
             BytesReceived = 0,
             RobotsRequestCount = 1,
-            RequestCount = 1
+            RequestCount = 1,
+            ElapsedMilliseconds = 1
         };
         return new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, id, request, receipt);
     }

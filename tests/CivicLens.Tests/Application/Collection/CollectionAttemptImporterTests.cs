@@ -300,7 +300,8 @@ public sealed class CollectionAttemptImporterTests
         ObservedAt = ObservedAt,
         BytesReceived = 0,
         RobotsRequestCount = 1,
-        RequestCount = 1
+        RequestCount = 1,
+        ElapsedMilliseconds = 1
     };
 
     private static HttpResponseMetadata Response(int status, string? etag, string[] encodings) => new()

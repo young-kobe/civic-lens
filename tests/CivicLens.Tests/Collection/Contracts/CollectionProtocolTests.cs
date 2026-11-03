@@ -278,7 +278,6 @@ public sealed class CollectionProtocolTests
     [Theory]
     [InlineData(",\"outOfScopeCount\":0", "")]
     [InlineData("\"robotsRequestCount\":1,", "")]
-    [InlineData("\"elapsedMilliseconds\":250,", "")]
     public void ResultsWithoutRequiredCountsAreRejected(string original, string replacement)
     {
         var request = Request() with { Mode = CollectionMode.Feed };

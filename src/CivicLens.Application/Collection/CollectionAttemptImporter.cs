@@ -13,24 +13,12 @@ public static class CollectionAttemptImporter
         return store.ImportAtomicallyAsync(CreateImport(attemptId, request, result), cancellationToken);
     }
 
-    public static Task<CollectionImportDecision> ImportAsync(PendingCollectionHandoff handoff,
-        ICollectionAttemptStore store, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return store.ImportAtomicallyAsync(CreateImport(handoff.AttemptId, handoff.Request, handoff.Receipt,
-            handoff.ElapsedMilliseconds), cancellationToken);
-    }
-
-    public static CollectionAttemptImport CreateImport(string attemptId, CollectionRequest request, CollectionResult result) =>
-        CreateImport(attemptId, request, result, result.ElapsedMilliseconds);
-
-    private static CollectionAttemptImport CreateImport(string attemptId, CollectionRequest request, CollectionResult result,
-        long? elapsedMilliseconds)
+    public static CollectionAttemptImport CreateImport(string attemptId, CollectionRequest request, CollectionResult result)
     {
         result.ValidateAgainst(request);
         var sentValidators = result.SentValidators is null ? null :
             new SentValidators(result.SentValidators.ETag, result.SentValidators.LastModified);
-        return new CollectionAttemptImport(Map(attemptId, result), sentValidators, elapsedMilliseconds,
+        return new CollectionAttemptImport(Map(attemptId, result), sentValidators, result.ElapsedMilliseconds,
             result.Discovery is null ? null : new DiscoveryEvidence(request, result.Discovery), result.RobotsCrawlDelayMilliseconds);
     }
 

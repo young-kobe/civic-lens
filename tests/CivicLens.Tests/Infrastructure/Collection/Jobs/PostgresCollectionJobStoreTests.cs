@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using CivicLens.Application.Paging;
 using System.Data.Common;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
@@ -523,6 +524,49 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.Single(result.Job.Attempts);
         Assert.NotNull(await evidence.GetAsync(start.Attempt.AttemptId, default));
         Assert.Empty(await handoffs.ListAsync(default));
+    }
+
+    [Fact]
+    public async Task AVersionOneHandoffWithoutElapsedTimeRecoversWithAnUnknownElapsedTimeAndIsDeleted()
+    {
+        var claim = await EnqueueClaimAsync("recover-version-one", Source());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
+        var versionOne = new PendingCollectionHandoff(1, start.Attempt.AttemptId, start.Attempt.Request, receipt);
+        var envelope = JsonNode.Parse(JsonSerializer.Serialize(versionOne, CollectionProtocol.JsonOptions))!.AsObject();
+        Assert.True(envelope["receipt"]!.AsObject().Remove("elapsedMilliseconds"));
+        var handoffs = new FileCollectionReceiptHandoffStore(root);
+        await File.WriteAllTextAsync(Path.Combine(root, ".pending", start.Attempt.AttemptId + ".json"), envelope.ToJsonString());
+        await jobs.ReleaseCollectorAsync(claim.Lease, start.CollectorLease!, default);
+        await jobs.ReleaseClaimAsync(claim.Lease, default);
+
+        var result = await Runner(new RejectCollector()).ExecuteAsync(claim.Job.JobId, root, LeaseDuration);
+
+        Assert.Equal(CollectionJobState.Failed, result.Job!.State);
+        Assert.Null(Assert.Single(result.Job.Attempts).Resolution!.Receipt!.ElapsedMilliseconds);
+        var stored = await evidence.GetAsync(start.Attempt.AttemptId, default);
+        Assert.NotNull(stored);
+        Assert.Null(stored.ElapsedMilliseconds);
+        Assert.Empty(await handoffs.ListAsync(default));
+    }
+
+    [Fact]
+    public async Task AJobAttemptSettledBeforeElapsedTimeExistedStillReadsAndSettlesAgain()
+    {
+        var claim = await EnqueueClaimAsync("settled-before-elapsed", Source());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
+        var resolution = JsonNode.Parse(JsonSerializer.Serialize(CollectionJobLifecycle.Resolve(receipt), CollectionProtocol.JsonOptions))!.AsObject();
+        Assert.True(resolution["receipt"]!.AsObject().Remove("elapsedMilliseconds"));
+        await SqlAsync($"UPDATE collection_job_attempts SET resolution_json = '{resolution.ToJsonString()}', completed_at = 900 " +
+            $"WHERE attempt_id = '{start.Attempt.AttemptId}'");
+
+        var read = await jobs.GetAsync(claim.Job.JobId, default);
+
+        var old = Assert.Single(read!.Attempts).Resolution!;
+        Assert.Null(old.Receipt!.ElapsedMilliseconds);
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId, old, default));
     }
 
     [Fact]
@@ -1103,6 +1147,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
                 ObservedAt = DateTimeOffset.UtcNow,
                 RequestCount = 1,
                 RobotsRequestCount = 1,
+                ElapsedMilliseconds = 10,
                 BytesReceived = 0,
                 FailureCode = CollectionFailureCode.RateLimited,
                 RetryAfterSeconds = 60
@@ -1122,6 +1167,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
                 ObservedAt = DateTimeOffset.UtcNow,
                 RequestCount = 1,
                 RobotsRequestCount = 1,
+                ElapsedMilliseconds = 10,
                 BytesReceived = 0,
                 FailureCode = failureCode,
                 RetryAfterSeconds = 60
@@ -1144,7 +1190,8 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             Response = new HttpResponseMetadata { StatusCode = status, ContentEncodings = [] },
             FailureCode = status == 429 ? CollectionFailureCode.RateLimited : CollectionFailureCode.HttpError,
             RetryAfterSeconds = status == 429 ? 60 : null,
-            RobotsRequestCount = 1
+            RobotsRequestCount = 1,
+            ElapsedMilliseconds = 10
         };
     }
 }
