@@ -1,0 +1,34 @@
+# Every column of every public_api view, in view order. PublicApiViewsTests compares this file with the database.
+# Add a column here in the same change that adds it to a view.
+active_records kind
+active_records record_id
+active_records revision_number
+active_records release_number
+vote_issues record_id
+vote_issues revision_number
+vote_issues issue_id
+vote_issues is_tracked
+vote_members record_id
+vote_members revision_number
+vote_members position
+vote_members bioguide_id
+vote_members vote_cast
+votes record_id
+votes revision_number
+votes release_number
+votes chamber
+votes congress
+votes session_number
+votes roll_call_number
+votes voted_on
+votes kind
+votes bill_type
+votes bill_number
+votes headline
+votes summary
+votes text_origin
+votes label
+votes yea
+votes nay
+votes present
+votes not_voting
