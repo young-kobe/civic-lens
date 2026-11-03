@@ -50,7 +50,9 @@ public sealed class ZctaDistrictSourceConfigurationTests
     {
         var second = DistrictFixtures.Source() with { Id = "second", Url = DistrictFixtures.SourceUrl + "?copy=1" };
 
-        Assert.Throws<ArgumentException>((DistrictFixtures.Configuration() with { Sources = [DistrictFixtures.Source(), second] }).Validate);
+        var error = Assert.Throws<ArgumentException>((DistrictFixtures.Configuration() with { Sources = [DistrictFixtures.Source(), second] }).Validate);
+
+        Assert.Contains("district source", error.Message);
     }
 
     [Fact]

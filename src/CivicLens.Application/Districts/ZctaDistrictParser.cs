@@ -19,7 +19,7 @@ public static class ZctaDistrictParser
 
     public static ZctaDistrict[] Parse(ReadOnlySpan<byte> file)
     {
-        var lines = Encoding.UTF8.GetString(file).TrimStart('﻿').Split('\n').Select(line => line.TrimEnd('\r')).ToArray();
+        var lines = Encoding.UTF8.GetString(file).TrimStart('\uFEFF').Split('\n').Select(line => line.TrimEnd('\r')).ToArray();
         if (lines[0] != Header)
             throw new InvalidDataException("ZCTA district file has an unexpected header.");
         var rows = lines.Skip(1).Where(line => line.Length > 0).Select(ReadRow).OfType<ZctaDistrict>().ToArray();

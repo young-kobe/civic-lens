@@ -60,6 +60,7 @@ public sealed class ZctaDistrictParserTests
     [InlineData("1|0101|Congressional District|1|2|G5200|N|3|3601X|ZCTA5 3601X|4|5|G6350|B5|S|10|0")]
     [InlineData("1|0101|Congressional District|1|2|G5200|N|3|36012|ZCTA5 36012|4|5|G6350|B5|S|ten|0")]
     [InlineData("1|0101|Congressional District|1|2|G5200|N|3|36012|ZCTA5 36012|4|5|G6350|B5|S|-10|0")]
+    [InlineData("1|0101|Congressional District|1|2|G5200|N|3||ZCTA5 |4|5|G6350|B5|S|ten|0")]
     [InlineData("1|01|Congressional District|1|2|G5200|N|3|36012|ZCTA5 36012|4|5|G6350|B5|S|10|0")]
     [InlineData("1|01AB|Congressional District|1|2|G5200|N|3|36012|ZCTA5 36012|4|5|G6350|B5|S|10|0")]
     public void AMalformedRowIsRejected(string row)
@@ -80,7 +81,7 @@ public sealed class ZctaDistrictParserTests
     [Fact]
     public void AFileWithOnlyDroppedRowsIsRejectedSoAnEmptySnapshotIsNeverStored()
     {
-        var text = "﻿" + ZctaDistrictParser.Header + "\n" + DistrictFixtures.Row("0101", "36011", 0) + "\n";
+        var text = "\uFEFF" + ZctaDistrictParser.Header + "\n" + DistrictFixtures.Row("0101", "36011", 0) + "\n";
 
         Assert.Throws<InvalidDataException>(() => ZctaDistrictParser.Parse(DistrictFixtures.Bytes(text)));
     }
