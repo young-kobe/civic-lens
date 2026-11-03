@@ -1,4 +1,4 @@
-# Every column of every public_api view, in view order. PublicApiViewsTests compares this file with the database.
+# Every column of every public_api view. PublicApiViewsTests compares this file with the database.
 # Add a column here in the same change that adds it to a view.
 active_records kind
 active_records record_id

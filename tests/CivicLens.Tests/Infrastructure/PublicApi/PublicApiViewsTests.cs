@@ -1,6 +1,14 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using CivicLens.Application.Publication;
 using CivicLens.Host.Publication;
+using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Application.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using CivicLens.Infrastructure.Collection;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.PublicApi;
@@ -17,10 +25,15 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         ["vote_revisions", "vote_member_list_entries", "vote_revision_issues", "publication_releases", "publication_record_states", "vote_drafts", "vote_member_lists"];
 
     private string connectionString = null!;
+    private string[] roleAfterMigration = null!;
 
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
+        roleAfterMigration = await QueryAsync($"""
+            SELECT rolcanlogin || ' ' || rolconnlimit || ' ' || (rolpassword IS NULL) || ' ' || rolsuper || ' ' || rolcreaterole || ' ' || rolcreatedb
+              FROM pg_authid WHERE rolname = '{Role}'
+            """, connectionString);
         await ExecuteAsync($"ALTER ROLE {Role} LOGIN PASSWORD '{LoginPassword}'");
     }
 
@@ -34,17 +47,16 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     [Fact]
     public async Task TheRoleReadsNoBaseTableAndWritesNothingBecauseItHoldsOnlyTheViewGrants()
     {
-        await ExecuteAsync(ReadOnlyGrantsScript());
         await using var connection = await OpenPublicAsync();
         // The session can lift the read-only default itself, so the grants must hold alone.
         await using (var lift = new NpgsqlCommand("SET default_transaction_read_only = off", connection)) await lift.ExecuteNonQueryAsync();
         foreach (var table in BaseTables)
             await AssertDeniedAsync(connection, $"SELECT * FROM public.{table}");
         await AssertDeniedAsync(connection, "SELECT count(*) FROM public.vote_revisions");
-        await AssertDeniedAsync(connection, "SELECT * FROM readonly_access.revisions('vote_revisions')");
         await AssertDeniedAsync(connection, "INSERT INTO public.publication_releases (release_number) VALUES (9)");
         await AssertDeniedAsync(connection, "UPDATE public.vote_revisions SET headline = 'x'");
         await AssertDeniedAsync(connection, "DELETE FROM public.publication_record_states");
+        await AssertDeniedAsync(connection, "SELECT pg_advisory_lock(1)");
         foreach (var view in new[] { "active_records", "votes", "vote_members", "vote_issues" })
         {
             // A view with a join or a group cannot take a write at all, so Postgres refuses with 55000 before it checks a privilege.
@@ -91,26 +103,68 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
-    public async Task TheRoleIsReadOnlyShortLivedAndLimitedAndTheMigrationLeavesItWithoutLoginOrPassword()
+    public async Task TheRoleHoldsNoPrivilegeOutsideThePublicApiSchemaBecauseNothingElseMayBeReachable()
     {
-        await ExecuteAsync($"ALTER ROLE {Role} NOLOGIN PASSWORD NULL");
-        var role = await QueryAsync($"""
-            SELECT rolcanlogin || ' ' || rolconnlimit || ' ' || (rolpassword IS NULL) || ' ' || rolsuper || ' ' || rolcreaterole || ' ' || rolcreatedb
-              FROM pg_authid WHERE rolname = '{Role}'
+        await ExecuteAsync(ReadOnlyGrantsScript());
+        var privileges = "'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'";
+        var columnPrivileges = "'SELECT,INSERT,UPDATE,REFERENCES'";
+        var relations = await QueryAsync($"""
+            SELECT n.nspname || '.' || c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'public_api') AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+               AND (has_table_privilege('{Role}', c.oid, {privileges}) OR has_any_column_privilege('{Role}', c.oid, {columnPrivileges}))
+             ORDER BY 1
             """, connectionString);
-        Assert.Equal(["false 5 true false false false"], role);
-        var settings = await QueryAsync($"SELECT unnest(setconfig) FROM pg_db_role_setting WHERE setrole = '{Role}'::regrole ORDER BY 1", connectionString);
-        Assert.Equal(["default_transaction_read_only=on", "idle_in_transaction_session_timeout=10s", "statement_timeout=2s"], settings);
-        var owner = await QueryAsync($"SELECT rolcanlogin FROM pg_roles WHERE rolname = '{Owner}'", connectionString);
-        Assert.Equal(["False"], owner);
+        Assert.Empty(relations);
+        Assert.Empty(await QueryAsync($"SELECT roleid::regrole::text FROM pg_auth_members WHERE member = '{Role}'::regrole", connectionString));
+        Assert.Empty(await QueryAsync($"""
+            SELECT n.nspname || '.' || p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+             WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'public_api') AND p.prorettype <> 'trigger'::regtype AND has_function_privilege('{Role}', p.oid, 'EXECUTE') ORDER BY 1
+            """, connectionString));
     }
 
     [Fact]
-    public async Task TheLabelWordingInTheViewMatchesTheWordingThatThePagesShow()
+    public async Task AMigratedDatabaseGrantsNoTemporaryTablesToPublicAndKeepsConnectForTheRoleBecauseTheDatabaseGrantsDoNotSurviveATemplateCopy()
     {
-        var definition = Assert.Single(await QueryAsync("SELECT pg_get_viewdef('public_api.votes'::regclass)", connectionString));
-        Assert.Contains($"'{PublishedRecordLabels.ModelWording}'", definition, StringComparison.Ordinal);
-        Assert.Contains($"'{PublishedRecordLabels.CodeWording}'", definition, StringComparison.Ordinal);
+        var empty = await postgres.CreateEmptyDatabaseAsync();
+        try
+        {
+            await using (var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(empty).Options))
+                await db.Database.MigrateAsync();
+
+            Assert.Equal(["false true"], await QueryAsync($"SELECT has_database_privilege('{Role}', current_database(), 'TEMPORARY') || ' ' || has_database_privilege('{Role}', current_database(), 'CONNECT')", empty));
+        }
+        finally
+        {
+            await postgres.DropDatabaseAsync(empty);
+        }
+    }
+
+    [Fact]
+    public async Task TheOwnerHoldsGrantsOnlyOnColumnsThatAViewReadsBecauseASpareColumnGrantWouldWidenWhatAViewCanShow()
+    {
+        Assert.Empty(await QueryAsync($"""
+            SELECT c.relname || '.' || a.attname FROM pg_attribute a
+              JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public' AND a.attnum > 0
+               AND EXISTS (SELECT 1 FROM aclexplode(a.attacl) g WHERE g.grantee = '{Owner}'::regrole)
+               AND NOT EXISTS (SELECT 1 FROM pg_depend d JOIN pg_rewrite r ON r.oid = d.objid
+                                 JOIN pg_class v ON v.oid = r.ev_class JOIN pg_namespace vn ON vn.oid = v.relnamespace
+                                WHERE vn.nspname = 'public_api' AND d.refobjid = a.attrelid AND d.refobjsubid = a.attnum)
+            UNION ALL
+            SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public' AND EXISTS (SELECT 1 FROM aclexplode(c.relacl) g WHERE g.grantee = '{Owner}'::regrole)
+            ORDER BY 1
+            """, connectionString));
+    }
+
+    [Fact]
+    public async Task TheRoleIsReadOnlyShortLivedAndLimitedAndTheMigrationLeavesItWithoutLoginOrPassword()
+    {
+        Assert.Equal(["false 5 true false false false"], roleAfterMigration);
+        var settings = await QueryAsync($"SELECT unnest(setconfig) FROM pg_db_role_setting WHERE setrole = '{Role}'::regrole ORDER BY 1", connectionString);
+        Assert.Equal(["default_transaction_read_only=on", "idle_in_transaction_session_timeout=10s", "idle_session_timeout=60s", "statement_timeout=2s"], settings);
+        var owner = await QueryAsync($"SELECT rolcanlogin FROM pg_roles WHERE rolname = '{Owner}'", connectionString);
+        Assert.Equal(["False"], owner);
     }
 
     [Fact]
@@ -150,6 +204,35 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Equal(["0 0 0 0"], await PublicAsync("SELECT yea || ' ' || nay || ' ' || present || ' ' || not_voting FROM public_api.votes WHERE record_id = 'd'"));
     }
 
+    [Fact]
+    public async Task VoteCountsEqualTheTotalsOfTheVoteTallyAndAreNullWhenTheCastsAreCandidateNamesBecauseOneRuleMustGiveBothAnswers()
+    {
+        string[] plain = ["Yea", "Aye", "Nay", "No", "Present", "Not Voting", "Not Voting"];
+        string[] speaker = ["Johnson (LA)", "Emmer", "Jeffries", "Jeffries"];
+
+        var plainTotals = await TallyTotalsAsync(plain, ["Party total D: Yea 2, Nay 2, Present 1, Not voting 2"]);
+        var speakerTotals = await TallyTotalsAsync(speaker, ["Candidate total Johnson (LA): 1", "Candidate total Emmer: 1", "Candidate total Jeffries: 2"]);
+
+        Assert.Equal(new PublishedVoteTotals { Yea = 2, Nay = 2, Present = 1, NotVoting = 2 }, plainTotals);
+        Assert.Null(speakerTotals);
+        Assert.Equal([$"{plainTotals!.Yea} {plainTotals.Nay} {plainTotals.Present} {plainTotals.NotVoting}"], await ViewCountsAsync("plain", plain));
+        Assert.Equal(["none"], await ViewCountsAsync("speaker", speaker));
+    }
+
+    [Fact]
+    public async Task AVoteRevisionWithNoWrittenColumnsAppearsInNoVoteRowBecauseItHoldsNothingToShow()
+    {
+        await ExecuteAsync("""
+            SET session_replication_role = replica;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+              VALUES (1, '000001-00000000000000000000000000000001', 'test', 1, 1, true);
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('vote', 'old', 1, 1, NULL);
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
+              VALUES ('old', 1, 'test', 'Person', 'x', 1);
+            """);
+        Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.votes"));
+    }
+
     private async Task SeedAsync()
     {
         await ExecuteAsync("""
@@ -169,14 +252,38 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             INSERT INTO vote_member_lists (list_id, member_count, created_at_utc_ticks) VALUES ('1111111111111111111111111111111111111111111111111111111111111111', 1, 1), ('2222222222222222222222222222222222222222222222222222222222222222', 8, 1), ('3333333333333333333333333333333333333333333333333333333333333333', 1, 1), ('4444444444444444444444444444444444444444444444444444444444444444', 1, 1), ('5555555555555555555555555555555555555555555555555555555555555555', 1, 1);
             """ + string.Join('\n', new[]
         {
-            Entry("1111111111111111111111111111111111111111111111111111111111111111", 0, "Yea"), Entry("3333333333333333333333333333333333333333333333333333333333333333", 0, "Nay"), Entry("4444444444444444444444444444444444444444444444444444444444444444", 0, "Present"), Entry("5555555555555555555555555555555555555555555555555555555555555555", 0, "Yea"),
+            Entry("1111111111111111111111111111111111111111111111111111111111111111", 0, "Yea"), Entry("3333333333333333333333333333333333333333333333333333333333333333", 0, "Nay"), Entry("4444444444444444444444444444444444444444444444444444444444444444", 0, "Present"),
             Entry("2222222222222222222222222222222222222222222222222222222222222222", 0, "Yea"), Entry("2222222222222222222222222222222222222222222222222222222222222222", 1, "Aye"), Entry("2222222222222222222222222222222222222222222222222222222222222222", 2, "Nay"), Entry("2222222222222222222222222222222222222222222222222222222222222222", 3, "No"), Entry("2222222222222222222222222222222222222222222222222222222222222222", 4, "Present"),
             Entry("2222222222222222222222222222222222222222222222222222222222222222", 5, "Not Voting"), Entry("2222222222222222222222222222222222222222222222222222222222222222", 6, "Not Voting")
         }) + """
             INSERT INTO vote_revision_issues (record_id, revision_number, issue_id, position, is_tracked) VALUES ('d', 1, 'health', 0, true), ('b', 1, 'tax', 0, false);
             """);
-        // Revision d has an empty member list row, so it has no entries: counts stay at zero.
-        await ExecuteAsync("DELETE FROM vote_member_list_entries WHERE list_id = '5555555555555555555555555555555555555555555555555555555555555555'");
+    }
+
+    private static async Task<PublishedVoteTotals?> TallyTotalsAsync(string[] casts, string[] totalLines)
+    {
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('d', totalLines: totalLines, cast: casts[0],
+            otherMemberLines: [.. casts[1..].Select((cast, index) => $"Member: X{index}, N, D, MA, {cast}")]);
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k", new PublishedRecordReference(PublishedRecordKind.Vote, vote)));
+        return JsonSerializer.Deserialize<PublishedVote>(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(vote)],
+            PublicationProtocol.JsonOptions)!.Totals;
+    }
+
+    private async Task<string[]> ViewCountsAsync(string record, string[] casts)
+    {
+        var list = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(record)));
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+              VALUES (1, '000001-00000000000000000000000000000001', 'test', 1, 1, true) ON CONFLICT DO NOTHING;
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('vote', '{record}', 1, 1, NULL);
+            INSERT INTO vote_member_lists (list_id, member_count, created_at_utc_ticks) VALUES ('{list}', {casts.Length}, 1);
+            {Revision(record, 1, "Person", list)}
+            {string.Join('\n', casts.Select((cast, index) => Entry(list, index, cast)))}
+            """);
+        return await PublicAsync($"SELECT coalesce(yea || ' ' || nay || ' ' || present || ' ' || not_voting, 'none') FROM public_api.votes WHERE record_id = '{record}'");
     }
 
     private static string Revision(string record, int revision, string origin, string list) => $"""
