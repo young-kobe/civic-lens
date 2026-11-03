@@ -298,7 +298,7 @@ The prompt holds the fact lines and the candidate issues. It tells the model tha
 | Blocked | `evidenceUnavailable`, `tooManyMembers`, `factTooLong`, `fieldTooLong`, `extractionVersionChanged`, `renderedTextMismatch`, `overByteCap` | The input cannot be drafted |
 | Failed | `outputRejected`, a stop code, or `attemptsExhausted` | Owner requeue needed |
 
-A run that makes no call has the reason `unchanged`, `noTrackedMember`, `memberVotesChanged`, `kindChanged`, or `recordRejected`. The last one is a record of a candidate that the worker refused because the record was rejected. The block is the column `vote_drafts.refused_candidate_id`, with a foreign key to `vote_candidates`; see [review](review.md#invariants). The `Down` of the migration `RejectedRunReason` fails while a run holds the reason `recordRejected`, and it rolls back.
+A run that makes no call has the reason `unchanged`, `noTrackedMember`, `memberVotesChanged`, `kindChanged`, or `recordRejected`. The last one is a record of a candidate that the worker refused because the record was rejected. The block is the column `vote_drafts.refused_candidate_id`, with a foreign key to `vote_candidates`; see [review](review.md#invariants). The `Down` of the migration `RejectDecision` fails while a run holds the reason `recordRejected`, and it rolls back.
 
 ### Redraft
 

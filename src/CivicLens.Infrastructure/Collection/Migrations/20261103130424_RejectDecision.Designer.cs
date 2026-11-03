@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CivicLens.Infrastructure.Collection.Migrations
 {
     [DbContext(typeof(CollectionAttemptDbContext))]
-    [Migration("20261102193151_RejectDecision")]
+    [Migration("20261103130424_RejectDecision")]
     partial class RejectDecision
     {
         /// <inheritdoc />
@@ -289,7 +289,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_action_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Bypassed')");
 
-                            t.HasCheckConstraint("ck_action_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noTrackedOfficial','summaryOmitted','sponsorshipsChanged','codeWritten','textKept')");
+                            t.HasCheckConstraint("ck_action_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noTrackedOfficial','summaryOmitted','sponsorshipsChanged','codeWritten','textKept','recordRejected')");
 
                             t.HasCheckConstraint("ck_action_analysis_runs_started_at_utc_ticks", "started_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
@@ -364,6 +364,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnName("official_ids")
                         .HasDefaultValueSql("'{}'");
 
+                    b.Property<string>("RefusedCandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("refused_candidate_id");
+
                     b.Property<int>("ReviewStateVersion")
                         .HasColumnType("integer")
                         .HasColumnName("review_state_version");
@@ -393,6 +398,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasDatabaseName("ix_action_drafts_official_ids");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("OfficialIds"), "gin");
+
+                    b.HasIndex("RefusedCandidateId");
 
                     b.HasIndex("LastRevisedAtUtcTicks", "RecordId")
                         .IsDescending()
@@ -979,7 +986,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("RetryOfRunId");
 
-                    b.HasIndex("WeekStart")
+                    b.HasIndex("WeekStart", "Task")
                         .IsUnique()
                         .HasDatabaseName("ux_brief_analysis_week");
 
@@ -1031,6 +1038,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("charged_tokens");
 
+                    b.Property<int?>("CheckedRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("checked_revision_number");
+
                     b.Property<string>("ContextJson")
                         .HasColumnType("text")
                         .HasColumnName("context_json");
@@ -1038,6 +1049,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("FinishedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("finished_at_utc_ticks");
+
+                    b.Property<string>("InputFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("input_fingerprint");
 
                     b.Property<string>("InputHash")
                         .IsRequired()
@@ -1090,6 +1106,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("reason");
 
+                    b.Property<string>("Recommendation")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("recommendation");
+
                     b.Property<string>("RecordId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -1101,6 +1122,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("schema_version");
+
+                    b.Property<string>("SourceRunId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("source_run_id");
 
                     b.Property<long>("StartedAtUtcTicks")
                         .HasColumnType("bigint")
@@ -1131,10 +1157,18 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("PreviousRunId");
 
+                    b.HasIndex("SourceRunId");
+
+                    b.HasIndex("RecordId", "CheckedRevisionNumber");
+
                     b.HasIndex("RecordId", "Task", "StartedAtUtcTicks");
 
                     b.ToTable("brief_analysis_runs", null, t =>
                         {
+                            t.HasCheckConstraint("ck_brief_analysis_runs_check", "(checked_revision_number IS NULL) = (recommendation IS NULL) AND (checked_revision_number IS NULL OR (checked_revision_number >= 1 AND task = 'brief-check' AND recommendation IN ('ApproveRecommended','NeedsAttention'))) AND (source_run_id IS NOT NULL) = (task = 'brief-check' AND outcome = 'Bypassed')");
+
+                            t.HasCheckConstraint("ck_brief_analysis_runs_fingerprint", "(input_fingerprint IS NOT NULL) = (task = 'brief-check' AND outcome = 'Drafted') AND (input_fingerprint IS NULL OR input_fingerprint ~ '^[0-9a-f]{64}$')");
+
                             t.HasCheckConstraint("ck_brief_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_brief_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
@@ -1148,6 +1182,52 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_brief_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
                             t.HasCheckConstraint("ck_brief_analysis_runs_tokens", "input_tokens >= 0 AND output_tokens >= 0 AND cache_read_tokens >= 0 AND cache_write_tokens >= 0 AND charged_tokens >= input_tokens + output_tokens + cache_read_tokens + cache_write_tokens");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Briefs.Persistence.BriefCheckFlagRow", b =>
+                {
+                    b.Property<string>("RunId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("run_id");
+
+                    b.Property<int>("FlagNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("flag_number");
+
+                    b.Property<string>("CitationId")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("citation_id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("message");
+
+                    b.Property<int>("ParagraphIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("paragraph_index");
+
+                    b.HasKey("RunId", "FlagNumber");
+
+                    b.ToTable("brief_check_flags", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_brief_check_flags_code", "code IN ('UnsupportedByCitation','Overstated','StatesBillStatus','LoadedWording','OmitsNotableRecord','Other')");
+
+                            t.HasCheckConstraint("ck_brief_check_flags_message", "char_length(message) BETWEEN 1 AND 300");
+
+                            t.HasCheckConstraint("ck_brief_check_flags_number", "flag_number BETWEEN 1 AND 24");
+
+                            t.HasCheckConstraint("ck_brief_check_flags_paragraph", "paragraph_index BETWEEN 0 AND 11");
                         });
                 });
 
@@ -5134,7 +5214,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_vote_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Bypassed')");
 
-                            t.HasCheckConstraint("ck_vote_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noTrackedMember','memberVotesChanged','kindChanged')");
+                            t.HasCheckConstraint("ck_vote_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noTrackedMember','memberVotesChanged','kindChanged','recordRejected')");
 
                             t.HasCheckConstraint("ck_vote_analysis_runs_started_at_utc_ticks", "started_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
@@ -5205,6 +5285,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnName("official_ids")
                         .HasDefaultValueSql("'{}'");
 
+                    b.Property<string>("RefusedCandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("refused_candidate_id");
+
                     b.Property<int>("ReviewStateVersion")
                         .HasColumnType("integer")
                         .HasColumnName("review_state_version");
@@ -5245,6 +5330,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasDatabaseName("ix_vote_drafts_official_ids");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("OfficialIds"), "gin");
+
+                    b.HasIndex("RefusedCandidateId");
 
                     b.HasIndex("LastRevisedAtUtcTicks", "RecordId")
                         .IsDescending()
@@ -5780,6 +5867,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("CandidateId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.BillStream.ActionCandidateRow", null)
+                        .WithMany()
+                        .HasForeignKey("RefusedCandidateId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionReviewDecisionRow", b =>
@@ -5858,9 +5950,28 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("PreviousRunId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefAnalysisRunRow", null)
+                        .WithMany()
+                        .HasForeignKey("SourceRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("RecordId", "CheckedRevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefAnalysisRow", null)
                         .WithMany()
                         .HasForeignKey("RecordId", "Task")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Briefs.Persistence.BriefCheckFlagRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefAnalysisRunRow", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -6590,6 +6701,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("CandidateId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.Votes.VoteCandidateRow", null)
+                        .WithMany()
+                        .HasForeignKey("RefusedCandidateId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteMemberListEntryRow", b =>
