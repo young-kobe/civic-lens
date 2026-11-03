@@ -35,6 +35,8 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A reviewer cannot publish. Enforced by `ReviewAuthorization.RequireOwner` in `PublishRelease`. Test: `PublishReleaseTests.ReviewerCannotPublishBecauseOnlyTheOwnerSpeaksForTheSite`.
 - Retained evidence renders as text, never as markup. Enforced by Razor encoding. Test: `ReviewWorkspaceTests.RetainedEvidenceIsShownAsTextNeverAsMarkupAsync`.
 - Only `worker health` defines a healthy worker. The host alert script uses its exit status and has no second rule. Enforced by `deploy/scripts/check-health.sh`. No test.
+- `worker health` exits 1 for a dead worker, and 3 (`WorkerHealthCommand.ReleaseFullExitCode`) when the worker is healthy and the release is full. A dead worker wins, so exit 1 also covers a full release. Enforced by `WorkerHealthCommand`. Tests: `WorkerHealthReleaseCapacityTests.ADeadWorkerWithAFullReleaseExitsOneAndStillPrintsTheCapLineBecauseTheDeadWorkerAlarmMustNotBeHidden` and `WorkerHealthReleaseCapacityTests.AHealthyWorkerWithAFullReleaseExitsWithTheReleaseFullCodeBecauseTheCapNeedsAnOwnerAndNotARestart`.
+- The alert script keeps one marker for each problem: `disk`, `worker`, and `release-full`. One alarm does not silence another, and a clear check removes only its own marker. Enforced by `deploy/scripts/check-health.sh`. No test.
 - Markup has no inline styles. Enforced by `PresentationArchitectureTests`. Test: `PresentationArchitectureTests.MarkupCannotStyleItselfSoComponentsStayTheOnlyStyleOwners`.
 
 ## Behavior
@@ -94,7 +96,7 @@ Pages compose these components. The comparison page, the draft editor, and publi
 
 ### Health alerts
 
-A systemd timer runs `deploy/scripts/check-health.sh` every 10 minutes on the host. The script runs `worker health` and treats a non-zero exit status as unhealthy, so it has no second definition of healthy. It also checks that free space under the data root is at least 10 GB. For each problem, it sends one email through `deploy/scripts/send-alert.sh`, which the unit failure alert also uses. A marker file in `/run/civic-lens` stops repeat email until the problem clears or the host reboots. See [health alerts](../operations.md#health-alerts).
+A systemd timer runs `deploy/scripts/check-health.sh` every 10 minutes on the host. The script runs `worker health` and treats exit 1 and any code except 0 and 3 as an unhealthy worker. It has no second definition of healthy. Exit 3 means a healthy worker with a full release. It sends its own "release is full" email. It also checks that free space under the data root is at least 10 GB. For each problem, it sends one email through `deploy/scripts/send-alert.sh`, which the unit failure alert also uses. A marker file for each problem in `/run/civic-lens` stops repeat email until the problem clears or the host reboots. See [health alerts](../operations.md#health-alerts).
 
 ## Storage and contracts
 

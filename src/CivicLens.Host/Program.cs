@@ -119,7 +119,7 @@ if (args is [] or ["--help"] or ["help"])
         worker also drafts relationships when CIVIC_LENS_RELATIONSHIP_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also drafts weekly briefs when CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         documents commands require the database. Citations use UTF-16 offsets into immutable extracted text.
-        Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration.
+        Exit codes: 0 success, 1 failed/deferred collection or operational failure, 2 invalid input/configuration, 3 worker health: healthy worker and a full release.
         """);
     return 0;
 }

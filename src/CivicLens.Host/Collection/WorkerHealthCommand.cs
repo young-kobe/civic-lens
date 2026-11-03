@@ -5,6 +5,9 @@ namespace CivicLens.Host.Collection;
 
 public static class WorkerHealthCommand
 {
+    public const int UnhealthyExitCode = 1;
+    public const int ReleaseFullExitCode = 3;
+
     private static readonly TimeSpan MaximumAge = TimeSpan.FromMinutes(10);
 
     public static bool Matches(string[] arguments) => arguments is ["worker", "health"];
@@ -16,8 +19,8 @@ public static class WorkerHealthCommand
         if (capacity is null) return exitCode;
         var release = await capacity.ExecuteAsync(cancellationToken);
         if (release.WaitingForRoom == 0) return exitCode;
-        output.WriteLine($"Unhealthy: The release holds {release.Held} records. {release.WaitingForRoom} new records wait for room.");
-        return 1;
+        output.WriteLine($"Release full: The release holds {release.Held} records. {release.WaitingForRoom} new records wait for room.");
+        return exitCode == 0 ? ReleaseFullExitCode : exitCode;
     }
 
     private static async Task<int> CheckHeartbeatsAsync(IWorkerHeartbeatStore heartbeats, TextWriter output, CancellationToken cancellationToken)
@@ -26,13 +29,13 @@ public static class WorkerHealthCommand
         if (beats.Count == 0)
         {
             output.WriteLine("Unhealthy: the worker has written no heartbeat.");
-            return 1;
+            return UnhealthyExitCode;
         }
         var stale = beats.Where(beat => beat.Age > MaximumAge).ToList();
         if (stale.Count > 0)
         {
             output.WriteLine("Unhealthy: " + string.Join(", ", stale.Select(Describe)) + $" (limit {MaximumAge.TotalMinutes:0} minutes).");
-            return 1;
+            return UnhealthyExitCode;
         }
         output.WriteLine($"Healthy: the oldest heartbeat is {Describe(beats.MaxBy(beat => beat.Age)!)}.");
         return 0;
