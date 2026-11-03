@@ -121,7 +121,7 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
     public async Task APublishOfTheSameVoteRevisionWithOtherCountsAndAlignmentIsAcceptedBecauseThoseAreNotEntryFacts()
     {
         await SeedVoteAsync(A);
-        await SeedVoteAsync(B);
+        await SeedVoteAsync(B, 101);
         await CommitAsync(1, null, PublishedEntryFixtures.Vote(B, First));
         await CommitAsync(2, 1, PublishedEntryFixtures.Vote(A, First));
         await publications.ActivateAsync(1, (_, _) => Task.CompletedTask, default);
@@ -369,11 +369,11 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         }
     }
 
-    private async Task SeedVoteAsync(string id) => await ExecuteAsync($$"""
+    private async Task SeedVoteAsync(string id, int rollCall = 100) => await ExecuteAsync($$"""
         SET session_replication_role = replica;
         INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version,
             review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-        VALUES ('{{id}}', 'congress-house-votes', 'House', 119, 1, 100, 1, 1, 'Approved', 0, 0);
+        VALUES ('{{id}}', 'congress-house-votes', 'House', 119, 1, {{rollCall}}, 1, 1, 'Approved', 0, 0);
         INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
         VALUES ('{{id}}', 1, 'owner', 'Person', NULL, '{}', 0)
         """);
@@ -382,8 +382,8 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         SET session_replication_role = replica;
         INSERT INTO executive_action_drafts (record_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
         VALUES ('{{id}}', 1, 1, 'Approved', 0, 0);
-        INSERT INTO executive_action_revisions (record_id, revision_number, revision_json, created_at_utc_ticks)
-        VALUES ('{{id}}', 1, '{}', 0)
+        INSERT INTO executive_action_revisions (record_id, revision_number, revision_json, created_at_utc_ticks, author_kind, author_subject)
+        VALUES ('{{id}}', 1, '{}', 0, 'Code', 'civic-lens:code')
         """);
 
     private async Task SeedPublishableRelationshipAsync(bool withTargetTime = true)
