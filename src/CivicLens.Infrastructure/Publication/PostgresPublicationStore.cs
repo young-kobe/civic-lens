@@ -117,17 +117,24 @@ public sealed class PostgresPublicationStore : IPublicationStore
         return active is null ? null : ToSummary(active);
     }
 
-    public async Task PruneAsync(int keep, Func<int, string?, CancellationToken, Task> retireOlder, CancellationToken cancellationToken)
+    public async Task PruneAsync(Func<ReleaseRetentionPlan, string?, CancellationToken, Task> retire, CancellationToken cancellationToken)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(keep, 1);
-        ArgumentNullException.ThrowIfNull(retireOlder);
+        ArgumentNullException.ThrowIfNull(retire);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysInOrder, cancellationToken);
         var releases = db.Set<PublicationReleaseRow>().AsNoTracking();
-        var lowestKept = await releases.OrderByDescending(row => row.ReleaseNumber).Take(keep)
-            .Select(row => (int?)row.ReleaseNumber).MinAsync(cancellationToken);
+        var now = (await DatabaseClock.ReadAsync(db, cancellationToken)).Offset;
+        var windowStartTicks = ReleaseRetention.DailyWindowStart(now).Ticks;
+        var newest = await releases.OrderByDescending(row => row.ReleaseNumber).Take(ReleaseRetention.NewestKept)
+            .Select(row => new { row.ReleaseNumber, row.PublishedAtUtcTicks }).ToListAsync(cancellationToken);
+        var newestOfEachDay = await releases.Where(row => row.PublishedAtUtcTicks >= windowStartTicks)
+            .GroupBy(row => row.PublishedAtUtcTicks / TimeSpan.TicksPerDay)
+            .Select(day => new { ReleaseNumber = day.Max(row => row.ReleaseNumber), PublishedAtUtcTicks = day.Max(row => row.PublishedAtUtcTicks) })
+            .ToListAsync(cancellationToken);
+        var plan = ReleaseRetention.Plan([.. newest.Concat(newestOfEachDay).Select(row => (row.ReleaseNumber,
+            new DateTimeOffset(row.PublishedAtUtcTicks, TimeSpan.Zero)))], now);
         var active = await releases.Where(row => row.IsActive).Select(row => row.DirectoryName).SingleOrDefaultAsync(cancellationToken);
-        if (lowestKept is not null) await retireOlder(lowestKept.Value, active, cancellationToken);
+        await retire(plan, active, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 

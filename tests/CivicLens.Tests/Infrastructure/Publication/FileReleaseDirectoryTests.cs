@@ -207,12 +207,12 @@ public sealed class FileReleaseDirectoryTests : IDisposable
     }
 
     [Fact]
-    public async Task RetiringMovesOlderFoldersOutOfReleasesSoNoHalfDeletedFolderCanLookLikeARelease()
+    public async Task RetiringMovesFoldersThePlanRetiresOutOfReleasesSoNoHalfDeletedFolderCanLookLikeARelease()
     {
         var first = await BuildReleaseAsync(1, "one");
         var second = await BuildReleaseAsync(2, "two");
 
-        await releases.RetireOlderThanAsync(2, [], default);
+        await releases.RetireAsync(Plan(highest: 2, kept: [2]), [], default);
 
         Assert.False(Directory.Exists(Path.Combine(root, "releases", first)));
         Assert.True(File.Exists(Path.Combine(root, "releases", second, "release.json")));
@@ -220,12 +220,36 @@ public sealed class FileReleaseDirectoryTests : IDisposable
     }
 
     [Fact]
-    public async Task RetiringSkipsTheKeptFoldersEvenWhenTheyAreOlder()
+    public async Task RetiringKeepsAFolderThePlanKeepsEvenWhenItIsOlderThanOneThatIsRetiredBecauseDailyReleasesSitBelowTheNewest()
+    {
+        var first = await BuildReleaseAsync(1, "one");
+        var second = await BuildReleaseAsync(2, "two");
+        await BuildReleaseAsync(3, "three");
+
+        await releases.RetireAsync(Plan(highest: 3, kept: [1, 3]), [], default);
+
+        Assert.True(Directory.Exists(Path.Combine(root, "releases", first)));
+        Assert.False(Directory.Exists(Path.Combine(root, "releases", second)));
+    }
+
+    [Fact]
+    public async Task RetiringLeavesAFolderAboveTheHighestCommittedNumberBecauseAPublishInProgressMayOwnIt()
+    {
+        await BuildReleaseAsync(1, "one");
+        var inProgress = await BuildReleaseAsync(2, "two");
+
+        await releases.RetireAsync(Plan(highest: 1, kept: []), [], default);
+
+        Assert.True(Directory.Exists(Path.Combine(root, "releases", inProgress)));
+    }
+
+    [Fact]
+    public async Task RetiringSkipsTheNamedFoldersEvenWhenThePlanRetiresThem()
     {
         var first = await BuildReleaseAsync(1, "one");
         await BuildReleaseAsync(2, "two");
 
-        await releases.RetireOlderThanAsync(3, [first], default);
+        await releases.RetireAsync(Plan(highest: 2, kept: []), [first], default);
 
         Assert.True(Directory.Exists(Path.Combine(root, "releases", first)));
     }
@@ -237,7 +261,7 @@ public sealed class FileReleaseDirectoryTests : IDisposable
         var other = Path.Combine(root, "releases", "notes");
         Directory.CreateDirectory(other);
 
-        await releases.RetireOlderThanAsync(9, [], default);
+        await releases.RetireAsync(Plan(highest: 9, kept: []), [], default);
 
         Assert.True(Directory.Exists(other));
     }
@@ -246,7 +270,7 @@ public sealed class FileReleaseDirectoryTests : IDisposable
     public async Task DeletingRetiredRemovesEveryTombstoneIncludingOnesAnEarlierCrashLeft()
     {
         await BuildReleaseAsync(1, "one");
-        await releases.RetireOlderThanAsync(2, [], default);
+        await releases.RetireAsync(Plan(highest: 2, kept: [2]), [], default);
         var leftover = Path.Combine(root, "deleting", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(leftover);
         await File.WriteAllTextAsync(Path.Combine(leftover, "release.json"), "half");
@@ -284,7 +308,7 @@ public sealed class FileReleaseDirectoryTests : IDisposable
         await staging.WriteFileAsync("release.json", Encoding.UTF8.GetBytes("two"), default);
         var linkedName = await staging.CompleteAsync(2, default);
 
-        await releases.RetireOlderThanAsync(2, [], default);
+        await releases.RetireAsync(Plan(highest: 2, kept: [2]), [], default);
         await releases.DeleteRetiredAsync(default);
 
         Assert.Equal("{}", await File.ReadAllTextAsync(Path.Combine(root, "releases", linkedName, "records", "a.json")));
@@ -379,6 +403,8 @@ public sealed class FileReleaseDirectoryTests : IDisposable
 
         await Assert.ThrowsAsync<InvalidDataException>(() => releases.ListFilesAsync(name, "records", 1, default));
     }
+
+    private static ReleaseRetentionPlan Plan(int highest, int[] kept) => new(highest, kept.ToHashSet());
 
     private async Task<string> BuildReleaseAsync(int number, string manifest)
     {

@@ -14,7 +14,7 @@ public interface IPublicationStore
     Task<PublicationReleaseSummary?> ServeActiveAsync(Func<string, CancellationToken, Task> serve,
         CancellationToken cancellationToken);
 
-    Task PruneAsync(int keep, Func<int, string?, CancellationToken, Task> retireOlder, CancellationToken cancellationToken);
+    Task PruneAsync(Func<ReleaseRetentionPlan, string?, CancellationToken, Task> retire, CancellationToken cancellationToken);
 
     Task<IReadOnlyDictionary<PublishedRecordReference, ReviewedRecord>> ReadReviewStatusesAsync(
         IReadOnlyCollection<PublishedRevisionBinding> published, CancellationToken cancellationToken);

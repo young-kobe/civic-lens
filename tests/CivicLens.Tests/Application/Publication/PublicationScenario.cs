@@ -553,7 +553,7 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Action? BeforeServe { get; set; }
     public Exception? FailOnPrune { get; set; }
     public bool InsidePrune { get; private set; }
-    public int? PrunedKeep { get; private set; }
+    public DateTimeOffset Now { get; set; } = new(2026, 2, 1, 0, 0, 0, TimeSpan.Zero);
 
     public TimeSpan? AgeOfNewestRelease { get; set; }
 
@@ -594,17 +594,15 @@ internal sealed class FakePublicationStore : IPublicationStore
         return active;
     }
 
-    public async Task PruneAsync(int keep, Func<int, string?, CancellationToken, Task> retireOlder, CancellationToken cancellationToken)
+    public async Task PruneAsync(Func<ReleaseRetentionPlan, string?, CancellationToken, Task> retire, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (FailOnPrune is not null) throw FailOnPrune;
-        PrunedKeep = keep;
-        if (Committed.Count == 0) return;
-        var lowestKept = Committed.OrderByDescending(item => item.ReleaseNumber).Take(keep).Min(item => item.ReleaseNumber);
+        var plan = ReleaseRetention.Plan(Committed.Select(item => (item.ReleaseNumber, item.PublishedAtUtc)), Now);
         InsidePrune = true;
         try
         {
-            await retireOlder(lowestKept, Committed.SingleOrDefault(item => item.ReleaseNumber == ActiveReleaseNumber)?.DirectoryName,
+            await retire(plan, Committed.SingleOrDefault(item => item.ReleaseNumber == ActiveReleaseNumber)?.DirectoryName,
                 cancellationToken);
         }
         finally
@@ -700,10 +698,10 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
         return Task.FromResult(files);
     }
 
-    public Task RetireOlderThanAsync(int releaseNumber, IReadOnlyCollection<string> keepDirectoryNames,
+    public Task RetireAsync(ReleaseRetentionPlan plan, IReadOnlyCollection<string> keepDirectoryNames,
         CancellationToken cancellationToken)
     {
-        foreach (var name in Directories.Keys.Where(name => NumberOf(name) < releaseNumber && !keepDirectoryNames.Contains(name)).ToList())
+        foreach (var name in Directories.Keys.Where(name => plan.Retires(NumberOf(name)) && !keepDirectoryNames.Contains(name)).ToList())
         {
             Directories.Remove(name);
             Retired.Add(name);
