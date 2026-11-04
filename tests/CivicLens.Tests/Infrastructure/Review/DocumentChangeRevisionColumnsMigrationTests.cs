@@ -17,7 +17,7 @@ namespace CivicLens.Tests.Infrastructure.Review;
 [Trait("Category", "Postgres")]
 public sealed class DocumentChangeRevisionColumnsMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private const string Migration = "20261104003149_DocumentChangeRevisionColumns";
+    private const string Migration = "20261104010500_DocumentChangeRevisionColumns";
     private static readonly string DraftId = new('a', 32);
     private static readonly string ComparisonId = new('c', 64);
     private static readonly string ExtractionId = new('e', 64);
