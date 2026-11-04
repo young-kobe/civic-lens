@@ -10,6 +10,24 @@ table[data-paged]:focus { outline: none; }
 .public .record-headline { font-family: var(--ui); font-weight: 800; letter-spacing: -.03em; }
 .public .page-header h1 { font-size: var(--t-h1); line-height: 1.05; font-weight: 800; letter-spacing: -.03em; }
 .public .panel-head h2 { font-size: var(--t-h2); font-weight: 800; letter-spacing: -.02em; }
+.public .record { max-width: none; }
+.public .record-lede { max-width: var(--measure); color: var(--ink); font-family: var(--ui); font-size: var(--t-lg); line-height: 1.5; }
+.public .facts { gap: var(--s2) var(--s6); font-size: var(--t-base); }
+.record-panels { display: grid; gap: var(--s6); margin-top: var(--s5); }
+.record-panels .panel { background: none; box-shadow: none; border-radius: 0; }
+.record-panels .panel-head { margin: 0 0 var(--s3); padding: 0 0 var(--s2); border-bottom-width: 2px; }
+.record-panels .panel-padded { padding: 0; }
+.record-panels .panel-padded > .panel-head { margin: 0; }
+.page-header-portrait .icon { width: 48px; height: 48px; color: var(--info); }
+.record-list .table tr { position: relative; }
+.record-list .table tbody tr:hover { background: var(--raised); }
+.record-list .cell-title::after { content: ""; position: absolute; inset: 0; }
+.record-list .cell-icon { align-items: flex-start; }
+.record-list .cell-icon .icon { margin-top: 2px; }
+.kind-search { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); margin-bottom: var(--s5); }
+@media (min-width: 761px) { .record-list .officials-col { width: 12rem; } }
+.record-row-text { flex: 1; min-width: 0; }
+.record-list .badge { align-self: center; }
 .badge:has(.icon)::before { display: none; }
 .badge .icon, .cell-icon .icon { color: var(--info); }
 .cell-icon { display: flex; align-items: center; gap: var(--s2); }
@@ -129,6 +147,9 @@ table[data-paged]:focus { outline: none; }
     .public-main .table td[data-label]::before { content: attr(data-label) ": "; content: attr(data-label) ": " / ""; color: var(--muted); font-weight: 600; font-variant-numeric: normal; }
     .public-main .table .cell-main { order: -1; }
     .public-main .table td:empty::before { content: none; }
+    .record-list .cell-icon { flex-wrap: wrap; }
+    .record-list .record-row-text { flex-basis: calc(100% - 30px); }
+    .record-list .badge { margin-left: 30px; }
 }
 
 .sort-bar, .records-lead { display: grid; gap: var(--s2); padding: var(--s3) var(--s4) 0; }

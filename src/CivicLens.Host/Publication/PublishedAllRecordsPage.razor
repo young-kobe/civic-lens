@@ -4,11 +4,11 @@
     <PageHeader Title="All published records" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
     @if (KindTabs.Count > 0)
     {
-        <Panel Title="Search by kind" Padded="true">
-            <p>Each link opens the search page with that kind of record chosen.</p>
+        <div class="kind-search">
+            <span class="muted">Search by kind</span>
             <FilterTabs Label="Search one kind of record" Tabs="KindTabs" />
-            <p><a href="@PublicationProtocol.SearchPagePath">Filter by issue or date</a></p>
-        </Panel>
+            <a href="@PublicationProtocol.SearchPagePath">Filter by issue or date</a>
+        </div>
     }
     <Panel Label="Records">
         <PublishedRecordTable Records="PageRecords" Caption="Published records" Sort="Sort" />

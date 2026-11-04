@@ -198,27 +198,30 @@ public sealed class PublishedHomePageTests
     [Theory]
     [InlineData(PublishedVoteAlignment.Split, "Split vote", "A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted on opposite sides.")]
     [InlineData(PublishedVoteAlignment.PartiesAgree, "Both parties agreed", "A vote where both parties agreed is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted the same way.")]
-    public async Task AVoteInAListShowsItsPartyBadgeWithItsMeaningAndItsCounts(PublishedVoteAlignment alignment, string badge, string meaning)
+    public async Task AVoteInAListShowsItsPartyPillAndCountsAndTheListSaysTheirMeaningOnceAboveTheRows(PublishedVoteAlignment alignment, string badge, string meaning)
     {
         var main = await AllRecordsAsync(ReleaseOf(Vote('a', 216, 214, alignment)));
 
-        var cell = main.QuerySelector("tbody td")!;
-        Assert.Equal(["Vote", badge], cell.QuerySelectorAll(".badge").Select(item => item.TextContent));
-        Assert.Contains(meaning, cell.TextContent, StringComparison.Ordinal);
-        Assert.Contains("Casts of all members of the chamber who voted Yea or Nay: Yea 216, Nay 214.", cell.TextContent, StringComparison.Ordinal);
+        var row = main.QuerySelector("tbody tr")!;
+        Assert.Equal([badge], row.QuerySelectorAll(".badge").Select(item => item.TextContent));
+        Assert.Equal("Vote, Yea 216, Nay 214", row.QuerySelector(".cell-note")!.TextContent);
+        Assert.DoesNotContain(meaning, row.TextContent, StringComparison.Ordinal);
+        Assert.Equal(1, main.TextContent.Split(meaning).Length - 1);
+        Assert.Contains("Yea and Nay counts are casts of all members of the chamber who voted Yea or Nay.", main.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task ACandidateVoteAndAMixedVoteGetNoPartyBadgeAndACandidateVoteShowsNoCounts()
+    public async Task ACandidateVoteAndAMixedVoteGetNoPartyPillAndACandidateVoteShowsNoCounts()
     {
         var candidate = Vote('a', 0, 0, null) with { YeaCount = null, NayCount = null };
         var mixed = Vote('b', 50, 50, PublishedVoteAlignment.Mixed);
 
         var main = await AllRecordsAsync(ReleaseOf(candidate, mixed));
 
-        var cells = main.QuerySelectorAll("tbody tr").Select(row => row.QuerySelector("td")!).ToList();
-        Assert.All(cells, cell => Assert.Single(cell.QuerySelectorAll(".badge")));
-        Assert.DoesNotContain("Casts of all members of the chamber", cells.Single(cell => cell.QuerySelector($"a[href='records/{Id('a')}.html']") is not null).TextContent, StringComparison.Ordinal);
+        var rows = main.QuerySelectorAll("tbody tr").ToList();
+        Assert.All(rows, row => Assert.Empty(row.QuerySelectorAll(".badge")));
+        Assert.Equal("Vote", rows.Single(row => row.QuerySelector($"a[href='records/{Id('a')}.html']") is not null).QuerySelector(".cell-note")!.TextContent);
+        Assert.DoesNotContain("A split vote is", main.TextContent, StringComparison.Ordinal);
     }
 
     private static async Task<AngleSharp.Dom.IElement> AllRecordsAsync(PublicationRelease release) =>
