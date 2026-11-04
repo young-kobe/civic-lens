@@ -163,3 +163,80 @@ Each item was checked on `origin/main` (`efd90376`) with `git show` and `git gre
 - P3-5 (missing `ExtractionId`): applied in PR 4. The command skips and reports such runs with `MissingExtraction`, so the FK never aborts a batch. A test is listed.
 - P3-6 (task list): applied. Line 35 now names `vote-draft` and `relationship-draft`.
 - Side effects of D11: the migrations of PR 2 to 4 add schema only. The drop PRs delete the backfill step that reads the dropped column. The last drop deletes the command. A short read window between `update.sh` and the first command run is noted in section 5.
+
+## Round 6 findings
+
+Each item was checked on `origin/main` at `14586748` with `git show`, `git grep` and file reads. Lines cite that commit. The analysis code is unchanged since `de620566`. Test files and some docs moved. Lines in `survey/model-run-storage.md` cite the survey before this fix, at `0e91a8e3`.
+
+### P1. The deploy fill runs after the new worker starts
+
+- File: `survey/model-run-storage.md:287` (section 5, Operations), against `deploy/scripts/update.sh:37-40`.
+- Defect: the runbook runs `analysis runs backfill` after `update.sh`. But `update.sh` stops the worker and the review host (`:37`), migrates (`:38`), writes the tag (`:39`) and starts every service (`:40`). The new worker reads legacy runs before their child rows exist.
+- Failure scenario, PR 2: an entry stopped mid-retry keeps `retry_of_run_id`. The new worker reads the legacy rejected run (`AnalysisValidationLoop.cs:67-71`). `ToRun` gets no error rows, and `Validate` throws `ArgumentException` (`AnalysisRun.cs:31-33`). `RunId` is still null, so `FailUnexpectedAsync` moves the entry to Blocked (`AnalysisWorker.cs:215`). The statement gate, statement draft and document change lifecycles pass no Blocked requeue rule (`StatementGateLifecycle.cs:7-8`, `StatementDraftLifecycle.cs:7`, `DocumentChangeDraftLifecycle.cs:5`, `AnalysisLifecycle.cs:16`). The entry never returns to Pending.
+- Failure scenario, PR 4: a pending statement draft reads a legacy gate run with no quote rows. `StatementGateCarryOver.From` returns empty issues and raises no error (`StatementGateCarryOver.cs:15`).
+- Failure scenario, PR 3: every legacy settled pair has a null `input_fingerprint`. `RelationshipStaleness` finds no settled run (`RelationshipStaleness.cs:62-66`), so each pair is stale (`:32`) and drafts again at a cost.
+- Fix: owner decision D12. `update.sh` runs the fill and then verify after `db migrate`, while the worker and the review host are stopped.
+
+### P2-1. The fill has no end condition that `update.sh` can use
+
+- File: `survey/model-run-storage.md:241,281,287`.
+- Defect: the command takes a `<limit>`, and the runbook says to run it "until `examined` is 0". The survey never defines `examined`. The brief record step selects runs by `NOT EXISTS` on child rows. A brief draft that settles with `NoNewRecords` has a context with `records: []` (`BriefDraftStep.cs:26,29-30`, `BriefDraftPrompt.cs:48`). That run never gets a row, so every pass selects it again.
+- Failure scenario: under D12, `update.sh` calls the command once. A limit below the legacy row count leaves rows unfilled, and verify then stops the deploy. The listed command caps a count at four digits (`operator-command.sh:18`). A loop "until `examined` is 0" never ends, because the empty brief runs come back on each pass.
+- Fix: the command takes no limit. It walks each run table once to its end, in batches of one short transaction each. The brief step selects only runs whose list is not empty (`jsonb_array_length(...) > 0`). The command prints `filled` and `skipped` counts per step.
+
+### P2-2. The drop PRs leave verify conditions on dropped columns
+
+- File: `survey/model-run-storage.md:342-344` (PR 5), `:350` (PR 6), `:358` (PR 7), `:372` (PR 8).
+- Defect: PR 6, 7 and 8 delete the backfill step that reads the dropped column. They do not delete the verify condition that reads the same column.
+- Failure scenario: PR 6 drops `validation_json`. Verify still compares error rows with `validation_json` and fails with `column "validation_json" does not exist`. Under D12, `update.sh` runs verify on each deploy, so every deploy after PR 6 stops before `compose up`.
+- Fix: PR 6 deletes the error condition. PR 7 deletes the relationship and brief record conditions. PR 8 deletes the quote condition. Each PR adds a test that verify runs on the new schema.
+
+### P2-3. Verify does not prove that the fill is complete
+
+- File: `survey/model-run-storage.md:217,342-344`.
+- Defect: verify compares rebuilt rows with the JSON, but the survey states no null rule. A legacy rejected run with no error rows rebuilds to SQL NULL. `NULL <> validation_json` is NULL, so a plain comparison counts no mismatch. The same holds for a null `input_fingerprint`, null revision columns and absent quote or record rows. The count of Drafted and DraftDiscarded runs with a null fingerprint (`:217`) sits in the fill, not in verify. PR 7 adds the strict check "after verify", so verify must prove that count is zero.
+- Failure scenario: the fill skips a batch or a step has a wrong filter. Verify exits 0. Under D12, `compose up` starts the new worker, and the P1 failures return.
+- Fix: every verify condition compares with `IS DISTINCT FROM`, so an absent value is a mismatch. Verify also counts Drafted and DraftDiscarded relationship runs with a null fingerprint. A test leaves one legacy rejected run unfilled and asserts exit code 1.
+
+### P2-4. The brief check fill skips the not-cited records
+
+- File: `survey/model-run-storage.md:241` (section 3.4, brief backfill).
+- Defect: for `brief-check` runs, "the same shape runs over `citations` and then over `notCited`". Each statement carries `NOT EXISTS` on the run's record rows. The first statement inserts the cited rows. The second statement then sees them and selects nothing.
+- Failure scenario: a check run with two citations and one not-cited record gets two rows. The pre-check counts three in the context and two rows, so the command exits 1 for every such run. Under D12, every deploy that crosses PR 3 stops.
+- Fix: one `INSERT` reads both lists through `UNION ALL`, under one `NOT EXISTS`. A test fills a check run with both kinds of record in one pass.
+
+### P3-1. Production and doc citations drifted on `origin/main`
+
+- File: `survey/model-run-storage.md:64,67,198,210,245,262,379,410`.
+- Defect and fix, old to new: `ActionDraftQueueMapping.cs:33-35` to `:34-38`. `PostgresActionDraftStore.cs:44` to `:47`. `ActionRevisionRows.cs:38` to `:41`. `actions.md:60` to `:61`. `actions.md:62` to `:63`. `VoteRevisionRows.cs:63-81` to `:65-81`. `ExecutiveActionRevisionRows.cs:44-53` to `:46-62`. `ActionRevisionRowConfiguration.cs:74-75` to `:77-78`. `collection.md:369` (now blank) to `:372`.
+- Failure scenario: an implementer opens `collection.md:369` and finds a blank line, or opens `actions.md:62` and finds the bill page citation rule.
+
+### P3-2. PR 1 test list misses a Bypassed site and cites moved lines
+
+- File: `survey/model-run-storage.md:310-311,366,369`.
+- Defect: `CodeRun` (`PostgresBillStreamTests.ActionDrafts.cs:1054-1058`) derives a Bypassed run from `DraftedRun` with `with`. It copies `Input`, so PR 1 must set `Input = null` there too. The survey lists five such sites, and there are six. Lines also moved: `ActionDrafts.cs:999` to `:1042`, `:793` to `:836`, `:711` to `:695`, `:484,503,505` to `:468,487,489`, and `ActionReview.cs:684-686` to `:694-696`.
+- Failure scenario: after PR 1, `ValidateForWrite()` refuses the `CodeRun` run, and the test that settles it at `:754` fails.
+- Fix: add `CodeRun` to the PR 1 list and cite the lines on `14586748`.
+
+### P3-3. The relationship target check accepts a mixed pair
+
+- File: `survey/model-run-storage.md:206,248`.
+- Defect: the check is `num_nulls(<four target columns>) IN (2, 4)`. Two nulls also match `target_action_record_id` with `target_vote_revision_number`. A composite foreign key with a null column is not checked (Postgres `MATCH SIMPLE`), so neither FK refuses that row.
+- Failure scenario: a writer bug sets the action record ID and the vote revision number. The insert passes, and the run names no real revision.
+- Fix: each group is all set or all null: `num_nulls(target_action_record_id, target_action_revision_number) IN (0, 2)`, the same for the vote group, and `num_nulls` of all four `IN (2, 4)`. The statement group and each brief record group use the same per-group rule.
+
+### P3-4. PR 8 leaves members with no production caller
+
+- File: `survey/model-run-storage.md:372` (PR 8), `:340-347` (PR 5).
+- Defect: PR 8 says "delete the command". It does not name the handler `BackfillAnalysisRuns`, the port `IAnalysisRunBackfillStore`, the store `AnalysisRunBackfill`, the `operator-command.sh` entry, the listed command in `operations.md:1235` or the runbook section. PR 5 adds verify but never adds it to `operator-command.sh` or `operations.md`.
+- Failure scenario: after PR 8 the port and the store keep only test callers. An operator cannot run verify through `civic-lens-ops`.
+- Fix: PR 5 adds `analysis runs verify` to `operator-command.sh` and `operations.md:1235`. PR 8 deletes the handler, the port, the store, its tests, the `operator-command.sh` entry, the listed command and the runbook section.
+
+### Claims checked and rejected
+
+- None of the P1 text was rejected. The main session cited `AnalysisWorker.cs` "about line 215". The Blocked branch is exactly line 215.
+- The survey holds no production row counts. Round 1 removed figures that came from outside the repo. D12 states the deploy cost without them.
+
+### Resolution
+
+Every finding above is applied in `survey/model-run-storage.md`. D12 is recorded in section 6, and PR 2, 5, 6, 7 and 8 carry its steps.
