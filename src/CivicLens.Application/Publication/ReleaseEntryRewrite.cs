@@ -49,7 +49,7 @@ internal static class ReleaseEntryRewrite
             : throw new ReleaseRewriteException($"The record file of {old.Kind} {old.RecordId} does not match its manifest entry, so the entry cannot be rebuilt.");
 
     private static PublishedRecordEntry WithoutNewFields(PublishedRecordEntry entry) =>
-        entry with { YeaCount = null, NayCount = null, Alignment = null, CosponsorIds = null };
+        entry with { YeaCount = null, NayCount = null, Alignment = null, Chamber = null, CosponsorIds = null };
 
     private static string Serialize(PublishedRecordEntry entry) => JsonSerializer.Serialize(entry, PublicationProtocol.JsonOptions);
 }

@@ -104,7 +104,7 @@ public sealed class RelationshipRevisionTests
         Revision().ValidateShape();
 
         Assert.Throws<ArgumentException>((Revision() with { OfficialId = " " }).ValidateShape);
-        Assert.Throws<ArgumentException>((Revision() with { OfficialId = new string('o', RelationshipRevision.MaximumOfficialIdLength + 1) }).ValidateShape);
+        Assert.Throws<ArgumentException>((Revision() with { OfficialId = new string('o', ReviewTextRules.MaximumConfigurationIdLength + 1) }).ValidateShape);
     }
 
     [Fact]

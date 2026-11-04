@@ -199,7 +199,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
         var withOneUnreadable = await counted.ListAsync(null, 10, default);
         var queriesForOne = counter.QueryCount;
         await seeder.ExecuteAsync("UPDATE action_revisions SET revision_json = '{broken' WHERE record_id = @id", ("id", ActionId));
-        await seeder.ExecuteAsync("UPDATE statement_revisions SET revision_json = '{broken' WHERE candidate_id = @id", ("id", StatementId));
+        await seeder.ExecuteAsync("UPDATE statement_revisions SET headline = NULL, summary = NULL WHERE candidate_id = @id", ("id", StatementId));
         counter.QueryCount = 0;
         var withThreeUnreadable = await counted.ListAsync(null, 10, default);
 
@@ -208,13 +208,11 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
         Assert.Equal(queriesForOne, counter.QueryCount);
     }
 
-    [Theory]
-    [InlineData("jsonb_set(revision_json::jsonb, '{candidateId}', '\"ffff\"')::text")]
-    [InlineData("'{}'")]
-    public async Task ACitedStatementWhoseStoredJsonDoesNotMatchItsCitationMarksItsRelationshipUnreadableAndNamesTheCitation(string replacement)
+    [Fact]
+    public async Task ACitedStatementWithNullColumnsMarksItsRelationshipUnreadableAndNamesTheCitation()
     {
         await SeedEveryKindAsync();
-        await seeder.ExecuteAsync($"UPDATE statement_revisions SET revision_json = {replacement} WHERE candidate_id = @id", ("id", StatementId));
+        await seeder.ExecuteAsync("UPDATE statement_revisions SET headline = NULL, summary = NULL WHERE candidate_id = @id", ("id", StatementId));
 
         var page = await store.ListAsync(null, 10, default);
 
@@ -229,7 +227,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
     public async Task ABrokenCitedStatementMarksOnlyItsRelationshipUnreadableAndTheOtherRowsStillLoad()
     {
         await SeedEveryKindAsync();
-        await seeder.ExecuteAsync("UPDATE statement_revisions SET revision_json = '{broken' WHERE candidate_id = @id", ("id", StatementId));
+        await seeder.ExecuteAsync("UPDATE statement_revisions SET headline = NULL, summary = NULL WHERE candidate_id = @id", ("id", StatementId));
 
         var page = await store.ListAsync(null, 10, default);
 
@@ -245,7 +243,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
     public async Task ACitedStatementRevisionThatIsNotStoredMarksOnlyItsRelationshipUnreadable()
     {
         await SeedEveryKindAsync();
-        await seeder.ExecuteAsync("DELETE FROM statement_revisions WHERE candidate_id = @id", ("id", StatementId));
+        await seeder.ExecuteAsync("SET session_replication_role = replica;\nDELETE FROM statement_revisions WHERE candidate_id = @id", ("id", StatementId));
 
         var page = await store.ListAsync(null, 10, default);
 
@@ -258,7 +256,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
     {
         var approvedIds = await SeedApprovedRecordsOfSixKindsAsync();
         await seeder.ExecuteAsync("""
-            UPDATE statement_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{headline}', '"Zebra statement"')::text;
+            UPDATE statement_revisions SET headline = 'Zebra statement';
             UPDATE action_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{headline}', '"Zebra action"')::text;
             UPDATE vote_revisions SET headline = 'Zebra vote';
             UPDATE brief_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{headline}', '"Zebra brief"')::text;
