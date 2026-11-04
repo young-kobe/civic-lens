@@ -107,6 +107,11 @@
 
 body.public {
     --ui: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+    --content: 1280px;
+    --gutter: 32px;
+    --frame-pad: max(var(--gutter), calc((100% - var(--content)) / 2 + var(--gutter)));
+    --t-h1: clamp(2.5rem, 6vw, 4rem);
+    --t-h2: 2.25rem;
     --marigold: #f5b301;
     --bar: #14213d;
     --bar-ink: #ffffff;
@@ -131,6 +136,10 @@ body.public {
     --focus-halo: rgba(39, 71, 217, .25);
     --info: #2747d9;
     --info-bg: #e7ecfc;
+}
+
+@media (max-width: 760px) {
+    body.public { --gutter: 16px; }
 }
 
 @supports (color: light-dark(#000000, #ffffff)) {
