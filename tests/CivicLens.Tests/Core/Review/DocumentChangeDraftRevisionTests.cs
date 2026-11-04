@@ -41,6 +41,27 @@ public sealed class DocumentChangeDraftRevisionTests
         Assert.Throws<ArgumentException>((valid with { Citations = [new SourceSpan(new string('e', 64), 0, 0)] }).ValidateShape);
     }
 
+    [Fact]
+    public void ASelectionIdHoldsAtMostTheLengthOfAConfigurationIdBecauseItsColumnHoldsNoMore()
+    {
+        var valid = Revision(new string('d', 32), 1);
+        var longest = new string('x', ReviewTextRules.MaximumConfigurationIdLength);
+
+        (valid with { OfficialIds = [longest], IssueIds = [longest] }).ValidateShape();
+        Assert.Throws<ArgumentException>((valid with { OfficialIds = [longest + "x"] }).ValidateShape);
+        Assert.Throws<ArgumentException>((valid with { IssueIds = [longest + "x"] }).ValidateShape);
+    }
+
+    [Fact]
+    public void ChangeDateEvidenceMustBeOneOfTheCitationsBecauseOnlyTheRevisionShapeRuleProvesIt()
+    {
+        var cited = new SourceSpan(new string('e', 64), 0, 4);
+        var valid = Revision(new string('d', 32), 1) with { Citations = [cited], ChangeDate = new DateOnly(2026, 10, 3), ChangeDateEvidence = cited };
+
+        valid.ValidateShape();
+        Assert.Throws<ArgumentException>((valid with { ChangeDateEvidence = new SourceSpan(new string('e', 64), 1, 4) }).ValidateShape);
+    }
+
     private static DocumentChangeDraftRevision Revision(string draftId, int number) =>
         new(draftId, number, new string('c', 64), "reviewer", DateTimeOffset.UnixEpoch,
             "Headline", "Summary", null, null, "Institution", null, null, [], [], []);
