@@ -151,7 +151,7 @@ public sealed class PostgresExecutiveRosterStoreTests(PostgresCollection postgre
     [Fact]
     public async Task TheDailyCheckCreatesAnExecutiveJobWithNoCredentialEvenThoughTheSourceCoversNoPeople()
     {
-        var jobs = CivicLens.Infrastructure.Collection.Jobs.PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var jobs = CivicLens.Infrastructure.Collection.Jobs.PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         await jobs.SynchronizeAsync(ExecutiveFixtures.Configuration(), default);
         await ExecuteAsync("UPDATE collection_source_schedules SET next_due_utc_ticks = 0");
 

@@ -1,9 +1,11 @@
 using System.Data;
 using System.Text.Json;
+using CivicLens.Application;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
+using CivicLens.Infrastructure.ExecutiveActions;
 using CivicLens.Infrastructure.Collection.Jobs.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -13,10 +15,12 @@ using Npgsql;
 namespace CivicLens.Infrastructure.Collection.Jobs;
 
 /// <summary>Atomic job ownership, collection admission, and recovery accounting using database time.</summary>
-public sealed partial class PostgresCollectionJobStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) :
+public sealed partial class PostgresCollectionJobStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory, CodeVersion codeVersion) :
     ICollectionJobStore, ICollectionScheduleStore
 {
-    public static PostgresCollectionJobStore FromConnectionString(string connectionString)
+    private readonly ExecutiveActionRows executiveActions = new(codeVersion);
+
+    public static PostgresCollectionJobStore FromConnectionString(string connectionString, CodeVersion codeVersion)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         try
@@ -25,7 +29,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             if (string.IsNullOrWhiteSpace(parsed.Host) || string.IsNullOrWhiteSpace(parsed.Database))
                 throw new ArgumentException("Host and Database are required.");
             var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(parsed.ConnectionString).Options;
-            return new PostgresCollectionJobStore(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
+            return new PostgresCollectionJobStore(new PooledDbContextFactory<CollectionAttemptDbContext>(options), codeVersion);
         }
         catch (ArgumentException)
         {

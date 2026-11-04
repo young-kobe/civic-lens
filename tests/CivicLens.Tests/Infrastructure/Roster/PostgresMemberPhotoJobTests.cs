@@ -60,7 +60,7 @@ public sealed class PostgresMemberPhotoJobTests(PostgresCollection postgres) : I
         await roster.AdmitAsync(await ImportRosterAsync('a', 0), RosterFixtures.Members(), Photos(), default);
         var job = (await ReadPhotoJobsAsync()).First(row => row.IdempotencyKey.Contains("/C000127/"));
 
-        var record = await PostgresCollectionJobStore.FromConnectionString(connectionString).GetAsync(job.JobId, default);
+        var record = await PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current).GetAsync(job.JobId, default);
 
         Assert.Equal((ApiResource.MemberPhoto, MemberPhotoFixtures.PhotoUrl("C000127")),
             (record!.Definition.ApiResource, record.Definition.Url));

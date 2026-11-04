@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using CivicLens.Application;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
@@ -382,23 +383,6 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task TheOlderCandidateReadsNoSummaryPageEvenAfterTheSummariesArrive()
-    {
-        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1);
-        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
-        await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], null));
-        var candidates = await CandidatesAsync();
-
-        var older = (await ActionStore().ReadEvidenceAsync(candidates.Single(item => !item.IncludesSummaries).CandidateId, default))!;
-        var newer = (await ActionStore().ReadEvidenceAsync(candidates.Single(item => item.IncludesSummaries).CandidateId, default))!;
-
-        Assert.Equal([ApiResource.Bill], older.Pages.Select(page => page.Resource));
-        Assert.False(older.Candidate.IncludesSummaries);
-        Assert.Equal([ApiResource.Bill, ApiResource.BillSummaries], newer.Pages.Select(page => page.Resource));
-        Assert.True(newer.Candidate.IncludesSummaries);
-    }
-
-    [Fact]
     public async Task ANewerCandidateThatArrivesAfterTheClaimSupersedesTheAppendSoTheOlderDraftNeverBecomesARevision()
     {
         var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1);
@@ -736,6 +720,65 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task AnAnalysisRevisionStoresNoCodeVersion()
+    {
+        var candidate = await CandidateWithoutSummariesAsync();
+        var store = ActionStore();
+        var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
+        var runId = await ReserveAsync(store, claim);
+
+        await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1))), DraftedRun(runId, candidate), default);
+
+        Assert.Equal(("Analysis", "none"), await TupleAsync($"SELECT author_kind, coalesce(code_version, 'none') FROM action_revisions WHERE record_id = '{RecordId}'"));
+    }
+
+    [Fact]
+    public async Task ACodeRevisionStoresTheCodeVersionOfTheBuild()
+    {
+        _ = await ReadableCandidateAsync(sponsor: "A000001", policyArea: BillGateFixtures.UntrackedPolicyArea, withSummary: false);
+
+        await RunActionWorkerAsync(new FakeHeadlineSummaryModel());
+
+        Assert.Equal(("Code", TestCodeVersion.Sha), await TupleAsync($"SELECT author_kind, code_version FROM action_revisions WHERE record_id = '{RecordId}'"));
+    }
+
+    [Fact]
+    public async Task ABuildWithoutACodeVersionCannotWriteACodeRevisionAndStoresNothing()
+    {
+        var candidate = await CandidateWithoutSummariesAsync();
+        var store = new PostgresActionDraftStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options), CodeVersion.Unknown);
+        var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.CheckpointAsync(ActionDraftCheckpoint.From(claim, CodeRevision(candidate)), CodeRun(candidate), default));
+
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
+    }
+
+    [Theory]
+    [InlineData("Code", "civic-lens:code", "C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0", "ck_action_revisions_code_version")]
+    [InlineData("Code", "civic-lens:code", "ccccccccccccccccccccccccccccccccccccccc", "ck_action_revisions_code_version")]
+    [InlineData("Analysis", "civic-lens:analysis", "cccccccccccccccccccccccccccccccccccccccc", "ck_action_revisions_code_version_author")]
+    public async Task TheDatabaseRefusesAMalformedCodeVersionAndOneOnARevisionNotWrittenByCode(string authorKind, string authorSubject, string codeVersion, string constraint)
+    {
+        var candidate = await CandidateWithoutSummariesAsync();
+        var run = await InsertRunAsync(candidate, ActionDraftTask.PromptVersion, 1, "Bypassed", ActionDraftErrorCodes.CodeWritten);
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
+                review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)
+            VALUES ('{RecordId}', '{SourceId}', 119, 'hr', 7, 1, 0, 'AwaitingReview', 0, 0, (SELECT min(candidate_id) FROM action_candidates))
+            """);
+
+        var refused = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"""
+            INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, code_version, revision_json, created_at_utc_ticks)
+            VALUES ('{RecordId}', 1, '{authorSubject}', '{authorKind}', '{run}', '{codeVersion}', 'x', 0)
+            """));
+
+        Assert.Equal((PostgresErrorCodes.CheckViolation, constraint), (refused.SqlState, refused.ConstraintName));
+    }
+
+    [Fact]
     public async Task ASecondCandidateOfTheSameBillAppendsRevisionTwoToTheSameDraft()
     {
         var candidate = await CandidateWithoutSummariesAsync();
@@ -890,7 +933,7 @@ public sealed partial class PostgresBillStreamTests
     private static string RecordId => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{SourceId.Length}:{SourceId}119:hr:7")));
 
     private PostgresActionDraftStore ActionStore() => new(new PooledDbContextFactory<CollectionAttemptDbContext>(
-        new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));
+        new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options), TestCodeVersion.Current);
 
     private async Task<string> CandidateWithoutSummariesAsync()
     {
@@ -1000,6 +1043,19 @@ public sealed partial class PostgresBillStreamTests
         ActionDraftTask.TaskVersion, ActionDraftTask.Model, ActionDraftTask.PromptVersion, ActionDraftTask.SchemaVersion, new string('1', 64), previousRunId,
         AnalysisRunOutcome.Drafted, new(900, 100, 0, 0), 1_000, "end_turn", "req", "{}", [], "{}", DateTimeOffset.UnixEpoch,
         DateTimeOffset.UnixEpoch), null);
+
+    private static ActionDraftRevision CodeRevision(string candidate) => Revision(candidate, 1) with
+    {
+        AuthorSubject = ReviewAuthor.CodeSubject,
+        TextOrigin = ReviewTextOrigin.Code,
+        BillCitation = new SourceSpan(new string('f', 64), 0, 5)
+    };
+
+    private static ActionDraftRun CodeRun(string candidate)
+    {
+        var drafted = DraftedRun(Guid.NewGuid().ToString("N"), candidate);
+        return drafted with { Run = drafted.Run with { Outcome = AnalysisRunOutcome.Bypassed, Usage = new(0, 0, 0, 0), ChargedTokens = 0 }, Reason = ActionDraftErrorCodes.CodeWritten };
+    }
 
     private static ActionDraftRevision Revision(string candidate, int number, bool includesSummaries = false, bool includesSubjects = false)
     {

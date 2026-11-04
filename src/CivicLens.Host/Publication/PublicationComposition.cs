@@ -1,3 +1,4 @@
+using CivicLens.Application;
 using CivicLens.Infrastructure.ExecutiveActions;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Issues;
@@ -32,7 +33,7 @@ internal static class PublicationComposition
     public static IssueConfiguration RequireIssues(IssueConfiguration? issues) =>
         issues ?? throw new ArgumentException("Publishing requires CIVIC_LENS_ISSUES_CONFIG.");
 
-    public static PublicationParts Create(string connectionString,
+    public static PublicationParts Create(string connectionString, CodeVersion codeVersion,
         PostgresPublicationStore publications, FileReleaseDirectory releases, CollectionConfiguration collection, IssueConfiguration issues,
         string artifactRoot, ILoggerFactory loggers)
     {
@@ -43,7 +44,7 @@ internal static class PublicationComposition
             PostgresVoteReviewStore.FromConnectionString(connectionString),
             new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)),
             new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)),
-            PostgresExecutiveActionReviewStore.FromConnectionString(connectionString));
+            PostgresExecutiveActionReviewStore.FromConnectionString(connectionString, codeVersion));
         var publish = new PublishRelease(publications, releases, ReleaseRenderer.FromEnvironment(), loaders,
             new PublicationCatalog(ReviewOfficials.From(collection).Names, issues),
             new PublicationOfficials(collection, PostgresMemberRosterStore.FromConnectionString(connectionString),

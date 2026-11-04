@@ -21,7 +21,7 @@ public sealed class PostgresCollectionWorkerQueueTests(PostgresCollection postgr
         connectionString = await postgres.CreateMigratedDatabaseAsync();
         var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
         var factory = new PooledDbContextFactory<CollectionAttemptDbContext>(options);
-        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         queue = new PostgresCollectionWorkerQueue(factory);
     }
 

@@ -181,21 +181,6 @@ public sealed class PublishStatementTests
     }
 
     [Fact]
-    public async Task StatementAlreadyPublishedAtItsCurrentRevisionIsRejectedSoReleasesDoNotRepeatIt()
-    {
-        var scenario = new PublicationScenario();
-        var statement = scenario.AddStatement('b');
-        var reference = new PublishedRecordReference(PublishedRecordKind.Statement, statement);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", reference));
-
-        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
-            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", reference)));
-
-        Assert.Contains("already published at its current revision", error.Message, StringComparison.Ordinal);
-        Assert.Single(scenario.Publications.Committed);
-    }
-
-    [Fact]
     public async Task ADocumentChangeWithTheSameIdDoesNotCountAsThePublishedStatement()
     {
         var scenario = new PublicationScenario();

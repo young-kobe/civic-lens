@@ -8,4 +8,5 @@ internal sealed class PublicationReleaseRow
     public long PublishedAtUtcTicks { get; set; }
     public int RecordCount { get; set; }
     public bool IsActive { get; set; }
+    public string? CodeVersion { get; set; }
 }

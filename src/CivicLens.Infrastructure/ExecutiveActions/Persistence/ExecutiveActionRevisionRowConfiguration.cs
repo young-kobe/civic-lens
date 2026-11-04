@@ -23,6 +23,7 @@ internal sealed class ExecutiveActionRevisionRowConfiguration : IEntityTypeConfi
             table.HasCheckConstraint("ck_executive_action_revisions_number", "revision_number >= 1");
             table.HasCheckConstraint("ck_executive_action_revisions_author",
                 $"author_kind = '{nameof(ReviewAuthorKind.Code)}' AND author_subject = '{ReviewAuthor.CodeSubject}'");
+            table.HasCheckConstraint("ck_executive_action_revisions_code_version", "code_version ~ '^[0-9a-f]{40}$'");
             table.HasCheckConstraint("ck_executive_action_revisions_kind", EnumChecks.InList("kind", Enum.GetNames<ExecutiveActionKind>()));
             table.HasCheckConstraint("ck_executive_action_revisions_ids",
                 "length(btrim(source_id)) > 0 AND length(btrim(person_id)) > 0");
@@ -38,6 +39,7 @@ internal sealed class ExecutiveActionRevisionRowConfiguration : IEntityTypeConfi
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
         builder.Property(row => row.AuthorSubject).HasColumnName("author_subject").HasMaxLength(ReviewAuthor.MaximumSubjectLength).IsRequired();
         builder.Property(row => row.AuthorKind).HasColumnName("author_kind").HasConversion<string>().HasMaxLength(16).IsRequired();
+        builder.Property(row => row.CodeVersion).HasColumnName("code_version").HasMaxLength(40);
         builder.Property(row => row.SourceId).HasColumnName("source_id").HasMaxLength(ReviewTextRules.MaximumConfigurationIdLength);
         builder.Property(row => row.DocumentNumber).HasColumnName("document_number").HasMaxLength(ExecutiveActionRevision.MaximumFieldLength);
         builder.Property(row => row.Kind).HasColumnName("kind").HasConversion<string>().HasMaxLength(16);

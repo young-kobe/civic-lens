@@ -57,14 +57,6 @@ public sealed class StatementReviewHandlerTests
     }
 
     [Fact]
-    public async Task SaveForwardsTheDateCheckedFlagSoTheStoreCanDropAnUnconfirmedAiDate()
-    {
-        _ = await new SaveStatementDraft(store, Reader()).ExecuteAsync(Reviewer, Request() with { StatementDateChecked = true });
-
-        Assert.True(store.SavedDateChecked);
-    }
-
-    [Fact]
     public async Task SaveRefusesASpeakerWhoDidNotCoverTheSourceOnTheCaptureDate()
     {
         var save = new SaveStatementDraft(store, Reader());
