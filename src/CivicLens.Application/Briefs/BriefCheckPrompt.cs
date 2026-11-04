@@ -43,10 +43,7 @@ public static class BriefCheckPrompt
         var schema = BuildSchema(revision);
         var bytes = Encoding.UTF8.GetByteCount(SystemInstructions) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
-        var hash = AnalysisPromptHash.Compute(BriefCheckTask.Model, AnalysisEffort.Medium, BriefCheckTask.MaximumOutputTokens,
-            SystemInstructions, user, schema);
-        return new(BriefCheckTask.Model, AnalysisEffort.Medium, BriefCheckTask.MaximumOutputTokens, SystemInstructions, user, schema, hash,
-            bytes + (long)BriefCheckTask.MaximumOutputTokens);
+        return AnalysisModelRequest.Create(BriefCheckTask.Model, BriefCheckTask.MaximumOutputTokens, SystemInstructions, user, schema, bytes);
     }
 
     public static string SerializeContext(BriefRevision revision, ImmutableArray<BriefRecord> notCited, int omittedNotCited) =>

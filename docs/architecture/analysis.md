@@ -45,6 +45,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A run that did not call the model holds no input. Enforced by `ck_<run table>_input_outcome` and `AnalysisRun.ValidateForWrite`. Tests: `AnalysisRunInputColumnsTests.AnInterruptedRunCannotHoldAnInputBecauseTheRequestDiedWithTheWorker` and `AnalysisRunTests.ANewRunHoldsItsInputOnlyWhenItCalledTheModelBecauseTheDatabaseCannotTellNewRunsFromOldOnes`.
 - A new run that called the model holds its input. Enforced by `AnalysisRun.ValidateForWrite`, which `PostgresAnalysisQueue.CheckpointAsync` and `Interrupt` call. The database cannot tell a new run from an old run, and old runs hold no input. Test: `AnalysisRunTests.ANewRunHoldsItsInputOnlyWhenItCalledTheModelBecauseTheDatabaseCannotTellNewRunsFromOldOnes`.
 - A stored input equals the request that the model call sent. Enforced by `AnalysisWorker.Attempt.Run`, which builds the input from the request, and by `AnalysisRunRows.Create`. Tests: `PostgresDocumentChangeAnalysisStoreTests.EveryRunStoresTheExactRequestItSentAndARetryRunStoresItsOwnUserMessage` and the matching test of each other task.
+- The input hash covers the effort and the limits that the call sent. Enforced by `AnalysisModelRequest.Create`, the one builder of a request. Test: `StoredRunInputs.AssertMatchAsync`, which recomputes each stored hash from the stored parts in the test of each task.
 - A model answer never puts a NUL character in a stored text. Enforced by `AnalysisAnswerRules.Bound`, which replaces each NUL in a validation error with U+FFFD, and by `AnalysisRun.ValidateForWrite`, which refuses a NUL as a guard. Tests: `AnalysisAnswerRulesTests.BoundReplacesEachNulCharacterWithTheReplacementCharacterBecauseAnErrorQuotesModelTextAndPostgresTextCannotHoldNul`, `DocumentChangeDraftStepTests.AModelIdWithANulCharacterGivesARejectedRunWhoseErrorAndRetryPromptHoldTheReplacementCharacter`, and `AnalysisRunTests.ANewRunRefusesANulCharacterInEachInputTextBecausePostgresTextCannotHoldIt`.
 - The read-only database role cannot read `user_message`. Enforced by the hidden column pattern in `deploy/scripts/readonly-grants.sql`. The system prompt and schema tables stay readable. Test: `AnalysisRunInputColumnsTests.TheReadOnlyRoleCannotReadTheUserMessageOfAnyRunTableButStillReadsTheSystemPromptTheSchemaAndTheFlagMessages`.
 - Only a human owner requeues. Enforced by `RequeueAnalyses`, `RequeueBlockedActionDrafts`, `RedraftActionDrafts`, `RequeueBlockedVoteDrafts`, `RedraftVoteDrafts`, and `RedraftBrief`. Tests: `RequeueAnalysesTests.OnlyAHumanOwnerRequeues`, `ActionCommandTests.TheAiDrafterCannotActAsTheOwner`, `VoteCommandTests.TheAiDrafterCannotActAsTheOwner`, `RelationshipCommandTests.TheAiDrafterCannotActAsTheOwner`, and `RedraftBriefTests.OnlyTheOwnerMayRedraftAWeek`.
@@ -161,7 +162,7 @@ Account-wide errors pause the whole executor. The entry returns to Pending and l
 
 ### Run input
 
-`AnalysisModelRequest` carries the effort. `AnalysisEffort.Medium` is the one effort constant. Each prompt builder passes it to `AnalysisPromptHash.Compute` and to the request. `AnthropicStructuredCall` maps it to the SDK value and refuses an unknown effort.
+`AnalysisModelRequest` carries the effort. `AnalysisEffort.Medium` is the one effort constant. Each prompt builder calls `AnalysisModelRequest.Create`. It sets the effort and computes the input hash from the same values. The hash therefore always covers the effort that the call sends. `AnthropicStructuredCall` maps it to the SDK value and refuses an unknown effort.
 
 `AnalysisWorker.Attempt.Run` builds an `AnalysisRunInput` from the request of the call. The input holds the system prompt, the user message, the output schema, the effort, and the output token limit. It computes the SHA-256 of the system prompt and of the schema once. `AnalysisRunRows.Create` copies the two hashes and the other fields into the run row.
 
@@ -174,6 +175,13 @@ A bypassed run made no call and holds no input. An interrupted run lost its requ
 `AnalysisRun.Validate` is the read rule and accepts a run with no input, because runs from before this change hold none. `AnalysisRun.ValidateForWrite` is the write rule. It requires an input for each run that called the model and none for the other runs. It refuses a NUL character in each input text and in each validation error. A model answer cannot reach that guard, because `AnalysisAnswerRules.Bound` replaces each NUL in an error first.
 
 `AnalysisRunInput.MaximumPromptBytes` is the one limit of 100,000. The task classes use it for `MaximumPromptBytes`, and the text tables and `user_message` use it in their checks. A character count never exceeds the byte count, so a prompt that the builder accepts always passes the checks.
+
+These limits hold today:
+
+- The stored input is the text that the code built, not the HTTP body. The SDK serializes the body, so key order and spacing of the schema on the wire can differ.
+- The system prompt of a cached call is sent as a text block. The text is the same, and the block shape is not stored.
+- Runs from before the input columns hold no input. An interrupted run and a bypassed run hold none by design.
+- The run context and the validation errors stay in JSON columns. Later steps of R-63 move them to columns and child rows.
 
 ### Draft and authorship
 
@@ -221,7 +229,7 @@ Ordinary tests use a fake model at the port. One live smoke test runs only with 
 - A person who edits a draft does not refresh the tier. The next draft of the record does.
 - `document_change_analysis`, `relationship_analysis`, and `brief_analysis` keep the default tier. Their order does not change.
 - Each `*_analysis_runs` table keeps one insert-only row for each model call. It holds the versions, the input hash, the token use, the output, and a copy of the context that the prompt listed.
-- Each run table also has five input columns: `system_prompt_sha256`, `output_schema_sha256`, `user_message`, `effort`, and `max_output_tokens`. The two hash columns have restricting foreign keys to `analysis_system_prompts` and `analysis_output_schemas`. Each of those tables holds `text_sha256`, `text`, and `created_at_utc_ticks`. The checks `ck_<table>_hash`, `ck_<table>_id`, and `ck_<table>_text` keep the key equal to the SHA-256 of the text and keep the text from 1 to 100,000 characters.
+- Each run table also has five input columns: `system_prompt_sha256`, `output_schema_sha256`, `user_message`, `effort`, and `max_output_tokens`. The two hash columns have restricting foreign keys to `analysis_system_prompts` and `analysis_output_schemas`. Each of those tables holds `text_sha256`, `text`, and `created_at_utc_ticks`. The checks `ck_<table>_hash` and `ck_<table>_text` keep the key equal to the SHA-256 of the text and keep the text from 1 to 100,000 characters. The hash check also fixes the form of the key, so no separate key check exists.
 - A run from before the input columns holds none of them. No step rebuilds a past request.
 - `output_json` holds the answer text of every stop that has text. A refusal or a truncated answer keeps its text.
 - A run recovered after a crash or shutdown is `Interrupted`. It keeps its real start time, has no context copy and no input, and uses the current task constants as its versions.
@@ -235,7 +243,7 @@ Ordinary tests use a fake model at the port. One live smoke test runs only with 
 | Concern | Files |
 |---|---|
 | Run and outcomes | `src/CivicLens.Core/Analysis/AnalysisRun.cs`, `src/CivicLens.Core/Analysis/AnalysisRunOutcome.cs`, `src/CivicLens.Core/Analysis/AnalysisRunInput.cs` |
-| Run input storage | `src/CivicLens.Infrastructure/Analysis/AnalysisPromptTexts.cs`, `src/CivicLens.Infrastructure/Analysis/AnalysisRunRows.cs`, `src/CivicLens.Infrastructure/Analysis/Persistence/AnalysisTableConfiguration.cs`, `src/CivicLens.Application/Analysis/AnalysisEffort.cs` |
+| Run input storage | `src/CivicLens.Infrastructure/Analysis/AnalysisPromptTexts.cs`, `src/CivicLens.Infrastructure/Analysis/AnalysisRunRows.cs`, `src/CivicLens.Infrastructure/Analysis/Persistence/AnalysisTableConfiguration.cs`, `src/CivicLens.Application/Analysis/AnalysisEffort.cs`, `src/CivicLens.Application/Analysis/AnalysisModelRequest.cs` |
 | Shared queue rules | `src/CivicLens.Application/Analysis/AnalysisWorker.cs`, `src/CivicLens.Application/Analysis/AnalysisLifecycle.cs`, `src/CivicLens.Application/Analysis/AnalysisValidationLoop.cs`, `src/CivicLens.Application/Analysis/AnalysisStatus.cs`, `src/CivicLens.Application/Analysis/AnalysisPolicy.cs` |
 | Shared answer and schema rules | `src/CivicLens.Application/Analysis/AnalysisAnswerRules.cs`, `src/CivicLens.Application/Analysis/AnalysisSchema.cs` |
 | Ports | `src/CivicLens.Application/Analysis/IAnalysisQueue.cs`, `src/CivicLens.Application/Analysis/IAnalysisQueueStore.cs`, `src/CivicLens.Application/Analysis/IAnalysisTaskStep.cs`, `src/CivicLens.Application/Analysis/IAnalysisAttempt.cs`, `src/CivicLens.Application/Analysis/IAnalysisStatusStore.cs` |
@@ -255,11 +263,6 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 ## Limits and planned work
 
 The [roadmap](../roadmap.md) holds the delivery order. These design rules apply to the planned work:
-
-- The stored input is the text that the code built, not the HTTP body. The SDK serializes the body, so key order and spacing of the schema on the wire can differ.
-- The system prompt of a cached call is sent as a text block. The text is the same, and the block shape is not stored.
-- Runs from before the input columns hold no input. An interrupted run and a bypassed run hold none by design.
-- The run context and the validation errors stay in JSON columns. Later steps of R-63 move them to columns and child rows.
 
 - A concurrent statement registration and action enqueue can miss a raise. The row then waits until a statement draft saves.
 - The exact tier of a saved draft changes the claim order only after a requeue.

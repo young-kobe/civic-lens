@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CivicLens.Infrastructure.Collection.Migrations
 {
     [DbContext(typeof(CollectionAttemptDbContext))]
-    [Migration("20261104135604_ModelRunInput")]
+    [Migration("20261104154215_ModelRunInput")]
     partial class ModelRunInput
     {
         /// <inheritdoc />
@@ -976,8 +976,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_analysis_output_schemas_hash", "text_sha256 = encode(sha256(convert_to(text, 'UTF8')), 'hex')");
 
-                            t.HasCheckConstraint("ck_analysis_output_schemas_id", "text_sha256 ~ '^[0-9a-f]{64}$'");
-
                             t.HasCheckConstraint("ck_analysis_output_schemas_text", "char_length(text) BETWEEN 1 AND 100000");
                         });
                 });
@@ -1005,8 +1003,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_analysis_system_prompts_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_analysis_system_prompts_hash", "text_sha256 = encode(sha256(convert_to(text, 'UTF8')), 'hex')");
-
-                            t.HasCheckConstraint("ck_analysis_system_prompts_id", "text_sha256 ~ '^[0-9a-f]{64}$'");
 
                             t.HasCheckConstraint("ck_analysis_system_prompts_text", "char_length(text) BETWEEN 1 AND 100000");
                         });

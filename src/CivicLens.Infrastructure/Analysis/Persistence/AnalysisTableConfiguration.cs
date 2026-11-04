@@ -54,7 +54,6 @@ internal static class AnalysisTableConfiguration
     {
         builder.ToTable(table, constraints =>
         {
-            constraints.HasCheckConstraint($"ck_{table}_id", "text_sha256 ~ '^[0-9a-f]{64}$'");
             constraints.HasCheckConstraint($"ck_{table}_hash", "text_sha256 = encode(sha256(convert_to(text, 'UTF8')), 'hex')");
             constraints.HasCheckConstraint($"ck_{table}_text", $"char_length(text) BETWEEN 1 AND {AnalysisRunInput.MaximumPromptBytes}");
         });

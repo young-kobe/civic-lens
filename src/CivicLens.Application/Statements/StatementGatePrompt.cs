@@ -37,10 +37,7 @@ public static class StatementGatePrompt
         var schema = BuildSchema(rubric);
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
-        var hash = AnalysisPromptHash.Compute(StatementGateTask.Model, AnalysisEffort.Medium,
-            StatementGateTask.MaximumOutputTokens, system, user, schema);
-        return new(StatementGateTask.Model, AnalysisEffort.Medium, StatementGateTask.MaximumOutputTokens, system, user, schema, hash,
-            bytes + (long)StatementGateTask.MaximumOutputTokens, CacheSystemPrompt: true);
+        return AnalysisModelRequest.Create(StatementGateTask.Model, StatementGateTask.MaximumOutputTokens, system, user, schema, bytes, cacheSystemPrompt: true);
     }
 
     private static string BuildSystemPrompt(StatementGateRubric rubric) =>

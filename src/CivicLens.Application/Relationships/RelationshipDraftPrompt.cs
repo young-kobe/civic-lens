@@ -40,10 +40,7 @@ public static class RelationshipDraftPrompt
         var schema = BuildSchema(context.Pair.Target);
         var bytes = Encoding.UTF8.GetByteCount(SystemInstructions) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
-        var hash = AnalysisPromptHash.Compute(RelationshipDraftTask.Model, AnalysisEffort.Medium, RelationshipDraftTask.MaximumOutputTokens,
-            SystemInstructions, user, schema);
-        return new(RelationshipDraftTask.Model, AnalysisEffort.Medium, RelationshipDraftTask.MaximumOutputTokens, SystemInstructions, user, schema, hash,
-            bytes + (long)RelationshipDraftTask.MaximumOutputTokens);
+        return AnalysisModelRequest.Create(RelationshipDraftTask.Model, RelationshipDraftTask.MaximumOutputTokens, SystemInstructions, user, schema, bytes);
     }
 
     public static string SerializeContext(RelationshipDraftContext context) => JsonSerializer.Serialize(new
