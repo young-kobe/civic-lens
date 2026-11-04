@@ -52,6 +52,11 @@ internal sealed class PreviousRelease
     {
         var bytes = await releases.ReadFileAsync(directoryName, PublicationProtocol.ManifestPath,
             PublicationProtocol.MaximumManifestBytes, cancellationToken);
+        return ParseManifest(bytes);
+    }
+
+    public static PublicationRelease ParseManifest(byte[] bytes)
+    {
         var manifest = ReadManifest(bytes);
         manifest.Validate();
         return manifest;

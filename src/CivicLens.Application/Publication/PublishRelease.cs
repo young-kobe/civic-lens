@@ -186,8 +186,7 @@ public sealed class PublishRelease
             ReleaseNumber = number,
             PublishedAtUtc = now,
             Records = [.. ReleaseRecordOrder.NewestFirst(entries, ReleaseRecordOrder.Day, entry => entry.FirstPublishedAtUtc, entry => entry.RecordId)],
-            Withdrawals = [.. withdrawals.OrderByDescending(withdrawal => withdrawal.WithdrawnAtUtc)
-                .ThenBy(withdrawal => withdrawal.RecordId, StringComparer.Ordinal)]
+            Withdrawals = [.. ReleaseRecordOrder.WithdrawalsNewestFirst(withdrawals)]
         };
         manifest.Validate();
         var manifestJson = JsonSerializer.SerializeToUtf8Bytes(manifest, PublicationProtocol.JsonOptions);
