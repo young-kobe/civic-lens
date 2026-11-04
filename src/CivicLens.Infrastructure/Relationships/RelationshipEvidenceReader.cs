@@ -108,12 +108,12 @@ internal static class RelationshipEvidenceReader
 
     public static async Task<ImmutableArray<ActionDraftRevision>> ReadActionsSponsoredByAsync(CollectionAttemptDbContext db,
         string[] officialIds, RelationshipRevisionScope scope, CancellationToken cancellationToken) =>
-        await ActionRevisionRows.ReadRevisionsAsync(db, db.Set<ActionRevisionRow>().FromSqlRaw(Scoped(ActionsOfOfficials, scope), (object)officialIds)
+        await ActionRevisionRows.ReadDraftRevisionsAsync(db, db.Set<ActionRevisionRow>().FromSqlRaw(Scoped(ActionsOfOfficials, scope), (object)officialIds)
             .AsNoTracking(), cancellationToken);
 
     public static async Task<ActionDraftRevision?> ReadActionAsync(CollectionAttemptDbContext db, string recordId,
         RelationshipRevisionScope scope, CancellationToken cancellationToken) =>
-        (await ActionRevisionRows.ReadRevisionsAsync(db, db.Set<ActionRevisionRow>().FromSqlRaw(Scoped(ActionById, scope), recordId).AsNoTracking(),
+        (await ActionRevisionRows.ReadDraftRevisionsAsync(db, db.Set<ActionRevisionRow>().FromSqlRaw(Scoped(ActionById, scope), recordId).AsNoTracking(),
             cancellationToken)).SingleOrDefault();
 
     public static async Task<ImmutableArray<VoteDraftRevision>> ReadVotesOnAsync(CollectionAttemptDbContext db,

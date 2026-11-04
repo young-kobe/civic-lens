@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CivicLens.Application.Publication;
@@ -7,6 +8,7 @@ using CivicLens.Infrastructure.Review;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Tests.Infrastructure.Collection.BillStream;
@@ -58,6 +60,7 @@ public sealed partial class PostgresBillStreamTests
         await MakeActionRevisionsLegacyAsync(1);
         var reviews = ActionReviews();
         var latest = Enum.Parse(typeof(PostgresReviewQueueStore).Assembly.GetType("CivicLens.Infrastructure.Relationships.RelationshipRevisionScope")!, "Latest");
+        var officialIds = ((string)(await ScalarAsync("SELECT array_to_string(official_ids, ',') FROM action_drafts"))!).Split(',');
         await using var db = await new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options).CreateDbContextAsync();
 
@@ -70,6 +73,8 @@ public sealed partial class PostgresBillStreamTests
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options)).SearchApprovedAsync("Warren", null, 10, default));
         await Assert.ThrowsAsync<InvalidDataException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Relationships.RelationshipEvidenceReader",
             "ReadActionAsync", db, RecordId, latest, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Relationships.RelationshipEvidenceReader",
+            "ReadActionsSponsoredByAsync", db, officialIds, latest, CancellationToken.None));
         await Assert.ThrowsAsync<InvalidDataException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Actions.ActionRevisionRows",
             "ReadNamedAsync", db, new[] { new PublishedRevisionBinding(PublishedRecordKind.Action, RecordId, 1) },
             CancellationToken.None));
@@ -86,5 +91,58 @@ public sealed partial class PostgresBillStreamTests
         await Assert.ThrowsAsync<InvalidDataException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Actions.ActionRevisionRows",
             "ReadNamedAsync", db, new[] { new PublishedRevisionBinding(PublishedRecordKind.Action, RecordId, 9) },
             CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task TheQueriesOfAnActionHistoryReadStayTheSameWhenMoreActionsAreReadBecauseNoReaderQueriesEachRow()
+    {
+        var counter = new ActionReaderQueryCounter();
+        _ = await SettleFullRevisionAsync();
+        var officialIds = ((string)(await ScalarAsync("SELECT array_to_string(official_ids, ',') FROM action_drafts"))!).Split(',');
+        var latest = Enum.Parse(typeof(PostgresReviewQueueStore).Assembly.GetType("CivicLens.Infrastructure.Relationships.RelationshipRevisionScope")!, "Latest");
+        await using var db = await new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(counter).Options).CreateDbContextAsync();
+        async Task<int> ReadAsync()
+        {
+            dynamic read = InternalMethods.InvokeAsync("CivicLens.Infrastructure.Relationships.RelationshipEvidenceReader",
+                "ReadActionsSponsoredByAsync", db, officialIds, latest, CancellationToken.None);
+            return (await read).Length;
+        }
+        Assert.Equal(1, await ReadAsync());
+        counter.Count = 0;
+        await ReadAsync();
+        var queriesForOne = counter.Count;
+        foreach (var (digit, index) in new[] { 'a', 'b', 'c' }.Select((digit, index) => (digit, index)))
+            await CopyActionAsync(new string(digit, 64), 8 + index);
+        counter.Count = 0;
+
+        Assert.Equal(4, await ReadAsync());
+        Assert.Equal(queriesForOne, counter.Count);
+    }
+
+    private Task CopyActionAsync(string recordId, int billNumber)
+    {
+        string Copy(string table, string overrides) => $"""
+            INSERT INTO {table} SELECT (jsonb_populate_record(NULL::{table}, to_jsonb(t) || {overrides})).* FROM {table} t WHERE t.record_id = '{RecordId}';
+            """;
+        var id = $"jsonb_build_object('record_id', '{recordId}')";
+        return ExecuteAsync(connectionString, string.Concat(
+            Copy("action_drafts", $"jsonb_build_object('record_id', '{recordId}', 'bill_number', {billNumber})"),
+            Copy("action_revisions", $"jsonb_build_object('record_id', '{recordId}', 'bill_number', {billNumber}, 'run_id', NULL, 'author_kind', 'Person', 'text_origin', 'Person')"),
+            Copy("action_revision_sponsorships", id),
+            Copy("action_revision_sponsorship_citations", id),
+            Copy("action_revision_issues", id)));
+    }
+
+    private sealed class ActionReaderQueryCounter : DbCommandInterceptor
+    {
+        public int Count { get; set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            Count++;
+            return ValueTask.FromResult(result);
+        }
     }
 }

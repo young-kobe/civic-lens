@@ -93,7 +93,7 @@ internal static class ActionRevisionRows
         (await ReadPageAsync(db, query, cancellationToken)).ToStoredRevisions();
 
     /// <summary>Reads the revisions of a query and builds each one. A row with null columns fails the read.</summary>
-    public static async Task<ImmutableArray<ActionDraftRevision>> ReadRevisionsAsync(CollectionAttemptDbContext db,
+    public static async Task<ImmutableArray<ActionDraftRevision>> ReadDraftRevisionsAsync(CollectionAttemptDbContext db,
         IQueryable<ActionRevisionRow> query, CancellationToken cancellationToken) =>
         [.. (await ReadAsync(db, query, cancellationToken)).Select(stored => stored.Read())];
 
@@ -107,7 +107,7 @@ internal static class ActionRevisionRows
         var rows = db.Set<ActionRevisionRow>().FromSqlRaw("""
             SELECT r.* FROM action_revisions r JOIN unnest({0}, {1}) AS k(id, number) ON r.record_id = k.id AND r.revision_number = k.number
             """, requested.Select(binding => binding.RecordId).ToArray(), requested.Select(binding => binding.RevisionNumber).ToArray()).AsNoTracking();
-        var revisions = await ReadRevisionsAsync(db, rows, cancellationToken);
+        var revisions = await ReadDraftRevisionsAsync(db, rows, cancellationToken);
         return revisions.Length == requested.Length ? revisions : throw CitedRevisions.NotStored(PublishedRecordKind.Action);
     }
 
