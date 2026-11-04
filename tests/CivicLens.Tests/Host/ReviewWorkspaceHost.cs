@@ -37,6 +37,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
     public string KeyDirectory { get; } = Path.Combine(Path.GetTempPath(), "civic-review-keys-" + Guid.NewGuid().ToString("N"));
     public string ReleaseDirectory => Path.Combine(KeyDirectory, "releases");
     public string ArtifactDirectory => Path.Combine(KeyDirectory, "captures");
+    public string IssueIconsPath => Path.Combine(KeyDirectory, "issue-icons.json");
     private Process? process;
     private Task<string>? output;
     private readonly StringBuilder errors = new();
@@ -97,6 +98,8 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
         var issuesPath = Path.Combine(KeyDirectory, "issues.json");
         await File.WriteAllTextAsync(issuesPath, JsonSerializer.Serialize(Issues ?? IssueConfiguration.None, CollectionProtocol.JsonOptions));
         start.Environment["CIVIC_LENS_ISSUES_CONFIG"] = issuesPath;
+        await File.WriteAllTextAsync(IssueIconsPath, JsonSerializer.Serialize(IssueIconConfiguration.None, CollectionProtocol.JsonOptions));
+        start.Environment["CIVIC_LENS_ISSUE_ICONS_CONFIG"] = IssueIconsPath;
         process = Process.Start(start)!;
         output = process.StandardOutput.ReadToEndAsync();
         process.ErrorDataReceived += (_, line) =>

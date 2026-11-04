@@ -6,17 +6,17 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.Host;
 
-public sealed class PublishedHomeCardsTests
+public sealed class PublishedHomePageTests
 {
     private static readonly DateTimeOffset Published = new(2026, 5, 11, 8, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task TheBreakCardListsOneRowForEachLeaderWithTheHighestShareFirstAndALinkToTheBoards()
+    public async Task TheBreakCardListsOneRowForEachLeaderInTheOrderOfTheHighlightsAndALinkToTheBoards()
     {
-        var low = Leader() with { Official = Official("low", "Low Share"), Breaks = 10, Cast = 100 };
-        var high = Leader() with { Official = Official("high", "High Share"), Breaks = 126, Cast = 206, PagePath = "officials/high.html" };
+        var high = Leader("High Share", breaks: 126, cast: 206, pagePath: "officials/high.html");
+        var low = Leader("Low Share", breaks: 10, cast: 100);
 
-        var main = await HomeAsync(ReleaseOf(), [low, high]);
+        var main = await HomeAsync(ReleaseOf(), [high, low]);
 
         Assert.Equal("Who broke from their party most", main.QuerySelector(".break-card h2")!.TextContent);
         var rows = main.QuerySelectorAll(".break-rows li").ToList();
@@ -136,7 +136,7 @@ public sealed class PublishedHomeCardsTests
     [InlineData("Democrat", null, "DC", "D, District of Columbia")]
     public async Task TheBreakCardShowsOnlyThePartyLetterAndStateNameThatTheTermHolds(string? party, string? caucus, string? state, string expected)
     {
-        var main = await HomeAsync(ReleaseOf(), [Leader([Term(party, state, caucus)])]);
+        var main = await HomeAsync(ReleaseOf(), [Leader(terms: [Term(party, state, caucus)])]);
 
         Assert.Equal(expected, main.QuerySelector(".break-row-name .muted")!.TextContent);
     }
@@ -144,7 +144,7 @@ public sealed class PublishedHomeCardsTests
     [Fact]
     public async Task TheBreakCardUsesThePartyOfTheCountedChamberSoAMemberWhoChangedPartyIsNotLabeledWithTheNewParty()
     {
-        var main = await HomeAsync(ReleaseOf(), [Leader([Term("Democrat", "TX", startYear: 2021), Term("Republican", "FL", startYear: 2025)])]);
+        var main = await HomeAsync(ReleaseOf(), [Leader(terms: [Term("Democrat", "TX", startYear: 2021), Term("Republican", "FL", startYear: 2025)])]);
 
         Assert.Equal("D, Texas", main.QuerySelector(".break-row-name .muted")!.TextContent);
     }
@@ -152,7 +152,7 @@ public sealed class PublishedHomeCardsTests
     [Fact]
     public async Task ALaterTermInAnotherOfficeOrChamberDoesNotChangeThePartyOrStateOfAMemberOfTheHouse()
     {
-        var other = Leader([Term("Democrat", "TX", startYear: 2021), Term("Democrat", null, startYear: 2025, kind: PublishedOfficeKind.Executive), Term("Democrat", "NM", startYear: 2026, kind: PublishedOfficeKind.Senator)]);
+        var other = Leader(terms: [Term("Democrat", "TX", startYear: 2021), Term("Democrat", null, startYear: 2025, kind: PublishedOfficeKind.Executive), Term("Democrat", "NM", startYear: 2026, kind: PublishedOfficeKind.Senator)]);
 
         var main = await HomeAsync(ReleaseOf(), [other]);
 
@@ -164,7 +164,7 @@ public sealed class PublishedHomeCardsTests
     {
         var terms = new[] { Term("Democrat", "NM", startYear: 2021, kind: PublishedOfficeKind.Senator), Term("Democrat", "TX", startYear: 2025) };
 
-        var main = await HomeAsync(ReleaseOf(), [Leader(terms, PublishedChamber.Senate)]);
+        var main = await HomeAsync(ReleaseOf(), [Leader(terms: terms, chamber: PublishedChamber.Senate)]);
 
         Assert.Equal("D, New Mexico", main.QuerySelector(".break-row-name .muted")!.TextContent);
     }
@@ -213,10 +213,9 @@ public sealed class PublishedHomeCardsTests
         return new HtmlParser().ParseDocument(html).Body!;
     }
 
-    private static OfficialListing Official(string id, string name) => new(new PublishedOfficialProfile { Id = id, Name = name, Terms = [Term("Democrat", "TX")] }, 0);
-
-    private static BreakLeader Leader(PublishedOfficeTerm[]? terms = null, PublishedChamber chamber = PublishedChamber.House) => new(chamber, PublishedPartyMajority.Democrat,
-        new OfficialListing(new PublishedOfficialProfile { Id = "doe", Name = "Jane Doe", Terms = terms ?? [Term("Democrat", "TX")] }, 0), 40, 12, 119, "officials/doe.html");
+    private static BreakLeader Leader(string name = "Jane Doe", int breaks = 12, int cast = 40, string pagePath = "officials/doe.html", PublishedOfficeTerm[]? terms = null,
+        PublishedChamber chamber = PublishedChamber.House) => new(chamber, PublishedPartyMajority.Democrat,
+        new BoardMember(new OfficialListing(new PublishedOfficialProfile { Id = "doe", Name = name, Terms = terms ?? [Term("Democrat", "TX")] }, 0), cast, breaks, null, pagePath), 119);
 
     private static PublishedOfficeTerm Term(string? party, string? state, string? caucus = null, int startYear = 2025, PublishedOfficeKind kind = PublishedOfficeKind.Representative) => new()
     {

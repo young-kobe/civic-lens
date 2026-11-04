@@ -22,9 +22,10 @@ internal sealed record PublishingComposition(AnalysisStage Stage, IWorkerWakeup 
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (string.IsNullOrWhiteSpace(releaseRoot))
             throw new ArgumentException("Publishing needs CIVIC_LENS_RELEASE_DIRECTORY.");
+        var requiredIssues = PublicationComposition.RequireIssues(issues);
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, codeVersion);
         var (publish, loaders) = PublicationComposition.Create(connectionString, codeVersion, publications, new FileReleaseDirectory(releaseRoot),
-            collection, PublicationComposition.RequireIssues(issues), artifactRoot, loggers);
+            collection, requiredIssues, PublicationComposition.RequireIssueIcons(ConfigurationFile.ReadIssueIconsFromEnvironment(requiredIssues)), artifactRoot, loggers);
         var wakeup = PostgresPublishingWakeup.FromConnectionString(connectionString, PublishApprovedRecords.ReleaseGap);
         var publishApproved = new PublishApprovedRecords(publish, publications, loaders, loggers.CreateLogger<PublishApprovedRecords>(), beat, TimeProvider.System, wakeup);
         var worker = new StageWorker(WorkerLoopNames.Publishing, publishApproved.ExecuteAsync, wakeup, loggers.CreateLogger<StageWorker>(), beat);

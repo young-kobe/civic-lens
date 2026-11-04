@@ -111,16 +111,26 @@ Overloads that take a prebuilt definition or request serve callers that already 
 
 Tracked issues are in a separate file, `config/issues.json`, with its own version. `IssueConfiguration` holds the 32 policy areas and the tracked issues. Each issue links to at least one policy area and can carry a dated active range.
 
-The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `name`), and a list of `issues`. Each issue has an `id`, a `name`, a `definition`, and at least one `policyAreaIds` entry. It may also have `icon`, `includes`, `excludes`, `startsOn` (inclusive), and `endsBefore` (exclusive).
+The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `name`), and a list of `issues`. Each issue has an `id`, a `name`, a `definition`, and at least one `policyAreaIds` entry. It may also have `includes`, `excludes`, `startsOn` (inclusive), and `endsBefore` (exclusive).
 
 - IDs use lowercase words joined by hyphens, with at most 60 characters, the `PublicationProtocol.MaximumFacetIdLength` limit.
 - Policy area IDs and names are unique, and issue IDs are unique.
 - Each policy area ID in an issue must exist and may appear once.
 - List entries must be nonblank and unique within their list. The date range must be valid.
-- `icon` names one icon of the fixed set in `IssueIcons` (Application, Issues). An unknown name is invalid. An issue with no `icon` gets the neutral default icon on the home page. Every issue in the shipped file names an icon. Enforced by `TrackedIssueConfiguration.Validate`. Tests: `IssueConfigurationRevisionTests.AnIssueIconMustBeAbsentOrNameOneOfTheFixedIconsSoAnIssueCannotShipABrokenTile` and `IssueConfigurationRevisionTests.EveryShippedIssueNamesAnIconSoNoTileFallsBackToTheNeutralOne`.
 - The file holds at most 256 issues. The Host accepts a file of at most 1 MB.
 - The host reads and validates the file once at process start. An invalid file stops startup.
 - `ConfigurationFile` in Host reads and validates every collection and issue file. It rejects a file over 1 MB or a relative environment path. The largest file, `config/federal-coverage.json`, is 814 KB.
+
+### Issue icons
+
+The home page tile of an issue shows an icon. The icon names are in a separate file, `config/issue-icons.json`, so an icon change never changes the issue revision ID. A new issue revision ID makes the vote and action drafts call the paid model again. Only publishing reads the file. No revision hash holds it.
+
+The file has a `version` (only 1 is supported) and `icons`, a map from issue ID to icon name. `IssueIcons` (Application, Issues) owns the fixed set of names and the neutral default. An issue with no entry gets the default icon. Every issue in the shipped file has an entry.
+
+- Each name must be a key of `IssueIcons`, and each issue ID must be in `config/issues.json`. A broken entry stops the command or the worker with an error that names it. Enforced by `IssueIconConfiguration.Validate`, which `ConfigurationFile` calls. Tests: `IssueIconConfigurationTests.AnUnknownIconNameIsRefusedSoAnIssueCannotShipABrokenTile` and `IssueIconConfigurationTests.AnIconForAnIssueThatDoesNotExistIsRefusedSoARenamedIssueCannotLeaveAStaleEntry`.
+- Every issue of the shipped file has an icon. Test: `IssueIconConfigurationTests.EveryShippedIssueNamesAnIconSoNoTileFallsBackToTheNeutralOne`.
+- An issue entry in `config/issues.json` cannot hold an `icon` field, so an icon can never enter the issue revision. The shipped issue file keeps its revision ID. Tests: `IssueIconConfigurationTests.ATrackedIssueRefusesAnIconFieldSoTheIconCanNeverEnterTheIssueRevision` and `IssueConfigurationRevisionTests.TheShippedIssueFileKeepsTheRevisionIdOfBeforeIconsSoNoPaidRedraftRunsBecauseOfAnIcon`.
+- `CIVIC_LENS_ISSUE_ICONS_CONFIG` names the file, as `CIVIC_LENS_ISSUES_CONFIG` names the issue file. `releases publish` and the publishing stage need it. The review host reads it for Take off site, and an unset variable there gives the default icon to every tile. The Host accepts a file of at most 1 MB.
 
 `IssueConfigurationRevision` mirrors `CollectionConfigurationRevision`. It keeps the canonical JSON and its lowercase SHA-256 ID. Construction verifies the hash, strict shape, and invariants. The review host reads the file named by `CIVIC_LENS_ISSUES_CONFIG` once at start and takes the configured issue IDs from it. The review host takes the official IDs from the `People` of the collection configuration through `ReviewOfficials`.
 
@@ -141,7 +151,7 @@ The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `
 | Admission request | `src/CivicLens.Application/Collection/ConfiguredCollectionSource.cs` |
 | Issues | `src/CivicLens.Application/Issues/IssueConfiguration.cs`, `src/CivicLens.Application/Issues/IssueConfigurationRevision.cs` |
 | File loader | `src/CivicLens.Host/ConfigurationFile.cs` |
-| Files | `config/issues.json`, `config/federal-pilot.json`, `config/example.json` |
+| Files | `config/issues.json`, `config/issue-icons.json`, `config/federal-pilot.json`, `config/example.json` |
 
 ## Limits and planned work
 

@@ -12,6 +12,7 @@ x-host-environment: &host-environment
   CIVIC_LENS_REVIEW_KEY_DIRECTORY: ${CIVIC_LENS_ROOT:?}/review-keys
   CIVIC_LENS_COLLECTION_CONFIG: ${CIVIC_LENS_ROOT:?}/config/collection.json
   CIVIC_LENS_ISSUES_CONFIG: ${CIVIC_LENS_ROOT:?}/config/issues.json
+  CIVIC_LENS_ISSUE_ICONS_CONFIG: ${CIVIC_LENS_ROOT:?}/config/issue-icons.json
   CIVIC_LENS_REPORT_PULL_URL: http://127.0.0.1:${CIVIC_LENS_API_PORT:?}
 
 x-host: &host

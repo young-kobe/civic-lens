@@ -181,7 +181,7 @@ public sealed class PublishEntryRewriteTests
             new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('d', speakerIds: ["chair"]))));
 
         var leader = Assert.Single(scenario.Highlights!.BreakLeaders);
-        Assert.Equal(("mayor", 40, 12), (leader.Official.Profile.Id, leader.Cast, leader.Breaks));
+        Assert.Equal(("mayor", 40, 12), (leader.Member.Official.Profile.Id, leader.Member.Cast, leader.Member.Breaks));
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3") { RewriteOfficials = true });
         Assert.Empty(scenario.Highlights.BreakLeaders);
     }

@@ -25,13 +25,11 @@ internal static class PublishedBreakCardView
         return $"The share of split votes each member cast against most of their party, in the {string.Join(" and ", congresses)} {(congresses.Count == 1 ? "Congress" : "Congresses")}.";
     }
 
-    public static string Votes(BreakLeader leader) => $"{leader.Breaks} of {leader.Cast} votes";
-
-    public static double Share(BreakLeader leader) => (double)leader.Breaks / leader.Cast;
+    public static string Votes(BreakLeader leader) => $"{leader.Member.Breaks} of {leader.Member.Cast} votes";
 
     public static string PartyAndState(BreakLeader leader, DateTimeOffset publishedAtUtc)
     {
-        var counted = leader.Official.Profile.Terms.Where(term => IsCountedWith(term, leader));
+        var counted = leader.Member.Official.Profile.Terms.Where(term => IsCountedWith(term, leader));
         if (PublishedOfficialView.LatestTerm(counted, publishedAtUtc) is not { } term) return "";
         return string.Join(", ", new[] { term.Party is null ? null : PartyLetters.LetterOf(term.Party), term.State is null ? null : UsStates.NameOf(term.State) }.OfType<string>());
     }

@@ -862,7 +862,7 @@ public sealed class PublishedOfficialPageTests
         {
             PolicyAreas = [new() { Id = "land-use", Name = "Land use" }],
             Issues = [new() { Id = "housing", Name = "Housing costs", Definition = "d", PolicyAreaIds = ["land-use"] }]
-        });
+        }, IssueIconConfiguration.None);
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, catalog, CancellationToken.None);
 

@@ -33,9 +33,12 @@ internal static class PublicationComposition
     public static IssueConfiguration RequireIssues(IssueConfiguration? issues) =>
         issues ?? throw new ArgumentException("Publishing requires CIVIC_LENS_ISSUES_CONFIG.");
 
+    public static IssueIconConfiguration RequireIssueIcons(IssueIconConfiguration? icons) =>
+        icons ?? throw new ArgumentException("Publishing requires CIVIC_LENS_ISSUE_ICONS_CONFIG.");
+
     public static PublicationParts Create(string connectionString, CodeVersion codeVersion,
         PostgresPublicationStore publications, FileReleaseDirectory releases, CollectionConfiguration collection, IssueConfiguration issues,
-        string artifactRoot, ILoggerFactory loggers)
+        IssueIconConfiguration icons, string artifactRoot, ILoggerFactory loggers)
     {
         var loaders = new PublishedRecordLoaders(
             PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
@@ -46,7 +49,7 @@ internal static class PublicationComposition
             new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)),
             PostgresExecutiveActionReviewStore.FromConnectionString(connectionString, codeVersion));
         var publish = new PublishRelease(publications, releases, ReleaseRenderer.FromEnvironment(), loaders,
-            new PublicationCatalog(ReviewOfficials.From(collection).Names, issues),
+            new PublicationCatalog(ReviewOfficials.From(collection).Names, issues, icons),
             new PublicationOfficials(collection, PostgresMemberRosterStore.FromConnectionString(connectionString),
                 PostgresExecutiveRosterStore.FromConnectionString(connectionString)),
             new ReleasePhotos(PostgresCollectionAttemptStore.FromConnectionString(connectionString), new CaptureBodyReader(), artifactRoot,

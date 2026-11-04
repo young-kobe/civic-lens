@@ -49,7 +49,7 @@ public sealed class HomeHighlightsTests
         var leader = Assert.Single(BreakLeader.All(OfficialBoardPage.All(officials, summaries)));
 
         Assert.Equal(("share", PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10),
-            (leader.Official.Profile.Id, leader.Chamber, leader.Party, leader.Cast, leader.Breaks));
+            (leader.Member.Official.Profile.Id, leader.Chamber, leader.Party, leader.Member.Cast, leader.Member.Breaks));
     }
 
     [Fact]
@@ -63,8 +63,8 @@ public sealed class HomeHighlightsTests
         var kept = Assert.Single(BreakLeader.All(OfficialBoardPage.All([Listing("moved"), Listing("stayed")], [moved, stayed])));
         var current = Assert.Single(BreakLeader.All(OfficialBoardPage.All([Listing("stayed")], [stayed])));
 
-        Assert.Equal(("moved", 119, "officials/moved/119.html"), (kept.Official.Profile.Id, kept.Congress, kept.PagePath));
-        Assert.Equal((119, "officials/stayed.html"), (current.Congress, current.PagePath));
+        Assert.Equal(("moved", 119, "officials/moved/119.html"), (kept.Member.Official.Profile.Id, kept.Congress, kept.Member.PagePath));
+        Assert.Equal((119, "officials/stayed.html"), (current.Congress, current.Member.PagePath));
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public sealed class HomeHighlightsTests
 
         var leader = Assert.Single(BreakLeader.All(OfficialBoardPage.All(officials, summaries)));
 
-        Assert.Equal(("exact", OfficialBoardPage.MinimumSplitVotes), (leader.Official.Profile.Id, leader.Cast));
+        Assert.Equal(("exact", OfficialBoardPage.MinimumSplitVotes), (leader.Member.Official.Profile.Id, leader.Member.Cast));
     }
 
     [Fact]
@@ -91,8 +91,8 @@ public sealed class HomeHighlightsTests
 
         var leader = Assert.Single(BreakLeader.All(boards));
 
-        Assert.Equal("b", leader.Official.Profile.Id);
-        Assert.Equal(boards.Single(page => page.Board.Chamber == PublishedChamber.House && page.Board.Party == PublishedPartyMajority.Democrat).Breakers[0].Official, leader.Official);
+        Assert.Equal("b", leader.Member.Official.Profile.Id);
+        Assert.Equal(boards.Single(page => page.Board.Chamber == PublishedChamber.House && page.Board.Party == PublishedPartyMajority.Democrat).Breakers[0], leader.Member);
     }
 
     [Fact]
@@ -109,8 +109,25 @@ public sealed class HomeHighlightsTests
 
         var leaders = BreakLeader.All(OfficialBoardPage.All(officials, summaries));
 
-        Assert.Equal([("newer", PublishedChamber.House), ("senator", PublishedChamber.Senate)],
-            leaders.Select(leader => (leader.Official.Profile.Id, leader.Chamber)));
+        Assert.Equal([("senator", PublishedChamber.Senate), ("newer", PublishedChamber.House)],
+            leaders.Select(leader => (leader.Member.Official.Profile.Id, leader.Chamber)));
+    }
+
+    [Fact]
+    public void BreakLeadersComeHighestShareFirstThenMoreBreaksThenLowerOfficialIdSoTheCardOrderNeverDependsOnBoardOrder()
+    {
+        var officials = new[] { Listing("low"), Listing("big"), Listing("z-small"), Listing("a-small") };
+        var summaries = new[]
+        {
+            Summary("low", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 100, 10),
+            Summary("big", 119, PublishedChamber.House, PublishedPartyMajority.Republican, 200, 40),
+            Summary("z-small", 119, PublishedChamber.Senate, PublishedPartyMajority.Democrat, 100, 20),
+            Summary("a-small", 119, PublishedChamber.Senate, PublishedPartyMajority.Republican, 100, 20)
+        };
+
+        var leaders = BreakLeader.All(OfficialBoardPage.All(officials, summaries));
+
+        Assert.Equal(["big", "a-small", "z-small", "low"], leaders.Select(leader => leader.Member.Official.Profile.Id));
     }
 
     [Fact]

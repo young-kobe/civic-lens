@@ -2090,7 +2090,7 @@ public sealed class ReleaseRendererTests
     public async Task TheFacetListLinksOnlyFacetsThatHavePagesAndShowsNamesAndCounts()
     {
         var release = ReleaseOf(3) with { Records = [.. ReleaseOf(3).Records.Select(entry => entry with { IssueIds = ["housing", "Not A Path"] })] };
-        var facets = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssuesNamed("housing", "Housing costs")));
+        var facets = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssuesNamed("housing", "Housing costs"), IssueIconConfiguration.None));
 
         var list = await new ReleaseRenderer(null, null).RenderFacetsAsync(facets, CancellationToken.None);
 
@@ -2332,7 +2332,7 @@ public sealed class ReleaseRendererTests
     {
         var name = new string('x', 70);
         var release = ReleaseOf(120) with { Records = [.. ReleaseOf(120).Records.Select(entry => entry with { IssueIds = ["housing"] })] };
-        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssuesNamed("housing", name))).Issues.Single();
+        var facet = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), IssuesNamed("housing", name), IssueIconConfiguration.None)).Issues.Single();
         var renderer = new ReleaseRenderer(null, null);
 
         Assert.Equal($"{name}, page 3 of 3 | Civic Lens", TitleOf(await renderer.RenderFacetPageAsync(facet, 3, CancellationToken.None)));
@@ -2892,7 +2892,7 @@ public sealed class ReleaseRendererTests
     private static readonly ReleaseFacets NoFacets = new([], []);
     private static HomeHighlights NoHighlights(PublicationRelease release) => HomeHighlights.From(release, [], 0);
 
-    private static PublicationCatalog HousingCatalog { get; } = new(new Dictionary<string, string>(), IssuesNamed("housing", "Housing costs"));
+    private static PublicationCatalog HousingCatalog { get; } = new(new Dictionary<string, string>(), IssuesNamed("housing", "Housing costs"), IssueIconConfiguration.None);
 
     private static IssueConfiguration IssuesNamed(string id, string name) => new()
     {
@@ -2909,7 +2909,7 @@ public sealed class ReleaseRendererTests
                 new() { Id = "housing", Name = "Housing costs", Definition = "d", PolicyAreaIds = ["area-one"] },
                 new() { Id = "transit", Name = "Transit", Definition = "d", PolicyAreaIds = ["area-one"] }
             ]
-        }));
+        }, IssueIconConfiguration.None));
 
     private static PublicationRelease ReleaseWithFilters() => new()
     {

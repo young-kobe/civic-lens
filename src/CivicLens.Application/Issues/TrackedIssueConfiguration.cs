@@ -10,7 +10,6 @@ public sealed record TrackedIssueConfiguration
     public required string[] PolicyAreaIds { get; init; }
     public string[]? Includes { get; init; }
     public string[]? Excludes { get; init; }
-    public string? Icon { get; init; }
     public DateOnly? StartsOn { get; init; }
     public DateOnly? EndsBefore { get; init; }
 
@@ -21,7 +20,6 @@ public sealed record TrackedIssueConfiguration
             throw new ArgumentException($"Issue '{Id}' must have a nonblank name and definition.");
         IssueConfiguration.ValidateNameLength(Name, $"Issue '{Id}'");
         ValidatePolicyAreas(policyAreaIds);
-        ValidateIcon();
         ValidateTerms(Includes, "includes");
         ValidateTerms(Excludes, "excludes");
         _ = new DateRange(StartsOn, EndsBefore);
@@ -39,12 +37,6 @@ public sealed record TrackedIssueConfiguration
             if (!seen.Add(policyAreaId))
                 throw new ArgumentException($"Issue '{Id}' repeats policy area '{policyAreaId}'.");
         }
-    }
-
-    private void ValidateIcon()
-    {
-        if (Icon is not null && !IssueIcons.IsKnown(Icon))
-            throw new ArgumentException($"Issue '{Id}' names an unknown icon '{Icon}'.");
     }
 
     private void ValidateTerms(string[]? terms, string listName)

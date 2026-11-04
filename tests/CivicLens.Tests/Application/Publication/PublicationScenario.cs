@@ -95,7 +95,7 @@ internal sealed class PublicationScenario
     public HomeHighlights? Highlights { get; private set; }
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, Layout = PageLayout, FailOnStatement = RenderFailureOfStatement, OfficialPages = OfficialPages, PublicBaseUrl = BaseUrl, HomeSeen = seen => Highlights = seen }, Loaders(),
-        new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
+        new PublicationCatalog(OfficialNames, Issues, IssueIconConfiguration.None), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
         Captures.Photos("artifacts"), Clock, new PruneReleases(Publications, Releases, NullLogger<PruneReleases>.Instance));
 
     public BlockedPublishedRecords Blocked() => new(Publications, Releases);

@@ -17,14 +17,14 @@
         </div>
         <p class="break-card-lede">@PublishedBreakCardView.Lede(Highlights.BreakLeaders)</p>
         <ul class="break-rows" role="list">
-            @foreach (var leader in Highlights.BreakLeaders.OrderByDescending(PublishedBreakCardView.Share))
+            @foreach (var leader in Highlights.BreakLeaders)
             {
                 <li>
                     <div class="break-row-text">
-                        <span class="break-row-name"><a href="@leader.PagePath">@leader.Official.Profile.Name</a> <span class="muted">@PublishedBreakCardView.PartyAndState(leader, PublishedAtUtc)</span></span>
+                        <span class="break-row-name"><a href="@leader.Member.PagePath">@leader.Member.Official.Profile.Name</a> <span class="muted">@PublishedBreakCardView.PartyAndState(leader, PublishedAtUtc)</span></span>
                         <span class="muted">@PublishedBreakCardView.Votes(leader)</span>
                     </div>
-                    <meter class="break-bar" aria-hidden="true" min="0" max="@leader.Cast" value="@leader.Breaks"></meter>
+                    <meter class="break-bar" aria-hidden="true" min="0" max="@leader.Member.Cast" value="@leader.Member.Breaks"></meter>
                 </li>
             }
         </ul>
