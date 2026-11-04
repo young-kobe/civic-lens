@@ -46,7 +46,7 @@ public static class ReleaseCommand
                     case ["releases", "entries", "backfill", var entriesLimit] when TryParsePositive(entriesLimit, out var entriesCount):
                         var result = await entries.ExecuteAsync(owner, entriesCount, cancellationToken);
                         CommandOutput.Write(output, result);
-                        return result.Skipped == 0 && result.OpenRangesWithoutRow == 0 ? 0 : 1;
+                        return result.Skipped == 0 && result.OpenRangesWithoutRow == 0 && result.ReadyRangesWithoutRow == 0 ? 0 : 1;
                     default:
                         error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, or releases entries backfill <limit>.");
                         return 2;

@@ -42,7 +42,7 @@ internal static class PublishedEntries
     }
 
     public static async Task<int> InsertAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,
-        CancellationToken cancellationToken)
+        string conflictAdvice, CancellationToken cancellationToken)
     {
         if (entries.Count == 0) return 0;
         await RequireLinkedRecordsAsync(db, entries, cancellationToken);
@@ -50,7 +50,7 @@ internal static class PublishedEntries
         var created = rows.Select(row => (row.Kind, row.RecordId, row.RevisionNumber)).ToHashSet();
         var createdEntries = entries.Where(entry => created.Contains(KeyOf(entry))).ToList();
         await InsertChildrenAsync(db, createdEntries, cancellationToken);
-        await RequireSameAsync(db, [.. entries.Except(createdEntries)], cancellationToken);
+        await RequireSameAsync(db, [.. entries.Except(createdEntries)], conflictAdvice, cancellationToken);
         return createdEntries.Count;
     }
 
@@ -106,7 +106,8 @@ internal static class PublishedEntries
         return db.Database.ExecuteSqlRawAsync(sql, [.. KeysOf(rows), rows.Select(row => row.Value).ToArray()], cancellationToken);
     }
 
-    private static async Task RequireSameAsync(CollectionAttemptDbContext db, List<PublishedRecordEntry> entries, CancellationToken cancellationToken)
+    private static async Task RequireSameAsync(CollectionAttemptDbContext db, List<PublishedRecordEntry> entries, string conflictAdvice,
+        CancellationToken cancellationToken)
     {
         if (entries.Count == 0) return;
         var stored = await ReadFactsAsync(db, entries, cancellationToken);
@@ -114,7 +115,7 @@ internal static class PublishedEntries
         {
             if (!stored.TryGetValue(KeyOf(entry), out var existing) || Serialize(existing) != Serialize(FactsOf(entry)))
                 throw new PublicationConflictException(
-                    $"The stored entry of {entry.RecordId} revision {entry.RevisionNumber} differs from the release entry. Rebuild the release.");
+                    $"The stored entry of {entry.RecordId} revision {entry.RevisionNumber} differs from the release entry. {conflictAdvice}");
         }
     }
 

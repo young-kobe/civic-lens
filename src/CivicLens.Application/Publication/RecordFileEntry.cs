@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -19,5 +18,5 @@ internal static class RecordFileEntry
     };
 
     private static PublishedRecordEntry Of<TRecord>(byte[] json, Func<TRecord, PublishedRecordEntry> toEntry) where TRecord : class =>
-        toEntry(JsonSerializer.Deserialize<TRecord>(json, PublicationProtocol.JsonOptions) ?? throw new InvalidDataException("A record file is empty."));
+        toEntry(ReleaseRecordFiles.Deserialize<TRecord>(json));
 }

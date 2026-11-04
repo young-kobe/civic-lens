@@ -7,7 +7,8 @@ namespace CivicLens.Application.Publication;
 
 /// <summary>
 /// Fills the entry rows of revisions that a commit never wrote. The oldest kept folder of a range supplies the entry. The record file must agree
-/// with it, and so must the entry in every later kept folder of the range. A range that fails a check gets a skip reason and no row.
+/// with it, and so must the entry in every later kept folder of the range. A kept folder of the range that omits the revision fails the check too.
+/// A range that fails a check gets a skip reason and no row.
 /// Each kept manifest is read once, from the oldest folder to the newest. Rows go in only through the store insert.
 /// </summary>
 public sealed class BackfillPublishedEntries(IPublicationStore publications, IReleaseDirectory releases)
@@ -58,8 +59,9 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
         PendingPublishedEntry pending, CancellationToken cancellationToken)
     {
         var candidate = pending.Candidate;
-        if (!listed.TryGetValue(new(candidate.Kind, candidate.RecordId), out var entry) || entry.RevisionNumber != candidate.RevisionNumber) return;
-        if (pending.Entry is null)
+        if (!listed.TryGetValue(new(candidate.Kind, candidate.RecordId), out var entry) || entry.RevisionNumber != candidate.RevisionNumber)
+            pending.Block(FoldersDiffer);
+        else if (pending.Entry is null)
             await ReadFirstEntryAsync(release, entry, pending, cancellationToken);
         else if (!ReleaseEntryComparison.SameOutsideNewFields(pending.Entry, entry))
             pending.Block(FoldersDiffer);
@@ -121,6 +123,7 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
             entry.Candidate.RecordId, entry.Candidate.RevisionNumber, entry.SkipReason!)).ToList();
         return new(pending.Count, added, alreadyPresent, skipped.Count, byReason, first,
             pending.Count(entry => entry.Candidate.IsOpen && !entry.HasRow),
-            pending.Count(entry => !entry.Candidate.IsOpen && entry.Entry is null && !entry.IsBlocked));
+            pending.Count(entry => !entry.Candidate.IsOpen && entry.Entry is null && !entry.IsBlocked),
+            pending.Count(entry => entry.IsReady && !entry.HasRow));
     }
 }

@@ -13,7 +13,9 @@ internal static class ReleaseRecordFiles
         var json = additions.FirstOrDefault(addition => addition.Entry.Kind == entry.Kind && addition.RecordId == entry.RecordId)?.Json
             ?? await releases.ReadFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(entry.RecordId),
                 PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken);
-        return JsonSerializer.Deserialize<TRecord>(json, PublicationProtocol.JsonOptions)
-            ?? throw new InvalidDataException("A record file is empty.");
+        return Deserialize<TRecord>(json);
     }
+
+    public static TRecord Deserialize<TRecord>(byte[] json) where TRecord : class =>
+        JsonSerializer.Deserialize<TRecord>(json, PublicationProtocol.JsonOptions) ?? throw new InvalidDataException("A record file is empty.");
 }

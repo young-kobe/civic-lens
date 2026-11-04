@@ -924,7 +924,7 @@ The tables `published_entries`, `published_entry_officials`, `published_entry_is
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases entries backfill <limit>
 ```
 
-The limit counts inserted rows. The command reads each kept manifest once, from the oldest to the newest. It takes the entry of a revision from the oldest kept folder of its range. It checks the record file of that folder, and it compares the entry in every later kept folder of the range. It never fixes a value. A row that fails a check is skipped with a reason. A repeat is safe, because the command inserts only missing rows and a commit during the run cannot create a second row.
+The limit counts inserted rows. It does not bound the reads: each run reads every state row, every kept manifest that covers a range without a row, and the first record file of each such range. The command reads each kept manifest once, from the oldest to the newest. It takes the entry of a revision from the oldest kept folder of its range. It checks the record file of that folder, and it compares the entry in every later kept folder of the range. A kept folder of the range that omits the revision counts as a difference. It never fixes a value. A row that fails a check is skipped with a reason. A repeat is safe, because the command inserts only missing rows and a commit during the run cannot create a second row.
 
 The command prints JSON with these keys:
 
@@ -934,8 +934,9 @@ The command prints JSON with these keys:
 - `skipped`, `skippedByReason`, and `skippedEntries`: the skipped rows, a count for each reason, and the first 50 rows. The reasons are `manifestInvalid`, `recordFileInvalid`, `recordFileDiffers`, `foldersDiffer`, and `firstPublishedMissing`.
 - `openRangesWithoutRow`: the open ranges that still have no row.
 - `closedRangesWithoutKeptFolder`: the closed ranges that no kept folder lists. These ranges get no row, and this is expected.
+- `readyRangesWithoutRow`: the open or closed ranges that passed every check but got no row, because the limit stopped the run.
 
-The exit code is 0 only when `skipped` and `openRangesWithoutRow` are both 0. Otherwise it is 1. After a run with a limit that stops early, `openRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
+The exit code is 0 only when `skipped`, `openRangesWithoutRow`, and `readyRangesWithoutRow` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
 
 ### Take a record off the site
 

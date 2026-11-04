@@ -165,18 +165,71 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
     }
 
     [Fact]
-    public async Task AnOpenRangeWithoutAKeptEntryIsReportedAndTheCommandExitsWithOne()
+    public async Task AnOpenRangeThatNoKeptFolderHoldsIsReportedAndTheCommandExitsWithOne()
     {
         var action = await SeedActionAsync('a');
         await AddReleasesAsync(1);
         await AddRangeAsync(action, 1, null);
-        Keep(1);
 
         var (exit, json) = await RunCommandAsync(10);
 
         Assert.Equal(1, exit);
         Assert.Equal((1, 0, 0), (json.GetProperty("openRangesWithoutRow").GetInt32(), json.GetProperty("added").GetInt32(), json.GetProperty("skipped").GetInt32()));
         Assert.Empty(await ReadAsync("SELECT record_id FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task ALimitThatStopsBeforeAReadyClosedRangeLeavesItCountedAndTheCommandExitsWithOneUntilARerunWritesIt()
+    {
+        var open = await SeedActionAsync('a');
+        var closed = await SeedActionAsync('b');
+        await AddReleasesAsync(2);
+        await AddRangeAsync(open, 1, null);
+        await AddRangeAsync(closed, 1, 1);
+        Keep(1, Listed(open), Listed(closed));
+        Keep(2, Listed(open));
+
+        var (limitedExit, limited) = await RunCommandAsync(1);
+        var (restExit, rest) = await RunCommandAsync(1);
+
+        Assert.Equal((1, 1, 0, 1), (limited.GetProperty("added").GetInt32(), limited.GetProperty("readyRangesWithoutRow").GetInt32(),
+            limited.GetProperty("openRangesWithoutRow").GetInt32(), limitedExit));
+        Assert.Equal([open.RecordId], await ReadAsync($"SELECT record_id FROM published_entries WHERE record_id = '{open.RecordId}'"));
+        Assert.Equal((1, 0, 0), (rest.GetProperty("added").GetInt32(), rest.GetProperty("readyRangesWithoutRow").GetInt32(), restExit));
+        Assert.Equal(["2"], await ReadAsync("SELECT count(*) FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task AKeptFolderInTheRangeThatOmitsTheRevisionOrListsAnotherOneBlocksTheRowEvenWhenALaterFolderHoldsIt()
+    {
+        var omitted = await SeedActionAsync('a');
+        var otherRevision = await SeedActionAsync('b');
+        var good = await SeedActionAsync('c');
+        await SeedActionRevisionAsync(otherRevision with { RevisionNumber = 2 });
+        await AddReleasesAsync(2);
+        foreach (var action in new[] { omitted, otherRevision, good }) await AddRangeAsync(action, 1, null);
+        Keep(1, Listed(good), Listed(otherRevision with { RevisionNumber = 2 }));
+        Keep(2, Listed(omitted), Listed(otherRevision), Listed(good));
+
+        var result = await RunAsync(10);
+
+        Assert.Equal(new Dictionary<string, int> { ["foldersDiffer"] = 2 }, result.SkippedByReason);
+        Assert.Equal([good.RecordId], await ReadAsync("SELECT record_id FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task AConflictWithARowThatACommitWroteTellsTheOperatorToCompareTheRowAndNotToRebuildTheRelease()
+    {
+        var action = await SeedActionAsync('a');
+        await AddReleasesAsync(1);
+        await AddRangeAsync(action, 1, null);
+        Keep(1, Listed(action));
+        var store = new InterceptingPublicationStore(publications) { AfterReadingCandidates = () => InsertLikeACommitAsync(action, "The commit headline") };
+
+        var conflict = await Assert.ThrowsAsync<PublicationConflictException>(() => new BackfillPublishedEntries(store, releases).ExecuteAsync(Owner, 10));
+
+        Assert.Contains("Compare the row with the kept folders", conflict.Message);
+        Assert.DoesNotContain("Rebuild the release", conflict.Message);
     }
 
     [Fact]
@@ -210,7 +263,7 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
         Keep(1, Listed(first));
         KeepWithdrawals(2, WithdrawalOf(first));
         Keep(3, Listed(returned));
-        KeepWithdrawals(5, WithdrawalOf(withdrawnOnly));
+        Write(5, [Listed(returned)], [WithdrawalOf(withdrawnOnly)]);
 
         var result = await RunAsync(10);
 

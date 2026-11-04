@@ -5,6 +5,7 @@ namespace CivicLens.Application.Publication;
 /// <param name="AlreadyPresent">The ranges that already had a row, including rows that a commit inserted during the run.</param>
 /// <param name="OpenRangesWithoutRow">The open ranges that still have no row at the end of the run.</param>
 /// <param name="ClosedRangesWithoutKeptFolder">The closed ranges that no kept folder lists. They get no row.</param>
+/// <param name="ReadyRangesWithoutRow">The open or closed ranges that passed every check but got no row, because the limit stopped the run.</param>
 public sealed record PublishedEntriesBackfillResult(int Examined, int Added, int AlreadyPresent, int Skipped,
     IReadOnlyDictionary<string, int> SkippedByReason, IReadOnlyList<SkippedPublishedEntry> SkippedEntries,
-    int OpenRangesWithoutRow, int ClosedRangesWithoutKeptFolder);
+    int OpenRangesWithoutRow, int ClosedRangesWithoutKeptFolder, int ReadyRangesWithoutRow);

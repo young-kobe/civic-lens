@@ -104,7 +104,8 @@ public sealed class PostgresPublicationStore : IPublicationStore
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var created = await PublishedEntries.InsertAsync(db, entries, cancellationToken);
+        var created = await PublishedEntries.InsertAsync(db, entries,
+            "A commit wrote this row with other facts than the kept folder. Compare the row with the kept folders before you run the backfill again.", cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return created;
     }
@@ -217,7 +218,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         var firstPublications = commit.AddedEntries.Select(PublishedFirstPublication.Of).ToList();
         await PublishedRecords.InsertAsync(db, firstPublications, cancellationToken);
         await PublishedRecords.RequireStoredTimesAsync(db, firstPublications, cancellationToken);
-        await PublishedEntries.InsertAsync(db, commit.AddedEntries, cancellationToken);
+        await PublishedEntries.InsertAsync(db, commit.AddedEntries, "Rebuild the release.", cancellationToken);
         await PublicationWithdrawalRows.RecordAsync(db, commit, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return summary;
