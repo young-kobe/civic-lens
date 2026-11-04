@@ -34,6 +34,6 @@ public sealed record VoteRequest
         From = QueryValues.Date(query, "from"),
         To = QueryValues.Date(query, "to"),
         Cursor = VoteCursor.Parse(QueryValues.Value(query, "cursor")),
-        Limit = QueryValues.Number(query, "limit", 1, SearchRequest.MaximumLimit) ?? SearchRequest.DefaultLimit
+        Limit = QueryValues.PageLimit(query)
     };
 }

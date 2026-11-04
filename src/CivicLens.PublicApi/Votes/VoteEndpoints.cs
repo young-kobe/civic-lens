@@ -21,5 +21,12 @@ public static class VoteEndpoints
             PublicationProtocol.IsAnyRecordId(recordId) && await votes.FindAsync(recordId, cancellationToken) is { } vote
                 ? ApiResults.Json(vote)
                 : ApiResults.RecordNotFound()));
+        v1.MapGet("/votes/{recordId}/members", (string recordId, HttpContext http, VoteStore votes, CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
+        {
+            if (!PublicationProtocol.IsAnyRecordId(recordId)) return ApiResults.RecordNotFound();
+            var request = VoteMemberRequest.Parse(http.Request.Query);
+            if (await votes.ListMembersAsync(recordId, request, cancellationToken) is not { } page) return ApiResults.RecordNotFound();
+            return request.Cursor is { } cursor && cursor.Release != page.Release ? ApiResults.ReleaseChanged(page.Release) : ApiResults.Json(page);
+        }));
     }
 }
