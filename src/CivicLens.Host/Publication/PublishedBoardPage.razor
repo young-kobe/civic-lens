@@ -1,8 +1,7 @@
 @using CivicLens.Application.Publication
-@using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="PublicSection.Officials" CanonicalPath="@Board.PagePath" Title="@PublishedBoardView.Title(Board)" Description="@PublishedBoardView.Description(Page)" Crumbs="Crumbs">
+<PublicPage Section="PublicSection.Officials" CanonicalPath="@Board.PagePath" Title="@PublishedBoardView.Title(Board)" Description="@PublishedBoardView.Description(Page)">
     <PageHeader Title="@PublishedBoardView.Title(Board)" Lede="@PublishedBoardView.Lede(Page)" />
     <FilterTabs Label="@PublishedBoardView.TabsLabel" Tabs="PublishedBoardView.Tabs(Board)" />
     @if (Page.Congress is { } congress)
@@ -64,8 +63,6 @@
     [Parameter, EditorRequired] public OfficialBoardPage Page { get; set; } = default!;
 
     private OfficialBoard Board => Page.Board;
-
-    private IReadOnlyList<Crumb> Crumbs => [PublicCrumbs.Home(""), PublicCrumbs.Section(PublicSection.Officials, ""), new(PublishedBoardView.PartyOf(Board))];
 
     private RenderFragment Split(IReadOnlyList<BoardMember> members, string caption, string header, Func<BoardMember, int> counted, Func<BoardMember, double> share, int congress) => @<text>
         <DataTable Roles="true" PagedRows="officials" Items="members" Caption="@caption" DefaultOrder="@PublishedBoardView.ShareOrder">

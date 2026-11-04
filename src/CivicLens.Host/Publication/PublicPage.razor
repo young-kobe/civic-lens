@@ -1,5 +1,4 @@
 @using CivicLens.Application.Publication
-@using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 <!DOCTYPE html>
 <html lang="en">
@@ -45,16 +44,19 @@
     <header class="public-header">
         <a class="public-brand" href="@(RootPath + PublicationProtocol.HomePath)"><BrandMark />Civic Lens</a>
         <nav class="public-nav" aria-label="Site">@NavLinks(PublicSections.Header)</nav>
-        <form class="public-search" role="search" action="@(RootPath + PublicationProtocol.SearchPagePath)" method="get">
-            <label class="visually-hidden" for="site-search">Search records</label>
-            <Icon Name="IconName.Search" />
-            <input id="site-search" type="search" name="q" maxlength="200" placeholder="Search records" />
-        </form>
-        <div class="topbar-tools"><ThemeToggle /></div>
+        @if (HasSearch)
+        {
+            <form class="public-search" role="search" action="@(RootPath + PublicationProtocol.SearchPagePath)" method="get">
+                <label class="visually-hidden" for="site-search">Search records</label>
+                <Icon Name="IconName.Search" />
+                <input id="site-search" type="search" name="q" maxlength="200" placeholder="Search bills, votes, people" />
+            </form>
+        }
+        <div class="topbar-tools"><PublicThemeMenu /></div>
     </header>
-    <main class="public-main" id="main" tabindex="-1"><div class="content"><PublicBreadcrumb Crumbs="Crumbs" /><CascadingValue Value="glossaryUse" IsFixed="true">@ChildContent</CascadingValue></div></main>
+    <main class="public-main" id="main" tabindex="-1"><div class="content"><CascadingValue Value="glossaryUse" IsFixed="true">@ChildContent</CascadingValue></div></main>
     <footer class="public-footer">
-        <p>Each record shows its sources and the exact text it cites.</p>
+        <span class="public-footer-name">Civic Lens</span>
         <nav class="public-footer-nav" aria-label="Footer">@NavLinks(PublicSections.Footer)</nav>
     </footer>
 </body>
@@ -74,10 +76,10 @@
     [Parameter] public bool IsArticle { get; set; }
     [Parameter] public bool UsesRecordFont { get; set; }
     [Parameter] public bool NoIndex { get; set; }
+    [Parameter] public bool HasSearch { get; set; }
     [Parameter, EditorRequired] public string? CanonicalPath { get; set; }
     [Parameter] public string? ExternalScript { get; set; }
     [Parameter] public string RootPath { get; set; } = string.Empty;
-    [Parameter] public IReadOnlyList<Crumb> Crumbs { get; set; } = [];
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
     private RenderFragment NavLinks(IReadOnlyList<PublicSections.NavLink> links) => @<text>

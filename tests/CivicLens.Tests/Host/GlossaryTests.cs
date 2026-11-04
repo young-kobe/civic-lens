@@ -60,7 +60,7 @@ public sealed class GlossaryTests
 
         Assert.Equal(targets.Count, targets.Distinct().Count());
         Assert.All(targets, target => Assert.NotNull(document.QuerySelector($"[popover]#{target}")));
-        Assert.Equal(targets.Count, document.QuerySelectorAll("[popover]").Length);
+        Assert.Equal(targets.Count, document.QuerySelectorAll("main [popover]").Length);
         Assert.Equal(2, document.QuerySelector("main")!.TextContent.Split("Not Voting").Length - 1);
         Assert.Single(targets, "term-not-voting");
     }
