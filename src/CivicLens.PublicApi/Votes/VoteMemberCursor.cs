@@ -9,18 +9,13 @@ namespace CivicLens.PublicApi.Votes;
 /// </summary>
 public sealed record VoteMemberCursor(int Release, int Position)
 {
-    private const int MaximumLength = 40;
     private const string Tag = "m";
 
     public static VoteMemberCursor? Parse(string? value)
     {
         if (value is null) return null;
-        var parts = value.Split('.');
-        if (value.Length > MaximumLength || parts is not [Tag, var release, var position] ||
-            !int.TryParse(release, NumberStyles.None, CultureInfo.InvariantCulture, out var releaseNumber) || releaseNumber < 1 ||
-            !int.TryParse(position, NumberStyles.None, CultureInfo.InvariantCulture, out var positionNumber))
-            throw QueryValues.InvalidCursor();
-        return new(releaseNumber, positionNumber);
+        var parts = CursorFields.Split(value, Tag, 2);
+        return new(CursorFields.Release(parts[0]), CursorFields.Number(parts[1]));
     }
 
     public string Encode() => string.Create(CultureInfo.InvariantCulture, $"{Tag}.{Release}.{Position}");
