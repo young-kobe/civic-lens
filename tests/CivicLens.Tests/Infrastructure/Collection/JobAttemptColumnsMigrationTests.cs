@@ -147,8 +147,8 @@ public sealed class JobAttemptColumnsMigrationTests(PostgresCollection postgres)
     {
         await ExecuteAsync("""
             INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks, outcome, has_response,
-                has_sent_validators, failure_code)
-            VALUES ('a', 'source', 'https://example.test/a', 'https://example.test/a', 1, 'failed', FALSE, FALSE, 'HttpError')
+                has_sent_validators, failure_code, elapsed_milliseconds)
+            VALUES ('a', 'source', 'https://example.test/a', 'https://example.test/a', 1, 'failed', FALSE, FALSE, 'HttpError', 0)
             """);
 
         var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"UPDATE collection_attempts SET {change} WHERE attempt_id = 'a'"));

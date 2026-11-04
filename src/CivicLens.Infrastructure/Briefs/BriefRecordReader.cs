@@ -38,18 +38,20 @@ internal static class BriefRecordReader
         ImmutableArray<PublishedRevisionBinding> bindings, bool approvedOnly, CancellationToken cancellationToken)
     {
         var records = new List<BriefRecord>();
-        records.AddRange(await ReadKindAsync<DocumentChangeDraftRevision>(db, bindings,
-            BriefCitationKind.DocumentChange, approvedOnly, BriefRecord.From, cancellationToken));
-        records.AddRange(await ReadKindAsync<StatementDraftRevision>(db, bindings,
-            BriefCitationKind.Statement, approvedOnly, BriefRecord.From, cancellationToken));
-        records.AddRange(await ReadKindAsync<ActionDraftRevision>(db, bindings,
-            BriefCitationKind.Action, approvedOnly, BriefRecord.From, cancellationToken));
+        records.AddRange(await ReadKindAsync<DocumentChangeDraftRevision>(db, bindings, BriefCitationKind.DocumentChange, approvedOnly, BriefRecord.From,
+            DocumentChangeRevisionRows.ReadNamedAsync, cancellationToken));
+        records.AddRange(await ReadKindAsync<StatementDraftRevision>(db, bindings, BriefCitationKind.Statement, approvedOnly, BriefRecord.From,
+            ReadJsonRevisionsAsync<StatementDraftRevision>, cancellationToken));
+        records.AddRange(await ReadKindAsync<ActionDraftRevision>(db, bindings, BriefCitationKind.Action, approvedOnly, BriefRecord.From,
+            ReadJsonRevisionsAsync<ActionDraftRevision>, cancellationToken));
         return [.. records.OrderBy(record => record.Kind).ThenBy(record => record.RecordId, StringComparer.Ordinal)];
     }
 
     private static async Task<IReadOnlyList<BriefRecord>> ReadKindAsync<TRevision>(CollectionAttemptDbContext db,
         ImmutableArray<PublishedRevisionBinding> bindings, BriefCitationKind kind, bool approvedOnly,
-        Func<TRevision, BriefRecord> toRecord, CancellationToken cancellationToken)
+        Func<TRevision, BriefRecord> toRecord,
+        Func<CollectionAttemptDbContext, PublishedRevisionBinding[], CancellationToken, Task<IReadOnlyList<TRevision>>> readRevisions,
+        CancellationToken cancellationToken)
         where TRevision : class, IReviewRevision
     {
         var publishedKind = BriefCitationKinds.PublishedKindOf(kind);
@@ -57,7 +59,13 @@ internal static class BriefRecordReader
         var wanted = approvedOnly
             ? requested.Except(await CitedRevisions.FindNotApprovedAsync(db, publishedKind, requested, cancellationToken)).ToArray() : requested;
         if (wanted.Length == 0) return [];
-        var json = await CitedRevisions.ReadRevisionJsonAsync(db, publishedKind, wanted, cancellationToken);
-        return [.. json.Select(item => toRecord(ReviewJson.Deserialize<TRevision>(item, "revision")))];
+        return [.. (await readRevisions(db, wanted, cancellationToken)).Select(toRecord)];
+    }
+
+    private static async Task<IReadOnlyList<TRevision>> ReadJsonRevisionsAsync<TRevision>(CollectionAttemptDbContext db,
+        PublishedRevisionBinding[] wanted, CancellationToken cancellationToken)
+    {
+        var json = await CitedRevisions.ReadRevisionJsonAsync(db, wanted[0].Kind, wanted, cancellationToken);
+        return [.. json.Select(item => ReviewJson.Deserialize<TRevision>(item, "revision"))];
     }
 }

@@ -48,7 +48,7 @@ public sealed class CollectorProcess(string collectorAssembly, string dotnetExec
             start.ArgumentList.Add(manifest);
             using var process = Process.Start(start) ?? throw new IOException("Could not start collector.");
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            deadline.CancelAfter(TimeSpan.FromSeconds(request.TimeoutSeconds + 5));
+            deadline.CancelAfter(TimeSpan.FromSeconds(request.TimeoutSeconds + CollectionProtocol.CollectorGraceSeconds));
             var outputLimit = request.Mode is CollectionMode.Feed or CollectionMode.Html
                 ? CollectionProtocol.MaximumDiscoveryReceiptSize
                 : CollectionProtocol.MaximumPageReceiptSize;

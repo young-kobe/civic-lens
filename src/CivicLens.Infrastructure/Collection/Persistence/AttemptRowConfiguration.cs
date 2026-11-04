@@ -1,3 +1,4 @@
+using CivicLens.Collection.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -11,6 +12,7 @@ internal sealed class AttemptRowConfiguration : IEntityTypeConfiguration<Attempt
         {
             table.HasCheckConstraint("ck_collection_attempts_identity", "length(btrim(attempt_id)) > 0 AND length(btrim(source_id)) > 0 AND length(btrim(requested_url)) > 0 AND length(btrim(final_url)) > 0");
             table.HasCheckConstraint("ck_collection_attempts_robots_delay", "robots_crawl_delay_milliseconds IS NULL OR robots_crawl_delay_milliseconds BETWEEN 0 AND 922337203685000");
+            table.HasCheckConstraint("ck_collection_attempts_elapsed_milliseconds", $"elapsed_milliseconds IS NULL OR elapsed_milliseconds BETWEEN 0 AND {CollectionProtocol.MaximumElapsedMilliseconds(CollectionRequest.MaximumTimeoutSeconds)}");
             table.HasCheckConstraint("ck_collection_attempts_transfer", "(request_count IS NULL) = (bytes_received IS NULL) AND (request_count IS NULL OR request_count >= 0 AND bytes_received >= 0 AND (bytes_received = 0 OR request_count > 0))");
             table.HasCheckConstraint("ck_collection_attempts_retry_ticks", "retry_delay_ticks IS NULL OR retry_delay_ticks >= 0");
             table.HasCheckConstraint("ck_collection_attempts_outcome", """
@@ -49,6 +51,7 @@ internal sealed class AttemptRowConfiguration : IEntityTypeConfiguration<Attempt
         builder.Property(row => row.SentETag).HasColumnName("sent_etag");
         builder.Property(row => row.SentLastModifiedUtcTicks).HasColumnName("sent_last_modified_utc_ticks");
         builder.Property(row => row.RobotsCrawlDelayMilliseconds).HasColumnName("robots_crawl_delay_milliseconds");
+        builder.Property(row => row.ElapsedMilliseconds).HasColumnName("elapsed_milliseconds");
         builder.Property(row => row.RequestCount).HasColumnName("request_count");
         builder.Property(row => row.BytesReceived).HasColumnName("bytes_received");
         builder.Property(row => row.FailureCode).HasColumnName("failure_code");
