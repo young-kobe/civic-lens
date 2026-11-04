@@ -689,7 +689,7 @@ public sealed class PublishedOfficialPageTests
     public async Task AVoteForACandidateHasItsOwnMarkAndLegendEntrySoAReaderDoesNotTakeItForAMissedVote()
     {
         var day = new DateOnly(2025, 1, 3);
-        var votes = new[] { Vote('a', day) with { Cast = "Jeffries" }, Vote('b', day.AddDays(1)) with { Cast = PublishedOfficialVote.Present } };
+        var votes = new[] { Vote('a', day) with { Cast = "Jeffries", Totals = null, BillType = null, BillNumber = null }, Vote('b', day.AddDays(1)) with { Cast = PublishedOfficialVote.Present } };
 
         var strip = (await RenderedAsync(votes)).QuerySelector(".vote-strip")!;
 

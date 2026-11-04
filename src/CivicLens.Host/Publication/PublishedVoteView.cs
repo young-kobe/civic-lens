@@ -81,7 +81,7 @@ internal static class PublishedVoteView
     public static IEnumerable<CastGroup> CastGroups(PublishedVote vote) =>
         vote.Members.GroupBy(member => member.Cast)
             .OrderBy(group => CastRank(group.Key))
-            .ThenByDescending(group => CastRank(group.Key) == CandidateRank ? group.Count() : 0)
+            .ThenByDescending(group => PublishedOfficialVote.IsCandidate(group.Key) ? group.Count() : 0)
             .ThenBy(group => group.Key, StringComparer.Ordinal)
             .Select(group => Heading(vote, group.Key, group.Count(), ByName(group)));
 
@@ -152,18 +152,12 @@ internal static class PublishedVoteView
 
     private static string PartyOf(PublishedVote vote, string party) => PublishedOfficialView.PartyOf(vote.Chamber, party);
 
-    private const int CandidateRank = 2;
-
     private static int CastRank(string cast) => cast switch
     {
         PublishedOfficialVote.NotVoting => 4,
-        PublishedRecordLabels.Present => 3,
-        _ => PublishedOfficialVote.SideOf(cast) switch
-        {
-            PublishedPartyMajority.Yea => 0,
-            PublishedPartyMajority.Nay => 1,
-            _ => CandidateRank
-        }
+        PublishedOfficialVote.Present => 3,
+        _ when PublishedOfficialVote.IsCandidate(cast) => 2,
+        _ => PublishedOfficialVote.SideOf(cast) == PublishedPartyMajority.Yea ? 0 : 1
     };
 
     private static CastGroup Heading(PublishedVote vote, string cast, int count, PublishedMemberVote[] members)
@@ -171,8 +165,9 @@ internal static class PublishedVoteView
         var (lead, word) = cast switch
         {
             PublishedOfficialVote.NotVoting => ("", "Did not vote"),
-            PublishedRecordLabels.Present => ("Voted ", PublishedRecordLabels.Present),
-            _ => CastRank(cast) == CandidateRank ? ("Voted for ", cast) : ("Voted ", cast)
+            PublishedOfficialVote.Present => ("Voted ", PublishedOfficialVote.Present),
+            _ when PublishedOfficialVote.IsCandidate(cast) => ("Voted for ", cast),
+            _ => ("Voted ", cast)
         };
         return new(lead, word, cast, $" ({count} tracked {PublishedOfficialView.Noun(count, MemberNoun(vote))})", members);
     }
