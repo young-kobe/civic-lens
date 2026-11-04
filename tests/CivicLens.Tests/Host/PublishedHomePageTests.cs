@@ -128,6 +128,24 @@ public sealed class PublishedHomePageTests
         Assert.Equal(IssueIcons.PathOf(IssueIcons.Default), tiles[1].QuerySelector("path")!.GetAttribute("d"));
     }
 
+    [Fact]
+    public async Task TheHomeTileOfAnIssueDrawsTheIconTheCatalogHoldsSoABrokenLookupShowsTheNeutralIcon()
+    {
+        var issues = new IssueConfiguration
+        {
+            PolicyAreas = [new() { Id = "defense", Name = "Defense" }],
+            Issues = [new() { Id = "firearms", Name = "Firearms", Definition = "d", PolicyAreaIds = ["defense"] }]
+        };
+        var icons = new IssueIconConfiguration { Icons = new Dictionary<string, string> { ["firearms"] = "crosshair" } };
+        var release = ReleaseOf(Vote('a', 216, 214, null) with { IssueIds = ["firearms"] });
+        var facets = ReleaseFacets.From(release, new PublicationCatalog(new Dictionary<string, string>(), issues, icons));
+
+        var main = await HomeAsync(release, [], facets: facets);
+
+        var tile = main.QuerySelector("section#issues a.issue-tile")!;
+        Assert.Equal(IssueIcons.PathOf("crosshair"), tile.QuerySelector("path")!.GetAttribute("d"));
+    }
+
     [Theory]
     [InlineData("Independent", "Democrat", "ME", "I, Maine")]
     [InlineData("Democrat", null, null, "D")]
