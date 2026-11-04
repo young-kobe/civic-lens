@@ -20,7 +20,7 @@ table[data-paged]:focus { outline: none; }
 .record-panels .panel-padded > .panel-head { margin: 0; }
 .page-header-portrait .icon { width: 48px; height: 48px; color: var(--info); }
 .record-list .table tr { position: relative; }
-.record-list .table tr:hover { background: var(--raised); }
+.record-list .table tbody tr:hover { background: var(--raised); }
 .record-list .cell-title::after { content: ""; position: absolute; inset: 0; }
 .record-list .cell-icon { align-items: flex-start; }
 .record-list .cell-icon .icon { margin-top: 2px; }

@@ -37,7 +37,7 @@
         </Panel>
     }
     <Panel Label="Records">
-        <PublishedRecordTable Records="Facet.RecordsOnPage(Page)" Caption="@Facet.Name" RootPath="../" Columns="RecordTableColumns.Facet" Sort="Sort" DefineVoteBadges="Page > 1" />
+        <PublishedRecordTable Records="Facet.RecordsOnPage(Page)" Caption="@Facet.Name" RootPath="../" Columns="RecordTableColumns.Facet" Sort="Sort" DefineVoteBadges="!(IsIssue && Page == 1)" />
         <Pager Label="Pages" Summary="@($"Page {Page} of {Facet.PageCount}")" NewerText="Previous" OlderText="Next"
                NewerHref="@(Page > 1 ? "../" + Facet.PagePath(Page - 1) : null)"
                OlderHref="@(Page < Facet.PageCount ? "../" + Facet.PagePath(Page + 1) : null)" />

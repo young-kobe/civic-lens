@@ -1607,10 +1607,10 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task AnIssuePageDefinesTheVoteBadgesOnlyWhereItsSummaryDoesNotSoEachPageSaysItOnce()
+    public async Task AnIssuePageDefinesTheVoteBadgesOnlyWhereItsSummaryDoesNotButAlwaysSaysTheCountsMeaningSoEachPageSaysItOnce()
     {
         var published = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero);
-        var votes = Enumerable.Range(0, PublicationProtocol.PageSize + 1).Select(index => FacetEntry(PublishedRecordKind.Vote, index, PublishedVoteAlignment.Split, published.AddDays(-index), ["housing"], []));
+        var votes = Enumerable.Range(0, PublicationProtocol.PageSize + 1).Select(index => FacetEntry(PublishedRecordKind.Vote, index, PublishedVoteAlignment.Split, published.AddDays(-index), ["housing"], []) with { YeaCount = 200, NayCount = 210 });
         var release = ReleaseOf(0) with { Records = [.. votes] };
 
         foreach (var page in new[] { 1, 2 })
@@ -1618,7 +1618,20 @@ public sealed class ReleaseRendererTests
             var text = (await FacetMainAsync(release, FacetKind.Issue, page)).TextContent;
 
             Assert.Equal(1, text.Split("A split vote is a substantive roll call vote").Length - 1);
+            Assert.Equal(1, text.Split("Yea and Nay counts are casts of all members of the chamber who voted Yea or Nay.").Length - 1);
         }
+    }
+
+    [Fact]
+    public async Task APolicyAreaPageDefinesTheVoteBadgesOnItsFirstPageBecauseItsSummaryDoesNotDefineThem()
+    {
+        var published = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero);
+        var votes = Enumerable.Range(0, 3).Select(index => FacetEntry(PublishedRecordKind.Vote, index, PublishedVoteAlignment.Split, published.AddDays(-index), [], ["land-use"]));
+        var release = ReleaseOf(0) with { Records = [.. votes] };
+
+        var text = (await FacetMainAsync(release, FacetKind.PolicyArea, 1)).TextContent;
+
+        Assert.Equal(1, text.Split("A split vote is a substantive roll call vote").Length - 1);
     }
 
     [Fact]
