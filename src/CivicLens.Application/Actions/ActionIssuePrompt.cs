@@ -23,10 +23,7 @@ public static class ActionIssuePrompt
         var schema = AnalysisSchema.IssueChoice(issues.AnswerSchema()!);
         var bytes = Encoding.UTF8.GetByteCount(SystemInstructions) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
-        var hash = AnalysisPromptHash.Compute(ActionDraftTask.Model, ActionDraftTask.Effort, ActionDraftTask.MaximumIssueOutputTokens,
-            SystemInstructions, user, schema);
-        return new(ActionDraftTask.Model, ActionDraftTask.MaximumIssueOutputTokens, SystemInstructions, user, schema, hash,
-            bytes + (long)ActionDraftTask.MaximumIssueOutputTokens, CacheSystemPrompt: true,
-            PromptVersion: ActionDraftTask.IssuePromptVersion, SchemaVersion: ActionDraftTask.IssueSchemaVersion);
+        return AnalysisModelRequest.Create(ActionDraftTask.Model, ActionDraftTask.MaximumIssueOutputTokens, SystemInstructions, user, schema, bytes,
+            cacheSystemPrompt: true, promptVersion: ActionDraftTask.IssuePromptVersion, schemaVersion: ActionDraftTask.IssueSchemaVersion);
     }
 }

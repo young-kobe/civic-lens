@@ -28,6 +28,11 @@ internal static class AnalysisRunRows
         OutputJson = run.OutputJson,
         ValidationJson = run.ValidationErrors.IsEmpty ? null : JsonSerializer.Serialize(run.ValidationErrors),
         ContextJson = run.ContextJson,
+        SystemPromptSha256 = run.Input?.SystemPromptSha256,
+        OutputSchemaSha256 = run.Input?.OutputSchemaSha256,
+        UserMessage = run.Input?.UserMessage,
+        Effort = run.Input?.Effort,
+        MaxOutputTokens = run.Input?.MaximumOutputTokens,
         StartedAtUtcTicks = run.StartedAtUtc.UtcTicks,
         FinishedAtUtcTicks = run.FinishedAtUtc.UtcTicks
     };

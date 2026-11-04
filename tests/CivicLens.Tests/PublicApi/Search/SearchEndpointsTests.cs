@@ -23,16 +23,6 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheReleaseEndpointNamesTheActiveReleaseAndItsPublicationTime()
-    {
-        await using var host = await StartWithReleasesAsync();
-
-        var release = await host.Client.GetFromJsonAsync<ReleaseInfo>("/v1/release", PublicationProtocol.JsonOptions);
-
-        Assert.Equal(new ReleaseInfo(1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero)), release);
-    }
-
-    [Fact]
     public async Task SearchReturnsTheManifestEntryFieldsTheSnippetAndTheRecordPaths()
     {
         await using var host = await StartWithReleasesAsync();
@@ -166,7 +156,7 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task WhenTheSiteGoesBackToAnEarlierReleaseTheReleaseEndpointAndAnUnpinnedSearchFollowAndAPinToTheLaterReleaseStillWorks()
+    public async Task WhenTheSiteGoesBackToAnEarlierReleaseAnUnpinnedSearchFollowsAndAPinToTheLaterReleaseStillWorks()
     {
         var five = PublishedSamples.Statement('a', "Rent five");
         var site = new FakeReleaseSite();

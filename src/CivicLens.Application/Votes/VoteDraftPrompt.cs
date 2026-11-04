@@ -45,10 +45,7 @@ public static class VoteDraftPrompt
         var schema = AnalysisSchema.HeadlineAndSummary(issueSchema);
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
-        var hash = AnalysisPromptHash.Compute(VoteDraftTask.Model, VoteDraftTask.Effort, VoteDraftTask.MaximumOutputTokens,
-            system, user, schema);
-        return new(VoteDraftTask.Model, VoteDraftTask.MaximumOutputTokens, system, user, schema, hash,
-            bytes + (long)VoteDraftTask.MaximumOutputTokens, CacheSystemPrompt: true);
+        return AnalysisModelRequest.Create(VoteDraftTask.Model, VoteDraftTask.MaximumOutputTokens, system, user, schema, bytes, cacheSystemPrompt: true);
     }
 
     public static string SerializeContext(VoteSnapshot snapshot, BillIssueChoice issues, string issueRevisionId) =>

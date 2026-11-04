@@ -1,4 +1,3 @@
-using System.Globalization;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
 using Microsoft.AspNetCore.Http;
@@ -40,17 +39,17 @@ public sealed record SearchRequest
         {
             Text = QueryText(query),
             Kind = KindFilter(query),
-            Official = Filter(query, "official"),
-            Issue = Filter(query, "issue"),
-            PolicyArea = Filter(query, "policyArea"),
-            Source = Filter(query, "source"),
-            From = Date(query, "from"),
-            To = Date(query, "to"),
+            Official = QueryValues.Filter(query, "official"),
+            Issue = QueryValues.Filter(query, "issue"),
+            PolicyArea = QueryValues.Filter(query, "policyArea"),
+            Source = QueryValues.Filter(query, "source"),
+            From = QueryValues.Date(query, "from"),
+            To = QueryValues.Date(query, "to"),
             Release = release ?? cursor?.Release,
             Sort = sort,
             Descending = descending,
             Cursor = cursor,
-            Limit = QueryValues.Number(query, "limit", 1, MaximumLimit) ?? DefaultLimit
+            Limit = QueryValues.PageLimit(query)
         };
         if (cursor is not null && !request.Accepts(cursor))
             throw new ArgumentException("The cursor does not fit this search.", "cursor");
@@ -79,28 +78,10 @@ public sealed record SearchRequest
         return string.IsNullOrEmpty(text) ? null : text;
     }
 
-    private static string? Filter(IQueryCollection query, string name)
-    {
-        var value = QueryValues.Value(query, name);
-        if (string.IsNullOrEmpty(value)) return null;
-        return value.Length <= PublishedRecordEntry.MaximumFilterValueLength
-            ? value
-            : throw new ArgumentException($"{name} holds at most {PublishedRecordEntry.MaximumFilterValueLength} characters.", name);
-    }
-
     private static PublishedRecordKind? KindFilter(IQueryCollection query)
     {
         var value = QueryValues.Value(query, "kind");
         if (string.IsNullOrEmpty(value)) return null;
         return RecordKinds.TryParse(value, out var kind) ? kind : throw new ArgumentException("kind is not a record kind.", "kind");
-    }
-
-    private static DateOnly? Date(IQueryCollection query, string name)
-    {
-        var value = QueryValues.Value(query, name);
-        if (string.IsNullOrEmpty(value)) return null;
-        return DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
-            ? date
-            : throw new ArgumentException($"{name} must be a date as yyyy-MM-dd.", name);
     }
 }

@@ -5,6 +5,9 @@ namespace CivicLens.Publication.Contracts;
 /// <summary>One roll call vote of one official. The record ID names the vote record that holds the evidence.</summary>
 public sealed record PublishedOfficialVote
 {
+    public const string Aye = "Aye";
+    public const string No = "No";
+    public const string Present = "Present";
     public const string NotVoting = "Not Voting";
 
     public required string RecordId { get; init; }
@@ -30,8 +33,8 @@ public sealed record PublishedOfficialVote
 
     public static string? SideOf(string cast) => cast switch
     {
-        "Yea" or "Aye" => PublishedPartyMajority.Yea,
-        "Nay" or "No" => PublishedPartyMajority.Nay,
+        PublishedPartyMajority.Yea or Aye => PublishedPartyMajority.Yea,
+        PublishedPartyMajority.Nay or No => PublishedPartyMajority.Nay,
         _ => null
     };
 
