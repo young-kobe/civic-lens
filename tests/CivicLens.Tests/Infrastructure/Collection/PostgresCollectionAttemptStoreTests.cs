@@ -7,6 +7,7 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using System.Text.Json;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
@@ -153,6 +154,90 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
                 receipt with { RobotsCrawlDelayMilliseconds = delay });
             await Assert.ThrowsAsync<InvalidOperationException>(() => store.ImportAtomicallyAsync(conflict, default));
         }
+    }
+
+    [Fact]
+    public async Task ElapsedTimeSurvivesImportAndCannotChangeOnReplay()
+    {
+        var request = Request("elapsed");
+        var receipt = Result(request.JobId, CollectionOutcome.Failed,
+            Response: Metadata(404, null, null, null, []), FailureCode: CollectionFailureCode.HttpError) with
+        {
+            RequestCount = 2,
+            ElapsedMilliseconds = 1_234
+        };
+        var import = CollectionAttemptImporter.CreateImport("elapsed", request, receipt);
+        await store.ImportAtomicallyAsync(import, default);
+        var retained = await store.GetAsync("elapsed", default);
+        Assert.Equal(1_234, retained!.ElapsedMilliseconds);
+        Assert.Equal(ImportDisposition.DuplicateAttempt, (await store.ImportAtomicallyAsync(import, default)).Disposition);
+        var conflict = CollectionAttemptImporter.CreateImport("elapsed", request, receipt with { ElapsedMilliseconds = 1_235 });
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.ImportAtomicallyAsync(conflict, default));
+    }
+
+    [Fact]
+    public async Task TheDatabaseRefusesElapsedTimeOutsideItsRangeSoNoRowKeepsAnImpossibleDuration()
+    {
+        var request = Request("elapsed-range");
+        await store.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("elapsed-range", request,
+            Result(request.JobId, CollectionOutcome.Failed, Response: Metadata(404, null, null, null, []),
+                FailureCode: CollectionFailureCode.HttpError) with
+            { RequestCount = 2, ElapsedMilliseconds = 10 }), default);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        var limit = CollectionProtocol.MaximumElapsedMilliseconds(CollectionRequest.MaximumTimeoutSeconds);
+        foreach (var refused in new[] { -1, limit + 1 })
+        {
+            await using var command = new NpgsqlCommand(
+                $"UPDATE collection_attempts SET elapsed_milliseconds = {refused} WHERE attempt_id = 'elapsed-range'", connection);
+            var failure = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+            Assert.Equal("ck_collection_attempts_elapsed_milliseconds", failure.ConstraintName);
+        }
+        await using var accepted = new NpgsqlCommand(
+            $"UPDATE collection_attempts SET elapsed_milliseconds = {limit} WHERE attempt_id = 'elapsed-range'", connection);
+        Assert.Equal(1, await accepted.ExecuteNonQueryAsync());
+    }
+
+    [Fact]
+    public async Task OnlyARowObservedBeforeTheMigrationMayHaveNoElapsedTimeSoNoNewRowCanLoseIt()
+    {
+        var request = Request("elapsed-cutoff");
+        await store.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport("elapsed-cutoff", request,
+            Result(request.JobId, CollectionOutcome.Failed, Response: Metadata(404, null, null, null, []),
+                FailureCode: CollectionFailureCode.HttpError) with
+            { RequestCount = 2, ElapsedMilliseconds = 10 }), default);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var newRow = new NpgsqlCommand(
+            "UPDATE collection_attempts SET elapsed_milliseconds = NULL WHERE attempt_id = 'elapsed-cutoff'", connection);
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => newRow.ExecuteNonQueryAsync());
+        Assert.Equal("ck_collection_attempts_elapsed_measured", failure.ConstraintName);
+
+        await using var oldRow = new NpgsqlCommand(
+            "UPDATE collection_attempts SET observed_at_utc_ticks = 0, elapsed_milliseconds = NULL WHERE attempt_id = 'elapsed-cutoff'", connection);
+        Assert.Equal(1, await oldRow.ExecuteNonQueryAsync());
+    }
+
+    [Fact]
+    public async Task TheRecoveryCommandKeepsAVersionOneHandoffAsInvalidSoNoReceiptWithoutElapsedTimeIsImported()
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            var handoffs = new FileCollectionReceiptHandoffStore(root);
+            await File.WriteAllTextAsync(Path.Combine(root, ".pending", "legacy-elapsed.json"),
+                VersionOneHandoff.Replace("ARTIFACTS", JsonSerializer.Serialize(Path.GetTempPath())[1..^1]));
+
+            var completion = await new RecoverCollectionAttempts(handoffs, new CaptureArtifactVerifier(), store)
+                .ReplayAllAsync(root);
+
+            Assert.Equal(CollectionRecoveryStatus.InvalidHandoff, Assert.Single(completion).Status);
+            Assert.Equal(["legacy-elapsed"], await handoffs.ListAsync(default));
+            Assert.Null(await store.GetAsync("legacy-elapsed", default));
+        }
+        finally { Directory.Delete(root, true); }
     }
 
     [Fact]
@@ -425,6 +510,16 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
             CancellationToken cancellationToken = default) =>
             CollectionAttemptImporter.ImportAsync(attemptId, request, result, target, cancellationToken);
     }
+
+    private const string VersionOneHandoff = """
+        {"version":1,"attemptId":"legacy-elapsed","request":{"version":1,"jobId":"legacy","sourceId":"source",
+        "url":"https://example.test/page","allowedOrigin":"https://example.test","allowedPathPrefix":"/",
+        "artifactDirectory":"ARTIFACTS","mode":"page","maxCandidates":100,"maxRequests":5,"maxBytes":2000000,
+        "timeoutSeconds":30,"minDelayMilliseconds":0},
+        "receipt":{"version":1,"jobId":"legacy","sourceId":"source","requestedUrl":"https://example.test/page",
+        "finalUrl":"https://example.test/page","outcome":"failed","observedAt":"2026-10-01T12:00:00+00:00",
+        "sentValidators":null,"bytesReceived":0,"requestCount":1,"robotsRequestCount":1,"failureCode":"transportError"}}
+        """;
 
     private static CollectionRequest Request(string id, string? etag = null) => new()
     {

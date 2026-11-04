@@ -495,8 +495,8 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
             ;
             INSERT INTO collection_captures (sha256, byte_length) VALUES (@hash, 1);
             INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks,
-                outcome, has_response, response_status_code, response_content_encodings, has_sent_validators, capture_sha256)
-            VALUES (@attempt, @source, @url, @url, @created, 'captured', TRUE, 200, ARRAY[]::text[], FALSE, @hash);
+                outcome, has_response, response_status_code, response_content_encodings, has_sent_validators, capture_sha256, elapsed_milliseconds)
+            VALUES (@attempt, @source, @url, @url, @created, 'captured', TRUE, 200, ARRAY[]::text[], FALSE, @hash, 0);
             INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
             VALUES (@extraction, @attempt, 'extraction-v1', 'text', @text_hash);
             """, connection);
