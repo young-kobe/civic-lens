@@ -264,6 +264,14 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
     }
 
     [Fact]
+    public async Task AVoteAlignmentRebuildsByteForByteBecauseTheRowsDoNotHoldItAndOnlyTheFileCanGiveItBack()
+    {
+        var vote = PublishedSamples.Vote("A vote", "A short account.", "Xq the source text.");
+
+        await AssertSamplesPassAsync(vote with { Entry = vote.Entry with { Alignment = PublishedVoteAlignment.Split } });
+    }
+
+    [Fact]
     public async Task AnActionWithSeveralSponsorsKeepsTheNamesAndTheOrderOfTheFileBecauseTheRowsHoldOnlyTheIds()
     {
         var action = (PublishedAction)PublishedSamples.Action("An action", "A short account.", "A bill title", "Xq the source text.").Body;
