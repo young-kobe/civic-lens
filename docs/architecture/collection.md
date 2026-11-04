@@ -20,7 +20,7 @@ Collection fetches configured sources through a separate, bounded collector proc
 - PostgreSQL notifications only wake the engine. Durable rows decide the runnable work.
 - Network execution is not exactly once. An expired lease cannot prove that a stalled process has stopped its HTTP requests.
 - A lost import acknowledgment never authorizes another fetch before reconciliation.
-- Timeout reservations stay fully charged, because the receipt does not report elapsed time.
+- Timeout reservations stay fully charged. The stored elapsed time does not lower the charge.
 - Large crawl delays are not shortened to fit budgets. Repeated attempts can exhaust the bounded allowance of a job, and an operator then adjusts it.
 - A robots rule that exceeds a limit blocks collection. The collector never accepts partial rules.
 - Pacing groups bound the total load on shared infrastructure, such as all `*.house.gov` origins.
