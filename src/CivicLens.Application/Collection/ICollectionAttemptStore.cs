@@ -8,6 +8,10 @@ public interface ICollectionAttemptStore
     /// <summary>Reads an already imported attempt for durable job reconciliation without collecting again.</summary>
     Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken);
 
+    /// <summary>Reads the imported attempts among the given IDs in one bounded batch; missing IDs are absent.</summary>
+    Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> GetManyAsync(IReadOnlyCollection<string> attemptIds,
+        CancellationToken cancellationToken);
+
     /// <summary>
     /// In one transaction, load any same-ID retained attempt and all potentially eligible prior captures, call
     /// <see cref="CollectionAttemptImport.DecideFromCandidates"/>, retain new evidence on NewAttempt, and return the decision.

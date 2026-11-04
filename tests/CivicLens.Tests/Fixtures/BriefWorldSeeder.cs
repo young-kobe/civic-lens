@@ -73,12 +73,9 @@ internal sealed class BriefWorldSeeder(string connectionString)
         """, ("id", id), ("revision", revision), ("json", JsonSerializer.Serialize(new StatementDraftRevision(id, revision, "auth0|editor", Created,
             headline, "Summary of " + headline, new DateOnly(2026, 10, 6), null, [.. officials], [], [], [], [], []), Web)));
 
-    public Task DocumentChangeAsync(string id, int revision, string headline, params string[] officials) => ExecuteAsync("""
-        SET session_replication_role = replica;
-        INSERT INTO document_change_revisions (draft_id, revision_number, revision_json, created_at_utc_ticks)
-        VALUES (@id, @revision, @json, 0)
-        """, ("id", id), ("revision", revision), ("json", JsonSerializer.Serialize(new DocumentChangeDraftRevision(id, revision, new string('c', 64),
-            "auth0|editor", Created, headline, "Summary of " + headline, null, null, "Agency", null, null, [.. officials], [], []), Web)));
+    public Task DocumentChangeAsync(string id, int revision, string headline, params string[] officials) =>
+        DocumentChangeRevisionSeeder.AddAsync(connectionString, new DocumentChangeDraftRevision(id, revision, new string('c', 64),
+            "auth0|editor", Created, headline, "Summary of " + headline, null, null, "Agency", null, null, [.. officials], [], []));
 
     public Task ActionAsync(string id, int revision, int billNumber, params string[] sponsors) => ExecuteAsync("""
         SET session_replication_role = replica;

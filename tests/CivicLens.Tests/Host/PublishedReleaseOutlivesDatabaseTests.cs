@@ -54,12 +54,16 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
     {
         var releases = Path.Combine(root, "releases-root");
         var summary = await PublishAsync(releases);
+        var entryRows = await PublishedEntryRows.ReadAsync(new NpgsqlConnectionStringBuilder(container.GetConnectionString()) { Pooling = false }.ConnectionString);
         await container.DisposeAsync();
 
         var current = Path.Combine(releases, "current");
         var manifest = Deserialize<PublicationRelease>(Path.Combine(current, PublicationProtocol.ManifestPath));
         manifest.Validate();
         var entry = Assert.Single(manifest.Records);
+        var withoutNames = entry with { Officials = [.. entry.Officials.Select(official => official with { Name = string.Empty })] };
+        Assert.Equal(JsonSerializer.Serialize(withoutNames, PublicationProtocol.JsonOptions),
+            JsonSerializer.Serialize(Assert.Single(entryRows), PublicationProtocol.JsonOptions));
         var record = Deserialize<PublishedDocumentChange>(Path.Combine(current, PublicationProtocol.RecordDataPath(entry.RecordId)));
         record.Validate();
         Assert.Equal(summary.ReleaseNumber, manifest.ReleaseNumber);

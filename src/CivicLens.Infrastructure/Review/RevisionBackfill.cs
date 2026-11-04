@@ -55,9 +55,10 @@ internal sealed class RevisionBackfill<TRow, TRevision, TPage>(IDbContextFactory
         return new(checkedCount, legacy, mismatched, first);
     }
 
-    private static IQueryable<TRow> InKeyOrderAfter(IQueryable<TRow> rows, RevisionKey? after) =>
-        rows.Where(row => after == null || row.RecordId.CompareTo(after.RecordId) > 0 || row.RecordId == after.RecordId && row.RevisionNumber > after.RevisionNumber)
-            .OrderBy(row => row.RecordId).ThenBy(row => row.RevisionNumber);
+    private IQueryable<TRow> InKeyOrderAfter(IQueryable<TRow> rows, RevisionKey? after) =>
+        rows.Where(row => after == null || EF.Property<string>(row, kind.RecordIdProperty).CompareTo(after.RecordId) > 0 ||
+                EF.Property<string>(row, kind.RecordIdProperty) == after.RecordId && row.RevisionNumber > after.RevisionNumber)
+            .OrderBy(row => EF.Property<string>(row, kind.RecordIdProperty)).ThenBy(row => row.RevisionNumber);
 
     private async Task<string?> TryMoveAsync(CollectionAttemptDbContext db, IDbContextTransaction transaction, TRow row, CancellationToken cancellationToken)
     {
@@ -88,7 +89,7 @@ internal sealed class RevisionBackfill<TRow, TRevision, TPage>(IDbContextFactory
         await kind.FillColumnsAsync(db, row, revision, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         var stored = await kind.ReadPageAsync(db, db.Set<TRow>().AsNoTracking()
-            .Where(candidate => candidate.RecordId == row.RecordId && candidate.RevisionNumber == row.RevisionNumber), cancellationToken);
+            .Where(candidate => EF.Property<string>(candidate, kind.RecordIdProperty) == row.RecordId && candidate.RevisionNumber == row.RevisionNumber), cancellationToken);
         return kind.DifferingFields(stored.Rows.Single(), stored).Count == 0 ? null : RevisionBackfillReasons.RebuildMismatch;
     }
 

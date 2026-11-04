@@ -21,6 +21,8 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
 using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
+using CivicLens.Tests.Fixtures;
+
 namespace CivicLens.Tests.Infrastructure.Documents;
 
 [Collection(PostgresCollection.Name)]
@@ -532,8 +534,8 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
                 INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, source_id, is_root, pacing_key, state, created_at,
                     cancellation_requested, lease_fence)
                 VALUES ('job', 'key', '{}', 'source', FALSE, 'source', 'Succeeded', 1, FALSE, 0);
-                INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at)
-                VALUES (@attempt, 'job', 1, '{}', 1);
+                """ + JobAttemptSql.Insert("@attempt", "'job'", "1", "1") + """
+                ;
                 INSERT INTO document_comparisons (comparison_id, before_extraction_id, after_extraction_id,
                     algorithm_version, settings_version, result_json, has_changes)
                 VALUES (@comparison, @before, @after, @algorithm, @settings, @result, FALSE)

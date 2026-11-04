@@ -116,8 +116,8 @@ public sealed class PublishFirstPublishedTests
 
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));
 
-        var row = Assert.Single(scenario.Publications.LastCommit!.FirstPublications);
-        Assert.Equal(new PublishedFirstPublication(PublishedRecordKind.DocumentChange, draft, scenario.Clock.Now), row);
+        var entry = Assert.Single(scenario.Publications.LastCommit!.AddedEntries);
+        Assert.Equal((PublishedRecordKind.DocumentChange, draft, scenario.Clock.Now), (entry.Kind, entry.RecordId, entry.FirstPublishedAtUtc));
     }
 
     [Fact]

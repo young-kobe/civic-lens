@@ -23,7 +23,8 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
     private static readonly QueueKind[] Kinds =
     [
         new(PublishedRecordKind.DocumentChange, "dc", "document_change_drafts", "headline",
-            (db, ids, ct) => PostgresDocumentChangeReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
+            (db, ids, ct) => PostgresDocumentChangeReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct),
+            Column: new("headline", recordId => DocumentChangeRevisionRows.NotBackfilled($"The current revision of document change {recordId}"))),
         new(PublishedRecordKind.Statement, "st", "statement_drafts", "headline",
             (db, ids, ct) => PostgresStatementReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
         new(PublishedRecordKind.Action, "ac", "action_drafts", "headline",

@@ -31,3 +31,5 @@ votes yea
 votes nay
 votes present
 votes not_voting
+votes question
+votes result

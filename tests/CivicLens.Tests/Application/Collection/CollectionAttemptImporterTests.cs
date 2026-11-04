@@ -326,6 +326,7 @@ public sealed class CollectionAttemptImporterTests
 
     private sealed class FakeStore : ICollectionAttemptStore
     {
+        public Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> GetManyAsync(IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken) =>
             Task.FromResult(Existing?.AttemptResult.AttemptId == attemptId ? Existing : null);
 
