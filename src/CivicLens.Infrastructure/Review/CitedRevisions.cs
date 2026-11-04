@@ -29,7 +29,7 @@ internal static class CitedRevisions
         IEnumerable<PublishedRevisionBinding> named, CancellationToken cancellationToken)
     {
         if (kind is PublishedRecordKind.Vote or PublishedRecordKind.ExecutiveAction or PublishedRecordKind.DocumentChange or PublishedRecordKind.Relationship
-            or PublishedRecordKind.Statement)
+            or PublishedRecordKind.Statement or PublishedRecordKind.Brief)
             throw new ArgumentException($"A {kind} revision is read from its columns, not from its JSON.", nameof(kind));
         var requested = named.Distinct().ToArray();
         var stored = await ReadStoredRevisionsAsync(db, kind, requested, cancellationToken);

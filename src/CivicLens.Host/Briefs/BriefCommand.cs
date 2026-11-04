@@ -1,13 +1,15 @@
 using System.Globalization;
 using CivicLens.Application.Briefs;
+using CivicLens.Application.Review;
 using CivicLens.Core.Briefs;
 using CivicLens.Core.Review;
 
 namespace CivicLens.Host.Briefs;
 
-internal sealed class BriefCommand(RedraftBrief redraft, ReviewActor owner)
+internal sealed class BriefCommand(RedraftBrief redraft, BackfillRevisions backfill, VerifyRevisions verify, ReviewActor owner)
 {
-    private const string Usage = "Use brief redraft --week <yyyy-MM-dd>, where the date is the Monday that starts the week.";
+    private const string Usage = "Use brief redraft --week <yyyy-MM-dd>, where the date is the Monday that starts the week, " +
+        "brief revisions backfill <limit>, or brief revisions verify.";
 
     public static bool Matches(string[] args) => args is ["brief", ..];
 
@@ -19,6 +21,10 @@ internal sealed class BriefCommand(RedraftBrief redraft, ReviewActor owner)
                 case ["brief", "redraft", "--week", var week]:
                     CommandOutput.Write(new { requeued = await redraft.ExecuteAsync(owner, ParseWeek(week), cancellationToken) });
                     return 0;
+                case ["brief", "revisions", "backfill", var limit]:
+                    return await OwnerCommand.BackfillRevisionsAsync(backfill, owner, limit, Usage, cancellationToken);
+                case ["brief", "revisions", "verify"]:
+                    return await OwnerCommand.VerifyRevisionsAsync(verify, owner, cancellationToken);
                 default:
                     Console.Error.WriteLine(Usage);
                     return 2;
