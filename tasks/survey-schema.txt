@@ -1,0 +1,19 @@
+TASK: an independent design review of the data plane schema of Civic Lens, written to survey/schema-coherence.md. The owner asks: "Is our data plane schema coherent and well designed for our use case?"
+Use case: collect public evidence (captures, attempts, jobs), draft records with a model (statements, actions, votes, executive actions, document changes, relationships, weekly briefs), approve them (code approves fact records, people approve judgment records), publish immutable releases, and serve them read-only through the public_api views. Data and schemas are first class: own data lives in columns and child tables with database-enforced rules; JSON stays only for verbatim text (hashed configuration revision, byte-compared document comparison, raw model and collector input and output). Read docs/roadmap.md R-63 and R-68 for the plan in flight.
+Sources: docs/schema*.md or the generated schema reference (find it with git grep -l "CIVIC_LENS_WRITE_SCHEMA_DOCS"), src/CivicLens.Infrastructure/**/Migrations (newest model snapshot), the EF configurations, docs/architecture/*.md Storage sections, docs/architecture/public-api-columns.txt.
+Report, in this order:
+1. A one-page map: each table group, its owner feature, and what it records.
+2. Coherence checks, each with a verdict (good, gap, defect) and file:line: naming consistency (table, column, tick and time columns, ID forms), the same concept modeled two ways across revision kinds (for example official, issue, citation and source links), keys and foreign keys (missing FKs, FKs that cannot exist and why), immutability of revisions and captures (is it enforced by the database or only by code), check constraints for closed value sets, nullable columns that should not be null after backfills, indexes vs the real read paths (worker queues, publish, public_api views), JSON columns still holding own data and which R-63 step removes each, tables or columns with no reader or no writer, duplicated facts that can drift (for example counts stored and computed).
+3. Whether the public_api views expose a coherent read model for the public pages (officials, votes, bills, issues, ZIP districts, records), and what is missing for the official page, home, and issue pages to read from the API instead of release.json.
+4. The ranked list of changes you recommend, each sized (small, medium, large), with the open decisions in the format above. Mark which ones must land before the R-63 JSON drops and which can wait for the prune pass.
+Keep the file under 2,500 words.
+
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b survey-schema-coherence origin/main
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+Read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Facts come from file reads and git grep on origin/main; cite file:line for every claim. Do not change code. Prose: ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes. Each open decision gives the concrete problem, 2 to 4 options with tradeoffs, the precedent you checked, and a recommendation first.
+Finish, each its own Bash call: git add survey/schema-coherence.md; git commit -m "<one plain sentence>"; git push origin survey-schema-coherence. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only survey-schema-coherence.
+Final message under 1,800 characters: the pushed SHA, the top findings ranked, and the decision list with one line each.
