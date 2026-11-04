@@ -37,9 +37,9 @@ public static class StatementDraftPrompt
         var schema = BuildSchema(severalSpeakers ? officials : default);
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
-        var hash = AnalysisPromptHash.Compute(StatementDraftTask.Model, StatementDraftTask.Effort,
+        var hash = AnalysisPromptHash.Compute(StatementDraftTask.Model, AnalysisEffort.Medium,
             StatementDraftTask.MaximumOutputTokens, system, user, schema);
-        return new(StatementDraftTask.Model, StatementDraftTask.MaximumOutputTokens, system, user, schema, hash,
+        return new(StatementDraftTask.Model, AnalysisEffort.Medium, StatementDraftTask.MaximumOutputTokens, system, user, schema, hash,
             bytes + (long)StatementDraftTask.MaximumOutputTokens);
     }
 

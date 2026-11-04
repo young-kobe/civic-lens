@@ -43,9 +43,9 @@ public static class BriefCheckPrompt
         var schema = BuildSchema(revision);
         var bytes = Encoding.UTF8.GetByteCount(SystemInstructions) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
-        var hash = AnalysisPromptHash.Compute(BriefCheckTask.Model, BriefCheckTask.Effort, BriefCheckTask.MaximumOutputTokens,
+        var hash = AnalysisPromptHash.Compute(BriefCheckTask.Model, AnalysisEffort.Medium, BriefCheckTask.MaximumOutputTokens,
             SystemInstructions, user, schema);
-        return new(BriefCheckTask.Model, BriefCheckTask.MaximumOutputTokens, SystemInstructions, user, schema, hash,
+        return new(BriefCheckTask.Model, AnalysisEffort.Medium, BriefCheckTask.MaximumOutputTokens, SystemInstructions, user, schema, hash,
             bytes + (long)BriefCheckTask.MaximumOutputTokens);
     }
 

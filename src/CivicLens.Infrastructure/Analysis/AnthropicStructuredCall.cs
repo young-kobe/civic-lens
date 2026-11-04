@@ -40,7 +40,7 @@ internal sealed class AnthropicStructuredCall
             Messages = [new() { Role = Role.User, Content = request.UserPrompt }],
             OutputConfig = new OutputConfig
             {
-                Effort = Effort.Medium,
+                Effort = ToEffort(request.Effort),
                 Format = new JsonOutputFormat { Schema = ToSchema(request.SchemaJson) }
             }
         };
@@ -51,9 +51,7 @@ internal sealed class AnthropicStructuredCall
             var tokens = new AnalysisTokenUsage(usage.InputTokens, usage.OutputTokens, usage.CacheReadInputTokens ?? 0,
                 usage.CacheCreationInputTokens ?? 0);
             var stopReason = message.StopReason?.Raw() ?? "none";
-            var text = stopReason == "end_turn"
-                ? string.Concat(message.Content.Select(block => block.Value).OfType<TextBlock>().Select(block => block.Text))
-                : null;
+            var text = string.Concat(message.Content.Select(block => block.Value).OfType<TextBlock>().Select(block => block.Text));
             return new(stopReason, string.IsNullOrEmpty(text) ? null : text, tokens, message.ID);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
@@ -69,6 +67,12 @@ internal sealed class AnthropicStructuredCall
     private static MessageCreateParamsSystem SystemPrompt(AnalysisModelRequest request) => request.CacheSystemPrompt
         ? new List<TextBlockParam> { new() { Text = request.SystemPrompt, CacheControl = new CacheControlEphemeral() } }
         : request.SystemPrompt;
+
+    private static Effort ToEffort(string effort) => effort switch
+    {
+        AnalysisEffort.Medium => Effort.Medium,
+        _ => throw new ArgumentOutOfRangeException(nameof(effort), effort, "The analysis effort is not supported.")
+    };
 
     private static Failure ForStatus(HttpStatusCode status) => (int)status switch
     {

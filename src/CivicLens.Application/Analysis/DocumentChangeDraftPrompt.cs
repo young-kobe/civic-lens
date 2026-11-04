@@ -49,9 +49,9 @@ public static class DocumentChangeDraftPrompt
         var schema = BuildSchema(hunks.Length, catalog);
         var bytes = Encoding.UTF8.GetByteCount(SystemPrompt) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > DocumentChangeDraftTask.MaximumPromptBytes) return null;
-        var hash = AnalysisPromptHash.Compute(DocumentChangeDraftTask.Model, DocumentChangeDraftTask.Effort,
+        var hash = AnalysisPromptHash.Compute(DocumentChangeDraftTask.Model, AnalysisEffort.Medium,
             DocumentChangeDraftTask.MaximumOutputTokens, SystemPrompt, user, schema);
-        return new(DocumentChangeDraftTask.Model, DocumentChangeDraftTask.MaximumOutputTokens,
+        return new(DocumentChangeDraftTask.Model, AnalysisEffort.Medium, DocumentChangeDraftTask.MaximumOutputTokens,
             SystemPrompt, user, schema, hash, bytes + (long)DocumentChangeDraftTask.MaximumOutputTokens);
     }
 

@@ -231,6 +231,18 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
     }
 
     [Fact]
+    public async Task EveryRelationshipRunStoresTheExactRequestAndARetryRunStoresItsOwnUserMessage()
+    {
+        var pair = await SeedApprovedPairAsync();
+        var model = new FakeRelationshipDraftModel().Draft("not json").Draft(Output());
+
+        await RunWorkerAsync(model);
+
+        Assert.Equal(2, model.Requests.Count);
+        await StoredRunInputs.AssertMatchAsync(connectionString, "relationship_analysis_runs", "pair_id", pair.PairId, model.Requests);
+    }
+
+    [Fact]
     public async Task AChangedStatementRevisionDraftsRevisionTwoAndALaterPassWithTheSameInputsMakesNoCall()
     {
         await SeedApprovedPairAsync();
@@ -264,6 +276,8 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
         Assert.Equal([["2"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_revisions"));
         Assert.Equal([["Succeeded", "null"]], await seeder.ReadAsync("SELECT status, error_code FROM relationship_analysis"));
         Assert.Equal([["1"]], await seeder.ReadAsync("SELECT count(*) FROM relationship_analysis_runs WHERE outcome = 'Bypassed' AND reason = 'targetRecited'"));
+        var bypassed = Assert.Single(await seeder.ReadAsync("SELECT run_id FROM relationship_analysis_runs WHERE outcome = 'Bypassed'"))[0];
+        Assert.Null(await StoredRunInputs.ReadAsync(connectionString, "relationship_analysis_runs", bypassed));
         var read = (await new PostgresRelationshipReviewStore(factory).GetAsync(pair.PairId, default))!;
         Assert.Equal(2, read.Review.CurrentRevision.Target.RevisionNumber);
         Assert.False(read.CitedRecordsChanged);

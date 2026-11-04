@@ -32,6 +32,51 @@ public sealed class DocumentChangeDraftStepTests
     }
 
     [Fact]
+    public async Task AModelIdWithANulCharacterGivesARejectedRunWhoseErrorAndRetryPromptHoldTheReplacementCharacter()
+    {
+        var store = new FakeAnalysisStore(1);
+        var citation = ("h1", "after", "Item 0 new");
+        var model = new FakeDocumentChangeDraftModel()
+            .Draft(FakeDocumentChangeDraftModel.Output("Deadline moves", [citation], officialIds: ["warren\0x"]))
+            .Draft(FakeDocumentChangeDraftModel.Output(citation));
+
+        await Worker(store, model).ExecuteAsync(once: true);
+
+        Assert.Equal(2, model.Requests.Count);
+        var rejected = store.Runs.First();
+        Assert.Equal(AnalysisRunOutcome.OutputRejected, rejected.Outcome);
+        Assert.Contains(rejected.ValidationErrors, error => error.Contains("warren\uFFFDx", StringComparison.Ordinal));
+        Assert.Contains("warren\uFFFDx", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain('\0', model.Requests[1].UserPrompt);
+        Assert.All(store.Runs, run => run.ValidateForWrite());
+        Assert.Equal(AnalysisRunOutcome.Drafted, store.Runs.Last().Outcome);
+    }
+
+    [Fact]
+    public async Task EveryRunThatCalledTheModelKeepsTheExactRequestAndARetryRunKeepsItsOwnUserMessage()
+    {
+        var store = new FakeAnalysisStore(1);
+        var citation = ("h1", "after", "Item 0 new");
+        var model = new FakeDocumentChangeDraftModel()
+            .Draft(FakeDocumentChangeDraftModel.Output("Deadline moves", [citation], officialIds: ["nobody"]))
+            .Draft(FakeDocumentChangeDraftModel.Output(citation));
+
+        await Worker(store, model).ExecuteAsync(once: true);
+
+        Assert.Equal(2, store.Runs.Count);
+        foreach (var (run, request) in store.Runs.Zip(model.Requests))
+        {
+            var input = Assert.IsType<AnalysisRunInput>(run.Input);
+            Assert.Equal((request.SystemPrompt, request.UserPrompt, request.SchemaJson, request.Effort, request.MaximumOutputTokens),
+                (input.SystemPrompt, input.UserMessage, input.OutputSchema, input.Effort, input.MaximumOutputTokens));
+            Assert.Equal(request.InputHash, AnalysisPromptHash.Compute(request.Model, input.Effort, input.MaximumOutputTokens,
+                input.SystemPrompt, input.UserMessage, input.OutputSchema));
+        }
+        Assert.NotEqual(store.Runs[0].Input!.UserMessage, store.Runs[1].Input!.UserMessage);
+        Assert.Contains("nobody", store.Runs[1].Input!.UserMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AnUnexpectedModelErrorAfterTheReservationFailsTheEntryAndKeepsTheCharge()
     {
         var store = new FakeAnalysisStore(1);

@@ -40,9 +40,9 @@ public static class RelationshipDraftPrompt
         var schema = BuildSchema(context.Pair.Target);
         var bytes = Encoding.UTF8.GetByteCount(SystemInstructions) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
-        var hash = AnalysisPromptHash.Compute(RelationshipDraftTask.Model, RelationshipDraftTask.Effort, RelationshipDraftTask.MaximumOutputTokens,
+        var hash = AnalysisPromptHash.Compute(RelationshipDraftTask.Model, AnalysisEffort.Medium, RelationshipDraftTask.MaximumOutputTokens,
             SystemInstructions, user, schema);
-        return new(RelationshipDraftTask.Model, RelationshipDraftTask.MaximumOutputTokens, SystemInstructions, user, schema, hash,
+        return new(RelationshipDraftTask.Model, AnalysisEffort.Medium, RelationshipDraftTask.MaximumOutputTokens, SystemInstructions, user, schema, hash,
             bytes + (long)RelationshipDraftTask.MaximumOutputTokens);
     }
 

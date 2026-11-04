@@ -16,6 +16,8 @@ The analysis feature runs model tasks over retained evidence through durable, bu
 - The token reservation is the prompt byte count plus the output allowance. A byte-level tokenizer gives at most one token for each byte, so this is an upper bound.
 - The byte bound also keeps each prompt in the lower Haiku 5.5 price tier.
 - A call that may have been billed stays fully charged. A crash or a lost connection therefore never hides spend.
+- A run stores the exact system prompt, user message, output schema, effort, and output token limit of its model call. Runs repeat the system prompt and the schema, so two shared tables hold those texts once. The user message belongs to one run and stays in the run row.
+- A content hash over one row gets a database CHECK. A content hash over child rows gets a verify recompute, as `vote_member_lists` does. A CHECK cannot see child rows, and the repository limits triggers.
 - AI drafts use the reserved author subject `civic-lens:analysis`. That subject can never decide, so an AI author can never approve its own draft.
 - Code approves a worker revision of an action or a vote under the reserved subject `civic-lens:code`, after it checks the citations. This is a code decision and not a model decision. The statement draft task also gets a code approval, but only when the statement checks pass; see [statements](statements.md#statement-code-approval). No other task gets a code approval.
 - An AI-proposed change date needs explicit human confirmation. A published record never carries an unconfirmed AI date. The one exception is a statement date that code read from the release; see [statements](statements.md#statement-code-approval). The page labels it.
@@ -38,6 +40,13 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - `pending_run_id` has no key. `ReserveAsync` names the run before the run row exists, and `SettleRunAsync` or `Interrupt` writes the row later. Enforced by the absence of a key. Test: `TickBoundsAndKeysMigrationTests.ThePendingRunOfAReservationHasNoKeyBecauseItsRunRowIsWrittenLater`.
 - A run charges at least the tokens it used. Enforced by `ck_document_change_analysis_runs_tokens` and `AnalysisRun`. Test: `AnalysisRunTests.ARunCannotChargeLessThanTheTokensItUsed`.
 - At most one run exists for each draft revision. Enforced by the unique index `IX_document_change_analysis_runs_draft_id_revision_number` on `(draft_id, revision_number)`. A run without a draft has a null `draft_id`. No test.
+- A prompt text row has the SHA-256 of its text as its key. Enforced by `ck_analysis_system_prompts_hash` and `ck_analysis_output_schemas_hash`, which repeat `AnalysisRunInput.TextHash` in SQL. Test: `AnalysisPromptTextsTests.TheDatabaseRefusesATextWhoseKeyIsNotItsSha256BecauseTheKeyIsTheOnlyProofThatTheTextIsTheOneRunsUsed`.
+- A run holds all five input columns or none. Enforced by `ck_<run table>_input`. Test: `AnalysisRunInputColumnsTests.OneMissingInputColumnIsRefusedBecauseARunHoldsTheWholeInputOrNone`.
+- A run that did not call the model holds no input. Enforced by `ck_<run table>_input_outcome` and `AnalysisRun.ValidateForWrite`. Tests: `AnalysisRunInputColumnsTests.AnInterruptedRunCannotHoldAnInputBecauseTheRequestDiedWithTheWorker` and `AnalysisRunTests.ANewRunHoldsItsInputOnlyWhenItCalledTheModelBecauseTheDatabaseCannotTellNewRunsFromOldOnes`.
+- A new run that called the model holds its input. Enforced by `AnalysisRun.ValidateForWrite`, which `PostgresAnalysisQueue.CheckpointAsync` and `Interrupt` call. The database cannot tell a new run from an old run, and old runs hold no input. Test: `AnalysisRunTests.ANewRunHoldsItsInputOnlyWhenItCalledTheModelBecauseTheDatabaseCannotTellNewRunsFromOldOnes`.
+- A stored input equals the request that the model call sent. Enforced by `AnalysisWorker.Attempt.Run`, which builds the input from the request, and by `AnalysisRunRows.Create`. Tests: `PostgresDocumentChangeAnalysisStoreTests.EveryRunStoresTheExactRequestItSentAndARetryRunStoresItsOwnUserMessage` and the matching test of each other task.
+- A model answer never puts a NUL character in a stored text. Enforced by `AnalysisAnswerRules.Bound`, which replaces each NUL in a validation error with U+FFFD, and by `AnalysisRun.ValidateForWrite`, which refuses a NUL as a guard. Tests: `AnalysisAnswerRulesTests.BoundReplacesEachNulCharacterWithTheReplacementCharacterBecauseAnErrorQuotesModelTextAndPostgresTextCannotHoldNul`, `DocumentChangeDraftStepTests.AModelIdWithANulCharacterGivesARejectedRunWhoseErrorAndRetryPromptHoldTheReplacementCharacter`, and `AnalysisRunTests.ANewRunRefusesANulCharacterInEachInputTextBecausePostgresTextCannotHoldIt`.
+- The read-only database role cannot read `user_message`. Enforced by the hidden column pattern in `deploy/scripts/readonly-grants.sql`. The system prompt and schema tables stay readable. Test: `AnalysisRunInputColumnsTests.TheReadOnlyRoleCannotReadTheUserMessageOfAnyRunTableButStillReadsTheSystemPromptTheSchemaAndTheFlagMessages`.
 - Only a human owner requeues. Enforced by `RequeueAnalyses`, `RequeueBlockedActionDrafts`, `RedraftActionDrafts`, `RequeueBlockedVoteDrafts`, `RedraftVoteDrafts`, and `RedraftBrief`. Tests: `RequeueAnalysesTests.OnlyAHumanOwnerRequeues`, `ActionCommandTests.TheAiDrafterCannotActAsTheOwner`, `VoteCommandTests.TheAiDrafterCannotActAsTheOwner`, `RelationshipCommandTests.TheAiDrafterCannotActAsTheOwner`, and `RedraftBriefTests.OnlyTheOwnerMayRedraftAWeek`.
 
 ## Behavior
@@ -139,7 +148,7 @@ A rate limit, a provider error, or a rejected request charges nothing. A connect
 
 A rate limit or a single provider or connection failure retries durably. The delay starts at 30 seconds, doubles, and stops at 30 minutes. The SDK exceptions do not expose the `retry-after` header, so a 429 also uses this backoff. A 408 or 409 counts as a provider failure. Other 4xx responses fail the entry at once.
 
-A refusal, a `max_tokens` stop, and any other stop fail the entry at once. A response that arrives but cannot be read fails the entry as `invalidResponse`. It keeps the reported token use, or the full reservation when the use is unknown. It does not count toward an outage.
+A refusal, a `max_tokens` stop, and any other stop fail the entry at once. The run keeps the answer text of each stop that has text. A response that arrives but cannot be read fails the entry as `invalidResponse`. It keeps the reported token use, or the full reservation when the use is unknown. It does not count toward an outage.
 
 Account-wide errors pause the whole executor. The entry returns to Pending and loses no attempt.
 
@@ -149,6 +158,22 @@ Account-wide errors pause the whole executor. The entry returns to Pending and l
 - An outage pause never replaces a pause that waits for a restart.
 
 `AnalysisStatus` owns this rule (`IsHardPaused`, `IsTimedPaused`). `PostgresAnalysisStatusStore` locks the status row with `FOR UPDATE`, applies the rule in C#, and writes. A restart or a second pause therefore cannot slip between the check and the write.
+
+### Run input
+
+`AnalysisModelRequest` carries the effort. `AnalysisEffort.Medium` is the one effort constant. Each prompt builder passes it to `AnalysisPromptHash.Compute` and to the request. `AnthropicStructuredCall` maps it to the SDK value and refuses an unknown effort.
+
+`AnalysisWorker.Attempt.Run` builds an `AnalysisRunInput` from the request of the call. The input holds the system prompt, the user message, the output schema, the effort, and the output token limit. It computes the SHA-256 of the system prompt and of the schema once. `AnalysisRunRows.Create` copies the two hashes and the other fields into the run row.
+
+`PostgresAnalysisQueue.SettleRunAsync` calls `AnalysisPromptTexts.EnsureAsync` just before it adds the run. The call runs in the settle transaction, under the subject row lock. It inserts the system prompt and then the schema with `ON CONFLICT DO NOTHING`. Every writer takes the two table locks in that order. A writer that finds the text already stored skips the insert, and the first writer keeps `created_at_utc_ticks`.
+
+A retry run has its own user message, because the rejection reasons are part of it. Each pass is its own run with its own input.
+
+A bypassed run made no call and holds no input. An interrupted run lost its request with the worker and holds no input, but keeps its input hash. A run that failed after the call started, such as a rate limit or a lost connection, keeps the full input.
+
+`AnalysisRun.Validate` is the read rule and accepts a run with no input, because runs from before this change hold none. `AnalysisRun.ValidateForWrite` is the write rule. It requires an input for each run that called the model and none for the other runs. It refuses a NUL character in each input text and in each validation error. A model answer cannot reach that guard, because `AnalysisAnswerRules.Bound` replaces each NUL in an error first.
+
+`AnalysisRunInput.MaximumPromptBytes` is the one limit of 100,000. The task classes use it for `MaximumPromptBytes`, and the text tables and `user_message` use it in their checks. A character count never exceeds the byte count, so a prompt that the builder accepts always passes the checks.
 
 ### Draft and authorship
 
@@ -195,9 +220,11 @@ Ordinary tests use a fake model at the port. One live smoke test runs only with 
 - A saved action or vote draft gets its exact tier. `PairPriority` finds the pairs over the latest revisions with no approval filter. The entry is tier 1 only if a pair exists. A saved statement draft raises the entries of the actions and votes that pair with it. A raise never lowers a tier. `AnalysisPriority` locks the rows in key order and skips Running entries.
 - A person who edits a draft does not refresh the tier. The next draft of the record does.
 - `document_change_analysis`, `relationship_analysis`, and `brief_analysis` keep the default tier. Their order does not change.
-- `document_change_analysis_runs` keeps one insert-only row for each model call. It holds the versions, the input hash, the token use, the output, and the catalog copy of the officials and issues that the prompt listed.
-- The run does not store prompt text. The versioned prompt in code rebuilds it from the retained comparison and the catalog copy. The input hash proves the rebuild.
-- A run recovered after a crash or shutdown is `Interrupted`. It keeps its real start time, has no catalog copy, and uses the current task constants as its versions.
+- Each `*_analysis_runs` table keeps one insert-only row for each model call. It holds the versions, the input hash, the token use, the output, and a copy of the context that the prompt listed.
+- Each run table also has five input columns: `system_prompt_sha256`, `output_schema_sha256`, `user_message`, `effort`, and `max_output_tokens`. The two hash columns have restricting foreign keys to `analysis_system_prompts` and `analysis_output_schemas`. Each of those tables holds `text_sha256`, `text`, and `created_at_utc_ticks`. The checks `ck_<table>_hash`, `ck_<table>_id`, and `ck_<table>_text` keep the key equal to the SHA-256 of the text and keep the text from 1 to 100,000 characters.
+- A run from before the input columns holds none of them. No step rebuilds a past request.
+- `output_json` holds the answer text of every stop that has text. A refusal or a truncated answer keeps its text.
+- A run recovered after a crash or shutdown is `Interrupted`. It keeps its real start time, has no context copy and no input, and uses the current task constants as its versions.
 - `document_change_analysis_budget` holds charged tokens for each UTC day.
 - `document_change_analysis_status` holds one row for each task with its limit, time, and pause state. The statement tasks also use this table.
 - The code of a run outcome is its name in camel case.
@@ -207,7 +234,8 @@ Ordinary tests use a fake model at the port. One live smoke test runs only with 
 
 | Concern | Files |
 |---|---|
-| Run and outcomes | `src/CivicLens.Core/Analysis/AnalysisRun.cs`, `src/CivicLens.Core/Analysis/AnalysisRunOutcome.cs` |
+| Run and outcomes | `src/CivicLens.Core/Analysis/AnalysisRun.cs`, `src/CivicLens.Core/Analysis/AnalysisRunOutcome.cs`, `src/CivicLens.Core/Analysis/AnalysisRunInput.cs` |
+| Run input storage | `src/CivicLens.Infrastructure/Analysis/AnalysisPromptTexts.cs`, `src/CivicLens.Infrastructure/Analysis/AnalysisRunRows.cs`, `src/CivicLens.Infrastructure/Analysis/Persistence/AnalysisTableConfiguration.cs`, `src/CivicLens.Application/Analysis/AnalysisEffort.cs` |
 | Shared queue rules | `src/CivicLens.Application/Analysis/AnalysisWorker.cs`, `src/CivicLens.Application/Analysis/AnalysisLifecycle.cs`, `src/CivicLens.Application/Analysis/AnalysisValidationLoop.cs`, `src/CivicLens.Application/Analysis/AnalysisStatus.cs`, `src/CivicLens.Application/Analysis/AnalysisPolicy.cs` |
 | Shared answer and schema rules | `src/CivicLens.Application/Analysis/AnalysisAnswerRules.cs`, `src/CivicLens.Application/Analysis/AnalysisSchema.cs` |
 | Ports | `src/CivicLens.Application/Analysis/IAnalysisQueue.cs`, `src/CivicLens.Application/Analysis/IAnalysisQueueStore.cs`, `src/CivicLens.Application/Analysis/IAnalysisTaskStep.cs`, `src/CivicLens.Application/Analysis/IAnalysisAttempt.cs`, `src/CivicLens.Application/Analysis/IAnalysisStatusStore.cs` |
@@ -227,6 +255,11 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 ## Limits and planned work
 
 The [roadmap](../roadmap.md) holds the delivery order. These design rules apply to the planned work:
+
+- The stored input is the text that the code built, not the HTTP body. The SDK serializes the body, so key order and spacing of the schema on the wire can differ.
+- The system prompt of a cached call is sent as a text block. The text is the same, and the block shape is not stored.
+- Runs from before the input columns hold no input. An interrupted run and a bypassed run hold none by design.
+- The run context and the validation errors stay in JSON columns. Later steps of R-63 move them to columns and child rows.
 
 - A concurrent statement registration and action enqueue can miss a raise. The row then waits until a statement draft saves.
 - The exact tier of a saved draft changes the claim order only after a requeue.

@@ -45,9 +45,9 @@ public static class VoteDraftPrompt
         var schema = AnalysisSchema.HeadlineAndSummary(issueSchema);
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
-        var hash = AnalysisPromptHash.Compute(VoteDraftTask.Model, VoteDraftTask.Effort, VoteDraftTask.MaximumOutputTokens,
+        var hash = AnalysisPromptHash.Compute(VoteDraftTask.Model, AnalysisEffort.Medium, VoteDraftTask.MaximumOutputTokens,
             system, user, schema);
-        return new(VoteDraftTask.Model, VoteDraftTask.MaximumOutputTokens, system, user, schema, hash,
+        return new(VoteDraftTask.Model, AnalysisEffort.Medium, VoteDraftTask.MaximumOutputTokens, system, user, schema, hash,
             bytes + (long)VoteDraftTask.MaximumOutputTokens, CacheSystemPrompt: true);
     }
 

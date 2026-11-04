@@ -50,6 +50,20 @@ internal static class AnalysisTableConfiguration
             .HasFilter("status IN ('Pending','RetryWaiting','WaitingForBudget','Running')");
     }
 
+    public static void ConfigureText<TRow>(EntityTypeBuilder<TRow> builder, string table) where TRow : class, IAnalysisTextRow
+    {
+        builder.ToTable(table, constraints =>
+        {
+            constraints.HasCheckConstraint($"ck_{table}_id", "text_sha256 ~ '^[0-9a-f]{64}$'");
+            constraints.HasCheckConstraint($"ck_{table}_hash", "text_sha256 = encode(sha256(convert_to(text, 'UTF8')), 'hex')");
+            constraints.HasCheckConstraint($"ck_{table}_text", $"char_length(text) BETWEEN 1 AND {AnalysisRunInput.MaximumPromptBytes}");
+        });
+        builder.HasKey(nameof(IAnalysisTextRow.TextSha256));
+        builder.Property<string>(nameof(IAnalysisTextRow.TextSha256)).HasColumnName("text_sha256").HasMaxLength(64);
+        builder.Property<string>(nameof(IAnalysisTextRow.Text)).HasColumnName("text").IsRequired();
+        builder.Property<long>(nameof(IAnalysisTextRow.CreatedAtUtcTicks)).HasColumnName("created_at_utc_ticks");
+    }
+
     public static void ConfigureRun<TRow>(EntityTypeBuilder<TRow> builder, string table, string keyProperty, string keyColumn,
         Action<TableBuilder<TRow>> featureConstraints) where TRow : class, IAnalysisRunRow
     {
@@ -59,6 +73,13 @@ internal static class AnalysisTableConfiguration
                 "input_tokens >= 0 AND output_tokens >= 0 AND cache_read_tokens >= 0 AND cache_write_tokens >= 0 AND " +
                 "charged_tokens >= input_tokens + output_tokens + cache_read_tokens + cache_write_tokens");
             constraints.HasCheckConstraint($"ck_{table}_times", "finished_at_utc_ticks >= started_at_utc_ticks");
+            constraints.HasCheckConstraint($"ck_{table}_input",
+                "num_nulls(system_prompt_sha256, output_schema_sha256, user_message, effort, max_output_tokens) IN (0, 5)");
+            constraints.HasCheckConstraint($"ck_{table}_input_outcome",
+                "outcome NOT IN ('Bypassed','Interrupted') OR system_prompt_sha256 IS NULL");
+            constraints.HasCheckConstraint($"ck_{table}_user_message",
+                $"user_message IS NULL OR char_length(user_message) BETWEEN 1 AND {AnalysisRunInput.MaximumPromptBytes}");
+            constraints.HasCheckConstraint($"ck_{table}_max_output_tokens", "max_output_tokens IS NULL OR max_output_tokens > 0");
             featureConstraints(constraints);
         });
         builder.HasKey(nameof(IAnalysisRunRow.RunId));
@@ -83,9 +104,18 @@ internal static class AnalysisTableConfiguration
         builder.Property<string>(nameof(IAnalysisRunRow.OutputJson)).HasColumnName("output_json");
         builder.Property<string>(nameof(IAnalysisRunRow.ValidationJson)).HasColumnName("validation_json");
         builder.Property<string>(nameof(IAnalysisRunRow.ContextJson)).HasColumnName("context_json");
+        builder.Property<string>(nameof(IAnalysisRunRow.SystemPromptSha256)).HasColumnName("system_prompt_sha256").HasMaxLength(64);
+        builder.Property<string>(nameof(IAnalysisRunRow.OutputSchemaSha256)).HasColumnName("output_schema_sha256").HasMaxLength(64);
+        builder.Property<string>(nameof(IAnalysisRunRow.UserMessage)).HasColumnName("user_message");
+        builder.Property<string>(nameof(IAnalysisRunRow.Effort)).HasColumnName("effort").HasMaxLength(AnalysisRunInput.MaximumEffortLength);
+        builder.Property<int?>(nameof(IAnalysisRunRow.MaxOutputTokens)).HasColumnName("max_output_tokens");
         builder.Property<long>(nameof(IAnalysisRunRow.StartedAtUtcTicks)).HasColumnName("started_at_utc_ticks");
         builder.Property<long>(nameof(IAnalysisRunRow.FinishedAtUtcTicks)).HasColumnName("finished_at_utc_ticks");
         builder.HasOne<TRow>().WithMany().HasForeignKey(nameof(IAnalysisRunRow.PreviousRunId)).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<AnalysisSystemPromptRow>().WithMany().HasForeignKey(nameof(IAnalysisRunRow.SystemPromptSha256))
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<AnalysisOutputSchemaRow>().WithMany().HasForeignKey(nameof(IAnalysisRunRow.OutputSchemaSha256))
+            .OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(keyProperty, nameof(IAnalysisRunRow.Task), nameof(IAnalysisRunRow.StartedAtUtcTicks));
     }
 }

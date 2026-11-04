@@ -71,6 +71,7 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal(("Analysis", runId), await TupleAsync($"SELECT author_kind, run_id FROM vote_revisions WHERE record_id = '{recordId}' AND revision_number = 1"));
         Assert.Equal(1_000L, await ScalarAsync("SELECT charged_tokens FROM vote_analysis_budget WHERE task = 'vote-draft'"));
         Assert.Equal(("1", "100"), await TupleAsync($"SELECT session_number, roll_call_number FROM vote_drafts WHERE record_id = '{recordId}'"));
+        Assert.Equal(AnalysisRunInputs.Sample, await StoredRunInputs.ReadAsync(connectionString, "vote_analysis_runs", runId));
     }
 
     [Fact]
@@ -103,6 +104,7 @@ public sealed partial class PostgresHouseVoteTests
 
         Assert.True(settled);
         Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM vote_analysis_runs WHERE run_id = '{run.RunId}' AND reason = 'kindChanged'"));
+        Assert.Null(await StoredRunInputs.ReadAsync(connectionString, "vote_analysis_runs", run.RunId));
         Assert.Equal(2, await ScalarAsync("SELECT current_revision_number FROM vote_drafts"));
         Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM vote_revisions WHERE revision_number = 2 AND run_id = '{run.RunId}'"));
     }
@@ -518,7 +520,7 @@ public sealed partial class PostgresHouseVoteTests
     private static VoteDraftRun DraftedRun(string runId, string candidate) => new(new AnalysisRun(runId, candidate, VoteDraftTask.Task,
         VoteDraftTask.TaskVersion, VoteDraftTask.Model, VoteDraftTask.PromptVersion, VoteDraftTask.SchemaVersion, new string('1', 64), null,
         AnalysisRunOutcome.Drafted, new(900, 100, 0, 0), 1_000, "end_turn", "req", "{}", [], "{}", DateTimeOffset.UnixEpoch,
-        DateTimeOffset.UnixEpoch), null);
+        DateTimeOffset.UnixEpoch, AnalysisRunInputs.Sample), null);
 
     private static AnalysisRun BypassedRun(string runId, string candidate) => new(runId, candidate, VoteDraftTask.Task,
         VoteDraftTask.TaskVersion, VoteDraftTask.Model, VoteDraftTask.PromptVersion, VoteDraftTask.SchemaVersion, new string('1', 64), null,
