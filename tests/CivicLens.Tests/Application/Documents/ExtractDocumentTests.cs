@@ -176,6 +176,7 @@ public sealed class ExtractDocumentTests
 
     private sealed class AttemptStore(StoredCollectionAttempt? result, Action? onRead = null) : ICollectionAttemptStore
     {
+        public Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> GetManyAsync(IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken)
         {
             onRead?.Invoke();
