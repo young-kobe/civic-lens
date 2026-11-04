@@ -130,7 +130,7 @@ internal sealed class VoteWorld
         new(jobId, ExtractionIdOf(jobId), versionOverrides.GetValueOrDefault(jobId) ?? extractionVersion,
             texts[jobId]);
 
-    private static string MembersBody(MemberSpec[] members) => JsonSerializer.Serialize(new
+    public static string MembersBody(MemberSpec[] members) => JsonSerializer.Serialize(new
     {
         houseRollCallVoteMemberVotes = new
         {

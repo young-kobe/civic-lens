@@ -32,10 +32,7 @@ public static class BriefDraftPrompt
         var schema = BuildSchema(sent);
         var bytes = Encoding.UTF8.GetByteCount(SystemInstructions) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
-        var hash = AnalysisPromptHash.Compute(BriefDraftTask.Model, BriefDraftTask.Effort, BriefDraftTask.MaximumOutputTokens,
-            SystemInstructions, user, schema);
-        return new(BriefDraftTask.Model, BriefDraftTask.MaximumOutputTokens, SystemInstructions, user, schema, hash,
-            bytes + (long)BriefDraftTask.MaximumOutputTokens);
+        return AnalysisModelRequest.Create(BriefDraftTask.Model, BriefDraftTask.MaximumOutputTokens, SystemInstructions, user, schema, bytes);
     }
 
     public static string SerializeContext(BriefDraftContext context) => JsonSerializer.Serialize(new

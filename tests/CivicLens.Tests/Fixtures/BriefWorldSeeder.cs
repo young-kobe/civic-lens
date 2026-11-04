@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Actions;
@@ -5,8 +7,10 @@ using CivicLens.Core.Briefs;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
+using CivicLens.Infrastructure.Collection;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Publication;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace CivicLens.Tests.Fixtures;
@@ -112,25 +116,46 @@ internal sealed class BriefWorldSeeder(string connectionString)
             Binding(PublishedRecordKind.DocumentChange, BriefFixtures.CitedDocumentChange, 1));
     }
 
-    public Task ReviewableBriefAsync(BriefRevision revision, string reviewStatus = "AwaitingReview") => ExecuteAsync("""
-        SET session_replication_role = replica;
-        INSERT INTO brief_analysis (record_id, task, week_start, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
-        VALUES (@id, 'brief-draft', @week, 'Succeeded', 0, 3, 0, 1);
-        INSERT INTO brief_drafts (record_id, week_start, current_revision_number, review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-        VALUES (@id, @week, @number, 0, @review, @created, @created);
-        INSERT INTO brief_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-        VALUES (@id, @number, @author, 'Analysis', substr(@id, 1, 32), @json, @created);
-        """, ("id", revision.RecordId), ("week", revision.Window.WeekStart), ("number", revision.RevisionNumber),
-        ("review", reviewStatus), ("created", revision.CreatedAtUtc.UtcTicks), ("author", revision.AuthorSubject),
-        ("json", JsonSerializer.Serialize(revision, Web)));
+    public async Task ReviewableBriefAsync(BriefRevision revision, string reviewStatus = "AwaitingReview")
+    {
+        await ExecuteAsync("""
+            SET session_replication_role = replica;
+            INSERT INTO brief_analysis (record_id, task, week_start, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
+            VALUES (@id, 'brief-draft', @week, 'Succeeded', 0, 3, 0, 1);
+            INSERT INTO brief_drafts (record_id, week_start, current_revision_number, review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
+            VALUES (@id, @week, @number, 0, @review, @created, @created)
+            """, ("id", revision.RecordId), ("week", revision.Window.WeekStart), ("number", revision.RevisionNumber),
+            ("review", reviewStatus), ("created", revision.CreatedAtUtc.UtcTicks));
+        await InsertRevisionAsync(revision, revision.RecordId[..32]);
+    }
 
-    public Task AppendRevisionAsync(BriefRevision revision) => ExecuteAsync("""
-        SET session_replication_role = replica;
-        UPDATE brief_drafts SET current_revision_number = @number WHERE record_id = @id;
-        INSERT INTO brief_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-        VALUES (@id, @number, @author, 'Analysis', substr(md5(@id || @number::text), 1, 32), @json, @created);
-        """, ("id", revision.RecordId), ("number", revision.RevisionNumber), ("created", revision.CreatedAtUtc.UtcTicks),
-        ("author", revision.AuthorSubject), ("json", JsonSerializer.Serialize(revision, Web)));
+    public async Task AppendRevisionAsync(BriefRevision revision)
+    {
+        await ExecuteAsync("SET session_replication_role = replica; UPDATE brief_drafts SET current_revision_number = @number WHERE record_id = @id",
+            ("id", revision.RecordId), ("number", revision.RevisionNumber));
+        await InsertRevisionAsync(revision, Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes(revision.RecordId + revision.RevisionNumber)))[..32]);
+    }
+
+    public Task MakeLegacyAsync() => ExecuteAsync("""
+        DELETE FROM brief_revision_paragraph_citations;
+        DELETE FROM brief_revision_paragraphs;
+        DELETE FROM brief_revision_citations;
+        UPDATE brief_revisions SET week_start = NULL, window_start_utc_ticks = NULL, window_end_utc_ticks = NULL, first_release_number = NULL,
+            cutoff_release_number = NULL, fingerprint = NULL, headline = NULL, text_origin = NULL, suggestion_headline = NULL, suggestion_run_id = NULL,
+            suggestion_fingerprint = NULL, coverage_considered = NULL, coverage_sent_to_model = NULL
+        """);
+
+    /// <summary>Writes the revision row with the row mapper of production, so that the columns and the child rows equal what the store writes.
+    /// The foreign keys stay off, because the seeder does not seed the cited records.</summary>
+    private async Task InsertRevisionAsync(BriefRevision revision, string runId)
+    {
+        var row = InternalMethods.Invoke("CivicLens.Infrastructure.Briefs.BriefRevisionRows", "Create", revision, runId);
+        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
+        await db.Database.OpenConnectionAsync();
+        await db.Database.ExecuteSqlRawAsync("SET session_replication_role = replica");
+        db.Add(row);
+        await db.SaveChangesAsync();
+    }
 
     public async Task ReplaceActiveReleaseAsync(int number, DateTimeOffset publishedAt, params PublishedRevisionBinding[] records)
     {

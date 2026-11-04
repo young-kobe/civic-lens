@@ -40,7 +40,7 @@ public sealed class AnthropicStatementGateModelTests
     {
         var handler = new CapturingHandler();
         using var client = new HttpClient(handler);
-        var request = new AnalysisModelRequest("claude-haiku-5-5", 100, "System.", "User.", """{"type":"object"}""",
+        var request = new AnalysisModelRequest("claude-haiku-5-5", AnalysisEffort.Medium, 100, "System.", "User.", """{"type":"object"}""",
             new string('a', 64), 1_000);
 
         await new AnthropicDocumentChangeDraftModel("test-key", client).DraftAsync(request, CancellationToken.None);

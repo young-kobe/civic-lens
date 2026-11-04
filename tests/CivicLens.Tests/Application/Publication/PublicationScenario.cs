@@ -626,6 +626,15 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Task<IReadOnlyList<PublicationReleaseSummary>> ListAsync(int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<PublicationReleaseSummary>>([.. Committed.AsEnumerable().Reverse().Take(limit)]);
 
+    public Task<IReadOnlyList<PublicationReleaseSummary>> ListAllAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<PublicationReleaseSummary>>([.. Committed.OrderBy(item => item.ReleaseNumber)]);
+
+    public Task<IReadOnlyList<PublishedEntryCandidate>> ReadEntryCandidatesAsync(CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<int> AddEntriesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
     public Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey,
         string payloadHash, CancellationToken cancellationToken)
     {

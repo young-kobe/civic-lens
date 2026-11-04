@@ -1,3 +1,4 @@
+using System.Text;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
@@ -256,15 +257,15 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     private async Task<PreparedBillDetail> AdmitBillDetailAsync(DateTimeOffset? updatedAt = null, int congress = 119, int number = 14,
-        bool hasTrackedIssue = false, int subjects = 0)
+        bool hasTrackedIssue = false, int subjects = 0, bool readable = false)
     {
-        var bill = await PrepareBillDetailAsync(updatedAt, congress, number, subjects);
+        var bill = await PrepareBillDetailAsync(updatedAt, congress, number, subjects, readable);
         var result = await AdmitPreparedBillDetailAsync(bill, hasTrackedIssue);
         return bill with { SubjectsJobId = result.Jobs.SingleOrDefault(job => job.Url.Contains("/subjects?"))?.JobId };
     }
 
     private async Task<PreparedBillDetail> PrepareBillDetailAsync(DateTimeOffset? updatedAt = null, int congress = 119, int number = 14,
-        int subjects = 0)
+        int subjects = 0, bool readable = false)
     {
         var configuration = CongressBillSourceConfigurationTests.Configuration();
         configuration = configuration with
@@ -276,11 +277,24 @@ public sealed partial class PostgresHouseVoteTests
             TestJobKeyPrefix + "bill-list-" + Guid.NewGuid().ToString("N"));
         var jobId = await SucceededJobs.BillDetailAsync(store, connectionString, source, listJob,
             new CongressBillListItem(congress, "hconres", number, Backfill.AddDays(++billListSequence)));
-        var text = $"Bill: {congress} hconres {number}\nTitle: A concurrent resolution\n{Guid.NewGuid():N}";
-        var extractionId = await extractions.SaveAsync(jobId, text, text, "extraction");
         var bill = new CongressBill(congress, "hconres", number, "A concurrent resolution", Backfill, updatedAt ?? Updated,
             BillGateFixtures.UntrackedPolicyArea, [], 0, 1, 0, subjects, null);
+        var extractionId = readable ? await ReadableBillExtractionAsync(jobId, bill) : await FakeBillExtractionAsync(jobId, bill);
         return new(source, jobId, bill, extractionId);
+    }
+
+    private Task<string> FakeBillExtractionAsync(string jobId, CongressBill bill)
+    {
+        var text = $"Bill: {bill.Congress} hconres {bill.Number}\nTitle: A concurrent resolution\n{Guid.NewGuid():N}";
+        return extractions.SaveAsync(jobId, text, text, "extraction");
+    }
+
+    private Task<string> ReadableBillExtractionAsync(string jobId, CongressBill bill)
+    {
+        var body = ActionBillWorld.DetailBody(bill);
+        var url = $"{ActionBillWorld.SourceUrl}/{bill.Congress}/hconres/{bill.Number}?format=json";
+        var text = CongressBillRenderer.RenderDetail(CongressBillParser.Parse(Encoding.UTF8.GetBytes(body), CongressBillListItem.TryReadDetailUrl(ActionBillWorld.SourceUrl, url)!));
+        return extractions.SaveAsync(jobId, body, text, CongressBillParser.ExtractionVersion);
     }
 
     private Task<DiscoveryAdmissionResult> AdmitPreparedBillDetailAsync(PreparedBillDetail prepared, bool hasTrackedIssue = false) =>

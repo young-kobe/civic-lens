@@ -7,6 +7,7 @@ public static class AnalysisErrorCodes
     public const string DailyTokenLimit = "dailyTokenLimit";
     public const string AttemptsExhausted = "attemptsExhausted";
     public const string ProviderOutage = "providerOutage";
+    public const string InvalidRunInput = "invalidRunInput";
 
     public static string ForOutcome(AnalysisRunOutcome outcome)
     {

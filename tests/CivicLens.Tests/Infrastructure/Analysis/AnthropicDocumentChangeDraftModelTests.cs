@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using CivicLens.Application.Analysis;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Tests.Fixtures;
@@ -51,13 +52,70 @@ public sealed class AnthropicDocumentChangeDraftModelTests
         Assert.Equal(Failure.InvalidResponse, failure.Kind);
     }
 
+    [Fact]
+    public async Task TheEffortOfTheRequestReachesTheProviderAndAnUnknownEffortNeverSendsACall()
+    {
+        var bodies = new List<string>();
+        using var client = new HttpClient(new FixtureHandler(request =>
+        {
+            bodies.Add(request.Content!.ReadAsStringAsync().Result);
+            return Reply("end_turn", "{}");
+        }));
+        var model = new AnthropicDocumentChangeDraftModel("test-key", client);
+
+        await model.DraftAsync(Request(), CancellationToken.None);
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => model.DraftAsync(Request() with { Effort = "extreme" }, CancellationToken.None));
+
+        Assert.Equal("medium", JsonDocument.Parse(Assert.Single(bodies)).RootElement.GetProperty("output_config").GetProperty("effort").GetString());
+    }
+
+    [Theory]
+    [InlineData("end_turn")]
+    [InlineData("refusal")]
+    [InlineData("max_tokens")]
+    [InlineData("pause_turn")]
+    public async Task EveryStopThatHasTextKeepsItBecauseARefusalOrATruncatedAnswerIsEvidenceOfWhatTheModelSaid(string stopReason)
+    {
+        using var client = new HttpClient(new FixtureHandler(_ => Reply(stopReason, "Exact words.")));
+
+        var response = await new AnthropicDocumentChangeDraftModel("test-key", client).DraftAsync(Request(), CancellationToken.None);
+
+        Assert.Equal((stopReason, "Exact words."), (response.StopReason, response.OutputJson));
+    }
+
+    [Fact]
+    public async Task AStopWithNoTextKeepsNoOutput()
+    {
+        using var client = new HttpClient(new FixtureHandler(_ => Reply("refusal", "")));
+
+        var response = await new AnthropicDocumentChangeDraftModel("test-key", client).DraftAsync(Request(), CancellationToken.None);
+
+        Assert.Null(response.OutputJson);
+    }
+
+    private static AnalysisModelRequest Request() => DocumentChangeDraftPrompt.Build(
+        FakeDocumentChangeDraftModel.Evidence("Fee: 10.\n", "Fee: 12.\n"), new DocumentChangeDraftCatalog([], []))!;
+
+    private static HttpResponseMessage Reply(string stopReason, string text) => new(HttpStatusCode.OK)
+    {
+        Content = new StringContent(JsonSerializer.Serialize(new
+        {
+            id = "msg_fixture",
+            type = "message",
+            role = "assistant",
+            model = "claude-haiku-5-5",
+            content = new[] { new { type = "text", text } },
+            stop_reason = stopReason,
+            stop_sequence = (string?)null,
+            usage = new { input_tokens = 10, output_tokens = 5, cache_read_input_tokens = 0, cache_creation_input_tokens = 0 }
+        }), Encoding.UTF8, "application/json")
+    };
+
     private static async Task<AnalysisModelException> CallAsync(Func<HttpRequestMessage, HttpResponseMessage> respond)
     {
         using var client = new HttpClient(new FixtureHandler(respond));
         var model = new AnthropicDocumentChangeDraftModel("test-key", client);
-        var request = DocumentChangeDraftPrompt.Build(
-            FakeDocumentChangeDraftModel.Evidence("Fee: 10.\n", "Fee: 12.\n"), new DocumentChangeDraftCatalog([], []))!;
-        return await Assert.ThrowsAsync<AnalysisModelException>(() => model.DraftAsync(request, CancellationToken.None));
+        return await Assert.ThrowsAsync<AnalysisModelException>(() => model.DraftAsync(Request(), CancellationToken.None));
     }
 
     private sealed class FixtureHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler

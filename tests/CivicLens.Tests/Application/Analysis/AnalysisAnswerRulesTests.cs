@@ -25,6 +25,14 @@ public sealed class AnalysisAnswerRulesTests
     }
 
     [Fact]
+    public void BoundReplacesEachNulCharacterWithTheReplacementCharacterBecauseAnErrorQuotesModelTextAndPostgresTextCannotHoldNul()
+    {
+        var errors = AnalysisAnswerRules.Bound(["The ID \"a\0b\0\" is not listed.", "Plain error."]);
+
+        Assert.Equal(["The ID \"a\uFFFDb\uFFFD\" is not listed.", "Plain error."], errors.ToArray());
+    }
+
+    [Fact]
     public void ATextWithinTheLimitIsAccepted()
     {
         var errors = new List<string>();

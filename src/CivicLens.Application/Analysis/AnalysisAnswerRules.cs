@@ -62,7 +62,7 @@ public static class AnalysisAnswerRules
     public static string Shorten(string? value) => Truncate(value ?? "", 80);
 
     public static ImmutableArray<string> Bound(IEnumerable<string> errors) =>
-        [.. errors.Take(AnalysisRun.MaximumValidationErrors).Select(error => Truncate(error, AnalysisRun.MaximumValidationErrorLength))];
+        [.. errors.Take(AnalysisRun.MaximumValidationErrors).Select(error => Truncate(error.Replace('\0', '\uFFFD'), AnalysisRun.MaximumValidationErrorLength))];
 
     private static string Truncate(string value, int maximumLength)
     {

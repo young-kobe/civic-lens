@@ -12,7 +12,17 @@ public static class ApiResults
     public static IResult Json<T>(T value) => Results.Json(value, PublicationProtocol.JsonOptions);
 
     public static IResult NoRelease() =>
-        Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "no release is indexed yet");
+        Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "no release is active yet");
+
+    public static IResult RecordNotFound() =>
+        Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "record not found");
+
+    /// <summary>A cursor that names another release than the active one. The answer holds the active release number, so the caller starts the walk again.</summary>
+    public static IResult ReleaseChanged(int activeRelease) => Results.Problem(
+        statusCode: StatusCodes.Status409Conflict,
+        title: "the release changed",
+        detail: $"The cursor belongs to another release. Start again from the first page. The active release is {activeRelease}.",
+        extensions: new Dictionary<string, object?> { ["release"] = activeRelease });
 
     public static async Task<IResult> GuardAsync(Func<Task<IResult>> read)
     {

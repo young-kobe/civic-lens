@@ -24,6 +24,11 @@ internal interface IAnalysisRunRow
     string? OutputJson { get; set; }
     string? ValidationJson { get; set; }
     string? ContextJson { get; set; }
+    string? SystemPromptSha256 { get; set; }
+    string? OutputSchemaSha256 { get; set; }
+    string? UserMessage { get; set; }
+    string? Effort { get; set; }
+    int? MaxOutputTokens { get; set; }
     long StartedAtUtcTicks { get; set; }
     long FinishedAtUtcTicks { get; set; }
 }

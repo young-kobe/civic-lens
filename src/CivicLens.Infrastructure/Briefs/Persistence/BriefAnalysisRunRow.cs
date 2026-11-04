@@ -31,6 +31,11 @@ internal sealed class BriefAnalysisRunRow : IAnalysisRunRow
     public string? OutputJson { get; set; }
     public string? ValidationJson { get; set; }
     public string? ContextJson { get; set; }
+    public string? SystemPromptSha256 { get; set; }
+    public string? OutputSchemaSha256 { get; set; }
+    public string? UserMessage { get; set; }
+    public string? Effort { get; set; }
+    public int? MaxOutputTokens { get; set; }
     public long StartedAtUtcTicks { get; set; }
     public long FinishedAtUtcTicks { get; set; }
 

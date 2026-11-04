@@ -40,6 +40,7 @@ internal sealed class SearchWorld : IAsyncDisposable
         {
             ReleaseBaseUrl = PublicApiOptions.Directory("http://release.test"),
             Database = connection,
+            PublicViewsDatabase = connection,
             QueryTimeout = queryTimeout ?? TimeSpan.FromSeconds(2)
         });
         await new SchemaMigrator(world.writer).ApplyAsync(CancellationToken.None);
