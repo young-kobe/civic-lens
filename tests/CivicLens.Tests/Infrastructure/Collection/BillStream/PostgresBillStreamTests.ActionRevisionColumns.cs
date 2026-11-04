@@ -112,6 +112,9 @@ public sealed partial class PostgresBillStreamTests
     [InlineData("action_revisions", "bill_citation_start = NULL", "ck_action_revisions_bill_citation")]
     [InlineData("action_revisions", "author_kind = 'Code', bill_citation_extraction_id = NULL, bill_citation_start = NULL, bill_citation_length = NULL", "ck_action_revisions_code_bill_citation")]
     [InlineData("action_revisions", "headline = NULL", "ck_action_revisions_columns_written")]
+    [InlineData("action_revisions", "event_on = NULL", "ck_action_revisions_derived_columns_written")]
+    [InlineData("action_revisions", "cosponsor_count = NULL", "ck_action_revisions_derived_columns_written")]
+    [InlineData("action_revisions", "cosponsor_count = -1", "ck_action_revisions_cosponsor_count")]
     [InlineData("action_revision_issues", "issue_id = ' '", "ck_action_revision_issues_issue")]
     [InlineData("action_revision_issues", "position = -1", "ck_action_revision_issues_position")]
     [InlineData("action_revision_sponsorships", "role = 'Boss'", "ck_action_revision_sponsorships_role")]
@@ -151,6 +154,16 @@ public sealed partial class PostgresBillStreamTests
         var full = await SettleFullRevisionAsync();
 
         Assert.Equal(2L, await ScalarAsync($"SELECT count(*) FROM action_revision_sponsorships WHERE record_id = '{RecordId}' AND person_id = '{full.Sponsorships[0].PersonId}' AND role = 'Sponsor'"));
+    }
+
+    [Fact]
+    public async Task TheEventDateAndTheCosponsorCountAreWrittenOnceWithTheRevisionBecauseARevisionNeverChangesAndTheApiSortsByThem()
+    {
+        var full = await SettleFullRevisionAsync();
+
+        Assert.Equal(("2025-02-01", 1), (full.EventOn().ToString("yyyy-MM-dd"), full.CosponsorCount()));
+        Assert.Equal("2025-02-01|1", await ScalarAsync("SELECT event_on || '|' || cosponsor_count FROM action_revisions"));
+        Assert.Equal("ix_action_revisions_event_on", await ScalarAsync("SELECT indexname FROM pg_indexes WHERE tablename = 'action_revisions' AND indexdef LIKE '%(event_on)%'"));
     }
 
     private async Task<ActionDraftRevision> SettleFullRevisionAsync()
@@ -220,7 +233,9 @@ public sealed partial class PostgresBillStreamTests
             ["bill_citation_length"] = revision.BillCitation?.Length,
             ["issue_revision_id"] = revision.IssueRevisionId,
             ["subjects_hash"] = revision.SubjectsHash,
-            ["issue_candidates_recorded"] = !revision.IssueCandidateIds.IsDefault
+            ["issue_candidates_recorded"] = !revision.IssueCandidateIds.IsDefault,
+            ["event_on"] = revision.EventOn().ToString("yyyy-MM-dd"),
+            ["cosponsor_count"] = revision.CosponsorCount()
         };
         foreach (var (column, value) in expected)
             Assert.True((value?.ToJsonString() ?? "null") == (actual[column]?.ToJsonString() ?? "null"), $"Column {column} differs from the JSON.");
