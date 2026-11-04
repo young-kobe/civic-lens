@@ -51,7 +51,7 @@
     };
 
     const init = () => {
-        all(".theme-toggle").forEach(toggle => { toggle.hidden = false; });
+        all(".theme-toggle, .theme-menu").forEach(toggle => { toggle.hidden = false; });
         all("[data-layout-switch]").forEach(control => { control.hidden = false; });
         showTheme(root.dataset.theme || "");
         measureAll();

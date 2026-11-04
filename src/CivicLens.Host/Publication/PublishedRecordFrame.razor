@@ -1,7 +1,6 @@
-@using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="Section" Title="@Headline" Description="@(string.IsNullOrWhiteSpace(Summary) ? Headline : Summary)" CanonicalPath="@PublicationProtocol.RecordPagePath(RecordId)" IsArticle="true" UsesRecordFont="true" RootPath="../" Crumbs="Crumbs">
+<PublicPage Section="Section" Title="@Headline" Description="@(string.IsNullOrWhiteSpace(Summary) ? Headline : Summary)" CanonicalPath="@PublicationProtocol.RecordPagePath(RecordId)" IsArticle="true" UsesRecordFont="true" RootPath="../">
     @ReportLink
     <RecordView HeadingLevel="1" Headline="@Headline" Summary="@Summary" Significance="@Significance"
                 Limits="@Limits" Facts="Facts" />
@@ -14,11 +13,7 @@
 @code {
     private RenderFragment ReportLink => @<p class="muted small"><a href="@("../" + PublicationProtocol.ReportPageLink(RecordId, RevisionNumber))">@PublishedRecordLabels.ReportRecordLink</a></p>;
 
-    private IReadOnlyList<Crumb> Crumbs => [PublicCrumbs.Home("../"), SectionCrumb, new(Headline)];
-
-    private Crumb SectionCrumb => PublicCrumbs.Section(Section == PublicSection.Briefs ? PublicSection.Briefs : PublicSection.AllRecords, "../");
-
-    [Parameter] public PublicSection Section { get; set; } = PublicSection.AllRecords;
+    [Parameter] public PublicSection? Section { get; set; } = PublicSection.AllRecords;
     [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;
     [Parameter, EditorRequired] public int RevisionNumber { get; set; }
     [Parameter, EditorRequired] public string Headline { get; set; } = string.Empty;
