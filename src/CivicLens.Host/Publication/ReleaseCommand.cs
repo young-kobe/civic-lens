@@ -17,7 +17,7 @@ public static class ReleaseCommand
     public static bool IsPublish(string[] args) => args is ["releases", "publish", ..];
 
     public static Task<int> ExecuteAsync(string[] args, PublishRelease publish,
-        ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, BackfillFirstPublished backfill, ReviewActor owner,
+        ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, BackfillFirstPublished backfill, BackfillPublishedEntries entries, ReviewActor owner,
         TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
         OwnerCommand.RunAsync(async () =>
         {
@@ -43,8 +43,12 @@ public static class ReleaseCommand
                     case ["releases", "first-published", "backfill"]:
                         CommandOutput.Write(output, await backfill.ExecuteAsync(owner, cancellationToken));
                         return 0;
+                    case ["releases", "entries", "backfill", var entriesLimit] when TryParsePositive(entriesLimit, out var entriesCount):
+                        var result = await entries.ExecuteAsync(owner, entriesCount, cancellationToken);
+                        CommandOutput.Write(output, result);
+                        return result.Skipped == 0 && result.OpenRangesWithoutRow == 0 ? 0 : 1;
                     default:
-                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, or releases first-published backfill.");
+                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, or releases entries backfill <limit>.");
                         return 2;
                 }
             }

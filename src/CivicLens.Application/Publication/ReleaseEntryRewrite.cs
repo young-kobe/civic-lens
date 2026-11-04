@@ -18,38 +18,22 @@ internal static class ReleaseEntryRewrite
         return rebuilt;
     }
 
-    private static Task<PublishedRecordEntry> RebuildAsync(IReleaseDirectory releases, PublishedRecordEntry entry,
-        PreviousRelease previous, CancellationToken cancellationToken) =>
-        entry.Kind switch
-        {
-            PublishedRecordKind.Vote => RebuildAsync<PublishedVote>(releases, entry, previous, vote => { vote.Validate(); return vote.ToEntry(); }, cancellationToken),
-            PublishedRecordKind.Action => RebuildAsync<PublishedAction>(releases, entry, previous, action => { action.Validate(); return action.ToEntry(); }, cancellationToken),
-            _ => Task.FromResult(entry)
-        };
-
-    private static async Task<PublishedRecordEntry> RebuildAsync<TRecord>(IReleaseDirectory releases, PublishedRecordEntry entry,
-        PreviousRelease previous, Func<TRecord, PublishedRecordEntry> rebuild, CancellationToken cancellationToken)
-        where TRecord : class
+    private static async Task<PublishedRecordEntry> RebuildAsync(IReleaseDirectory releases, PublishedRecordEntry entry,
+        PreviousRelease previous, CancellationToken cancellationToken)
     {
+        if (entry.Kind is not (PublishedRecordKind.Vote or PublishedRecordKind.Action)) return entry;
         PublishedRecordEntry rebuilt;
         try
         {
-            rebuilt = rebuild(await ReleaseRecordFiles.ReadAsync<TRecord>(releases, entry, [], previous, cancellationToken));
+            rebuilt = RecordFileEntry.Read(entry.Kind, await releases.ReadFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(entry.RecordId),
+                PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken));
         }
         catch (Exception exception) when (exception is JsonException or InvalidDataException)
         {
             throw new ReleaseRewriteException($"The record file of {entry.Kind} {entry.RecordId} is invalid, so the entries cannot be rebuilt.", exception);
         }
-        return RequireSameOutsideNewFields(entry, rebuilt);
-    }
-
-    private static PublishedRecordEntry RequireSameOutsideNewFields(PublishedRecordEntry old, PublishedRecordEntry rebuilt) =>
-        Serialize(WithoutNewFields(old)) == Serialize(WithoutNewFields(rebuilt))
+        return ReleaseEntryComparison.SameOutsideNewFields(entry, rebuilt)
             ? rebuilt
-            : throw new ReleaseRewriteException($"The record file of {old.Kind} {old.RecordId} does not match its manifest entry, so the entry cannot be rebuilt.");
-
-    private static PublishedRecordEntry WithoutNewFields(PublishedRecordEntry entry) =>
-        entry with { YeaCount = null, NayCount = null, Alignment = null, CosponsorIds = null };
-
-    private static string Serialize(PublishedRecordEntry entry) => JsonSerializer.Serialize(entry, PublicationProtocol.JsonOptions);
+            : throw new ReleaseRewriteException($"The record file of {entry.Kind} {entry.RecordId} does not match its manifest entry, so the entry cannot be rebuilt.");
+    }
 }

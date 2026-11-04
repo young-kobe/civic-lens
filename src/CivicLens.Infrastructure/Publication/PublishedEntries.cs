@@ -24,16 +24,34 @@ internal static class PublishedEntries
 
     private static readonly string InsertEntries = BuildInsertEntries();
 
-    public static async Task InsertAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,
+    private const string ReadCandidates = """
+        SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber", s.first_release AS "FirstRelease",
+            s.last_release AS "LastRelease", EXISTS (
+                SELECT 1 FROM published_entries e
+                WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number) AS "HasEntry"
+        FROM publication_record_states s
+        ORDER BY s.kind, s.record_id, s.revision_number
+        """;
+
+    public static async Task<IReadOnlyList<PublishedEntryCandidate>> ReadCandidatesAsync(CollectionAttemptDbContext db,
         CancellationToken cancellationToken)
     {
-        if (entries.Count == 0) return;
+        var rows = await db.Database.SqlQueryRaw<CandidateRow>(ReadCandidates).ToArrayAsync(cancellationToken);
+        return [.. rows.Select(row => new PublishedEntryCandidate(Enum.Parse<PublishedRecordKind>(row.Kind, ignoreCase: true), row.RecordId,
+            row.RevisionNumber, row.FirstRelease, row.LastRelease, row.HasEntry))];
+    }
+
+    public static async Task<int> InsertAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,
+        CancellationToken cancellationToken)
+    {
+        if (entries.Count == 0) return 0;
         await RequireLinkedRecordsAsync(db, entries, cancellationToken);
         var rows = await db.Database.SqlQueryRaw<EntryKeyRow>(InsertEntries, ScalarColumnsOf(entries)).ToArrayAsync(cancellationToken);
         var created = rows.Select(row => (row.Kind, row.RecordId, row.RevisionNumber)).ToHashSet();
         var createdEntries = entries.Where(entry => created.Contains(KeyOf(entry))).ToList();
         await InsertChildrenAsync(db, createdEntries, cancellationToken);
         await RequireSameAsync(db, [.. entries.Except(createdEntries)], cancellationToken);
+        return createdEntries.Count;
     }
 
     private static string BuildInsertEntries()
@@ -59,11 +77,7 @@ internal static class PublishedEntries
     private static async Task RequireLinkedRecordsAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,
         CancellationToken cancellationToken)
     {
-        var linked = entries.Where(entry => entry.StatementRecordId is not null).SelectMany(entry => new[]
-        {
-            new PublishedRecordReference(PublishedRecordKind.Statement, entry.StatementRecordId!),
-            new PublishedRecordReference(entry.TargetKind!.Value, entry.TargetRecordId!)
-        }).Distinct().ToArray();
+        var linked = entries.SelectMany(PublishedRecordReference.LinkedBy).Distinct().ToArray();
         var stored = await PublishedRecords.ReadAsync(db, linked, cancellationToken);
         var unrecorded = linked.FirstOrDefault(reference => !stored.ContainsKey(reference));
         if (unrecorded is null) return;
@@ -169,6 +183,16 @@ internal static class PublishedEntries
     private sealed record EntryFacts(string Headline, string? SourceHost, DateOnly? EventDate, string? BillTitle, PublishedRelationshipType? LinkType,
         string? StatementRecordId, string? TargetKind, string? TargetRecordId, PublishedExecutiveActionKind? DocumentType, string[] OfficialIds,
         string? MatchedOfficialId, string[] IssueIds, string[] PolicyAreaIds);
+
+    private sealed class CandidateRow
+    {
+        public string Kind { get; set; } = "";
+        public string RecordId { get; set; } = "";
+        public int RevisionNumber { get; set; }
+        public int FirstRelease { get; set; }
+        public int? LastRelease { get; set; }
+        public bool HasEntry { get; set; }
+    }
 
     private sealed class EntryKeyRow
     {
