@@ -69,7 +69,7 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 | Infrastructure | Process lifecycle, protocol decoding, actual capture verification, Postgres persistence | Independent definitions of contract or editorial validity |
 | Collector | Bounded source interaction and complete raw capture production | Durable scheduling, imports, officials registry or publication |
 | Host | Command parsing, composition, and web presentation | Collection algorithms or evidence invariants |
-| PublicApi | Release ingest, the search index, and the public read API | Operational storage, credentials, job handlers, or unpublished evidence |
+| PublicApi | Release ingest, the search index, and the public read API | Operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence |
 
 `tools/render-architecture.py` generates the diagrams below. Run `python3 tools/render-architecture.py`, then open `artifacts/architecture.html` for the explorer. Planned components are labeled there; a diagram is not a claim that the pipeline exists.
 
@@ -435,6 +435,7 @@ This is the only navigation index.
 | Web host, security headers, components | [Host](architecture/host.md#behavior) | `src/CivicLens.Host/Program.cs` |
 | Production hosting plan | [Host](architecture/host.md#limits-and-planned-work) | none |
 | MCP plans | [Review](architecture/review.md#limits-and-planned-work), [Publication](architecture/publication.md#limits-and-planned-work) | none |
+| Public views, role, active release rule | [Publication](architecture/publication.md#public-api-views) | `src/CivicLens.Infrastructure/Collection/Migrations/20261103165431_PublicApiViews.cs`, `src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs` |
 | Public search service: ingest, index, read API, rate limit | [Search](architecture/search.md#decisions) | `src/CivicLens.PublicApi/PublicApiApp.cs` |
 | Reader report queue: pull, dismiss, editor panel, close by approval | [Review](architecture/review.md#reader-reports), [Search](architecture/search.md#operational-pull) | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Infrastructure/Reports/PostgresReaderReportStore.cs` |
 | Search ingest of a release | [Search](architecture/search.md#ingest) | `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs` |

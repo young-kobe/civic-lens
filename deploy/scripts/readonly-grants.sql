@@ -22,8 +22,6 @@ ALTER ROLE civic_lens_readonly SET statement_timeout = '30s';
 DO $$
 BEGIN
   EXECUTE format('GRANT CONNECT ON DATABASE %I TO civic_lens_readonly', current_database());
-  -- A session that can create a temp object could run it inside the function below.
-  EXECUTE format('REVOKE TEMPORARY ON DATABASE %I FROM PUBLIC', current_database());
 END $$;
 GRANT USAGE ON SCHEMA public TO civic_lens_readonly, civic_lens_readonly_owner;
 

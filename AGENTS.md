@@ -18,7 +18,7 @@ Keep these dependencies acyclic and exact (enforced by tests):
 - Infrastructure: Application (other dependencies only through an explicitly reviewed boundary change).
 - Host: Application, Infrastructure.
 - Collector: Collection.Contracts only. No database, AI, editorial, or publishing dependencies.
-- PublicApi: Publication.Contracts and Npgsql only. It reads published releases and its own search database. The planned public read path reads only the `public_api` views, through a database role that can read nothing else. It never reads any other operational storage.
+- PublicApi: Publication.Contracts and Npgsql only. It reads published releases and its own search database. The planned public read path may connect to the operational database only as the role `civic_lens_public`, which can read only `public_api` views. It never reads any other operational storage. An operational database outage then stops the live API, while the cached pages stay up.
 
 Local CLI, review UI, and local MCP will call shared application handlers. Public MCP must live in a separate deployment and consume published contracts only. It must never reach operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence.
 
