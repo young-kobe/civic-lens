@@ -405,6 +405,17 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task EveryActionRunStoresTheExactRequestAndARetryRunStoresItsOwnUserMessage()
+    {
+        var candidate = await ReadableCandidateAsync(sponsor: "A000001");
+
+        var model = await RunActionWorkerAsync(new FakeHeadlineSummaryModel().Draft("not json").Draft(DraftableOutput));
+
+        Assert.Equal(2, model.Requests.Count);
+        await StoredRunInputs.AssertMatchAsync(connectionString, "action_analysis_runs", "candidate_id", candidate, model.Requests);
+    }
+
+    [Fact]
     public async Task ADelayedOlderCandidateIsSupersededSoItsStaleContentNeverBecomesTheNewestRevision()
     {
         var march3 = await ReadableCandidateAsync(sponsor: "A000001");
@@ -833,7 +844,7 @@ public sealed partial class PostgresBillStreamTests
             VALUES ('{RecordId}', 1, 'auth0|editor', 'Person', NULL, 'x', 0)
             """);
         var run = DraftedRun(Guid.NewGuid().ToString("N"), candidate);
-        var bypassed = new ActionDraftRun(run.Run with { Outcome = AnalysisRunOutcome.Bypassed, Usage = AnalysisTokenUsage.None, ChargedTokens = 0 },
+        var bypassed = new ActionDraftRun(run.Run with { Outcome = AnalysisRunOutcome.Bypassed, Usage = AnalysisTokenUsage.None, ChargedTokens = 0, Input = null },
             ActionDraftErrorCodes.SponsorshipsChanged);
 
         Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1))), bypassed, default));
@@ -1042,7 +1053,7 @@ public sealed partial class PostgresBillStreamTests
     private static ActionDraftRun DraftedRun(string runId, string candidate, string? previousRunId = null) => new(new AnalysisRun(runId, candidate, ActionDraftTask.Task,
         ActionDraftTask.TaskVersion, ActionDraftTask.Model, ActionDraftTask.PromptVersion, ActionDraftTask.SchemaVersion, new string('1', 64), previousRunId,
         AnalysisRunOutcome.Drafted, new(900, 100, 0, 0), 1_000, "end_turn", "req", "{}", [], "{}", DateTimeOffset.UnixEpoch,
-        DateTimeOffset.UnixEpoch), null);
+        DateTimeOffset.UnixEpoch, AnalysisRunInputs.Sample), null);
 
     private static ActionDraftRevision CodeRevision(string candidate) => Revision(candidate, 1) with
     {
@@ -1054,7 +1065,7 @@ public sealed partial class PostgresBillStreamTests
     private static ActionDraftRun CodeRun(string candidate)
     {
         var drafted = DraftedRun(Guid.NewGuid().ToString("N"), candidate);
-        return drafted with { Run = drafted.Run with { Outcome = AnalysisRunOutcome.Bypassed, Usage = new(0, 0, 0, 0), ChargedTokens = 0 }, Reason = ActionDraftErrorCodes.CodeWritten };
+        return drafted with { Run = drafted.Run with { Outcome = AnalysisRunOutcome.Bypassed, Usage = new(0, 0, 0, 0), ChargedTokens = 0, Input = null }, Reason = ActionDraftErrorCodes.CodeWritten };
     }
 
     private static ActionDraftRevision Revision(string candidate, int number, bool includesSummaries = false, bool includesSubjects = false)

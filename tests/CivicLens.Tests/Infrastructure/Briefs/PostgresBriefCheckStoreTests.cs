@@ -77,6 +77,18 @@ public sealed class PostgresBriefCheckStoreTests(PostgresCollection postgres) : 
     }
 
     [Fact]
+    public async Task EveryBriefCheckRunStoresTheExactRequestAndARetryRunStoresItsOwnUserMessage()
+    {
+        await QueueCheckAsync();
+        var model = new FakeBriefCheckModel().Check("not json").Check(CheckOutput("NeedsAttention", (0, "other", null, Note)));
+
+        await RunCheckWorkerAsync(model);
+
+        Assert.Equal(2, model.Requests.Count);
+        await StoredRunInputs.AssertMatchAsync(connectionString, "brief_analysis_runs", "record_id", RecordId, model.Requests);
+    }
+
+    [Fact]
     public async Task ACheckKeepsItsFlagsOnTheRevisionItCheckedAndChangesNothingInTheBriefOrItsReview()
     {
         await QueueCheckAsync();

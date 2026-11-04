@@ -276,6 +276,18 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task EveryDraftRunStoresTheExactRequestAndARetryRunStoresItsOwnUserMessage()
+    {
+        var candidate = await PassedCandidateAsync();
+        var model = new FakeStatementDraftModel().Draft("not json").Draft(Output(quotes: ["a rent cap for tenants"]));
+
+        await DraftingWorker(model).ExecuteAsync(once: true);
+
+        Assert.Equal(2, model.Requests.Count);
+        await StoredRunInputs.AssertMatchAsync(connectionString, "statement_analysis_runs", "candidate_id", candidate, model.Requests, StatementDraftTask.Task);
+    }
+
+    [Fact]
     public async Task TwoRejectedAnswersFailTheEntryAndAnOwnerRequeueRunsItAgainWithoutTouchingTheGate()
     {
         var candidate = await PassedCandidateAsync();

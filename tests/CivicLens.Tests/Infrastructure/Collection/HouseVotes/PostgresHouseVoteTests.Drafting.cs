@@ -2,6 +2,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Documents;
@@ -9,6 +12,8 @@ using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Votes;
+using CivicLens.Tests.Application.Actions;
+using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -71,6 +76,24 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal(("Analysis", runId), await TupleAsync($"SELECT author_kind, run_id FROM vote_revisions WHERE record_id = '{recordId}' AND revision_number = 1"));
         Assert.Equal(1_000L, await ScalarAsync("SELECT charged_tokens FROM vote_analysis_budget WHERE task = 'vote-draft'"));
         Assert.Equal(("1", "100"), await TupleAsync($"SELECT session_number, roll_call_number FROM vote_drafts WHERE record_id = '{recordId}'"));
+        Assert.Equal(AnalysisRunInputs.Sample, await StoredRunInputs.ReadAsync(connectionString, "vote_analysis_runs", runId));
+    }
+
+    [Fact]
+    public async Task EveryVoteRunStoresTheExactRequestAndARetryRunStoresItsOwnUserMessage()
+    {
+        var candidate = await ReadableCandidateAsync();
+        var model = new FakeHeadlineSummaryModel().Draft("not json").Draft(HeadlineSummaryOutputs.Output("The House voted on a concurrent resolution",
+            "The House decided whether to agree to a Senate amendment."));
+        var reader = new VoteReader(store, new ApiResponseReader(PostgresCollectionAttemptStore.FromConnectionString(connectionString),
+            new CaptureBodyReader()), captureRoot);
+
+        await AnalysisWorkers.VoteDrafting(VoteStore(), new FakeAnalysisStatusStore(), reader, model, new VoteDraftSettings(10_000_000, concurrency: 1),
+            BillGateFixtures.Revision(), TimeProvider.System).ExecuteAsync(once: true);
+
+        Assert.Equal([(candidate, "vote-draft", "Succeeded", null)], await QueueAsync());
+        Assert.Equal(2, model.Requests.Count);
+        await StoredRunInputs.AssertMatchAsync(connectionString, "vote_analysis_runs", "candidate_id", candidate, model.Requests);
     }
 
     [Fact]
@@ -103,6 +126,7 @@ public sealed partial class PostgresHouseVoteTests
 
         Assert.True(settled);
         Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM vote_analysis_runs WHERE run_id = '{run.RunId}' AND reason = 'kindChanged'"));
+        Assert.Null(await StoredRunInputs.ReadAsync(connectionString, "vote_analysis_runs", run.RunId));
         Assert.Equal(2, await ScalarAsync("SELECT current_revision_number FROM vote_drafts"));
         Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM vote_revisions WHERE revision_number = 2 AND run_id = '{run.RunId}'"));
     }
@@ -478,6 +502,27 @@ public sealed partial class PostgresHouseVoteTests
         return (string)(await ScalarAsync($"SELECT candidate_id FROM vote_candidates WHERE update_date_utc_ticks = {vote.UpdateDate.UtcTicks}"))!;
     }
 
+    private async Task<string> ReadableCandidateAsync()
+    {
+        var vote = HouseVoteFixtures.Vote(100, Updated);
+        var roll = HouseVoteFixtures.Roll100;
+        var source = new ConfiguredCollectionSource(HouseVoteFixtures.Configuration() with
+        {
+            People = [new() { Id = "zed", Name = "Zed Zimmer", BioguideId = "A000001" }]
+        }, HouseVoteFixtures.SourceId, Backfill.AddDays(400));
+        var detailJob = await DetailJobAsync("detail-" + Guid.NewGuid().ToString("N"), roll.Number, vote.UpdateDate);
+        var detailBody = HouseVoteFixtures.Detail();
+        var detailText = HouseVoteRenderer.RenderDetail(HouseVoteParser.Parse(Encoding.UTF8.GetBytes(detailBody), roll));
+        var detailExtraction = await extractions.SaveAsync(detailJob, detailBody, detailText, HouseVoteParser.ExtractionVersion);
+        var membersJob = Assert.Single((await store.AdmitDetailAsync(source, detailJob, vote, detailExtraction, default)).Jobs).JobId;
+        var membersBody = VoteWorld.MembersBody([new("A000001", "Zed", "Zimmer", "Yea")]);
+        var membersText = HouseVoteRenderer.RenderMembers(HouseVoteMembersParser.Parse(Encoding.UTF8.GetBytes(membersBody), roll));
+        var membersExtraction = await extractions.SaveAsync(membersJob, membersBody, membersText, HouseVoteMembersParser.ExtractionVersion);
+        await store.AdmitMembersAsync(source, membersJob, vote, membersExtraction, default);
+        await AdmitBillDetailAsync(readable: true);
+        return (string)(await ScalarAsync("SELECT candidate_id FROM vote_candidates"))!;
+    }
+
     private PostgresVoteDraftStore VoteStore() => new(new PooledDbContextFactory<CollectionAttemptDbContext>(
         new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));
 
@@ -518,7 +563,7 @@ public sealed partial class PostgresHouseVoteTests
     private static VoteDraftRun DraftedRun(string runId, string candidate) => new(new AnalysisRun(runId, candidate, VoteDraftTask.Task,
         VoteDraftTask.TaskVersion, VoteDraftTask.Model, VoteDraftTask.PromptVersion, VoteDraftTask.SchemaVersion, new string('1', 64), null,
         AnalysisRunOutcome.Drafted, new(900, 100, 0, 0), 1_000, "end_turn", "req", "{}", [], "{}", DateTimeOffset.UnixEpoch,
-        DateTimeOffset.UnixEpoch), null);
+        DateTimeOffset.UnixEpoch, AnalysisRunInputs.Sample), null);
 
     private static AnalysisRun BypassedRun(string runId, string candidate) => new(runId, candidate, VoteDraftTask.Task,
         VoteDraftTask.TaskVersion, VoteDraftTask.Model, VoteDraftTask.PromptVersion, VoteDraftTask.SchemaVersion, new string('1', 64), null,

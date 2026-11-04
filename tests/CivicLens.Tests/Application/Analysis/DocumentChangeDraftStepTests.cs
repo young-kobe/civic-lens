@@ -2,6 +2,7 @@ using CivicLens.Application;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
 using CivicLens.Tests.Fixtures;
+using Microsoft.Extensions.Logging.Abstractions;
 using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Tests.Application.Analysis;
@@ -29,6 +30,69 @@ public sealed class DocumentChangeDraftStepTests
         var context = Assert.Single(store.Runs).ContextJson!;
         Assert.Contains("markey", context, StringComparison.Ordinal);
         Assert.Contains("warren", context, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AModelIdWithANulCharacterGivesARejectedRunWhoseErrorAndRetryPromptHoldTheReplacementCharacter()
+    {
+        var store = new FakeAnalysisStore(1);
+        var citation = ("h1", "after", "Item 0 new");
+        var model = new FakeDocumentChangeDraftModel()
+            .Draft(FakeDocumentChangeDraftModel.Output("Deadline moves", [citation], officialIds: ["warren\0x"]))
+            .Draft(FakeDocumentChangeDraftModel.Output(citation));
+
+        await Worker(store, model).ExecuteAsync(once: true);
+
+        Assert.Equal(2, model.Requests.Count);
+        var rejected = store.Runs.First();
+        Assert.Equal(AnalysisRunOutcome.OutputRejected, rejected.Outcome);
+        Assert.Contains(rejected.ValidationErrors, error => error.Contains("warren\uFFFDx", StringComparison.Ordinal));
+        Assert.Contains("warren\uFFFDx", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain('\0', model.Requests[1].UserPrompt);
+        Assert.All(store.Runs, run => run.ValidateForWrite());
+        Assert.Equal(AnalysisRunOutcome.Drafted, store.Runs.Last().Outcome);
+    }
+
+    [Fact]
+    public async Task EveryRunThatCalledTheModelKeepsTheExactRequestAndARetryRunKeepsItsOwnUserMessage()
+    {
+        var store = new FakeAnalysisStore(1);
+        var citation = ("h1", "after", "Item 0 new");
+        var model = new FakeDocumentChangeDraftModel()
+            .Draft(FakeDocumentChangeDraftModel.Output("Deadline moves", [citation], officialIds: ["nobody"]))
+            .Draft(FakeDocumentChangeDraftModel.Output(citation));
+
+        await Worker(store, model).ExecuteAsync(once: true);
+
+        Assert.Equal(2, store.Runs.Count);
+        foreach (var (run, request) in store.Runs.Zip(model.Requests))
+        {
+            var input = Assert.IsType<AnalysisRunInput>(run.Input);
+            Assert.Equal((request.SystemPrompt, request.UserPrompt, request.SchemaJson, request.Effort, request.MaximumOutputTokens),
+                (input.SystemPrompt, input.UserMessage, input.OutputSchema, input.Effort, input.MaximumOutputTokens));
+            Assert.Equal(request.InputHash, AnalysisPromptHash.Compute(request.Model, input.Effort, input.MaximumOutputTokens,
+                input.SystemPrompt, input.UserMessage, input.OutputSchema));
+        }
+        Assert.NotEqual(store.Runs[0].Input!.UserMessage, store.Runs[1].Input!.UserMessage);
+        Assert.Contains("nobody", store.Runs[1].Input!.UserMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task APromptThatCannotBeStoredBlocksTheEntryBeforeAnyBudgetOrModelCallBecauseARunThatCalledTheModelMustHoldItsInput()
+    {
+        var store = new FakeAnalysisStore(1);
+        var model = new FakeDocumentChangeDraftModel();
+        var step = new UnstorablePromptStep(new DocumentChangeDraftStep(store, model, new DocumentChangeDraftSettings(10_000_000, concurrency: 1), []), model);
+        var worker = new AnalysisWorker<AnalysisRun>(step, new FakeAnalysisStatusStore(), new FakeClock(DateTimeOffset.UnixEpoch),
+            NullLogger<AnalysisWorker<AnalysisRun>>.Instance, TestBeat.Create());
+
+        await worker.ExecuteAsync(once: true);
+
+        var entry = store.Entries.Single();
+        Assert.Equal((State.Blocked, AnalysisErrorCodes.InvalidRunInput), (entry.Status, entry.ErrorCode));
+        Assert.Empty(model.Requests);
+        Assert.Equal(0, store.Charged);
+        Assert.Empty(store.Runs);
     }
 
     [Fact]
@@ -219,6 +283,21 @@ public sealed class DocumentChangeDraftStepTests
         AnalysisWorkers.Drafting(store, status ?? new FakeAnalysisStatusStore(), model,
             settings ?? new DocumentChangeDraftSettings(10_000_000, concurrency: 1), [],
             clock ?? new FakeClock(DateTimeOffset.UnixEpoch), wakeup, beat);
+
+    private sealed class UnstorablePromptStep(DocumentChangeDraftStep inner, FakeDocumentChangeDraftModel model) : IAnalysisTaskStep<AnalysisRun>
+    {
+        public IAnalysisQueue<AnalysisRun> Queue => inner.Queue;
+        public AnalysisSettings Settings => inner.Settings;
+        public AnalysisTaskIdentity Identity => inner.Identity;
+        public AnalysisRun Wrap(AnalysisRun run) => run;
+
+        public async Task<bool> RunAsync(IAnalysisAttempt<AnalysisRun> attempt, CancellationToken cancellationToken)
+        {
+            var request = AnalysisModelRequest.Create(DocumentChangeDraftTask.Model, 100, "System.", "", "{}", 10);
+            var call = await attempt.CallModelAsync(request, null, model.DraftAsync, cancellationToken);
+            return call.Progress;
+        }
+    }
 
     private sealed class FakeWakeup(Action onWait) : IWorkerWakeup
     {
