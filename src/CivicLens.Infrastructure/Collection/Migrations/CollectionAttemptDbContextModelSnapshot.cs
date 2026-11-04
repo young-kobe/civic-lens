@@ -4409,6 +4409,34 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
 
+                    b.Property<string>("MatchBasis")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("match_basis");
+
+                    b.Property<string>("MatchExtractionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("match_extraction_id");
+
+                    b.Property<int?>("MatchLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("match_length");
+
+                    b.Property<int?>("MatchStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("match_start");
+
+                    b.Property<string>("OfficialId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("official_id");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)")
+                        .HasColumnName("reason");
+
                     b.Property<string>("RevisionJson")
                         .IsRequired()
                         .HasColumnType("text")
@@ -4419,20 +4447,111 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("run_id");
 
+                    b.Property<string>("StatementCandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("statement_candidate_id");
+
+                    b.Property<string>("StatementQuoteExtractionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("statement_quote_extraction_id");
+
+                    b.Property<int?>("StatementQuoteLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("statement_quote_length");
+
+                    b.Property<int?>("StatementQuoteStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("statement_quote_start");
+
+                    b.Property<int?>("StatementRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("statement_revision_number");
+
+                    b.Property<string>("TargetActionRecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("target_action_record_id");
+
+                    b.Property<int?>("TargetActionRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("target_action_revision_number");
+
+                    b.Property<string>("TargetFactId")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("target_fact_id");
+
+                    b.Property<string>("TargetKind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("target_kind");
+
+                    b.Property<string>("TargetVoteRecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("target_vote_record_id");
+
+                    b.Property<int?>("TargetVoteRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("target_vote_revision_number");
+
+                    b.Property<string>("Type")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("type");
+
                     b.HasKey("RecordId", "RevisionNumber");
+
+                    b.HasIndex("MatchExtractionId");
 
                     b.HasIndex("RunId")
                         .IsUnique();
+
+                    b.HasIndex("StatementQuoteExtractionId");
+
+                    b.HasIndex("StatementCandidateId", "StatementRevisionNumber");
+
+                    b.HasIndex("TargetActionRecordId", "TargetActionRevisionNumber");
+
+                    b.HasIndex("TargetVoteRecordId", "TargetVoteRevisionNumber");
 
                     b.ToTable("relationship_revisions", null, t =>
                         {
                             t.HasCheckConstraint("ck_relationship_revisions_author_kind", "author_kind IN ('Person','Analysis')");
 
+                            t.HasCheckConstraint("ck_relationship_revisions_columns_written", "num_nulls(statement_candidate_id, statement_revision_number, target_kind, match_basis, match_extraction_id, match_start, match_length, type, reason, statement_quote_extraction_id, statement_quote_start, statement_quote_length, target_fact_id, official_id) IN (0, 14)");
+
                             t.HasCheckConstraint("ck_relationship_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_relationship_revisions_fact_id", "btrim(target_fact_id) <> '' AND length(target_fact_id) <= 16");
+
+                            t.HasCheckConstraint("ck_relationship_revisions_match", "match_start >= 0 AND match_length > 0");
+
+                            t.HasCheckConstraint("ck_relationship_revisions_match_basis", "match_basis IN ('BillNumber', 'BillTitle')");
 
                             t.HasCheckConstraint("ck_relationship_revisions_number", "revision_number >= 1");
 
+                            t.HasCheckConstraint("ck_relationship_revisions_official_id", "btrim(official_id) <> '' AND length(official_id) <= 256");
+
+                            t.HasCheckConstraint("ck_relationship_revisions_quote", "statement_quote_length <= 4096 AND statement_quote_extraction_id = match_extraction_id\nAND statement_quote_start <= match_start AND match_start + match_length <= statement_quote_start + statement_quote_length");
+
+                            t.HasCheckConstraint("ck_relationship_revisions_reason", "btrim(reason) <> '' AND length(reason) <= 400 AND reason !~ '[\\r\\n]'");
+
                             t.HasCheckConstraint("ck_relationship_revisions_run", "(author_kind = 'Analysis') = (run_id IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_relationship_revisions_statement", "statement_candidate_id ~ '^[0-9a-f]{64}$' AND statement_revision_number >= 1");
+
+                            t.HasCheckConstraint("ck_relationship_revisions_statement_quote", "statement_quote_start >= 0 AND statement_quote_length > 0");
+
+                            t.HasCheckConstraint("ck_relationship_revisions_target", "target_kind IS NULL AND num_nonnulls(target_action_record_id, target_action_revision_number, target_vote_record_id, target_vote_revision_number) = 0\nOR target_kind = 'Action' AND num_nonnulls(target_action_record_id, target_action_revision_number) = 2 AND num_nonnulls(target_vote_record_id, target_vote_revision_number) = 0\nOR target_kind = 'Vote' AND num_nonnulls(target_vote_record_id, target_vote_revision_number) = 2 AND num_nonnulls(target_action_record_id, target_action_revision_number) = 0");
+
+                            t.HasCheckConstraint("ck_relationship_revisions_target_ids", "target_action_record_id ~ '^[0-9a-f]{64}$' AND target_action_revision_number >= 1 AND target_vote_record_id ~ '^[0-9a-f]{64}$' AND target_vote_revision_number >= 1");
+
+                            t.HasCheckConstraint("ck_relationship_revisions_type", "type IN ('DescribesOwnBill', 'StatesPositionOn', 'ClaimsCreditFor', 'StatementAboutVote')");
+
+                            t.HasCheckConstraint("ck_relationship_revisions_type_target", "target_kind = 'Action' AND type IN ('DescribesOwnBill', 'StatesPositionOn', 'ClaimsCreditFor') OR target_kind = 'Vote' AND type IN ('StatementAboutVote')");
                         });
                 });
 
@@ -7302,6 +7421,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Relationships.Persistence.RelationshipRevisionRow", b =>
                 {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("MatchExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CivicLens.Infrastructure.Relationships.Persistence.RelationshipDraftRow", null)
                         .WithMany()
                         .HasForeignKey("RecordId")
@@ -7311,6 +7435,26 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Relationships.Persistence.RelationshipAnalysisRunRow", null)
                         .WithMany()
                         .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("StatementQuoteExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("StatementCandidateId", "StatementRevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("TargetActionRecordId", "TargetActionRevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("TargetVoteRecordId", "TargetVoteRevisionNumber")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

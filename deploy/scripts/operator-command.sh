@@ -80,6 +80,14 @@ case "$*" in
     number "$4"
     "$compose" run --rm cli bills status backfill "$4"
     ;;
+  # usage: relationships revisions backfill <count>
+  "relationships revisions backfill "*)
+    [[ $# -eq 4 ]] || refuse
+    number "$4"
+    "$compose" run --rm cli relationships revisions backfill "$4"
+    ;;
+  # usage: relationships revisions verify
+  "relationships revisions verify") "$compose" run --rm cli relationships revisions verify ;;
   # usage: votes revisions backfill <count>
   "votes revisions backfill "*)
     [[ $# -eq 4 ]] || refuse
