@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using CivicLens.Application;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
@@ -25,8 +26,10 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
     private readonly PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun> queue;
 
-    public PostgresActionDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory)
-        : this(contextFactory, new(contextFactory, new ActionDraftQueueMapping(AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Action, PublishedRecordKind.Action)))) { }
+    public PostgresActionDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory, CodeVersion codeVersion)
+        : this(contextFactory, new PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun>(contextFactory, new ActionDraftQueueMapping(
+            AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Action, PublishedRecordKind.Action), codeVersion)))
+    { }
 
     private PostgresActionDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
         PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun> queue) : base(queue)

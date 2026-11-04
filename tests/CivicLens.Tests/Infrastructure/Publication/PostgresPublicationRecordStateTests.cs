@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using System.Diagnostics;
 using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Collection;
@@ -26,7 +27,7 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
         publications = new PostgresPublicationStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
-            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options), TestCodeVersion.Current);
     }
 
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);

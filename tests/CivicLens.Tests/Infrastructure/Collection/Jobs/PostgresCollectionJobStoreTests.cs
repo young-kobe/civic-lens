@@ -31,7 +31,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         evidence = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         Directory.CreateDirectory(root);
     }
@@ -51,7 +51,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             MaxPoolSize = 1,
             Timeout = 3
         }.ConnectionString;
-        jobs = PostgresCollectionJobStore.FromConnectionString(pooled);
+        jobs = PostgresCollectionJobStore.FromConnectionString(pooled, TestCodeVersion.Current);
         var claim = await EnqueueClaimAsync("single-connection", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
@@ -101,7 +101,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var counter = new ReadCounter();
         var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
             .AddInterceptors(counter).Options;
-        var reader = new PostgresCollectionJobStore(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
+        var reader = new PostgresCollectionJobStore(new PooledDbContextFactory<CollectionAttemptDbContext>(options), TestCodeVersion.Current);
 
         await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-collection-jobs");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -773,7 +773,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var coverageDate = new DateOnly(2026, 7, 1);
         var original = new ConfiguredCollectionSource(configuration, "source", coverageDate);
         var current = await jobs.EnqueueAsync(original, "current", default);
-        var reopened = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var reopened = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var stored = await reopened.GetAsync(current.JobId, default);
         Assert.Equal(original.CreateJobDefinition(coverageDate), stored!.Definition);
         configuration.People[0] = configuration.People[0] with { Name = "Correction" };

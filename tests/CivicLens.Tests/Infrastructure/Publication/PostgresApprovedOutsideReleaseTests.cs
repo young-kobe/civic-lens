@@ -19,7 +19,7 @@ public sealed class PostgresApprovedOutsideReleaseTests(PostgresCollection postg
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        store = PostgresPublicationStore.FromConnectionString(connectionString);
+        store = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         await ExecuteAsync(ApprovalDrafts.DropForeignKeys);
     }
 

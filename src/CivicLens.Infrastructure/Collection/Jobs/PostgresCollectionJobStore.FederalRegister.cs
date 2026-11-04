@@ -37,7 +37,7 @@ public sealed partial class PostgresCollectionJobStore : IFederalRegisterAdmissi
                     row.DocumentNumber == document.DocumentNumber, cancellationToken))
                 return NoAdmission with { DuplicateCount = 1 };
             await EnsureExtractionIsOfJobAsync(db, documentJobId, evidence.ExtractionId, cancellationToken);
-            var revision = await ExecutiveActionRows.AdmitAsync(db, source.SourceId, documentJobId, evidence, now, cancellationToken);
+            var revision = await executiveActions.AdmitAsync(db, source.SourceId, documentJobId, evidence, now, cancellationToken);
             return revision is null && document.CorrectionOf is { } original
                 ? await AdmitOriginalJobAsync(db, source, original, document.PublishedOn, now, cancellationToken)
                 : NoAdmission;
