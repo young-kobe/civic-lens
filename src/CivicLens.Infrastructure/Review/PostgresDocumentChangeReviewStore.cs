@@ -25,7 +25,8 @@ namespace CivicLens.Infrastructure.Review;
 public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewStore
 {
     internal static readonly ReviewRecords<DocumentChangeDraftRow, DocumentChangeRevisionRow, ReviewDecisionRow, DocumentChangeDraftRevision>
-        Records = new(PostgresAdvisoryLock.DocumentChangeReview, PublishedRecordKind.DocumentChange, "Document-change", nameof(DocumentChangeDraftRow.DraftId));
+        Records = new(PostgresAdvisoryLock.DocumentChangeReview, PublishedRecordKind.DocumentChange, "Document-change", nameof(DocumentChangeDraftRow.DraftId),
+            readRevisions: DocumentChangeRevisionRows.ReadAsync);
 
     private const string CreateOperation = "create";
     private const string SaveOperation = "save";
@@ -82,7 +83,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
                     ?? throw new ArgumentException("Drafts must reference a complete comparison containing a text change.", nameof(revision));
                 ValidateRevisionAgainstEvidence(saved, verified);
                 return saved;
-            }, NewRevisionRow, null,
+            }, DocumentChangeRevisionRows.Create, null,
             approval is null ? null : new(approval,
                 (_, draft, history) =>
                 {
@@ -203,7 +204,9 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
             .ThenByDescending(row => row.DraftId).Take(limit).ToArrayAsync(cancellationToken);
         var saved = await db.Set<DocumentChangeRevisionRow>().AsNoTracking().Where(row => row.RevisionNumber > 1)
             .OrderByDescending(row => row.CreatedAtUtcTicks).ThenByDescending(row => row.DraftId)
-            .ThenByDescending(row => row.RevisionNumber).Take(limit).ToArrayAsync(cancellationToken);
+            .ThenByDescending(row => row.RevisionNumber).Take(limit)
+            .Select(row => new ActivityRevision(row.DraftId, row.RevisionNumber, row.CreatedAtUtcTicks, row.AuthorSubject, row.Headline))
+            .ToArrayAsync(cancellationToken);
         var decided = await db.Set<ReviewDecisionRow>().AsNoTracking().OrderByDescending(row => row.CreatedAtUtcTicks)
             .ThenByDescending(row => row.DecisionId).Take(limit).ToArrayAsync(cancellationToken);
         var revisions = await ReadActivityRevisionsAsync(db, drafts, decided, cancellationToken);
@@ -211,13 +214,12 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
         return
         [
             .. drafts.Select(row => ToActivity(ReviewActivityKind.DraftCreated, row.CreatedAtUtcTicks, revisions[(row.DraftId, 1)])),
-            .. saved.Select(row => ToActivity(ReviewActivityKind.RevisionSaved, row.CreatedAtUtcTicks,
-                ReviewJson.Deserialize<DocumentChangeDraftRevision>(row.RevisionJson, "revision"))),
+            .. saved.Select(row => ToActivity(ReviewActivityKind.RevisionSaved, row.CreatedAtUtcTicks, row)),
             .. decided.Select(row => ToDecisionActivity(row, revisions[(row.DraftId, row.RevisionNumber)]))
         ];
     }
 
-    private static async Task<Dictionary<(string DraftId, int RevisionNumber), DocumentChangeDraftRevision>> ReadActivityRevisionsAsync(
+    private static async Task<Dictionary<(string DraftId, int RevisionNumber), ActivityRevision>> ReadActivityRevisionsAsync(
         CollectionAttemptDbContext db, DocumentChangeDraftRow[] drafts, ReviewDecisionRow[] decisions,
         CancellationToken cancellationToken)
     {
@@ -229,17 +231,22 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
                   ON r.draft_id = k.draft_id AND r.revision_number = k.revision_number
                 """,
                 wanted.Select(key => key.DraftId).ToArray(), wanted.Select(key => key.RevisionNumber).ToArray())
-            .AsNoTracking().ToArrayAsync(cancellationToken);
-        return rows.ToDictionary(
-            row => (row.DraftId, row.RevisionNumber), row => ReviewJson.Deserialize<DocumentChangeDraftRevision>(row.RevisionJson, "revision"));
+            .AsNoTracking().Select(row => new ActivityRevision(row.DraftId, row.RevisionNumber, row.CreatedAtUtcTicks, row.AuthorSubject, row.Headline))
+            .ToArrayAsync(cancellationToken);
+        return rows.ToDictionary(row => (row.DraftId, row.RevisionNumber));
     }
 
-    private static ReviewActivityEvent ToActivity(ReviewActivityKind kind, long ticks, DocumentChangeDraftRevision revision) =>
-        new(kind, new DateTimeOffset(ticks, TimeSpan.Zero), revision.AuthorSubject, revision.DraftId, revision.Headline, null);
+    private static ReviewActivityEvent ToActivity(ReviewActivityKind kind, long ticks, ActivityRevision revision) =>
+        new(kind, new DateTimeOffset(ticks, TimeSpan.Zero), revision.AuthorSubject, revision.DraftId, HeadlineOf(revision), null);
 
-    private static ReviewActivityEvent ToDecisionActivity(ReviewDecisionRow row, DocumentChangeDraftRevision revision) =>
+    private static ReviewActivityEvent ToDecisionActivity(ReviewDecisionRow row, ActivityRevision revision) =>
         new(ReviewActivityKind.DecisionRecorded, new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero),
-            row.ActorSubject, row.DraftId, revision.Headline, row.Kind);
+            row.ActorSubject, row.DraftId, HeadlineOf(revision), row.Kind);
+
+    private static string HeadlineOf(ActivityRevision revision) => revision.Headline
+        ?? throw DocumentChangeRevisionRows.NotBackfilled($"Document change revision {revision.DraftId} {revision.RevisionNumber}");
+
+    private sealed record ActivityRevision(string DraftId, int RevisionNumber, long CreatedAtUtcTicks, string AuthorSubject, string? Headline);
 
     internal sealed record VerifiedComparison(EligibleDocumentComparison Summary,
         DocumentExtraction Before, DocumentExtraction After);
@@ -314,16 +321,8 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
             CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks,
             LastRevisedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
         });
-        db.Add(NewRevisionRow(revision));
+        db.Add(DocumentChangeRevisionRows.Create(revision));
     }
-
-    private static DocumentChangeRevisionRow NewRevisionRow(DocumentChangeDraftRevision revision) => new()
-    {
-        DraftId = revision.DraftId,
-        RevisionNumber = revision.RevisionNumber,
-        RevisionJson = ReviewJson.Serialize(revision),
-        CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
-    };
 
     private static ImmutableArray<SourceSpan> CreateInitialCitations(DocumentComparison comparison)
     {

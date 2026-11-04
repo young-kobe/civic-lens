@@ -5,6 +5,8 @@ namespace CivicLens.Collection.Contracts;
 
 public sealed record CollectionRequest
 {
+    public const int MaximumTimeoutSeconds = 300;
+
     [JsonRequired]
     public int Version { get; init; } = CollectionProtocol.Version;
     public required string JobId { get; init; }
@@ -79,7 +81,7 @@ public sealed record CollectionRequest
     private void ValidateBudgets()
     {
         if (MaxRequests is < 2 or > 20 || MaxBytes is < 1 or > 100_000_000 ||
-            TimeoutSeconds is < 1 or > 300 || MinDelayMilliseconds is < 0 or > 60_000 || MaxCandidates is < 1 or > 1000)
+            TimeoutSeconds is < 1 or > MaximumTimeoutSeconds || MinDelayMilliseconds is < 0 or > 60_000 || MaxCandidates is < 1 or > 1000)
             throw new ArgumentException("Collection budgets are outside supported bounds.");
     }
 

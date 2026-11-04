@@ -51,6 +51,7 @@ internal static class CollectionFixtures
         Response = new HttpResponseMetadata { StatusCode = 200, ETag = "\"v1\"", ContentEncodings = [] },
         Capture = new CaptureArtifact { Sha256 = new string('a', 64), RelativePath = new string('a', 64) + ".gz", ByteLength = 4 },
         BytesReceived = 10,
-        RequestCount = 2
+        RequestCount = 2,
+        ElapsedMilliseconds = 250
     };
 }

@@ -313,7 +313,6 @@ public sealed class PostgresBriefRevisionColumnsTests(PostgresCollection postgre
     [InlineData("UPDATE brief_revisions SET suggestion_run_id = repeat('c', 32)", PostgresErrorCodes.ForeignKeyViolation)]
     [InlineData("DELETE FROM brief_revisions", PostgresErrorCodes.RestrictViolation)]
     [InlineData("DELETE FROM brief_revision_paragraphs WHERE position = 0 AND part = 'Text'", PostgresErrorCodes.RestrictViolation)]
-    [InlineData("DELETE FROM statement_revisions", PostgresErrorCodes.RestrictViolation)]
     public async Task TheDatabaseRefusesALinkThatBreaksAKey(string change, string state)
     {
         await SeedAsync();
@@ -321,6 +320,18 @@ public sealed class PostgresBriefRevisionColumnsTests(PostgresCollection postgre
         var thrown = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(change));
 
         Assert.Equal(state, thrown.SqlState);
+    }
+
+    [Fact]
+    public async Task ABriefCitationKeepsItsStatementRevision()
+    {
+        await SeedAsync();
+        await ExecuteAsync("DELETE FROM statement_review_decisions");
+
+        var thrown = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync("DELETE FROM statement_revisions"));
+
+        Assert.Equal(PostgresErrorCodes.RestrictViolation, thrown.SqlState);
+        Assert.Equal("FK_brief_revision_citations_statement_revisions_statement_cand~", thrown.ConstraintName);
     }
 
     private async Task SeedAsync(string reviewStatus = "AwaitingReview")

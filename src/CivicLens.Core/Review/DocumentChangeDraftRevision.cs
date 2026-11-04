@@ -65,9 +65,6 @@ public sealed record DocumentChangeDraftRevision(string DraftId, int RevisionNum
         ValidateText(Significance, MaximumSignificanceLength, nameof(Significance));
         ValidateText(Limits, MaximumLimitsLength, nameof(Limits));
         ValidateText(Institution, MaximumInstitutionLength, nameof(Institution));
-        if ((ChangeDate is null) != (ChangeDateEvidence is null) ||
-            ChangeDateEvidence is not null && !Citations.Contains(ChangeDateEvidence))
-            throw new ArgumentException("Change date must be bound to a citation included in the public evidence bindings.");
         ValidateSelections(OfficialIds, nameof(OfficialIds));
         ValidateSelections(IssueIds, nameof(IssueIds));
         if (Citations.IsDefault || Citations.Length > MaximumCitations)
@@ -75,6 +72,9 @@ public sealed record DocumentChangeDraftRevision(string DraftId, int RevisionNum
         if (Citations.Any(citation => citation is null || citation.Start < 0 || citation.Length <= 0 || citation.Length > MaximumCitationLength) ||
             Citations.Distinct().Count() != Citations.Length)
             throw new ArgumentException("Citations must be distinct valid bounded spans.");
+        if ((ChangeDate is null) != (ChangeDateEvidence is null) ||
+            ChangeDateEvidence is not null && !Citations.Contains(ChangeDateEvidence))
+            throw new ArgumentException("Change date must be bound to a citation included in the public evidence bindings.");
     }
 
 
@@ -87,7 +87,7 @@ public sealed record DocumentChangeDraftRevision(string DraftId, int RevisionNum
     private static void ValidateSelections(ImmutableArray<string> values, string name)
     {
         if (values.IsDefault || values.Length > MaximumSelections || values.Any(string.IsNullOrWhiteSpace) ||
-            values.Any(value => value.Length > 128) || values.Distinct(StringComparer.Ordinal).Count() != values.Length)
+            values.Any(value => value.Length > ReviewTextRules.MaximumConfigurationIdLength) || values.Distinct(StringComparer.Ordinal).Count() != values.Length)
             throw new ArgumentException("Stored editorial selections are invalid.", name);
     }
 }

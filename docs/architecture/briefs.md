@@ -333,9 +333,9 @@ This is an owner command. It prints the count of entries that it queued or moved
 ## Storage and contracts
 
 - The generated [briefs schema](schema/briefs.md) lists every table, column, key, check, index, and trigger.
-- Nine tables hold weekly briefs: `brief_analysis`, `brief_analysis_runs`, `brief_analysis_budget`, `brief_schedule`, `brief_drafts`, `brief_revisions`, `brief_review_decisions`, `brief_review_decision_resolutions`, and `brief_check_flags`.
+- Twelve tables hold weekly briefs: `brief_analysis`, `brief_analysis_runs`, `brief_analysis_budget`, `brief_schedule`, `brief_drafts`, `brief_revisions`, `brief_review_decisions`, `brief_review_decision_resolutions`, `brief_check_flags`, `brief_revision_citations`, `brief_revision_paragraphs`, and `brief_revision_paragraph_citations`.
 - The commands use the replay receipt table with the operations `brief-save` and `brief-decide`.
-- The review of briefs adds no lock. It uses `brief_drafts`, `brief_revisions`, `brief_review_decisions`, and `brief_review_decision_resolutions`.
+- The review of briefs adds no lock. It uses `brief_drafts`, `brief_revisions`, `brief_revision_citations`, `brief_revision_paragraphs`, `brief_revision_paragraph_citations`, `brief_review_decisions`, and `brief_review_decision_resolutions`.
 - A revision is written twice: as JSON in `revision_json`, and as columns with child rows (R-63). Every reader reads the columns, so the columns are the source of truth. The JSON stays as a copy until the drop step. A row that older code wrote has null columns, and every reader fails on it. Run the backfill first.
 - `brief_revisions` holds the window, the fingerprint, the headline, the text origin, the suggestion header, and the two coverage counts. The suggestion header is its headline, run ID, and fingerprint. `brief_revision_citations` holds one row for each citation and part. `brief_revision_paragraphs` holds one row for each paragraph and part. `brief_revision_paragraph_citations` holds the citation IDs of each paragraph in order. The part is `Text` or `Suggestion`. The row mapping is `BriefRevisionRows` and `BriefRevisionPage`.
 - A Bypassed run records its reason in `brief_analysis_runs`. The reasons are `unchanged` and `noNewRecords`.

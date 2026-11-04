@@ -302,7 +302,7 @@ Optional source `jobPolicy` fields are `maxAttempts` (default 3), `initialRetryD
 
 A crawl delay longer than every attempt timeout can exhaust the retries. Inspect the delay, then adjust the work budget or the source policy before you admit new work. Inspection shows immutable attempts and charged totals. The `reserved*` totals keep timeout reservations and unknown use conservatively.
 
-**Interruption.** Ctrl+C does not cancel the job permanently. After an interruption, start the worker again with the complete artifact root, including `.pending`, or its relocated copy. A same-origin unresolved attempt blocks other managed jobs until it is reconciled. The worker reconciles imported evidence even when its handoff is missing. Otherwise `receipts replay` imports without a fetch.
+**Interruption.** Ctrl+C does not cancel the job permanently. After an interruption, start the worker again with the complete artifact root, including `.pending`, or its relocated copy. A same-origin unresolved attempt blocks other managed jobs until it is reconciled. The worker reconciles imported evidence even when its handoff is missing. Otherwise `receipts replay` imports without a fetch. The worker removes a handoff file of an old version or without an elapsed time, and fetches the job again. It keeps any other invalid file.
 
 **Worker.** `worker <collector.dll> <artifact-directory>` needs `CIVIC_LENS_COLLECTION_CONFIG` with an absolute configuration path. It runs the durable collection-to-review engine. `--once` admits due checks, drains the runnable work, and exits without waiting for future deadlines. The publishing stage makes one pass, so it makes at most one release of up to 64 records. Ctrl+C stops the worker. Change the configuration and restart the worker to apply it. Cancelling one job does not disable its source schedule. Keep one worker for each operational store. Leases and fenced checkpoints protect ownership if another worker runs.
 
@@ -705,6 +705,21 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- vo
 
 Run order: `backfill`, then `verify`. Run the new code only when `verify` exits 0, so `legacy` and `mismatched` are both 0. Every reader fails on a row with null columns.
 
+### Action revision backfill
+
+R-63 step 2 moves old action revisions into columns and child rows. A revision written by current code has them, but a revision written before the derived columns existed has no `event_on` and `cosponsor_count`. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions revisions backfill 500
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions revisions verify
+```
+
+`backfill <limit>` moves at most `limit` revisions that have no event date. Those are legacy revisions and revisions without the derived columns. It walks the table in key order in batches of 25. Each batch is one short transaction that holds the action review lock. For each row it deletes the old child rows, writes the columns and the issue, sponsorship, and citation rows, reads the row back, rebuilds the revision, and compares it to the stored JSON. A row that differs is skipped with `RebuildMismatch`. The output and the exit code are the same as for the [vote backfill](#vote-revision-backfill). The reasons are `UnreadableJson`, `InvalidShape`, `RebuildMismatch`, and `database:<constraint>`. A skipped row keeps its earlier columns and child rows.
+
+`verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. The output and the exit code are the same as for the vote `verify`. No key is allowed to be absent.
+
+Run order: `db migrate`, then `backfill`, then `verify`. The action readers still read the JSON, so a row with null columns breaks no reader yet. Step 3 moves the readers to the columns. Run it only when `verify` exits 0.
+
 ### Executive action revision backfill
 
 R-63 step 3 moves old executive action revisions into columns and child rows. A revision written by current code already has them. The migration `ExecutiveActionRevisionColumns` also moves each `notice_json` of a document into the notice columns, and drops `notice_json`. It sets the code author on each old revision. It fails and changes nothing when a notice differs from its row, when a revision names another author, or when a `notice_json` or `revision_json` is not valid JSON. The error names the row. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
@@ -734,6 +749,21 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- br
 `verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. The output and the exit code are the same as for the vote `verify`. A revision whose rows cannot be read shows the field name `columns`. No key is allowed to be absent.
 
 Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. Run `backfill` right after the deploy, because every brief read fails until it ends. Production held 1 brief revision when the survey was made.
+
+### Document change revision backfill
+
+R-63 step 3 moves old document change revisions into columns and child rows. A revision written by current code already has them. The migration `DocumentChangeRevisionColumns` fills the author columns of each old revision from its JSON. It fails and changes nothing when a `revision_json` is not valid JSON, or when it has no author of 1 to 256 characters. The error names the draft and the revision number. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- document-changes revisions backfill 500
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- document-changes revisions verify
+```
+
+`backfill <limit>` moves at most `limit` legacy revisions. It walks the table in key order in batches of 25. Each batch is one short transaction that holds the document change review lock. For each row it writes the columns and the official, issue, and citation rows, reads the row back, rebuilds the revision, and compares it to the stored JSON. A row that differs is skipped with `RebuildMismatch`. The output and the exit code are the same as for the [vote backfill](#vote-revision-backfill). The reasons are `UnreadableJson`, `InvalidShape`, `RebuildMismatch`, and `database:<constraint>`.
+
+`verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. The output and the exit code are the same as for the vote `verify`. A revision whose rows cannot be read shows the field name `columns`. No key is allowed to be absent.
+
+Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every document change read fails until it ends. That includes the review pages, the activity feed, the approved record search, and the weekly brief reader. For a manual run, start the new code only when `verify` exits 0. A rollback past the migration keeps the JSON, and the next run of the migration fills the author columns again.
 
 ## Relationship drafting
 
@@ -1084,6 +1114,8 @@ sudo deploy/scripts/compose.sh run --rm cli releases list
 
 `update.sh` stops when the checkout is not at the given SHA, when `deploy/` has uncommitted changes, or when the Caddy port in `compose.env` differs from the port in the tunnel config. It sets the image tag for the run and pulls the images. It stops the worker and the review host, so no old image runs on the new schema or commits a release during the migration. Then it applies the migrations with a one-off `cli` container. Then it writes the tag to `compose.env`, because the schema now belongs to that commit. Last, it recreates the services, and it always recreates Caddy and cloudflared so that a changed Caddyfile or tunnel config takes effect. The worker stays stopped until the services start from the new tag. A search service of an older image fails the ingest of a release with a new published value, keeps its last index, and tries again at the next interval. It recovers by itself once the new image runs. If a step after the migration fails, run `update.sh` again with the same SHA. If the migration fails, the worker and the review host stay stopped. Fix the cause and run `update.sh` again, or run `sudo deploy/scripts/compose.sh up --detach worker review` to start the old services. Services never migrate at start. The tag must be a full commit SHA whose images exist. To roll back, run `update.sh` with an earlier SHA. A rollback does not undo a migration, so a rollback past `DropDecisionJson` needs the steps in [Postgres adapter and migrations](#postgres-adapter-and-migrations) first. If the migration `DropPublicationRecordsJson` raises "Cannot drop records_json", run `db migrate` from the prior image, which still rebuilds the record state table, and then run `update.sh` again. If the migration `DropDecisionJson` raises "Cannot drop decision_json", the migration rolled back, the column is intact, and `compose.env` still holds the old tag. Run `sudo deploy/scripts/compose.sh up --detach worker review` to restore service, and give the named decision to the developer.
 
+**Receipt spool check.** Do this before an `update.sh` that changes the receipt handoff version. Stop the worker with `sudo deploy/scripts/compose.sh stop worker`. Run `sudo ls -A /srv/civic-lens/captures/.pending`. An empty directory is the goal. Each file is a receipt that was saved but not yet imported. Let the old worker finish first, so that the spool empties. If a file remains, the new worker refuses it. It logs an error, removes the file, settles the attempt as interrupted with the code `HandoffRefused`, and fetches the job again. The saved capture file stays in the directory and is not used. `receipts replay` does not do this. It reports the file as invalid and keeps it.
+
 `compose.sh` is `docker compose` with the compose file and `compose.env` set. The `cli` service starts the host image with no command. The `restic` service has the same `tools` profile. Add the host command after `cli`, for example `releases publish` or `db migrate`.
 
 ## Production runbook
@@ -1247,7 +1279,7 @@ The installer refuses a checkout that anyone other than root can write, because 
 
 Every result that an agent reads goes to its model vendor, so add a column to the hidden list before it holds private text.
 
-**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `votes revisions backfill`, `votes revisions verify`, `executive-actions revisions backfill`, `executive-actions revisions verify`, `releases first-published backfill`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
+**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `votes revisions backfill`, `votes revisions verify`, `actions revisions backfill`, `actions revisions verify`, `executive-actions revisions backfill`, `executive-actions revisions verify`, `document-changes revisions backfill`, `document-changes revisions verify`, `releases first-published backfill`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
 
 `deploy` takes a full commit SHA on `origin/main` that is the checkout or newer. The scripts of that commit run as root, and a migration has no undo, so a rollback stays with the owner. It checks out the commit, runs `update.sh`, and runs `check-live.sh`. A merge to `main` is therefore the real approval. GitHub does not stop the agent from merging, because it uses the owner's token. Only the agent rules and the Claude Code permissions stop it.
 

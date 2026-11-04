@@ -300,7 +300,8 @@ public sealed class CollectionAttemptImporterTests
         ObservedAt = ObservedAt,
         BytesReceived = 0,
         RobotsRequestCount = 1,
-        RequestCount = 1
+        RequestCount = 1,
+        ElapsedMilliseconds = 1
     };
 
     private static HttpResponseMetadata Response(int status, string? etag, string[] encodings) => new()
@@ -345,7 +346,7 @@ public sealed class CollectionAttemptImporterTests
             var decision = attempt.Decide(Existing, Prior);
             if (decision.Disposition == ImportDisposition.NewAttempt)
                 Existing = new StoredCollectionAttempt(decision.AttemptResult, decision.SentValidators,
-                    decision.PriorCapturedAttempt);
+                    decision.PriorCapturedAttempt, elapsedMilliseconds: attempt.ElapsedMilliseconds);
             if (LoseAcknowledgmentOnce)
             {
                 LoseAcknowledgmentOnce = false;
