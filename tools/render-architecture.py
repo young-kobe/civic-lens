@@ -31,7 +31,7 @@ VIEWS = [
             ("core", "Core", "Domain invariants. No project or third-party dependencies."),
             ("cc", "Collection.Contracts", "Versioned page/feed/HTML requests, capture/response metadata, bounded discovery and receipt validation. No dependencies."),
             ("pc", "Publication.Contracts", "Public release contract, read by Application and PublicApi. No dependencies."),
-            ("api", "PublicApi", "Public search service and read API over its own Postgres database, fed from published releases. References Publication.Contracts only."),
+            ("api", "PublicApi", "Public search service and read API over its own Postgres database, fed from published releases. Plans to read operational data only through the public_api views. References Publication.Contracts only."),
             ("collector", "Collector", "Independent executable referencing Collection.Contracts only."),
         ],
         "edges": [("host", "app"), ("host", "infra"), ("infra", "app"), ("app", "core"), ("app", "cc"), ("app", "pc"), ("collector", "cc"), ("api", "pc")],

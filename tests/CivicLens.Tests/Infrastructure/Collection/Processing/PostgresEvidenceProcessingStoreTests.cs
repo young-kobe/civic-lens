@@ -3,6 +3,8 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Processing;
 using Npgsql;
 
+using CivicLens.Tests.Fixtures;
+
 namespace CivicLens.Tests.Infrastructure.Collection.Processing;
 
 [Collection(PostgresCollection.Name)]
@@ -489,12 +491,12 @@ public sealed class PostgresEvidenceProcessingStoreTests(PostgresCollection post
             INSERT INTO collection_jobs (job_id, idempotency_key, definition_json, source_id, is_root, pacing_key, state, created_at,
                 cancellation_requested, lease_fence)
             VALUES (@job, @key, '{}', 'source', FALSE, 'source', 'Succeeded', @created, FALSE, 0);
-            INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at)
-            VALUES (@attempt, @job, 1, '{}', @created);
+            """ + JobAttemptSql.Insert("@attempt", "@job", "1", "@created") + """
+            ;
             INSERT INTO collection_captures (sha256, byte_length) VALUES (@hash, 1);
             INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks,
-                outcome, has_response, response_status_code, response_content_encodings, has_sent_validators, capture_sha256)
-            VALUES (@attempt, @source, @url, @url, @created, 'captured', TRUE, 200, ARRAY[]::text[], FALSE, @hash);
+                outcome, has_response, response_status_code, response_content_encodings, has_sent_validators, capture_sha256, elapsed_milliseconds)
+            VALUES (@attempt, @source, @url, @url, @created, 'captured', TRUE, 200, ARRAY[]::text[], FALSE, @hash, 0);
             INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
             VALUES (@extraction, @attempt, 'extraction-v1', 'text', @text_hash);
             """, connection);

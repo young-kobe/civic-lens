@@ -7,6 +7,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
+using CivicLens.Core.Collection;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Tests.Application.Collection.Bills;
@@ -32,7 +33,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         evidence = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         Directory.CreateDirectory(root);
     }
@@ -52,7 +53,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             MaxPoolSize = 1,
             Timeout = 3
         }.ConnectionString;
-        jobs = PostgresCollectionJobStore.FromConnectionString(pooled);
+        jobs = PostgresCollectionJobStore.FromConnectionString(pooled, TestCodeVersion.Current);
         var claim = await EnqueueClaimAsync("single-connection", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
@@ -65,7 +66,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task ConflictingHandoffSettlesRetainedEvidenceWithoutRefundOrDeletion()
+    public async Task ConflictingHandoffSettlesRetainedEvidenceWithItsImportedTransferAndKeepsTheHandoff()
     {
         var claim = await EnqueueClaimAsync("conflicting-handoff", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
@@ -80,9 +81,8 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var result = await Runner(new RejectCollector()).ExecuteAsync(claim.Job.JobId, root, LeaseDuration);
 
         Assert.Equal(CollectionJobState.Failed, result.Job!.State);
-        Assert.Equal(5, CollectionJobCharges.Of(result.Job.Attempts).Requests);
-        Assert.Equal(100, CollectionJobCharges.Of(result.Job.Attempts).Bytes);
-        Assert.Null(Assert.Single(result.Job.Attempts).Resolution!.Receipt);
+        Assert.Equal(receipt.RequestCount, CollectionJobCharges.Of(result.Job.Attempts).Requests);
+        Assert.Equal(receipt.BytesReceived, CollectionJobCharges.Of(result.Job.Attempts).Bytes);
         Assert.Equal(start.Attempt.AttemptId, Assert.Single(await handoffs.ListAsync(default)));
         Assert.Equal(receipt.FinalUrl, (await evidence.GetAsync(start.Attempt.AttemptId, default))!.AttemptResult.FinalUrl);
         var next = await EnqueueClaimAsync("next", Source());
@@ -96,20 +96,20 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var initial = await jobs.TryStartAttemptAsync(first.Lease, root, default);
         await jobs.ReleaseCollectorAsync(first.Lease, initial.CollectorLease!, default);
         await jobs.SettleAttemptAsync(first.Lease, initial.Attempt!.AttemptId,
-            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "UnknownUsage"), default);
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, "UnknownUsage"), default);
         var retry = await jobs.TryStartAttemptAsync(first.Lease, root, default);
         var empty = await jobs.EnqueueAsync(Source(), "empty", default);
         var counter = new ReadCounter();
         var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
             .AddInterceptors(counter).Options;
-        var reader = new PostgresCollectionJobStore(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
+        var reader = new PostgresCollectionJobStore(new PooledDbContextFactory<CollectionAttemptDbContext>(options), TestCodeVersion.Current);
 
         await using var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-collection-jobs");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var listed = await reader.ListAsync(100, timeout.Token);
         var fetched = await reader.GetAsync(first.Job.JobId, timeout.Token);
 
-        Assert.Equal(6, counter.Count);
+        Assert.Equal(8, counter.Count);
         Assert.Equal(new[] { empty.JobId, first.Job.JobId }, listed.Select(job => job.JobId));
         Assert.Empty(listed[0].Attempts);
         Assert.Equal(new[] { initial.Attempt.AttemptId, retry.Attempt!.AttemptId },
@@ -141,20 +141,95 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task SettlementRejectsDifferentEvidenceBeforeRefundingBudget()
+    public async Task SettlementThatContradictsImportedEvidenceIsRejectedAndLeavesTheAttemptUnresolvedBecauseTheImportAlreadyFixedTheCharge()
     {
         var claim = await EnqueueClaimAsync("binding", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
         await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
-        var altered = receipt with { FinalUrl = receipt.FinalUrl + "/other" };
+        var contradicting = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded);
         await Assert.ThrowsAsync<InvalidOperationException>(() => jobs.SettleAttemptAsync(claim.Lease,
-            start.Attempt.AttemptId, CollectionJobLifecycle.Resolve(altered), default));
+            start.Attempt.AttemptId, contradicting, default));
         var unchanged = (await jobs.GetAsync(claim.Job.JobId, default))!;
-        Assert.Equal(5, CollectionJobCharges.Of(unchanged.Attempts).Requests);
+        Assert.Equal(receipt.RequestCount, CollectionJobCharges.Of(unchanged.Attempts).Requests);
         Assert.Null(Assert.Single(unchanged.Attempts).Resolution);
         Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId,
             CollectionJobLifecycle.Resolve(receipt), default));
+    }
+
+    [Fact]
+    public async Task SettlementRefusesAnErrorCodeOnASuccessOtherThanTheEvidenceMarkerBecauseTheCodeIsRecordedForDiagnosis()
+    {
+        var claim = await EnqueueClaimAsync("success-code", Source());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var hash = new string('a', 64);
+        var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404) with
+        {
+            Outcome = CollectionOutcome.Captured,
+            Response = new HttpResponseMetadata { StatusCode = 200, ContentEncodings = [] },
+            FailureCode = null,
+            Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = 10 },
+            BytesReceived = 10
+        };
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId,
+            CollectionJobLifecycle.Resolve(receipt) with { ErrorCode = nameof(CollectionFailureCode.Timeout) }, default));
+
+        Assert.Null(Assert.Single((await jobs.GetAsync(claim.Job.JobId, default))!.Attempts).Resolution);
+        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId,
+            CollectionJobLifecycle.Resolve(receipt) with { ErrorCode = CollectionJobLifecycle.EvidenceAlreadyImported }, default));
+    }
+
+    [Fact]
+    public async Task OperatorReplayOfAHandoffWithADifferentRequestChargesTheFullReservationBecauseTheTransferIsNotBoundToWhatWasReserved()
+    {
+        var claim = await EnqueueClaimAsync("replay-different", Source());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var reserved = start.Attempt!.Request;
+
+        await ReplayHandoffAsync(start.Attempt.AttemptId, reserved with { MaxRequests = reserved.MaxRequests + 1 });
+
+        var charges = CollectionJobCharges.Of((await jobs.GetAsync(claim.Job.JobId, default))!.Attempts);
+        Assert.Equal(reserved.MaxRequests, charges.Requests);
+        Assert.Equal(reserved.MaxBytes, charges.Bytes);
+    }
+
+    [Fact]
+    public async Task OperatorReplayOfAHandoffWithTheReservedRequestChargesTheMeasuredTransferBecauseTheUnusedAllowanceIsRefunded()
+    {
+        var claim = await EnqueueClaimAsync("replay-same", Source());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+
+        var receipt = await ReplayHandoffAsync(start.Attempt!.AttemptId, start.Attempt.Request);
+
+        var charges = CollectionJobCharges.Of((await jobs.GetAsync(claim.Job.JobId, default))!.Attempts);
+        Assert.Equal(receipt.RequestCount, charges.Requests);
+        Assert.Equal(receipt.BytesReceived, charges.Bytes);
+    }
+
+    private async Task<CollectionResult> ReplayHandoffAsync(string attemptId, CollectionRequest request)
+    {
+        var receipt = ReceiptCollector.Result(request, 404);
+        var handoffs = new FileCollectionReceiptHandoffStore(root);
+        await handoffs.SaveAsync(new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, attemptId, request, receipt), default);
+        var completion = await new RecoverCollectionAttempts(handoffs, new CaptureArtifactVerifier(), evidence).ReplayAsync(attemptId, root);
+        Assert.Equal(ImportDisposition.NewAttempt, completion.Decision.Disposition);
+        return receipt;
+    }
+
+    [Fact]
+    public async Task SettlementRejectsAnErrorCodeThatContradictsTheFailureInTheEvidenceBecauseTheCodeIsRecordedForDiagnosis()
+    {
+        var claim = await EnqueueClaimAsync("error-code", Source());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId,
+            CollectionJobLifecycle.Resolve(receipt) with { ErrorCode = nameof(CollectionFailureCode.Timeout) }, default));
+
+        Assert.Null(Assert.Single((await jobs.GetAsync(claim.Job.JobId, default))!.Attempts).Resolution);
     }
 
     [Fact]
@@ -202,7 +277,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.Equal(CollectionJobStartStatus.Started,
             (await jobs.TryStartAttemptAsync(outside.Lease, root + "-c", default)).Status);
 
-        var interrupted = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "NoReceipt");
+        var interrupted = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, "NoReceipt");
         Assert.True(await jobs.SettleAttemptAsync(first.Lease, started.Attempt!.AttemptId, interrupted, default));
         Assert.Equal(CollectionJobBlockReason.OriginBackoff,
             (await jobs.TryStartAttemptAsync(second.Lease, root + "-b", default)).BlockReason);
@@ -214,7 +289,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var first = await EnqueueClaimAsync("busy-a", Source());
         var second = await EnqueueClaimAsync("busy-b", Source());
         var started = await jobs.TryStartAttemptAsync(first.Lease, root, default);
-        var interrupted = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "NoReceipt");
+        var interrupted = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, "NoReceipt");
         Assert.True(await jobs.SettleAttemptAsync(first.Lease, started.Attempt!.AttemptId, interrupted, default));
         await SqlAsync("UPDATE collection_job_origins SET not_before = 0");
 
@@ -251,7 +326,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var laterStart = await jobs.TryStartAttemptAsync(later.Lease, root + "-later", default);
         Assert.Equal(CollectionJobStartStatus.Started, laterStart.Status);
 
-        var interrupted = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "NoReceipt");
+        var interrupted = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, "NoReceipt");
         Assert.True(await jobs.SettleAttemptAsync(legacy.Lease, legacyStart.Attempt!.AttemptId, interrupted, default));
 
         Assert.Equal(laterStart.Attempt!.AttemptId,
@@ -269,7 +344,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.False((await jobs.RenewAsync(original.Lease, start.CollectorLease, LeaseDuration, default)).Owned);
         Assert.False(await jobs.ReleaseClaimAsync(original.Lease, default));
         Assert.False(await jobs.ReleaseCollectorAsync(original.Lease, start.CollectorLease!, default));
-        var interrupted = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "NoReceipt");
+        var interrupted = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, "NoReceipt");
         Assert.False(await jobs.SettleAttemptAsync(original.Lease, start.Attempt!.AttemptId, interrupted, default));
         var competing = await EnqueueClaimAsync("competing", Source());
         Assert.Equal(CollectionJobBlockReason.AttemptUnresolved,
@@ -327,7 +402,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
 
         await jobs.ReleaseCollectorAsync(claim.Lease, second.CollectorLease!, default);
         Assert.True(await jobs.SettleAttemptAsync(claim.Lease, second.Attempt.AttemptId,
-            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "NoReceipt"), default));
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, "NoReceipt"), default));
         Assert.Equal(new CollectionJobCharges(7, 100, 20), counters);
         Assert.Equal(counters, await ChargesAsync(claim.Job.JobId));
 
@@ -543,7 +618,9 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.Equal(start.Attempt.AttemptId, refused.AttemptId);
         Assert.Equal(CollectionJobAttemptOutcome.Interrupted, refused.Resolution!.Outcome);
         Assert.Equal("HandoffRefused", refused.Resolution.ErrorCode);
-        Assert.NotNull(result.Job.Attempts[1].Resolution!.Receipt);
+        var refetched = result.Job.Attempts[1];
+        Assert.NotEqual(CollectionJobAttemptOutcome.Interrupted, refetched.Resolution!.Outcome);
+        Assert.NotNull(await evidence.GetAsync(refetched.AttemptId, default));
         Assert.Null(await evidence.GetAsync(start.Attempt.AttemptId, default));
         Assert.Empty(await handoffs.ListAsync(default));
     }
@@ -569,26 +646,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task AJobAttemptSettledBeforeElapsedTimeExistedStillReadsAndSettlesAgain()
-    {
-        var claim = await EnqueueClaimAsync("settled-before-elapsed", Source());
-        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
-        var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
-        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
-        var resolution = JsonNode.Parse(JsonSerializer.Serialize(CollectionJobLifecycle.Resolve(receipt), CollectionProtocol.JsonOptions))!.AsObject();
-        Assert.True(resolution["receipt"]!.AsObject().Remove("elapsedMilliseconds"));
-        await SqlAsync($"UPDATE collection_job_attempts SET resolution_json = '{resolution.ToJsonString()}', completed_at = 900 " +
-            $"WHERE attempt_id = '{start.Attempt.AttemptId}'");
-
-        var read = await jobs.GetAsync(claim.Job.JobId, default);
-
-        var old = Assert.Single(read!.Attempts).Resolution!;
-        Assert.Null(old.Receipt!.ElapsedMilliseconds);
-        Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId, old, default));
-    }
-
-    [Fact]
-    public async Task AlreadyImportedReceiptWithoutSpoolRetainsReservationAndServerBackoff()
+    public async Task AlreadyImportedReceiptWithoutSpoolChargesItsImportedTransferAndKeepsServerBackoff()
     {
         var claim = await EnqueueClaimAsync("already-imported", Source());
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
@@ -600,8 +658,8 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var result = await Runner(new RejectCollector()).ExecuteAsync(claim.Job.JobId, root, LeaseDuration);
 
         Assert.Equal(CollectionJobState.WaitingToRetry, result.Job!.State);
-        Assert.Equal(5, CollectionJobCharges.Of(result.Job.Attempts).Requests);
-        Assert.Equal(100, CollectionJobCharges.Of(result.Job.Attempts).Bytes);
+        Assert.Equal(receipt.RequestCount, CollectionJobCharges.Of(result.Job.Attempts).Requests);
+        Assert.Equal(receipt.BytesReceived, CollectionJobCharges.Of(result.Job.Attempts).Bytes);
         Assert.True(await UnclaimableUntilAsync("after-recovery", Source()) > DateTimeOffset.UtcNow);
     }
 
@@ -650,7 +708,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         await jobs.ReleaseCollectorAsync(claim.Lease, start.CollectorLease!, default);
         Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt!.AttemptId,
-            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "UnknownUsage"), default));
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, "UnknownUsage"), default));
         Assert.Equal(CollectionJobState.Failed, (await jobs.GetAsync(claim.Job.JobId, default))!.State);
         Assert.Equal(CollectionJobStartStatus.Exhausted, (await jobs.TryStartAttemptAsync(claim.Lease, root, default)).Status);
         var cancelled = await EnqueueClaimAsync("cancel", Source());
@@ -684,7 +742,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = await CapturedReceiptAsync(start.Attempt!.Request);
         await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
-        var resolution = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null, "EvidenceAlreadyImported");
+        var resolution = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, "EvidenceAlreadyImported");
 
         Assert.True(await jobs.SettleAttemptAsync(claim.Lease, start.Attempt.AttemptId, resolution, default));
 
@@ -699,7 +757,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var first = await jobs.TryStartAttemptAsync(retry.Lease, root, default);
         await jobs.ReleaseCollectorAsync(retry.Lease, first.CollectorLease!, default);
         Assert.True(await jobs.SettleAttemptAsync(retry.Lease, first.Attempt!.AttemptId,
-            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, "UnknownUsage"), default));
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, "UnknownUsage"), default));
         Assert.Equal(0L, await PreparationCountAsync(retry.Job.JobId));
         await SqlAsync($"UPDATE collection_jobs SET retry_at = 0 WHERE job_id = '{retry.Job.JobId}'");
         var second = await jobs.TryStartAttemptAsync(retry.Lease, root, default);
@@ -847,7 +905,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var coverageDate = new DateOnly(2026, 7, 1);
         var original = new ConfiguredCollectionSource(configuration, "source", coverageDate);
         var current = await jobs.EnqueueAsync(original, "current", default);
-        var reopened = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var reopened = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var stored = await reopened.GetAsync(current.JobId, default);
         Assert.Equal(original.CreateJobDefinition(coverageDate), stored!.Definition);
         configuration.People[0] = configuration.People[0] with { Name = "Correction" };
@@ -1105,8 +1163,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await SqlAsync($"UPDATE collection_jobs SET created_at = 50, state = 'Failed' WHERE job_id = '{lateFailure.JobId}'");
         await SqlAsync($"UPDATE collection_jobs SET created_at = 200 WHERE job_id = '{running.JobId}'");
         // The job created first failed last: failure time, not creation time, orders failures.
-        await SqlAsync($"INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at, resolution_json, completed_at) " +
-            $"VALUES ('late-attempt', '{lateFailure.JobId}', 1, '{{}}', 60, '{{}}', 900)");
+        await SqlAsync(JobAttemptSql.Insert("'late-attempt'", $"'{lateFailure.JobId}'", "1", "60", outcome: "PermanentFailure", completedAt: 900));
 
         var activity = await jobs.ListActivityAsync(2, default);
 

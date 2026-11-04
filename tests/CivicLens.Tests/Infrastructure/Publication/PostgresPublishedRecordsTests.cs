@@ -2,6 +2,7 @@ using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -26,7 +27,7 @@ public sealed class PostgresPublishedRecordsTests(PostgresCollection postgres) :
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
         publications = new PostgresPublicationStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
-            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options), TestCodeVersion.Current);
     }
 
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
@@ -120,6 +121,7 @@ public sealed class PostgresPublishedRecordsTests(PostgresCollection postgres) :
             [.. added.Select(record => new PublishedRevisionBinding(PublishedRecordKind.Action, record.Id, 1))],
             [.. added.Select(record => new ReviewStateExpectation(PublishedRecordKind.Action, record.Id, 1, 1))])
         {
+            Withdrawals = [],
             FirstPublications = [.. added.Select(record => new PublishedFirstPublication(PublishedRecordKind.Action, record.Id, record.FirstPublishedAt))]
         }, $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
 

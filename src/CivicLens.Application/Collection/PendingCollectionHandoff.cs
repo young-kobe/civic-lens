@@ -16,8 +16,6 @@ public sealed record PendingCollectionHandoff(int Version, string AttemptId, Col
             throw new InvalidDataException("Receipt handoff attempt ID is invalid.");
         ArgumentNullException.ThrowIfNull(Request);
         ArgumentNullException.ThrowIfNull(Receipt);
-        if (Receipt.ElapsedMilliseconds is null)
-            throw new InvalidDataException("Receipt handoff version 2 needs an elapsed time.");
         Request.Validate();
         Receipt.ValidateAgainst(Request);
     }

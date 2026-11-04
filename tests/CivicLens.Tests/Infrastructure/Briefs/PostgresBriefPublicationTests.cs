@@ -53,7 +53,7 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         reviews = new PostgresBriefReviewStore(factory);
         drafts = new PostgresBriefDraftStore(factory);
-        publications = new PostgresPublicationStore(factory);
+        publications = new PostgresPublicationStore(factory, TestCodeVersion.Current);
         seeder = new BriefWorldSeeder(connectionString);
         await seeder.ReleaseCitedRecordsAsync();
         await seeder.ReviewableBriefAsync(ReviewableRevision());
@@ -248,7 +248,8 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
 
     private Task<PublicationReleaseSummary> CommitAsync(params PublishedRevisionBinding[] records) =>
         publications.CommitAsync("auth0|owner", new(2, 1, $"000002-{Guid.NewGuid():N}", [.. records],
-            [new(PublishedRecordKind.Brief, RecordId, 1, 1)]), "commit-1",
+            [new(PublishedRecordKind.Brief, RecordId, 1, 1)])
+        { Withdrawals = [] }, "commit-1",
             Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("payload"))), default);
 
     private async Task<PublishRelease> PublisherAsync()

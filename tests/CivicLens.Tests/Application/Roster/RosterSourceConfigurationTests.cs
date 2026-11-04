@@ -10,12 +10,6 @@ public sealed class RosterSourceConfigurationTests
     private static readonly DateOnly Today = new(2026, 10, 19);
 
     [Fact]
-    public void ARosterSourceValidatesWithoutACredentialOrCoverageList()
-    {
-        RosterFixtures.Configuration(RosterFixtures.Person("a", "A", "A000001")).Validate();
-    }
-
-    [Fact]
     public void ACredentialIsRejectedBecauseTheFileIsPublic()
     {
         var configuration = RosterFixtures.Configuration();

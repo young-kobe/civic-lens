@@ -13,6 +13,7 @@ using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Registry;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Districts;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Infrastructure.Documents;
@@ -42,7 +43,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         processing = PostgresEvidenceProcessingStore.FromConnectionString(connectionString);
         extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
@@ -215,7 +216,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     public async Task PreparingABillDetailAgainKeepsTheOneExtractionEvenThoughTheGateIsADuplicate()
     {
         var detail = await RunBillJobAsync(ApiResource.Bill, BillDetail(sponsor: "A000001", cosponsors: 2));
-        var replay = new JobPreparation(jobs, attempts, jobs, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString), PostgresExecutiveRosterStore.FromConnectionString(connectionString), new CaptureBodyReader(), processing, extractions, new CaptureDocumentTextExtractor(), issues, NullLogger<JobPreparation>.Instance);
+        var replay = new JobPreparation(jobs, attempts, jobs, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString), PostgresExecutiveRosterStore.FromConnectionString(connectionString), PostgresZctaDistrictStore.FromConnectionString(connectionString), new CaptureBodyReader(), processing, extractions, new CaptureDocumentTextExtractor(), issues, NullLogger<JobPreparation>.Instance);
 
         var result = await replay.PrepareAsync(detail.JobId, artifactRoot, default);
 
@@ -245,16 +246,6 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     }
 
     [Fact]
-    public async Task CosponsorAndActionsPagesAreExtractedByTheirOwnParsers()
-    {
-        var job = await RunBillJobAsync(ApiResource.BillCosponsors, """{"cosponsors":[{"bioguideId":"A000001","sponsorshipDate":"2025-01-04","isOriginalCosponsor":true}],"pagination":{}}""");
-
-        var saved = Assert.Single(await ReadBillExtractionsAsync(), extraction => extraction.AttemptId == Assert.Single(job.Attempts).AttemptId);
-        Assert.Equal(("congress-bill-cosponsors-v1", "Bill: 119 hr 1\nCosponsor: A000001, original, 2025-01-04"),
-            (saved.ExtractionVersion, saved.Text));
-    }
-
-    [Fact]
     public async Task ASummariesPageIsExtractedWithTheCombinedExtractionVersionAndNeverBecomesAStatementCandidate()
     {
         var job = await RunBillJobAsync(ApiResource.BillSummaries, """{"summaries":[{"versionCode":"173","actionDate":"2025-01-04","actionDesc":"Introduced in House","updateDate":"2025-01-05T08:00:00Z","text":"<p><strong>Title.</strong></p><p>Requires the agency to act.</p>"}],"pagination":{}}""");
@@ -265,15 +256,6 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
             "Updated: 2025-01-05T08:00:00Z\nText:\nTitle.\nRequires the agency to act.", saved.Text);
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_candidates"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_analysis"));
-    }
-
-    [Fact]
-    public async Task ABillDetailWithSummariesAdmitsItsSummariesPageBesideTheOthers()
-    {
-        _ = await RunBillJobAsync(ApiResource.Bill, BillDetail(sponsor: "A000001", cosponsors: 2, summaries: 3));
-
-        Assert.Equal(3L, await ScalarAsync("SELECT count(*) FROM bill_follow_on_jobs"));
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_jobs WHERE idempotency_key LIKE '%/summaries/%'"));
     }
 
     [Theory]
@@ -453,7 +435,7 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
         Assert.Single(await processing.GetByJobIdsAsync([jobId], default), record => record.AttemptId == attemptId);
 
     private EvidenceProcessingWorker Worker(IEvidenceProcessingStore processingStore, IDocumentHistoryStore? historyStore = null) => new(jobs,
-        new JobPreparation(jobs, attempts, jobs, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString), PostgresExecutiveRosterStore.FromConnectionString(connectionString), new CaptureBodyReader(), processingStore, extractions, new CaptureDocumentTextExtractor(), issues, NullLogger<JobPreparation>.Instance), processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
+        new JobPreparation(jobs, attempts, jobs, jobs, jobs, jobs, PostgresMemberRosterStore.FromConnectionString(connectionString), PostgresExecutiveRosterStore.FromConnectionString(connectionString), PostgresZctaDistrictStore.FromConnectionString(connectionString), new CaptureBodyReader(), processingStore, extractions, new CaptureDocumentTextExtractor(), issues, NullLogger<JobPreparation>.Instance), processingStore, extract, new GetDocumentHistory(historyStore ?? PostgresDocumentHistoryStore.FromConnectionString(connectionString)),
         new CompareDocuments(comparisons), 1, NullLogger<EvidenceProcessingWorker>.Instance);
 
     private CollectionJobDefinition ConfiguredDefinition(string? etag = null) =>

@@ -92,7 +92,7 @@ public sealed class CollectionWorkspaceTests
     }
 
     [Fact]
-    public async Task SourcesLoadsSelectedRecentJobAndEachDistinctReceiptlessAttemptOnce()
+    public async Task SourcesLoadsSelectedRecentJobAndTheDistinctAttemptsOfTheCheckInOneBatchBecauseOneReadPerAttemptWastesQueries()
     {
         var attemptId = "attempt-one";
         var request = Request(attemptId);
@@ -100,7 +100,7 @@ public sealed class CollectionWorkspaceTests
             "https://example.test/news", 2)), "source");
         var selected = Job(definition) with
         {
-            Attempts = [JobAttempt(attemptId, request), JobAttempt(attemptId, request)]
+            Attempts = [JobAttempt(attemptId, request), JobAttempt(attemptId, request), JobAttempt("attempt-two", Request("attempt-two"))]
         };
         var jobs = new CountingJobStore([selected]);
         var retained = new AttemptsStore(Captured(attemptId, "https://example.test/news"));
@@ -112,7 +112,8 @@ public sealed class CollectionWorkspaceTests
         Assert.Equal(0, jobs.GetCalls);
         Assert.Equal(1, jobs.ListCalls);
         Assert.Equal(0, jobs.LatestCalls);
-        Assert.Equal(new[] { attemptId }, retained.ReadIds);
+        Assert.Equal(new[] { attemptId, "attempt-two" }, retained.ReadIds);
+        Assert.Equal(1, retained.Batches);
         Assert.Contains(attemptId, result.RetainedAttempts.Keys);
     }
 
@@ -259,10 +260,16 @@ public sealed class CollectionWorkspaceTests
     private sealed class AttemptsStore(StoredCollectionAttempt? result) : ICollectionAttemptStore
     {
         public List<string> ReadIds { get; } = [];
-        public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken)
+        public int Batches { get; private set; }
+        public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> GetManyAsync(IReadOnlyCollection<string> attemptIds,
+            CancellationToken cancellationToken)
         {
-            ReadIds.Add(attemptId);
-            return Task.FromResult(result?.AttemptResult.AttemptId == attemptId ? result : null);
+            Batches++;
+            ReadIds.AddRange(attemptIds);
+            IReadOnlyDictionary<string, StoredCollectionAttempt> found = result is not null && attemptIds.Contains(result.AttemptResult.AttemptId)
+                ? new Dictionary<string, StoredCollectionAttempt> { [result.AttemptResult.AttemptId] = result } : new Dictionary<string, StoredCollectionAttempt>();
+            return Task.FromResult(found);
         }
         public Task<CollectionImportDecision> ImportAtomicallyAsync(CollectionAttemptImport attempt, CancellationToken cancellationToken) => throw new NotSupportedException();
     }

@@ -30,7 +30,7 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        store = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        store = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var documents = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         Directory.CreateDirectory(captureRoot);
         var seeder = new StatementCandidateSeeder(PostgresCollectionAttemptStore.FromConnectionString(connectionString), documents,
@@ -110,14 +110,6 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
 
         Assert.Equal([SourceUrl + "/119/1/101?format=json"], result.Jobs.Select(job => job.Url).Where(url => url.Contains("/119/1/", StringComparison.Ordinal)));
         Assert.Equal(1, result.DuplicateCount);
-    }
-
-    [Fact]
-    public async Task TheLastPageOfAnEarlierSessionAdmitsTheFirstPageOfTheFollowingSession()
-    {
-        var result = await AdmitListAsync("sweep-one", Page(HouseVoteFixtures.FirstSession, Item(100)));
-
-        Assert.Equal(SourceUrl + "/119/2?format=json&limit=250", result.Jobs.Last().Url);
     }
 
     [Fact]

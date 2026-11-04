@@ -3,7 +3,9 @@ using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Tests.Fixtures;
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using System.Text.Json;
 using Npgsql;
@@ -46,6 +48,61 @@ public sealed class PostgresCollectionAttemptStoreTests(PostgresCollection postg
         finally
         {
             await postgres.DropDatabaseAsync(empty);
+        }
+    }
+
+    [Fact]
+    public async Task AnImportedReceiptKeepsItsMeasuredTransferBecauseJobChargesAndTheTimelineReadItFromTheAttempt()
+    {
+        var request = CollectionFixtures.Request();
+        var receipt = CollectionFixtures.Receipt(request) with
+        {
+            Outcome = CollectionOutcome.Failed,
+            Capture = null,
+            FailureCode = CollectionFailureCode.HttpError,
+            RequestCount = 3,
+            BytesReceived = 77
+        };
+
+        await CollectionAttemptImporter.ImportAsync("attempt", request, receipt, store, default);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("SELECT request_count, bytes_received FROM collection_attempts WHERE attempt_id = 'attempt'", connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal((3, 77L), (reader.GetInt32(0), reader.GetInt64(1)));
+    }
+
+    [Fact]
+    public async Task ReadingManyAttemptsUsesTheSameNumberOfQueriesForOneOrThreeBecauseTheTimelineMustNotReadOncePerAttempt()
+    {
+        var request = CollectionFixtures.Request();
+        var receipt = CollectionFixtures.Receipt(request) with { Outcome = CollectionOutcome.Failed, Capture = null, FailureCode = CollectionFailureCode.HttpError };
+        foreach (var id in new[] { "one", "two", "three" })
+            await CollectionAttemptImporter.ImportAsync(id, request, receipt, store, default);
+        var counter = new QueryCounter();
+        var counted = new PostgresCollectionAttemptStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(counter).Options));
+
+        Assert.Single(await counted.GetManyAsync(["one", "missing"], default));
+        var queriesForOne = counter.Count;
+        counter.Count = 0;
+        var three = await counted.GetManyAsync(["one", "two", "three"], default);
+
+        Assert.Equal(["one", "three", "two"], three.Keys.Order());
+        Assert.Equal(queriesForOne, counter.Count);
+    }
+
+    private sealed class QueryCounter : DbCommandInterceptor
+    {
+        public int Count { get; set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            Count++;
+            return ValueTask.FromResult(result);
         }
     }
 

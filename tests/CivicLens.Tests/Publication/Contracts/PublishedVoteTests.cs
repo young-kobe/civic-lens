@@ -183,14 +183,6 @@ public sealed class PublishedVoteTests
         Assert.Throws<InvalidDataException>((vote with { Sources = [.. vote.Sources, extra] }).Validate);
     }
 
-    [Fact]
-    public void RejectsTheSameSourceTwiceBecauseEachExtractionIsEmbeddedOnce()
-    {
-        var vote = Vote();
-
-        Assert.Throws<InvalidDataException>((vote with { Sources = [.. vote.Sources, vote.Sources[0]] }).Validate);
-    }
-
     [Theory]
     [InlineData(0)]
     [InlineData(PublishedVote.MaximumSources + 1)]

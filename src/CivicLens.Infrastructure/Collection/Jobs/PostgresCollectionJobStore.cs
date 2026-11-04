@@ -1,9 +1,11 @@
 using System.Data;
 using System.Text.Json;
+using CivicLens.Application;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
+using CivicLens.Infrastructure.ExecutiveActions;
 using CivicLens.Infrastructure.Collection.Jobs.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -13,10 +15,12 @@ using Npgsql;
 namespace CivicLens.Infrastructure.Collection.Jobs;
 
 /// <summary>Atomic job ownership, collection admission, and recovery accounting using database time.</summary>
-public sealed partial class PostgresCollectionJobStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) :
+public sealed partial class PostgresCollectionJobStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory, CodeVersion codeVersion) :
     ICollectionJobStore, ICollectionScheduleStore
 {
-    public static PostgresCollectionJobStore FromConnectionString(string connectionString)
+    private readonly ExecutiveActionRows executiveActions = new(codeVersion);
+
+    public static PostgresCollectionJobStore FromConnectionString(string connectionString, CodeVersion codeVersion)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         try
@@ -25,7 +29,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             if (string.IsNullOrWhiteSpace(parsed.Host) || string.IsNullOrWhiteSpace(parsed.Database))
                 throw new ArgumentException("Host and Database are required.");
             var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(parsed.ConnectionString).Options;
-            return new PostgresCollectionJobStore(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
+            return new PostgresCollectionJobStore(new PooledDbContextFactory<CollectionAttemptDbContext>(options), codeVersion);
         }
         catch (ArgumentException)
         {
@@ -46,7 +50,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             var definition = source.CreateJobDefinition(DateOnly.FromDateTime(now.UtcDateTime), savedDefinition);
             if (existing is not null) return await ToRecordAsync(db, existing, savedDefinition!, cancellationToken);
             var row = await new JobRowWriter(db, Ticks(now)).AddJobAsync(idempotencyKey, definition, cancellationToken);
-            return ToRecord(row, definition, []);
+            return ToRecord(row, definition, [], new Dictionary<string, AttemptTransfer>());
         }, cancellationToken);
     }
 
@@ -104,7 +108,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             if (row.State is CollectionJobState.Succeeded or CollectionJobState.Failed or CollectionJobState.Cancelled)
                 return await ToRecordAsync(db, row, cancellationToken);
             row.CancellationRequested = true;
-            if (!await db.Set<JobAttemptRow>().AnyAsync(attempt => attempt.JobId == jobId && attempt.ResolutionJson == null, cancellationToken))
+            if (!await db.Set<JobAttemptRow>().AnyAsync(attempt => attempt.JobId == jobId && attempt.CompletedAt == null, cancellationToken))
             {
                 row.State = CollectionJobState.Cancelled;
                 row.RetryAt = null;
@@ -166,15 +170,16 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         if (row.State is CollectionJobState.Succeeded or CollectionJobState.Failed)
             return new CollectionJobStartResult(CollectionJobStartStatus.Exhausted);
         var attempts = await db.Set<JobAttemptRow>().Where(attempt => attempt.JobId == row.JobId).ToListAsync(cancellationToken);
-        if (attempts.Any(attempt => attempt.ResolutionJson == null))
+        if (attempts.Any(attempt => attempt.CompletedAt == null))
             return Blocked(CollectionJobBlockReason.AttemptUnresolved);
         if (row.RetryAt > Ticks(now)) return Blocked(CollectionJobBlockReason.RetryNotDue, FromTicks(row.RetryAt));
 
         var definition = await ReadDefinitionAsync(db, row, cancellationToken);
         var request = definition.CreateRequest(Guid.NewGuid().ToString("N"), Path.GetFullPath(artifactDirectory));
         request.Validate();
+        var transfers = await ReadTransfersAsync(db, attempts, cancellationToken);
         if (!CollectionJobLifecycle.CanReserve(definition, request, row.State, attempts.Count,
-                CollectionJobCharges.Of(attempts.Select(ToAttempt))))
+                CollectionJobCharges.Of(attempts.Select(item => ToAttempt(item, transfers)))))
         {
             row.State = CollectionJobState.Failed;
             row.RetryAt = null;
@@ -185,14 +190,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         var (origin, group, slot, admissionBlock) = await ReadAdmissionAvailabilityAsync(db, originKey, groupKey, row.PacingKey, now, cancellationToken);
         if (admissionBlock is not null) return admissionBlock;
 
-        var attempt = new JobAttemptRow
-        {
-            AttemptId = Guid.NewGuid().ToString("N"),
-            JobId = row.JobId,
-            Sequence = attempts.Count + 1,
-            RequestJson = Write(request),
-            StartedAt = Ticks(now)
-        };
+        var attempt = NewAttemptRow(Guid.NewGuid().ToString("N"), row.JobId, attempts.Count + 1, request, Ticks(now));
         db.Add(attempt);
         if (origin is null) { origin = new JobOriginRow { Origin = originKey }; db.Add(origin); }
         origin.UnresolvedAttemptId = attempt.AttemptId;
@@ -209,7 +207,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         slot.ExpiresAt = row.LeaseExpiresAt;
         row.State = CollectionJobState.Running;
         row.RetryAt = null;
-        return new CollectionJobStartResult(CollectionJobStartStatus.Started, ToAttempt(attempt), CollectorLease(slot));
+        return new CollectionJobStartResult(CollectionJobStartStatus.Started, ToAttempt(attempt, transfers), CollectorLease(slot));
     }, cancellationToken);
 
     public Task<bool> ReleaseCollectorAsync(CollectionJobLease jobLease, CollectionCollectorLease collectorLease,
@@ -233,13 +231,12 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         if (job is null) return false;
         var attempts = await db.Set<JobAttemptRow>().Where(item => item.JobId == job.JobId).ToListAsync(cancellationToken);
         var attempt = attempts.Single(item => item.AttemptId == attemptId);
-        var request = Read<CollectionRequest>(attempt.RequestJson);
+        var request = ToRequest(attempt);
         var definition = await ReadDefinitionAsync(db, job, cancellationToken);
-        ValidateResolution(resolution, request);
-        var resolutionJson = Write(resolution);
-        if (attempt.ResolutionJson is not null)
+        ValidateResolution(resolution);
+        if (ToResolution(attempt) is { } settled)
         {
-            if (Write(Read<CollectionAttemptResolution>(attempt.ResolutionJson)) != resolutionJson) throw new InvalidOperationException("Conflicting job attempt settlement.");
+            if (settled != resolution) throw new InvalidOperationException("Conflicting job attempt settlement.");
             return true;
         }
         var evidence = await PostgresCollectionAttemptStore.GetAsync(db, attemptId, cancellationToken);
@@ -253,20 +250,16 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             var expected = CollectionJobLifecycle.Resolve(evidence);
             if (expected.Outcome != resolution.Outcome || expected.RetryDelay != resolution.RetryDelay ||
                 expected.RobotsCrawlDelayMilliseconds != resolution.RobotsCrawlDelayMilliseconds ||
+                !ErrorCodeMatches(expected, resolution) ||
                 evidence.AttemptResult.SourceId != request.SourceId || evidence.AttemptResult.RequestedUrl != request.Url)
                 throw new InvalidOperationException("Job settlement does not match imported evidence.");
         }
-        if (resolution.Receipt is { } receipt)
-        {
-            var imported = CollectionAttemptImporter.CreateImport(attemptId, request, receipt);
-            _ = imported.Decide(evidence, evidence!.PriorCapturedAttempt);
-        }
-        attempt.ResolutionJson = resolutionJson;
-        attempt.CompletedAt = Ticks(now);
+        SetResolution(attempt, resolution, Ticks(now));
         var prospective = resolution.Outcome is CollectionJobAttemptOutcome.RetryableFailure or CollectionJobAttemptOutcome.Interrupted
             ? CollectionJobState.WaitingToRetry : CollectionJobState.Running;
+        var transfers = await ReadTransfersAsync(db, attempts, cancellationToken);
         var canRetry = CollectionJobLifecycle.CanReserve(definition, request, prospective, attempt.Sequence,
-            CollectionJobCharges.Of(attempts.Select(ToAttempt)));
+            CollectionJobCharges.Of(attempts.Select(item => ToAttempt(item, transfers))));
         job.State = CollectionJobLifecycle.Transition(job.State, resolution.Outcome, job.CancellationRequested, !canRetry);
         job.RetryAt = job.State == CollectionJobState.WaitingToRetry
             ? Ticks(CollectionJobLifecycle.RetryAt(now, definition.Policy, attempt.Sequence, resolution.RetryDelay)) : null;
@@ -336,7 +329,7 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         if (job.State is CollectionJobState.Succeeded or CollectionJobState.Failed or CollectionJobState.Cancelled)
             return null;
         if (await db.Set<JobAttemptRow>().AnyAsync(attempt => attempt.JobId == job.JobId &&
-                attempt.ResolutionJson == null, cancellationToken))
+                attempt.CompletedAt == null, cancellationToken))
             return "changed";
         if (job.RetryAt > Ticks(now)) return job.RetryAt.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         string origin;
@@ -381,23 +374,19 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         CancellationToken cancellationToken) =>
         db.Set<CollectorSlotRow>().SingleOrDefaultAsync(item => item.PacingKey == pacingKey, cancellationToken);
 
-    private static void ValidateResolution(CollectionAttemptResolution resolution, CollectionRequest request)
+    private static bool ErrorCodeMatches(CollectionAttemptResolution expected, CollectionAttemptResolution resolution) =>
+        expected.Outcome == CollectionJobAttemptOutcome.Succeeded
+            ? resolution.ErrorCode is null or CollectionJobLifecycle.EvidenceAlreadyImported
+            : expected.ErrorCode == resolution.ErrorCode;
+
+    private static void ValidateResolution(CollectionAttemptResolution resolution)
     {
         ArgumentNullException.ThrowIfNull(resolution);
         if (!Enum.IsDefined(resolution.Outcome) || resolution.RetryDelay < TimeSpan.Zero ||
             resolution.RobotsCrawlDelayMilliseconds is < 0 or > CollectionProtocol.MaximumCrawlDelayMilliseconds)
             throw new ArgumentException("Invalid job attempt resolution.");
-        if (resolution.Outcome == CollectionJobAttemptOutcome.Interrupted && resolution.Receipt is not null)
-            throw new ArgumentException("Interrupted execution cannot replace a completed receipt.");
         if (resolution.Outcome == CollectionJobAttemptOutcome.Interrupted && resolution.RobotsCrawlDelayMilliseconds is not null)
             throw new ArgumentException("Interrupted execution cannot declare an origin crawl delay.");
-        if (resolution.Receipt is not { } receipt) return;
-        receipt.ValidateAgainst(request);
-        var expected = CollectionJobLifecycle.Resolve(receipt);
-        if (expected.Outcome != resolution.Outcome || expected.ErrorCode != resolution.ErrorCode ||
-            expected.RetryDelay != resolution.RetryDelay ||
-            expected.RobotsCrawlDelayMilliseconds != resolution.RobotsCrawlDelayMilliseconds)
-            throw new ArgumentException("Job resolution does not match its receipt.");
     }
 
     private async Task<T> TransactionAsync<T>(Func<CollectionAttemptDbContext, DateTimeOffset, Task<T>> operation,
@@ -453,10 +442,6 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
             throw new ArgumentOutOfRangeException(nameof(duration), "Job leases must be 3 to 600 seconds.");
     }
 
-    private static CollectionJobAttempt ToAttempt(JobAttemptRow row) => new(row.AttemptId, Read<CollectionRequest>(row.RequestJson),
-        row.ResolutionJson is null ? null : Read<CollectionAttemptResolution>(row.ResolutionJson),
-        FromTicks(row.StartedAt)!.Value, FromTicks(row.CompletedAt));
-
     private static async Task<CollectionJobRecord> ToRecordAsync(CollectionAttemptDbContext db, JobRow row, CancellationToken cancellationToken) =>
         await ToRecordAsync(db, row, await ReadDefinitionAsync(db, row, cancellationToken), cancellationToken);
 
@@ -464,11 +449,12 @@ public sealed partial class PostgresCollectionJobStore(IDbContextFactory<Collect
         CollectionJobDefinition definition, CancellationToken cancellationToken)
     {
         var attempts = await db.Set<JobAttemptRow>().Where(attempt => attempt.JobId == row.JobId).OrderBy(attempt => attempt.Sequence).ToListAsync(cancellationToken);
-        return ToRecord(row, definition, attempts);
+        return ToRecord(row, definition, attempts, await ReadTransfersAsync(db, attempts, cancellationToken));
     }
 
-    private static CollectionJobRecord ToRecord(JobRow row, CollectionJobDefinition definition, IEnumerable<JobAttemptRow> attempts) =>
+    private static CollectionJobRecord ToRecord(JobRow row, CollectionJobDefinition definition, IEnumerable<JobAttemptRow> attempts,
+        IReadOnlyDictionary<string, AttemptTransfer> transfers) =>
         new(row.JobId, definition, row.IdempotencyKey,
             row.State, FromTicks(row.CreatedAt)!.Value, FromTicks(row.RetryAt), row.CancellationRequested,
-            attempts.Select(ToAttempt).ToArray());
+            attempts.Select(attempt => ToAttempt(attempt, transfers)).ToArray());
 }

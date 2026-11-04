@@ -138,7 +138,7 @@ internal sealed class ActionBillWorld
         var configured = new ConfiguredCollectionSource(Revision, SourceId, Backfill);
         var definition = configured.CreateApiJobDefinition(resource, url, Backfill, CollectionJobPriority.Check);
         var attempt = new CollectionJobAttempt("attempt-" + jobId, definition.CreateRequest(jobId, Path.GetFullPath("captures")),
-            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         jobs[jobId] = new CollectionJobRecord(jobId, definition, "key-" + jobId, CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
             false, [attempt]);
         bodies["attempt-" + jobId] = body;
@@ -229,6 +229,7 @@ internal sealed class ActionBillWorld
     internal sealed class FixtureStores(Dictionary<string, CollectionJobRecord> jobs, Dictionary<string, string> bodies)
         : ICollectionJobStore, ICollectionAttemptStore, ICaptureBodyReader
     {
+        Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> ICollectionAttemptStore.GetManyAsync(IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<CollectionJobRecord?> GetAsync(string jobId, CancellationToken cancellationToken) =>
             Task.FromResult(jobs.GetValueOrDefault(jobId));
 

@@ -48,7 +48,7 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
         factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         store = new PostgresBriefDraftStore(factory);
-        publications = new PostgresPublicationStore(factory);
+        publications = new PostgresPublicationStore(factory, TestCodeVersion.Current);
         seeder = new BriefWorldSeeder(connectionString);
     }
 
@@ -615,7 +615,7 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
     private static readonly string CitesEveryRecord = BriefFixtures.Output(paragraphs: [("Warren backed a cap.", ["R1", "R2", "R3"])]);
 
     private Task PublishAsync(int number, params PublishedRevisionBinding[] records) => publications.CommitAsync("auth0|owner",
-        new(number, number - 1, $"{number:D6}-{Guid.NewGuid():N}", [.. records], []), $"key-{number}",
+        new(number, number - 1, $"{number:D6}-{Guid.NewGuid():N}", [.. records], []) { Withdrawals = [] }, $"key-{number}",
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"payload-{number}"))), default);
 
     private async Task<int?> CitedRevisionAsync(int briefRevision, string recordId)

@@ -75,7 +75,7 @@ public sealed class JobPreparationFeedStatementTests
         var definition = new ConfiguredCollectionSource(CollectionConfigurationRevision.Create(configuration), "senator", Today)
             .CreateJobDefinition(Today);
         var request = definition.CreateRequest("job", Path.GetFullPath("captures"));
-        var attempt = new CollectionJobAttempt("attempt", request, new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null),
+        var attempt = new CollectionJobAttempt("attempt", request, new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded),
             DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null, false, [attempt]);
         var captured = new CapturedAttemptResult("attempt", "senator", FeedUrl, FeedUrl, DateTimeOffset.UnixEpoch,
@@ -83,13 +83,14 @@ public sealed class JobPreparationFeedStatementTests
         var stored = new StoredCollectionAttempt(captured, null, null,
             new DiscoveryEvidence(request, new DiscoveryResult { Status = DiscoveryStatus.Parsed, Urls = [], OutOfScopeCount = 0 }));
         var preparation = new JobPreparation(new FixedJobStore { Get = (_, _) => Task.FromResult<CollectionJobRecord?>(job) },
-            new FixedAttempt(stored), admissions, null!, null!, null!, null!, null!, new FixedBody(body), null!, extractions,
+            new FixedAttempt(stored), admissions, null!, null!, null!, null!, null!, null!, new FixedBody(body), null!, extractions,
             new Extractor(), null, NullLogger<JobPreparation>.Instance);
         return await preparation.PrepareAsync("job", "artifacts", default);
     }
 
     private sealed class FixedAttempt(StoredCollectionAttempt stored) : ICollectionAttemptStore
     {
+        public Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> GetManyAsync(IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken) =>
             Task.FromResult<StoredCollectionAttempt?>(stored);
 

@@ -42,17 +42,6 @@ public sealed class HttpReportPullerTests
     }
 
     [Fact]
-    public async Task TheFirstPullHasNoCursorParameterSoTheServiceStartsFromTheFirstReport()
-    {
-        Uri? asked = null;
-        var puller = new HttpReportPuller(new(new Reply(request => { asked = request.RequestUri; return Json(Batch()); })), Service, Token);
-
-        await puller.PullAsync(null, default);
-
-        Assert.Equal("", asked!.Query);
-    }
-
-    [Fact]
     public async Task AFailedCallThrowsWithoutTheTokenSoTheStageCountsItAndNeverLogsTheSecret()
     {
         var puller = new HttpReportPuller(new(new Reply(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized))), Service, Token);

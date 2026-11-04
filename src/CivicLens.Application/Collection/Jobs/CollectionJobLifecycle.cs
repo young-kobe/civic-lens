@@ -6,6 +6,8 @@ namespace CivicLens.Application.Collection.Jobs;
 /// <summary>Pure job retry, outcome, and reserved-budget decisions shared with persistence adapters.</summary>
 public static class CollectionJobLifecycle
 {
+    public const string EvidenceAlreadyImported = "EvidenceAlreadyImported";
+
     public static CollectionAttemptResolution Resolve(CollectionResult receipt)
     {
         ArgumentNullException.ThrowIfNull(receipt);
@@ -16,7 +18,7 @@ public static class CollectionJobLifecycle
                 receipt.Outcome == CollectionOutcome.Deferred, receipt.FailureCode?.ToString(), receipt.Response?.StatusCode) => CollectionJobAttemptOutcome.RetryableFailure,
             _ => CollectionJobAttemptOutcome.PermanentFailure
         };
-        return new CollectionAttemptResolution(outcome, receipt, receipt.FailureCode?.ToString(),
+        return new CollectionAttemptResolution(outcome, receipt.FailureCode?.ToString(),
             ToRetryDelay(receipt.RetryAfterSeconds), receipt.RobotsCrawlDelayMilliseconds);
     }
 
@@ -29,7 +31,7 @@ public static class CollectionJobLifecycle
         ArgumentNullException.ThrowIfNull(retained);
         var attempt = retained.AttemptResult;
         if (attempt is CapturedAttemptResult or NotModifiedAttemptResult)
-            return new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null, "EvidenceAlreadyImported",
+            return new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, EvidenceAlreadyImported,
                 RobotsCrawlDelayMilliseconds: retained.RobotsCrawlDelayMilliseconds);
         var failureCode = attempt switch
         {
@@ -40,7 +42,7 @@ public static class CollectionJobLifecycle
         var retryable = IsRetryable(attempt is DeferredAttemptResult, failureCode, attempt.Response?.StatusCode);
         TimeSpan? delay = attempt is DeferredAttemptResult deferredAttempt ? deferredAttempt.RetryDelay : null;
         return new CollectionAttemptResolution(retryable ? CollectionJobAttemptOutcome.RetryableFailure :
-            CollectionJobAttemptOutcome.PermanentFailure, null, failureCode, delay,
+            CollectionJobAttemptOutcome.PermanentFailure, failureCode, delay,
             retained.RobotsCrawlDelayMilliseconds);
     }
 

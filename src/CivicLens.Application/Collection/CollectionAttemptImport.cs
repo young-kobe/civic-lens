@@ -1,3 +1,4 @@
+using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Application.Collection.Discovery;
 
@@ -8,18 +9,23 @@ public sealed class CollectionAttemptImport
 {
     private readonly CollectionImportPolicy policy = new();
 
-    internal CollectionAttemptImport(CollectionAttemptResult attemptResult, SentValidators? sentValidators,
-        long? elapsedMilliseconds, DiscoveryEvidence? discovery = null, long? robotsCrawlDelayMilliseconds = null)
+    internal CollectionAttemptImport(CollectionRequest request, CollectionAttemptResult attemptResult,
+        SentValidators? sentValidators, long elapsedMilliseconds, DiscoveryEvidence? discovery = null,
+        long? robotsCrawlDelayMilliseconds = null, AttemptTransfer? transfer = null)
     {
+        Request = request;
         ElapsedMilliseconds = elapsedMilliseconds;
         AttemptResult = attemptResult;
         SentValidators = sentValidators;
         Discovery = discovery;
         RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds;
+        Transfer = transfer;
     }
 
-    public long? ElapsedMilliseconds { get; }
+    public CollectionRequest Request { get; }
+    public long ElapsedMilliseconds { get; }
     public long? RobotsCrawlDelayMilliseconds { get; }
+    public AttemptTransfer? Transfer { get; }
     public CollectionAttemptResult AttemptResult { get; }
     public SentValidators? SentValidators { get; }
     public DiscoveryEvidence? Discovery { get; }

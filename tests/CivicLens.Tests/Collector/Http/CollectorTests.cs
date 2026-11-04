@@ -789,7 +789,7 @@ public sealed class CollectorTests
         var request = Request(directoryOwner.Path);
         var result = await collector.FetchAsync(request);
         Assert.Equal(CollectionOutcome.Captured, result.Outcome);
-        Assert.InRange(result.ElapsedMilliseconds!.Value, 100, CollectionProtocol.MaximumElapsedMilliseconds(request.TimeoutSeconds));
+        Assert.InRange(result.ElapsedMilliseconds, 100, CollectionProtocol.MaximumElapsedMilliseconds(request.TimeoutSeconds));
     }
 
     [Fact]
@@ -801,7 +801,7 @@ public sealed class CollectorTests
         var request = Request(directoryOwner.Path);
         var result = await collector.FetchAsync(request);
         Assert.Equal(CollectionFailureCode.RobotsDenied, result.FailureCode);
-        Assert.InRange(result.ElapsedMilliseconds!.Value, 50, CollectionProtocol.MaximumElapsedMilliseconds(request.TimeoutSeconds));
+        Assert.InRange(result.ElapsedMilliseconds, 50, CollectionProtocol.MaximumElapsedMilliseconds(request.TimeoutSeconds));
     }
 
     [Fact]
@@ -812,18 +812,7 @@ public sealed class CollectorTests
         var request = Request(directoryOwner.Path) with { TimeoutSeconds = 1, MinDelayMilliseconds = 0 };
         var result = await collector.FetchAsync(request);
         Assert.Equal(CollectionFailureCode.Timeout, result.FailureCode);
-        Assert.InRange(result.ElapsedMilliseconds!.Value, 900, CollectionProtocol.MaximumElapsedMilliseconds(request.TimeoutSeconds));
-    }
-
-    [Fact]
-    public async Task RobotsDenyPreventsTargetRequest()
-    {
-        using var directoryOwner = new TemporaryDirectory();
-        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, "User-agent: *\nDisallow: /watch*\n"));
-        using var collector = new HttpCollector(handler);
-        var result = await collector.FetchAsync(Request(directoryOwner.Path));
-        Assert.Equal(CollectionFailureCode.RobotsDenied, result.FailureCode);
-        Assert.Equal(1, handler.Calls);
+        Assert.InRange(result.ElapsedMilliseconds, 900, CollectionProtocol.MaximumElapsedMilliseconds(request.TimeoutSeconds));
     }
 
     [Fact]

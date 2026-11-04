@@ -16,7 +16,7 @@ internal sealed class ExecutiveActionSeeder
     public ExecutiveActionSeeder(string connectionString, string captureRoot)
     {
         this.connectionString = connectionString;
-        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var documents = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         Directory.CreateDirectory(captureRoot);
         var candidates = new StatementCandidateSeeder(PostgresCollectionAttemptStore.FromConnectionString(connectionString), documents,
@@ -39,5 +39,18 @@ internal sealed class ExecutiveActionSeeder
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("SELECT record_id FROM executive_action_drafts LIMIT 1", connection);
         return (string)(await command.ExecuteScalarAsync())!;
+    }
+
+    public async Task MakeLegacyAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+            DELETE FROM executive_action_revision_facts;
+            DELETE FROM executive_action_revision_notices;
+            UPDATE executive_action_revisions SET source_id = NULL, document_number = NULL, kind = NULL, presidential_number = NULL, title = NULL,
+                signed_on = NULL, published_on = NULL, federal_register_citation = NULL, president_name = NULL, person_id = NULL, document_url = NULL
+            """, connection);
+        await command.ExecuteNonQueryAsync();
     }
 }

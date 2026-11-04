@@ -1,4 +1,5 @@
 using System.Net;
+using CivicLens.Application;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Activity;
 using CivicLens.Application.Analysis;
@@ -43,7 +44,7 @@ namespace CivicLens.Host.Review;
 
 internal static class ReviewWorkspace
 {
-    public static async Task<int> RunAsync(int port, CancellationToken cancellationToken)
+    public static async Task<int> RunAsync(int port, CodeVersion codeVersion, CancellationToken cancellationToken)
     {
         ReviewWorkspaceSettings settings;
         string connectionString;
@@ -103,7 +104,7 @@ internal static class ReviewWorkspace
             });
             builder.Services.AddRazorComponents().AddInteractiveServerComponents();
             builder.Services.AddCascadingAuthenticationState();
-            ConfigureReviewServices(builder.Services, connectionString);
+            ConfigureReviewServices(builder.Services, connectionString, codeVersion);
 
             await using var app = builder.Build();
             app.Use(async (context, next) =>
@@ -216,7 +217,7 @@ internal static class ReviewWorkspace
         });
     }
 
-    private static void ConfigureReviewServices(IServiceCollection services, string connectionString)
+    private static void ConfigureReviewServices(IServiceCollection services, string connectionString, CodeVersion codeVersion)
     {
         services.AddSingleton<IDocumentExtractionStore>(PostgresDocumentExtractionStore.FromConnectionString(connectionString));
         services.AddSingleton<IDocumentHistoryStore>(PostgresDocumentHistoryStore.FromConnectionString(connectionString));
@@ -241,7 +242,7 @@ internal static class ReviewWorkspace
         ConfigureStatementReview(services, contexts, issues);
         ConfigureActionReview(services, contexts);
         ConfigureVoteReview(services, contexts);
-        ConfigureExecutiveActionReview(services, contexts);
+        ConfigureExecutiveActionReview(services, contexts, codeVersion);
         ConfigureRelationshipReview(services, contexts);
         ConfigureBriefReview(services, contexts);
         ConfigureReportReview(services, contexts);
@@ -263,13 +264,13 @@ internal static class ReviewWorkspace
         else
         {
             services.AddScoped(provider => new GetRecentActivity(provider.GetRequiredService<IDocumentChangeReviewStore>(),
-                PostgresCollectionJobStore.FromConnectionString(connectionString),
+                PostgresCollectionJobStore.FromConnectionString(connectionString, codeVersion),
                 CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString)));
             services.AddScoped(_ => new CollectionWorkspace(collection,
-                PostgresCollectionJobStore.FromConnectionString(connectionString),
+                PostgresCollectionJobStore.FromConnectionString(connectionString, codeVersion),
                 PostgresCollectionAttemptStore.FromConnectionString(connectionString),
                 CivicLens.Infrastructure.Collection.Processing.PostgresEvidenceProcessingStore.FromConnectionString(connectionString)));
-            if (configuredIssues is not null) ConfigurePublication(services, connectionString, collection, configuredIssues);
+            if (configuredIssues is not null) ConfigurePublication(services, connectionString, codeVersion, collection, configuredIssues);
         }
     }
 
@@ -310,9 +311,10 @@ internal static class ReviewWorkspace
         services.AddScoped<GetVoteReview>();
     }
 
-    private static void ConfigureExecutiveActionReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
+    private static void ConfigureExecutiveActionReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts,
+        CodeVersion codeVersion)
     {
-        services.AddSingleton<IExecutiveActionReviewStore>(new PostgresExecutiveActionReviewStore(contexts));
+        services.AddSingleton<IExecutiveActionReviewStore>(new PostgresExecutiveActionReviewStore(contexts, codeVersion));
         services.AddScoped<DecideExecutiveActionReview>();
         services.AddScoped<GetExecutiveActionReview>();
     }
@@ -344,18 +346,18 @@ internal static class ReviewWorkspace
     }
 
     // The owner release lists and Take off site need a release directory.
-    private static void ConfigurePublication(IServiceCollection services, string connectionString, CollectionConfiguration collection,
+    private static void ConfigurePublication(IServiceCollection services, string connectionString, CodeVersion codeVersion, CollectionConfiguration collection,
         IssueConfiguration issues)
     {
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (releaseRoot is null) return;
-        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, codeVersion);
         var releases = new FileReleaseDirectory(releaseRoot);
         services.AddScoped(_ => new ListPublicationReleases(publications, releases));
         services.AddScoped(_ => new ListBlockedPublished(publications, releases, new BlockedPublishedRecords(publications, releases)));
         services.AddSingleton(provider =>
         {
-            var parts = PublicationComposition.Create(connectionString, publications, releases, collection, issues,
+            var parts = PublicationComposition.Create(connectionString, codeVersion, publications, releases, collection, issues,
                 PublicationComposition.RequireArtifactRoot(), provider.GetRequiredService<ILoggerFactory>());
             return new TakeOffSite(parts.Publish, publications, releases, parts.Loaders, provider.GetRequiredService<ILogger<TakeOffSite>>());
         });

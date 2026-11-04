@@ -13,7 +13,7 @@ public sealed class PostgresWorkerHeartbeatStore(IDbContextFactory<CollectionAtt
 
     public static PostgresWorkerHeartbeatStore FromConnectionString(string connectionString)
     {
-        _ = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        _ = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
         return new(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
     }

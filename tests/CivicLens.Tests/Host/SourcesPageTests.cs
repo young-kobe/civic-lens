@@ -8,6 +8,7 @@ using CivicLens.Application.Configuration;
 using CivicLens.Application.Collection.Health;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
+using CivicLens.Core.Collection;
 using CivicLens.Core.Review;
 using CivicLens.Host.Collection;
 using CivicLens.Host.Components.Ui;
@@ -198,7 +199,7 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
 
         var details = await workspace.GetSourcesAsync(Owner, job.JobId, null);
         var timeline = CheckTimeline.Build(details.SelectedJob!, details.RetainedAttempts);
-        Assert.StartsWith("Saved evidence is kept, but the transfer receipt is missing.", Assert.Single(timeline).Text, StringComparison.Ordinal);
+        Assert.StartsWith("Saved evidence is kept. Its transfer was not counted, so the full reservation is charged.", Assert.Single(timeline).Text, StringComparison.Ordinal);
 
         var key = Guid.NewGuid().ToString("N");
         var again = await workspace.RecollectAsync(Owner, job.JobId, key, default);
@@ -251,9 +252,12 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
             People = [new PersonConfiguration { Id = "person", Name = "Official" }],
             Sources = [new WatchedSourceConfiguration { Id = "source", Coverage = [new SourceCoverageConfiguration { PersonId = "person" }], Url = request.Url, AllowedOrigin = request.AllowedOrigin, AllowedPathPrefix = request.AllowedPathPrefix }]
         }, "source"), "key", CollectionJobState.Failed, Retry, null, false,
-            [new CollectionJobAttempt("attempt", request, new CollectionAttemptResolution(CollectionJobAttemptOutcome.PermanentFailure, failed), Retry, Retry)]);
+            [new CollectionJobAttempt("attempt", request, new CollectionAttemptResolution(CollectionJobAttemptOutcome.PermanentFailure), Retry, Retry,
+                new AttemptTransfer(failed.RequestCount, failed.BytesReceived))]);
+        var retained = new StoredCollectionAttempt(new FailedAttemptResult("attempt", request.SourceId, request.Url, request.Url,
+            DateTimeOffset.UnixEpoch, nameof(CollectionFailureCode.HttpError)), null, null);
 
-        var item = Assert.Single(CheckTimeline.Build(job, new Dictionary<string, StoredCollectionAttempt>()));
+        var item = Assert.Single(CheckTimeline.Build(job, new Dictionary<string, StoredCollectionAttempt> { ["attempt"] = retained }));
 
         Assert.Equal(Tone.Bad, item.Tone);
         Assert.Equal("Check failed: the site returned an error. This is a coverage gap, not evidence of no activity.", item.Text);
@@ -261,7 +265,7 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
 
     private ReviewWorkspaceHost Host => host!;
 
-    private PostgresCollectionJobStore Jobs => PostgresCollectionJobStore.FromConnectionString(Host.ConnectionString);
+    private PostgresCollectionJobStore Jobs => PostgresCollectionJobStore.FromConnectionString(Host.ConnectionString, TestCodeVersion.Current);
 
     private async Task<CollectionWorkspace> StartAsync(string subject)
     {
@@ -278,21 +282,17 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
     {
         var request = job.Definition.CreateRequest(attemptId, Host.KeyDirectory);
         await Host.SaveImportedAttemptAsync(request, attemptId, "Retained article text.\n");
-        var resolution = JsonSerializer.Serialize(new CollectionAttemptResolution(
-            CollectionJobAttemptOutcome.Succeeded, null, "EvidenceAlreadyImported"), CollectionProtocol.JsonOptions);
         await using var connection = new NpgsqlConnection(Host.ConnectionString);
         await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("""
-            INSERT INTO collection_job_attempts (attempt_id, job_id, sequence, request_json, started_at, resolution_json, completed_at)
-            VALUES (@attempt, @job, 1, @request, @started, @resolution, @completed);
+        await using var command = new NpgsqlCommand(JobAttemptSql.Insert("@attempt", "@job", "1", "@started", request,
+            completedAt: DateTimeOffset.UtcNow.UtcDateTime.Ticks) + """
+            ;
             UPDATE collection_jobs SET state = 'Succeeded' WHERE job_id = @job;
+            UPDATE collection_attempts SET request_count = NULL, bytes_received = NULL WHERE attempt_id = @attempt;
             """, connection);
         command.Parameters.AddWithValue("attempt", attemptId);
         command.Parameters.AddWithValue("job", job.JobId);
-        command.Parameters.AddWithValue("request", JsonSerializer.Serialize(request, CollectionProtocol.JsonOptions));
         command.Parameters.AddWithValue("started", DateTimeOffset.UtcNow.AddMinutes(-1).UtcDateTime.Ticks);
-        command.Parameters.AddWithValue("resolution", resolution);
-        command.Parameters.AddWithValue("completed", DateTimeOffset.UtcNow.UtcDateTime.Ticks);
         await command.ExecuteNonQueryAsync();
     }
 

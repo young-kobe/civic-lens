@@ -8,7 +8,7 @@ The search service gives readers full-text search over every published record. I
 
 - The kind `executiveAction` indexes the saved Federal Register record as source text and has no summary text. Deploy the search service before the publisher. An older service refuses a release that holds the new kind.
 - The service is its own Web SDK project, `CivicLens.PublicApi`. It references `CivicLens.Publication.Contracts` and the Npgsql package only. It has no path to operational storage, credentials, job handlers, or unpublished evidence.
-- The service has its own Postgres database, named by `CIVIC_LENS_SEARCH_DATABASE`. It never connects to the operational database.
+- The service has its own Postgres database, named by `CIVIC_LENS_SEARCH_DATABASE`. It connects to the operational database only through the role `civic_lens_public`, which reads `public_api` views and nothing else. That read path is planned. See [public API views](publication.md#public-api-views). The tradeoff is that an operational database outage stops the live API, while the cached pages stay up.
 - The service reads the public release files over HTTP. The base address is `CIVIC_LENS_RELEASE_BASE_URL`. A dev or test server can serve the release root.
 - The ingest polls `release.json` every 30 seconds with a conditional GET. It sends the ETag and the Last-Modified time that the server gave. An unchanged manifest costs one empty reply.
 - The ingest reuses the contract rules. `PublicationRelease.Validate` checks the manifest, and the `Validate` method of each record type checks the record. Search copies no contract rule.
@@ -205,8 +205,8 @@ The poll interval is 30 seconds and the statement timeout is 2 seconds. Both are
 
 | Concern | Files |
 |---|---|
-| Startup and options | `src/CivicLens.PublicApi/Program.cs`, `src/CivicLens.PublicApi/PublicApiApp.cs`, `src/CivicLens.PublicApi/PublicApiOptions.cs`, `src/CivicLens.PublicApi/RecordKinds.cs` |
-| Schema | `src/CivicLens.PublicApi/Schema/SchemaMigrator.cs`, `src/CivicLens.PublicApi/Schema/SchemaStartup.cs`, `src/CivicLens.PublicApi/Schema/001_search_index.sql` |
+| Startup and options | `src/CivicLens.PublicApi/Program.cs`, `src/CivicLens.PublicApi/PublicApiApp.cs`, `src/CivicLens.PublicApi/PublicApiOptions.cs`, `src/CivicLens.PublicApi/RecordKinds.cs`, `src/CivicLens.PublicApi/SearchLocks.cs` |
+| Schema | `src/CivicLens.PublicApi/Schema/SchemaMigrator.cs`, `src/CivicLens.PublicApi/Schema/SchemaStartup.cs`, `src/CivicLens.PublicApi/Schema/001_search_index.sql`, `src/CivicLens.PublicApi/Schema/003_drop_report_release_number.sql` |
 | Ingest | `src/CivicLens.PublicApi/Ingest/IngestWorker.cs`, `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs`, `src/CivicLens.PublicApi/Ingest/ReleaseFeed.cs`, `src/CivicLens.PublicApi/Ingest/RecordReader.cs`, `src/CivicLens.PublicApi/Ingest/IndexedRecord.cs`, `src/CivicLens.PublicApi/Ingest/IndexTransaction.cs`, `src/CivicLens.PublicApi/Ingest/IngestResult.cs` |
 | Search and API | `src/CivicLens.PublicApi/Search/SearchEndpoints.cs`, `src/CivicLens.PublicApi/Search/SearchRequest.cs`, `src/CivicLens.PublicApi/Search/SearchIndex.cs`, `src/CivicLens.PublicApi/Search/SearchCursor.cs`, `src/CivicLens.PublicApi/Search/SearchSortKey.cs`, `src/CivicLens.PublicApi/Search/RecordHit.cs`, `src/CivicLens.PublicApi/Search/SearchPage.cs`, `src/CivicLens.PublicApi/Search/ReleaseInfo.cs` |
 | Rate limit | `src/CivicLens.PublicApi/Http/ClientAddress.cs` |

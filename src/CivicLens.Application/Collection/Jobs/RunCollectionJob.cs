@@ -123,7 +123,7 @@ public sealed class RunCollectionJob(
 
         if (lease.CancellationRequested)
         {
-            var cancelled = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null,
+            var cancelled = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted,
                 executionFailure?.GetType().Name ?? "CancelledByRequest");
             using var cancelSettleTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             var cancelledSettled = await lease.SettleAttemptAsync(attempt.AttemptId, cancelled, cancelSettleTimeout.Token);
@@ -132,7 +132,7 @@ public sealed class RunCollectionJob(
         }
         if (callerToken.IsCancellationRequested)
             return new CollectionJobRunResult(CollectionJobRunStatus.Cancelled, await ReadJobBoundedAsync(lease.JobId));
-        var interrupted = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null,
+        var interrupted = new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted,
             executionFailure?.GetType().Name ?? "CollectorInterrupted");
         using var settlementTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         bool settled;
@@ -226,7 +226,7 @@ public sealed class RunCollectionJob(
                 }
                 catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
                 {
-                    // Retained evidence still settles safely with the full reservation.
+                    // The handoff stays on disk. Settlement uses the retained evidence, whose charge was fixed at import.
                 }
             }
 
@@ -282,7 +282,7 @@ public sealed class RunCollectionJob(
     {
         using var interruptionTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         return await lease.SettleAttemptAsync(attemptId,
-            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, null, errorCode),
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Interrupted, errorCode),
             interruptionTimeout.Token);
     }
 

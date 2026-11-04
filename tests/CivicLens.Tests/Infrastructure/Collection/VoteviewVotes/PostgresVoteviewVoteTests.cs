@@ -28,7 +28,7 @@ public sealed class PostgresVoteviewVoteTests(PostgresCollection postgres) : IAs
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        store = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        store = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         documents = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         Directory.CreateDirectory(captureRoot);
         var candidates = new StatementCandidateSeeder(PostgresCollectionAttemptStore.FromConnectionString(connectionString), documents,

@@ -255,10 +255,10 @@ public sealed class CollectorProcessTests
             if (!OperatingSystem.IsWindows())
                 File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 
-            var failure = await Assert.ThrowsAsync<InvalidDataException>(() =>
+            var failure = await Assert.ThrowsAsync<JsonException>(() =>
                 new CollectorProcess(script, script).RunAsync(request, CancellationToken.None));
 
-            Assert.Contains("elapsed time", failure.Message);
+            Assert.Contains("elapsedMilliseconds", failure.Message);
         }
         finally { Directory.Delete(directory, true); }
     }
