@@ -1,0 +1,25 @@
+Round 1 review fixes on branch public-api-vote-members (new route GET /v1/votes/{recordId}/members in src/CivicLens.PublicApi). The review found no P1. Fix these findings, then stop. Do not ask for another review. The branch is stacked on an unmerged parent; do NOT merge origin/main or any other branch. The owner merges later.
+P2: src/CivicLens.PublicApi/Votes/VoteStore.cs about line 65. The EXISTS guard gives a 404 for a vote revision with no member list, but no test covers it, and ViewsSeed cannot seed such a vote. Let ViewsSeed (tests/CivicLens.Tests/PublicApi/Votes/ViewsSeed.cs) seed a vote with a null member_list_id, and assert 404 on both /v1/votes/{id}/members and /v1/votes/{id}. Prove the test fails when the EXISTS is removed (remove it once, run, restore, git diff to confirm).
+P3-1: src/CivicLens.PublicApi/Votes/VoteMemberRequest.cs:11 holds a fourth copy of the cast word list, mixing contract constants with literals "Aye", "No", "Present". Use the existing contract constants in CivicLens.Publication.Contracts where they exist (PublicApi may reference Publication.Contracts only). Do not add a new shared list unless a contract owner already exists for some of the words; if one does, extend it there.
+P3-2: docs/architecture/search.md:83 names VoteMemberRequest.Parse as the enforcer of the empty page for an unknown cast, but VoteStore.ListMembersAsync produces it. Fix the enforcer name, and say the cast match is exact after the case-insensitive mapping.
+P3-3: tests/CivicLens.Tests/PublicApi/Votes/VoteMembersEndpointsTests.cs:74: add a test that follows a cursor with the cast filter on, so dropping the cast condition on later pages fails.
+Run VoteMembersEndpointsTests, the other classes under CivicLens.Tests.PublicApi.Votes, PublicApiViewsTests, format, check-docs and render-architecture.
+Final message under 1,800 characters: the pushed SHA, each fix in one line, test classes run with counts.
+
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b public-api-vote-members origin/public-api-vote-members
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+6. curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+7. bash /tmp/dotnet-install.sh --version 10.0.403 --install-dir /root/.dotnet
+8. docker info  (if it fails: run sudo dockerd > /tmp/dockerd.log 2>&1 & in the background, then check docker info again after 10 seconds)
+9. export PATH=/root/.dotnet:$PATH && dotnet restore tests/CivicLens.Tests --locked-mode
+Prefix every later dotnet call with export PATH=/root/.dotnet:$PATH &&. If a Testcontainers pull fails with HTTP 429, wait 60 seconds and retry. Run test classes one filter at a time with --filter FullyQualifiedName~<Class> (no | in filters). Run at most one PublishReleaseTests class.
+
+Rules: read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Each rule has one owner; reuse the existing shared owners before adding any. Every added member needs a production caller. Delete code the change makes unused. No backward compatibility shims, dual reads or legacy fallbacks beyond what the named precedent already does. Comments only when absolutely necessary; intent goes in names. Tests encode why the rule matters and must fail if the rule breaks. EF migrations: generate with the repo EF tool manifest (dotnet tool restore, then dotnet ef migrations add), strip the UTF-8 BOM from generated files, and make the Designer match the model at the migration's position. Regenerate schema docs with CIVIC_LENS_WRITE_SCHEMA_DOCS=1 and the SchemaReferenceTests class. Prose (docs, commit messages): ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes. Update the owning feature docs in place (template headings Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, Limits and planned work); each invariant names its rule, enforcer and test. Do not write session reports or changelogs. If you hit a design choice the brief does not settle, choose nothing: stop, commit what is done, and list the question with options in your final message.
+
+Checks before the last commit: dotnet build tests/CivicLens.Tests -c Release (0 errors), the changed and related test classes, dotnet format CivicLens.slnx --verify-no-changes --no-restore, python3 tools/check-docs.py --check, python3 tools/render-architecture.py --check.
+
+Finish, each its own Bash call: git add -A; git commit -m "<one plain sentence>"; git push origin public-api-vote-members. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only public-api-vote-members.

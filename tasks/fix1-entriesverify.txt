@@ -1,0 +1,26 @@
+Round 1 review fixes on branch published-entries-verify (`releases entries verify`, which rebuilds each kept release.json from the tables and compares bytes). The branch is stacked on an unmerged parent; do NOT merge origin/main or any other branch. The owner merges later. Fix these findings, then stop. A round 2 review follows.
+P1: src/CivicLens.Infrastructure/Publication/PublicationWithdrawalRows.cs:47. ReadAsync builds `kinds` with rows.ToDictionary(row => row.Kind, ...). Two withdrawal rows of the same kind in one release throw ArgumentException, so verify crashes on that release and never reaches later ones. Fix: parse the kind per row with the existing KindOf helper (or the existing parse owner), not a dictionary keyed by kind. Add a test with two withdrawals of the same kind in one release, and prove it fails on the old code.
+P2: tests/CivicLens.Tests/Infrastructure/Publication/VerifyPublishedEntriesTests.cs:38. Every case seeds actions with one official. Add cases that verify byte-for-byte for: a relationship entry (TargetKind maps string to enum in PublishedEntries.cs about line 538), a statement with matched official and issue rows, a vote entry, and a record with several officials and their names. Reuse existing seed fixtures in tests/CivicLens.Tests/Fixtures; do not copy seeding code.
+P3-1: src/CivicLens.Application/Publication/ReleaseSplice.cs:179. A release that lists withdrawals and has no withdrawal rows counts as legacy, even when committed after the PublicationWithdrawals migration. docs/architecture/publication.md line 97 says such a release always has rows. Count it as legacy only when it is older than the first release that has a withdrawal row; otherwise report it as a failure. Test both cases. If this needs a design choice the brief does not settle, stop and list it.
+P3-2: VerifyPublishedEntriesTests.cs:52, the "writes nothing" check counts only entry and entry official rows. Also compare the counts of publication_record_states, publication_withdrawals, publication_withdrawal_corrections and published_records.
+Do not change the optional field count in docs: main now has a Chamber field on PublishedRecordEntry; the owner reconciles that on merge.
+Run VerifyPublishedEntriesTests, BackfillPublishedEntriesTests, PostgresPublishedEntriesTests, ReleaseCommandTests, format, check-docs and render-architecture.
+Final message under 1,800 characters: the pushed SHA, each fix in one line, test classes run with counts, any open question.
+
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b published-entries-verify origin/published-entries-verify
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+6. curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+7. bash /tmp/dotnet-install.sh --version 10.0.403 --install-dir /root/.dotnet
+8. docker info  (if it fails: run sudo dockerd > /tmp/dockerd.log 2>&1 & in the background, then check docker info again after 10 seconds)
+9. export PATH=/root/.dotnet:$PATH && dotnet restore tests/CivicLens.Tests --locked-mode
+Prefix every later dotnet call with export PATH=/root/.dotnet:$PATH &&. If a Testcontainers pull fails with HTTP 429, wait 60 seconds and retry. Run test classes one filter at a time with --filter FullyQualifiedName~<Class> (no | in filters). Run at most one PublishReleaseTests class.
+
+Rules: read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Each rule has one owner; reuse the existing shared owners before adding any. Every added member needs a production caller. Delete code the change makes unused. No backward compatibility shims, dual reads or legacy fallbacks beyond what the named precedent already does. Comments only when absolutely necessary; intent goes in names. Tests encode why the rule matters and must fail if the rule breaks. EF migrations: generate with the repo EF tool manifest (dotnet tool restore, then dotnet ef migrations add), strip the UTF-8 BOM from generated files, and make the Designer match the model at the migration's position. Regenerate schema docs with CIVIC_LENS_WRITE_SCHEMA_DOCS=1 and the SchemaReferenceTests class. Prose (docs, commit messages): ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes. Update the owning feature docs in place (template headings Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, Limits and planned work); each invariant names its rule, enforcer and test. Do not write session reports or changelogs. If you hit a design choice the brief does not settle, choose nothing: stop, commit what is done, and list the question with options in your final message.
+
+Checks before the last commit: dotnet build tests/CivicLens.Tests -c Release (0 errors), the changed and related test classes, dotnet format CivicLens.slnx --verify-no-changes --no-restore, python3 tools/check-docs.py --check, python3 tools/render-architecture.py --check.
+
+Finish, each its own Bash call: git add -A; git commit -m "<one plain sentence>"; git push origin published-entries-verify. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only published-entries-verify.
