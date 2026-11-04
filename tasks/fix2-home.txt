@@ -1,0 +1,25 @@
+Round 2 review of public-home (the public home page rebuild with the issue icons file config/issue-icons.json) found no P1. Fix these three, then stop. Do not ask for another review.
+Do setup steps 3 to 5 (git config) BEFORE step 9a (the merge), so the merge commit has the right author.
+P2: src/CivicLens.Host/Review/ReviewWorkspace.cs:356. When CIVIC_LENS_ISSUE_ICONS_CONFIG is unset, `?? IssueIconConfiguration.None` lets Take off site publish a full release with the neutral icon on every home tile. A normal publish refuses to start without the file. Fix: when the issues file is configured, call PublicationComposition.RequireIssueIcons inside the singleton factory next to RequireArtifactRoot, so the review host fails loud like releases publish. Remove the None fallback, and delete IssueIconConfiguration.None if it loses its last production caller (tests then build their own empty value). Update docs/architecture/configuration.md, which records the silent fallback as intended. Add a test that a review host with the issues file but no icons file refuses to start.
+P3-1: same place. When CIVIC_LENS_ISSUES_CONFIG is unset, the review host now checks the icon file against an empty issue set and startup fails with "unknown issue". On main that case only turned the release lists off. Keep main's behavior: read and require the icons only when the issues file is configured. Make configuration.md:130 name every reader of the file (the command, the worker and the review host).
+P3-2: src/CivicLens.Application/Publication/PublicationCatalog.cs:20. No test covers the path from catalog.IssueIcon through ReleaseFacets to a rendered home tile. Every catalog in the tests uses an empty icon set, and the tile test builds the facets by hand. Add one test that builds a catalog with a non-default icon for an issue and proves the home tile renders that icon, so a broken lookup fails.
+Final message under 1,800 characters: the pushed SHA, each finding and its fix, the test classes run with counts, and any open question.
+
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b public-home origin/public-home
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+6. curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+7. bash /tmp/dotnet-install.sh --version 10.0.403 --install-dir /root/.dotnet
+8. docker info  (if it fails: run sudo dockerd > /tmp/dockerd.log 2>&1 & in the background, then check docker info again after 10 seconds)
+9a. git merge --no-edit origin/main  (merge, never rebase; resolve conflicts keeping both sides' intent; for the EF model snapshot keep both sides' changes)
+9. export PATH=/root/.dotnet:$PATH && dotnet restore tests/CivicLens.Tests --locked-mode
+Prefix every later dotnet call with export PATH=/root/.dotnet:$PATH &&. If a Testcontainers pull fails with HTTP 429, wait 60 seconds and retry. Run test classes one filter at a time with --filter FullyQualifiedName~<Class> (no | in filters). Run at most one PublishReleaseTests class.
+
+Rules: read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Each rule has one owner; reuse the existing shared owners before adding any. Every added member needs a production caller. Delete code the change makes unused. No backward compatibility shims, dual reads or legacy fallbacks beyond what the named precedent already does. Comments only when absolutely necessary; intent goes in names. Tests encode why the rule matters and must fail if the rule breaks. EF migrations: generate with the repo EF tool manifest (dotnet tool restore, then dotnet ef migrations add), strip the UTF-8 BOM from generated files, and make the Designer match the model at the migration's position. Regenerate schema docs with CIVIC_LENS_WRITE_SCHEMA_DOCS=1 and the SchemaReferenceTests class. Prose (docs, commit messages): ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes. Update the owning feature docs in place (template headings Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, Limits and planned work); each invariant names its rule, enforcer and test. Do not write session reports or changelogs. If you hit a design choice the brief does not settle, choose nothing: stop, commit what is done, and list the question with options in your final message.
+
+Checks before the last commit: dotnet build tests/CivicLens.Tests -c Release (0 errors), the changed and related test classes, dotnet format CivicLens.slnx --verify-no-changes --no-restore, python3 tools/check-docs.py --check, python3 tools/render-architecture.py --check.
+
+Finish, each its own Bash call: git add -A; git commit -m "<one plain sentence>"; git push origin public-home. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only public-home.
