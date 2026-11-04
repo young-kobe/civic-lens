@@ -182,6 +182,27 @@ public sealed class PublicationReleaseTests
         (Entry(PublishedRecordKind.Vote, StatementId) with { YeaCount = 0, NayCount = 0 }).Validate();
     }
 
+    public static TheoryData<PublishedRecordEntry> InvalidChambers() => new()
+    {
+        Entry(PublishedRecordKind.Statement, StatementId) with { Chamber = PublishedChamber.House },
+        Entry(PublishedRecordKind.Action, new string('7', 64)) with { Chamber = PublishedChamber.Senate },
+        Entry(PublishedRecordKind.Vote, StatementId) with { Chamber = (PublishedChamber)99 }
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidChambers))]
+    public void OnlyAVoteEntryMayNameAChamberAndItNamesAKnownOneSoNoOtherKindCarriesAFalseChamber(PublishedRecordEntry entry)
+    {
+        Assert.Throws<InvalidDataException>(entry.Validate);
+    }
+
+    [Fact]
+    public void AVoteEntryWithNoChamberStaysValidSoAReleaseFromBeforeTheFieldStillReads()
+    {
+        Entry(PublishedRecordKind.Vote, StatementId).Validate();
+        (Entry(PublishedRecordKind.Vote, StatementId) with { Chamber = PublishedChamber.Senate }).Validate();
+    }
+
     public static TheoryData<PublishedRecordEntry> InvalidCosponsors()
     {
         var action = Entry(PublishedRecordKind.Action, new string('7', 64));
