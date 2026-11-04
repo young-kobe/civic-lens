@@ -10,6 +10,8 @@ public sealed record PublicApiOptions
 {
     public const string ReleaseBaseUrlVariable = "CIVIC_LENS_RELEASE_BASE_URL";
     public const string DatabaseVariable = "CIVIC_LENS_SEARCH_DATABASE";
+    public const string PublicViewsDatabaseVariable = "CIVIC_LENS_PUBLIC_VIEWS_DATABASE";
+    public const int PublicViewsPoolSize = 4;
     public const string TrustedProxyRangesVariable = "CIVIC_LENS_TRUSTED_PROXY_RANGES";
     public const string RequestsPerMinuteVariable = "CIVIC_LENS_REQUESTS_PER_MINUTE";
     public const string ReportsPerHourVariable = "CIVIC_LENS_REPORTS_PER_HOUR";
@@ -20,6 +22,8 @@ public sealed record PublicApiOptions
 
     public required Uri ReleaseBaseUrl { get; init; }
     public required string Database { get; init; }
+    /// <summary>The connection of the role <c>civic_lens_public</c> to the operational database. Only the views of <c>public_api</c> are readable through it.</summary>
+    public required string PublicViewsDatabase { get; init; }
     public IReadOnlyList<IPNetwork> TrustedProxyRanges { get; init; } = [];
     public int RequestsPerMinute { get; init; } = 60;
     public int ReportsPerHour { get; init; } = 5;
@@ -37,10 +41,14 @@ public sealed record PublicApiOptions
         Options = $"-c statement_timeout={(int)QueryTimeout.TotalMilliseconds}"
     }.ConnectionString;
 
+    /// <summary>The pool is one connection smaller than the connection limit of the role. The role sets its own statement timeout.</summary>
+    public string PublicViewsReaderDatabase => new NpgsqlConnectionStringBuilder(PublicViewsDatabase) { MaxPoolSize = PublicViewsPoolSize }.ConnectionString;
+
     public static PublicApiOptions FromEnvironment() => new()
     {
         ReleaseBaseUrl = Directory(Required(ReleaseBaseUrlVariable)),
         Database = Required(DatabaseVariable),
+        PublicViewsDatabase = Required(PublicViewsDatabaseVariable),
         TrustedProxyRanges = [.. (Environment.GetEnvironmentVariable(TrustedProxyRangesVariable) ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(IPNetwork.Parse)],
         RequestsPerMinute = ParseLimit(RequestsPerMinuteVariable, 60),

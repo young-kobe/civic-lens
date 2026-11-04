@@ -4,6 +4,7 @@ active_records kind
 active_records record_id
 active_records revision_number
 active_records release_number
+active_records published_at_utc_ticks
 vote_issues record_id
 vote_issues revision_number
 vote_issues issue_id

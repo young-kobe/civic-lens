@@ -150,7 +150,7 @@ flowchart LR
 | Classification (planned) | Rules from measured change history first. A model tier only if the R-13 measurement shows a need (D-05) |
 | Drafting | Claude models through the official `Anthropic` C# SDK in Infrastructure; model extraction is planned; the model for each task can change after evaluation |
 | Public website | C# release builder renders shared Razor components to static HTML; small JS modules add the theme toggle, the comparison control, and the search page |
-| Public search and read API | `CivicLens.PublicApi`, a Web SDK project over its own Postgres database through plain Npgsql, fed from published releases |
+| Public search and read API | `CivicLens.PublicApi`, a Web SDK project over its own Postgres database through plain Npgsql, fed from published releases. The vote routes read the `public_api` views of the operational database as the role `civic_lens_public` |
 | Local MCP (planned) | Official C# SDK; separate local development and review registration |
 | Public MCP (planned) | Separate deployment over published artifacts and index; Cloudflare Worker is a candidate |
 | Production hosting | Jetson with Docker Compose (temporary); planned cloud move with Terraform and CI deployment |
@@ -166,7 +166,7 @@ Package rules:
 - EF Core Design is private tooling in Infrastructure. Other production projects must not reference database packages.
 - Infrastructure pins the official `Anthropic` C# SDK 12.50.0 for the model adapters only. An architecture test checks that no other project references its assembly.
 - Application pins one package, `Microsoft.Extensions.Logging.Abstractions` 10.0.14, so workers take `ILogger<T>`. The worker command builds a console provider in `Program.cs` that writes to stderr. The review workspace builds its own console provider with a Warning minimum. An architecture test allows no other Application package.
-- `CivicLens.PublicApi` pins Npgsql 10.0.3 and references `Publication.Contracts` only. It has no EF Core, no Application, and no operational storage. Only Host and PublicApi use the Web SDK. An architecture test checks the references.
+- `CivicLens.PublicApi` pins Npgsql 10.0.3 and references `Publication.Contracts` only. It has no EF Core, no Application, and no operational storage beyond the `public_api` views. Only Host and PublicApi use the Web SDK. An architecture test checks the references.
 - No Rust, Go, Python analysis service, or React application is planned. Python's standard library serves only the development tools in `tools/`.
 
 ### Legacy reuse
@@ -437,8 +437,9 @@ This is the only navigation index.
 | Web host, security headers, components | [Host](architecture/host.md#behavior) | `src/CivicLens.Host/Program.cs` |
 | Production hosting plan | [Host](architecture/host.md#limits-and-planned-work) | none |
 | MCP plans | [Review](architecture/review.md#limits-and-planned-work), [Publication](architecture/publication.md#limits-and-planned-work) | none |
-| Public views, role, active release rule | [Publication](architecture/publication.md#public-api-views) | `src/CivicLens.Infrastructure/Collection/Migrations/20261103165431_PublicApiViews.cs`, `src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs` |
+| Public views, role, active release rule | [Publication](architecture/publication.md#public-api-views) | `src/CivicLens.Infrastructure/Collection/Migrations/20261103165431_PublicApiViews.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261104011255_PublicApiReleaseTime.cs`, `src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs` |
 | Public search service: ingest, index, read API, rate limit | [Search](architecture/search.md#decisions) | `src/CivicLens.PublicApi/PublicApiApp.cs` |
+| Public vote routes, vote cursor, views data source, `/v1/release` | [Search](architecture/search.md#api) | `src/CivicLens.PublicApi/Votes/VoteEndpoints.cs`, `src/CivicLens.PublicApi/ActiveRelease/ReleaseEndpoints.cs` |
 | Reader report queue: pull, dismiss, editor panel, close by approval | [Review](architecture/review.md#reader-reports), [Search](architecture/search.md#operational-pull) | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Infrastructure/Reports/PostgresReaderReportStore.cs` |
 | Search ingest of a release | [Search](architecture/search.md#ingest) | `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs` |
 | Search API routes and errors | [Search](architecture/search.md#api) | `src/CivicLens.PublicApi/Search/SearchEndpoints.cs` |

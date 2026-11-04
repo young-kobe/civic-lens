@@ -277,9 +277,9 @@ The migration `PublicApiViews` creates the roles `civic_lens_public` and `civic_
 
 The same step revokes `TEMPORARY` on the database and `EXECUTE` on the `pg_advisory_*` and `pg_try_advisory_*` functions from `PUBLIC`. So `db migrate` needs a superuser. It is the only place that revokes `TEMPORARY`, so `readonly-grants.sql` relies on it. The app role of the compose database is one. The role `civic_lens_public` then creates no temporary table and takes no advisory lock.
 
-Enable the login by hand, after the first `db migrate` that holds the migration. Open an interactive `psql` session on the database host as the database owner. Run `ALTER ROLE civic_lens_public LOGIN PASSWORD` with a long random password. Keep the password out of shell history, logs, and Git. Store it only where the future `PublicApi` reads its settings.
+Enable the login by hand, after the first `db migrate` that holds the migration. Open an interactive `psql` session on the database host as the database owner. Run `ALTER ROLE civic_lens_public LOGIN PASSWORD` with a long random password. Keep the password out of shell history, logs, and Git. Store it only where `PublicApi` reads its settings. The service reads the connection from `CIVIC_LENS_PUBLIC_VIEWS_DATABASE`, for example `Host=<host>;Database=<database>;Username=civic_lens_public;Password=<password>`. It sets `Maximum Pool Size=4` itself and no timeout, because the role sets the statement timeout. The service stops at startup when the variable is missing.
 
-The role reads only the views in `public_api`. It cannot write, a statement stops after 2 seconds, an idle session ends after 60 seconds, and it holds at most 5 connections. After a restore, run `db migrate`. It creates a missing role and sets the grants again, because `pg_restore --no-privileges` drops them. Roles belong to the cluster and a dump can leave them out, so the login of the role needs a new `ALTER ROLE` after a restore into a new cluster. Without the login the views stay closed, which is the safe state. `PublicApi` does not use the role yet.
+The role reads only the views in `public_api`. It cannot write, a statement stops after 2 seconds, an idle session ends after 60 seconds, and it holds at most 5 connections. After a restore, run `db migrate`. It creates a missing role and sets the grants again, because `pg_restore --no-privileges` drops them. Roles belong to the cluster and a dump can leave them out, so the login of the role needs a new `ALTER ROLE` after a restore into a new cluster. Without the login the views stay closed, which is the safe state. `PublicApi` uses the role for `/v1/release` and the vote routes. Without the login those routes fail and the search routes keep working.
 
 ## Managed collection jobs
 
@@ -944,6 +944,7 @@ Run the service in a second shell. It applies its schema at startup, ingests the
 ```sh
 export CIVIC_LENS_RELEASE_BASE_URL=http://127.0.0.1:8090/
 export CIVIC_LENS_SEARCH_DATABASE="Host=127.0.0.1;Port=5434;Database=search;Username=search;Password=search"
+export CIVIC_LENS_PUBLIC_VIEWS_DATABASE="Host=127.0.0.1;Port=5432;Database=civic_lens;Username=civic_lens_public;Password=<password of the public role>"
 export ASPNETCORE_URLS=http://127.0.0.1:8100
 dotnet run --project src/CivicLens.PublicApi
 ```

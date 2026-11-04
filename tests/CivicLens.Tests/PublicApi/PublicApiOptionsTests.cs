@@ -1,4 +1,5 @@
 using CivicLens.PublicApi;
+using Npgsql;
 
 namespace CivicLens.Tests.PublicApi;
 
@@ -33,5 +34,21 @@ public sealed class PublicApiOptionsTests
     {
         Assert.Null(PublicApiOptions.ParsePullToken(null));
         Assert.Equal(new string('t', 32), PublicApiOptions.ParsePullToken(new string('t', 32)));
+    }
+
+    [Fact]
+    public void ThePublicViewsConnectionKeepsItsLoginAndCapsThePoolAtFourBecauseTheRoleAllowsFiveConnections()
+    {
+        var options = new PublicApiOptions
+        {
+            ReleaseBaseUrl = PublicApiOptions.Directory("http://release.test"),
+            Database = "Host=search;Database=search",
+            PublicViewsDatabase = "Host=operational;Database=civic_lens;Username=civic_lens_public;Password=secret"
+        };
+
+        var views = new NpgsqlConnectionStringBuilder(options.PublicViewsReaderDatabase);
+
+        Assert.Equal(4, views.MaxPoolSize);
+        Assert.Equal(("operational", "civic_lens_public"), (views.Host, views.Username));
     }
 }

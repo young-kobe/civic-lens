@@ -27,7 +27,7 @@ internal static class PublicApiGrants
         ALTER ROLE civic_lens_public SET idle_in_transaction_session_timeout = '10s';
         ALTER ROLE civic_lens_public SET idle_session_timeout = '60s';
 
-        GRANT SELECT (release_number, is_active) ON publication_releases TO civic_lens_public_owner;
+        GRANT SELECT (release_number, published_at_utc_ticks, is_active) ON publication_releases TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, first_release, revision_number, last_release) ON publication_record_states TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, chamber, congress, session_number, roll_call_number, voted_on, kind,
             bill_type, bill_number, headline, summary, text_origin, member_list_id) ON vote_revisions TO civic_lens_public_owner;
