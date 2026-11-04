@@ -720,6 +720,21 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ex
 
 Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every executive action read fails until it ends. For a manual run, start the new code only when `verify` exits 0. Every reader fails on a row with null columns. Production held 688 revisions when the survey was made. A rollback past the migration rebuilds `notice_json` from the notice columns.
 
+### Brief revision backfill
+
+R-63 step 3 moves old brief revisions into columns and child rows. A revision written by current code already has them. The migration `BriefRevisionColumns` adds nullable columns and moves no data. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- brief revisions backfill 500
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- brief revisions verify
+```
+
+`backfill <limit>` moves at most `limit` legacy revisions. It walks the table in key order in batches of 25. Each batch is one short transaction that holds the brief review lock. For each row it writes the columns and the citation, paragraph, and paragraph citation rows, reads the row back, rebuilds the revision, and compares it to the stored JSON. A row that differs is skipped with `RebuildMismatch`. A citation of a revision that is not stored is skipped with `database:` and the name of the foreign key. The output and the exit code are the same as for the [vote backfill](#vote-revision-backfill). The reasons are `UnreadableJson`, `InvalidShape`, `RebuildMismatch`, and `database:<constraint>`.
+
+`verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. The output and the exit code are the same as for the vote `verify`. A revision whose rows cannot be read shows the field name `columns`. No key is allowed to be absent.
+
+Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. Run `backfill` right after the deploy, because every brief read fails until it ends. Production held 1 brief revision when the survey was made.
+
 ## Relationship drafting
 
 The `worker` command drafts one relationship for each pair of an approved statement and an approved action or vote that share an official and a bill. [Statements](architecture/statements.md#relationship-drafting) holds the rules. Relationship drafting runs when both required variables below are set in the worker's protected environment. A limit without `ANTHROPIC_API_KEY` stops the worker with exit code 2. The names of the officials come from the collection configuration of the worker.

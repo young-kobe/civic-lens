@@ -31,7 +31,7 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         new(PublishedRecordKind.Vote, "vo", "vote_drafts", "headline",
             (db, ids, ct) => VoteDraftRows.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct), Column: new("headline", recordId => VoteRevisionRows.NotBackfilled($"The current revision of vote {recordId}"))),
         new(PublishedRecordKind.Brief, "br", "brief_drafts", "headline",
-            (db, ids, ct) => PostgresBriefReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
+            (db, ids, ct) => PostgresBriefReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct), Column: new("headline", recordId => BriefRevisionRows.NotBackfilled($"The current revision of brief {recordId}"))),
         new(PublishedRecordKind.Relationship, "re", "relationship_drafts", null,
             ReadRelationshipsAsync),
         new(PublishedRecordKind.ExecutiveAction, "ea", "executive_action_drafts", "title",

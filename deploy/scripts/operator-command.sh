@@ -96,6 +96,14 @@ case "$*" in
     ;;
   # usage: executive-actions revisions verify
   "executive-actions revisions verify") "$compose" run --rm cli executive-actions revisions verify ;;
+  # usage: brief revisions backfill <count>
+  "brief revisions backfill "*)
+    [[ $# -eq 4 ]] || refuse
+    number "$4"
+    "$compose" run --rm cli brief revisions backfill "$4"
+    ;;
+  # usage: brief revisions verify
+  "brief revisions verify") "$compose" run --rm cli brief revisions verify ;;
   # usage: releases first-published backfill
   "releases first-published backfill") "$compose" run --rm cli releases first-published backfill ;;
   # usage: releases publish <key> [--rewrite-entries] [--rewrite-officials] [--rewrite-pages]

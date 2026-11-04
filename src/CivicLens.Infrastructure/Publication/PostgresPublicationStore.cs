@@ -305,12 +305,11 @@ public sealed class PostgresPublicationStore : IPublicationStore
     {
         var briefs = expectations.Where(expectation => expectation.Kind == PublishedRecordKind.Brief).ToArray();
         if (briefs.Length == 0) return [];
-        var rows = await db.Set<BriefRevisionRow>().FromSqlRaw(
+        var stored = await BriefRevisionRows.ReadAsync(db, db.Set<BriefRevisionRow>().FromSqlRaw(
                 "SELECT r.* FROM brief_revisions r JOIN unnest({0}, {1}) AS k(id, number) ON r.record_id = k.id AND r.revision_number = k.number",
-                briefs.Select(brief => brief.RecordId).ToArray(), briefs.Select(brief => brief.RevisionNumber).ToArray())
-            .AsNoTracking().ToArrayAsync(cancellationToken);
-        return rows.Select(row => ReviewJson.Deserialize<BriefRevision>(row.RevisionJson, "revision"))
-            .SelectMany(revision => revision.Citations).Select(BriefRecordReader.BindingOf);
+                briefs.Select(brief => brief.RecordId).ToArray(), briefs.Select(brief => brief.RevisionNumber).ToArray()).AsNoTracking(),
+            cancellationToken);
+        return stored.Select(revision => revision.Read()).SelectMany(revision => revision.Citations).Select(BriefRecordReader.BindingOf);
     }
 
     private static async Task<IEnumerable<PublishedRevisionBinding>> ReadAddedRelationshipCitationsAsync(CollectionAttemptDbContext db,
