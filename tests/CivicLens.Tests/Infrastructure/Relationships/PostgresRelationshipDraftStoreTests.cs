@@ -578,8 +578,8 @@ public sealed class PostgresRelationshipDraftStoreTests(PostgresCollection postg
             CancellationToken cancellationToken)
         {
             await seeder.ExecuteAsync("""
-                UPDATE relationship_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{statement,revisionNumber}', '2')::text
-                WHERE revision_number = 2
+                SET session_replication_role = replica;
+                UPDATE relationship_revisions SET statement_revision_number = 2 WHERE revision_number = 2
                 """);
             return new("end_turn", reply, new(900, 100, 0, 0), "req_fixture");
         }
