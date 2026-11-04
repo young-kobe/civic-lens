@@ -146,3 +146,20 @@ Each item was checked on `origin/main` (`8f47562c`) with `git show` and `git gre
 - P3: the quotes backfill uses the PascalCase keys. `statement_gate_quotes` is now `statement_analysis_run_quotes`. Line 3 states the decisions. The input check uses `num_nulls(...) IN (0, 5)`. The count of query kinds is fixed: eight by run ID, one by `draft_id`, one by candidate. The note on cited rows of a check run is added.
 
 Owner decisions of 2026-11-04: D1a (i), D9 A, D10 (a). No owner decision stays open.
+
+## Round 5 resolution
+
+Each item was checked on `origin/main` (`efd90376`) with `git show` and `git grep`. All were applied. Two were adjusted, and the reasons follow.
+
+- P1 (rerunnable backfill): confirmed. `AnalysisRun.Validate` throws for a rejected run with no errors (`AnalysisRun.cs:31-33`). `StatementGateCarryOver` reads `gateRun.Quotes` (`:15`). `RelationshipStaleness` filters on the context fingerprint (`:65`). The survey records the owner choice (b) as D11 and adds a section 5 design. Model runs do not plug into `RevisionBackfill`. That engine needs `IReviewRevisionRow`, a `RevisionKey(RecordId, RevisionNumber)` cursor, a review lock, and a C# rebuild that it compares to the JSON. Run tables key by `run_id`. They get their own command, `analysis runs backfill`, with the same shape. Precedents checked: `votes revisions backfill`, `executive-actions revisions backfill`, `bills subjects backfill`. PR 2, 3, 4, 5, 6, 7 and 8, the verify order, the operations notes and the rollback text are updated. PR 2 to 4 need no EF Down.
+- P2-1 (one owner for run references): applied. Core gets `AnalysisRunReference` and `AnalysisRun.References`. `AddRun` reads `run.Run.References`. `RelationshipDraftRun` keeps only `InputFingerprint`. The brief run records gain no record field, which removes the second path that section 3.4 had. PR 3 lists a test for worker failure runs.
+- P2-2 (verify outcome filter): applied in PR 5. The fingerprint comparison covers only Drafted, DraftDiscarded and Bypassed.
+- P2-3 (Bypassed `with` sites): applied in PR 1. The lines 497, 523 and 569 are correct at `de620566`, which the survey cites. On `origin/main` they sit at 507, 533 and 579. The survey states both. Line 426 was already listed.
+- P2-4 (prompt hash in C#): applied in PR 5. `AnalysisPromptHash.Compute` serializes with `UnsafeRelaxedJsonEscaping` (`AnalysisPromptText.cs:13,18`). SQL cannot reproduce it.
+- P3-1 (brief kind casing): confirmed. The draft context writes `Kind.ToString()` (PascalCase). The check context writes `KindOf` with `JsonNamingPolicy.CamelCase` (`BriefCheckPrompt.cs:124`). The survey names both and says each `CASE` matches its own writer.
+- P3-2 (nine `Build` sites, one effort constant): confirmed. Nine `Build` methods exist, eight kinds plus `ActionIssuePrompt`. The survey lists them. It adds `AnalysisEffort.Medium` and deletes the eight task consts.
+- P3-3 (PR 6 Down): applied. The Down uses `jsonb_agg(e.message ORDER BY e.error_number)`.
+- P3-4 (NUL): adjusted. `ValidateForWrite` refuses NUL in the three input texts and in each error. A pre-check for a raw NUL in existing rows finds nothing, because Postgres refuses NUL in `text`. The real risk is the JSON escape `\u0000` in the old JSON columns, because `::jsonb` refuses it. The command checks for that escape, skips those runs with the reason `NulEscape`, and reports their IDs.
+- P3-5 (missing `ExtractionId`): applied in PR 4. The command skips and reports such runs with `MissingExtraction`, so the FK never aborts a batch. A test is listed.
+- P3-6 (task list): applied. Line 35 now names `vote-draft` and `relationship-draft`.
+- Side effects of D11: the migrations of PR 2 to 4 add schema only. The drop PRs delete the backfill step that reads the dropped column. The last drop deletes the command. A short read window between `update.sh` and the first command run is noted in section 5.
