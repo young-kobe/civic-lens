@@ -20,7 +20,7 @@ internal static class StatementDraftRows
         var draft = NewDraft(revision.CandidateId, 1, revision.CreatedAtUtc.UtcTicks);
         SetListing(draft, revision, capturedOn);
         db.Add(draft);
-        await PostgresStatementReviewStore.Records.AppendCodeApprovedAsync(db, draft, revision, NewRevision(revision, runId), [],
+        await PostgresStatementReviewStore.Records.AppendCodeApprovedAsync(db, draft, revision, StatementRevisionRows.Create(revision, runId), [],
             () => Task.FromResult(codeApproval));
         return true;
     }
@@ -46,17 +46,6 @@ internal static class StatementDraftRows
         ReviewStatus = ReviewPolicy.GetInitialStatus(currentRevisionNumber),
         CreatedAtUtcTicks = createdAtUtcTicks,
         LastRevisedAtUtcTicks = createdAtUtcTicks
-    };
-
-    public static StatementRevisionRow NewRevision(StatementDraftRevision revision, string? runId) => new()
-    {
-        CandidateId = revision.CandidateId,
-        RevisionNumber = revision.RevisionNumber,
-        AuthorSubject = revision.AuthorSubject,
-        AuthorKind = revision.AuthorKind,
-        RunId = runId,
-        RevisionJson = ReviewJson.Serialize(revision),
-        CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
     };
 
     public static DateOnly CapturedOn(long capturedAtUtcTicks) => DateOnly.FromDateTime(new DateTime(capturedAtUtcTicks, DateTimeKind.Utc));

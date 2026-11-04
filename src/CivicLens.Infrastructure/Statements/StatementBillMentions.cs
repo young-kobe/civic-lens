@@ -18,12 +18,12 @@ namespace CivicLens.Infrastructure.Statements;
 internal static class StatementBillMentions
 {
     private const string MentionsEndingInNumber = """
-        SELECT m AS "Citation", r.revision_json::jsonb ->> 'statementDate' AS "StatementDate", c.created_at_utc_ticks AS "CapturedAtUtcTicks"
+        SELECT m.bill_number AS "Citation", r.statement_date AS "StatementDate", c.created_at_utc_ticks AS "CapturedAtUtcTicks"
         FROM statement_drafts d
         JOIN statement_revisions r ON r.candidate_id = d.candidate_id AND r.revision_number = d.current_revision_number
         JOIN statement_candidates c ON c.candidate_id = d.candidate_id
-        CROSS JOIN LATERAL jsonb_array_elements_text(r.revision_json::jsonb -> 'billNumbers') m
-        WHERE m LIKE {0}
+        LEFT JOIN statement_revision_bill_numbers m ON m.candidate_id = r.candidate_id AND m.revision_number = r.revision_number
+        WHERE r.headline IS NULL OR m.bill_number LIKE {0}
         """;
 
     public static async Task<int> PriorityOfBillAsync(CollectionAttemptDbContext db, int congress, string? billType, int? billNumber,
@@ -58,18 +58,18 @@ internal static class StatementBillMentions
     {
         var mentions = await db.Database.SqlQueryRaw<MentionRow>(MentionsEndingInNumber, "% " + billNumber.ToString(CultureInfo.InvariantCulture))
             .ToArrayAsync(cancellationToken);
-        return mentions.Any(mention => CongressOf(mention) is { } mentionedCongress && RelationshipPairRule.CitedBills(mention.Citation)
+        if (mentions.Any(mention => mention.Citation is null)) throw StatementRevisionRows.NotBackfilled("A current statement revision");
+        return mentions.Any(mention => CongressOf(mention) is { } mentionedCongress && RelationshipPairRule.CitedBills(mention.Citation!)
             .Any(bill => RelationshipPairRule.IsSameBill(mentionedCongress, bill.BillType, bill.Number, congress, billType, billNumber)));
     }
 
-    private static int? CongressOf(MentionRow mention) => CongressCalendar.CongressOn(mention.StatementDate is { } date
-        ? DateOnly.ParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture)
-        : StatementDraftRows.CapturedOn(mention.CapturedAtUtcTicks));
+    private static int? CongressOf(MentionRow mention) =>
+        CongressCalendar.CongressOn(mention.StatementDate ?? StatementDraftRows.CapturedOn(mention.CapturedAtUtcTicks));
 
     private sealed class MentionRow
     {
-        public string Citation { get; set; } = "";
-        public string? StatementDate { get; set; }
+        public string? Citation { get; set; }
+        public DateOnly? StatementDate { get; set; }
         public long CapturedAtUtcTicks { get; set; }
     }
 }

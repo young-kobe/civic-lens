@@ -172,6 +172,26 @@ public sealed class PostgresRelationshipPublicationTests(PostgresCollection post
     }
 
     [Fact]
+    public async Task TheCommitAcceptsARelationshipWhoseJsonIsUnreadableBecauseItReadsTheCitationsFromTheColumns()
+    {
+        await ApproveAsync();
+        await seeder.ExecuteAsync("UPDATE relationship_revisions SET revision_json = 'x'");
+
+        var summary = await CommitAsync(StatementBinding, ActionBinding, RelationshipBinding());
+
+        Assert.Equal(2, summary.ReleaseNumber);
+    }
+
+    [Fact]
+    public async Task TheCommitRefusesARelationshipWhoseColumnsCiteARevisionThatTheReleaseDoesNotHold()
+    {
+        await ApproveAsync();
+        await seeder.ExecuteAsync("SET session_replication_role = replica;\nUPDATE relationship_revisions SET statement_revision_number = 2");
+
+        await Assert.ThrowsAsync<PublicationConflictException>(() => CommitAsync(StatementBinding, ActionBinding, RelationshipBinding()));
+    }
+
+    [Fact]
     public async Task TheCommitChecksTheRelationshipTableForARelationshipAndRefusesAChangedReviewState()
     {
         await ApproveAsync();
