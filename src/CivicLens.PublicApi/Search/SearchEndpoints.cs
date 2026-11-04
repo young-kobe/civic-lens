@@ -11,8 +11,6 @@ public static class SearchEndpoints
     public static void MapSearch(this IEndpointRouteBuilder routes)
     {
         var v1 = routes.MapGroup("/v1");
-        v1.MapGet("/release", (SearchIndex index, CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
-            await index.FindReleaseAsync(null, cancellationToken) is { } release ? ApiResults.Json(release) : ApiResults.NoRelease()));
         v1.MapGet("/search", (HttpContext http, SearchIndex index, CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
         {
             var request = SearchRequest.Parse(http.Request.Query);
@@ -21,12 +19,12 @@ public static class SearchEndpoints
         }));
         v1.MapGet("/records/{id}", (string id, HttpContext http, SearchIndex index, CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
         {
-            if (!PublicationProtocol.IsAnyRecordId(id)) return Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "record not found");
+            if (!PublicationProtocol.IsAnyRecordId(id)) return ApiResults.RecordNotFound();
             var requested = SearchRequest.ReleaseNumber(http.Request.Query);
             if (await index.FindReleaseAsync(requested, cancellationToken) is not { } release) return NotIndexed(requested);
             return await index.FindRecordAsync(id, release.ReleaseNumber, cancellationToken) is { } record
                 ? ApiResults.Json(record)
-                : Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "record not found");
+                : ApiResults.RecordNotFound();
         }));
     }
 

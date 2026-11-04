@@ -49,10 +49,7 @@ public static class DocumentChangeDraftPrompt
         var schema = BuildSchema(hunks.Length, catalog);
         var bytes = Encoding.UTF8.GetByteCount(SystemPrompt) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > DocumentChangeDraftTask.MaximumPromptBytes) return null;
-        var hash = AnalysisPromptHash.Compute(DocumentChangeDraftTask.Model, DocumentChangeDraftTask.Effort,
-            DocumentChangeDraftTask.MaximumOutputTokens, SystemPrompt, user, schema);
-        return new(DocumentChangeDraftTask.Model, DocumentChangeDraftTask.MaximumOutputTokens,
-            SystemPrompt, user, schema, hash, bytes + (long)DocumentChangeDraftTask.MaximumOutputTokens);
+        return AnalysisModelRequest.Create(DocumentChangeDraftTask.Model, DocumentChangeDraftTask.MaximumOutputTokens, SystemPrompt, user, schema, bytes);
     }
 
     public static long MinimumReservation => Encoding.UTF8.GetByteCount(SystemPrompt) + (long)DocumentChangeDraftTask.MaximumOutputTokens;

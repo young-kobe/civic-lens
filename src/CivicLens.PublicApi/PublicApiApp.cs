@@ -1,10 +1,12 @@
 using System.Net;
 using System.Threading.RateLimiting;
+using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Ingest;
 using CivicLens.PublicApi.Reports;
 using CivicLens.PublicApi.Schema;
 using CivicLens.PublicApi.Search;
+using CivicLens.PublicApi.Votes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
@@ -26,6 +28,7 @@ public static class PublicApiApp
         if (logProvider is not null) builder.Logging.AddProvider(logProvider);
         var writer = NpgsqlDataSource.Create(options.Database);
         var reader = NpgsqlDataSource.Create(options.ReaderDatabase);
+        var views = NpgsqlDataSource.Create(options.PublicViewsReaderDatabase);
         var feed = new ReleaseFeed(new HttpClient(releaseHandler ?? new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.All })
         {
             BaseAddress = options.ReleaseBaseUrl,
@@ -37,6 +40,8 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new SchemaMigrator(writer));
         builder.Services.AddSingleton(new ReleaseIngest(feed, writer));
         builder.Services.AddSingleton(new SearchIndex(reader));
+        builder.Services.AddSingleton(new ActiveReleaseReader(views));
+        builder.Services.AddSingleton(new VoteStore(views));
         builder.Services.AddSingleton(new ReportStore(writer, options));
         if (options.Turnstile is { } turnstile)
             builder.Services.AddSingleton(new TurnstileVerifier(
@@ -58,6 +63,7 @@ public static class PublicApiApp
         {
             writer.Dispose();
             reader.Dispose();
+            views.Dispose();
         });
         app.Use((context, next) =>
         {
@@ -65,6 +71,8 @@ public static class PublicApiApp
             return next(context);
         });
         app.UseRateLimiter();
+        app.MapRelease();
+        app.MapVotes();
         app.MapSearch();
         app.MapReports(options);
         return app;

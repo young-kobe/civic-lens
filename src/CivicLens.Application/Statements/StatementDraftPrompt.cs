@@ -37,10 +37,7 @@ public static class StatementDraftPrompt
         var schema = BuildSchema(severalSpeakers ? officials : default);
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
-        var hash = AnalysisPromptHash.Compute(StatementDraftTask.Model, StatementDraftTask.Effort,
-            StatementDraftTask.MaximumOutputTokens, system, user, schema);
-        return new(StatementDraftTask.Model, StatementDraftTask.MaximumOutputTokens, system, user, schema, hash,
-            bytes + (long)StatementDraftTask.MaximumOutputTokens);
+        return AnalysisModelRequest.Create(StatementDraftTask.Model, StatementDraftTask.MaximumOutputTokens, system, user, schema, bytes);
     }
 
     public static string SerializeContext(ImmutableArray<AnalysisOfficial> officials, StatementGateCarryOver carryOver) =>

@@ -26,5 +26,6 @@ internal sealed class BriefDraftRowConfiguration : IEntityTypeConfiguration<Brie
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
         ReviewDraftTableConfiguration.ConfigureLastRevised(builder, "brief_drafts", nameof(BriefDraftRow.RecordId));
         builder.HasIndex(row => row.WeekStart).IsUnique().HasDatabaseName("ux_brief_drafts_week");
+        builder.HasAlternateKey(row => new { row.RecordId, row.WeekStart }).HasName("ux_brief_drafts_record_week");
     }
 }

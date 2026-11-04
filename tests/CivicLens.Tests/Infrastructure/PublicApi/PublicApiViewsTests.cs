@@ -200,6 +200,20 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task TheActiveReleaseViewShowsThePublicationTimeOfTheActiveReleaseAndTheRoleReadsNoOtherReleaseColumn()
+    {
+        await SeedAsync();
+        Assert.Equal(["2 2"], await PublicAsync("SELECT DISTINCT release_number || ' ' || published_at_utc_ticks FROM public_api.active_records"));
+
+        await ExecuteAsync("UPDATE publication_releases SET is_active = false; UPDATE publication_releases SET is_active = true WHERE release_number = 1");
+
+        Assert.Equal(["1 1"], await PublicAsync("SELECT DISTINCT release_number || ' ' || published_at_utc_ticks FROM public_api.active_records"));
+        await using var connection = await OpenPublicAsync();
+        foreach (var column in new[] { "published_at_utc_ticks", "actor_subject", "directory_name", "record_count", "is_active" })
+            await AssertDeniedAsync(connection, $"SELECT {column} FROM public.publication_releases");
+    }
+
+    [Fact]
     public async Task TheZipViewShowsNoRowsBeforeTheFirstSnapshotAndHidesCaptureIdentifiers()
     {
         Assert.Empty(await PublicAsync("SELECT zcta FROM public_api.zip_districts"));

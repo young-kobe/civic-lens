@@ -114,10 +114,14 @@ if (args is [] or ["--help"] or ["help"])
           relationships revisions backfill <limit>
           relationships revisions verify
           brief redraft --week <yyyy-MM-dd>
+          brief revisions backfill <limit>
+          brief revisions verify
           roster propose <config.json>
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
           releases activate <release-number>
+          releases first-published backfill
+          releases entries backfill <limit>
           review [port]
         The review workspace binds only to 127.0.0.1 and defaults to port 5081.
         New admissions default to today in UTC; existing keys retain their saved date when --as-of is omitted.
@@ -399,7 +403,9 @@ try
     if (BriefCommand.Matches(args))
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
-        var brief = new BriefCommand(new RedraftBrief(new PostgresBriefDraftStore(AnalysisDbContextFactory.Create(connectionString))), owner);
+        var contexts = AnalysisDbContextFactory.Create(connectionString);
+        var backfillStore = new PostgresBriefRevisionBackfillStore(contexts);
+        var brief = new BriefCommand(new RedraftBrief(new PostgresBriefDraftStore(contexts)), new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
         executing = true;
         return await brief.ExecuteAsync(args, cancellation.Token);
     }
@@ -440,7 +446,7 @@ try
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
             new ListBlockedPublished(publications, releases, blocked),
             new ActivatePublicationRelease(publications, releases, blocked, loggers.CreateLogger<ActivatePublicationRelease>()),
-            new BackfillFirstPublished(publications, releases), owner,
+            new BackfillFirstPublished(publications, releases), new BackfillPublishedEntries(publications, releases), owner,
             Console.Out, Console.Error, cancellation.Token);
     }
 

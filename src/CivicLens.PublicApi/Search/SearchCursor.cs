@@ -1,4 +1,5 @@
 using System.Globalization;
+using CivicLens.PublicApi.Http;
 
 namespace CivicLens.PublicApi.Search;
 
@@ -24,9 +25,9 @@ public sealed record SearchCursor(int Release, string RecordId, float? Rank, Dat
         if (value is null) return null;
         var parts = value.Split('.');
         if (value.Length > MaximumLength || parts.Length is not (3 or 4 or 5) || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var release))
-            throw Invalid();
+            throw QueryValues.InvalidCursor();
         var id = parts[^1];
-        if (id.Length is 0 or > 64 || !id.All(char.IsAsciiHexDigitLower)) throw Invalid();
+        if (id.Length is 0 or > 64 || !id.All(char.IsAsciiHexDigitLower)) throw QueryValues.InvalidCursor();
         if (parts is ["s", _, _]) return Sorted(release, id);
         if (parts is ["r", _, var bits, _] && int.TryParse(bits, NumberStyles.None, CultureInfo.InvariantCulture, out var rankBits) &&
             float.IsFinite(BitConverter.Int32BitsToSingle(rankBits)))
@@ -34,7 +35,7 @@ public sealed record SearchCursor(int Release, string RecordId, float? Rank, Dat
         if (parts is ["d", _, var date, var ticks, _] && DateOnly.TryParseExact(date, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var sortDate) &&
             long.TryParse(ticks, NumberStyles.None, CultureInfo.InvariantCulture, out var publishedTicks))
             return Dated(release, id, sortDate, publishedTicks);
-        throw Invalid();
+        throw QueryValues.InvalidCursor();
     }
 
     public bool IsSorted => Rank is null && SortDate is null;
@@ -45,6 +46,4 @@ public sealed record SearchCursor(int Release, string RecordId, float? Rank, Dat
         { IsSorted: true } => string.Create(CultureInfo.InvariantCulture, $"s.{Release}.{RecordId}"),
         _ => string.Create(CultureInfo.InvariantCulture, $"d.{Release}.{SortDate!.Value.ToString(DateFormat, CultureInfo.InvariantCulture)}.{PublishedTicks}.{RecordId}")
     };
-
-    private static ArgumentException Invalid() => new("Page cursor is not valid.", "cursor");
 }
