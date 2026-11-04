@@ -7,7 +7,7 @@ Docs: docs/architecture/publication.md invariants and docs/roadmap.md in place.
 Final message under 1,800 characters: the pushed SHA, what you built, the test classes run with counts, every new user-facing string verbatim, and any open question.
 
 This branch is stacked on published-entries-backfill. Those PRs are not merged yet. Build only on top of them; do not change their code unless your feature needs it, and name any such change in your final message.
-If a new migration sorts before the newest migration on the merged tree, give it a later timestamp.
+If a new migration sorts before the newest migration on the merged tree, give it a later timestamp. Do not rename the parent branches' migrations; the owner session does that.
 
 Setup, each step its own Bash call. Do not assign shell variables from command output.
 1. git fetch origin
