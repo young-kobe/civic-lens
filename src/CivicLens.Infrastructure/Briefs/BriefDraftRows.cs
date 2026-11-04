@@ -21,18 +21,18 @@ internal static class BriefDraftRows
         if (draft?.ReviewStatus == ReviewStatus.Rejected) return BriefDraftErrorCodes.RecordRejected;
         if (draft is null) db.Add(draft = NewDraft(revision));
         var records = PostgresBriefReviewStore.Records;
-        records.AppendRevision(db, draft, revision, NewRevision(revision, runId), await records.ReadCycleAsync(db, draft, cancellationToken));
+        records.AppendRevision(db, draft, revision, BriefRevisionRows.Create(revision, runId), await records.ReadCycleAsync(db, draft, cancellationToken));
         return null;
     }
 
     public static async Task<BriefRevision?> ReadCurrentAsync(CollectionAttemptDbContext db, string recordId, CancellationToken cancellationToken)
     {
-        var json = await (from draft in db.Set<BriefDraftRow>().AsNoTracking()
-                          join revision in db.Set<BriefRevisionRow>().AsNoTracking()
-                              on new { draft.RecordId, Number = draft.CurrentRevisionNumber } equals new { revision.RecordId, Number = revision.RevisionNumber }
-                          where draft.RecordId == recordId
-                          select revision.RevisionJson).SingleOrDefaultAsync(cancellationToken);
-        return json is null ? null : ReviewJson.Deserialize<BriefRevision>(json, "brief revision");
+        var current = from draft in db.Set<BriefDraftRow>().AsNoTracking()
+                      join revision in db.Set<BriefRevisionRow>().AsNoTracking()
+                          on new { draft.RecordId, Number = draft.CurrentRevisionNumber } equals new { revision.RecordId, Number = revision.RevisionNumber }
+                      where draft.RecordId == recordId
+                      select revision;
+        return (await BriefRevisionRows.ReadAsync(db, current, cancellationToken)).SingleOrDefault()?.Read();
     }
 
     private static BriefDraftRow NewDraft(BriefRevision revision) => new()
@@ -42,14 +42,4 @@ internal static class BriefDraftRows
         CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
     };
 
-    public static BriefRevisionRow NewRevision(BriefRevision revision, string? runId) => new()
-    {
-        RecordId = revision.RecordId,
-        RevisionNumber = revision.RevisionNumber,
-        AuthorSubject = revision.AuthorSubject,
-        AuthorKind = ReviewAuthor.KindOf(revision.AuthorSubject),
-        RunId = runId,
-        RevisionJson = ReviewJson.Serialize(revision),
-        CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
-    };
 }
