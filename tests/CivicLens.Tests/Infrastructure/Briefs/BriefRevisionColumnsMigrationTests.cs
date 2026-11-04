@@ -17,7 +17,7 @@ namespace CivicLens.Tests.Infrastructure.Briefs;
 [Trait("Category", "Postgres")]
 public sealed class BriefRevisionColumnsMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private const string Migration = "20261104013231_BriefRevisionColumns";
+    private const string Migration = "20261104014200_BriefRevisionColumns";
 
     private string connectionString = null!;
 
