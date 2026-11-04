@@ -2698,6 +2698,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("capture_sha256");
 
+                    b.Property<long?>("ElapsedMilliseconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("elapsed_milliseconds");
+
                     b.Property<string>("FailureCode")
                         .HasColumnType("text")
                         .HasColumnName("failure_code");
@@ -2806,6 +2810,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("collection_attempts", null, t =>
                         {
+                            t.HasCheckConstraint("ck_collection_attempts_elapsed_milliseconds", "elapsed_milliseconds IS NULL OR elapsed_milliseconds BETWEEN 0 AND 305000");
+
                             t.HasCheckConstraint("ck_collection_attempts_identity", "length(btrim(attempt_id)) > 0 AND length(btrim(source_id)) > 0 AND length(btrim(requested_url)) > 0 AND length(btrim(final_url)) > 0");
 
                             t.HasCheckConstraint("ck_collection_attempts_observed_at_utc_ticks", "observed_at_utc_ticks BETWEEN 0 AND 3155378975999999999");

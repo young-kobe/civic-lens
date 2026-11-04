@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
 
@@ -117,7 +118,10 @@ public sealed class FileCollectionReceiptHandoffStore : ICollectionReceiptHandof
                     throw new InvalidDataException("Receipt handoff size is invalid.");
                 await contents.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
             }
-            var handoff = JsonSerializer.Deserialize<PendingCollectionHandoff>(contents.ToArray(),
+            var bytes = contents.ToArray();
+            PendingCollectionHandoff.ThrowIfRefused(JsonNode.Parse(bytes)
+                ?? throw new InvalidDataException("Receipt handoff is empty."));
+            var handoff = JsonSerializer.Deserialize<PendingCollectionHandoff>(bytes,
                 CollectionProtocol.JsonOptions) ?? throw new InvalidDataException("Receipt handoff is empty.");
             handoff.Validate();
             if (!string.Equals(handoff.AttemptId, handoffId, StringComparison.Ordinal))

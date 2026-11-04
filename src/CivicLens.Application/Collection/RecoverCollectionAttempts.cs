@@ -77,7 +77,7 @@ public sealed class RecoverCollectionAttempts(ICollectionReceiptHandoffStore han
             handoff.Validate();
             return new ReplayEntry(id, handoff.Receipt.Outcome, null);
         }
-        catch (InvalidDataException)
+        catch (Exception exception) when (exception is InvalidDataException or RefusedCollectionHandoffException)
         {
             return new ReplayEntry(id, null, new CollectionRecoveryItem(id, CollectionRecoveryStatus.InvalidHandoff,
                 null, "Handoff failed validation; it was retained."));
@@ -102,7 +102,7 @@ public sealed class RecoverCollectionAttempts(ICollectionReceiptHandoffStore han
         {
             handoff = await LoadAndVerifyAsync(id, artifactRoot, cancellationToken);
         }
-        catch (InvalidDataException)
+        catch (Exception exception) when (exception is InvalidDataException or RefusedCollectionHandoffException)
         {
             return new CollectionRecoveryItem(id, CollectionRecoveryStatus.InvalidHandoff, null,
                 "Handoff failed validation; it was retained.");
