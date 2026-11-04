@@ -2,6 +2,7 @@ using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Briefs;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Publication.Contracts;
@@ -68,7 +69,7 @@ internal sealed class BriefWorldSeeder(string connectionString)
 
     public Task StatementAsync(string id, int revision, string headline, params string[] officials) =>
         StatementRevisionSeeder.AddAsync(connectionString, new StatementDraftRevision(id, revision, "auth0|editor", Created,
-            headline, "Summary of " + headline, new DateOnly(2026, 10, 6), null, [.. officials], [], [], [], [], []));
+            headline, "Summary of " + headline, new DateOnly(2026, 10, 6), new SourceSpan(new string('e', 64), 0, 5), [.. officials], [], [], [], [], []));
 
     public Task DocumentChangeAsync(string id, int revision, string headline, params string[] officials) =>
         DocumentChangeRevisionSeeder.AddAsync(connectionString, new DocumentChangeDraftRevision(id, revision, new string('c', 64),
