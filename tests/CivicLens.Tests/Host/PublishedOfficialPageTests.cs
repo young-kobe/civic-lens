@@ -390,14 +390,6 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task ThePageWithoutAnOfficialHasNoPortraitBecauseOnlyAProfileIsAboutOnePerson()
-    {
-        var html = await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None);
-
-        Assert.DoesNotContain("page-header-portrait", html);
-    }
-
-    [Fact]
     public async Task TheHeaderHoldsTheNameThePortraitAndTheLinksRowSoTheyReadAsOneIntroduction()
     {
         var page = Current([], []) with

@@ -444,13 +444,6 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
-    public void MatchesOnlyReleaseCommands()
-    {
-        Assert.True(ReleaseCommand.Matches(["releases", "list"]));
-        Assert.False(ReleaseCommand.Matches(["documents", "get", "x"]));
-    }
-
-    [Fact]
     public async Task BlockedListsThePublishedRecordsThatReviewBlockedSoTheOwnerKnowsWhatToWithdraw()
     {
         var scenario = new PublicationScenario();

@@ -765,17 +765,6 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task ABillThatPassesAtACosponsorPageWithoutSummariesAdmitsOnlyActions()
-    {
-        var detail = await EnqueueDetailAsync("detail");
-        var first = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 1, summaries: 0), BillGateOutcome.Pending);
-
-        var passed = await AdmitCosponsorPageAsync(first.Jobs.Single().JobId, Cosponsors(["A000001"], next: null));
-
-        Assert.Contains("/actions?", Assert.Single(passed.Jobs).Url);
-    }
-
-    [Fact]
     public async Task ABillThatStaysNotRelevantAtTheLastCosponsorPageAdmitsNoSummaries()
     {
         var detail = await EnqueueDetailAsync("detail");

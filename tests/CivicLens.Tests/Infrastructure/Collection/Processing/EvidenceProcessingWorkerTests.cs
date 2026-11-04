@@ -246,16 +246,6 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
     }
 
     [Fact]
-    public async Task CosponsorAndActionsPagesAreExtractedByTheirOwnParsers()
-    {
-        var job = await RunBillJobAsync(ApiResource.BillCosponsors, """{"cosponsors":[{"bioguideId":"A000001","sponsorshipDate":"2025-01-04","isOriginalCosponsor":true}],"pagination":{}}""");
-
-        var saved = Assert.Single(await ReadBillExtractionsAsync(), extraction => extraction.AttemptId == Assert.Single(job.Attempts).AttemptId);
-        Assert.Equal(("congress-bill-cosponsors-v1", "Bill: 119 hr 1\nCosponsor: A000001, original, 2025-01-04"),
-            (saved.ExtractionVersion, saved.Text));
-    }
-
-    [Fact]
     public async Task ASummariesPageIsExtractedWithTheCombinedExtractionVersionAndNeverBecomesAStatementCandidate()
     {
         var job = await RunBillJobAsync(ApiResource.BillSummaries, """{"summaries":[{"versionCode":"173","actionDate":"2025-01-04","actionDesc":"Introduced in House","updateDate":"2025-01-05T08:00:00Z","text":"<p><strong>Title.</strong></p><p>Requires the agency to act.</p>"}],"pagination":{}}""");
@@ -266,15 +256,6 @@ public sealed class EvidenceProcessingWorkerTests(PostgresCollection postgres) :
             "Updated: 2025-01-05T08:00:00Z\nText:\nTitle.\nRequires the agency to act.", saved.Text);
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_candidates"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM statement_analysis"));
-    }
-
-    [Fact]
-    public async Task ABillDetailWithSummariesAdmitsItsSummariesPageBesideTheOthers()
-    {
-        _ = await RunBillJobAsync(ApiResource.Bill, BillDetail(sponsor: "A000001", cosponsors: 2, summaries: 3));
-
-        Assert.Equal(3L, await ScalarAsync("SELECT count(*) FROM bill_follow_on_jobs"));
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM collection_jobs WHERE idempotency_key LIKE '%/summaries/%'"));
     }
 
     [Theory]

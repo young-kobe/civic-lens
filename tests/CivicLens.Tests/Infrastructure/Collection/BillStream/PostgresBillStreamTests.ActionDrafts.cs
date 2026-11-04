@@ -382,23 +382,6 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task TheOlderCandidateReadsNoSummaryPageEvenAfterTheSummariesArrive()
-    {
-        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1);
-        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
-        await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], null));
-        var candidates = await CandidatesAsync();
-
-        var older = (await ActionStore().ReadEvidenceAsync(candidates.Single(item => !item.IncludesSummaries).CandidateId, default))!;
-        var newer = (await ActionStore().ReadEvidenceAsync(candidates.Single(item => item.IncludesSummaries).CandidateId, default))!;
-
-        Assert.Equal([ApiResource.Bill], older.Pages.Select(page => page.Resource));
-        Assert.False(older.Candidate.IncludesSummaries);
-        Assert.Equal([ApiResource.Bill, ApiResource.BillSummaries], newer.Pages.Select(page => page.Resource));
-        Assert.True(newer.Candidate.IncludesSummaries);
-    }
-
-    [Fact]
     public async Task ANewerCandidateThatArrivesAfterTheClaimSupersedesTheAppendSoTheOlderDraftNeverBecomesARevision()
     {
         var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1);

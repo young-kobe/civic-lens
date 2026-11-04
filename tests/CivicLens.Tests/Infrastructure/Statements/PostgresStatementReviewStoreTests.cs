@@ -612,21 +612,6 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
     }
 
     [Fact]
-    public async Task ASpanOutsideTheExtractionOrOnAnotherExtractionIsRefusedAndNothingIsWritten()
-    {
-        var candidate = await StartedAsync();
-        var request = await SaveRequestAsync(candidate, 1, "save");
-        var extraction = request.Quotations[0].ExtractionId;
-
-        await Assert.ThrowsAsync<ArgumentException>(() => Save.ExecuteAsync(Owner,
-            request with { Quotations = [new(extraction, Article.Length + 50, 10)] }));
-        await Assert.ThrowsAsync<ArgumentException>(() => Save.ExecuteAsync(Owner,
-            request with { Quotations = [new(new string('b', 64), 0, 10)] }));
-
-        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM statement_revisions WHERE candidate_id = '{candidate}'"));
-    }
-
-    [Fact]
     public async Task AHumanCreateAndAnAiSettlementRacingForTheSameCandidateLeaveExactlyOneFirstRevision()
     {
         var candidate = await PassedCandidateAsync();

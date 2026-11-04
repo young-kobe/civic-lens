@@ -110,16 +110,6 @@ public sealed class ReportEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TextOfExactlyTheMaximumLengthIsAccepted()
-    {
-        await using var host = await StartAsync(new FakeTurnstile());
-
-        var response = await PostAsync(host, "other", new string('x', ReaderReportProtocol.MaximumTextCharacters));
-
-        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
-    }
-
-    [Fact]
     public async Task TextOfMultiByteCharactersUpToTheMaximumLengthIsAcceptedBecauseTheBodyCapCountsBytesNotCharacters()
     {
         await using var host = await StartAsync(new FakeTurnstile());

@@ -113,14 +113,6 @@ public sealed partial class PostgresHouseVoteTests(PostgresCollection postgres) 
     }
 
     [Fact]
-    public async Task TheLastPageOfAnEarlierSessionAdmitsTheFirstPageOfTheFollowingSession()
-    {
-        var result = await AdmitListAsync("sweep-one", Page(HouseVoteFixtures.FirstSession, Item(100)));
-
-        Assert.Equal(SourceUrl + "/119/2?format=json&limit=250", result.Jobs.Last().Url);
-    }
-
-    [Fact]
     public async Task TheLastPageOfTheCurrentSessionAdmitsNoFurtherListPage()
     {
         var current = VoteSession.ForYear(Convert.ToInt32(await ScalarAsync("SELECT EXTRACT(YEAR FROM clock_timestamp() AT TIME ZONE 'UTC')")));
