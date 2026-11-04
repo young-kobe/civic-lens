@@ -981,7 +981,7 @@ The command reads each kept manifest once. It writes the file again with no chan
 The command prints JSON with these keys:
 
 - `passed`: the kept releases that the tables rebuild byte for byte.
-- `legacy`: the kept releases that pass but list withdrawals that no withdrawal row covers. Withdrawals made before the migration `PublicationWithdrawals` have no rows. These releases do not change the exit code.
+- `legacy`: the kept releases that pass but list withdrawals that no withdrawal row covers, and that are older than the first release with a withdrawal row. Withdrawals made before the migration `PublicationWithdrawals` have no rows. A newer release with such withdrawals fails. Legacy releases do not change the exit code.
 - `failed`, `failedByReason`, and `failedReleases`: the failed releases, a count for each reason, and each release with its number, folder, reason, and first record. The reasons are `manifestInvalid`, `manifestNotReproducible`, `entryRowMissing`, `firstPublishedMissing`, `stateRowNotListed`, `entryOutsideRange`, and `bytesDiffer`.
 - `retired`: the release rows whose folder holds no manifest.
 

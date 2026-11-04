@@ -49,6 +49,22 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
     }
 
     [Fact]
+    public async Task TheStoreReadsTwoWithdrawalsOfOneKindInOneReleaseBecauseVerifyMustReachEveryLaterRelease()
+    {
+        await SeedActionsAsync(A, B, C);
+        await PublishAsync(1, null, [A, B, C], added: [A, B, C]);
+        var b = Withdrawal(B, "Wrong bill.", First.AddDays(2), Correction(1, "Fixed.", false));
+        var a = Withdrawal(A, "Wrong date.", First.AddDays(3));
+        await SetStatusAsync(B, "ApprovalWithdrawn");
+        await SetStatusAsync(A, "ApprovalWithdrawn");
+        await PublishAsync(2, 1, [C], withdrawn: [b, a]);
+
+        var stored = await publications.ReadReleaseAsync(2, default);
+
+        Assert.Equal(Json([a, b]), Json(stored.Withdrawals.OrderBy(withdrawal => withdrawal.RecordId)));
+    }
+
+    [Fact]
     public async Task ACarriedWithdrawalKeepsItsOneRowAndALaterReleaseAddsNoRow()
     {
         await SeedActionsAsync(A, B);

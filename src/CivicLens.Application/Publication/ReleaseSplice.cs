@@ -24,7 +24,7 @@ internal static class ReleaseSplice
     }
 
     public static bool HoldsWithdrawalsOnlyInFile(PublicationRelease file, StoredRelease stored) =>
-        file.Withdrawals.Length > 0 && stored.Withdrawals.Count == 0;
+        file.Withdrawals.Length > 0 && stored.Withdrawals.Count == 0 && stored.PredatesWithdrawalRows;
 
     public static byte[] Serialize(PublicationRelease release) => JsonSerializer.SerializeToUtf8Bytes(release, PublicationProtocol.JsonOptions);
 

@@ -136,7 +136,7 @@ internal static class PublishedEntries
         }
     }
 
-    private static PublishedRecordKind KindOf(string name) => Enum.Parse<PublishedRecordKind>(name, ignoreCase: true);
+    internal static PublishedRecordKind KindOf(string name) => Enum.Parse<PublishedRecordKind>(name, ignoreCase: true);
 
     private static string Serialize(PublishedEntryFacts facts) => JsonSerializer.Serialize(facts);
 

@@ -44,15 +44,13 @@ internal static class PublicationWithdrawalRows
                                  where row.FirstRelease <= releaseNumber && (row.LastRelease == null || row.LastRelease >= releaseNumber)
                                  orderby correction.Position
                                  select correction).ToArrayAsync(cancellationToken);
-        var kinds = rows.ToDictionary(row => row.Kind, row => Enum.Parse<PublishedRecordKind>(row.Kind, ignoreCase: true));
-        var firstPublished = await PublishedRecords.ReadAsync(db,
-            [.. rows.Select(row => new PublishedRecordReference(kinds[row.Kind], row.RecordId))], cancellationToken);
+        var firstPublished = await PublishedRecords.ReadAsync(db, [.. rows.Select(ReferenceOf)], cancellationToken);
         return [.. rows.Select(row => new PublishedWithdrawal
         {
-            Kind = kinds[row.Kind],
+            Kind = PublishedEntries.KindOf(row.Kind),
             RecordId = row.RecordId,
             WithdrawnRevisionNumber = row.WithdrawnRevisionNumber,
-            FirstPublishedAtUtc = firstPublished[new(kinds[row.Kind], row.RecordId)],
+            FirstPublishedAtUtc = firstPublished[ReferenceOf(row)],
             WithdrawnAtUtc = new DateTimeOffset(row.WithdrawnAtUtcTicks, TimeSpan.Zero),
             Note = row.Note,
             Corrections = [.. corrections.Where(correction => correction.Kind == row.Kind && correction.RecordId == row.RecordId &&
@@ -66,6 +64,11 @@ internal static class PublicationWithdrawalRows
                 })]
         })];
     }
+
+    public static async Task<bool> PredateAsync(CollectionAttemptDbContext db, int releaseNumber, CancellationToken cancellationToken) =>
+        !await db.Set<PublicationWithdrawalRow>().AsNoTracking().AnyAsync(row => row.FirstRelease <= releaseNumber, cancellationToken);
+
+    private static PublishedRecordReference ReferenceOf(PublicationWithdrawalRow row) => new(PublishedEntries.KindOf(row.Kind), row.RecordId);
 
     private static async Task OpenAsync(CollectionAttemptDbContext db, int release, PublishedWithdrawal[] withdrawals,
         CancellationToken cancellationToken)

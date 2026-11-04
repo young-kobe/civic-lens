@@ -21,6 +21,12 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
 {
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
     private static readonly DateTimeOffset PublishedAt = new(2026, 5, 11, 8, 0, 0, TimeSpan.Zero);
+    private const string RowCountsSql = """
+        SELECT (SELECT count(*) FROM published_entries) || '|' || (SELECT count(*) FROM published_entry_officials) || '|' ||
+            (SELECT count(*) FROM publication_record_states) || '|' || (SELECT count(*) FROM publication_withdrawals) || '|' ||
+            (SELECT count(*) FROM publication_withdrawal_corrections) || '|' || (SELECT count(*) FROM published_records)
+        """;
+
     private readonly FakeReleaseDirectory releases = new();
     private readonly Dictionary<int, string> folders = [];
     private string connectionString = null!;
@@ -46,14 +52,14 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
         Keep(1, older);
         Keep(2, older, newer);
         await FillRowsAsync();
-        var before = await ReadAsync("SELECT (SELECT count(*) FROM published_entries) || '|' || (SELECT count(*) FROM published_entry_officials)");
+        var before = await ReadAsync(RowCountsSql);
 
         var (exit, json) = await RunCommandAsync();
 
         Assert.Equal(0, exit);
         Assert.Equal((2, 0, 0, 0), (json.GetProperty("passed").GetInt32(), json.GetProperty("legacy").GetInt32(), json.GetProperty("failed").GetInt32(),
             json.GetProperty("retired").GetInt32()));
-        Assert.Equal(before, await ReadAsync("SELECT (SELECT count(*) FROM published_entries) || '|' || (SELECT count(*) FROM published_entry_officials)"));
+        Assert.Equal(before, await ReadAsync(RowCountsSql));
     }
 
     [Fact]
@@ -210,11 +216,103 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
     }
 
     [Fact]
+    public async Task AReleaseAfterTheFirstWithdrawalRowThatListsWithdrawalsWithoutRowsFailsBecauseOnlyOlderReleasesMayLackThem()
+    {
+        var kept = await SeedActionAsync('a');
+        var withdrawn = await SeedActionAsync('b');
+        await AddReleasesAsync(3);
+        await AddRangeAsync(kept, 1, null);
+        var withdrawal = WithdrawalOf(withdrawn);
+        Keep(1, [kept], [withdrawal]);
+        Keep(2, [kept], [withdrawal]);
+        Keep(3, [kept], [withdrawal]);
+        await FillRowsAsync();
+        await ExecuteAsync($"""
+            INSERT INTO publication_withdrawals (kind, record_id, withdrawn_revision_number, withdrawn_at_utc_ticks, note, first_release, last_release)
+            VALUES ('action', '{withdrawn.RecordId}', 1, {withdrawal.WithdrawnAtUtc.UtcTicks}, '{withdrawal.Note}', 2, 2)
+            """);
+
+        var (exit, json) = await RunCommandAsync();
+
+        Assert.Equal(1, exit);
+        Assert.Equal((1, 1, 1), (json.GetProperty("legacy").GetInt32(), json.GetProperty("passed").GetInt32(), json.GetProperty("failed").GetInt32()));
+        var failed = Assert.Single(json.GetProperty("failedReleases").EnumerateArray());
+        Assert.Equal((3, "bytesDiffer"), (failed.GetProperty("releaseNumber").GetInt32(), failed.GetProperty("reason").GetString()));
+    }
+
+    [Fact]
+    public async Task ARelationshipEntryRebuildsByteForByteBecauseItsTargetKindAndMatchedOfficialComeFromRowsAndNotFromTheFile()
+    {
+        await AssertSamplesPassAsync(PublishedSamples.Relationship("A link", "The statement describes the bill.", "quote"));
+    }
+
+    [Fact]
+    public async Task AStatementEntryWithSeveralOfficialsIssuesAndPolicyAreasRebuildsByteForByteInTheOrderOfItsRows()
+    {
+        var statement = (PublishedStatement)PublishedSamples.Statement('a', "A statement", issues: ["tax", "housing", "health"], areas: ["economics", "health"]).Body with
+        {
+            Speakers = [new() { Id = "o2", Name = "Official o2" }, new() { Id = "o1", Name = "Official o1" }]
+        };
+
+        await AssertSamplesPassAsync(new SampleRecord(statement.ToEntry(), statement));
+    }
+
+    [Fact]
+    public async Task AVoteEntryRebuildsByteForByteBecauseItsCountsAndAlignmentComeFromTheFile()
+    {
+        await AssertSamplesPassAsync(PublishedSamples.Vote("A vote", "A short account.", "Xq the source text."));
+    }
+
+    [Fact]
+    public async Task AnActionWithSeveralSponsorsKeepsTheNamesAndTheOrderOfTheFileBecauseTheRowsHoldOnlyTheIds()
+    {
+        var action = (PublishedAction)PublishedSamples.Action("An action", "A short account.", "A bill title", "Xq the source text.").Body;
+        var second = action.Sponsorships[0] with { Official = new() { Id = "o0", Name = "Official o0" } };
+        action = action with { Sponsorships = [action.Sponsorships[0], second] };
+
+        await AssertSamplesPassAsync(new SampleRecord(action.ToEntry(), action));
+    }
+
+    [Fact]
     public async Task OnlyTheOwnerMayVerifyBecauseTheReportNamesUnpublishedRecordsAndTheCommandRefusesAReviewer()
     {
         var reviewer = new ReviewActor("auth0|reviewer", ReviewRole.Reviewer);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new VerifyPublishedEntries(publications, releases).ExecuteAsync(reviewer));
+    }
+
+    private async Task AssertSamplesPassAsync(SampleRecord sample)
+    {
+        await AddReleasesAsync(1);
+        await SeedEntryAsync(sample.Entry);
+        Keep(1, [sample], []);
+        var fill = await FillRowsAsync();
+
+        var (exit, json) = await RunCommandAsync();
+
+        Assert.True(exit == 0 && fill.Added == 1, JsonSerializer.Serialize(fill) + json);
+        Assert.Equal((1, 0, 0), (json.GetProperty("passed").GetInt32(), json.GetProperty("legacy").GetInt32(), json.GetProperty("failed").GetInt32()));
+    }
+
+    private async Task SeedEntryAsync(PublishedRecordEntry entry)
+    {
+        var kind = PublishedRecordReference.NameOf(entry.Kind);
+        var revisions = kind + "_revisions";
+        var idColumn = entry.Kind == PublishedRecordKind.Statement ? "candidate_id" : "record_id";
+        var linked = string.Concat(PublishedRecordReference.LinkedBy(entry).Select(reference => $$"""
+            INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks)
+            VALUES ('{{PublishedRecordReference.NameOf(reference.Kind)}}', '{{reference.RecordId}}', 1) ON CONFLICT DO NOTHING;
+            """));
+        await ExecuteAsync($$"""
+            SET session_replication_role = replica;
+            {{linked}}
+            INSERT INTO {{revisions}} ({{idColumn}}, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
+            VALUES ('{{entry.RecordId}}', {{entry.RevisionNumber}}, 'owner', 'Person', '{}', 0);
+            INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks)
+            VALUES ('{{kind}}', '{{entry.RecordId}}', {{entry.FirstPublishedAtUtc.UtcTicks}});
+            INSERT INTO publication_record_states (kind, record_id, revision_number, first_release, last_release)
+            VALUES ('{{kind}}', '{{entry.RecordId}}', {{entry.RevisionNumber}}, 1, NULL)
+            """);
     }
 
     private static PublishedWithdrawal WithdrawalOf(PublishedAction action) => new()
@@ -230,7 +328,10 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
 
     private void Keep(int number, params PublishedAction[] actions) => Keep(number, actions, []);
 
-    private void Keep(int number, PublishedAction[] actions, PublishedWithdrawal[] withdrawals)
+    private void Keep(int number, PublishedAction[] actions, PublishedWithdrawal[] withdrawals) =>
+        Keep(number, [.. actions.Select(action => new SampleRecord(action.ToEntry(), action))], withdrawals);
+
+    private void Keep(int number, SampleRecord[] records, PublishedWithdrawal[] withdrawals)
     {
         var files = new Dictionary<string, byte[]>
         {
@@ -239,13 +340,14 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
                 SchemaVersion = PublicationProtocol.SchemaVersion,
                 ReleaseNumber = number,
                 PublishedAtUtc = PublishedAt,
-                Records = [.. ReleaseRecordOrder.NewestFirst(actions.Select(action => action.ToEntry()), ReleaseRecordOrder.Day, entry => entry.FirstPublishedAtUtc,
+                Records = [.. ReleaseRecordOrder.NewestFirst(records.Select(record => record.Entry), ReleaseRecordOrder.Day, entry => entry.FirstPublishedAtUtc,
                     entry => entry.RecordId)],
                 Withdrawals = [.. ReleaseRecordOrder.WithdrawalsNewestFirst(withdrawals)]
             }, PublicationProtocol.JsonOptions)
         };
-        foreach (var action in actions)
-            files[PublicationProtocol.RecordDataPath(action.RecordId)] = JsonSerializer.SerializeToUtf8Bytes(action, PublicationProtocol.JsonOptions);
+        foreach (var record in records)
+            files[PublicationProtocol.RecordDataPath(record.Entry.RecordId)] = JsonSerializer.SerializeToUtf8Bytes(record.Body, record.Body.GetType(),
+                PublicationProtocol.JsonOptions);
         releases.Directories[folders[number]] = files;
     }
 
