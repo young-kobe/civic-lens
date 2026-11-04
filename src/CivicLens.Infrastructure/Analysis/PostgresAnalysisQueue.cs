@@ -161,14 +161,14 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
     public async Task<bool> CheckpointAsync(AnalysisCheckpoint checkpoint, TRun? run, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(checkpoint);
-        if (run is not null) mapping.RunOf(run).Validate();
+        if (run is not null) mapping.RunOf(run).ValidateForWrite();
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var row = await LockAsync(db, checkpoint.SubjectId, cancellationToken);
         if (row is null || !mapping.CanTransition(ToRecord(row), checkpoint)) return false;
         var clock = await DatabaseClock.ReadAsync(db, cancellationToken);
         (checkpoint, run) = await mapping.PrepareSettlementAsync(db, row, new(checkpoint, run), cancellationToken);
-        if (run is not null) await SettleRunAsync(db, row, run, cancellationToken);
+        if (run is not null) await SettleRunAsync(db, row, run, clock.Ticks, cancellationToken);
         else if (row.ReservedTokens != 0)
             throw new InvalidOperationException("An analysis run must settle the reservation that it was made under.");
         if (checkpoint.Status == State.Running && run is not null) row.RetryOfRunId = mapping.RunOf(run).RunId;
@@ -222,7 +222,8 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
     private static AnalysisRecord ToRecord(TRow row) => new(row.SubjectId, row.Task, row.Status, row.LeaseToken, row.Fence, row.Attempts,
         row.RetryAt is { } retry ? new DateTimeOffset(retry, TimeSpan.Zero) : null, row.ErrorCode, row.RetryOfRunId);
 
-    private async Task SettleRunAsync(CollectionAttemptDbContext db, TRow row, TRun wrapped, CancellationToken cancellationToken)
+    private async Task SettleRunAsync(CollectionAttemptDbContext db, TRow row, TRun wrapped, long nowTicks,
+        CancellationToken cancellationToken)
     {
         var run = mapping.RunOf(wrapped);
         if (run.ComparisonId != row.SubjectId) throw new InvalidOperationException("An analysis run must belong to its subject.");
@@ -239,6 +240,7 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
             day.ChargedTokens += run.ChargedTokens - row.ReservedTokens;
             ClearReservation(row);
         }
+        if (run.Input is not null) await AnalysisPromptTexts.EnsureAsync(db, run.Input, nowTicks, cancellationToken);
         mapping.AddRun(db, row, wrapped);
         if (run.Outcome is AnalysisRunOutcome.CitationRejected or AnalysisRunOutcome.OutputRejected) row.Attempts++;
     }
@@ -298,7 +300,7 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
             identity.PromptVersion, identity.SchemaVersion, row.PendingInputHash!, row.RetryOfRunId, AnalysisRunOutcome.Interrupted,
             AnalysisTokenUsage.None, row.ReservedTokens, null, null, null, [], null,
             new DateTimeOffset(row.ReservedAtUtcTicks!.Value, TimeSpan.Zero), new DateTimeOffset(now, TimeSpan.Zero));
-        run.Validate();
+        run.ValidateForWrite();
         mapping.AddRun(db, row, mapping.WrapInterrupted(run));
         ClearReservation(row);
     }

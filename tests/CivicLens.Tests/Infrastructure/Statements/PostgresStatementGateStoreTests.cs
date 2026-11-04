@@ -98,6 +98,18 @@ public sealed class PostgresStatementGateStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task EveryGateRunStoresTheExactRequestAndARetryRunStoresItsOwnUserMessage()
+    {
+        var candidate = await seeder.SeedAsync(Article, "https://example.test/pages/a");
+        var model = new FakeStatementGateModel().Classify("not json").Classify(Output([HousingArea], 0.8, (RentIssue, "a rent cap")));
+
+        await Worker(model, Revision()).ExecuteAsync(once: true);
+
+        Assert.Equal(2, model.Requests.Count);
+        await StoredRunInputs.AssertMatchAsync(connectionString, "statement_analysis_runs", "candidate_id", candidate, model.Requests);
+    }
+
+    [Fact]
     public async Task TwoInvalidAnswersFailOpenAndKeepBothFailedRuns()
     {
         var candidate = await seeder.SeedAsync(Article, "https://example.test/pages/a");

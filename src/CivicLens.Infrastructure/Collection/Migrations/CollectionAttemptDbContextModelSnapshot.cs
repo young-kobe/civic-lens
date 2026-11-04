@@ -186,6 +186,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("context_json");
 
+                    b.Property<string>("Effort")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("effort");
+
                     b.Property<long>("FinishedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("finished_at_utc_ticks");
@@ -199,6 +204,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("InputTokens")
                         .HasColumnType("bigint")
                         .HasColumnName("input_tokens");
+
+                    b.Property<int?>("MaxOutputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_output_tokens");
 
                     b.Property<string>("Model")
                         .IsRequired()
@@ -215,6 +224,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<string>("OutputJson")
                         .HasColumnType("text")
                         .HasColumnName("output_json");
+
+                    b.Property<string>("OutputSchemaSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("output_schema_sha256");
 
                     b.Property<long>("OutputTokens")
                         .HasColumnType("bigint")
@@ -256,6 +270,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("stop_reason");
 
+                    b.Property<string>("SystemPromptSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("system_prompt_sha256");
+
                     b.Property<string>("Task")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -268,13 +287,21 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("task_version");
 
+                    b.Property<string>("UserMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("user_message");
+
                     b.Property<string>("ValidationJson")
                         .HasColumnType("text")
                         .HasColumnName("validation_json");
 
                     b.HasKey("RunId");
 
+                    b.HasIndex("OutputSchemaSha256");
+
                     b.HasIndex("PreviousRunId");
+
+                    b.HasIndex("SystemPromptSha256");
 
                     b.HasIndex("CandidateId", "Task", "StartedAtUtcTicks");
 
@@ -283,6 +310,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_action_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_action_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
+
+                            t.HasCheckConstraint("ck_action_analysis_runs_input", "num_nulls(system_prompt_sha256, output_schema_sha256, user_message, effort, max_output_tokens) IN (0, 5)");
+
+                            t.HasCheckConstraint("ck_action_analysis_runs_input_outcome", "outcome NOT IN ('Bypassed','Interrupted') OR system_prompt_sha256 IS NULL");
+
+                            t.HasCheckConstraint("ck_action_analysis_runs_max_output_tokens", "max_output_tokens IS NULL OR max_output_tokens > 0");
 
                             t.HasCheckConstraint("ck_action_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Bypassed')");
 
@@ -293,6 +326,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_action_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
                             t.HasCheckConstraint("ck_action_analysis_runs_tokens", "input_tokens >= 0 AND output_tokens >= 0 AND cache_read_tokens >= 0 AND cache_write_tokens >= 0 AND charged_tokens >= input_tokens + output_tokens + cache_read_tokens + cache_write_tokens");
+
+                            t.HasCheckConstraint("ck_action_analysis_runs_user_message", "user_message IS NULL OR char_length(user_message) BETWEEN 1 AND 100000");
                         });
                 });
 
@@ -914,6 +949,62 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Analysis.Persistence.AnalysisOutputSchemaRow", b =>
+                {
+                    b.Property<string>("TextSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("text_sha256");
+
+                    b.Property<long>("CreatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("text");
+
+                    b.HasKey("TextSha256");
+
+                    b.ToTable("analysis_output_schemas", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_analysis_output_schemas_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_analysis_output_schemas_hash", "text_sha256 = encode(sha256(convert_to(text, 'UTF8')), 'hex')");
+
+                            t.HasCheckConstraint("ck_analysis_output_schemas_text", "char_length(text) BETWEEN 1 AND 100000");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Analysis.Persistence.AnalysisSystemPromptRow", b =>
+                {
+                    b.Property<string>("TextSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("text_sha256");
+
+                    b.Property<long>("CreatedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("text");
+
+                    b.HasKey("TextSha256");
+
+                    b.ToTable("analysis_system_prompts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_analysis_system_prompts_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_analysis_system_prompts_hash", "text_sha256 = encode(sha256(convert_to(text, 'UTF8')), 'hex')");
+
+                            t.HasCheckConstraint("ck_analysis_system_prompts_text", "char_length(text) BETWEEN 1 AND 100000");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Analysis.Persistence.DocumentChangeAnalysisBudgetRow", b =>
                 {
                     b.Property<DateOnly>("DayUtc")
@@ -1085,6 +1176,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("draft_id");
 
+                    b.Property<string>("Effort")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("effort");
+
                     b.Property<long>("FinishedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("finished_at_utc_ticks");
@@ -1098,6 +1194,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("InputTokens")
                         .HasColumnType("bigint")
                         .HasColumnName("input_tokens");
+
+                    b.Property<int?>("MaxOutputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_output_tokens");
 
                     b.Property<string>("Model")
                         .IsRequired()
@@ -1114,6 +1214,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<string>("OutputJson")
                         .HasColumnType("text")
                         .HasColumnName("output_json");
+
+                    b.Property<string>("OutputSchemaSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("output_schema_sha256");
 
                     b.Property<long>("OutputTokens")
                         .HasColumnType("bigint")
@@ -1154,6 +1259,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("stop_reason");
 
+                    b.Property<string>("SystemPromptSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("system_prompt_sha256");
+
                     b.Property<string>("Task")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1166,13 +1276,21 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("task_version");
 
+                    b.Property<string>("UserMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("user_message");
+
                     b.Property<string>("ValidationJson")
                         .HasColumnType("text")
                         .HasColumnName("validation_json");
 
                     b.HasKey("RunId");
 
+                    b.HasIndex("OutputSchemaSha256");
+
                     b.HasIndex("PreviousRunId");
+
+                    b.HasIndex("SystemPromptSha256");
 
                     b.HasIndex("DraftId", "RevisionNumber")
                         .IsUnique();
@@ -1187,6 +1305,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_document_change_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
 
+                            t.HasCheckConstraint("ck_document_change_analysis_runs_input", "num_nulls(system_prompt_sha256, output_schema_sha256, user_message, effort, max_output_tokens) IN (0, 5)");
+
+                            t.HasCheckConstraint("ck_document_change_analysis_runs_input_outcome", "outcome NOT IN ('Bypassed','Interrupted') OR system_prompt_sha256 IS NULL");
+
+                            t.HasCheckConstraint("ck_document_change_analysis_runs_max_output_tokens", "max_output_tokens IS NULL OR max_output_tokens > 0");
+
                             t.HasCheckConstraint("ck_document_change_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted')");
 
                             t.HasCheckConstraint("ck_document_change_analysis_runs_started_at_utc_ticks", "started_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
@@ -1194,6 +1318,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_document_change_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
                             t.HasCheckConstraint("ck_document_change_analysis_runs_tokens", "input_tokens >= 0 AND output_tokens >= 0 AND cache_read_tokens >= 0 AND cache_write_tokens >= 0 AND charged_tokens >= input_tokens + output_tokens + cache_read_tokens + cache_write_tokens");
+
+                            t.HasCheckConstraint("ck_document_change_analysis_runs_user_message", "user_message IS NULL OR char_length(user_message) BETWEEN 1 AND 100000");
                         });
                 });
 
@@ -1407,6 +1533,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("context_json");
 
+                    b.Property<string>("Effort")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("effort");
+
                     b.Property<long>("FinishedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("finished_at_utc_ticks");
@@ -1426,6 +1557,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("input_tokens");
 
+                    b.Property<int?>("MaxOutputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_output_tokens");
+
                     b.Property<string>("Model")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -1441,6 +1576,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<string>("OutputJson")
                         .HasColumnType("text")
                         .HasColumnName("output_json");
+
+                    b.Property<string>("OutputSchemaSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("output_schema_sha256");
 
                     b.Property<long>("OutputTokens")
                         .HasColumnType("bigint")
@@ -1498,6 +1638,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("stop_reason");
 
+                    b.Property<string>("SystemPromptSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("system_prompt_sha256");
+
                     b.Property<string>("Task")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1510,15 +1655,23 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("task_version");
 
+                    b.Property<string>("UserMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("user_message");
+
                     b.Property<string>("ValidationJson")
                         .HasColumnType("text")
                         .HasColumnName("validation_json");
 
                     b.HasKey("RunId");
 
+                    b.HasIndex("OutputSchemaSha256");
+
                     b.HasIndex("PreviousRunId");
 
                     b.HasIndex("SourceRunId");
+
+                    b.HasIndex("SystemPromptSha256");
 
                     b.HasIndex("RecordId", "CheckedRevisionNumber");
 
@@ -1534,6 +1687,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_brief_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
 
+                            t.HasCheckConstraint("ck_brief_analysis_runs_input", "num_nulls(system_prompt_sha256, output_schema_sha256, user_message, effort, max_output_tokens) IN (0, 5)");
+
+                            t.HasCheckConstraint("ck_brief_analysis_runs_input_outcome", "outcome NOT IN ('Bypassed','Interrupted') OR system_prompt_sha256 IS NULL");
+
+                            t.HasCheckConstraint("ck_brief_analysis_runs_max_output_tokens", "max_output_tokens IS NULL OR max_output_tokens > 0");
+
                             t.HasCheckConstraint("ck_brief_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Bypassed')");
 
                             t.HasCheckConstraint("ck_brief_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noNewRecords')");
@@ -1543,6 +1702,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_brief_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
                             t.HasCheckConstraint("ck_brief_analysis_runs_tokens", "input_tokens >= 0 AND output_tokens >= 0 AND cache_read_tokens >= 0 AND cache_write_tokens >= 0 AND charged_tokens >= input_tokens + output_tokens + cache_read_tokens + cache_write_tokens");
+
+                            t.HasCheckConstraint("ck_brief_analysis_runs_user_message", "user_message IS NULL OR char_length(user_message) BETWEEN 1 AND 100000");
                         });
                 });
 
@@ -4713,6 +4874,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("context_json");
 
+                    b.Property<string>("Effort")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("effort");
+
                     b.Property<long>("FinishedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("finished_at_utc_ticks");
@@ -4726,6 +4892,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("InputTokens")
                         .HasColumnType("bigint")
                         .HasColumnName("input_tokens");
+
+                    b.Property<int?>("MaxOutputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_output_tokens");
 
                     b.Property<string>("Model")
                         .IsRequired()
@@ -4742,6 +4912,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<string>("OutputJson")
                         .HasColumnType("text")
                         .HasColumnName("output_json");
+
+                    b.Property<string>("OutputSchemaSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("output_schema_sha256");
 
                     b.Property<long>("OutputTokens")
                         .HasColumnType("bigint")
@@ -4789,6 +4964,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("stop_reason");
 
+                    b.Property<string>("SystemPromptSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("system_prompt_sha256");
+
                     b.Property<string>("Task")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -4801,13 +4981,21 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("task_version");
 
+                    b.Property<string>("UserMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("user_message");
+
                     b.Property<string>("ValidationJson")
                         .HasColumnType("text")
                         .HasColumnName("validation_json");
 
                     b.HasKey("RunId");
 
+                    b.HasIndex("OutputSchemaSha256");
+
                     b.HasIndex("PreviousRunId");
+
+                    b.HasIndex("SystemPromptSha256");
 
                     b.HasIndex("PairId", "Task", "StartedAtUtcTicks");
 
@@ -4816,6 +5004,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_relationship_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_relationship_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
+
+                            t.HasCheckConstraint("ck_relationship_analysis_runs_input", "num_nulls(system_prompt_sha256, output_schema_sha256, user_message, effort, max_output_tokens) IN (0, 5)");
+
+                            t.HasCheckConstraint("ck_relationship_analysis_runs_input_outcome", "outcome NOT IN ('Bypassed','Interrupted') OR system_prompt_sha256 IS NULL");
+
+                            t.HasCheckConstraint("ck_relationship_analysis_runs_max_output_tokens", "max_output_tokens IS NULL OR max_output_tokens > 0");
 
                             t.HasCheckConstraint("ck_relationship_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Bypassed')");
 
@@ -4826,6 +5020,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_relationship_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
                             t.HasCheckConstraint("ck_relationship_analysis_runs_tokens", "input_tokens >= 0 AND output_tokens >= 0 AND cache_read_tokens >= 0 AND cache_write_tokens >= 0 AND charged_tokens >= input_tokens + output_tokens + cache_read_tokens + cache_write_tokens");
+
+                            t.HasCheckConstraint("ck_relationship_analysis_runs_user_message", "user_message IS NULL OR char_length(user_message) BETWEEN 1 AND 100000");
                         });
                 });
 
@@ -6182,6 +6378,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("context_json");
 
+                    b.Property<string>("Effort")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("effort");
+
                     b.Property<long>("FinishedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("finished_at_utc_ticks");
@@ -6201,6 +6402,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("issue_revision_id");
 
+                    b.Property<int?>("MaxOutputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_output_tokens");
+
                     b.Property<string>("Model")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -6216,6 +6421,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<string>("OutputJson")
                         .HasColumnType("text")
                         .HasColumnName("output_json");
+
+                    b.Property<string>("OutputSchemaSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("output_schema_sha256");
 
                     b.Property<long>("OutputTokens")
                         .HasColumnType("bigint")
@@ -6261,6 +6471,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("stop_reason");
 
+                    b.Property<string>("SystemPromptSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("system_prompt_sha256");
+
                     b.Property<string>("Task")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -6273,13 +6488,21 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("task_version");
 
+                    b.Property<string>("UserMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("user_message");
+
                     b.Property<string>("ValidationJson")
                         .HasColumnType("text")
                         .HasColumnName("validation_json");
 
                     b.HasKey("RunId");
 
+                    b.HasIndex("OutputSchemaSha256");
+
                     b.HasIndex("PreviousRunId");
+
+                    b.HasIndex("SystemPromptSha256");
 
                     b.HasIndex("CandidateId", "Task", "StartedAtUtcTicks");
 
@@ -6288,6 +6511,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_statement_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_statement_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (issue_revision_id IS NULL OR issue_revision_id ~ '^[0-9a-f]{64}$') AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
+
+                            t.HasCheckConstraint("ck_statement_analysis_runs_input", "num_nulls(system_prompt_sha256, output_schema_sha256, user_message, effort, max_output_tokens) IN (0, 5)");
+
+                            t.HasCheckConstraint("ck_statement_analysis_runs_input_outcome", "outcome NOT IN ('Bypassed','Interrupted') OR system_prompt_sha256 IS NULL");
+
+                            t.HasCheckConstraint("ck_statement_analysis_runs_max_output_tokens", "max_output_tokens IS NULL OR max_output_tokens > 0");
 
                             t.HasCheckConstraint("ck_statement_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Classified','Bypassed')");
 
@@ -6300,6 +6529,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_statement_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
                             t.HasCheckConstraint("ck_statement_analysis_runs_tokens", "input_tokens >= 0 AND output_tokens >= 0 AND cache_read_tokens >= 0 AND cache_write_tokens >= 0 AND charged_tokens >= input_tokens + output_tokens + cache_read_tokens + cache_write_tokens");
+
+                            t.HasCheckConstraint("ck_statement_analysis_runs_user_message", "user_message IS NULL OR char_length(user_message) BETWEEN 1 AND 100000");
                         });
                 });
 
@@ -7050,6 +7281,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("context_json");
 
+                    b.Property<string>("Effort")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("effort");
+
                     b.Property<long>("FinishedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("finished_at_utc_ticks");
@@ -7063,6 +7299,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("InputTokens")
                         .HasColumnType("bigint")
                         .HasColumnName("input_tokens");
+
+                    b.Property<int?>("MaxOutputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_output_tokens");
 
                     b.Property<string>("Model")
                         .IsRequired()
@@ -7079,6 +7319,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<string>("OutputJson")
                         .HasColumnType("text")
                         .HasColumnName("output_json");
+
+                    b.Property<string>("OutputSchemaSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("output_schema_sha256");
 
                     b.Property<long>("OutputTokens")
                         .HasColumnType("bigint")
@@ -7120,6 +7365,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("stop_reason");
 
+                    b.Property<string>("SystemPromptSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("system_prompt_sha256");
+
                     b.Property<string>("Task")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -7132,13 +7382,21 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("task_version");
 
+                    b.Property<string>("UserMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("user_message");
+
                     b.Property<string>("ValidationJson")
                         .HasColumnType("text")
                         .HasColumnName("validation_json");
 
                     b.HasKey("RunId");
 
+                    b.HasIndex("OutputSchemaSha256");
+
                     b.HasIndex("PreviousRunId");
+
+                    b.HasIndex("SystemPromptSha256");
 
                     b.HasIndex("CandidateId", "Task", "StartedAtUtcTicks");
 
@@ -7147,6 +7405,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_vote_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_vote_analysis_runs_ids", "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
+
+                            t.HasCheckConstraint("ck_vote_analysis_runs_input", "num_nulls(system_prompt_sha256, output_schema_sha256, user_message, effort, max_output_tokens) IN (0, 5)");
+
+                            t.HasCheckConstraint("ck_vote_analysis_runs_input_outcome", "outcome NOT IN ('Bypassed','Interrupted') OR system_prompt_sha256 IS NULL");
+
+                            t.HasCheckConstraint("ck_vote_analysis_runs_max_output_tokens", "max_output_tokens IS NULL OR max_output_tokens > 0");
 
                             t.HasCheckConstraint("ck_vote_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Bypassed')");
 
@@ -7157,6 +7421,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_vote_analysis_runs_times", "finished_at_utc_ticks >= started_at_utc_ticks");
 
                             t.HasCheckConstraint("ck_vote_analysis_runs_tokens", "input_tokens >= 0 AND output_tokens >= 0 AND cache_read_tokens >= 0 AND cache_write_tokens >= 0 AND charged_tokens >= input_tokens + output_tokens + cache_read_tokens + cache_write_tokens");
+
+                            t.HasCheckConstraint("ck_vote_analysis_runs_user_message", "user_message IS NULL OR char_length(user_message) BETWEEN 1 AND 100000");
                         });
                 });
 
@@ -7784,9 +8050,19 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Actions.Persistence.ActionAnalysisRunRow", b =>
                 {
+                    b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.AnalysisOutputSchemaRow", null)
+                        .WithMany()
+                        .HasForeignKey("OutputSchemaSha256")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionAnalysisRunRow", null)
                         .WithMany()
                         .HasForeignKey("PreviousRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.AnalysisSystemPromptRow", null)
+                        .WithMany()
+                        .HasForeignKey("SystemPromptSha256")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionAnalysisRow", null)
@@ -7918,9 +8194,19 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Analysis.Persistence.DocumentChangeAnalysisRunRow", b =>
                 {
+                    b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.AnalysisOutputSchemaRow", null)
+                        .WithMany()
+                        .HasForeignKey("OutputSchemaSha256")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.DocumentChangeAnalysisRunRow", null)
                         .WithMany()
                         .HasForeignKey("PreviousRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.AnalysisSystemPromptRow", null)
+                        .WithMany()
+                        .HasForeignKey("SystemPromptSha256")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.DocumentChangeAnalysisRow", null)
@@ -7945,6 +8231,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Briefs.Persistence.BriefAnalysisRunRow", b =>
                 {
+                    b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.AnalysisOutputSchemaRow", null)
+                        .WithMany()
+                        .HasForeignKey("OutputSchemaSha256")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefAnalysisRunRow", null)
                         .WithMany()
                         .HasForeignKey("PreviousRunId")
@@ -7953,6 +8244,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefAnalysisRunRow", null)
                         .WithMany()
                         .HasForeignKey("SourceRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.AnalysisSystemPromptRow", null)
+                        .WithMany()
+                        .HasForeignKey("SystemPromptSha256")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefRevisionRow", null)
@@ -8544,9 +8840,19 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Relationships.Persistence.RelationshipAnalysisRunRow", b =>
                 {
+                    b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.AnalysisOutputSchemaRow", null)
+                        .WithMany()
+                        .HasForeignKey("OutputSchemaSha256")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CivicLens.Infrastructure.Relationships.Persistence.RelationshipAnalysisRunRow", null)
                         .WithMany()
                         .HasForeignKey("PreviousRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.AnalysisSystemPromptRow", null)
+                        .WithMany()
+                        .HasForeignKey("SystemPromptSha256")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("CivicLens.Infrastructure.Relationships.Persistence.RelationshipAnalysisRow", null)
@@ -8864,9 +9170,19 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementAnalysisRunRow", b =>
                 {
+                    b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.AnalysisOutputSchemaRow", null)
+                        .WithMany()
+                        .HasForeignKey("OutputSchemaSha256")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementAnalysisRunRow", null)
                         .WithMany()
                         .HasForeignKey("PreviousRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.AnalysisSystemPromptRow", null)
+                        .WithMany()
+                        .HasForeignKey("SystemPromptSha256")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementAnalysisRow", null)
@@ -9037,9 +9353,19 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteAnalysisRunRow", b =>
                 {
+                    b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.AnalysisOutputSchemaRow", null)
+                        .WithMany()
+                        .HasForeignKey("OutputSchemaSha256")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CivicLens.Infrastructure.Votes.Persistence.VoteAnalysisRunRow", null)
                         .WithMany()
                         .HasForeignKey("PreviousRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Analysis.Persistence.AnalysisSystemPromptRow", null)
+                        .WithMany()
+                        .HasForeignKey("SystemPromptSha256")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("CivicLens.Infrastructure.Votes.Persistence.VoteAnalysisRow", null)

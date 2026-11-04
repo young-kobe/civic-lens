@@ -199,6 +199,19 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     }
 
     [Fact]
+    public async Task EveryRunStoresTheExactRequestItSentAndARetryRunStoresItsOwnUserMessage()
+    {
+        var comparison = await seeder.SaveAsync("Deadline: October 15.\n", "Deadline: October 30.\n");
+        var model = new FakeDocumentChangeDraftModel().Draft(FakeDocumentChangeDraftModel.Output(("h1", "after", "October 31")))
+            .Draft(FakeDocumentChangeDraftModel.Output(("h1", "after", "October 30")));
+
+        await Worker(model).ExecuteAsync(once: true);
+
+        await StoredRunInputs.AssertMatchAsync(connectionString, "document_change_analysis_runs", "comparison_id", comparison.ComparisonId, model.Requests);
+        Assert.Contains("does not occur", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ACorrectedRetryBecomesTheDraft()
     {
         var comparison = await seeder.SaveAsync("Deadline: October 15.\n", "Deadline: October 30.\n");
@@ -411,6 +424,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         Assert.Equal(1, current.Record.Attempts);
         Assert.Equal(["Interrupted"], await RunOutcomesAsync(comparison));
         Assert.Equal(5_000, await ScalarAsync<long>($"SELECT charged_tokens FROM document_change_analysis_runs WHERE run_id = '{runId}'"));
+        Assert.Null(await StoredRunInputs.ReadAsync(connectionString, "document_change_analysis_runs", runId));
         Assert.Equal(5_000, await ChargedTodayAsync());
         var late = Run(stale.Record.SubjectId, runId, AnalysisRunOutcome.RateLimited);
         Assert.False(await analysis.CheckpointAsync(AnalysisCheckpoint.From(stale, AnalysisState.RetryWaiting,
@@ -496,7 +510,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
     private static AnalysisRun Run(string comparisonId, string runId, AnalysisRunOutcome outcome) => new(runId, comparisonId,
         DocumentChangeDraftTask.Task, DocumentChangeDraftTask.TaskVersion, DocumentChangeDraftTask.Model,
         DocumentChangeDraftTask.PromptVersion, DocumentChangeDraftTask.SchemaVersion, new string('e', 64), null, outcome,
-        AnalysisTokenUsage.None, 0, null, null, null, ImmutableArray<string>.Empty, "{}", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+        AnalysisTokenUsage.None, 0, null, null, null, ImmutableArray<string>.Empty, "{}", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, AnalysisRunInputs.Sample);
 
     private async Task<DocumentChangeAnalysisRecord> EntryAsync(DocumentComparison comparison) =>
         Assert.Single(await analysis.GetByComparisonIdsAsync([comparison.ComparisonId], default));

@@ -433,7 +433,7 @@ public sealed partial class PostgresBillStreamTests
         await DecideAsync(1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
         var claim = await ClaimAfterRequeueAsync(newer);
         var bypassed = DraftedRun(Guid.NewGuid().ToString("N"), newer);
-        bypassed = bypassed with { Run = bypassed.Run with { Outcome = AnalysisRunOutcome.Bypassed, ChargedTokens = 0, Usage = AnalysisTokenUsage.None } };
+        bypassed = bypassed with { Run = bypassed.Run with { Outcome = AnalysisRunOutcome.Bypassed, ChargedTokens = 0, Usage = AnalysisTokenUsage.None, Input = null } };
 
         Assert.True(await ActionStore().CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(newer, 5)), bypassed, default));
 
@@ -504,7 +504,7 @@ public sealed partial class PostgresBillStreamTests
     {
         var claim = (await ActionStore().TryClaimAsync(candidate, Lease, default))!;
         var bypass = DraftedRun(Guid.NewGuid().ToString("N"), candidate);
-        bypass = bypass with { Run = bypass.Run with { Outcome = AnalysisRunOutcome.Bypassed, ChargedTokens = 0, Usage = AnalysisTokenUsage.None }, Reason = reason };
+        bypass = bypass with { Run = bypass.Run with { Outcome = AnalysisRunOutcome.Bypassed, ChargedTokens = 0, Usage = AnalysisTokenUsage.None, Input = null }, Reason = reason };
         Assert.True(await ActionStore().CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Succeeded, code), bypass, default));
     }
 
@@ -530,7 +530,7 @@ public sealed partial class PostgresBillStreamTests
         var claim = (await ActionStore().TryClaimAsync(second, Lease, default))!;
         _ = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(2), title: "A third title");
         var bypass = DraftedRun(Guid.NewGuid().ToString("N"), second);
-        bypass = bypass with { Run = bypass.Run with { Outcome = AnalysisRunOutcome.Bypassed, ChargedTokens = 0, Usage = AnalysisTokenUsage.None }, Reason = ActionDraftErrorCodes.RecordRejected };
+        bypass = bypass with { Run = bypass.Run with { Outcome = AnalysisRunOutcome.Bypassed, ChargedTokens = 0, Usage = AnalysisTokenUsage.None, Input = null }, Reason = ActionDraftErrorCodes.RecordRejected };
 
         Assert.True(await ActionStore().CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Succeeded, ActionDraftErrorCodes.Unchanged), bypass, default));
 
@@ -576,7 +576,7 @@ public sealed partial class PostgresBillStreamTests
         var older = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(-1), title: "An older title");
         var claim = (await ActionStore().TryClaimAsync(older, Lease, default))!;
         var bypass = DraftedRun(Guid.NewGuid().ToString("N"), older);
-        bypass = bypass with { Run = bypass.Run with { Outcome = AnalysisRunOutcome.Bypassed, ChargedTokens = 0, Usage = AnalysisTokenUsage.None }, Reason = ActionDraftErrorCodes.RecordRejected };
+        bypass = bypass with { Run = bypass.Run with { Outcome = AnalysisRunOutcome.Bypassed, ChargedTokens = 0, Usage = AnalysisTokenUsage.None, Input = null }, Reason = ActionDraftErrorCodes.RecordRejected };
 
         Assert.True(await ActionStore().CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Succeeded, ActionDraftErrorCodes.Unchanged), bypass, default));
 
