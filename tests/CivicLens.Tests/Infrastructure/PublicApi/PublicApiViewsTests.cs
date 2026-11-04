@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Publication;
+using CivicLens.Infrastructure.Districts;
+using CivicLens.Infrastructure.Roster;
 using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Application.Publication;
@@ -21,7 +23,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     private const string LoginPassword = "test-only-password";
 
     private static readonly string[] BaseTables =
-        ["vote_revisions", "vote_member_list_entries", "vote_revision_issues", "publication_releases", "publication_record_states", "vote_drafts", "vote_member_lists"];
+        ["vote_revisions", "vote_member_list_entries", "vote_revision_issues", "publication_releases", "publication_record_states", "vote_drafts", "vote_member_lists",
+         "zcta_districts", "roster_snapshots", "collection_attempts"];
 
     private string connectionString = null!;
     private string[] roleAfterMigration = null!;
@@ -58,11 +61,11 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
-        foreach (var view in new[] { "active_records", "votes", "vote_members", "vote_issues" })
+        foreach (var view in new[] { "active_records", "votes", "vote_members", "vote_issues", "zip_districts" })
         {
             // A view with a join or a group cannot take a write at all, so Postgres refuses with 55000 before it checks a privilege.
             await AssertDeniedAsync(connection, $"DELETE FROM public_api.{view}", "55000");
-            await AssertDeniedAsync(connection, $"UPDATE public_api.{view} SET record_id = 'x'", "55000");
+            await AssertDeniedAsync(connection, $"UPDATE public_api.{view} SET {(view == "zip_districts" ? "zcta" : "record_id")} = 'x'", "55000");
         }
     }
 
@@ -92,7 +95,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"active_records v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_members v {Owner} {Role}:SELECT {{security_barrier=true}}",
-            $"votes v {Owner} {Role}:SELECT {{security_barrier=true}}"
+            $"votes v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"zip_districts v {Owner} {Role}:SELECT {{security_barrier=true}}"
         ], objects);
         Assert.Empty(await QueryAsync("SELECT proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public_api'", connectionString));
         var schema = await QueryAsync("""
@@ -188,6 +192,73 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task TheZipViewShowsNoRowsBeforeTheFirstSnapshotAndHidesCaptureIdentifiers()
+    {
+        Assert.Empty(await PublicAsync("SELECT zcta FROM public_api.zip_districts"));
+        await using var connection = await OpenPublicAsync();
+        await AssertDeniedAsync(connection, "SELECT attempt_id FROM public_api.zip_districts", "42703");
+        await AssertDeniedAsync(connection, "SELECT capture_sha256 FROM public_api.zip_districts", "42703");
+    }
+
+    [Fact]
+    public async Task TheZipViewFollowsTheRosterRuleForTheNewestSnapshotWhenTheFileChangesAndChangesBack()
+    {
+        var steps = new ZipSnapshotSteps(this);
+        await steps.AdmitAsync('c', 0, 3);
+        await steps.AssertViewMatchesRosterAsync(3);
+
+        await steps.AdmitAsync('d', 1, 2);
+        await steps.AssertViewMatchesRosterAsync(2);
+
+        await steps.ImportOnlyAsync('c', 2);
+        await steps.AssertViewMatchesRosterAsync(3);
+    }
+
+    [Fact]
+    public async Task TheZipViewReadsTheOldestSnapshotWhenTwoSnapshotsHoldOneBodyLikeTheRosterRule()
+    {
+        var steps = new ZipSnapshotSteps(this);
+        var first = await steps.ImportOnlyAsync('c', 0);
+        var raced = await steps.ImportOnlyAsync('c', 1);
+        await steps.AdmitImportedAsync(raced, 1);
+        await steps.AdmitImportedAsync(first, 3);
+
+        await steps.AssertViewMatchesRosterAsync(3);
+    }
+
+    [Fact]
+    public async Task TheZipViewIgnoresSnapshotsOfOtherSourcesAndShowsOneRowForEachZctaStateAndDistrict()
+    {
+        var steps = new ZipSnapshotSteps(this);
+        await steps.AdmitAsync('c', 0, 5);
+
+        Assert.Equal(["20001 DC 0", "36009 AL 1", "36009 AL 2", "94505 CA 14", "99501 AK 0"],
+            await PublicAsync("SELECT zcta || ' ' || state || ' ' || district FROM public_api.zip_districts ORDER BY 1"));
+    }
+
+    [Fact]
+    public async Task TheZipViewGivesTheLandOfTheOverlapAndTheShareOfTheZctaLandSoALargestFirstPageNeedsNoMoreMath()
+    {
+        var steps = new ZipSnapshotSteps(this);
+        await steps.AdmitAsync('c', 0, 5);
+        var districtOne = 4938464m;
+        var districtTwo = 412306983m;
+
+        var shares = await PublicAsync("""
+            SELECT district || ' ' || land_area_square_meters || ' ' || round(land_share, 6) FROM public_api.zip_districts
+             WHERE zcta = '36009' ORDER BY land_share DESC
+            """);
+
+        Assert.Equal(
+        [
+            $"2 412306983 {Math.Round(districtTwo / (districtOne + districtTwo), 6)}",
+            $"1 4938464 {Math.Round(districtOne / (districtOne + districtTwo), 6)}"
+        ], shares);
+        Assert.Equal(["1.000000"], await PublicAsync("SELECT round(land_share, 6) FROM public_api.zip_districts WHERE zcta = '99501'"));
+        Assert.Empty(await PublicAsync("SELECT zcta FROM public_api.zip_districts GROUP BY zcta HAVING abs(sum(land_share) - 1) > 0.000001"));
+    }
+
+    [Fact]
     public async Task VoteCountsEqualTheMemberRowsAndEveryAiOrCodeRowHasItsLabel()
     {
         await SeedAsync();
@@ -279,7 +350,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await ExecuteAsync($"""
             REVOKE SELECT ON ALL TABLES IN SCHEMA public_api FROM {Role};
             REVOKE USAGE ON SCHEMA public_api FROM {Role};
-            REVOKE SELECT ON publication_releases, publication_record_states, vote_revisions, vote_member_list_entries, vote_revision_issues FROM {Owner};
+            REVOKE SELECT ON publication_releases, publication_record_states, vote_revisions, vote_member_list_entries, vote_revision_issues, zcta_districts, roster_snapshots, collection_attempts FROM {Owner};
             ALTER ROLE {Role} RESET ALL;
             ALTER ROLE {Role} CONNECTION LIMIT -1;
             GRANT TEMPORARY ON DATABASE {new NpgsqlConnectionStringBuilder(connectionString).Database} TO PUBLIC;
@@ -303,6 +374,37 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await using var restored = await OpenPublicAsync();
         await AssertDeniedAsync(restored, "SELECT pg_advisory_lock(1)");
         await AssertDeniedAsync(restored, "SELECT * FROM public.vote_revisions");
+    }
+
+    private sealed class ZipSnapshotSteps(PublicApiViewsTests tests)
+    {
+        private const string RosterSource = RosterFixtures.SourceId;
+        private static readonly DateTimeOffset Morning = new(2026, 11, 3, 6, 0, 0, TimeSpan.Zero);
+        private readonly PostgresCollectionAttemptStore attempts = PostgresCollectionAttemptStore.FromConnectionString(tests.connectionString);
+        private readonly PostgresMemberRosterStore roster = PostgresMemberRosterStore.FromConnectionString(tests.connectionString);
+        private readonly PostgresZctaDistrictStore districts = PostgresZctaDistrictStore.FromConnectionString(tests.connectionString);
+        private readonly Dictionary<string, string> rosterAttempts = [];
+
+        public async Task AdmitAsync(char body, int day, int rows) => await AdmitImportedAsync(await ImportOnlyAsync(body, day), rows);
+
+        public async Task<string> ImportOnlyAsync(char body, int day)
+        {
+            var districtAttempt = await RosterFixtures.ImportCaptureAsync(attempts, new string(body, 64), Morning.AddDays(day), DistrictFixtures.SourceId);
+            rosterAttempts[districtAttempt] = await RosterFixtures.ImportCaptureAsync(attempts, new string(body, 64), Morning.AddDays(day), RosterSource);
+            return districtAttempt;
+        }
+
+        public async Task AdmitImportedAsync(string districtAttempt, int rows)
+        {
+            await districts.AdmitAsync(districtAttempt, [.. DistrictFixtures.Rows().Take(rows)], default);
+            await roster.AdmitAsync(rosterAttempts[districtAttempt], [.. RosterFixtures.Members().Take(rows)], null, default);
+        }
+
+        public async Task AssertViewMatchesRosterAsync(int expectedRows)
+        {
+            Assert.Equal(expectedRows, (await roster.ReadLatestAsync(RosterSource, default)).Count);
+            Assert.Equal([expectedRows.ToString()], await tests.PublicAsync("SELECT count(*) FROM public_api.zip_districts"));
+        }
     }
 
     private async Task SeedAsync()
