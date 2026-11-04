@@ -4,12 +4,14 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.Infrastructure.Publication;
 
-/// <summary>Wraps a store so that a test can run code after the candidate read and before each batch insert.</summary>
+/// <summary>Wraps a store so that a test can run code before the release list, after the candidate read, and before each batch insert.</summary>
 internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IPublicationStore
 {
     private int batches;
 
     public Func<Task>? AfterReadingCandidates { get; set; }
+
+    public Func<Task>? BeforeListingAll { get; set; }
 
     public Func<int, Task>? BeforeAddingEntries { get; set; }
 
@@ -35,7 +37,11 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
 
     public Task<IReadOnlyList<PublicationReleaseSummary>> ListAsync(int limit, CancellationToken cancellationToken) => inner.ListAsync(limit, cancellationToken);
 
-    public Task<IReadOnlyList<PublicationReleaseSummary>> ListAllAsync(CancellationToken cancellationToken) => inner.ListAllAsync(cancellationToken);
+    public async Task<IReadOnlyList<PublicationReleaseSummary>> ListAllAsync(CancellationToken cancellationToken)
+    {
+        if (BeforeListingAll is not null) await BeforeListingAll();
+        return await inner.ListAllAsync(cancellationToken);
+    }
 
     public Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, Func<string, CancellationToken, Task> requireFiles,
         CancellationToken cancellationToken) => inner.ActivateAsync(releaseNumber, requireFiles, cancellationToken);

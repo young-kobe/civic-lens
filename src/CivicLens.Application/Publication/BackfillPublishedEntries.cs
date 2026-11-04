@@ -9,6 +9,7 @@ namespace CivicLens.Application.Publication;
 /// Fills the entry rows of revisions that a commit never wrote. The oldest kept folder of a range supplies the entry. The record file must agree
 /// with it, and so must the entry in every later kept folder of the range. A kept folder of the range that omits the revision fails the check too.
 /// A range that fails a check gets a skip reason and no row.
+/// The release list is read before the candidates, so a commit between the two reads leaves a range that no listed folder covers.
 /// Each kept manifest is read once, from the oldest folder to the newest. Rows go in only through the store insert.
 /// </summary>
 public sealed class BackfillPublishedEntries(IPublicationStore publications, IReleaseDirectory releases)
@@ -25,9 +26,10 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
     {
         ReviewAuthorization.RequireOwner(actor);
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        var keptReleases = await publications.ListAllAsync(cancellationToken);
         var candidates = await publications.ReadEntryCandidatesAsync(cancellationToken);
         var pending = candidates.Where(candidate => !candidate.HasEntry).Select(candidate => new PendingPublishedEntry(candidate)).ToList();
-        foreach (var release in await publications.ListAllAsync(cancellationToken))
+        foreach (var release in keptReleases)
             await ReadFolderAsync(release, [.. pending.Where(entry => entry.Candidate.Covers(release.ReleaseNumber))], cancellationToken);
         var (added, racedIn) = await WriteAsync(pending, limit, cancellationToken);
         return Report(added, candidates.Count(candidate => candidate.HasEntry) + racedIn, pending);
@@ -73,8 +75,8 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
         PublishedRecordEntry fromFile;
         try
         {
-            fromFile = RecordFileEntry.Read(entry.Kind, await releases.ReadFileAsync(release.DirectoryName,
-                PublicationProtocol.RecordDataPath(entry.RecordId), PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken));
+            fromFile = RecordFileEntry.Read(entry.Kind, await ReleaseRecordFiles.ReadAsync(releases, release.DirectoryName, entry.RecordId,
+                cancellationToken));
         }
         catch (Exception exception) when (exception is FileNotFoundException or InvalidDataException or JsonException)
         {

@@ -218,6 +218,39 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task AFolderThatListsARevisionAfterTheFirstFolderSetTheEntryButOmitsItLaterStillBlocksTheRowEvenWhenTheNewestFolderHoldsItAgain()
+    {
+        var action = await SeedActionAsync('a');
+        await AddReleasesAsync(3);
+        await AddRangeAsync(action, 1, null);
+        Keep(1, Listed(action));
+        Keep(2);
+        Keep(3, Listed(action));
+
+        var result = await RunAsync(10);
+
+        Assert.Equal(new Dictionary<string, int> { ["foldersDiffer"] = 1 }, result.SkippedByReason);
+        Assert.Empty(await ReadAsync("SELECT record_id FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task AReleaseThatACommitAddsBetweenTheTwoReadsNeverMakesTheOlderRevisionSkipAsFoldersDiffer()
+    {
+        var old = await SeedActionAsync('a');
+        var returned = old with { RevisionNumber = 2 };
+        await SeedActionRevisionAsync(returned);
+        await AddReleasesAsync(1);
+        await AddRangeAsync(old, 1, null);
+        Keep(1, Listed(old));
+        var store = new InterceptingPublicationStore(publications) { BeforeListingAll = () => CommitReleaseTwoAsync(old, returned) };
+
+        var result = await new BackfillPublishedEntries(store, releases).ExecuteAsync(Owner, 10);
+
+        Assert.Empty(result.SkippedByReason);
+        Assert.Equal(["1", "2"], await ReadAsync("SELECT revision_number FROM published_entries ORDER BY 1"));
+    }
+
+    [Fact]
     public async Task AConflictWithARowThatACommitWroteTellsTheOperatorToCompareTheRowAndNotToRebuildTheRelease()
     {
         var action = await SeedActionAsync('a');
@@ -432,6 +465,18 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
     }
 
     private Task SeedActionRevisionAsync(PublishedAction action) => ExecuteAsync(PublishedEntryFixtures.InsertActionRevisionSql(action.RecordId, action.RevisionNumber));
+
+    private async Task CommitReleaseTwoAsync(PublishedAction old, PublishedAction returned)
+    {
+        folders[2] = $"{2:D6}-{2:x32}";
+        await ExecuteAsync($"""
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES (2, '{folders[2]}', 'owner', 2, 0, false);
+            UPDATE publication_record_states SET last_release = 1 WHERE record_id = '{old.RecordId}' AND revision_number = 1
+            """);
+        await AddRangeAsync(returned, 2, null);
+        Keep(2, Listed(returned));
+    }
 
     private Task InsertLikeACommitAsync(PublishedAction action, string headline)
     {

@@ -25,8 +25,8 @@ internal static class ReleaseEntryRewrite
         PublishedRecordEntry rebuilt;
         try
         {
-            rebuilt = RecordFileEntry.Read(entry.Kind, await releases.ReadFileAsync(previous.DirectoryName!, PublicationProtocol.RecordDataPath(entry.RecordId),
-                PublishedRecordFiles.MaximumCitedRecordBytes, cancellationToken));
+            rebuilt = RecordFileEntry.Read(entry.Kind, await ReleaseRecordFiles.ReadAsync(releases, previous.DirectoryName!, entry.RecordId,
+                cancellationToken));
         }
         catch (Exception exception) when (exception is JsonException or InvalidDataException)
         {
