@@ -12,7 +12,8 @@ namespace CivicLens.Infrastructure.Relationships;
 internal static class RelationshipDraftRows
 {
     internal static readonly ReviewRecords<RelationshipDraftRow, RelationshipRevisionRow, RelationshipReviewDecisionRow, RelationshipRevision> Records =
-        new(PostgresAdvisoryLock.RelationshipReview, PublishedRecordKind.Relationship, "Relationship", nameof(RelationshipDraftRow.RecordId));
+        new(PostgresAdvisoryLock.RelationshipReview, PublishedRecordKind.Relationship, "Relationship", nameof(RelationshipDraftRow.RecordId),
+            readRevisions: RelationshipRevisionRows.ReadAsync);
 
     public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, RelationshipRevision revision, string runId,
         CancellationToken cancellationToken)
@@ -36,12 +37,12 @@ internal static class RelationshipDraftRows
     public static async Task<RelationshipRevision?> ReadCurrentAsync(CollectionAttemptDbContext db, string recordId,
         CancellationToken cancellationToken)
     {
-        var json = await (from draft in db.Set<RelationshipDraftRow>().AsNoTracking()
-                          join revision in db.Set<RelationshipRevisionRow>().AsNoTracking()
-                              on new { draft.RecordId, Number = draft.CurrentRevisionNumber } equals new { revision.RecordId, Number = revision.RevisionNumber }
-                          where draft.RecordId == recordId
-                          select revision.RevisionJson).SingleOrDefaultAsync(cancellationToken);
-        return json is null ? null : ReviewJson.Deserialize<RelationshipRevision>(json, "relationship revision");
+        var current = from draft in db.Set<RelationshipDraftRow>().AsNoTracking()
+                      join revision in db.Set<RelationshipRevisionRow>().AsNoTracking()
+                          on new { draft.RecordId, Number = draft.CurrentRevisionNumber } equals new { revision.RecordId, Number = revision.RevisionNumber }
+                      where draft.RecordId == recordId
+                      select revision;
+        return (await RelationshipRevisionRows.ReadAsync(db, current, cancellationToken)).SingleOrDefault()?.Read();
     }
 
     private static RelationshipDraftRow NewDraft(RelationshipRevision revision) => new()
@@ -50,14 +51,19 @@ internal static class RelationshipDraftRows
         CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
     };
 
-    public static RelationshipRevisionRow NewRevision(RelationshipRevision revision, string? runId) => new()
+    public static RelationshipRevisionRow NewRevision(RelationshipRevision revision, string? runId)
     {
-        RecordId = revision.RecordId,
-        RevisionNumber = revision.RevisionNumber,
-        AuthorSubject = revision.AuthorSubject,
-        AuthorKind = ReviewAuthor.KindOf(revision.AuthorSubject),
-        RunId = runId,
-        RevisionJson = ReviewJson.Serialize(revision),
-        CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
-    };
+        var row = new RelationshipRevisionRow
+        {
+            RecordId = revision.RecordId,
+            RevisionNumber = revision.RevisionNumber,
+            AuthorSubject = revision.AuthorSubject,
+            AuthorKind = ReviewAuthor.KindOf(revision.AuthorSubject),
+            RunId = runId,
+            RevisionJson = ReviewJson.Serialize(revision),
+            CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
+        };
+        RelationshipRevisionRows.FillColumns(row, revision);
+        return row;
+    }
 }

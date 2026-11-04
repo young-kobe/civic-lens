@@ -353,7 +353,7 @@ internal static class ReviewWorkspace
         if (releaseRoot is null) return;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, codeVersion);
         var releases = new FileReleaseDirectory(releaseRoot);
-        var icons = ConfigurationFile.ReadIssueIconsFromEnvironment(issues) ?? IssueIconConfiguration.None;
+        var icons = PublicationComposition.RequireIssueIcons(ConfigurationFile.ReadIssueIconsFromEnvironment(issues));
         services.AddScoped(_ => new ListPublicationReleases(publications, releases));
         services.AddScoped(_ => new ListBlockedPublished(publications, releases, new BlockedPublishedRecords(publications, releases)));
         services.AddSingleton(provider =>

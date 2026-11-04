@@ -49,6 +49,7 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
     public string OfficialName { get; init; } = "Test Official";
     public IssueConfiguration? Issues { get; init; }
     public bool WithReleaseDirectory { get; init; } = true;
+    public bool WithIssueIcons { get; init; } = true;
 
     public async Task StartAsync()
     {
@@ -98,8 +99,12 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
         var issuesPath = Path.Combine(KeyDirectory, "issues.json");
         await File.WriteAllTextAsync(issuesPath, JsonSerializer.Serialize(Issues ?? IssueConfiguration.None, CollectionProtocol.JsonOptions));
         start.Environment["CIVIC_LENS_ISSUES_CONFIG"] = issuesPath;
-        await File.WriteAllTextAsync(IssueIconsPath, JsonSerializer.Serialize(IssueIconConfiguration.None, CollectionProtocol.JsonOptions));
-        start.Environment["CIVIC_LENS_ISSUE_ICONS_CONFIG"] = IssueIconsPath;
+        start.Environment.Remove("CIVIC_LENS_ISSUE_ICONS_CONFIG");
+        if (WithIssueIcons)
+        {
+            await File.WriteAllTextAsync(IssueIconsPath, JsonSerializer.Serialize(new IssueIconConfiguration { Icons = [] }, CollectionProtocol.JsonOptions));
+            start.Environment["CIVIC_LENS_ISSUE_ICONS_CONFIG"] = IssueIconsPath;
+        }
         process = Process.Start(start)!;
         output = process.StandardOutput.ReadToEndAsync();
         process.ErrorDataReceived += (_, line) =>

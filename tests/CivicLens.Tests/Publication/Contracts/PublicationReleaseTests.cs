@@ -129,7 +129,7 @@ public sealed class PublicationReleaseTests
     {
         var oldJson = JsonSerializer.Serialize(Entry(PublishedRecordKind.Vote, StatementId), PublicationProtocol.JsonOptions);
         var node = JsonNode.Parse(oldJson)!.AsObject();
-        foreach (var field in new[] { "yeaCount", "nayCount", "alignment", "cosponsorIds" }) node.Remove(field);
+        foreach (var field in new[] { "yeaCount", "nayCount", "alignment", "chamber", "cosponsorIds" }) node.Remove(field);
 
         var read = JsonSerializer.Deserialize<PublishedRecordEntry>(node.ToJsonString(), PublicationProtocol.JsonOptions)!;
         read.Validate();
@@ -137,20 +137,22 @@ public sealed class PublicationReleaseTests
         Assert.Null(read.YeaCount);
         Assert.Null(read.NayCount);
         Assert.Null(read.Alignment);
+        Assert.Null(read.Chamber);
         Assert.Null(read.CosponsorIds);
     }
 
     [Fact]
     public void VoteFactsRoundTripAndTheAlignmentIsAWordSoNoReaderSeesANumber()
     {
-        var entry = Entry(PublishedRecordKind.Vote, StatementId) with { YeaCount = 216, NayCount = 214, Alignment = PublishedVoteAlignment.Split };
+        var entry = Entry(PublishedRecordKind.Vote, StatementId) with { YeaCount = 216, NayCount = 214, Alignment = PublishedVoteAlignment.Split, Chamber = PublishedChamber.House };
         var json = JsonSerializer.Serialize(entry, PublicationProtocol.JsonOptions);
 
         var read = JsonSerializer.Deserialize<PublishedRecordEntry>(json, PublicationProtocol.JsonOptions)!;
         read.Validate();
 
         Assert.Contains("\"alignment\":\"split\"", json, StringComparison.Ordinal);
-        Assert.Equal((216, 214, PublishedVoteAlignment.Split), (read.YeaCount, read.NayCount, read.Alignment));
+        Assert.Contains("\"chamber\":\"house\"", json, StringComparison.Ordinal);
+        Assert.Equal((216, 214, PublishedVoteAlignment.Split, PublishedChamber.House), (read.YeaCount, read.NayCount, read.Alignment, read.Chamber));
     }
 
     public static TheoryData<PublishedRecordEntry> InvalidVoteFacts()
@@ -180,6 +182,27 @@ public sealed class PublicationReleaseTests
     public void AVoteEntryWithCountsAndNoAlignmentIsValidBecauseAProceduralVoteHasNoPartyReading()
     {
         (Entry(PublishedRecordKind.Vote, StatementId) with { YeaCount = 0, NayCount = 0 }).Validate();
+    }
+
+    public static TheoryData<PublishedRecordEntry> InvalidChambers() => new()
+    {
+        Entry(PublishedRecordKind.Statement, StatementId) with { Chamber = PublishedChamber.House },
+        Entry(PublishedRecordKind.Action, new string('7', 64)) with { Chamber = PublishedChamber.Senate },
+        Entry(PublishedRecordKind.Vote, StatementId) with { Chamber = (PublishedChamber)99 }
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidChambers))]
+    public void OnlyAVoteEntryMayNameAChamberAndItNamesAKnownOneSoNoOtherKindCarriesAFalseChamber(PublishedRecordEntry entry)
+    {
+        Assert.Throws<InvalidDataException>(entry.Validate);
+    }
+
+    [Fact]
+    public void AVoteEntryWithNoChamberStaysValidSoAReleaseFromBeforeTheFieldStillReads()
+    {
+        Entry(PublishedRecordKind.Vote, StatementId).Validate();
+        (Entry(PublishedRecordKind.Vote, StatementId) with { Chamber = PublishedChamber.Senate }).Validate();
     }
 
     public static TheoryData<PublishedRecordEntry> InvalidCosponsors()

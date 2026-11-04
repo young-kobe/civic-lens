@@ -32,7 +32,7 @@ internal static class RelationshipStaleness
           AND (f.fingerprint IS DISTINCT FROM {{SettledFingerprint("a.pair_id")}}
                OR {{SettledReason("a.pair_id")}} IS DISTINCT FROM '{{RelationshipDraftErrorCodes.NoRelationship}}' AND EXISTS (SELECT 1 FROM relationship_drafts d JOIN relationship_revisions r
                             ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
-                          WHERE d.record_id = a.pair_id AND (r.revision_json::jsonb -> 'target' ->> 'revisionNumber')::int <> f.target_revision))
+                          WHERE d.record_id = a.pair_id AND COALESCE(r.target_action_revision_number, r.target_vote_revision_number) <> f.target_revision))
         """;
 
     // The shape of PostgresAnalysisQueue.lockSubjectsSql (task filter, key order, FOR UPDATE), narrowed to the pairs of one record.
