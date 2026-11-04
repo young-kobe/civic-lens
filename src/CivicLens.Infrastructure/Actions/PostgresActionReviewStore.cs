@@ -23,8 +23,8 @@ namespace CivicLens.Infrastructure.Actions;
 public sealed class PostgresActionReviewStore : IActionReviewStore
 {
     internal static readonly ReviewRecords<ActionDraftRow, ActionRevisionRow, ActionReviewDecisionRow, ActionDraftRevision> Records =
-        new(PostgresAdvisoryLock.ActionReview, PublishedRecordKind.Action, "Action", nameof(ActionDraftRow.RecordId), ActionDraftRows.Revised,
-            new(ActionDraftRows.RequireNoRefusedUpdateAsync));
+        new(PostgresAdvisoryLock.ActionReview, PublishedRecordKind.Action, "Action", nameof(ActionDraftRow.RecordId), ActionRevisionRows.ReadAsync,
+            ActionDraftRows.Revised, new(ActionDraftRows.RequireNoRefusedUpdateAsync));
 
     private const string SaveOperation = "action-save";
     private const string DecideOperation = "action-decide";

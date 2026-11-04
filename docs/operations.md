@@ -708,7 +708,7 @@ Run order: `backfill`, then `verify`. Run the new code only when `verify` exits 
 
 ### Action revision backfill
 
-R-63 step 2 moves old action revisions into columns and child rows. A revision written by current code has them, but a revision written before the derived columns existed has no `event_on` and `cosponsor_count`. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+R-63 steps 2 and 3 move old action revisions into columns and child rows. A revision written by current code has them, but a revision written before the derived columns existed has no `event_on` and `cosponsor_count`. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions revisions backfill 500
@@ -719,7 +719,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ac
 
 `verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. The output and the exit code are the same as for the vote `verify`. No key is allowed to be absent.
 
-Run order: `db migrate`, then `backfill`, then `verify`. The action readers still read the JSON, so a row with null columns breaks no reader yet. Step 3 moves the readers to the columns. Run it only when `verify` exits 0.
+Run order: `db migrate`, then `backfill`, then `verify`. Every action reader reads the columns and fails on a row with null columns. That includes the review pages, the queue, the relationship and brief readers, and the redraft skip. On production, `deploy` restarts the worker and the review host, so run `backfill` right after the deploy. For a manual run, start the new code only when `verify` exits 0, so `legacy` and `mismatched` are both 0.
 
 ### Executive action revision backfill
 

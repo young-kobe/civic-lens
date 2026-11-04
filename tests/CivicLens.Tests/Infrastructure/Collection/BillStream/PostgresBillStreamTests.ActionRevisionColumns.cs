@@ -14,7 +14,7 @@ public sealed partial class PostgresBillStreamTests
     private static readonly string AbsentId = new('9', 64);
 
     [Fact]
-    public async Task AFullRevisionWritesColumnsAndChildRowsThatEqualItsJsonBecauseTheReadersWillMoveToThem()
+    public async Task AFullRevisionWritesColumnsAndChildRowsThatEqualItsJsonBecauseTheReadersUseThem()
     {
         var full = await SettleFullRevisionAsync();
 

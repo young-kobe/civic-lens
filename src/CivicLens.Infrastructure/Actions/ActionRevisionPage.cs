@@ -31,6 +31,9 @@ internal sealed record ActionRevisionPage(IReadOnlyList<ActionRevisionRow> Rows,
             SpanOf(row.BillCitationExtractionId, row.BillCitationStart, row.BillCitationLength));
     }
 
+    public IReadOnlyList<StoredRevision<ActionRevisionRow, ActionDraftRevision>> ToStoredRevisions() =>
+        [.. Rows.Select(row => new StoredRevision<ActionRevisionRow, ActionDraftRevision>(row, () => Rebuild(row)))];
+
     private ImmutableArray<ActionSponsorship> SponsorshipsOf(ActionRevisionRow row) =>
         [.. Sponsorships[(row.RecordId, row.RevisionNumber)].OrderBy(item => item.Position).Select(item => new ActionSponsorship(item.PersonId, item.BioguideId,
             item.Role, item.IsOriginal, item.SponsoredOn, item.WithdrawnOn,

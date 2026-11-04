@@ -5,6 +5,7 @@ using CivicLens.Core.Actions;
 using CivicLens.Core.Relationships;
 using CivicLens.Core.Statements;
 using CivicLens.Core.Votes;
+using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Documents.Persistence;
@@ -76,7 +77,8 @@ internal static class RelationshipCitedReader
         var statements = (await StatementRevisionRows.ReadNamedAsync(db, [.. citations.Where(citation => citation.Kind == RelationshipRecordKind.Statement)
                 .Select(citation => new PublishedRevisionBinding(PublishedRecordKind.Statement, citation.RecordId, citation.RevisionNumber))], cancellationToken))
             .ToDictionary(item => (item.CandidateId, item.RevisionNumber));
-        var targets = (await ReadAsync<ActionDraftRevision>(db, RelationshipRecordKind.Action, citations, cancellationToken))
+        var targets = (await ActionRevisionRows.ReadNamedAsync(db, [.. citations.Where(citation => citation.Kind == RelationshipRecordKind.Action)
+                .Select(citation => new PublishedRevisionBinding(PublishedRecordKind.Action, citation.RecordId, citation.RevisionNumber))], cancellationToken))
             .Select(RelationshipTarget.Of).Concat((await ReadVotesAsync(db, citations, cancellationToken))
                 .Select(RelationshipTarget.Of)).ToDictionary(item => item.Citation);
         var candidateIds = statements.Keys.Select(key => key.CandidateId).Distinct().ToArray();
@@ -89,16 +91,6 @@ internal static class RelationshipCitedReader
             var statement = statements[(revision.Statement.RecordId, revision.Statement.RevisionNumber)];
             return (new ApprovedStatement(statement, articleTexts[statement.CandidateId]), targets[revision.Target]);
         });
-    }
-
-    private static async Task<ImmutableArray<T>> ReadAsync<T>(CollectionAttemptDbContext db, RelationshipRecordKind kind,
-        IEnumerable<RelationshipCitation> citations, CancellationToken cancellationToken)
-    {
-        var publishedKind = RelationshipRecordKinds.PublishedKindOf(kind);
-        var named = citations.Where(citation => citation.Kind == kind)
-            .Select(citation => new PublishedRevisionBinding(publishedKind, citation.RecordId, citation.RevisionNumber));
-        var json = await CitedRevisions.ReadRevisionJsonAsync(db, publishedKind, named, cancellationToken);
-        return [.. json.Select(item => ReviewJson.Deserialize<T>(item, "revision"))];
     }
 
     private static Task<ImmutableArray<VoteDraftRevision>> ReadVotesAsync(CollectionAttemptDbContext db, IEnumerable<RelationshipCitation> citations,

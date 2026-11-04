@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Briefs;
@@ -18,7 +17,6 @@ namespace CivicLens.Tests.Fixtures;
 // The brief selection reads only releases and the exact revision rows, so the seeder relaxes the foreign keys of the drafts around them.
 internal sealed class BriefWorldSeeder(string connectionString)
 {
-    private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
     private static readonly DateTimeOffset Created = new(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
 
     public static string StatementId(char c) => new(c, 64);
@@ -79,17 +77,14 @@ internal sealed class BriefWorldSeeder(string connectionString)
         DocumentChangeRevisionSeeder.AddAsync(connectionString, new DocumentChangeDraftRevision(id, revision, new string('c', 64),
             "auth0|editor", Created, headline, "Summary of " + headline, null, null, "Agency", null, null, [.. officials], [], []));
 
-    public Task ActionAsync(string id, int revision, int billNumber, params string[] sponsors) => ExecuteAsync("""
-        SET session_replication_role = replica;
-        INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-        VALUES (@id, @revision, 'auth0|editor', 'Person', NULL, @json, 0)
-        """, ("id", id), ("revision", revision), ("json", JsonSerializer.Serialize(ActionRevisionFixtures.Model(revision) with
-    {
-        RecordId = id,
-        BillNumber = billNumber,
-        Headline = $"Bill {billNumber}",
-        Sponsorships = [.. sponsors.Select(sponsor => ActionRevisionFixtures.Sponsorship() with { PersonId = sponsor })]
-    }, Web)));
+    public Task ActionAsync(string id, int revision, int billNumber, params string[] sponsors) =>
+        ActionRevisionSeeder.AddAsync(connectionString, ActionRevisionFixtures.Model(revision) with
+        {
+            RecordId = id,
+            BillNumber = billNumber,
+            Headline = $"Bill {billNumber}",
+            Sponsorships = [.. sponsors.Select(sponsor => ActionRevisionFixtures.Sponsorship() with { PersonId = sponsor })]
+        });
 
     public Task FinishedWeekAsync(DateOnly week) => ExecuteAsync("""
         INSERT INTO brief_analysis (record_id, task, week_start, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
