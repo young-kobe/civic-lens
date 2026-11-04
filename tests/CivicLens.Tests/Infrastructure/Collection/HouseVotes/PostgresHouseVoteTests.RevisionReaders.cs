@@ -24,10 +24,10 @@ public sealed partial class PostgresHouseVoteTests
     private static readonly JsonSerializerOptions ReaderJson = new(JsonSerializerDefaults.Web);
 
     [Fact]
-    public async Task EveryReaderOfAFullRevisionReturnsTheRevisionThatItsJsonHoldsBecauseTheReadersMovedToColumns()
+    public async Task EveryReaderOfAFullRevisionReturnsTheRevisionThatWasWrittenBecauseTheColumnsAreTheOnlyCopy()
     {
         var (recordId, candidate, written) = await SettledFullRevisionAsync();
-        var stored = JsonNode.Parse((string)(await ScalarAsync("SELECT revision_json FROM vote_revisions"))!)!;
+        var stored = JsonSerializer.SerializeToNode(written, ReaderJson);
         var reviews = VoteReviews();
 
         var found = await reviews.GetRevisionAsync(recordId, 1, default);
@@ -36,31 +36,13 @@ public sealed partial class PostgresHouseVoteTests
         var publishable = await reviews.GetForPublicationAsync([recordId], default);
         var members = await reviews.ReadMembersAsync([new(PublishedRecordKind.Vote, recordId, 1)], default);
 
-        Assert.True(JsonNode.DeepEquals(stored, JsonSerializer.SerializeToNode(written, ReaderJson)), "The written revision differs from its JSON.");
         foreach (var read in new[] { found, review!.Review.CurrentRevision, review.Review.LastApprovedRevision, evidence!.Current, publishable[recordId].Review.CurrentRevision })
-            Assert.True(JsonNode.DeepEquals(stored, JsonSerializer.SerializeToNode(read, ReaderJson)), "A reader returned a revision that differs from the JSON.");
+            Assert.True(JsonNode.DeepEquals(stored, JsonSerializer.SerializeToNode(read, ReaderJson)), "A reader returned a revision that differs from the written revision.");
         Assert.Equal(written.Members.Select(member => member.PersonId).Distinct().Order(), members.Select(member => member.PersonId).Order());
     }
 
     [Fact]
-    public async Task ARevisionReadsBackThroughItsColumnsWhenItsJsonIsUnreadableBecauseNoReaderUsesTheJson()
-    {
-        var (recordId, candidate, written) = await SettledFullRevisionAsync();
-        var expected = JsonSerializer.SerializeToNode(written, ReaderJson);
-        await ExecuteAsync("UPDATE vote_revisions SET revision_json = '{broken'");
-        var reviews = VoteReviews();
-
-        var found = await reviews.GetRevisionAsync(recordId, 1, default);
-        var review = await reviews.GetAsync(recordId, default);
-        var evidence = await VoteStore().ReadEvidenceAsync(candidate, default);
-
-        Assert.True(JsonNode.DeepEquals(expected, JsonSerializer.SerializeToNode(found, ReaderJson)));
-        Assert.True(JsonNode.DeepEquals(expected, JsonSerializer.SerializeToNode(review!.Review.CurrentRevision, ReaderJson)));
-        Assert.True(JsonNode.DeepEquals(expected, JsonSerializer.SerializeToNode(evidence!.Current, ReaderJson)));
-    }
-
-    [Fact]
-    public async Task EveryReaderFailsOnARowWithNullColumnsAndNeverFallsBackToTheJsonBecauseASilentFallbackWouldHideAnUnmovedRow()
+    public async Task EveryReaderFailsOnARowWithNullColumnsBecauseAGuessedRevisionWouldHideAnIncompleteRow()
     {
         var (recordId, candidate, _) = await SettledFullRevisionAsync();
         await ExecuteAsync("UPDATE vote_analysis_runs SET prompt_version = 'vote-draft-prompt-v1'");
@@ -159,6 +141,16 @@ public sealed partial class PostgresHouseVoteTests
         var revision = await RevisionAsync(candidate, 1);
         await SettleAsync(candidate, revision);
         return revision.RecordId;
+    }
+
+    private Task MakeLegacyAsync(params int[] numbers)
+    {
+        var list = string.Join(", ", numbers);
+        return ExecuteAsync($"""
+            DELETE FROM vote_revision_facts WHERE revision_number IN ({list});
+            DELETE FROM vote_revision_issues WHERE revision_number IN ({list});
+            UPDATE vote_revisions SET {VoteRevisionColumnsSeed.NullColumns} WHERE revision_number IN ({list})
+            """);
     }
 
     private sealed record LegacyBill(int Congress, string BillType, int BillNumber);

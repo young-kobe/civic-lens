@@ -68,14 +68,14 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         VALUES (@id, @source, @chamber, @congress, @session, @roll, @number, 0, @status, 1, @revised, @candidate, @eventOn, @issues, @officials)
         ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number, review_status = @status, candidate_id = @candidate,
                                               last_revised_at_utc_ticks = @revised, event_on = @eventOn, issue_ids = @issues, official_ids = @officials;
-        INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-        VALUES (@id, @number, 'auth0|editor', 'Person', NULL, @json, 1)
-        ON CONFLICT (record_id, revision_number) DO UPDATE SET revision_json = EXCLUDED.revision_json
+        INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, created_at_utc_ticks)
+        VALUES (@id, @number, 'auth0|editor', 'Person', NULL, 1)
+        ON CONFLICT (record_id, revision_number) DO NOTHING
         """ + VoteRevisionColumnsSeed.Sql, [.. VoteRevisionColumnsSeed.Parameters(vote), ("id", vote.RecordId), ("candidate", vote.CandidateId), ("revised", revisedAtTicks), ("source", vote.SourceId), ("chamber", vote.Chamber.ToString()),
         ("congress", vote.Congress),
         ("session", vote.SessionNumber), ("roll", vote.RollCallNumber), ("type", vote.BillType!), ("bill", vote.BillNumber!.Value),
         ("extraction", RelationshipFixtures.ExtractionId), ("number", vote.RevisionNumber), ("status", reviewStatus),
-        ("json", JsonSerializer.Serialize(vote, Web)), ("eventOn", vote.VotedOn), ("issues", vote.TrackedIssueIds.ToArray()),
+        ("eventOn", vote.VotedOn), ("issues", vote.TrackedIssueIds.ToArray()),
         ("officials", vote.OfficialIds().ToArray())]);
 
     public async Task RevisionAsync(RelationshipRevision revision)

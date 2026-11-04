@@ -364,8 +364,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
               VALUES (1, '000001-00000000000000000000000000000001', 'test', 1, 1, true);
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('vote', 'old', 1, 1, NULL);
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
-              VALUES ('old', 1, 'test', 'Person', 'x', 1);
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, created_at_utc_ticks)
+              VALUES ('old', 1, 'test', 'Person', 1);
             INSERT INTO vote_revision_issues (record_id, revision_number, issue_id, position, is_tracked) VALUES ('old', 1, 'health', 0, true);
             """);
         Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.votes"));
@@ -763,11 +763,11 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     private static string Revision(string record, int revision, string origin, string list) => $"""
-        INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks,
+        INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, created_at_utc_ticks,
             headline, summary, text_origin, source_id, vote_source, chamber, congress, session_number, roll_call_number, candidate_id,
             candidate_update_utc_ticks, voted_on, voted_on_citation_extraction_id, voted_on_citation_start, voted_on_citation_length,
             kind, member_list_id, issue_revision_id, issue_candidates_recorded, bill_type, bill_number)
-        VALUES ('{record}', {revision}, 'test', 'Person', 'x', 1, 'Headline {record}', 'Summary {record}', '{origin}', 'src', 'CongressGov', 'House', 119, 1, 7,
+        VALUES ('{record}', {revision}, 'test', 'Person', 1, 'Headline {record}', 'Summary {record}', '{origin}', 'src', 'CongressGov', 'House', 119, 1, 7,
             'cand', 1, '2026-01-02', 'ext', 0, 1, 'Passage', '{list}', '{new string('a', 64)}', true, 'HR', 1);
         """;
 

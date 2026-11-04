@@ -7895,11 +7895,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("member_list_id");
 
-                    b.Property<string>("RevisionJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("revision_json");
-
                     b.Property<int?>("RollCallNumber")
                         .HasColumnType("integer")
                         .HasColumnName("roll_call_number");

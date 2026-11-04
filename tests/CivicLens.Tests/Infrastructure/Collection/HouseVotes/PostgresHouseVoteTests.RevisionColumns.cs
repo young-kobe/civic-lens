@@ -124,8 +124,8 @@ public sealed partial class PostgresHouseVoteTests
         await SettleAsync(candidate, first);
 
         await ExecuteAsync($"""
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-            VALUES ('{first.RecordId}', 2, 'auth0|editor', 'Person', NULL, 'x', 0)
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, created_at_utc_ticks)
+            VALUES ('{first.RecordId}', 2, 'auth0|editor', 'Person', NULL, 0)
             """);
 
         Assert.Equal(0, await ScalarAsync("SELECT num_nonnulls(headline, summary, text_origin, source_id, chamber, member_list_id, kind, issue_candidates_recorded) FROM vote_revisions WHERE revision_number = 2"));

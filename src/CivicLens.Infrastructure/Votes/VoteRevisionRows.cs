@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Votes;
 
-/// <summary>Owns the mapping between a vote revision and its row, fact rows, and issue rows, in both directions. The row also keeps the JSON, but readers use the columns.</summary>
+/// <summary>Owns the mapping between a vote revision and its row, fact rows, and issue rows, in both directions.</summary>
 internal static class VoteRevisionRows
 {
     public static VoteRevisionRow Create(VoteDraftRevision revision, string? runId)
@@ -23,16 +23,8 @@ internal static class VoteRevisionRows
             AuthorSubject = revision.AuthorSubject,
             AuthorKind = ReviewAuthor.KindOf(revision.AuthorSubject),
             RunId = runId,
-            RevisionJson = ReviewJson.Serialize(revision),
             CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
         };
-        FillColumns(row, revision);
-        return row;
-    }
-
-    /// <summary>Sets every column and child row of the revision. It leaves the key, the author, the run, and the JSON as they are.</summary>
-    public static void FillColumns(VoteRevisionRow row, VoteDraftRevision revision)
-    {
         ReviewTextRows.Fill(row, revision);
         row.SourceId = revision.SourceId;
         row.VoteSource = revision.Source;
@@ -58,6 +50,7 @@ internal static class VoteRevisionRows
         row.IssueCandidatesRecorded = !revision.IssueCandidateIds.IsDefault;
         row.Facts = [.. revision.Facts.Select((fact, position) => FactRow(revision, fact, position))];
         row.Issues = [.. IssueIds(revision).Select((issueId, position) => IssueRow(revision, issueId, position))];
+        return row;
     }
 
     /// <summary>Reads the rows of a query, then their facts, issues, and member lists, in a fixed number of queries. The child rows come
@@ -80,9 +73,9 @@ internal static class VoteRevisionRows
         return new(rows, facts, issues, lists, entries);
     }
 
-    /// <summary>The failure of a reader that meets a vote revision row with null columns. Only the backfill fixes such a row.</summary>
+    /// <summary>The failure of a reader that meets a vote revision row with null columns.</summary>
     public static InvalidDataException NotBackfilled(string revision) =>
-        new($"{revision} has null columns. Run the vote revision backfill.");
+        new($"{revision} has null columns.");
 
     /// <summary>The reader that the shared review code uses for votes.</summary>
     public static async Task<IReadOnlyList<StoredRevision<VoteRevisionRow, VoteDraftRevision>>> ReadAsync(CollectionAttemptDbContext db,

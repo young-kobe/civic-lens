@@ -39,7 +39,6 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
         builder.Property(row => row.AuthorSubject).HasColumnName("author_subject").HasMaxLength(256).IsRequired();
         builder.Property(row => row.AuthorKind).HasColumnName("author_kind").HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(row => row.RunId).HasColumnName("run_id").HasMaxLength(32);
-        builder.Property(row => row.RevisionJson).HasColumnName("revision_json").IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
         builder.Property(row => row.SourceId).HasColumnName("source_id").HasMaxLength(128);
         builder.Property(row => row.VoteSource).HasColumnName("vote_source").HasConversion<string>().HasMaxLength(16);
