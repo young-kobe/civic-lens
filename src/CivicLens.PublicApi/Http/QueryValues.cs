@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicApi.Search;
 using Microsoft.AspNetCore.Http;
 
 namespace CivicLens.PublicApi.Http;
@@ -22,6 +23,8 @@ internal static class QueryValues
             ? number
             : throw new ArgumentException($"{name} must be a whole number from {minimum} to {maximum}.", name);
     }
+
+    public static int PageLimit(IQueryCollection query) => Number(query, "limit", 1, SearchRequest.MaximumLimit) ?? SearchRequest.DefaultLimit;
 
     public static string? Filter(IQueryCollection query, string name)
     {

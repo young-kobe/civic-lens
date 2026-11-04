@@ -597,7 +597,7 @@ The all-records pages open with a panel "Search by kind". A line says what the l
 
 ### Public API views
 
-R-68 plans to serve public data from tables. The schema `public_api` holds readable views for that path. `PublicApi` reads `active_records`, `votes`, and `vote_issues` for `/v1/release`, `/v1/votes`, and `/v1/votes/{recordId}`. See [search](search.md#api).
+R-68 plans to serve public data from tables. The schema `public_api` holds readable views for that path. `PublicApi` reads `active_records`, `votes`, `vote_issues`, and `vote_members` for `/v1/release`, `/v1/votes`, `/v1/votes/{recordId}`, and `/v1/votes/{recordId}/members`. See [search](search.md#api).
 
 - The view `public_api.active_records` joins the active row of `publication_releases` with `publication_record_states`. A record belongs to release N when `first_release <= N` and `last_release` is null or at least N. The view shows kind, record ID, revision number, release number, and the publication time of the release as `published_at_utc_ticks`. `/v1/release` reads the number and the time from it. The migration `PublicApiReleaseTime` adds the time and grants the owner that one column of `publication_releases`. A release with no record shows no row, so it reads as no active release. Every other view joins it. No function and no stored copy exist.
 - The view `public_api.votes` has one row for each active vote. It shows the roll call, the bill, the headline, the summary, `text_origin`, `label`, the four counts, `question`, and `result`. The counts come from the member rows by cast. `Yea` and `Aye` count as yea. `Nay` and `No` count as nay. A vote revision with no member list appears in no vote view.

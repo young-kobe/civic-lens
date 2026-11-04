@@ -49,7 +49,7 @@ public sealed record SearchRequest
             Sort = sort,
             Descending = descending,
             Cursor = cursor,
-            Limit = QueryValues.Number(query, "limit", 1, MaximumLimit) ?? DefaultLimit
+            Limit = QueryValues.PageLimit(query)
         };
         if (cursor is not null && !request.Accepts(cursor))
             throw new ArgumentException("The cursor does not fit this search.", "cursor");

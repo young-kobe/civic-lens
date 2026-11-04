@@ -133,7 +133,7 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [ ] Agree the view design, active release rule, and role limits, with a test that fails when the role can read any other table
   - [x] Add the `public_api` schema, the role `civic_lens_public`, the active release view, and the vote views ([public API views](architecture/publication.md#public-api-views))
   - [ ] Add the bill and action views. They wait until actions have columns, because actions still hold JSON
-  - [ ] Serve the members of a vote and the bills through `PublicApi`. The vote list, one vote, and `/v1/release` are done ([search API](architecture/search.md#api))
+  - [ ] Serve the bills through `PublicApi`. The vote list, one vote, the members of a vote, and `/v1/release` are done ([search API](architecture/search.md#api))
   - [ ] Measure traffic, query load, and worker effect on the shared database
   - [ ] Render the official page from the API, then the home, issue, record, and list pages
   - [ ] Write `release.json` only as a public download on a schedule, or remove it
