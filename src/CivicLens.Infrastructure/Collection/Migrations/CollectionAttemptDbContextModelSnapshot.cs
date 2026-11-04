@@ -4747,8 +4747,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnName("match_start");
 
                     b.Property<string>("OfficialId")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("official_id");
 
                     b.Property<string>("Reason")
@@ -4852,7 +4852,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_relationship_revisions_number", "revision_number >= 1");
 
-                            t.HasCheckConstraint("ck_relationship_revisions_official_id", "btrim(official_id) <> '' AND length(official_id) <= 256");
+                            t.HasCheckConstraint("ck_relationship_revisions_official_id", "btrim(official_id) <> '' AND length(official_id) <= 128");
 
                             t.HasCheckConstraint("ck_relationship_revisions_quote", "statement_quote_length <= 4096 AND statement_quote_extraction_id = match_extraction_id\nAND statement_quote_start <= match_start AND match_start + match_length <= statement_quote_start + statement_quote_length");
 

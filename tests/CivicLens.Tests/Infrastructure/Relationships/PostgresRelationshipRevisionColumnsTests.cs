@@ -267,6 +267,18 @@ public sealed class PostgresRelationshipRevisionColumnsTests(PostgresCollection 
     }
 
     [Fact]
+    public async Task TheStaleCheckSkipsARowWithNullColumnsBecauseOnlyTheBackfillMayTellItsTarget()
+    {
+        await DraftAsync();
+        await MakeLegacyAsync();
+        await seeder.ActionAsync(Action(revision: 2));
+
+        await drafts.RefreshPairsAsync(default);
+
+        Assert.Equal(["Succeeded"], await ReadAsync("SELECT status FROM relationship_analysis"));
+    }
+
+    [Fact]
     public async Task ReadRevisionJsonRefusesTheRelationshipKindBecauseItIsReadFromItsColumns()
     {
         await using var db = await factory.CreateDbContextAsync();

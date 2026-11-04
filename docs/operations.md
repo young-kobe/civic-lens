@@ -760,7 +760,7 @@ The `worker` command drafts one relationship for each pair of an approved statem
 | `CIVIC_LENS_RELATIONSHIP_DRAFTING_DAILY_TOKENS` | Daily token limit for relationship drafting calls, per UTC day. It is separate from the other limits. Start low. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
-Drafting uses Claude Haiku 5.5. The stage runs after vote drafting and before brief drafting. A review decision on a statement, an action, or a vote queues a Pending row for each new pair of that record. Run `relationships draft refresh` once after the migration to queue the pairs of records that were approved earlier. Then the worker can spend up to the daily limit. A pair with a new approved revision on either side returns to Pending unless a person approved its relationship. A pair with the same input as the last settled run makes no call. The [outcomes](architecture/statements.md#relationship-drafting) table lists every code.
+Drafting uses Claude Haiku 5.5. The stage runs after vote drafting and before brief drafting. A review decision on a statement, an action, or a vote queues a Pending row for each new pair of that record. Run `relationships draft refresh` once after the migration to queue the pairs of records that were approved earlier. The same stale check runs after each review decision (`AfterDecisionHooks`). Then the worker can spend up to the daily limit. A pair with a new approved revision on either side returns to Pending unless a person approved its relationship. A pair with the same input as the last settled run makes no call. The [outcomes](architecture/statements.md#relationship-drafting) table lists every code.
 
 The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
@@ -786,7 +786,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 
 `verify` rebuilds every revision from its columns and compares it to its JSON as trees. It writes nothing and takes no lock. The output and the exit code are the same as for the vote `verify`. A revision whose columns cannot be read shows the field name `columns`.
 
-Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. Run `backfill` right after the deploy, because every relationship read fails until it ends. Production held 2 relationship revisions when the survey was made. The stale check does not requeue a pair whose revision still has null columns, so run `backfill` before `relationships draft refresh`.
+Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. Run `backfill` right after the deploy, because every relationship read fails until it ends. Production held 2 relationship revisions when the survey was made. The stale check does not requeue a pair whose revision still has null columns. It runs in `relationships draft refresh` and after each review decision (`AfterDecisionHooks`), so run `backfill` before both.
 
 ## Brief drafting
 

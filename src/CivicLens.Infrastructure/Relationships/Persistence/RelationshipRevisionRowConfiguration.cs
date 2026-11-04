@@ -1,4 +1,5 @@
 using CivicLens.Core.Relationships;
+using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Infrastructure.Documents.Persistence;
@@ -47,7 +48,7 @@ internal sealed class RelationshipRevisionRowConfiguration : IEntityTypeConfigur
             table.HasCheckConstraint("ck_relationship_revisions_fact_id",
                 $"btrim(target_fact_id) <> '' AND length(target_fact_id) <= {RelationshipRevision.MaximumFactIdLength}");
             table.HasCheckConstraint("ck_relationship_revisions_official_id",
-                $"btrim(official_id) <> '' AND length(official_id) <= {RelationshipRevision.MaximumOfficialIdLength}");
+                $"btrim(official_id) <> '' AND length(official_id) <= {ReviewTextRules.MaximumConfigurationIdLength}");
             table.HasCheckConstraint("ck_relationship_revisions_quote", $"""
                 statement_quote_length <= {StatementDraftRevision.MaximumQuotationLength} AND statement_quote_extraction_id = match_extraction_id
                 AND statement_quote_start <= match_start AND match_start + match_length <= statement_quote_start + statement_quote_length
@@ -72,7 +73,7 @@ internal sealed class RelationshipRevisionRowConfiguration : IEntityTypeConfigur
         builder.Property(row => row.Type).HasColumnName("type").HasConversion<string>().HasMaxLength(24);
         builder.Property(row => row.Reason).HasColumnName("reason").HasMaxLength(RelationshipRevision.MaximumReasonLength);
         builder.Property(row => row.TargetFactId).HasColumnName("target_fact_id").HasMaxLength(RelationshipRevision.MaximumFactIdLength);
-        builder.Property(row => row.OfficialId).HasColumnName("official_id").HasMaxLength(RelationshipRevision.MaximumOfficialIdLength);
+        builder.Property(row => row.OfficialId).HasColumnName("official_id").HasMaxLength(ReviewTextRules.MaximumConfigurationIdLength);
         SourceSpanColumns.Configure(builder, "relationship_revisions", "Match", "match", optional: false);
         SourceSpanColumns.Configure(builder, "relationship_revisions", "StatementQuote", "statement_quote", optional: false);
         builder.HasIndex(row => row.RunId).IsUnique();

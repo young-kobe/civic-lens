@@ -10,7 +10,6 @@ public sealed record RelationshipRevision(string RecordId, int RevisionNumber, s
 {
     public const int MaximumReasonLength = 400;
     public const int MaximumFactIdLength = 16;
-    public const int MaximumOfficialIdLength = 256;
 
     public RelationshipRevision ComparableForm() => this with { Reason = ComparableText.Lines(Reason) };
 
@@ -29,7 +28,7 @@ public sealed record RelationshipRevision(string RecordId, int RevisionNumber, s
             throw new ArgumentException("The reason is one sentence on one line.", nameof(Reason));
         if (string.IsNullOrWhiteSpace(TargetFactId) || TargetFactId.Length > MaximumFactIdLength)
             throw new ArgumentException("A relationship names one fact of its target.", nameof(TargetFactId));
-        if (string.IsNullOrWhiteSpace(OfficialId) || OfficialId.Length > MaximumOfficialIdLength)
+        if (string.IsNullOrWhiteSpace(OfficialId) || OfficialId.Length > ReviewTextRules.MaximumConfigurationIdLength)
             throw new ArgumentException("A relationship names the official that its pair matched.", nameof(OfficialId));
     }
 

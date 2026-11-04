@@ -56,8 +56,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "official_id",
                 table: "relationship_revisions",
-                type: "character varying(256)",
-                maxLength: 256,
+                type: "character varying(128)",
+                maxLength: 128,
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
@@ -194,7 +194,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "ck_relationship_revisions_official_id",
                 table: "relationship_revisions",
-                sql: "btrim(official_id) <> '' AND length(official_id) <= 256");
+                sql: "btrim(official_id) <> '' AND length(official_id) <= 128");
 
             migrationBuilder.AddCheckConstraint(
                 name: "ck_relationship_revisions_quote",
