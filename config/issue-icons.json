@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "icons": {
+    "immigration-enforcement": "border-map",
+    "trade-and-tariffs": "trade-arrows",
+    "federal-budget": "dollar",
+    "federal-taxes": "receipt",
+    "health-coverage": "medical-cross",
+    "reproductive-health": "heart",
+    "firearms": "crosshair",
+    "energy-and-climate": "bolt",
+    "federal-workforce": "government-building",
+    "elections-and-voting": "ballot",
+    "foreign-policy-and-war": "globe",
+    "russia-ukraine": "flag",
+    "middle-east-conflicts": "compass",
+    "artificial-intelligence": "chip",
+    "social-security": "people",
+    "food-assistance": "fork-and-knife"
+  }
+}

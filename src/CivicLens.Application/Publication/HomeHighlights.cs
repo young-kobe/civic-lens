@@ -3,28 +3,20 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-/// <summary>
-/// The facts that the home page cards show, picked by fixed rules from the release. The closest vote is the substantive vote with a party
-/// alignment, dated in the seven days that end on the release day, with the smallest gap between its Yea and Nay counts, then the lowest record ID.
-/// An alignment comes only with counts.
-/// </summary>
-public sealed record HomeHighlights(DateOnly WindowStart, DateOnly WindowEnd, PublishedRecordEntry? ClosestVote, int VotesInWindow,
-    ImmutableArray<PublishedRecordEntry> ExecutiveActions, int ExecutiveActionTotal, ImmutableArray<BreakLeader> BreakLeaders)
+/// <summary>The facts that the home page shows, picked by fixed rules from the release: the newest votes, the newest executive actions, the break leaders of the voting boards, and the count of officials.</summary>
+public sealed record HomeHighlights(ImmutableArray<PublishedRecordEntry> Votes, ImmutableArray<PublishedRecordEntry> ExecutiveActions,
+    ImmutableArray<BreakLeader> BreakLeaders, int OfficialCount)
 {
-    public const int WindowDays = 7;
+    public const int VoteCount = 4;
     public const int ExecutiveActionCount = 3;
 
-    public static HomeHighlights From(PublicationRelease release, ImmutableArray<OfficialBoardPage> boards)
+    public static HomeHighlights From(PublicationRelease release, ImmutableArray<OfficialBoardPage> boards, int officialCount)
     {
-        var end = DateOnly.FromDateTime(release.PublishedAtUtc.UtcDateTime);
-        var start = end.AddDays(1 - WindowDays);
-        var votes = release.Records.Where(entry => entry.Kind == PublishedRecordKind.Vote && entry.Alignment is not null &&
-            ReleaseRecordOrder.Day(entry) >= start && ReleaseRecordOrder.Day(entry) <= end).ToList();
-        var executiveActions = ReleaseRecordOrder.NewestFirst(release.Records.Where(entry => entry.Kind == PublishedRecordKind.ExecutiveAction),
-            ReleaseRecordOrder.Day, entry => entry.FirstPublishedAtUtc, entry => entry.RecordId).ToList();
-        return new(start, end, votes.OrderBy(Gap).ThenBy(entry => entry.RecordId, StringComparer.Ordinal).FirstOrDefault(), votes.Count,
-            [.. executiveActions.Take(ExecutiveActionCount)], executiveActions.Count, BreakLeader.All(boards));
+        var byKind = release.Records.ToLookup(entry => entry.Kind);
+        return new(NewestOf(byKind[PublishedRecordKind.Vote], VoteCount), NewestOf(byKind[PublishedRecordKind.ExecutiveAction], ExecutiveActionCount),
+            BreakLeader.All(boards), officialCount);
     }
 
-    public static int Gap(PublishedRecordEntry vote) => Math.Abs(vote.YeaCount!.Value - vote.NayCount!.Value);
+    private static ImmutableArray<PublishedRecordEntry> NewestOf(IEnumerable<PublishedRecordEntry> entries, int count) =>
+        [.. ReleaseRecordOrder.NewestFirst(entries, ReleaseRecordOrder.Day, entry => entry.FirstPublishedAtUtc, entry => entry.RecordId).Take(count)];
 }

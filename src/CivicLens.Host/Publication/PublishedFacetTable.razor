@@ -5,7 +5,7 @@
     <Head><TableCell Header>Name</TableCell><TableCell Header Class="fit num">@PublicColumn.Records</TableCell></Head>
     <Row Context="facet">
         <TableCell Main>
-            <span class="cell-icon">@if (facet.Kind == FacetKind.Issue) {<IssueIcon IssueId="@facet.Id" />}<CellTitle Href="@(facet.HasPages ? RootPath + facet.PagePath(1) : null)">@facet.Name</CellTitle></span>
+            <span class="cell-icon">@if (facet.Kind == FacetKind.Issue) {<IssueIcon Name="@facet.Icon" />}<CellTitle Href="@(facet.HasPages ? RootPath + facet.PagePath(1) : null)">@facet.Name</CellTitle></span>
         </TableCell>
         <TableCell Class="fit num" Label="@PublicColumn.Records">@facet.Records.Length</TableCell>
     </Row>

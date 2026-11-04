@@ -13,6 +13,7 @@ WITH_ENV := source .runtime/database/connection.env && source .runtime/review/co
 
 export CIVIC_LENS_COLLECTION_CONFIG := $(CURDIR)/config/federal-pilot.json
 export CIVIC_LENS_ISSUES_CONFIG := $(CURDIR)/config/issues.json
+export CIVIC_LENS_ISSUE_ICONS_CONFIG := $(CURDIR)/config/issue-icons.json
 export CIVIC_LENS_CAPTURE_DIRECTORY := $(CURDIR)/.runtime/captures
 export CIVIC_LENS_RELEASE_DIRECTORY := $(CURDIR)/.runtime/releases
 

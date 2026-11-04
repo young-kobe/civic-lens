@@ -27,6 +27,21 @@ internal static class PublishedBoardView
 
     public const string OfficialsLede = "Lists of the members of Congress who voted against their party most often, voted with it most often, and missed the most votes. There is one page for each chamber and party.";
 
+    public static string ClosestTitle(ClosestVote closest) =>
+        $"Closest vote, {Moment.Day(closest.WindowStart)} to {Moment.Day(closest.WindowEnd)}";
+
+    public const string ClosestRule = "The card looks at the substantive roll call votes of the House and the Senate in which both the Democrats and the Republicans voted. It leaves out procedural votes, such as rules and motions. The gap ignores thresholds such as 60 votes in the Senate or two thirds of a chamber.";
+
+    public static string VoteGap(ClosestVote closest) => closest.Gap switch
+    {
+        0 => $"Roll call on {Moment.Day(ReleaseRecordOrder.Day(closest.Entry))}. The Yea and Nay counts are equal.",
+        var gap => $"Roll call on {Moment.Day(ReleaseRecordOrder.Day(closest.Entry))}. The Yea and Nay counts differ by {gap} {PublishedOfficialView.Noun(gap, "vote")}."
+    };
+
+    public static string VotePool(ClosestVote closest) => closest.VotesInWindow == 1
+        ? "This is the only substantive roll call vote with counts in these dates."
+        : $"The pick is the closest of {closest.VotesInWindow} substantive roll call votes with counts in these dates. The gap is the difference between the Yea count and the Nay count.";
+
     public static string PartyOf(OfficialBoard board) => PublishedOfficialView.PartyOf(board.Chamber, board.Party);
 
     public static string Title(OfficialBoard board) => $"{PartyOf(board)}: voting boards";
