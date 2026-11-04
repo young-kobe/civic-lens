@@ -461,13 +461,13 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
               ('action', 'legacy', 1, 1, NULL), ('action', 'underived', 1, 1, NULL), ('action', 'lonely', 1, 1, NULL);
             INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
               VALUES ('legacy', 1, 'test', 'Person', 'x', 1);
-            {ActionSponsorship("legacy", 1, 0, "p1", "Sponsor", true, "2026-01-10")}
-            {ActionIssue("legacy", 1, "health", 0, true)}
-            {ActionRevision("underived", 1, "Person", eventOn: null, cosponsorCount: null)}
-            {ActionSponsorship("underived", 1, 0, "p1", "Sponsor", true, "2026-01-10")}
-            {ActionIssue("underived", 1, "health", 0, true)}
-            {ActionRevision("lonely", 1, "Person", "2026-01-10", 0)}
-            {ActionIssue("lonely", 1, "health", 0, true)}
+            {PublicActionRows.ActionSponsorship("legacy", 1, 0, "p1", "Sponsor", true, "2026-01-10")}
+            {PublicActionRows.ActionIssue("legacy", 1, "health", 0, true)}
+            {PublicActionRows.ActionRevision("underived", 1, "Person", eventOn: null, cosponsorCount: null)}
+            {PublicActionRows.ActionSponsorship("underived", 1, 0, "p1", "Sponsor", true, "2026-01-10")}
+            {PublicActionRows.ActionIssue("underived", 1, "health", 0, true)}
+            {PublicActionRows.ActionRevision("lonely", 1, "Person", "2026-01-10", 0)}
+            {PublicActionRows.ActionIssue("lonely", 1, "health", 0, true)}
             """);
 
         foreach (var view in new[] { "bills", "bill_sponsorships", "bill_issues" })
@@ -482,11 +482,11 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             SET session_replication_role = replica;
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES
               ('action', 'untracked', 1, 1, NULL), ('action', 'hidden', 1, 1, NULL);
-            {ActionRevision("untracked", 1, "Person", "2026-02-20", 1)}
-            {ActionSponsorship("untracked", 1, 0, "p1", "Sponsor", true, "2026-01-10")}
-            {ActionRevision("hidden", 1, "Person", eventOn: null, cosponsorCount: null)}
-            {ActionSponsorship("hidden", 1, 0, "p1", "Sponsor", true, "2026-01-10")}
-            {ActionIssue("hidden", 1, "health", 0, true)}
+            {PublicActionRows.ActionRevision("untracked", 1, "Person", "2026-02-20", 1)}
+            {PublicActionRows.ActionSponsorship("untracked", 1, 0, "p1", "Sponsor", true, "2026-01-10")}
+            {PublicActionRows.ActionRevision("hidden", 1, "Person", eventOn: null, cosponsorCount: null)}
+            {PublicActionRows.ActionSponsorship("hidden", 1, 0, "p1", "Sponsor", true, "2026-01-10")}
+            {PublicActionRows.ActionIssue("hidden", 1, "health", 0, true)}
             """);
 
         var bills = await PublicAsync("SELECT record_id || ' ' || revision_number FROM public_api.bills ORDER BY 1");
@@ -557,8 +557,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await SeedBillsAsync();
         await ExecuteAsync($"""
             SET session_replication_role = replica;
-            {ActionIssue("A", 1, "tax", 1, false)}
-            {ActionIssue("A", 1, "labor", 2, true)}
+            {PublicActionRows.ActionIssue("A", 1, "tax", 1, false)}
+            {PublicActionRows.ActionIssue("A", 1, "labor", 2, true)}
             """);
 
         Assert.Equal(["health 0", "labor 2"], await PublicAsync("SELECT issue_id || ' ' || \"position\" FROM public_api.bill_issues WHERE record_id = 'A' ORDER BY \"position\""));
@@ -608,61 +608,29 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     private static string BillRows(string record, string origin) => $"""
-        {ActionRevision(record, 1, origin, "2026-02-20", 1)}
-        {ActionSponsorship(record, 1, 0, "p1", "Sponsor", true, "2026-01-10")}
-        {ActionSponsorship(record, 1, 1, "p2", "Cosponsor", true, "2026-01-10")}
-        {ActionSponsorship(record, 1, 2, "p3", "Cosponsor", false, "2026-02-01", "2026-02-20")}
-        {ActionIssue(record, 1, "health", 0, true)}
+        {PublicActionRows.ActionRevision(record, 1, origin, "2026-02-20", 1)}
+        {PublicActionRows.ActionSponsorship(record, 1, 0, "p1", "Sponsor", true, "2026-01-10")}
+        {PublicActionRows.ActionSponsorship(record, 1, 1, "p2", "Cosponsor", true, "2026-01-10")}
+        {PublicActionRows.ActionSponsorship(record, 1, 2, "p3", "Cosponsor", false, "2026-02-01", "2026-02-20")}
+        {PublicActionRows.ActionIssue(record, 1, "health", 0, true)}
         """;
 
     private async Task InsertActiveBillAsync(ActionDraftRevision revision, string origin, string? eventOn = null, int? cosponsorCount = null)
     {
-        var sponsorships = revision.Sponsorships.Select((item, position) => ActionSponsorship(revision.RecordId, 1, position, item.PersonId, item.Role.ToString(),
+        var sponsorships = revision.Sponsorships.Select((item, position) => PublicActionRows.ActionSponsorship(revision.RecordId, 1, position, item.PersonId, item.Role.ToString(),
             item.IsOriginal, item.SponsoredOn.ToString("yyyy-MM-dd"), item.WithdrawnOn?.ToString("yyyy-MM-dd")));
         await ExecuteAsync($"""
             SET session_replication_role = replica;
             INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
               VALUES (1, '000001-00000000000000000000000000000001', 'test', 1, 1, true) ON CONFLICT DO NOTHING;
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('action', '{revision.RecordId}', 1, 1, NULL);
-            {ActionRevision(revision.RecordId, 1, origin, eventOn ?? revision.EventOn().ToString("yyyy-MM-dd"), cosponsorCount ?? revision.CosponsorCount())}
+            {PublicActionRows.ActionRevision(revision.RecordId, 1, origin, eventOn ?? revision.EventOn().ToString("yyyy-MM-dd"), cosponsorCount ?? revision.CosponsorCount())}
             {string.Join('\n', sponsorships)}
             """);
     }
 
     private static ActionSponsorship Sponsorship(string person, ActionSponsorshipRole role, string sponsoredOn, string? withdrawnOn) =>
         new(person, $"B{person}", role, true, DateOnly.Parse(sponsoredOn), withdrawnOn is null ? null : DateOnly.Parse(withdrawnOn), []);
-
-    // Run ID and code version satisfy the author checks. The Code row also carries the bill citation that the Code author needs.
-    private static string ActionRevision(string record, int revision, string origin, string? eventOn, int? cosponsorCount)
-    {
-        var authorKind = origin switch { "Model" => "Analysis", "Code" => "Code", _ => "Person" };
-        var run = authorKind == "Person" ? "NULL" : $"'run-{record}'";
-        var codeVersion = authorKind == "Code" ? $"'{new string('c', 40)}'" : "NULL";
-        var billCitation = authorKind == "Code" ? "'ext', 0, 1" : "NULL, NULL, NULL";
-        return $"""
-            INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, code_version, revision_json, created_at_utc_ticks,
-                headline, summary, text_origin, source_id, congress, bill_type, bill_number, candidate_id, candidate_update_utc_ticks,
-                candidate_includes_summaries, candidate_includes_subjects, fingerprint, bill_title, issue_revision_id, issue_candidates_recorded,
-                bill_citation_extraction_id, bill_citation_start, bill_citation_length,
-                policy_area, policy_area_citation_extraction_id, policy_area_citation_start, policy_area_citation_length, policy_area_id,
-                suggestion_headline, suggestion_summary, suggestion_run_id, suggestion_fingerprint, event_on, cosponsor_count)
-            VALUES ('{record}', {revision}, 'test', '{authorKind}', {run}, {codeVersion}, 'x', 1,
-                'Headline {record}', 'Summary {record}', '{origin}', 'src', 119, 'hr', 7, '{new string('b', 64)}', 1,
-                true, true, '{new string('d', 64)}', 'A housing bill', '{new string('e', 64)}', true,
-                {billCitation}, 'Health', 'ext', 0, 1, 'health',
-                'Model draft headline', 'Model draft summary', 'suggestion-run', '{new string('f', 64)}',
-                {(eventOn is null ? "NULL" : $"'{eventOn}'")}, {cosponsorCount?.ToString() ?? "NULL"});
-            """;
-    }
-
-    private static string ActionSponsorship(string record, int revision, int position, string person, string role, bool original, string sponsoredOn, string? withdrawnOn = null) => $"""
-        INSERT INTO action_revision_sponsorships (record_id, revision_number, "position", person_id, bioguide_id, role, is_original, sponsored_on, withdrawn_on)
-        VALUES ('{record}', {revision}, {position}, '{person}', 'B{person}', '{role}', {original}, '{sponsoredOn}', {(withdrawnOn is null ? "NULL" : $"'{withdrawnOn}'")});
-        """;
-
-    private static string ActionIssue(string record, int revision, string issue, int position, bool tracked) => $"""
-        INSERT INTO action_revision_issues (record_id, revision_number, issue_id, "position", is_tracked) VALUES ('{record}', {revision}, '{issue}', {position}, {tracked});
-        """;
 
     private sealed class ZipSnapshotSteps(PublicApiViewsTests tests)
     {
