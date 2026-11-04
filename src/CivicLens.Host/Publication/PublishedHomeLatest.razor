@@ -15,7 +15,7 @@
 @code {
     [Parameter, EditorRequired] public HomeHighlights Highlights { get; set; } = default!;
 
-    private static RenderFragment LatestColumn(string title, IconName icon, IReadOnlyList<PublishedRecordEntry> rows) => @<div>
+    private static RenderFragment LatestColumn(string title, IconName icon, IReadOnlyList<PublishedRecordEntry> rows) => rows.Count == 0 ? _ => { } : @<div>
         <h3 class="latest-title"><Icon Name="icon" />@title</h3>
         <ul class="latest-rows" role="list">
             @foreach (var row in rows)

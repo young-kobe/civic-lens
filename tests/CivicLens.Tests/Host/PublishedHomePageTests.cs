@@ -112,6 +112,15 @@ public sealed class PublishedHomePageTests
     }
 
     [Fact]
+    public async Task AColumnWithNoEntryIsHiddenSoTheOtherColumnStandsAlone()
+    {
+        var main = await HomeAsync(ReleaseOf(Vote('a', 1, 1, null, 1)), []);
+
+        var columns = main.QuerySelectorAll("section#latest .latest-columns > div").ToList();
+        Assert.Equal(["House votes"], columns.Select(column => column.QuerySelector("h3")!.TextContent));
+    }
+
+    [Fact]
     public async Task TheIssueTilesLinkEachIssuePageAndDrawTheConfiguredIconOrTheNeutralDefaultAndSkipAnIssueWithNoPage()
     {
         ReleaseFacet Facet(string id, string? icon) => new(FacetKind.Issue, id, $"Name {id}", [], icon);
