@@ -1,0 +1,24 @@
+TASK: merge origin/main into branch relationship-revision-columns and fix the migration order. No other change. Branch: relationship-revision-columns.
+Main now ends with migration 20261104013000_PublicApiZipDistricts. This branch adds one collection migration. Its ID must sort after every migration on main and be unique. Target ID: 20261104014100_RelationshipRevisionColumns. If the branch migration already has that ID, keep it. Otherwise rename the .cs and .Designer.cs files and the [Migration("...")] attribute to 20261104014100_RelationshipRevisionColumns, and rename nothing else.
+After the merge, the EF model snapshot keeps both sides' changes. Rebuild the branch migration's Designer so it equals the merged model at its position (copy the merged snapshot body into the Designer's BuildTargetModel, with the Designer's own header and attribute). Check with: dotnet ef migrations has-pending-model-changes --project src/CivicLens.Infrastructure --context CollectionAttemptDbContext (must report no changes). Update any doc or test that names the old migration ID (git grep the old ID).
+Run: the build, MigrationTests, SchemaReferenceTests (regenerate with CIVIC_LENS_WRITE_SCHEMA_DOCS=1 if it fails on the merge), and the branch's own test classes (find them with git diff --name-only origin/main...HEAD -- tests). Fix only what the merge broke.
+Final message under 1,500 characters: pushed SHA, final migration ID, conflicts and how you resolved them, test classes with counts.
+
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b relationship-revision-columns origin/relationship-revision-columns
+2a. git merge --no-edit origin/main  (merge, never rebase)
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+6. curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+7. bash /tmp/dotnet-install.sh --version 10.0.403 --install-dir /root/.dotnet
+8. docker info  (if it fails: run sudo dockerd > /tmp/dockerd.log 2>&1 & in the background, then check docker info again after 10 seconds)
+9. export PATH=/root/.dotnet:$PATH && dotnet restore tests/CivicLens.Tests --locked-mode
+Prefix every later dotnet call with export PATH=/root/.dotnet:$PATH &&. If a Testcontainers pull fails with HTTP 429, wait 60 seconds and retry. Run test classes one filter at a time with --filter FullyQualifiedName~<Class> (no | in filters). Run at most one PublishReleaseTests class.
+
+Rules: read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Each rule has one owner; reuse the existing shared owners before adding any. Every added member needs a production caller. Delete code the change makes unused. No backward compatibility shims, dual reads or legacy fallbacks beyond what the named precedent already does. Comments only when absolutely necessary; intent goes in names. Tests encode why the rule matters and must fail if the rule breaks. EF migrations: generate with the repo EF tool manifest (dotnet tool restore, then dotnet ef migrations add), strip the UTF-8 BOM from generated files, and make the Designer match the model at the migration's position. Regenerate schema docs with CIVIC_LENS_WRITE_SCHEMA_DOCS=1 and the SchemaReferenceTests class. Prose (docs, commit messages): ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes. Update the owning feature docs in place (template headings Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, Limits and planned work); each invariant names its rule, enforcer and test. Do not write session reports or changelogs. If you hit a design choice the brief does not settle, choose nothing: stop, commit what is done, and list the question with options in your final message.
+
+Checks before the last commit: dotnet build tests/CivicLens.Tests -c Release (0 errors), the changed and related test classes, dotnet format CivicLens.slnx --verify-no-changes --no-restore, python3 tools/check-docs.py --check, python3 tools/render-architecture.py --check.
+
+Finish, each its own Bash call: git add -A; git commit -m "<one plain sentence>"; git push origin relationship-revision-columns. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only relationship-revision-columns.
