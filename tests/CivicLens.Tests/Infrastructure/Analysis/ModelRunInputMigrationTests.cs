@@ -11,7 +11,7 @@ namespace CivicLens.Tests.Infrastructure.Analysis;
 [Trait("Category", "Postgres")]
 public sealed class ModelRunInputMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private const string Migration = "20261104135604_ModelRunInput";
+    private const string Migration = "20261104154215_ModelRunInput";
     private static readonly string[] NewTables = ["analysis_output_schemas", "analysis_system_prompts"];
     private const string NewColumnCount = """
         SELECT count(*) FROM information_schema.columns
