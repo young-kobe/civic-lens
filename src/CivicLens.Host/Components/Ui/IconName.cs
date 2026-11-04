@@ -10,6 +10,7 @@ public enum IconName
     Light,
     Dark,
     System,
+    Theme,
     SignOut,
     Vote,
     Bill,
