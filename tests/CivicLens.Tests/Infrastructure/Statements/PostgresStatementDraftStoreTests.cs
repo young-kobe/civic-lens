@@ -63,6 +63,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         var revision = JsonSerializer.Deserialize<JsonElement>(await TextAsync($"SELECT revision_json FROM statement_revisions WHERE candidate_id = '{candidate}'"));
         Assert.Equal(RentIssue, revision.GetProperty("issueIds")[0].GetString());
         Assert.Equal(HousingArea, revision.GetProperty("policyAreaIds")[0].GetString());
+        await AssertColumnsAndChildRowsMatchJsonAsync(candidate);
         Assert.Equal(await ScalarAsync($"SELECT created_at_utc_ticks FROM statement_revisions WHERE candidate_id = '{candidate}' AND revision_number = 1"),
             await ScalarAsync($"SELECT last_revised_at_utc_ticks FROM statement_drafts WHERE candidate_id = '{candidate}'"));
         Assert.Equal(RentIssue, await TextAsync($"SELECT array_to_string(issue_ids, ',') FROM statement_drafts WHERE candidate_id = '{candidate}'"));
@@ -116,6 +117,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
 
         Assert.Equal("Approved", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
         Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM statement_drafts WHERE candidate_id = '{candidate}' AND held_reason IS NULL"));
+        await AssertColumnsAndChildRowsMatchJsonAsync(candidate);
         Assert.Equal(("civic-lens:code", "Approve", 1L), (
             await TextAsync($"SELECT actor_subject FROM statement_review_decisions WHERE candidate_id = '{candidate}'"),
             await TextAsync($"SELECT kind FROM statement_review_decisions WHERE candidate_id = '{candidate}'"),
@@ -458,6 +460,21 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         SELECT (timestamp '0001-01-01' + created_at_utc_ticks / 10 * interval '1 microsecond')::date::text
         FROM statement_candidates WHERE candidate_id = '{candidate}'
         """);
+
+    private async Task AssertColumnsAndChildRowsMatchJsonAsync(string candidate)
+    {
+        var json = JsonSerializer.Deserialize<JsonElement>(await TextAsync($"SELECT revision_json FROM statement_revisions WHERE candidate_id = '{candidate}' AND revision_number = 1"));
+        Assert.Equal((json.GetProperty("headline").GetString(), json.GetProperty("summary").GetString()), (
+            await TextAsync($"SELECT headline FROM statement_revisions WHERE candidate_id = '{candidate}' AND revision_number = 1"),
+            await TextAsync($"SELECT summary FROM statement_revisions WHERE candidate_id = '{candidate}' AND revision_number = 1")));
+        Assert.Equal(string.Join(',', json.GetProperty("speakerOfficialIds").EnumerateArray().Select(id => id.GetString())),
+            await TextAsync($"SELECT string_agg(official_id, ',' ORDER BY position) FROM statement_revision_speakers WHERE candidate_id = '{candidate}' AND revision_number = 1"));
+        Assert.Equal(RentIssue, await TextAsync($"SELECT string_agg(issue_id, ',' ORDER BY position) FROM statement_revision_issues WHERE candidate_id = '{candidate}' AND revision_number = 1"));
+        Assert.Equal(HousingArea, await TextAsync($"SELECT string_agg(policy_area_id, ',' ORDER BY position) FROM statement_revision_policy_areas WHERE candidate_id = '{candidate}' AND revision_number = 1"));
+        var quotation = json.GetProperty("quotations")[0].GetProperty("span");
+        Assert.Equal($"{quotation.GetProperty("start").GetInt32()}|{quotation.GetProperty("length").GetInt32()}",
+            await TextAsync($"SELECT quotation_start || '|' || quotation_length FROM statement_revision_quotations WHERE candidate_id = '{candidate}' AND revision_number = 1 ORDER BY position LIMIT 1"));
+    }
 
     private async Task<long> ScalarAsync(string sql)
     {

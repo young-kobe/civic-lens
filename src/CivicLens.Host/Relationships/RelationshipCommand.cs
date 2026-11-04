@@ -1,4 +1,5 @@
 using CivicLens.Application.Relationships;
+using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Host.Analysis;
 
@@ -6,10 +7,11 @@ namespace CivicLens.Host.Relationships;
 
 internal sealed class RelationshipCommand(
     AnalysisQueueCommands<RelationshipDraftRun, RelationshipDraftView, RelationshipDraftListItem> drafts,
-    GetRelationshipDraftStatus status, RefreshRelationshipPairs refresh, ReviewActor owner)
+    GetRelationshipDraftStatus status, RefreshRelationshipPairs refresh, BackfillRevisions backfill, VerifyRevisions verify, ReviewActor owner)
 {
     private const string Usage = "Use relationships draft status, relationships draft list [drafted|unchanged|none|unmatched|pending|failed] " +
-        "[limit], relationships draft requeue <pair-id|--all>, or relationships draft refresh.";
+        "[limit], relationships draft requeue <pair-id|--all>, relationships draft refresh, relationships revisions backfill <limit>, " +
+        "or relationships revisions verify.";
     private const int DefaultListLimit = 100;
 
     public static bool Matches(string[] args) => args is ["relationships", ..];
@@ -40,6 +42,10 @@ internal sealed class RelationshipCommand(
                 case ["relationships", "draft", "requeue", var pairId]:
                     CommandOutput.Write(new { requeued = await drafts.Requeue.ExecuteAsync(owner, pairId, cancellationToken) });
                     return 0;
+                case ["relationships", "revisions", "backfill", var limit]:
+                    return await OwnerCommand.BackfillRevisionsAsync(backfill, owner, limit, Usage, cancellationToken);
+                case ["relationships", "revisions", "verify"]:
+                    return await OwnerCommand.VerifyRevisionsAsync(verify, owner, cancellationToken);
                 default:
                     Console.Error.WriteLine(Usage);
                     return 2;

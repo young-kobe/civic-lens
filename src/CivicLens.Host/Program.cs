@@ -86,6 +86,8 @@ if (args is [] or ["--help"] or ["help"])
           statements draft list [drafted|over-cap|existing|pending|failed] [limit]
           statements draft run <run-id>
           statements draft requeue <candidate-id|--all>
+          statements revisions backfill <limit>
+          statements revisions verify
           actions draft status
           actions draft list [drafted|unchanged|superseded|no-official|pending|failed] [limit]
           actions draft requeue <candidate-id|--all>
@@ -109,7 +111,11 @@ if (args is [] or ["--help"] or ["help"])
           relationships draft list [drafted|unchanged|none|unmatched|pending|failed] [limit]
           relationships draft requeue <pair-id|--all>
           relationships draft refresh
+          relationships revisions backfill <limit>
+          relationships revisions verify
           brief redraft --week <yyyy-MM-dd>
+          brief revisions backfill <limit>
+          brief revisions verify
           roster propose <config.json>
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
@@ -306,13 +312,15 @@ try
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var gates = new PostgresStatementGateStore(contexts);
+        var backfillStore = new PostgresStatementRevisionBackfillStore(contexts);
         var gateCommands = new AnalysisQueueCommands<StatementGateRun, StatementGateView, StatementGateListItem>(gates,
             new PostgresAnalysisStatusStore(contexts, StatementGateTask.Task));
         var draftCommands = new AnalysisQueueCommands<StatementDraftRun, StatementDraftView, StatementDraftListItem>(
             new PostgresStatementDraftStore(contexts),
             new PostgresAnalysisStatusStore(contexts, StatementDraftTask.Task));
         var statements = new StatementCommand(gateCommands, draftCommands, new RegateStatementCandidates(gates),
-            new ExportGateLabels(new PostgresGateLabelStore(contexts)), owner,
+            new ExportGateLabels(new PostgresGateLabelStore(contexts)),
+            new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner,
             args is ["statements", "regate", ..] ? StatementIssueRubric.FromEnvironment()?.Id : null, GateLabelExport.DefaultRuntimeDirectory());
         executing = true;
         return await statements.ExecuteAsync(args, cancellation.Token);
@@ -372,7 +380,9 @@ try
         var draftStore = new PostgresRelationshipDraftStore(contexts);
         var draftCommands = new AnalysisQueueCommands<RelationshipDraftRun, RelationshipDraftView, RelationshipDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, RelationshipDraftTask.Task));
-        var relationships = new RelationshipCommand(draftCommands, new GetRelationshipDraftStatus(draftCommands.Status, draftStore), new RefreshRelationshipPairs(draftStore), owner);
+        var backfillStore = new PostgresRelationshipRevisionBackfillStore(contexts);
+        var relationships = new RelationshipCommand(draftCommands, new GetRelationshipDraftStatus(draftCommands.Status, draftStore), new RefreshRelationshipPairs(draftStore),
+            new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
         executing = true;
         return await relationships.ExecuteAsync(args, cancellation.Token);
     }
@@ -391,7 +401,9 @@ try
     if (BriefCommand.Matches(args))
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
-        var brief = new BriefCommand(new RedraftBrief(new PostgresBriefDraftStore(AnalysisDbContextFactory.Create(connectionString))), owner);
+        var contexts = AnalysisDbContextFactory.Create(connectionString);
+        var backfillStore = new PostgresBriefRevisionBackfillStore(contexts);
+        var brief = new BriefCommand(new RedraftBrief(new PostgresBriefDraftStore(contexts)), new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
         executing = true;
         return await brief.ExecuteAsync(args, cancellation.Token);
     }

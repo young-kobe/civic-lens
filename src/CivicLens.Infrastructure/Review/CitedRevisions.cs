@@ -28,7 +28,8 @@ internal static class CitedRevisions
     public static async Task<string[]> ReadRevisionJsonAsync(CollectionAttemptDbContext db, PublishedRecordKind kind,
         IEnumerable<PublishedRevisionBinding> named, CancellationToken cancellationToken)
     {
-        if (kind is PublishedRecordKind.Vote or PublishedRecordKind.ExecutiveAction or PublishedRecordKind.DocumentChange)
+        if (kind is PublishedRecordKind.Vote or PublishedRecordKind.ExecutiveAction or PublishedRecordKind.DocumentChange or PublishedRecordKind.Relationship
+            or PublishedRecordKind.Statement or PublishedRecordKind.Brief)
             throw new ArgumentException($"A {kind} revision is read from its columns, not from its JSON.", nameof(kind));
         var requested = named.Distinct().ToArray();
         var stored = await ReadStoredRevisionsAsync(db, kind, requested, cancellationToken);
@@ -37,7 +38,7 @@ internal static class CitedRevisions
     }
 
     /// <summary>Reads the named revisions that are stored. A revision that is not stored is absent from the result.</summary>
-    public static async Task<StoredRevisionRow[]> ReadStoredRevisionsAsync(CollectionAttemptDbContext db, PublishedRecordKind kind,
+    private static async Task<StoredRevisionRow[]> ReadStoredRevisionsAsync(CollectionAttemptDbContext db, PublishedRecordKind kind,
         PublishedRevisionBinding[] requested, CancellationToken cancellationToken)
     {
         if (requested.Length == 0) return [];

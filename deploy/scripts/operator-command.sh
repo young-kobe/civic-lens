@@ -88,6 +88,14 @@ case "$*" in
     ;;
   # usage: actions revisions verify
   "actions revisions verify") "$compose" run --rm cli actions revisions verify ;;
+  # usage: relationships revisions backfill <count>
+  "relationships revisions backfill "*)
+    [[ $# -eq 4 ]] || refuse
+    number "$4"
+    "$compose" run --rm cli relationships revisions backfill "$4"
+    ;;
+  # usage: relationships revisions verify
+  "relationships revisions verify") "$compose" run --rm cli relationships revisions verify ;;
   # usage: votes revisions backfill <count>
   "votes revisions backfill "*)
     [[ $# -eq 4 ]] || refuse
@@ -96,6 +104,14 @@ case "$*" in
     ;;
   # usage: votes revisions verify
   "votes revisions verify") "$compose" run --rm cli votes revisions verify ;;
+  # usage: statements revisions backfill <count>
+  "statements revisions backfill "*)
+    [[ $# -eq 4 ]] || refuse
+    number "$4"
+    "$compose" run --rm cli statements revisions backfill "$4"
+    ;;
+  # usage: statements revisions verify
+  "statements revisions verify") "$compose" run --rm cli statements revisions verify ;;
   # usage: executive-actions revisions backfill <count>
   "executive-actions revisions backfill "*)
     [[ $# -eq 4 ]] || refuse
@@ -104,6 +120,14 @@ case "$*" in
     ;;
   # usage: executive-actions revisions verify
   "executive-actions revisions verify") "$compose" run --rm cli executive-actions revisions verify ;;
+  # usage: brief revisions backfill <count>
+  "brief revisions backfill "*)
+    [[ $# -eq 4 ]] || refuse
+    number "$4"
+    "$compose" run --rm cli brief revisions backfill "$4"
+    ;;
+  # usage: brief revisions verify
+  "brief revisions verify") "$compose" run --rm cli brief revisions verify ;;
   # usage: document-changes revisions backfill <count>
   "document-changes revisions backfill "*)
     [[ $# -eq 4 ]] || refuse
