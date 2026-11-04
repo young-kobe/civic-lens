@@ -15,6 +15,7 @@ internal sealed class DocumentChangeDraftRowConfiguration : IEntityTypeConfigura
                 ReviewDraftTableConfiguration.StatusCheck(allowNotDrafted: false));
         });
         builder.HasKey(row => row.DraftId);
+        builder.HasAlternateKey(row => new { row.DraftId, row.ComparisonId }).HasName("ux_document_change_drafts_draft_comparison");
         builder.Property(row => row.DraftId).HasColumnName("draft_id").HasMaxLength(32);
         builder.Property(row => row.ComparisonId).HasColumnName("comparison_id").HasMaxLength(64).IsRequired();
         builder.Property(row => row.CurrentRevisionNumber).HasColumnName("current_revision_number").IsRequired();
