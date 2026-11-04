@@ -1,4 +1,5 @@
 using AngleSharp.Html.Parser;
+using CivicLens.Application.Issues;
 using CivicLens.Application.Publication;
 using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
@@ -10,74 +11,134 @@ public sealed class PublishedHomeCardsTests
     private static readonly DateTimeOffset Published = new(2026, 5, 11, 8, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task TheClosestVoteCardNamesTheDatesTheCountsAndTheSizeOfThePoolAndLinksTheVote()
+    public async Task TheBreakCardListsOneRowForEachLeaderWithTheHighestShareFirstAndALinkToTheBoards()
     {
-        var release = ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split), Vote('b', 300, 100, PublishedVoteAlignment.PartiesAgree));
+        var low = Leader() with { Official = Official("low", "Low Share"), Breaks = 10, Cast = 100 };
+        var high = Leader() with { Official = Official("high", "High Share"), Breaks = 126, Cast = 206, PagePath = "officials/high.html" };
+
+        var main = await HomeAsync(ReleaseOf(), [low, high]);
+
+        Assert.Equal("Who broke from their party most", main.QuerySelector(".break-card h2")!.TextContent);
+        var rows = main.QuerySelectorAll(".break-rows li").ToList();
+        Assert.Equal(["High Share", "Low Share"], rows.Select(row => row.QuerySelector("a")!.TextContent));
+        Assert.Equal("officials/high.html", rows[0].QuerySelector("a")!.GetAttribute("href"));
+        Assert.Equal("126 of 206 votes", rows[0].QuerySelector(".break-row-text > .muted")!.TextContent);
+        Assert.Equal(("126", "206"), (rows[0].QuerySelector("meter")!.GetAttribute("value"), rows[0].QuerySelector("meter")!.GetAttribute("max")));
+        Assert.Equal(("10", "100"), (rows[1].QuerySelector("meter")!.GetAttribute("value"), rows[1].QuerySelector("meter")!.GetAttribute("max")));
+        Assert.Equal("officials.html", main.QuerySelector(".break-card > p > a")!.GetAttribute("href"));
+        Assert.Equal("See all four party boards", main.QuerySelector(".break-card > p > a")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheBreakCardNamesTheCongressOfItsRowsSoAKeptEarlierBoardIsNotPassedOffAsTheCurrentOne()
+    {
+        var current = Leader();
+        var kept = Leader(chamber: PublishedChamber.Senate) with { Congress = 118 };
+
+        var same = await HomeAsync(ReleaseOf(), [current]);
+        var mixed = await HomeAsync(ReleaseOf(), [current, kept]);
+
+        Assert.Equal("The share of split votes each member cast against most of their party, in the 119th Congress.", same.QuerySelector(".break-card-lede")!.TextContent);
+        Assert.Equal("The share of split votes each member cast against most of their party, in the 119th and 118th Congresses.", mixed.QuerySelector(".break-card-lede")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheInfoButtonOfTheBreakCardOpensTheFixedRuleAndSaysWhenAChamberAndPartyHasNoLine()
+    {
+        var one = await HomeAsync(ReleaseOf(), [Leader()]);
+
+        var button = one.QuerySelector(".break-card-head button")!;
+        Assert.Equal("How the card chooses these members", button.GetAttribute("aria-label"));
+        var rule = one.QuerySelector("#" + button.GetAttribute("popovertarget"))!;
+        Assert.Contains("at least 25 split votes", rule.TextContent, StringComparison.Ordinal);
+        Assert.Contains("A vote against the party is not a mistake.", rule.TextContent, StringComparison.Ordinal);
+        Assert.Contains("A chamber and party with no line has no member with vote figures on this site who meets these rules.", rule.TextContent, StringComparison.Ordinal);
+        Assert.Equal("How these choices are made", rule.QuerySelector("a[href='method.html#home-picks']")!.TextContent);
+
+        var all = await HomeAsync(ReleaseOf(), [.. OfficialBoard.All.Select(board => Leader(chamber: board.Chamber) with { Party = board.Party })]);
+        Assert.DoesNotContain("A chamber and party with no line", all.QuerySelector(".break-card-head .term-popover")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheOldPanelsButtonsTablesAndReleaseLineAreGoneFromHomeAndTheHeroHoldsTheHeadingAndTheLede()
+    {
+        var release = ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split), Executive('b', 1));
+
+        var main = await HomeAsync(release, [Leader()]);
+
+        var document = main;
+        Assert.Equal("Who represents you?", document.QuerySelector(".public-hero h1")!.TextContent);
+        Assert.Equal("See how your representative and senators voted and which bills they introduced. Each fact links to its official source.", document.QuerySelector(".public-hero .home-lead")!.TextContent);
+        foreach (var gone in new[] { "Chosen by a fixed rule", "Closest vote", "Newest executive actions", "Newest records", "Find your representative or senators", "Understand a bill", "Search all records", "Release 3", "Policy areas", "Voted against their party most often" })
+            Assert.DoesNotContain(gone, document.TextContent, StringComparison.Ordinal);
+        Assert.Empty(document.QuerySelectorAll("main table, main form, .home-actions"));
+    }
+
+    [Fact]
+    public async Task HomeLinksTheOfficialsListWithTheRealCountInPlaceOfTheZipForm()
+    {
+        var main = await HomeAsync(ReleaseOf(), [], officialCount: 541);
+
+        var link = main.QuerySelector(".home-browse a")!;
+        Assert.Equal("browse all 541 officials", link.TextContent);
+        Assert.Equal("officials.html", link.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task TheLatestListHoldsTheFourNewestVotesAndTheThreeNewestActionsNewestFirstWithTheirDateAndALink()
+    {
+        var release = ReleaseOf(Vote('a', 1, 1, null, 1), Vote('b', 1, 1, null, 2), Vote('c', 1, 1, null, 3), Vote('d', 1, 1, null, 4), Vote('e', 1, 1, null, 5),
+            Executive('f', 1), Executive('g', 2), Executive('h', 3), Executive('i', 4));
 
         var main = await HomeAsync(release, []);
 
-        Assert.Contains("Closest vote, 5 May 2026 to 11 May 2026", main.QuerySelectorAll("h3").Select(heading => heading.TextContent));
-        Assert.Contains("The Yea and Nay counts differ by 2 votes.", main.TextContent, StringComparison.Ordinal);
-        Assert.Contains("closest of 2 substantive roll call votes with counts", main.TextContent, StringComparison.Ordinal);
-        Assert.NotNull(main.QuerySelector($"a[href='records/{Id('a')}.html']"));
+        var section = main.QuerySelector("section#latest")!;
+        Assert.Equal("Latest from the record", section.QuerySelector("h2")!.TextContent);
+        var columns = section.QuerySelectorAll(".latest-columns > div").ToList();
+        Assert.Equal(["Votes", "Executive actions"], columns.Select(column => column.QuerySelector("h3")!.TextContent));
+        Assert.Equal([Id('e'), Id('d'), Id('c'), Id('b')], columns[0].QuerySelectorAll("li a").Select(link => link.GetAttribute("href")!.Split('/')[1][..32]));
+        Assert.Equal([Id('i'), Id('h'), Id('g')], columns[1].QuerySelectorAll("li a").Select(link => link.GetAttribute("href")!.Split('/')[1][..32]));
+        Assert.Equal(["Headline e", "5 May 2026"], columns[0].QuerySelector("li a")!.Children.Select(child => child.TextContent));
     }
 
     [Fact]
-    public async Task WithNoVoteInTheWindowTheClosestVoteCardIsHiddenInsteadOfShowingAnOlderVoteOrAnEmptyCard()
-    {
-        var main = await HomeAsync(ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split) with { EventDate = new DateOnly(2026, 1, 1) }), [Leader()]);
-
-        Assert.DoesNotContain("Closest vote", main.TextContent, StringComparison.Ordinal);
-        Assert.Contains("Voted against their party most often", main.TextContent, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ATiedVoteSaysTheCountsAreEqualInsteadOfADifferenceOfZero()
-    {
-        var main = await HomeAsync(ReleaseOf(Vote('a', 50, 50, PublishedVoteAlignment.Mixed)), []);
-
-        Assert.Contains("The Yea and Nay counts are equal.", main.TextContent, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ThePicksPanelSaysAFixedRuleChoosesTheItemsAndLinksTheMethodOfTheChoices()
-    {
-        var main = await HomeAsync(ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split)), []);
-
-        Assert.Contains("A fixed rule chooses these items from the published records. The same records on the same release day give the same choices.", main.TextContent, StringComparison.Ordinal);
-        Assert.Equal("How these choices are made", main.QuerySelector("a[href='method.html#home-picks']")!.TextContent);
-    }
-
-    [Fact]
-    public async Task TheBreakCardNamesWhoWithPartyAndStateAndWhatWasCountedLinksTheOfficialAndStatesTheMinimum()
-    {
-        var main = await HomeAsync(ReleaseOf(), [Leader()]);
-
-        var item = main.QuerySelector("li")!;
-        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split in the 119th Congress.", item.TextContent);
-        Assert.Equal("officials/doe.html", item.QuerySelector("a")!.GetAttribute("href"));
-        Assert.Contains("A chamber and party with no line has no member with vote figures on this site who meets these rules.", main.TextContent, StringComparison.Ordinal);
-        Assert.Contains("at least 25 split votes", main.TextContent, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ABreakLineFromAKeptBoardNamesItsEarlierCongressAndLinksThePageOfThatCongressSoTheCountsCanBeChecked()
-    {
-        var kept = Leader() with { Congress = 118, PagePath = "officials/doe/118.html" };
-
-        var item = (await HomeAsync(ReleaseOf(), [kept])).QuerySelector("li")!;
-
-        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split in the 118th Congress.", item.TextContent);
-        Assert.Equal("officials/doe/118.html", item.QuerySelector("a")!.GetAttribute("href"));
-    }
-
-    [Fact]
-    public async Task WithNoVoteAndNoLeaderTheWholePicksPanelIsHiddenInsteadOfShowingAnEmptyPanel()
+    public async Task TheLatestListAndTheBreakCardAreHiddenWhenTheyHaveNothingToShowInsteadOfAnEmptyBlock()
     {
         var main = await HomeAsync(ReleaseOf(), []);
 
-        Assert.DoesNotContain("Chosen by a fixed rule", main.TextContent, StringComparison.Ordinal);
-        Assert.DoesNotContain("Newest executive actions", main.TextContent, StringComparison.Ordinal);
+        Assert.Null(main.QuerySelector("#latest"));
+        Assert.Null(main.QuerySelector("#issues"));
+        Assert.Null(main.QuerySelector(".break-card"));
+    }
+
+    [Fact]
+    public async Task TheIssueTilesLinkEachIssuePageAndDrawTheConfiguredIconOrTheNeutralDefaultAndSkipAnIssueWithNoPage()
+    {
+        ReleaseFacet Facet(string id, string? icon) => new(FacetKind.Issue, id, $"Name {id}", [], icon);
+        var facets = new ReleaseFacets([Facet("firearms", "crosshair"), Facet("plain", null), Facet("not a segment", "bolt")], []);
+
+        var main = await HomeAsync(ReleaseOf(), [], facets: facets);
+
+        var section = main.QuerySelector("section#issues")!;
+        Assert.Equal("Start with an issue", section.QuerySelector("h2")!.TextContent);
+        var tiles = section.QuerySelectorAll("a.issue-tile").ToList();
+        Assert.Equal(["Name firearms", "Name plain"], tiles.Select(tile => tile.TextContent));
+        Assert.Equal(PublicationProtocol.IssuePagePath("firearms", 1), tiles[0].GetAttribute("href"));
+        Assert.Equal(IssueIcons.PathOf("crosshair"), tiles[0].QuerySelector("path")!.GetAttribute("d"));
+        Assert.Equal(IssueIcons.PathOf(IssueIcons.Default), tiles[1].QuerySelector("path")!.GetAttribute("d"));
+    }
+
+    [Theory]
+    [InlineData("Independent", "Democrat", "ME", "I, Maine")]
+    [InlineData("Democrat", null, null, "D")]
+    [InlineData(null, "Democrat", "TX", "Texas")]
+    [InlineData("Libertarian", "Democrat", "ME", "Maine")]
+    [InlineData("Democrat", null, "DC", "D, District of Columbia")]
+    public async Task TheBreakCardShowsOnlyThePartyLetterAndStateNameThatTheTermHolds(string? party, string? caucus, string? state, string expected)
+    {
+        var main = await HomeAsync(ReleaseOf(), [Leader([Term(party, state, caucus)])]);
+
+        Assert.Equal(expected, main.QuerySelector(".break-row-name .muted")!.TextContent);
     }
 
     [Fact]
@@ -85,23 +146,17 @@ public sealed class PublishedHomeCardsTests
     {
         var main = await HomeAsync(ReleaseOf(), [Leader([Term("Democrat", "TX", startYear: 2021), Term("Republican", "FL", startYear: 2025)])]);
 
-        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split in the 119th Congress.", main.QuerySelector("li")!.TextContent);
+        Assert.Equal("D, Texas", main.QuerySelector(".break-row-name .muted")!.TextContent);
     }
 
     [Fact]
-    public async Task ALaterExecutiveTermOfTheSamePartyDoesNotChangeTheLabelOfAMemberOfTheHouse()
+    public async Task ALaterTermInAnotherOfficeOrChamberDoesNotChangeThePartyOrStateOfAMemberOfTheHouse()
     {
-        var main = await HomeAsync(ReleaseOf(), [Leader([Term("Democrat", "TX", startYear: 2021), Term("Democrat", null, startYear: 2025, kind: PublishedOfficeKind.Executive)])]);
+        var other = Leader([Term("Democrat", "TX", startYear: 2021), Term("Democrat", null, startYear: 2025, kind: PublishedOfficeKind.Executive), Term("Democrat", "NM", startYear: 2026, kind: PublishedOfficeKind.Senator)]);
 
-        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split in the 119th Congress.", main.QuerySelector("li")!.TextContent);
-    }
+        var main = await HomeAsync(ReleaseOf(), [other]);
 
-    [Fact]
-    public async Task ALaterTermOfTheSamePartyInTheOtherChamberDoesNotChangeTheStateOfAMemberOfTheHouse()
-    {
-        var main = await HomeAsync(ReleaseOf(), [Leader([Term("Democrat", "TX", startYear: 2021), Term("Democrat", "NM", startYear: 2025, kind: PublishedOfficeKind.Senator)])]);
-
-        Assert.Equal("Jane Doe (D, Texas) sided against most House Democrats on 12 of 40 votes where the parties split in the 119th Congress.", main.QuerySelector("li")!.TextContent);
+        Assert.Equal("D, Texas", main.QuerySelector(".break-row-name .muted")!.TextContent);
     }
 
     [Fact]
@@ -111,50 +166,15 @@ public sealed class PublishedHomeCardsTests
 
         var main = await HomeAsync(ReleaseOf(), [Leader(terms, PublishedChamber.Senate)]);
 
-        Assert.Equal("Jane Doe (D, New Mexico) sided against most Senate Democrats on 12 of 40 votes where the parties split in the 119th Congress.", main.QuerySelector("li")!.TextContent);
-    }
-
-    [Theory]
-    [InlineData("Independent", "Democrat", "ME", "Jane Doe (I, Maine) ")]
-    [InlineData("Democrat", null, null, "Jane Doe (D) ")]
-    [InlineData(null, "Democrat", "TX", "Jane Doe (Texas) ")]
-    [InlineData("Libertarian", "Democrat", "ME", "Jane Doe (Maine) ")]
-    [InlineData("Democrat", null, "DC", "Jane Doe (D, District of Columbia) ")]
-    public async Task TheBreakCardShowsOnlyThePartyLetterAndStateNameThatTheTermHolds(string? party, string? caucus, string? state, string expectedStart)
-    {
-        var main = await HomeAsync(ReleaseOf(), [Leader([Term(party, state, caucus)])]);
-
-        Assert.StartsWith(expectedStart + "sided against most House Democrats", main.QuerySelector("li")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal("D, New Mexico", main.QuerySelector(".break-row-name .muted")!.TextContent);
     }
 
     [Fact]
-    public async Task TheBreakCardLeavesOutThePartyAndStateItDoesNotHoldInsteadOfPrintingEmptyBrackets()
+    public async Task TheBreakCardLeavesOutThePartyAndStateItDoesNotHold()
     {
         var main = await HomeAsync(ReleaseOf(), [Leader(terms: [])]);
 
-        Assert.Equal("Jane Doe sided against most House Democrats on 12 of 40 votes where the parties split in the 119th Congress.", main.QuerySelector("li")!.TextContent);
-    }
-
-    [Fact]
-    public async Task TheExecutiveActionCardListsTheNewestThreeWithTheirDateAndSaysHowManyExist()
-    {
-        var release = ReleaseOf(Executive('a', 1), Executive('b', 2), Executive('c', 3), Executive('d', 4));
-
-        var main = await HomeAsync(release, []);
-
-        var table = main.QuerySelector("table")!;
-        Assert.Equal([Id('d'), Id('c'), Id('b')], table.QuerySelectorAll("a.cell-title").Select(link => link.GetAttribute("href")!.Split('/')[1][..32]));
-        Assert.Contains("Chosen by a fixed rule: the 3 newest of 4 executive actions on this site.", main.TextContent, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task TheExecutiveActionAsideSaysTheOnlyActionForOneAndTheCardIsHiddenForNone()
-    {
-        var one = await HomeAsync(ReleaseOf(Executive('a', 1)), []);
-        var none = await HomeAsync(ReleaseOf(), []);
-
-        Assert.Contains("Chosen by a fixed rule: the only executive action on this site.", one.TextContent, StringComparison.Ordinal);
-        Assert.DoesNotContain("Newest executive actions", none.TextContent, StringComparison.Ordinal);
+        Assert.Equal("", main.QuerySelector(".break-row-name .muted")!.TextContent);
     }
 
     [Theory]
@@ -162,7 +182,7 @@ public sealed class PublishedHomeCardsTests
     [InlineData(PublishedVoteAlignment.PartiesAgree, "Both parties agreed", "A vote where both parties agreed is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted the same way.")]
     public async Task AVoteInAListShowsItsPartyBadgeWithItsMeaningAndItsCounts(PublishedVoteAlignment alignment, string badge, string meaning)
     {
-        var main = await HomeAsync(ReleaseOf(Vote('a', 216, 214, alignment)), []);
+        var main = await AllRecordsAsync(ReleaseOf(Vote('a', 216, 214, alignment)));
 
         var cell = main.QuerySelector("tbody td")!;
         Assert.Equal(["Vote", badge], cell.QuerySelectorAll(".badge").Select(item => item.TextContent));
@@ -176,27 +196,24 @@ public sealed class PublishedHomeCardsTests
         var candidate = Vote('a', 0, 0, null) with { YeaCount = null, NayCount = null };
         var mixed = Vote('b', 50, 50, PublishedVoteAlignment.Mixed);
 
-        var main = await HomeAsync(ReleaseOf(candidate, mixed), []);
+        var main = await AllRecordsAsync(ReleaseOf(candidate, mixed));
 
         var cells = main.QuerySelectorAll("tbody tr").Select(row => row.QuerySelector("td")!).ToList();
         Assert.All(cells, cell => Assert.Single(cell.QuerySelectorAll(".badge")));
         Assert.DoesNotContain("Casts of all members of the chamber", cells.Single(cell => cell.QuerySelector($"a[href='records/{Id('a')}.html']") is not null).TextContent, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task WithFewerActionsThanTheCardHoldsTheAsideSaysAllOfThemAreShown()
-    {
-        var main = await HomeAsync(ReleaseOf(Executive('a', 1), Executive('b', 2)), []);
+    private static async Task<AngleSharp.Dom.IElement> AllRecordsAsync(PublicationRelease release) =>
+        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAllRecordsAsync(release, 1, CancellationToken.None)).QuerySelector("main")!;
 
-        Assert.Contains("Chosen by a fixed rule: all 2 executive actions on this site, newest first.", main.TextContent, StringComparison.Ordinal);
+    private static async Task<AngleSharp.Dom.IElement> HomeAsync(PublicationRelease release, BreakLeader[] leaders, int officialCount = 0, ReleaseFacets? facets = null)
+    {
+        var highlights = HomeHighlights.From(release, [], officialCount) with { BreakLeaders = [.. leaders] };
+        var html = await new ReleaseRenderer(null, null).RenderHomeAsync(release, null, facets ?? new ReleaseFacets([], []), highlights, CancellationToken.None);
+        return new HtmlParser().ParseDocument(html).Body!;
     }
 
-    private static async Task<AngleSharp.Dom.IElement> HomeAsync(PublicationRelease release, BreakLeader[] leaders)
-    {
-        var highlights = HomeHighlights.From(release, []) with { BreakLeaders = [.. leaders] };
-        var html = await new ReleaseRenderer(null, null).RenderHomeAsync(release, null, new ReleaseFacets([], []), highlights, CancellationToken.None);
-        return new HtmlParser().ParseDocument(html).QuerySelector("main")!;
-    }
+    private static OfficialListing Official(string id, string name) => new(new PublishedOfficialProfile { Id = id, Name = name, Terms = [Term("Democrat", "TX")] }, 0);
 
     private static BreakLeader Leader(PublishedOfficeTerm[]? terms = null, PublishedChamber chamber = PublishedChamber.House) => new(chamber, PublishedPartyMajority.Democrat,
         new OfficialListing(new PublishedOfficialProfile { Id = "doe", Name = "Jane Doe", Terms = terms ?? [Term("Democrat", "TX")] }, 0), 40, 12, 119, "officials/doe.html");
@@ -222,12 +239,12 @@ public sealed class PublishedHomeCardsTests
         Records = entries
     };
 
-    private static PublishedRecordEntry Vote(char id, int yea, int nay, PublishedVoteAlignment? alignment) => Entry(PublishedRecordKind.Vote, id) with
+    private static PublishedRecordEntry Vote(char id, int yea, int nay, PublishedVoteAlignment? alignment, int day = 7) => Entry(PublishedRecordKind.Vote, id) with
     {
         YeaCount = yea,
         NayCount = nay,
         Alignment = alignment,
-        EventDate = new DateOnly(2026, 5, 7)
+        EventDate = new DateOnly(2026, 5, day)
     };
 
     private static PublishedRecordEntry Executive(char id, int day) => Entry(PublishedRecordKind.ExecutiveAction, id) with

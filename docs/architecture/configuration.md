@@ -111,12 +111,13 @@ Overloads that take a prebuilt definition or request serve callers that already 
 
 Tracked issues are in a separate file, `config/issues.json`, with its own version. `IssueConfiguration` holds the 32 policy areas and the tracked issues. Each issue links to at least one policy area and can carry a dated active range.
 
-The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `name`), and a list of `issues`. Each issue has an `id`, a `name`, a `definition`, and at least one `policyAreaIds` entry. It may also have `includes`, `excludes`, `startsOn` (inclusive), and `endsBefore` (exclusive).
+The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `name`), and a list of `issues`. Each issue has an `id`, a `name`, a `definition`, and at least one `policyAreaIds` entry. It may also have `icon`, `includes`, `excludes`, `startsOn` (inclusive), and `endsBefore` (exclusive).
 
 - IDs use lowercase words joined by hyphens, with at most 60 characters, the `PublicationProtocol.MaximumFacetIdLength` limit.
 - Policy area IDs and names are unique, and issue IDs are unique.
 - Each policy area ID in an issue must exist and may appear once.
 - List entries must be nonblank and unique within their list. The date range must be valid.
+- `icon` names one icon of the fixed set in `IssueIcons` (Application, Issues). An unknown name is invalid. An issue with no `icon` gets the neutral default icon on the home page. Every issue in the shipped file names an icon. Enforced by `TrackedIssueConfiguration.Validate`. Tests: `IssueConfigurationRevisionTests.AnIssueIconMustBeAbsentOrNameOneOfTheFixedIconsSoAnIssueCannotShipABrokenTile` and `IssueConfigurationRevisionTests.EveryShippedIssueNamesAnIconSoNoTileFallsBackToTheNeutralOne`.
 - The file holds at most 256 issues. The Host accepts a file of at most 1 MB.
 - The host reads and validates the file once at process start. An invalid file stops startup.
 - `ConfigurationFile` in Host reads and validates every collection and issue file. It rejects a file over 1 MB or a relative environment path. The largest file, `config/federal-coverage.json`, is 814 KB.

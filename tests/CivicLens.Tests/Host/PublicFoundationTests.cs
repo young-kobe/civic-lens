@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AngleSharp.Html.Parser;
+using CivicLens.Application.Issues;
 using CivicLens.Application.Publication;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Publication;
@@ -41,23 +42,15 @@ public sealed class PublicFoundationTests
     }
 
     [Fact]
-    public async Task EveryNamedIconDrawsShapesAndAnIssueWithoutAnIconDrawsNothingSoTheListStaysClosed()
+    public async Task EveryNamedIconDrawsShapesAndAnIssueWithoutAnIconDrawsTheNeutralDefaultSoNoTileIsEmpty()
     {
         foreach (var name in Enum.GetValues<IconName>())
             Assert.NotEmpty(new HtmlParser().ParseFragment(await RenderAsync<Icon>(new() { [nameof(Icon.Name)] = name }), null!)
                 .OfType<AngleSharp.Dom.IElement>().Single().QuerySelectorAll("path, circle, rect"));
 
-        Assert.Equal("", await RenderAsync<IssueIcon>(new() { [nameof(IssueIcon.IssueId)] = "an-issue-added-later" }));
-        Assert.Contains("<path", await RenderAsync<IssueIcon>(new() { [nameof(IssueIcon.IssueId)] = "firearms" }), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void NoIssueIconNamesAnIssueThatTheConfigurationLacksSoAConfigOnlyNewIssueNeverFailsTheBuild()
-    {
-        using var config = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "config", "issues.json")));
-        var ids = config.RootElement.GetProperty("issues").EnumerateArray().Select(issue => issue.GetProperty("id").GetString()!);
-
-        Assert.Empty(IssueIcons.Paths.Keys.Except(ids));
+        foreach (var name in IssueIcons.Paths.Keys)
+            Assert.Contains(IssueIcons.Paths[name], await RenderAsync<IssueIcon>(new() { [nameof(IssueIcon.Name)] = name }), StringComparison.Ordinal);
+        Assert.Contains(IssueIcons.Paths[IssueIcons.Default], await RenderAsync<IssueIcon>(new()), StringComparison.Ordinal);
     }
 
     [Fact]

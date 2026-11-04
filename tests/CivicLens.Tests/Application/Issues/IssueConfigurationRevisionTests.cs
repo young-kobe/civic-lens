@@ -22,6 +22,37 @@ public sealed class IssueConfigurationRevisionTests
         Assert.Matches("^[0-9a-f]{64}$", IssueConfigurationRevision.Create(configuration).Id);
     }
 
+    [Fact]
+    public void EveryShippedIssueNamesAnIconSoNoTileFallsBackToTheNeutralOne()
+    {
+        var json = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "config", "issues.json"));
+
+        var configuration = JsonSerializer.Deserialize<IssueConfiguration>(json, CollectionProtocol.JsonOptions)!;
+
+        Assert.All(configuration.Issues, issue => Assert.True(issue.Icon is not null && IssueIcons.IsKnown(issue.Icon), issue.Id));
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("bolt", true)]
+    [InlineData("a-name-not-in-the-set", false)]
+    [InlineData("", false)]
+    public void AnIssueIconMustBeAbsentOrNameOneOfTheFixedIconsSoAnIssueCannotShipABrokenTile(string? icon, bool valid)
+    {
+        Assert.Equal(valid, IsValid(Configuration(Issue() with { Icon = icon })));
+    }
+
+    [Fact]
+    public void ARevisionKeepsTheIconOfAnIssueAndLeavesAnAbsentIconOutOfTheSnapshot()
+    {
+        var with = IssueConfigurationRevision.Create(Configuration(Issue() with { Icon = "bolt" }));
+        var without = IssueConfigurationRevision.Create(Configuration(Issue()));
+
+        Assert.Contains("\"icon\":\"bolt\"", with.Json, StringComparison.Ordinal);
+        Assert.DoesNotContain("icon", without.Json, StringComparison.Ordinal);
+        Assert.Equal("bolt", with.ReadConfiguration().Issues.Single().Icon);
+    }
+
     [Theory]
     [InlineData(60, true)]
     [InlineData(61, false)]

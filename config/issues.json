@@ -134,6 +134,7 @@
     {
       "id": "immigration-enforcement",
       "name": "Immigration enforcement and the border",
+      "icon": "border-map",
       "definition": "Federal policy and action on border security, immigration enforcement, detention, deportation, and asylum.",
       "policyAreaIds": [
         "immigration"
@@ -151,6 +152,7 @@
     {
       "id": "trade-and-tariffs",
       "name": "Trade and tariffs",
+      "icon": "trade-arrows",
       "definition": "Tariffs, trade agreements, export controls, and their effects on prices and industries.",
       "policyAreaIds": [
         "foreign-trade-and-international-finance"
@@ -167,6 +169,7 @@
     {
       "id": "federal-budget",
       "name": "Federal budget and debt",
+      "icon": "dollar",
       "definition": "Federal spending levels, appropriations, shutdowns, the debt limit, and deficits.",
       "policyAreaIds": [
         "economics-and-public-finance"
@@ -184,6 +187,7 @@
     {
       "id": "federal-taxes",
       "name": "Federal taxes",
+      "icon": "receipt",
       "definition": "Federal tax law: individual and business rates, credits, deductions, and tax enforcement.",
       "policyAreaIds": [
         "taxation"
@@ -201,6 +205,7 @@
     {
       "id": "health-coverage",
       "name": "Health coverage and costs",
+      "icon": "medical-cross",
       "definition": "Access to and cost of health insurance and care, including Medicare, Medicaid, the ACA marketplaces, and drug prices.",
       "policyAreaIds": [
         "health",
@@ -219,6 +224,7 @@
     {
       "id": "reproductive-health",
       "name": "Abortion and reproductive health",
+      "icon": "heart",
       "definition": "Federal policy on abortion, contraception, IVF, and related court decisions.",
       "policyAreaIds": [
         "health",
@@ -234,6 +240,7 @@
     {
       "id": "firearms",
       "name": "Firearms",
+      "icon": "crosshair",
       "definition": "Federal firearms law and regulation, and responses to gun violence.",
       "policyAreaIds": [
         "crime-and-law-enforcement"
@@ -250,6 +257,7 @@
     {
       "id": "energy-and-climate",
       "name": "Energy and climate",
+      "icon": "bolt",
       "definition": "Energy production and prices, and climate and emissions policy.",
       "policyAreaIds": [
         "energy",
@@ -267,6 +275,7 @@
     {
       "id": "federal-workforce",
       "name": "Federal workforce and agencies",
+      "icon": "government-building",
       "definition": "The size, structure, and independence of federal agencies and the civil service.",
       "policyAreaIds": [
         "government-operations-and-politics"
@@ -283,6 +292,7 @@
     {
       "id": "elections-and-voting",
       "name": "Elections and voting",
+      "icon": "ballot",
       "definition": "Federal rules for voting, election administration, and campaign finance.",
       "policyAreaIds": [
         "government-operations-and-politics",
@@ -300,6 +310,7 @@
     {
       "id": "foreign-policy-and-war",
       "name": "Foreign policy and war",
+      "icon": "globe",
       "definition": "U.S. relations with other countries, military operations abroad, and decisions to go to war or end one.",
       "policyAreaIds": [
         "international-affairs",
@@ -320,6 +331,7 @@
     {
       "id": "russia-ukraine",
       "name": "Russia and Ukraine",
+      "icon": "flag",
       "definition": "U.S. policy on the war in Ukraine, including aid, sanctions, and negotiations.",
       "policyAreaIds": [
         "international-affairs",
@@ -335,6 +347,7 @@
     {
       "id": "middle-east-conflicts",
       "name": "Middle East conflicts",
+      "icon": "compass",
       "definition": "U.S. policy on conflicts involving Israel, Gaza, Iran, and their neighbors.",
       "policyAreaIds": [
         "international-affairs",
@@ -350,6 +363,7 @@
     {
       "id": "artificial-intelligence",
       "name": "Artificial intelligence",
+      "icon": "chip",
       "definition": "Federal policy on the development, use, and regulation of artificial intelligence.",
       "policyAreaIds": [
         "science-technology-communications"
@@ -366,6 +380,7 @@
     {
       "id": "social-security",
       "name": "Social Security",
+      "icon": "people",
       "definition": "Social Security retirement and disability benefits, their funding, and their administration.",
       "policyAreaIds": [
         "social-welfare"
@@ -382,6 +397,7 @@
     {
       "id": "food-assistance",
       "name": "Food assistance",
+      "icon": "fork-and-knife",
       "definition": "Federal food assistance programs such as SNAP and WIC.",
       "policyAreaIds": [
         "agriculture-and-food",

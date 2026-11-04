@@ -225,7 +225,7 @@ public sealed class PublishRelease
             !ReleaseBillStatuses.ChangedActionIds(ReleaseBillStatuses.ActionIdsOf(manifest.Records), previous, statuses).Any())
             throw new ArgumentException("Nothing to publish: no record, official, or bill status changed.");
         var boards = await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, statuses, rewriteOfficials, cancellationToken);
-        await indexPages.WriteHomeAsync(staging, manifest, facets, HomeHighlights.From(manifest, boards), additions, previous, cancellationToken);
+        await indexPages.WriteHomeAsync(staging, manifest, facets, HomeHighlights.From(manifest, boards, officials.Officials.Length), additions, previous, cancellationToken);
         await staging.WriteSiteFilesAsync(manifest, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);

@@ -166,7 +166,7 @@ public sealed class PublishEntryRewriteTests
         var scenario = new PublicationScenario();
         scenario.Clock.Now = new(2025, 4, 12, 0, 0, 0, TimeSpan.Zero);
         var first = await PublishFirstAsync(scenario);
-        var vote = Assert.IsType<PublishedRecordEntry>(scenario.Highlights!.ClosestVote);
+        var vote = Assert.Single(scenario.Highlights!.Votes);
         Assert.Equal((1, 1, PublishedVoteAlignment.Split), (vote.YeaCount, vote.NayCount, vote.Alignment));
         Assert.Empty(scenario.Highlights.BreakLeaders);
         var carried = Summaries(scenario, first);

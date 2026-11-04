@@ -7,6 +7,8 @@ public sealed class PublicationCatalog(IReadOnlyDictionary<string, string> offic
 {
     private readonly ImmutableDictionary<string, string> issueNames =
         issues.Issues.ToImmutableDictionary(issue => issue.Id, issue => issue.Name, StringComparer.Ordinal);
+    private readonly ImmutableDictionary<string, string?> issueIcons =
+        issues.Issues.ToImmutableDictionary(issue => issue.Id, issue => issue.Icon, StringComparer.Ordinal);
     private readonly ImmutableDictionary<string, string> policyAreaNames =
         issues.PolicyAreas.ToImmutableDictionary(area => area.Id, area => area.Name, StringComparer.Ordinal);
 
@@ -16,6 +18,8 @@ public sealed class PublicationCatalog(IReadOnlyDictionary<string, string> offic
     public bool HasIssue(string id) => issueNames.ContainsKey(id);
 
     public string IssueName(string id) => issueNames.GetValueOrDefault(id, id);
+
+    public string? IssueIcon(string id) => issueIcons.GetValueOrDefault(id);
 
     public bool HasPolicyArea(string id) => policyAreaNames.ContainsKey(id);
 

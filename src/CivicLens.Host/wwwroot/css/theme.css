@@ -112,6 +112,8 @@ body.public {
     --frame-pad: max(var(--gutter), calc((100% - var(--content)) / 2 + var(--gutter)));
     --t-h1: clamp(2.5rem, 6vw, 4rem);
     --t-h2: 1.5rem;
+    --t-display: clamp(2.75rem, 7vw, 5.25rem);
+    --t-section: 2.25rem;
     --marigold: #f5b301;
     --bar: #14213d;
     --bar-ink: #ffffff;
