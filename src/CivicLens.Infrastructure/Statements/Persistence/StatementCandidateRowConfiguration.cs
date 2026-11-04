@@ -12,6 +12,7 @@ internal sealed class StatementCandidateRowConfiguration : IEntityTypeConfigurat
         builder.ToTable("statement_candidates", table =>
             table.HasCheckConstraint("ck_statement_candidates_id", "candidate_id ~ '^[0-9a-f]{64}$'"));
         builder.HasKey(row => row.CandidateId);
+        builder.HasAlternateKey(row => new { row.CandidateId, row.ExtractionId }).HasName("ux_statement_candidates_candidate_extraction");
         builder.Property(row => row.CandidateId).HasColumnName("candidate_id").HasMaxLength(64);
         builder.Property(row => row.SourceId).HasColumnName("source_id").IsRequired();
         builder.Property(row => row.Url).HasColumnName("url").HasMaxLength(4096).IsRequired();

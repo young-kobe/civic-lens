@@ -1,19 +1,27 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Relationships;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Relationships;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
+using CivicLens.Infrastructure.Analysis;
+using CivicLens.Infrastructure.Relationships;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace CivicLens.Tests.Fixtures;
 
 // The pair finder reads only the drafts and revisions, so the seeder relaxes the foreign keys of the rows around them.
+// It writes a relationship revision through the production row builder, so the columns equal the revision.
 internal sealed class RelationshipWorldSeeder(string connectionString)
 {
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
-    public Task StatementAsync(ApprovedStatement statement, string reviewStatus = "Approved") => ExecuteAsync("""
+    public async Task StatementAsync(ApprovedStatement statement, string reviewStatus = "Approved")
+    {
+        await ExecuteAsync("""
         SET session_replication_role = replica;
         INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
         VALUES (@extraction, 'attempt', 'extraction', @text, @hash) ON CONFLICT DO NOTHING;
@@ -22,12 +30,11 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         INSERT INTO statement_drafts (candidate_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks, official_ids)
         VALUES (@id, @number, 0, @status, 1, @officials)
         ON CONFLICT (candidate_id) DO UPDATE SET current_revision_number = @number, review_status = @status, official_ids = @officials;
-        INSERT INTO statement_revisions (candidate_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-        VALUES (@id, @number, 'auth0|editor', 'Person', NULL, @json, 1)
-        ON CONFLICT (candidate_id, revision_number) DO UPDATE SET revision_json = EXCLUDED.revision_json
         """, ("id", statement.RecordId), ("number", statement.Revision.RevisionNumber), ("status", reviewStatus),
-        ("extraction", RelationshipFixtures.ExtractionId), ("text", statement.ArticleText), ("hash", new string('f', 64)),
-        ("json", JsonSerializer.Serialize(statement.Revision, Web)), ("officials", statement.Revision.SpeakerOfficialIds.ToArray()));
+            ("extraction", RelationshipFixtures.ExtractionId), ("text", statement.ArticleText), ("hash", new string('f', 64)),
+            ("officials", statement.Revision.SpeakerOfficialIds.ToArray()));
+        await StatementRevisionSeeder.AddAsync(connectionString, statement.Revision);
+    }
 
     public Task ActionAsync(ActionDraftRevision action, string reviewStatus = "Approved", long revisedAtTicks = 1) => ExecuteAsync("""
         SET session_replication_role = replica;
@@ -71,16 +78,26 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         ("json", JsonSerializer.Serialize(vote, Web)), ("eventOn", vote.VotedOn), ("issues", vote.TrackedIssueIds.ToArray()),
         ("officials", vote.OfficialIds().ToArray())]);
 
-    public Task RevisionAsync(RelationshipRevision revision) => ExecuteAsync("""
-        SET session_replication_role = replica;
-        INSERT INTO relationship_drafts (record_id, current_revision_number, review_state_version, review_status, no_longer_matches,
-            created_at_utc_ticks, last_revised_at_utc_ticks)
-        VALUES (@id, @number, 0, 'AwaitingReview', false, 1, 1)
-        ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number;
-        INSERT INTO relationship_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-        VALUES (@id, @number, @author, @kind, CASE WHEN @kind = 'Analysis' THEN substr(md5(@id || @number::text), 1, 32) END, @json, 1)
-        """, ("id", revision.RecordId), ("number", revision.RevisionNumber), ("author", revision.AuthorSubject),
-        ("kind", ReviewAuthor.KindOf(revision.AuthorSubject).ToString()), ("json", JsonSerializer.Serialize(revision, Web)));
+    public async Task RevisionAsync(RelationshipRevision revision)
+    {
+        await ExecuteAsync("""
+            INSERT INTO relationship_drafts (record_id, current_revision_number, review_state_version, review_status, no_longer_matches,
+                created_at_utc_ticks, last_revised_at_utc_ticks)
+            VALUES (@id, @number, 0, 'AwaitingReview', false, 1, 1)
+            ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number
+            """, ("id", revision.RecordId), ("number", revision.RevisionNumber));
+        var runId = ReviewAuthor.KindOf(revision.AuthorSubject) == ReviewAuthorKind.Analysis ? RunIdOf(revision) : null;
+        var row = typeof(PostgresRelationshipReviewStore).Assembly.GetType("CivicLens.Infrastructure.Relationships.RelationshipDraftRows")!
+            .GetMethod("NewRevision")!.Invoke(null, [revision, runId])!;
+        await using var db = await AnalysisDbContextFactory.Create(connectionString).CreateDbContextAsync();
+        await db.Database.OpenConnectionAsync();
+        await db.Database.ExecuteSqlRawAsync("SET session_replication_role = replica");
+        db.Add(row);
+        await db.SaveChangesAsync();
+    }
+
+    private static string RunIdOf(RelationshipRevision revision) =>
+        Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes(revision.RecordId + revision.RevisionNumber)));
 
     public Task SetStatusAsync(string table, string idColumn, string id, string status) =>
         ExecuteAsync($"UPDATE {table} SET review_status = @status WHERE {idColumn} = @id", ("id", id), ("status", status));
