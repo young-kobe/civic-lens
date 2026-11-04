@@ -7,7 +7,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
     public partial class PublicApiZipDistricts : Migration
     {
         // The CTEs repeat RosterSnapshotRules.ReadLatestSnapshotAttemptIdAsync for each source that owns ZCTA rows.
-        // PublicApiViewsTests compares the view with that method.
+        // PublicApiViewsTests compares the view with PostgresMemberRosterStore.ReadLatestAsync, which applies that method.
         private const string UpSql = """
             CREATE VIEW public_api.zip_districts WITH (security_barrier = true) AS
             WITH district_sources AS (
