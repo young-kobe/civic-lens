@@ -1,0 +1,25 @@
+Round 1 review of statement-revision-columns found no P1, 2 P2, 2 P3. Fix all four:
+P2-1: the Designer and model snapshot predate main's #345 and #328 (elapsed_milliseconds, event_on, cosponsor_count). After the main merge, keep the migration ID 20261104014027 if it still sorts after every migration on main (check git ls-tree origin/main), else rename it later; rebuild the Designer from the merged model snapshot.
+P2-2: src/CivicLens.Core/Statements/StatementDraftRevision.cs:101 has no test for the blank and over-long configuration ID checks in ValidateShape. Add Core tests for a blank ID and a 129-character ID, as DocumentChangeDraftRevisionTests does.
+P3-1: src/CivicLens.Infrastructure/Review/CitedRevisions.cs:40 ReadStoredRevisionsAsync lost its last outside caller. Make it private (or delete if the merge with main leaves it unused).
+P3-2: tests/CivicLens.Tests/Infrastructure/Statements/PostgresStatementDraftStoreTests.cs:63 checks the analysis and code approval write path (StatementDraftRows.TryAddAnalysisDraftAsync) only against revision_json. Assert the columns and child rows there too.
+Final message under 1,800 characters: the pushed SHA, each finding and how it was fixed, the test classes run with counts, and any open question.
+
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b statement-revision-columns origin/statement-revision-columns
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+6. curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+7. bash /tmp/dotnet-install.sh --version 10.0.403 --install-dir /root/.dotnet
+8. docker info  (if it fails: run sudo dockerd > /tmp/dockerd.log 2>&1 & in the background, then check docker info again after 10 seconds)
+9a. git merge --no-edit origin/main  (merge, never rebase; resolve conflicts keeping both sides' intent; for the EF model snapshot keep both sides' changes)
+9. export PATH=/root/.dotnet:$PATH && dotnet restore tests/CivicLens.Tests --locked-mode
+Prefix every later dotnet call with export PATH=/root/.dotnet:$PATH &&. If a Testcontainers pull fails with HTTP 429, wait 60 seconds and retry. Run test classes one filter at a time with --filter FullyQualifiedName~<Class> (no | in filters). Run at most one PublishReleaseTests class.
+
+Rules: read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Each rule has one owner; reuse the existing shared owners before adding any. Every added member needs a production caller. Delete code the change makes unused. No backward compatibility shims, dual reads or legacy fallbacks beyond what the named precedent already does. Comments only when absolutely necessary; intent goes in names. Tests encode why the rule matters and must fail if the rule breaks. EF migrations: generate with the repo EF tool manifest (dotnet tool restore, then dotnet ef migrations add), strip the UTF-8 BOM from generated files, and make the Designer match the model at the migration's position. Regenerate schema docs with CIVIC_LENS_WRITE_SCHEMA_DOCS=1 and the SchemaReferenceTests class. Prose (docs, commit messages): ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes. Update the owning feature docs in place (template headings Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, Limits and planned work); each invariant names its rule, enforcer and test. Do not write session reports or changelogs. If you hit a design choice the brief does not settle, choose nothing: stop, commit what is done, and list the question with options in your final message.
+
+Checks before the last commit: dotnet build tests/CivicLens.Tests -c Release (0 errors), the changed and related test classes, dotnet format CivicLens.slnx --verify-no-changes --no-restore, python3 tools/check-docs.py --check, python3 tools/render-architecture.py --check.
+
+Finish, each its own Bash call: git add -A; git commit -m "<one plain sentence>"; git push origin statement-revision-columns. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only statement-revision-columns.

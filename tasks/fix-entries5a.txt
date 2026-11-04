@@ -1,0 +1,26 @@
+Round 1 review of published-entries-backfill (R-63 PR 5a) found 1 P1, 1 P2, 3 P3. Owner decisions D2 to D8 in survey/published-entries-backfill.md on origin/survey-entries-backfill stay DECIDED. Fix all five:
+P1: BackfillPublishedEntries.cs:123 with ReleaseCommand.cs:49 and docs/operations.md:923. A ready closed range that the limit leaves unwritten is counted nowhere, so a limited run can exit 0 with rows still to fill; the runbook says run until exit 0, and retention can later retire that folder. Fix: count every ready range that has no row, open or closed, as a remaining count in the JSON report; exit 1 while it is above 0; fix the runbook sentence. Add a test with limit 1 where an open range sorts before a closed one.
+P2: BackfillPublishedEntries.cs:61. A kept folder inside the range that omits the revision or lists another revision is passed over silently, so the row is taken from a later folder and D2 is not applied. Treat it as a folder that disagrees (skip with foldersDiffer, or a new named reason if clearer) and add a test.
+P3-1: PublishedEntries.cs:117. The conflict message says "Rebuild the release", wrong advice when the backfill hits it. Give the backfill path its own correct operator message (operator text, not public wording).
+P3-2: RecordFileEntry.cs:22 copies the record file deserialization and the empty file rule from ReleaseRecordFiles.ReadAsync. Give that rule one owner.
+P3-3: BackfillPublishedEntries.cs:27-30. The limit bounds only inserts; each run reads every state row, kept manifest and first record file. Read only what the next limit rows need where that is simple, or document the cost in operations.md if not.
+Final message under 1,800 characters: the pushed SHA, each finding and how it was fixed, the test classes run with counts, and any open question.
+
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b published-entries-backfill origin/published-entries-backfill
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+6. curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+7. bash /tmp/dotnet-install.sh --version 10.0.403 --install-dir /root/.dotnet
+8. docker info  (if it fails: run sudo dockerd > /tmp/dockerd.log 2>&1 & in the background, then check docker info again after 10 seconds)
+9a. git merge --no-edit origin/main  (merge, never rebase; resolve conflicts keeping both sides' intent; for the EF model snapshot keep both sides' changes)
+9. export PATH=/root/.dotnet:$PATH && dotnet restore tests/CivicLens.Tests --locked-mode
+Prefix every later dotnet call with export PATH=/root/.dotnet:$PATH &&. If a Testcontainers pull fails with HTTP 429, wait 60 seconds and retry. Run test classes one filter at a time with --filter FullyQualifiedName~<Class> (no | in filters). Run at most one PublishReleaseTests class.
+
+Rules: read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Each rule has one owner; reuse the existing shared owners before adding any. Every added member needs a production caller. Delete code the change makes unused. No backward compatibility shims, dual reads or legacy fallbacks beyond what the named precedent already does. Comments only when absolutely necessary; intent goes in names. Tests encode why the rule matters and must fail if the rule breaks. EF migrations: generate with the repo EF tool manifest (dotnet tool restore, then dotnet ef migrations add), strip the UTF-8 BOM from generated files, and make the Designer match the model at the migration's position. Regenerate schema docs with CIVIC_LENS_WRITE_SCHEMA_DOCS=1 and the SchemaReferenceTests class. Prose (docs, commit messages): ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes. Update the owning feature docs in place (template headings Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, Limits and planned work); each invariant names its rule, enforcer and test. Do not write session reports or changelogs. If you hit a design choice the brief does not settle, choose nothing: stop, commit what is done, and list the question with options in your final message.
+
+Checks before the last commit: dotnet build tests/CivicLens.Tests -c Release (0 errors), the changed and related test classes, dotnet format CivicLens.slnx --verify-no-changes --no-restore, python3 tools/check-docs.py --check, python3 tools/render-architecture.py --check.
+
+Finish, each its own Bash call: git add -A; git commit -m "<one plain sentence>"; git push origin published-entries-backfill. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only published-entries-backfill.
