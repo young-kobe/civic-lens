@@ -168,7 +168,7 @@ public sealed class PublishEntryRewriteTests
         var scenario = new PublicationScenario();
         scenario.Clock.Now = new(2025, 4, 12, 0, 0, 0, TimeSpan.Zero);
         var first = await PublishFirstAsync(scenario);
-        var vote = Assert.IsType<PublishedRecordEntry>(scenario.Highlights!.ClosestVote);
+        var vote = Assert.Single(scenario.Highlights!.Votes);
         Assert.Equal((1, 1, PublishedVoteAlignment.Split), (vote.YeaCount, vote.NayCount, vote.Alignment));
         Assert.Empty(scenario.Highlights.BreakLeaders);
         var carried = Summaries(scenario, first);
@@ -183,7 +183,7 @@ public sealed class PublishEntryRewriteTests
             new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('d', speakerIds: ["chair"]))));
 
         var leader = Assert.Single(scenario.Highlights!.BreakLeaders);
-        Assert.Equal(("mayor", 40, 12), (leader.Official.Profile.Id, leader.Cast, leader.Breaks));
+        Assert.Equal(("mayor", 40, 12), (leader.Member.Official.Profile.Id, leader.Member.Cast, leader.Member.Breaks));
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3") { RewriteOfficials = true });
         Assert.Empty(scenario.Highlights.BreakLeaders);
     }

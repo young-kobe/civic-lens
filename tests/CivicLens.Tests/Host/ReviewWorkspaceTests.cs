@@ -884,7 +884,8 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
             ["CIVIC_LENS_RELEASE_DIRECTORY"] = host.ReleaseDirectory,
             ["CIVIC_LENS_ARTIFACT_DIRECTORY"] = host.ArtifactDirectory,
             ["CIVIC_LENS_COLLECTION_CONFIG"] = Path.Combine(host.KeyDirectory, "sources.json"),
-            ["CIVIC_LENS_ISSUES_CONFIG"] = Path.Combine(host.KeyDirectory, "issues.json")
+            ["CIVIC_LENS_ISSUES_CONFIG"] = Path.Combine(host.KeyDirectory, "issues.json"),
+            ["CIVIC_LENS_ISSUE_ICONS_CONFIG"] = host.IssueIconsPath
         };
         var result = await HostProcess.RunWithEnvironmentAsync(host.ConnectionString, null, environment, arguments);
         Assert.True(result.ExitCode == 0, result.Error + result.Output);

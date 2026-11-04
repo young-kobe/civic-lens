@@ -153,7 +153,7 @@ public sealed partial class PostgresBillStreamTests
                 PostgresVoteReviewStore.FromConnectionString(connectionString),
                 new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)), new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)),
                 PostgresExecutiveActionReviewStore.FromConnectionString(connectionString, TestCodeVersion.Current)),
-            new PublicationCatalog(names, IssueConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System,
+            new PublicationCatalog(names, IssueConfiguration.None, IssueIconConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System,
             new PruneReleases(store, releases, NullLogger<PruneReleases>.Instance));
 
         var summary = await publisher.ExecuteAsync(PublicationScenario.Owner,
@@ -237,7 +237,7 @@ public sealed partial class PostgresBillStreamTests
                 PostgresVoteReviewStore.FromConnectionString(connectionString),
                 new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)), new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)),
                 PostgresExecutiveActionReviewStore.FromConnectionString(connectionString, TestCodeVersion.Current)),
-            new PublicationCatalog(names, IssueConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System,
+            new PublicationCatalog(names, IssueConfiguration.None, IssueIconConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System,
             new PruneReleases(publications, releases, NullLogger<PruneReleases>.Instance));
         var summary = await publisher.ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("publish", new PublishedRecordReference(PublishedRecordKind.Action, RecordId)));

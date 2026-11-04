@@ -8,7 +8,7 @@ a:hover { text-decoration-thickness: 2px; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 button, input, select, textarea { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.visually-hidden, .record-list thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .skip { position: absolute; left: var(--s3); top: var(--s3); z-index: 30; padding: var(--s2) var(--s3); border-radius: var(--r-control); background: var(--surface); transform: translateY(-200%); }
 .skip:focus { transform: none; box-shadow: var(--e2); }

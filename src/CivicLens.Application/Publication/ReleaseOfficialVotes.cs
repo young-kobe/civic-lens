@@ -45,7 +45,8 @@ internal sealed class ReleaseOfficialVotes(IReleaseDirectory releases, VoteRecor
         var paths = await releases.ListFilesAsync(previous.DirectoryName, PublicationProtocol.OfficialFolder(officialId),
             PublicationProtocol.MaximumOfficialFiles, cancellationToken);
         return new([.. paths.Select(PublicationProtocol.VotesCongressOf).OfType<int>()],
-            [.. paths.Select(PublicationProtocol.CongressPageOf).OfType<int>()]);
+            [.. paths.Select(PublicationProtocol.CongressPageOf).OfType<int>()],
+            paths.Contains(PublicationProtocol.OfficialRecordPagePath(officialId)));
     }
 
     public async Task<PublishedOfficialVote[]> ReadAsync(PreviousRelease previous, string officialId, int congress,

@@ -28,7 +28,7 @@ public sealed class PublishedRelatedRecordsTests : IDisposable
         var action = scenario.AddAction('d');
         var directory = new FileReleaseDirectory(root);
         var publish = new PublishRelease(scenario.Publications, directory, new ReleaseRenderer(null, null), scenario.Loaders(),
-            new PublicationCatalog(scenario.OfficialNames, IssueConfiguration.None), FixedRosters.NamedOnly(scenario.OfficialNames.Keys), PhotoCaptures.None(), scenario.Clock,
+            new PublicationCatalog(scenario.OfficialNames, IssueConfiguration.None, IssueIconConfiguration.None), FixedRosters.NamedOnly(scenario.OfficialNames.Keys), PhotoCaptures.None(), scenario.Clock,
             new PruneReleases(scenario.Publications, directory, NullLogger<PruneReleases>.Instance));
         var first = await publish.ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
             new PublishedRecordReference(PublishedRecordKind.Statement, statement), new PublishedRecordReference(PublishedRecordKind.Action, action)));
@@ -55,7 +55,7 @@ public sealed class PublishedRelatedRecordsTests : IDisposable
         var action = scenario.AddAction('d');
         var directory = new FileReleaseDirectory(root);
         var publish = new PublishRelease(scenario.Publications, directory, new ReleaseRenderer(null, null), scenario.Loaders(),
-            new PublicationCatalog(scenario.OfficialNames, IssueConfiguration.None), FixedRosters.NamedOnly(scenario.OfficialNames.Keys), PhotoCaptures.None(), scenario.Clock,
+            new PublicationCatalog(scenario.OfficialNames, IssueConfiguration.None, IssueIconConfiguration.None), FixedRosters.NamedOnly(scenario.OfficialNames.Keys), PhotoCaptures.None(), scenario.Clock,
             new PruneReleases(scenario.Publications, directory, NullLogger<PruneReleases>.Instance));
         var relationship = scenario.AddRelationship('e', statement, action);
         var first = await publish.ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",

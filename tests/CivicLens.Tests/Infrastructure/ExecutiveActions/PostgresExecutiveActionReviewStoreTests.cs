@@ -311,7 +311,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
                 PostgresActionReviewStore.FromConnectionString(connectionString), PostgresVoteReviewStore.FromConnectionString(connectionString),
                 new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)),
                 new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)), store),
-            new PublicationCatalog(new Dictionary<string, string> { ["donald-trump"] = "Donald Trump" }, IssueConfiguration.None),
+            new PublicationCatalog(new Dictionary<string, string> { ["donald-trump"] = "Donald Trump" }, IssueConfiguration.None, IssueIconConfiguration.None),
             FixedRosters.NamedOnly(["donald-trump"]), PhotoCaptures.None(), clock, new PruneReleases(publications, releases, NullLogger<PruneReleases>.Instance));
         var reference = new PublishedRecordReference(PublishedRecordKind.ExecutiveAction, recordId);
 

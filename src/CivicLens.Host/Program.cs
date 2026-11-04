@@ -432,12 +432,15 @@ try
         var issueConfiguration = ReleaseCommand.IsPublish(args)
             ? PublicationComposition.RequireIssues(ConfigurationFile.ReadIssuesFromEnvironment())
             : IssueConfiguration.None;
+        var issueIcons = ReleaseCommand.IsPublish(args)
+            ? PublicationComposition.RequireIssueIcons(ConfigurationFile.ReadIssueIconsFromEnvironment(issueConfiguration))
+            : IssueIconConfiguration.None;
         var artifactRoot = ReleaseCommand.IsPublish(args) ? PublicationComposition.RequireArtifactRoot() : string.Empty;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, codeVersion);
         var releases = new FileReleaseDirectory(releaseRoot);
         using var loggers = CreateLoggers();
         var (publish, _) = PublicationComposition.Create(connectionString, codeVersion, publications, releases, publishConfiguration, issueConfiguration,
-            artifactRoot, loggers);
+            issueIcons, artifactRoot, loggers);
         executing = true;
         var blocked = new BlockedPublishedRecords(publications, releases);
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),

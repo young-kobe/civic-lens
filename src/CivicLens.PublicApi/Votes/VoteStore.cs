@@ -5,7 +5,7 @@ using NpgsqlTypes;
 
 namespace CivicLens.PublicApi.Votes;
 
-/// <summary>Reads the views <c>public_api.votes</c> and <c>public_api.vote_issues</c>. Every answer takes its release from the query that reads its rows.</summary>
+/// <summary>Reads the views <c>public_api.votes</c>, <c>public_api.vote_issues</c>, and <c>public_api.vote_members</c>. Every answer takes its release from the query that reads its rows.</summary>
 public sealed class VoteStore(NpgsqlDataSource views)
 {
     private const string Columns = """
@@ -54,6 +54,43 @@ public sealed class VoteStore(NpgsqlDataSource views)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(21)) : null;
     }
+
+    /// <summary>Reads one page of members. Null means that the active release holds no such vote. The caller compares the release of the page with the release of the cursor.</summary>
+    public async Task<VoteMemberPage?> ListMembersAsync(string recordId, VoteMemberRequest request, CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand($"""
+            SELECT a.release_number, m."position", m.official_id, m.vote_cast
+              FROM (SELECT x.release_number, x.revision_number FROM public_api.active_records x
+                     WHERE x.kind = 'vote' AND x.record_id = @id
+                       AND EXISTS (SELECT 1 FROM public_api.vote_members h WHERE h.record_id = x.record_id AND h.revision_number = x.revision_number)) a
+              LEFT JOIN LATERAL (
+                   SELECT m.* FROM public_api.vote_members m
+                    WHERE m.record_id = @id AND m.revision_number = a.revision_number{MemberFilters(request)}
+                    ORDER BY m."position" LIMIT @take) m
+                ON TRUE
+             ORDER BY m."position"
+            """);
+        command.Parameters.AddWithValue("id", recordId);
+        command.Parameters.AddWithValue("take", request.Limit + 1);
+        if (request.Cast is not null) command.Parameters.AddWithValue("cast", request.Cast);
+        if (request.Cursor is { } cursor) command.Parameters.AddWithValue("after", cursor.Position);
+        var rows = new List<VoteMember>();
+        int? release = null;
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                release = reader.GetInt32(0);
+                if (!reader.IsDBNull(1)) rows.Add(new(reader.GetInt32(1), reader.GetString(2), reader.GetString(3)));
+            }
+        if (release is not { } active) return null;
+        var page = rows.Take(request.Limit).ToArray();
+        var next = rows.Count > request.Limit ? new VoteMemberCursor(active, page[^1].Position).Encode() : null;
+        return new(active, page, next);
+    }
+
+    private static string MemberFilters(VoteMemberRequest request) =>
+        (request.Cast is null ? "" : " AND m.vote_cast = @cast") +
+        (request.Cursor is null ? "" : " AND m.\"position\" > @after");
 
     private static string ListSql(VoteRequest request) => $"""
         SELECT a.release_number, {Columns}

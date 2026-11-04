@@ -239,7 +239,7 @@
         const [previous, next] = ["Previous", "Next"].map(text => {
             const button = document.createElement("button");
             button.type = "button";
-            button.className = "btn btn-small";
+            button.className = text === "Next" ? "btn btn-small btn-primary" : "btn btn-small";
             button.textContent = text;
             return button;
         });
@@ -269,27 +269,32 @@
         showRows(table, true);
     };
 
-    const initRecordFilters = panel => {
-        const table = panel.querySelector("table");
-        const rows = Array.from(panel.querySelectorAll("tbody tr"));
+    const initRecordFilters = section => {
+        const listPane = section.querySelector("[data-list-pane]");
+        const issuesPane = section.querySelector("[data-issues-pane]");
+        const table = listPane.querySelector("table");
+        const rows = Array.from(listPane.querySelectorAll("tbody tr"));
         if (rows.length === 0) return;
-        const tabs = panel.querySelector("[data-record-filters]");
-        const kindButtons = tabs ? Array.from(tabs.querySelectorAll("[data-filter-value]")) : [];
-        const counts = Array.from(document.querySelectorAll("[data-count-filter]"));
-        const status = panel.querySelector("[data-filter-status]");
-        const notice = panel.querySelector("[data-filter-notice]");
+        const tabs = section.querySelector("[data-record-filters]");
+        const tabButtons = tabs ? Array.from(tabs.querySelectorAll("[data-filter-value]")) : [];
+        const counts = Array.from(section.querySelectorAll("[data-count-filter]"));
+        const status = listPane.querySelector("[data-filter-status]");
+        const notice = listPane.querySelector("[data-filter-notice]");
         const clearButton = notice?.querySelector("[data-filter-clear]");
-        let kind = "", issue = null;
-        const hides = row => (kind !== "" && !row.classList.contains(kind))
-            || (issue !== null && !(row.dataset.filterKeys ?? "").split(" ").includes(issue.dataset.countFilter));
+        let kind = "", issue = null, issuesOpen = false;
+        const isIssuesTab = button => button.dataset.filterValue === issuesPane?.dataset.issuesPane;
+        const matchesIssue = (row, key) => (row.dataset.filterKeys ?? "").split(" ").some(rowKey => rowKey === key || rowKey.endsWith(":" + key));
+        const hides = row => (kind !== "" && !row.classList.contains(kind)) || (issue !== null && !matchesIssue(row, issue.key));
         const apply = () => {
             for (const row of rows) row.toggleAttribute("data-filtered-out", hides(row));
             const shown = rows.filter(row => !row.hasAttribute("data-filtered-out")).length;
             showRows(table, true);
-            for (const button of kindButtons) button.setAttribute("aria-pressed", String(button.dataset.filterValue === kind));
-            for (const count of counts) count.querySelector("button").setAttribute("aria-pressed", String(count === issue));
+            listPane.hidden = issuesOpen;
+            if (issuesPane) issuesPane.hidden = !issuesOpen;
+            for (const button of tabButtons) button.setAttribute("aria-pressed", String(isIssuesTab(button) ? issuesOpen : !issuesOpen && button.dataset.filterValue === kind));
+            for (const count of counts) count.querySelector("button").setAttribute("aria-pressed", String(count === issue?.count));
             if (notice) {
-                notice.querySelector("[data-filter-text]").textContent = issue?.dataset.filterShows ?? "";
+                notice.querySelector("[data-filter-text]").textContent = issue?.shows ?? "";
                 notice.hidden = issue === null;
             }
             const total = rows.length;
@@ -304,16 +309,33 @@
             button.textContent = count.textContent;
             button.setAttribute("aria-label", count.dataset.filterLabel);
             count.replaceChildren(button);
-            button.addEventListener("click", () => { issue = issue === count ? null : count; apply(); });
+            button.addEventListener("click", () => {
+                issue = issue?.count === count ? null : { key: count.dataset.countFilter, shows: count.dataset.filterShows, count };
+                issuesOpen = false;
+                apply();
+            });
         }
-        for (const button of kindButtons) button.addEventListener("click", () => { kind = button.dataset.filterValue; apply(); });
+        for (const button of tabButtons) button.addEventListener("click", () => {
+            issuesOpen = isIssuesTab(button);
+            if (!issuesOpen) kind = button.dataset.filterValue;
+            apply();
+        });
         clearButton?.addEventListener("click", () => {
-            const pressed = issue?.querySelector("button");
+            const pressed = issue?.count?.querySelector("button");
             kind = "";
             issue = null;
             apply();
             pressed?.focus();
         });
+        const query = new URLSearchParams(location.search);
+        const wanted = tabButtons.find(button => button.dataset.filterValue === query.get("tab"));
+        if (wanted) {
+            issuesOpen = isIssuesTab(wanted);
+            if (!issuesOpen) kind = wanted.dataset.filterValue;
+        }
+        const wantedIssue = query.get("issue");
+        const issueName = wantedIssue === null ? null : Array.from(section.querySelectorAll("[data-issue-name]")).find(name => name.dataset.issueName === wantedIssue);
+        if (issueName) issue = { key: wantedIssue, shows: issueName.dataset.issueNotice, count: null };
         if (tabs) tabs.hidden = false;
         apply();
     };
@@ -336,10 +358,10 @@
             link.className = "cell-title";
             link.href = source.root + hit.pagePath;
             link.textContent = hit.headline;
-            const badge = document.createElement("span");
-            badge.className = "badge badge-neutral";
-            badge.textContent = source.kinds[hit.kind];
-            cell.append(link, " ", badge);
+            const kind = document.createElement("span");
+            kind.className = "cell-note";
+            kind.textContent = source.kinds[hit.kind];
+            cell.append(link, kind);
             return cell;
         },
         officials: hit => hit.officials.map(official => official.name).join(", "),

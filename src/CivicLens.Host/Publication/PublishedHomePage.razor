@@ -2,31 +2,29 @@
 @using CivicLens.Publication.Contracts
 
 <PublicPage CanonicalPath="" HasSearch="true" Title="@PublicHead.SiteName" Description="@HomeDescription" UsesRecordFont="@(Brief is not null)">
-    <PageHeader Title="@PublicHead.SiteName" />
-    <p class="home-lead">Civic Lens shows what U.S. officials say and do, using official records you can check yourself.</p>
-    <p class="muted small">Release @Release.ReleaseNumber, published @Moment.Full(Release.PublishedAtUtc).</p>
-    <div class="row home-actions">
-        <Button Href="@PublicationProtocol.OfficialsPagePath" Variant="ButtonVariant.Primary">Find your representative or senators</Button>
-        <Button Href="@BillsGlossaryPath">Understand a bill</Button>
-        <Button Href="@PublicationProtocol.SearchPagePath">Search all records</Button>
-    </div>
-    @if (Brief is not null)
-    {
-        <p class="muted small">Weekly brief</p>
-        <Panel Title="@Brief.Headline" Padded="true">
-            <PublishedBriefText Record="Brief" BriefHref="@PublicationProtocol.RecordPagePath(Brief.RecordId)" />
-            <p><a href="@PublicationProtocol.RecordPagePath(Brief.RecordId)">Read the brief with its cited records</a></p>
-            <p><a href="@PublicationProtocol.BriefsPagePath(1)">All weekly briefs</a></p>
-        </Panel>
-    }
-    <PublishedHomeCards Highlights="Highlights" PublishedAtUtc="Release.PublishedAtUtc" />
-    <Panel Title="Newest records" Aside="@AllRecordsLink">
-        <PublishedRecordTable Records="NewestRecords" Caption="Newest records" />
-    </Panel>
-    <PublishedFacetBrowser Facets="Facets" />
-    <Panel Title="Officials" Padded="true">
-        <p><a href="@PublicationProtocol.OfficialsPagePath">Officials with published records</a></p>
-    </Panel>
+    <Hero>
+        <div class="home-hero">
+            <div>
+                <h1>Who represents you?</h1>
+                <p class="home-lead">See how your representative and senators voted and which bills they introduced. Each fact links to its official source.</p>
+                <p class="home-browse">Or <a href="@PublicationProtocol.OfficialsPagePath">browse all @Highlights.OfficialCount officials</a></p>
+            </div>
+            <PublishedBreakCard Highlights="Highlights" PublishedAtUtc="Release.PublishedAtUtc" />
+        </div>
+    </Hero>
+    <ChildContent>
+        @if (Brief is not null)
+        {
+            <p class="muted small">Weekly brief</p>
+            <Panel Title="@Brief.Headline" Padded="true">
+                <PublishedBriefText Record="Brief" BriefHref="@PublicationProtocol.RecordPagePath(Brief.RecordId)" />
+                <p><a href="@PublicationProtocol.RecordPagePath(Brief.RecordId)">Read the brief with its cited records</a></p>
+                <p><a href="@PublicationProtocol.BriefsPagePath(1)">All weekly briefs</a></p>
+            </Panel>
+        }
+        <PublishedHomeIssues Issues="Facets.Issues" />
+        <PublishedHomeLatest Highlights="Highlights" />
+    </ChildContent>
 </PublicPage>
 
 @code {
@@ -35,12 +33,6 @@
     [Parameter, EditorRequired] public ReleaseFacets Facets { get; set; } = default!;
     [Parameter, EditorRequired] public HomeHighlights Highlights { get; set; } = default!;
 
-    private static string BillsGlossaryPath => $"{PublicationProtocol.GlossaryPagePath}#{GlossaryGroup.AnchorOf(Glossary.BillsAndCongress)}";
-
     private string HomeDescription => Brief?.Headline
         ?? "Civic Lens collects what officials say and do, with the sources and the exact text that each record cites.";
-
-    private IReadOnlyList<PublishedRecordEntry> NewestRecords => [.. Release.Records.Take(PublicationProtocol.HomeRecordCount)];
-
-    private RenderFragment AllRecordsLink => @<a href="@PublicationProtocol.AllRecordsPagePath(1)">All records</a>;
 }

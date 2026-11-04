@@ -1,0 +1,20 @@
+@using CivicLens.Application.Publication
+@using CivicLens.Publication.Contracts
+
+<PublicPage Section="PublicSection.Officials" CanonicalPath="@PublicationProtocol.OfficialRecordPagePath(Page.Profile.Id)" Title="@Heading" Description="@Description" RootPath="@RootPath">
+    <PageHeader Title="@Heading" Meta="Back" />
+    <PublishedRecordList Page="Page" Catalog="Catalog" RootPath="@RootPath" />
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public ReleaseOfficialPage Page { get; set; } = default!;
+    [Parameter, EditorRequired] public PublicationCatalog Catalog { get; set; } = default!;
+
+    private string RootPath => "../../";
+
+    private string Heading => $"All records of {Page.Profile.Name}";
+
+    private string Description => $"Every published record of {Page.Profile.Name}: statements, bills, and votes, with a filter for each kind and each issue.";
+
+    private RenderFragment Back => @<a href="@(RootPath + PublicationProtocol.OfficialPagePath(Page.Profile.Id))">Back to @Page.Profile.Name</a>;
+}

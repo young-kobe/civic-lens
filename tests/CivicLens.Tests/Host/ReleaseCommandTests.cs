@@ -42,7 +42,7 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
-    public async Task PublishingRefusesToStartWithoutTheArtifactDirectoryBecauseANewPhotoNeedsItsCapture()
+    public async Task PublishingRefusesToStartWithoutTheArtifactDirectoryOrTheIssueIconFileBecauseANewPhotoNeedsItsCaptureAndATileNeedsItsIcon()
     {
         var folder = Directory.CreateTempSubdirectory("release-command").FullName;
         try
@@ -52,12 +52,16 @@ public sealed class ReleaseCommandTests
             await File.WriteAllTextAsync(collection, """{"version":1,"people":[],"sources":[]}""");
             await File.WriteAllTextAsync(issues, System.Text.Json.JsonSerializer.Serialize(
                 CivicLens.Application.Issues.IssueConfiguration.None, CivicLens.Collection.Contracts.CollectionProtocol.JsonOptions));
+            var icons = Path.Combine(folder, "issue-icons.json");
+            await File.WriteAllTextAsync(icons, System.Text.Json.JsonSerializer.Serialize(
+                CivicLens.Application.Issues.IssueIconConfiguration.None, CivicLens.Collection.Contracts.CollectionProtocol.JsonOptions));
             var environment = new Dictionary<string, string>
             {
                 ["CIVIC_LENS_REVIEW_OWNER"] = "auth0|owner",
                 ["CIVIC_LENS_RELEASE_DIRECTORY"] = Path.Combine(folder, "releases"),
                 ["CIVIC_LENS_COLLECTION_CONFIG"] = collection,
-                ["CIVIC_LENS_ISSUES_CONFIG"] = issues
+                ["CIVIC_LENS_ISSUES_CONFIG"] = issues,
+                ["CIVIC_LENS_ISSUE_ICONS_CONFIG"] = icons
             };
             const string unreachable = "Host=127.0.0.1;Port=1;Database=none;Username=none;Password=none;Timeout=2";
             string[] publish = ["releases", "publish", "key", "statement:" + new string('a', 64)];
@@ -66,8 +70,12 @@ public sealed class ReleaseCommandTests
             environment["CIVIC_LENS_ARTIFACT_DIRECTORY"] = Path.Combine(folder, "captures");
             var with = await HostProcess.RunWithEnvironmentAsync(unreachable, null, environment, publish);
 
+            environment.Remove("CIVIC_LENS_ISSUE_ICONS_CONFIG");
+            var withoutIcons = await HostProcess.RunWithEnvironmentAsync(unreachable, null, environment, publish);
+
             Assert.Equal(2, without.ExitCode);
             Assert.Equal(1, with.ExitCode);
+            Assert.Equal(2, withoutIcons.ExitCode);
         }
         finally
         {
@@ -86,12 +94,16 @@ public sealed class ReleaseCommandTests
             await File.WriteAllTextAsync(collection, """{"version":1,"people":[],"sources":[]}""");
             await File.WriteAllTextAsync(issues, System.Text.Json.JsonSerializer.Serialize(
                 CivicLens.Application.Issues.IssueConfiguration.None, CivicLens.Collection.Contracts.CollectionProtocol.JsonOptions));
+            var icons = Path.Combine(folder, "issue-icons.json");
+            await File.WriteAllTextAsync(icons, System.Text.Json.JsonSerializer.Serialize(
+                CivicLens.Application.Issues.IssueIconConfiguration.None, CivicLens.Collection.Contracts.CollectionProtocol.JsonOptions));
             var environment = new Dictionary<string, string>
             {
                 ["CIVIC_LENS_REVIEW_OWNER"] = "auth0|owner",
                 ["CIVIC_LENS_RELEASE_DIRECTORY"] = Path.Combine(folder, "releases"),
                 ["CIVIC_LENS_COLLECTION_CONFIG"] = collection,
                 ["CIVIC_LENS_ISSUES_CONFIG"] = issues,
+                ["CIVIC_LENS_ISSUE_ICONS_CONFIG"] = icons,
                 ["CIVIC_LENS_ARTIFACT_DIRECTORY"] = Path.Combine(folder, "captures"),
                 ["CIVIC_LENS_PUBLIC_BASE_URL"] = "https://civic.example/site"
             };

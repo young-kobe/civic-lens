@@ -95,7 +95,7 @@ internal sealed class PublicationScenario
     public HomeHighlights? Highlights { get; private set; }
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, Layout = PageLayout, FailOnStatement = RenderFailureOfStatement, OfficialPages = OfficialPages, PublicBaseUrl = BaseUrl, HomeSeen = seen => Highlights = seen }, Loaders(),
-        new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
+        new PublicationCatalog(OfficialNames, Issues, IssueIconConfiguration.None), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
         Captures.Photos("artifacts"), Clock, new PruneReleases(Publications, Releases, NullLogger<PruneReleases>.Instance));
 
     public BlockedPublishedRecords Blocked() => new(Publications, Releases);
@@ -505,13 +505,15 @@ internal sealed class FakeRenderer : IReleaseRenderer
         OfficialPages?.Add(page);
         return Task.FromResult($"<html>official {page.Profile.Id} {(page.IsTracked ? "tracked" : "untracked")} {(page.IsCurrent ? "current" : "past")} {page.Congress} congresses [{string.Join(',', page.Congresses)}] records [{string.Join(',', page.Records.Select(entry => entry.RecordId))}] votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]{StatusSuffix(page)}</html>");
     }
+    public Task<string> RenderOfficialRecordAsync(ReleaseOfficialPage page, PublicationCatalog catalog, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>record {page.Profile.Id} votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]</html>");
     private static string StatusSuffix(ReleaseOfficialPage page) =>
         page.BillStatuses?.Where(pair => page.Records.Any(entry => entry.RecordId == pair.Key)).ToArray() is { Length: > 0 } shown
             ? $" statuses [{string.Join(',', shown.Select(pair => $"{pair.Key[0]}:{pair.Value.Status.Text}"))}]" : "";
 
     public Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, DateTimeOffset publishedAtUtc, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>officials {string.Join(',', officials.Select(official => $"{official.Profile.Id}:{official.RecordCount}"))}</html>");
-    public Task<string> RenderBoardAsync(OfficialBoardPage page, CancellationToken cancellationToken) =>
+    public Task<string> RenderBoardAsync(OfficialBoardPage page, ClosestVote? closestVote, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>board {page.Board.PagePath} [{string.Join(',', page.Members.Select(member => member.Official.Profile.Id))}]</html>");
     public Task<string> RenderReportAsync(CancellationToken cancellationToken) =>
         Task.FromResult("<html>report</html>");

@@ -26,7 +26,7 @@ public sealed class PublishedExecutiveActionPageTests : IDisposable
         var record = scenario.AddExecutiveAction('a', withNotice: true);
         var directory = new FileReleaseDirectory(root);
         var publish = new PublishRelease(scenario.Publications, directory, new ReleaseRenderer(null, null), scenario.Loaders(),
-            new PublicationCatalog(scenario.OfficialNames, IssueConfiguration.None), FixedRosters.NamedOnly(scenario.OfficialNames.Keys), PhotoCaptures.None(), scenario.Clock,
+            new PublicationCatalog(scenario.OfficialNames, IssueConfiguration.None, IssueIconConfiguration.None), FixedRosters.NamedOnly(scenario.OfficialNames.Keys), PhotoCaptures.None(), scenario.Clock,
             new PruneReleases(scenario.Publications, directory, NullLogger<PruneReleases>.Instance));
 
         var release = await publish.ExecuteAsync(PublicationScenario.Owner,
