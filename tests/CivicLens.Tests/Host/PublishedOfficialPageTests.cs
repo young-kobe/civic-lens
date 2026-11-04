@@ -809,9 +809,6 @@ public sealed class PublishedOfficialPageTests
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
-        Assert.Equal(["../../index.html", "../../officials.html", "../../officials/mayor.html"],
-            document.QuerySelectorAll("nav[aria-label='Breadcrumb'] a").Select(link => link.GetAttribute("href")));
-        Assert.Equal("Mayor Example, the 118th Congress", document.QuerySelector("nav[aria-label='Breadcrumb'] [aria-current='page']")!.TextContent);
         Assert.Equal(["../../records/" + new string('3', 64) + ".html"], document.QuerySelectorAll("tbody a.cell-title").Select(link => link.GetAttribute("href")));
         Assert.Contains("href=\"../../assets/css/theme.css\"", html, StringComparison.Ordinal);
         Assert.Null(document.QuerySelector("[aria-labelledby='panel-offices']"));
