@@ -105,7 +105,7 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [x] Vote pilot 2: backfill old vote revisions and verify them with a C# command that compares each revision to its JSON
   - [x] Vote pilot 3: move the vote readers to the columns
   - [ ] Vote pilot 4: drop the vote revision JSON, after the read-only function stops reading it
-  - [ ] Move the other revision kinds, one PR for each. Executive action, document change, relationship, and statement revisions are done in code through step 3. Action revisions are done in code through step 2, the backfill and verify commands. The production backfills and the JSON drops stay open
+  - [ ] Move the other revision kinds, one PR for each. Executive action, document change, relationship, statement, and brief revisions are done in code through step 3. Action revisions are done in code through step 2, the backfill and verify commands. The production backfills and the JSON drops stay open
   - [ ] Move release entries to a table: one immutable row for each record revision, with a foreign key to that revision. `publication_record_states` gives the release membership. The code of `releases entries backfill <limit>` and `releases entries verify` is done. Open: the production runs, the foreign key from `publication_record_states`, and the move of the publish path off the manifest.
   - [ ] Write `release.json` from the tables, and stop reading the previous manifest in a publish
 
@@ -131,9 +131,8 @@ The owner accepted these designs. Each item holds its choices until the code and
 - R-22: Ordered row locks in the job store, after the MVP. Depends on: lock waits measured on a bills-only collection run. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-68: Serve public data from tables. The R-63 tables are the only source of truth, and no JSON file carries data to the public path. `PublicApi` reads a `public_api` schema of views, each listing its columns, through a role that can read nothing else. A new insight is a view, one endpoint, and one shared component. The target is server-rendered pages that Cloudflare caches for each release, and the browser calls the API for paging and filters. This comes before the official and home page rebuild. The design is still to agree in detail. Depends on: the vote, action, and release entry steps of R-63. [Publication](architecture/publication.md)
   - [ ] Agree the view design, active release rule, and role limits, with a test that fails when the role can read any other table
-  - [x] Add the `public_api` schema, the role `civic_lens_public`, the active release view, and the vote views ([public API views](architecture/publication.md#public-api-views))
-  - [ ] Add the bill and action views. They wait until actions have columns, because actions still hold JSON
-  - [ ] Serve votes and bills through `PublicApi`
+  - [x] Add the `public_api` schema, the role `civic_lens_public`, the active release view, the vote views, and the bill views ([public API views](architecture/publication.md#public-api-views))
+  - [ ] Serve the members of a vote and the bills through `PublicApi`. The vote list, one vote, and `/v1/release` are done ([search API](architecture/search.md#api))
   - [ ] Measure traffic, query load, and worker effect on the shared database
   - [ ] Render the official page from the API, then the home, issue, record, and list pages
   - [ ] Write `release.json` only as a public download on a schedule, or remove it

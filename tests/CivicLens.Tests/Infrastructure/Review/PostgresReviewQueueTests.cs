@@ -259,7 +259,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
             UPDATE statement_revisions SET headline = 'Zebra statement';
             UPDATE action_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{headline}', '"Zebra action"')::text;
             UPDATE vote_revisions SET headline = 'Zebra vote';
-            UPDATE brief_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{headline}', '"Zebra brief"')::text;
+            UPDATE brief_revisions SET headline = 'Zebra brief';
             UPDATE executive_action_revisions SET title = 'Zebra order';
             """);
         var waiting = RelationshipFixtures.Action(5) with { RecordId = new('e', 64), CandidateId = new('e', 64), Headline = "Zebra waits" };

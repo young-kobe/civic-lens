@@ -114,6 +114,8 @@ if (args is [] or ["--help"] or ["help"])
           relationships revisions backfill <limit>
           relationships revisions verify
           brief redraft --week <yyyy-MM-dd>
+          brief revisions backfill <limit>
+          brief revisions verify
           roster propose <config.json>
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
@@ -401,7 +403,9 @@ try
     if (BriefCommand.Matches(args))
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
-        var brief = new BriefCommand(new RedraftBrief(new PostgresBriefDraftStore(AnalysisDbContextFactory.Create(connectionString))), owner);
+        var contexts = AnalysisDbContextFactory.Create(connectionString);
+        var backfillStore = new PostgresBriefRevisionBackfillStore(contexts);
+        var brief = new BriefCommand(new RedraftBrief(new PostgresBriefDraftStore(contexts)), new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
         executing = true;
         return await brief.ExecuteAsync(args, cancellation.Token);
     }

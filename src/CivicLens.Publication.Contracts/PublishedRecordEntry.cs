@@ -25,6 +25,7 @@ public sealed record PublishedRecordEntry
     public int? YeaCount { get; init; }
     public int? NayCount { get; init; }
     public PublishedVoteAlignment? Alignment { get; init; }
+    public PublishedChamber? Chamber { get; init; }
     public string[]? CosponsorIds { get; init; }
 
     public void Validate()
@@ -44,6 +45,8 @@ public sealed record PublishedRecordEntry
             throw new InvalidDataException("A relationship manifest entry names its link type, statement, and target. Other entries name none.");
         if (!HasValidVoteFacts)
             throw new InvalidDataException("A vote manifest entry holds both Yea and Nay counts or none, and an alignment only with them. Other entries hold none.");
+        if (!HasValidChamber)
+            throw new InvalidDataException("A vote manifest entry may name its chamber. Other entries name none.");
         if (!HasValidCosponsors)
             throw new InvalidDataException(
                 $"An action manifest entry may hold at most {PublishedAction.MaximumSponsorships} distinct cosponsors. Other entries hold none.");
@@ -53,6 +56,9 @@ public sealed record PublishedRecordEntry
         YeaCount is null && NayCount is null && Alignment is null ||
         Kind == PublishedRecordKind.Vote && YeaCount is >= 0 && NayCount is >= 0 &&
         (long)YeaCount.Value + NayCount.Value <= PublishedVote.MaximumMembers && (Alignment is null || Enum.IsDefined(Alignment.Value));
+
+    private bool HasValidChamber =>
+        Chamber is null || Kind == PublishedRecordKind.Vote && Enum.IsDefined(Chamber.Value);
 
     private bool HasValidCosponsors =>
         CosponsorIds is null ||

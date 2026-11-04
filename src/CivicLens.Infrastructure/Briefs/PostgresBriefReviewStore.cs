@@ -21,7 +21,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
     private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefCheckRun> checkQueue = BriefCheckQueue.Create(contextFactory);
 
     internal static readonly ReviewRecords<BriefDraftRow, BriefRevisionRow, BriefReviewDecisionRow, BriefRevision> Records =
-        new(PostgresAdvisoryLock.BriefReview, PublishedRecordKind.Brief, "Brief", nameof(BriefDraftRow.RecordId));
+        new(PostgresAdvisoryLock.BriefReview, PublishedRecordKind.Brief, "Brief", nameof(BriefDraftRow.RecordId), readRevisions: BriefRevisionRows.ReadAsync);
 
     private const string SaveOperation = "brief-save";
     private const string DecideOperation = "brief-decide";
@@ -40,7 +40,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
             {
                 revision.ValidatePersonEditOf(current);
                 return Task.FromResult(revision);
-            }, saved => BriefDraftRows.NewRevision(saved, null),
+            }, saved => BriefRevisionRows.Create(saved, null),
             (db, saved) => BriefCheckQueue.QueueAsync(checkQueue, db, saved, cancellationToken),
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
                 NoAfterDecision, revision => revision.ComparableForm(), correctedReportIds), cancellationToken);

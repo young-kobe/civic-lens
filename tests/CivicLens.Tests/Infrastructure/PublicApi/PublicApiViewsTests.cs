@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Votes;
+using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Districts;
@@ -28,7 +29,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
 
     private static readonly string[] BaseTables =
         ["vote_revisions", "vote_revision_facts", "vote_member_list_entries", "vote_revision_issues", "publication_releases", "publication_record_states", "vote_drafts", "vote_member_lists",
-         "zcta_districts", "roster_snapshots", "collection_attempts"];
+         "action_revisions", "action_revision_sponsorships", "action_revision_issues", "action_drafts", "zcta_districts", "roster_snapshots", "collection_attempts"];
 
     private string connectionString = null!;
     private string[] roleAfterMigration = null!;
@@ -65,7 +66,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
-        foreach (var view in new[] { "active_records", "votes", "vote_members", "vote_issues", "zip_districts" })
+        foreach (var view in new[] { "active_records", "votes", "vote_members", "vote_issues", "bills", "bill_sponsorships", "bill_issues", "zip_districts" })
         {
             // A view with a join or a group cannot take a write at all, so Postgres refuses with 55000 before it checks a privilege.
             await AssertDeniedAsync(connection, $"DELETE FROM public_api.{view}", "55000");
@@ -97,6 +98,9 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Equal(
         [
             $"active_records v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"bill_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"bill_sponsorships v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"bills v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_members v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"votes v {Owner} {Role}:SELECT {{security_barrier=true}}",
@@ -193,6 +197,20 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await ExecuteAsync("UPDATE publication_releases SET is_active = false");
         Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.votes"));
         Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.active_records"));
+    }
+
+    [Fact]
+    public async Task TheActiveReleaseViewShowsThePublicationTimeOfTheActiveReleaseAndTheRoleReadsNoOtherReleaseColumn()
+    {
+        await SeedAsync();
+        Assert.Equal(["2 2"], await PublicAsync("SELECT DISTINCT release_number || ' ' || published_at_utc_ticks FROM public_api.active_records"));
+
+        await ExecuteAsync("UPDATE publication_releases SET is_active = false; UPDATE publication_releases SET is_active = true WHERE release_number = 1");
+
+        Assert.Equal(["1 1"], await PublicAsync("SELECT DISTINCT release_number || ' ' || published_at_utc_ticks FROM public_api.active_records"));
+        await using var connection = await OpenPublicAsync();
+        foreach (var column in new[] { "published_at_utc_ticks", "actor_subject", "directory_name", "record_count", "is_active" })
+            await AssertDeniedAsync(connection, $"SELECT {column} FROM public.publication_releases");
     }
 
     [Fact]
@@ -376,7 +394,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await ExecuteAsync($"""
             REVOKE SELECT ON ALL TABLES IN SCHEMA public_api FROM {Role};
             REVOKE USAGE ON SCHEMA public_api FROM {Role};
-            REVOKE SELECT ON publication_releases, publication_record_states, vote_revisions, vote_revision_facts, vote_member_list_entries, vote_revision_issues, zcta_districts, roster_snapshots, collection_attempts FROM {Owner};
+            REVOKE SELECT ON publication_releases, publication_record_states, vote_revisions, vote_revision_facts, vote_member_list_entries, vote_revision_issues,
+                action_revisions, action_revision_sponsorships, action_revision_issues, zcta_districts, roster_snapshots, collection_attempts FROM {Owner};
             ALTER ROLE {Role} RESET ALL;
             ALTER ROLE {Role} CONNECTION LIMIT -1;
             GRANT TEMPORARY ON DATABASE {new NpgsqlConnectionStringBuilder(connectionString).Database} TO PUBLIC;
@@ -401,6 +420,249 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(restored, "SELECT pg_advisory_lock(1)");
         await AssertDeniedAsync(restored, "SELECT * FROM public.vote_revisions");
     }
+
+    [Fact]
+    public async Task OnlyBillsOfTheActiveReleaseAppearAndAWithdrawnOrFutureOrNonActionRecordNeverDoes()
+    {
+        await SeedBillsAsync();
+        string[] views = ["bills", "bill_sponsorships", "bill_issues"];
+
+        foreach (var view in views)
+            Assert.Equal(["A", "C", "M"], await PublicAsync($"SELECT DISTINCT record_id FROM public_api.{view} ORDER BY 1"));
+
+        await ExecuteAsync("UPDATE publication_releases SET is_active = false; UPDATE publication_releases SET is_active = true WHERE release_number = 1");
+
+        foreach (var view in views)
+            Assert.Equal(["A", "W"], await PublicAsync($"SELECT DISTINCT record_id FROM public_api.{view} ORDER BY 1"));
+
+        await ExecuteAsync("UPDATE publication_releases SET is_active = false");
+        Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.bills"));
+    }
+
+    [Fact]
+    public async Task ABillKeepsItsBillIdentityAndPolicyAreaForTheRouteFilters()
+    {
+        await SeedBillsAsync();
+
+        Assert.Equal(["A|119|hr|7|A housing bill|Headline A|Summary A|Health|health|2"],
+            await PublicAsync("""
+                SELECT concat_ws('|', record_id, congress, bill_type, bill_number, bill_title, headline, summary, policy_area, policy_area_id, release_number)
+                  FROM public_api.bills WHERE record_id = 'A'
+                """));
+    }
+
+    [Fact]
+    public async Task ARevisionWithNoWrittenColumnsOrNoDerivedColumnsOrNoSponsorshipAppearsInNoBillViewBecauseItHoldsNothingToShow()
+    {
+        await SeedBillsAsync();
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES
+              ('action', 'legacy', 1, 1, NULL), ('action', 'underived', 1, 1, NULL), ('action', 'lonely', 1, 1, NULL);
+            INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
+              VALUES ('legacy', 1, 'test', 'Person', 'x', 1);
+            {ActionSponsorship("legacy", 1, 0, "p1", "Sponsor", true, "2026-01-10")}
+            {ActionIssue("legacy", 1, "health", 0, true)}
+            {ActionRevision("underived", 1, "Person", eventOn: null, cosponsorCount: null)}
+            {ActionSponsorship("underived", 1, 0, "p1", "Sponsor", true, "2026-01-10")}
+            {ActionIssue("underived", 1, "health", 0, true)}
+            {ActionRevision("lonely", 1, "Person", "2026-01-10", 0)}
+            {ActionIssue("lonely", 1, "health", 0, true)}
+            """);
+
+        foreach (var view in new[] { "bills", "bill_sponsorships", "bill_issues" })
+            Assert.Equal(["A", "C", "M"], await PublicAsync($"SELECT DISTINCT record_id FROM public_api.{view} ORDER BY 1"));
+    }
+
+    [Fact]
+    public async Task NoBillChildViewShowsARecordThatBillsHidesBecauseARouteJoinsThemByRecordId()
+    {
+        await SeedBillsAsync();
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES
+              ('action', 'untracked', 1, 1, NULL), ('action', 'hidden', 1, 1, NULL);
+            {ActionRevision("untracked", 1, "Person", "2026-02-20", 1)}
+            {ActionSponsorship("untracked", 1, 0, "p1", "Sponsor", true, "2026-01-10")}
+            {ActionRevision("hidden", 1, "Person", eventOn: null, cosponsorCount: null)}
+            {ActionSponsorship("hidden", 1, 0, "p1", "Sponsor", true, "2026-01-10")}
+            {ActionIssue("hidden", 1, "health", 0, true)}
+            """);
+
+        var bills = await PublicAsync("SELECT record_id || ' ' || revision_number FROM public_api.bills ORDER BY 1");
+        var sponsorships = await PublicAsync("SELECT DISTINCT record_id || ' ' || revision_number FROM public_api.bill_sponsorships ORDER BY 1");
+        var issues = await PublicAsync("SELECT DISTINCT record_id || ' ' || revision_number FROM public_api.bill_issues ORDER BY 1");
+
+        Assert.Equal(["A 1", "C 1", "M 1", "untracked 1"], bills);
+        Assert.Empty(sponsorships.Except(bills));
+        Assert.Empty(issues.Except(bills));
+        Assert.Contains("untracked 1", sponsorships);
+        Assert.DoesNotContain("untracked 1", issues);
+    }
+
+    [Fact]
+    public async Task EveryAiOrCodeBillHasItsLabelAndAPersonBillHasNone()
+    {
+        await SeedBillsAsync();
+
+        Assert.Equal(
+        [
+            $"A Person none", $"C Code {PublishedRecordLabels.CodeWording}", $"M Model {PublishedRecordLabels.ModelWording}"
+        ], await PublicAsync("SELECT record_id || ' ' || text_origin || ' ' || coalesce(label, 'none') FROM public_api.bills ORDER BY 1"));
+    }
+
+    [Fact]
+    public async Task EventDateAndCosponsorCountEqualTheStoredColumnsBecauseCSharpWritesThemOnceAndTheViewMustNotComputeThem()
+    {
+        var revision = ActionRevisionFixtures.Model() with
+        {
+            RecordId = "derived",
+            Sponsorships =
+            [
+                Sponsorship("p1", ActionSponsorshipRole.Sponsor, "2026-01-10", null), Sponsorship("p2", ActionSponsorshipRole.Cosponsor, "2026-01-10", null),
+                Sponsorship("p1", ActionSponsorshipRole.Cosponsor, "2026-01-12", null), Sponsorship("p3", ActionSponsorshipRole.Cosponsor, "2026-02-01", "2026-02-20"),
+                Sponsorship("p4", ActionSponsorshipRole.Cosponsor, "2026-01-15", null), Sponsorship("p4", ActionSponsorshipRole.Cosponsor, "2026-01-16", null)
+            ]
+        };
+        await InsertActiveBillAsync(revision, "Person");
+        await InsertActiveBillAsync(ActionRevisionFixtures.Model() with { RecordId = "stored", Sponsorships = [Sponsorship("p1", ActionSponsorshipRole.Sponsor, "2026-01-10", null)] },
+            "Person", eventOn: "2030-12-31", cosponsorCount: 42);
+
+        Assert.Equal(new DateOnly(2026, 2, 20), revision.EventOn());
+        Assert.Equal(2, revision.CosponsorCount());
+        Assert.Equal(["derived 2026-02-20 2 1"], await PublicAsync("SELECT concat_ws(' ', record_id, event_date, cosponsor_count, sponsor_count) FROM public_api.bills WHERE record_id = 'derived'"));
+        Assert.Equal(["stored 2030-12-31 42"], await PublicAsync("SELECT concat_ws(' ', record_id, event_date, cosponsor_count) FROM public_api.bills WHERE record_id = 'stored'"));
+    }
+
+    [Fact]
+    public async Task ASponsorshipRowKeepsItsOrderOfficialIdRoleAndOriginalFlagAndHidesTheBioguideId()
+    {
+        await SeedBillsAsync();
+
+        Assert.Equal(
+        [
+            "0 p1 Sponsor t 2026-01-10 none", "1 p2 Cosponsor t 2026-01-10 none", "2 p3 Cosponsor f 2026-02-01 2026-02-20"
+        ], await PublicAsync("""
+            SELECT concat_ws(' ', "position", official_id, role, is_original, sponsored_on, coalesce(withdrawn_on::text, 'none'))
+              FROM public_api.bill_sponsorships WHERE record_id = 'A' ORDER BY "position"
+            """));
+        await using var connection = await OpenPublicAsync();
+        await AssertDeniedAsync(connection, "SELECT bioguide_id FROM public_api.bill_sponsorships", "42703");
+        await AssertDeniedAsync(connection, "SELECT person_id FROM public_api.bill_sponsorships", "42703");
+    }
+
+    [Fact]
+    public async Task AnUntrackedBillIssueNeverAppearsInTheIssueViewBecauseNoPublicViewMayShowIt()
+    {
+        await SeedBillsAsync();
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            {ActionIssue("A", 1, "tax", 1, false)}
+            {ActionIssue("A", 1, "labor", 2, true)}
+            """);
+
+        Assert.Equal(["health 0", "labor 2"], await PublicAsync("SELECT issue_id || ' ' || \"position\" FROM public_api.bill_issues WHERE record_id = 'A' ORDER BY \"position\""));
+        Assert.Empty(await PublicAsync("SELECT issue_id FROM public_api.bill_issues WHERE issue_id = 'tax'"));
+        await using var connection = await OpenPublicAsync();
+        await AssertDeniedAsync(connection, "SELECT is_tracked FROM public_api.bill_issues", "42703");
+    }
+
+    [Fact]
+    public async Task TheRoleReadsNoNeverPublicBillFieldBecauseNoViewShowsOneAndNoBaseTableGrantExists()
+    {
+        await SeedBillsAsync();
+        string[] neverPublic =
+        [
+            "suggestion_headline", "suggestion_summary", "suggestion_run_id", "suggestion_fingerprint", "author_subject", "author_kind", "run_id", "code_version",
+            "candidate_id", "fingerprint", "subjects_hash", "issue_revision_id", "issue_candidates_recorded", "source_id", "summary_version", "revision_json",
+            "created_at_utc_ticks", "bill_citation_extraction_id", "summary_citation_start", "policy_area_citation_length"
+        ];
+        await using var connection = await OpenPublicAsync();
+        await using (var lift = new NpgsqlCommand("SET default_transaction_read_only = off", connection)) await lift.ExecuteNonQueryAsync();
+
+        foreach (var column in neverPublic)
+        {
+            await AssertDeniedAsync(connection, $"SELECT {column} FROM public_api.bills", "42703");
+            await AssertDeniedAsync(connection, $"SELECT {column} FROM public.action_revisions");
+        }
+        await AssertDeniedAsync(connection, "SELECT bioguide_id FROM public.action_revision_sponsorships");
+        await AssertDeniedAsync(connection, "SELECT record_id FROM public.action_revision_issues");
+        await AssertDeniedAsync(connection, "SELECT headline FROM public.action_revisions");
+        await AssertDeniedAsync(connection, "UPDATE public.action_revisions SET headline = 'x'");
+    }
+
+    private async Task SeedBillsAsync()
+    {
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active) VALUES
+              (1, '000001-00000000000000000000000000000001', 'test', 1, 2, false),
+              (2, '000002-00000000000000000000000000000002', 'test', 2, 3, true);
+            -- A: both releases. M and C: from release 2. W: release 1 only. F: from a later release. K: a vote record with an action row of the same ID.
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES
+              ('action', 'A', 1, 1, NULL), ('action', 'M', 2, 1, NULL), ('action', 'C', 2, 1, NULL), ('action', 'W', 1, 1, 1),
+              ('action', 'F', 3, 1, NULL), ('vote', 'K', 1, 1, NULL);
+            {string.Join('\n', new[] { ("A", "Person"), ("M", "Model"), ("C", "Code"), ("W", "Person"), ("F", "Person"), ("K", "Person") }
+                .Select(bill => BillRows(bill.Item1, bill.Item2)))}
+            """);
+    }
+
+    private static string BillRows(string record, string origin) => $"""
+        {ActionRevision(record, 1, origin, "2026-02-20", 1)}
+        {ActionSponsorship(record, 1, 0, "p1", "Sponsor", true, "2026-01-10")}
+        {ActionSponsorship(record, 1, 1, "p2", "Cosponsor", true, "2026-01-10")}
+        {ActionSponsorship(record, 1, 2, "p3", "Cosponsor", false, "2026-02-01", "2026-02-20")}
+        {ActionIssue(record, 1, "health", 0, true)}
+        """;
+
+    private async Task InsertActiveBillAsync(ActionDraftRevision revision, string origin, string? eventOn = null, int? cosponsorCount = null)
+    {
+        var sponsorships = revision.Sponsorships.Select((item, position) => ActionSponsorship(revision.RecordId, 1, position, item.PersonId, item.Role.ToString(),
+            item.IsOriginal, item.SponsoredOn.ToString("yyyy-MM-dd"), item.WithdrawnOn?.ToString("yyyy-MM-dd")));
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+              VALUES (1, '000001-00000000000000000000000000000001', 'test', 1, 1, true) ON CONFLICT DO NOTHING;
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('action', '{revision.RecordId}', 1, 1, NULL);
+            {ActionRevision(revision.RecordId, 1, origin, eventOn ?? revision.EventOn().ToString("yyyy-MM-dd"), cosponsorCount ?? revision.CosponsorCount())}
+            {string.Join('\n', sponsorships)}
+            """);
+    }
+
+    private static ActionSponsorship Sponsorship(string person, ActionSponsorshipRole role, string sponsoredOn, string? withdrawnOn) =>
+        new(person, $"B{person}", role, true, DateOnly.Parse(sponsoredOn), withdrawnOn is null ? null : DateOnly.Parse(withdrawnOn), []);
+
+    // Run ID and code version satisfy the author checks. The Code row also carries the bill citation that the Code author needs.
+    private static string ActionRevision(string record, int revision, string origin, string? eventOn, int? cosponsorCount)
+    {
+        var authorKind = origin switch { "Model" => "Analysis", "Code" => "Code", _ => "Person" };
+        var run = authorKind == "Person" ? "NULL" : $"'run-{record}'";
+        var codeVersion = authorKind == "Code" ? $"'{new string('c', 40)}'" : "NULL";
+        var billCitation = authorKind == "Code" ? "'ext', 0, 1" : "NULL, NULL, NULL";
+        return $"""
+            INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, code_version, revision_json, created_at_utc_ticks,
+                headline, summary, text_origin, source_id, congress, bill_type, bill_number, candidate_id, candidate_update_utc_ticks,
+                candidate_includes_summaries, candidate_includes_subjects, fingerprint, bill_title, issue_revision_id, issue_candidates_recorded,
+                bill_citation_extraction_id, bill_citation_start, bill_citation_length,
+                policy_area, policy_area_citation_extraction_id, policy_area_citation_start, policy_area_citation_length, policy_area_id,
+                suggestion_headline, suggestion_summary, suggestion_run_id, suggestion_fingerprint, event_on, cosponsor_count)
+            VALUES ('{record}', {revision}, 'test', '{authorKind}', {run}, {codeVersion}, 'x', 1,
+                'Headline {record}', 'Summary {record}', '{origin}', 'src', 119, 'hr', 7, '{new string('b', 64)}', 1,
+                true, true, '{new string('d', 64)}', 'A housing bill', '{new string('e', 64)}', true,
+                {billCitation}, 'Health', 'ext', 0, 1, 'health',
+                'Model draft headline', 'Model draft summary', 'suggestion-run', '{new string('f', 64)}',
+                {(eventOn is null ? "NULL" : $"'{eventOn}'")}, {cosponsorCount?.ToString() ?? "NULL"});
+            """;
+    }
+
+    private static string ActionSponsorship(string record, int revision, int position, string person, string role, bool original, string sponsoredOn, string? withdrawnOn = null) => $"""
+        INSERT INTO action_revision_sponsorships (record_id, revision_number, "position", person_id, bioguide_id, role, is_original, sponsored_on, withdrawn_on)
+        VALUES ('{record}', {revision}, {position}, '{person}', 'B{person}', '{role}', {original}, '{sponsoredOn}', {(withdrawnOn is null ? "NULL" : $"'{withdrawnOn}'")});
+        """;
+
+    private static string ActionIssue(string record, int revision, string issue, int position, bool tracked) => $"""
+        INSERT INTO action_revision_issues (record_id, revision_number, issue_id, "position", is_tracked) VALUES ('{record}', {revision}, '{issue}', {position}, {tracked});
+        """;
 
     private sealed class ZipSnapshotSteps(PublicApiViewsTests tests)
     {

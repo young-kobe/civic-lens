@@ -13,6 +13,7 @@ public sealed partial record BriefRevision(string RecordId, int RevisionNumber, 
     public const int MaximumParagraphs = 12;
     public const int MaximumCitations = 256;
     public const int MaximumRecordIdLength = 64;
+    public const string CitationIdPattern = "^R[1-9][0-9]{0,3}$";
 
     public ReviewAuthorKind AuthorKind => ReviewAuthor.KindOf(AuthorSubject);
 
@@ -122,6 +123,6 @@ public sealed partial record BriefRevision(string RecordId, int RevisionNumber, 
             throw new ArgumentException("A brief cites each record once, under its own ID.", name);
     }
 
-    [GeneratedRegex(@"^R[1-9][0-9]{0,3}$")]
+    [GeneratedRegex(CitationIdPattern)]
     private static partial Regex CitationId();
 }
