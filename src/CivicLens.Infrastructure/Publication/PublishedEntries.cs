@@ -23,9 +23,8 @@ internal static class PublishedEntries
         """;
 
     private const string ReadReleaseStates = """
-        SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber", p.first_published_at_utc_ticks AS "Ticks"
+        SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber"
         FROM publication_record_states s
-        LEFT JOIN published_records p ON p.kind = s.kind AND p.record_id = s.record_id
         WHERE s.first_release <= {0} AND (s.last_release IS NULL OR s.last_release >= {0})
         """;
 
@@ -53,8 +52,10 @@ internal static class PublishedEntries
     {
         var states = await db.Database.SqlQueryRaw<ReleaseStateRow>(ReadReleaseStates, releaseNumber).ToArrayAsync(cancellationToken);
         var facts = await ReadFactsAsync(db, KeyArrays(states.Select(state => (state.Kind, state.RecordId, state.RevisionNumber))), cancellationToken);
+        var references = states.Select(state => new PublishedRecordReference(KindOf(state.Kind), state.RecordId)).Distinct().ToArray();
+        var firstPublished = await PublishedRecords.ReadAsync(db, references, cancellationToken);
         return [.. states.Select(state => new StoredReleaseRecord(KindOf(state.Kind), state.RecordId, state.RevisionNumber,
-            state.Ticks is { } ticks ? new DateTimeOffset(ticks, TimeSpan.Zero) : null,
+            firstPublished.TryGetValue(new(KindOf(state.Kind), state.RecordId), out var time) ? time : null,
             facts.GetValueOrDefault((state.Kind, state.RecordId, state.RevisionNumber))))];
     }
 
@@ -209,7 +210,6 @@ internal static class PublishedEntries
         public string Kind { get; set; } = "";
         public string RecordId { get; set; } = "";
         public int RevisionNumber { get; set; }
-        public long? Ticks { get; set; }
     }
 
     private sealed class CandidateRow
