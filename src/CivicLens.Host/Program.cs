@@ -109,6 +109,8 @@ if (args is [] or ["--help"] or ["help"])
           relationships draft list [drafted|unchanged|none|unmatched|pending|failed] [limit]
           relationships draft requeue <pair-id|--all>
           relationships draft refresh
+          relationships revisions backfill <limit>
+          relationships revisions verify
           brief redraft --week <yyyy-MM-dd>
           brief revisions backfill <limit>
           brief revisions verify
@@ -374,7 +376,9 @@ try
         var draftStore = new PostgresRelationshipDraftStore(contexts);
         var draftCommands = new AnalysisQueueCommands<RelationshipDraftRun, RelationshipDraftView, RelationshipDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, RelationshipDraftTask.Task));
-        var relationships = new RelationshipCommand(draftCommands, new GetRelationshipDraftStatus(draftCommands.Status, draftStore), new RefreshRelationshipPairs(draftStore), owner);
+        var backfillStore = new PostgresRelationshipRevisionBackfillStore(contexts);
+        var relationships = new RelationshipCommand(draftCommands, new GetRelationshipDraftStatus(draftCommands.Status, draftStore), new RefreshRelationshipPairs(draftStore),
+            new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
         executing = true;
         return await relationships.ExecuteAsync(args, cancellation.Token);
     }

@@ -245,7 +245,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
     public async Task ACitedStatementRevisionThatIsNotStoredMarksOnlyItsRelationshipUnreadable()
     {
         await SeedEveryKindAsync();
-        await seeder.ExecuteAsync("DELETE FROM statement_revisions WHERE candidate_id = @id", ("id", StatementId));
+        await seeder.ExecuteAsync("SET session_replication_role = replica;\nDELETE FROM statement_revisions WHERE candidate_id = @id", ("id", StatementId));
 
         var page = await store.ListAsync(null, 10, default);
 

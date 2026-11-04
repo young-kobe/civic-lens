@@ -11,6 +11,7 @@ using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Briefs;
 using CivicLens.Infrastructure.Briefs.Persistence;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Relationships.Persistence;
 using CivicLens.Infrastructure.Publication.Persistence;
 using CivicLens.Infrastructure.Review;
@@ -322,8 +323,8 @@ public sealed class PostgresPublicationStore : IPublicationStore
                 relationships.Select(relationship => relationship.RecordId).ToArray(),
                 relationships.Select(relationship => relationship.RevisionNumber).ToArray())
             .AsNoTracking().ToArrayAsync(cancellationToken);
-        return rows.Select(row => ReviewJson.Deserialize<RelationshipRevision>(row.RevisionJson, "revision"))
-            .SelectMany(revision => new[] { revision.Statement, revision.Target }).Select(RelationshipRecordKinds.BindingOf);
+        return rows.Select(RelationshipRevisionRows.CitationsOf).SelectMany(citations => new[] { citations.Statement, citations.Target })
+            .Select(RelationshipRecordKinds.BindingOf);
     }
 
     private static async Task<Dictionary<(PublishedRecordKind Kind, string RecordId), ReviewState>>
