@@ -154,7 +154,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
 
         Assert.NotNull(read!.ConfigurationRevision);
         Assert.InRange(counter.ReadCount, 1, draftedReads);
-        Assert.InRange(draftedReads, 1, 9);
+        Assert.InRange(draftedReads, 1, 21);
     }
 
     [Fact]

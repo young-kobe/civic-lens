@@ -69,12 +69,12 @@ internal static class RelationshipEvidenceReader
         RelationshipRevisionScope scope, CancellationToken cancellationToken)
     {
         var current = await (from draft in db.Set<StatementDraftRow>().AsNoTracking()
-                          where (scope == RelationshipRevisionScope.Latest || draft.ReviewStatus == ReviewStatus.Approved) && (candidateIds == null || candidateIds.Contains(draft.CandidateId))
-                          join revision in db.Set<StatementRevisionRow>().AsNoTracking()
-                              on new { draft.CandidateId, Number = draft.CurrentRevisionNumber } equals new { revision.CandidateId, Number = revision.RevisionNumber }
-                          join candidate in db.Set<StatementCandidateRow>().AsNoTracking() on draft.CandidateId equals candidate.CandidateId
-                          join extraction in db.Set<DocumentExtractionRow>().AsNoTracking() on candidate.ExtractionId equals extraction.ExtractionId
-                          select new { revision.CandidateId, revision.RevisionNumber, extraction.Text }).ToArrayAsync(cancellationToken);
+                             where (scope == RelationshipRevisionScope.Latest || draft.ReviewStatus == ReviewStatus.Approved) && (candidateIds == null || candidateIds.Contains(draft.CandidateId))
+                             join revision in db.Set<StatementRevisionRow>().AsNoTracking()
+                                 on new { draft.CandidateId, Number = draft.CurrentRevisionNumber } equals new { revision.CandidateId, Number = revision.RevisionNumber }
+                             join candidate in db.Set<StatementCandidateRow>().AsNoTracking() on draft.CandidateId equals candidate.CandidateId
+                             join extraction in db.Set<DocumentExtractionRow>().AsNoTracking() on candidate.ExtractionId equals extraction.ExtractionId
+                             select new { revision.CandidateId, revision.RevisionNumber, extraction.Text }).ToArrayAsync(cancellationToken);
         var revisions = (await StatementRevisionRows.ReadNamedAsync(db, [.. current.Select(row =>
             new PublishedRevisionBinding(PublishedRecordKind.Statement, row.CandidateId, row.RevisionNumber))], cancellationToken))
             .ToDictionary(revision => revision.CandidateId, StringComparer.Ordinal);

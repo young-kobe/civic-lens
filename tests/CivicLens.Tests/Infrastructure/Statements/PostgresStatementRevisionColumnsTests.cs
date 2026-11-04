@@ -62,7 +62,7 @@ public sealed class PostgresStatementRevisionColumnsTests(PostgresCollection pos
             SELECT author_subject || '|' || author_kind || '|' || headline || '|' || summary || '|' || statement_date
             FROM statement_revisions WHERE revision_number = 2
             """));
-        Assert.Equal(["markey,warren|Jo Rivera,Pat Smith|rent-affordability|health,housing-and-community-development|S. 1234,H.R. 56"], await ReadAsync("""
+        Assert.Equal(["warren|Jo Rivera,Pat Smith|rent-affordability|health,housing-and-community-development|S. 1234,H.R. 56"], await ReadAsync("""
             SELECT (SELECT string_agg(official_id, ',' ORDER BY position) FROM statement_revision_speakers c WHERE c.candidate_id = r.candidate_id AND c.revision_number = r.revision_number)
                 || '|' || (SELECT string_agg(speaker_name, ',' ORDER BY position) FROM statement_revision_other_speakers c WHERE c.candidate_id = r.candidate_id AND c.revision_number = r.revision_number)
                 || '|' || (SELECT string_agg(issue_id, ',' ORDER BY position) FROM statement_revision_issues c WHERE c.candidate_id = r.candidate_id AND c.revision_number = r.revision_number)
@@ -294,8 +294,8 @@ public sealed class PostgresStatementRevisionColumnsTests(PostgresCollection pos
 
         var priority = await BillPriorityAsync(119, "hr", 1234);
 
-        Assert.Equal(ReviewPriorityOfNamedBill, priority);
-        Assert.NotEqual(ReviewPriorityOfNamedBill, await BillPriorityAsync(119, "hr", 4321));
+        Assert.Equal(ReviewPriority.Highest, priority);
+        Assert.Equal(ReviewPriority.Lowest, await BillPriorityAsync(119, "hr", 4321));
     }
 
     [Fact]
@@ -380,8 +380,6 @@ public sealed class PostgresStatementRevisionColumnsTests(PostgresCollection pos
         Assert.Contains("statement_candidates", thrown.ConstraintName, StringComparison.Ordinal);
     }
 
-    private const int ReviewPriorityOfNamedBill = 2;
-
     private static string Json(StatementDraftRevision revision) => JsonSerializer.Serialize(revision, JsonSerializerOptions.Web);
 
     private CreateStatementDraft Create => new(reviews);
@@ -401,7 +399,7 @@ public sealed class PostgresStatementRevisionColumnsTests(PostgresCollection pos
         var quote = new SourceSpan(extraction.ExtractionId, extraction.Text.IndexOf(Quote, StringComparison.Ordinal), Quote.Length);
         var second = new SourceSpan(extraction.ExtractionId, extraction.Text.IndexOf(SecondQuote, StringComparison.Ordinal), SecondQuote.Length);
         var evidence = new SourceSpan(extraction.ExtractionId, extraction.Text.IndexOf("October 3, 2026", StringComparison.Ordinal), "October 3, 2026".Length);
-        return new(candidate, expectedRevision, "Warren cap", "The senator announced a cap.", StatementDate, evidence, [Markey, Warren],
+        return new(candidate, expectedRevision, "Warren cap", "The senator announced a cap.", StatementDate, evidence, [Warren],
             ["Jo Rivera", "Pat Smith"], [RentIssue], [HealthArea, HousingArea], [second, quote], "save-" + candidate[..8], StatementDateChecked: true);
     }
 

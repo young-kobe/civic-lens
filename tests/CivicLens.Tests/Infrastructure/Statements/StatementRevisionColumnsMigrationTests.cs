@@ -71,7 +71,7 @@ public sealed class StatementRevisionColumnsMigrationTests(PostgresCollection po
         await MigrateToAsync(Before());
 
         Assert.Empty(await ReadAsync("SELECT 1 FROM information_schema.columns WHERE table_name = 'statement_revisions' AND column_name = 'headline'"));
-        Assert.Empty(await ReadAsync("SELECT 1 FROM information_schema.tables WHERE table_name LIKE 'statement_revision_%'"));
+        Assert.Empty(await ReadAsync("SELECT 1 FROM information_schema.tables WHERE table_name ~ '^statement_revision_.'"));
         Assert.Empty(await ReadAsync("SELECT 1 FROM pg_constraint WHERE conname = 'ux_statement_candidates_candidate_extraction'"));
         Assert.Equal(["""{"headline":"kept"}"""], await ReadAsync("SELECT revision_json FROM statement_revisions"));
         await MigrateToAsync(Migration);
