@@ -7,6 +7,7 @@ using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Infrastructure.Statements;
 
 namespace CivicLens.Infrastructure.Briefs;
 
@@ -41,7 +42,7 @@ internal static class BriefRecordReader
         records.AddRange(await ReadKindAsync<DocumentChangeDraftRevision>(db, bindings, BriefCitationKind.DocumentChange, approvedOnly, BriefRecord.From,
             DocumentChangeRevisionRows.ReadNamedAsync, cancellationToken));
         records.AddRange(await ReadKindAsync<StatementDraftRevision>(db, bindings, BriefCitationKind.Statement, approvedOnly, BriefRecord.From,
-            ReadJsonRevisionsAsync<StatementDraftRevision>, cancellationToken));
+            StatementRevisionRows.ReadNamedAsync, cancellationToken));
         records.AddRange(await ReadKindAsync<ActionDraftRevision>(db, bindings, BriefCitationKind.Action, approvedOnly, BriefRecord.From,
             ReadJsonRevisionsAsync<ActionDraftRevision>, cancellationToken));
         return [.. records.OrderBy(record => record.Kind).ThenBy(record => record.RecordId, StringComparer.Ordinal)];

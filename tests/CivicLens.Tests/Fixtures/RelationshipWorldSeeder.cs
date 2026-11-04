@@ -13,7 +13,9 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
 {
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
-    public Task StatementAsync(ApprovedStatement statement, string reviewStatus = "Approved") => ExecuteAsync("""
+    public async Task StatementAsync(ApprovedStatement statement, string reviewStatus = "Approved")
+    {
+        await ExecuteAsync("""
         SET session_replication_role = replica;
         INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
         VALUES (@extraction, 'attempt', 'extraction', @text, @hash) ON CONFLICT DO NOTHING;
@@ -22,12 +24,11 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         INSERT INTO statement_drafts (candidate_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks, official_ids)
         VALUES (@id, @number, 0, @status, 1, @officials)
         ON CONFLICT (candidate_id) DO UPDATE SET current_revision_number = @number, review_status = @status, official_ids = @officials;
-        INSERT INTO statement_revisions (candidate_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-        VALUES (@id, @number, 'auth0|editor', 'Person', NULL, @json, 1)
-        ON CONFLICT (candidate_id, revision_number) DO UPDATE SET revision_json = EXCLUDED.revision_json
         """, ("id", statement.RecordId), ("number", statement.Revision.RevisionNumber), ("status", reviewStatus),
-        ("extraction", RelationshipFixtures.ExtractionId), ("text", statement.ArticleText), ("hash", new string('f', 64)),
-        ("json", JsonSerializer.Serialize(statement.Revision, Web)), ("officials", statement.Revision.SpeakerOfficialIds.ToArray()));
+            ("extraction", RelationshipFixtures.ExtractionId), ("text", statement.ArticleText), ("hash", new string('f', 64)),
+            ("officials", statement.Revision.SpeakerOfficialIds.ToArray()));
+        await StatementRevisionSeeder.AddAsync(connectionString, statement.Revision);
+    }
 
     public Task ActionAsync(ActionDraftRevision action, string reviewStatus = "Approved", long revisedAtTicks = 1) => ExecuteAsync("""
         SET session_replication_role = replica;

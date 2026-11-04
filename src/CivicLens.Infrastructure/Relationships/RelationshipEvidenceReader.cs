@@ -11,7 +11,10 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Statements.Persistence;
+using CivicLens.Infrastructure.Statements;
 using CivicLens.Infrastructure.Votes;
+using CivicLens.Application.Publication;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Relationships;
@@ -35,8 +38,8 @@ internal static class RelationshipEvidenceReader
         SELECT d.candidate_id AS "Value" FROM statement_drafts d
         JOIN statement_revisions r ON r.candidate_id = d.candidate_id AND r.revision_number = d.current_revision_number
         WHERE @@scope
-          AND r.revision_json::jsonb ->> 'statementDate' >= {1} AND r.revision_json::jsonb ->> 'statementDate' < {2}
           AND d.official_ids && {0}
+          AND (r.headline IS NULL OR r.statement_date >= {1} AND r.statement_date < {2})
         """;
 
     private const string ActionById = """
@@ -65,15 +68,17 @@ internal static class RelationshipEvidenceReader
     public static async Task<ImmutableArray<ApprovedStatement>> ReadStatementsAsync(CollectionAttemptDbContext db, string[]? candidateIds,
         RelationshipRevisionScope scope, CancellationToken cancellationToken)
     {
-        var rows = await (from draft in db.Set<StatementDraftRow>().AsNoTracking()
+        var current = await (from draft in db.Set<StatementDraftRow>().AsNoTracking()
                           where (scope == RelationshipRevisionScope.Latest || draft.ReviewStatus == ReviewStatus.Approved) && (candidateIds == null || candidateIds.Contains(draft.CandidateId))
                           join revision in db.Set<StatementRevisionRow>().AsNoTracking()
                               on new { draft.CandidateId, Number = draft.CurrentRevisionNumber } equals new { revision.CandidateId, Number = revision.RevisionNumber }
                           join candidate in db.Set<StatementCandidateRow>().AsNoTracking() on draft.CandidateId equals candidate.CandidateId
                           join extraction in db.Set<DocumentExtractionRow>().AsNoTracking() on candidate.ExtractionId equals extraction.ExtractionId
-                          select new { revision.RevisionJson, extraction.Text }).ToArrayAsync(cancellationToken);
-        return [.. rows.Select(row => new ApprovedStatement(
-            ReviewJson.Deserialize<StatementDraftRevision>(row.RevisionJson, "statement revision"), row.Text))];
+                          select new { revision.CandidateId, revision.RevisionNumber, extraction.Text }).ToArrayAsync(cancellationToken);
+        var revisions = (await StatementRevisionRows.ReadNamedAsync(db, [.. current.Select(row =>
+            new PublishedRevisionBinding(PublishedRecordKind.Statement, row.CandidateId, row.RevisionNumber))], cancellationToken))
+            .ToDictionary(revision => revision.CandidateId, StringComparer.Ordinal);
+        return [.. current.Select(row => new ApprovedStatement(revisions[row.CandidateId], row.Text))];
     }
 
     public static async Task<ImmutableArray<ApprovedStatement>> ReadStatementsOfOfficialsAsync(CollectionAttemptDbContext db,
@@ -84,10 +89,8 @@ internal static class RelationshipEvidenceReader
     public static async Task<ImmutableArray<ApprovedStatement>> ReadDatedStatementsOfOfficialsAsync(CollectionAttemptDbContext db,
         string[] officialIds, int congress, RelationshipRevisionScope scope, CancellationToken cancellationToken)
     {
-        var from = CongressCalendar.StartOf(congress).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
-        var until = CongressCalendar.StartOf(congress + 1).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         return await ReadStatementsAsync(db, await db.Database.SqlQueryRaw<string>(Scoped(StatementsOfOfficialsInCongress, scope), officialIds,
-            from, until).ToArrayAsync(cancellationToken), scope, cancellationToken);
+            CongressCalendar.StartOf(congress), CongressCalendar.StartOf(congress + 1)).ToArrayAsync(cancellationToken), scope, cancellationToken);
     }
 
     public static Task<bool> IsApprovedAsync(CollectionAttemptDbContext db, RelationshipRecordKind kind, string recordId,
