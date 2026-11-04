@@ -85,7 +85,7 @@ public sealed class PublishedHomePageTests
     }
 
     [Fact]
-    public async Task TheLatestListHoldsTheFourNewestVotesAndTheThreeNewestActionsNewestFirstWithTheirDateAndALink()
+    public async Task TheLatestListHoldsTheNewestVotesOfEachChamberAndTheThreeNewestActionsNewestFirstWithTheirDateAndALink()
     {
         var split = PublishedVoteAlignment.Split;
         var release = ReleaseOf(Vote('a', 1, 1, split, 1), Vote('b', 1, 1, split, 2), Vote('c', 1, 1, split, 3) with { Chamber = PublishedChamber.Senate }, Vote('d', 1, 1, split, 4), Vote('e', 1, 1, split, 5),
