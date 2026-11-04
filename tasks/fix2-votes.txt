@@ -1,0 +1,27 @@
+Round 2 review of public-api-votes-routes found no P1. Fix these, then stop. Do not ask for another review.
+P2: tests/CivicLens.Tests/Architecture/ArchitectureTests.cs:88. The FROM/JOIN regex misses comma joins (FROM public_api.votes v, publication_releases r), lowercase from/join, interpolated {name} and quoted identifiers. Fix: match case-insensitively, scan each item of a comma list after FROM, and fail on { or " right after FROM or JOIN. Add test inputs that prove each form is caught.
+P3-1: src/CivicLens.PublicApi/Votes/VoteRequest.cs:30 and docs/architecture/search.md:86. The invariant names the wrong enforcer for lowercase stored bill_type. The writer is CongressBillListItem.NormalizeType. Name it, and say no database check enforces it.
+P3-2: docs/architecture/search.md:86. The claim that the filter moves below the view has no test that can fail. Write "No test" for that part (do not add an EXPLAIN test).
+P3-3: src/CivicLens.PublicApi/PublicApiOptions.cs:47. An operator connection string with MinPoolSize above 0 or a larger ConnectionPruningInterval brings the old failure back. Set MinPoolSize to 0 and the pruning interval explicitly for the views pool, beside the idle lifetime, and extend PublicApiOptionsTests so it fails if either is changed.
+Owner-approved wording: change the 503 detail in src/CivicLens.PublicApi/Http/ApiResults.cs (NoRelease) from "no release is indexed yet" to "no release is active yet". Update tests and docs that quote it. Change no other public text.
+Migration ID: rename 20261104013000_PublicApiReleaseTime (both files and the Migration attribute) to 20261104014300_PublicApiReleaseTime, because main has 20261104013000_PublicApiZipDistricts. Designer rule: after the merge, if this branch's migration is the last one in src/CivicLens.Infrastructure/Collection/Migrations, its Designer BuildTargetModel body must equal the snapshot's BuildModel body. Copy that body over and keep the Migration attribute and class name. Check with diff that only those lines differ.
+Final message under 1,800 characters: the pushed SHA, each finding and its fix, the test classes run with counts, and any open question.
+
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b public-api-votes-routes origin/public-api-votes-routes
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+6. curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+7. bash /tmp/dotnet-install.sh --version 10.0.403 --install-dir /root/.dotnet
+8. docker info  (if it fails: run sudo dockerd > /tmp/dockerd.log 2>&1 & in the background, then check docker info again after 10 seconds)
+9a. git merge --no-edit origin/main  (merge, never rebase; resolve conflicts keeping both sides' intent; for the EF model snapshot keep both sides' changes)
+9. export PATH=/root/.dotnet:$PATH && dotnet restore tests/CivicLens.Tests --locked-mode
+Prefix every later dotnet call with export PATH=/root/.dotnet:$PATH &&. If a Testcontainers pull fails with HTTP 429, wait 60 seconds and retry. Run test classes one filter at a time with --filter FullyQualifiedName~<Class> (no | in filters). Run at most one PublishReleaseTests class.
+
+Rules: read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Each rule has one owner; reuse the existing shared owners before adding any. Every added member needs a production caller. Delete code the change makes unused. No backward compatibility shims, dual reads or legacy fallbacks beyond what the named precedent already does. Comments only when absolutely necessary; intent goes in names. Tests encode why the rule matters and must fail if the rule breaks. EF migrations: generate with the repo EF tool manifest (dotnet tool restore, then dotnet ef migrations add), strip the UTF-8 BOM from generated files, and make the Designer match the model at the migration's position. Regenerate schema docs with CIVIC_LENS_WRITE_SCHEMA_DOCS=1 and the SchemaReferenceTests class. Prose (docs, commit messages): ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes. Update the owning feature docs in place (template headings Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, Limits and planned work); each invariant names its rule, enforcer and test. Do not write session reports or changelogs. If you hit a design choice the brief does not settle, choose nothing: stop, commit what is done, and list the question with options in your final message.
+
+Checks before the last commit: dotnet build tests/CivicLens.Tests -c Release (0 errors), the changed and related test classes, dotnet format CivicLens.slnx --verify-no-changes --no-restore, python3 tools/check-docs.py --check, python3 tools/render-architecture.py --check.
+
+Finish, each its own Bash call: git add -A; git commit -m "<one plain sentence>"; git push origin public-api-votes-routes. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only public-api-votes-routes.
