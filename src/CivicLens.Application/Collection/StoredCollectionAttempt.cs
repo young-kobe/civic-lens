@@ -8,7 +8,8 @@ namespace CivicLens.Application.Collection;
 public sealed class StoredCollectionAttempt
 {
     public StoredCollectionAttempt(CollectionAttemptResult attemptResult, SentValidators? sentValidators,
-        CapturedAttemptResult? priorCapturedAttempt, DiscoveryEvidence? discovery = null, long? robotsCrawlDelayMilliseconds = null)
+        CapturedAttemptResult? priorCapturedAttempt, DiscoveryEvidence? discovery = null, long? robotsCrawlDelayMilliseconds = null,
+        long? elapsedMilliseconds = null)
     {
         ArgumentNullException.ThrowIfNull(attemptResult);
         if (attemptResult is not NotModifiedAttemptResult && priorCapturedAttempt is not null)
@@ -18,7 +19,10 @@ public sealed class StoredCollectionAttempt
             throw new ArgumentException("Discovery must belong to the captured attempt.", nameof(discovery));
         if (robotsCrawlDelayMilliseconds is < 0 or > CollectionProtocol.MaximumCrawlDelayMilliseconds)
             throw new ArgumentOutOfRangeException(nameof(robotsCrawlDelayMilliseconds));
+        if (elapsedMilliseconds is < 0)
+            throw new ArgumentOutOfRangeException(nameof(elapsedMilliseconds));
         RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds;
+        ElapsedMilliseconds = elapsedMilliseconds;
         Discovery = discovery;
         AttemptResult = attemptResult;
         SentValidators = sentValidators;
@@ -30,6 +34,7 @@ public sealed class StoredCollectionAttempt
     }
 
     public long? RobotsCrawlDelayMilliseconds { get; }
+    public long? ElapsedMilliseconds { get; }
     public DiscoveryEvidence? Discovery { get; }
     public CollectionAttemptResult AttemptResult { get; }
     public SentValidators? SentValidators { get; }

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using CivicLens.Application.Paging;
 using System.Data.Common;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
@@ -72,7 +73,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
         await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
         var handoffs = new FileCollectionReceiptHandoffStore(root);
-        await handoffs.SaveAsync(new PendingCollectionHandoff(1, start.Attempt.AttemptId, start.Attempt.Request,
+        await handoffs.SaveAsync(new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, start.Attempt.AttemptId, start.Attempt.Request,
             receipt with { FinalUrl = receipt.FinalUrl + "/different" }), default);
         await jobs.ReleaseCollectorAsync(claim.Lease, start.CollectorLease!, default);
         await jobs.ReleaseClaimAsync(claim.Lease, default);
@@ -587,7 +588,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
         var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
         var handoffs = new FileCollectionReceiptHandoffStore(root);
-        await handoffs.SaveAsync(new PendingCollectionHandoff(1, start.Attempt.AttemptId, start.Attempt.Request, receipt), default);
+        await handoffs.SaveAsync(new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, start.Attempt.AttemptId, start.Attempt.Request, receipt), default);
         await jobs.ReleaseCollectorAsync(claim.Lease, start.CollectorLease!, default);
         await jobs.ReleaseClaimAsync(claim.Lease, default);
         await jobs.CancelAsync(claim.Job.JobId, default);
@@ -597,6 +598,50 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         Assert.Equal(CollectionJobState.Cancelled, result.Job!.State);
         Assert.Single(result.Job.Attempts);
         Assert.NotNull(await evidence.GetAsync(start.Attempt.AttemptId, default));
+        Assert.Empty(await handoffs.ListAsync(default));
+    }
+
+    [Fact]
+    public async Task AVersionOneHandoffIsRemovedAndTheJobFetchesAgainSoAnOldFileCannotBlockItsQueue()
+    {
+        var claim = await EnqueueClaimAsync("refused-version-one", Source());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var handoffs = new FileCollectionReceiptHandoffStore(root);
+        await WriteVersionOneHandoffAsync(handoffs, start.Attempt!, ReceiptCollector.Result(start.Attempt!.Request, 404));
+        await jobs.ReleaseCollectorAsync(claim.Lease, start.CollectorLease!, default);
+        await jobs.ReleaseClaimAsync(claim.Lease, default);
+
+        var result = await Runner(new ReceiptCollector(404)).ExecuteAsync(claim.Job.JobId, root, LeaseDuration);
+
+        Assert.Equal(2, result.Job!.Attempts.Count);
+        var refused = result.Job.Attempts[0];
+        Assert.Equal(start.Attempt.AttemptId, refused.AttemptId);
+        Assert.Equal(CollectionJobAttemptOutcome.Interrupted, refused.Resolution!.Outcome);
+        Assert.Equal("HandoffRefused", refused.Resolution.ErrorCode);
+        var refetched = result.Job.Attempts[1];
+        Assert.NotEqual(CollectionJobAttemptOutcome.Interrupted, refetched.Resolution!.Outcome);
+        Assert.NotNull(await evidence.GetAsync(refetched.AttemptId, default));
+        Assert.Null(await evidence.GetAsync(start.Attempt.AttemptId, default));
+        Assert.Empty(await handoffs.ListAsync(default));
+    }
+
+    [Fact]
+    public async Task AVersionOneHandoffForImportedEvidenceIsRemovedAndSettlesFromTheEvidenceSoNothingFetchesTwice()
+    {
+        var claim = await EnqueueClaimAsync("retained-version-one", Source());
+        var start = await jobs.TryStartAttemptAsync(claim.Lease, root, default);
+        var receipt = ReceiptCollector.Result(start.Attempt!.Request, 404);
+        await CollectionAttemptImporter.ImportAsync(start.Attempt.AttemptId, start.Attempt.Request, receipt, evidence, default);
+        var handoffs = new FileCollectionReceiptHandoffStore(root);
+        await WriteVersionOneHandoffAsync(handoffs, start.Attempt, receipt);
+        await jobs.ReleaseCollectorAsync(claim.Lease, start.CollectorLease!, default);
+        await jobs.ReleaseClaimAsync(claim.Lease, default);
+
+        var result = await Runner(new RejectCollector()).ExecuteAsync(claim.Job.JobId, root, LeaseDuration);
+
+        Assert.Equal(CollectionJobState.Failed, result.Job!.State);
+        var settled = Assert.Single(result.Job.Attempts).Resolution!;
+        Assert.NotEqual(CollectionJobAttemptOutcome.Interrupted, settled.Outcome);
         Assert.Empty(await handoffs.ListAsync(default));
     }
 
@@ -828,6 +873,18 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
         return (reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3));
+    }
+
+    private async Task WriteVersionOneHandoffAsync(FileCollectionReceiptHandoffStore handoffs, CollectionJobAttempt attempt,
+        CollectionResult receipt)
+    {
+        await handoffs.SaveAsync(new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, attempt.AttemptId,
+            attempt.Request, receipt), default);
+        var path = Path.Combine(root, ".pending", attempt.AttemptId + ".json");
+        var envelope = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
+        envelope["version"] = 1;
+        envelope["receipt"]!.AsObject().Remove("elapsedMilliseconds");
+        await File.WriteAllTextAsync(path, envelope.ToJsonString());
     }
 
     private RunCollectionJob Runner(ICollectorProcess collector) => new(jobs, evidence,
@@ -1177,6 +1234,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
                 ObservedAt = DateTimeOffset.UtcNow,
                 RequestCount = 1,
                 RobotsRequestCount = 1,
+                ElapsedMilliseconds = 10,
                 BytesReceived = 0,
                 FailureCode = CollectionFailureCode.RateLimited,
                 RetryAfterSeconds = 60
@@ -1196,6 +1254,7 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
                 ObservedAt = DateTimeOffset.UtcNow,
                 RequestCount = 1,
                 RobotsRequestCount = 1,
+                ElapsedMilliseconds = 10,
                 BytesReceived = 0,
                 FailureCode = failureCode,
                 RetryAfterSeconds = 60
@@ -1218,7 +1277,8 @@ public sealed class PostgresCollectionJobStoreTests(PostgresCollection postgres)
             Response = new HttpResponseMetadata { StatusCode = status, ContentEncodings = [] },
             FailureCode = status == 429 ? CollectionFailureCode.RateLimited : CollectionFailureCode.HttpError,
             RetryAfterSeconds = status == 429 ? 60 : null,
-            RobotsRequestCount = 1
+            RobotsRequestCount = 1,
+            ElapsedMilliseconds = 10
         };
     }
 }

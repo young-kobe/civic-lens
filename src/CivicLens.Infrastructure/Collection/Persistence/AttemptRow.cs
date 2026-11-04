@@ -18,6 +18,7 @@ internal sealed class AttemptRow
     public string? SentETag { get; set; }
     public long? SentLastModifiedUtcTicks { get; set; }
     public long? RobotsCrawlDelayMilliseconds { get; set; }
+    public long? ElapsedMilliseconds { get; set; }
     public int? RequestCount { get; set; }
     public long? BytesReceived { get; set; }
     public string? FailureCode { get; set; }

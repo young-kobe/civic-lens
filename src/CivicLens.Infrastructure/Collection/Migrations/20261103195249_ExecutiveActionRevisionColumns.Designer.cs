@@ -3054,6 +3054,40 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Districts.Persistence.ZctaDistrictRow", b =>
+                {
+                    b.Property<string>("AttemptId")
+                        .HasColumnType("text")
+                        .HasColumnName("attempt_id");
+
+                    b.Property<string>("Zcta")
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)")
+                        .HasColumnName("zcta");
+
+                    b.Property<string>("State")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("state");
+
+                    b.Property<int>("District")
+                        .HasColumnType("integer")
+                        .HasColumnName("district");
+
+                    b.Property<long>("LandAreaSquareMeters")
+                        .HasColumnType("bigint")
+                        .HasColumnName("land_area_square_meters");
+
+                    b.HasKey("AttemptId", "Zcta", "State", "District");
+
+                    b.ToTable("zcta_districts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_zcta_districts_land", "district >= 0 AND land_area_square_meters > 0");
+
+                            t.HasCheckConstraint("ck_zcta_districts_zcta", "zcta ~ '^[0-9]{5}$'");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonRow", b =>
                 {
                     b.Property<string>("ComparisonId")
@@ -6851,6 +6885,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
                         .WithMany()
                         .HasForeignKey("ExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Districts.Persistence.ZctaDistrictRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Roster.Persistence.RosterSnapshotRow", null)
+                        .WithMany()
+                        .HasForeignKey("AttemptId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

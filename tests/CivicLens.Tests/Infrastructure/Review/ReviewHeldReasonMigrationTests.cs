@@ -39,7 +39,7 @@ public sealed class ReviewHeldReasonMigrationTests(PostgresCollection postgres) 
             INSERT INTO document_change_drafts (draft_id, comparison_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks)
             VALUES (repeat('a', 32), 'c', 2, 0, 'AwaitingReview', 100);
             INSERT INTO document_change_revisions (draft_id, revision_number, revision_json, created_at_utc_ticks)
-            VALUES (repeat('a', 32), 1, '{}', 150), (repeat('a', 32), 2, '{}', 400)
+            VALUES (repeat('a', 32), 1, '{"authorSubject":"a"}', 150), (repeat('a', 32), 2, '{"authorSubject":"a"}', 400)
             """);
 
         await MigrateForwardAsync();

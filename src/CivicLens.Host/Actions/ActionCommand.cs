@@ -1,14 +1,16 @@
 using CivicLens.Application.Actions;
+using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Host.Analysis;
 
 namespace CivicLens.Host.Actions;
 
 internal sealed class ActionCommand(AnalysisQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem> drafts,
-    RequeueBlockedActionDrafts requeueBlocked, RequeueRefusedActionDrafts requeueRefused, RedraftActionDrafts redraft, ReviewActor owner)
+    RequeueBlockedActionDrafts requeueBlocked, RequeueRefusedActionDrafts requeueRefused, RedraftActionDrafts redraft,
+    BackfillRevisions backfill, VerifyRevisions verify, ReviewActor owner)
 {
     private const string Usage = "Use actions draft status, actions draft list [drafted|unchanged|superseded|no-official|pending|failed] [limit], " +
-        "actions draft requeue <candidate-id|--all>, actions draft requeue --blocked --code <block-code>, actions draft requeue --refused, or actions draft redraft.";
+        "actions draft requeue <candidate-id|--all>, actions draft requeue --blocked --code <block-code>, actions draft requeue --refused, actions draft redraft, actions revisions backfill <limit>, or actions revisions verify.";
     private const int DefaultListLimit = 100;
 
     public static bool Matches(string[] args) => args is ["actions", ..];
@@ -42,6 +44,10 @@ internal sealed class ActionCommand(AnalysisQueueCommands<ActionDraftRun, Action
                 case ["actions", "draft", "redraft"]:
                     CommandOutput.Write(new { requeued = await redraft.ExecuteAsync(owner, cancellationToken) });
                     return 0;
+                case ["actions", "revisions", "backfill", var limit]:
+                    return await OwnerCommand.BackfillRevisionsAsync(backfill, owner, limit, Usage, cancellationToken);
+                case ["actions", "revisions", "verify"]:
+                    return await OwnerCommand.VerifyRevisionsAsync(verify, owner, cancellationToken);
                 case ["actions", "draft", "requeue", "--blocked", ..]:
                     Console.Error.WriteLine(Usage);
                     return 2;
