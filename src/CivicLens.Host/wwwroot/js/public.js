@@ -283,8 +283,8 @@
         const clearButton = notice?.querySelector("[data-filter-clear]");
         let kind = "", issue = null, issuesOpen = false;
         const isIssuesTab = button => button.dataset.filterValue === issuesPane?.dataset.issuesPane;
-        const hides = row => (kind !== "" && !row.classList.contains(kind))
-            || (issue !== null && !(row.dataset.filterKeys ?? "").split(" ").includes(issue.dataset.countFilter));
+        const matchesIssue = (row, key) => (row.dataset.filterKeys ?? "").split(" ").some(rowKey => rowKey === key || rowKey.endsWith(":" + key));
+        const hides = row => (kind !== "" && !row.classList.contains(kind)) || (issue !== null && !matchesIssue(row, issue.key));
         const apply = () => {
             for (const row of rows) row.toggleAttribute("data-filtered-out", hides(row));
             const shown = rows.filter(row => !row.hasAttribute("data-filtered-out")).length;
@@ -292,9 +292,9 @@
             listPane.hidden = issuesOpen;
             if (issuesPane) issuesPane.hidden = !issuesOpen;
             for (const button of tabButtons) button.setAttribute("aria-pressed", String(isIssuesTab(button) ? issuesOpen : !issuesOpen && button.dataset.filterValue === kind));
-            for (const count of counts) count.querySelector("button").setAttribute("aria-pressed", String(count === issue));
+            for (const count of counts) count.querySelector("button").setAttribute("aria-pressed", String(count === issue?.count));
             if (notice) {
-                notice.querySelector("[data-filter-text]").textContent = issue?.dataset.filterShows ?? "";
+                notice.querySelector("[data-filter-text]").textContent = issue?.shows ?? "";
                 notice.hidden = issue === null;
             }
             const total = rows.length;
@@ -309,7 +309,11 @@
             button.textContent = count.textContent;
             button.setAttribute("aria-label", count.dataset.filterLabel);
             count.replaceChildren(button);
-            button.addEventListener("click", () => { issue = issue === count ? null : count; issuesOpen = false; apply(); });
+            button.addEventListener("click", () => {
+                issue = issue?.count === count ? null : { key: count.dataset.countFilter, shows: count.dataset.filterShows, count };
+                issuesOpen = false;
+                apply();
+            });
         }
         for (const button of tabButtons) button.addEventListener("click", () => {
             issuesOpen = isIssuesTab(button);
@@ -317,12 +321,21 @@
             apply();
         });
         clearButton?.addEventListener("click", () => {
-            const pressed = issue?.querySelector("button");
+            const pressed = issue?.count?.querySelector("button");
             kind = "";
             issue = null;
             apply();
             pressed?.focus();
         });
+        const query = new URLSearchParams(location.search);
+        const wanted = tabButtons.find(button => button.dataset.filterValue === query.get("tab"));
+        if (wanted) {
+            issuesOpen = isIssuesTab(wanted);
+            if (!issuesOpen) kind = wanted.dataset.filterValue;
+        }
+        const wantedIssue = query.get("issue");
+        const issueName = wantedIssue === null ? null : Array.from(section.querySelectorAll("[data-issue-name]")).find(name => name.dataset.issueName === wantedIssue);
+        if (issueName) issue = { key: wantedIssue, shows: issueName.dataset.issueNotice, count: null };
         if (tabs) tabs.hidden = false;
         apply();
     };

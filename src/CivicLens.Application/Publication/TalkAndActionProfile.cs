@@ -21,6 +21,8 @@ public sealed record TalkAndActionProfile(TalkAndActionColumn Statements, Immuta
 
     public ImmutableArray<PublishedRecordEntry> SponsoredOn(string issueId) => [.. SponsoredBills.Where(bill => bill.IssueIds.Contains(issueId))];
 
+    public int RecordsOn(string issueId) => Statements.CountOf(issueId) + SponsoredOn(issueId).Length + Votes.CountOf(issueId);
+
     public static string CountKey(string countName, string issueId) => $"{countName}:{issueId}";
 
     public ILookup<string, string> CountKeysByRecord() =>

@@ -1,0 +1,97 @@
+@using CivicLens.Application.Publication
+@using CivicLens.Publication.Contracts
+
+<section class="record-section" aria-labelledby="record-title" data-records="@(HasRecordFilters ? "" : null)">
+    <h2 id="record-title">The record</h2>
+    @if (RecordFilter is not null)
+    {
+        @RecordFilter
+    }
+    <div data-list-pane>
+        @if (Rows.Count > 0)
+        {
+            <div class="records-lead">
+                @if (PublishedOfficialView.RecordsCountLine(Page) is { } countLine)
+                {
+                    <p class="muted small">@countLine</p>
+                }
+                @if (HasRecordFilters)
+                {
+                    <p class="muted small" role="status" data-filter-status></p>
+                }
+                @if (Page.TalkAndAction is not null)
+                {
+                    <div class="notice" data-filter-notice hidden>
+                        <span data-filter-text></span>
+                        <button class="btn" type="button" data-filter-clear>@PublishedOfficialView.ShowAllRecords</button>
+                    </div>
+                }
+            </div>
+        }
+        <PublishedRecordRows Rows="Rows" Paged="true" FilterKeys="@(row => row.FilterKeys)" Caption="@($"Published records of {Page.Profile.Name}")" RootPath="@RootPath">
+            <Empty><EmptyState Title="No records yet" Text="There are no records here." /></Empty>
+        </PublishedRecordRows>
+    </div>
+    @if (Page.TalkAndAction is { } profile)
+    {
+        <section aria-labelledby="issues-title" data-issues-pane="@PublishedOfficialView.IssuesPane">
+            <h3 id="issues-title">@PublishedOfficialView.IssuesTabLabel</h3>
+            <DataTable Roles="true" Items="profile.IssueIds" Caption="@($"Statements, sponsored bills, and votes of {Page.Profile.Name} on each tracked issue in Congress {Page.Congress}")" DefaultOrder="@PublishedRecordLabels.DefaultOrder">
+                <Head><TableCell Header Sort="SortKind.Text">Issue</TableCell><TableCell Header Class="num" Sort="SortKind.Number">@PublicColumn.TheirStatements</TableCell><TableCell Header Sort="SortKind.Number">@PublicColumn.BillsTheySponsored</TableCell><TableCell Header Class="num" Sort="SortKind.Number">@PublicColumn.VotesTheyCast</TableCell></Head>
+                <Row Context="issueId">
+                    @{
+                        var issue = PublishedRecordView.IssueLink(issueId, Catalog, RootPath);
+                        var bills = profile.SponsoredOn(issueId);
+                    }
+                    <TableCell Main><span data-issue-name="@issueId" data-issue-notice="@PublishedOfficialView.IssueNotice(issue.Text, Congress)"><CellTitle Href="@issue.Href">@issue.Text</CellTitle></span></TableCell>
+                    <TableCell Class="num" Label="@PublicColumn.TheirStatements" SortValue="@profile.Statements.CountOf(issueId).ToString()">@IssueCount(profile.Statements.CountOf(issueId), TalkAndActionProfile.StatementCount, issueId, PublishedOfficialView.StatementsSubject, issue.Text)</TableCell>
+                    <TableCell Label="@PublicColumn.BillsTheySponsored" SortValue="@bills.Length.ToString()">
+                        @IssueCount(bills.Length, TalkAndActionProfile.BillCount, issueId, PublishedOfficialView.BillsSubject, issue.Text)
+                        @if (!bills.IsEmpty)
+                        {
+                            <ul class="choices">
+                                @foreach (var bill in bills)
+                                {
+                                    <li class="clamp-2"><a href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" title="@bill.BillTitle">@bill.BillTitle</a></li>
+                                }
+                            </ul>
+                        }
+                    </TableCell>
+                    <TableCell Class="num" Label="@PublicColumn.VotesTheyCast" SortValue="@profile.Votes.CountOf(issueId).ToString()">@IssueCount(profile.Votes.CountOf(issueId), TalkAndActionProfile.VoteCount, issueId, PublishedOfficialView.VotesSubject, issue.Text)</TableCell>
+                </Row>
+                <Empty><EmptyState Title="No tracked issue" Text="@PublishedOfficialView.NoTrackedIssue" /></Empty>
+            </DataTable>
+            <p class="muted small">Each count is for this Congress. "Votes they cast" counts only substantive votes. A statement, bill, or vote on several issues counts once for each issue. <a href="@(RootPath + PublicationProtocol.MethodPagePath)">How these counts work</a></p>
+        </section>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public ReleaseOfficialPage Page { get; set; } = default!;
+    [Parameter, EditorRequired] public PublicationCatalog Catalog { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+
+    private int Congress => Page.Congress!.Value;
+
+    private RenderFragment IssueCount(int count, string countKind, string issueId, string subject, string issueName)
+    {
+        var counted = PublishedOfficialView.Counted(count, countKind);
+        return @<CountFilter Filterable="count > 0" Text="@counted" Key="@TalkAndActionProfile.CountKey(countKind, issueId)"
+            Label="@PublishedOfficialView.CountFilterLabel(counted, subject, issueName)"
+            Notice="@PublishedOfficialView.CountFilterNotice(subject, issueName, Congress)" />;
+    }
+
+    private RenderFragment? RecordFilter => RecordTabs.Count == 0
+        ? null
+        : @<div data-record-filters hidden><FilterTabs Label="Filter records" Tabs="RecordTabs" /></div>;
+
+    private IReadOnlyList<FilterTab> RecordTabs => recordTabs ??= PublishedOfficialView.RecordTabs(Rows, Page.TalkAndAction is not null);
+
+    private IReadOnlyList<FilterTab>? recordTabs;
+
+    private bool HasRecordFilters => RecordTabs.Count > 0 || Page.TalkAndAction is not null;
+
+    private IReadOnlyList<PublishedOfficialRow> Rows => rows ??= PublishedOfficialView.Rows(Page);
+
+    private IReadOnlyList<PublishedOfficialRow>? rows;
+}

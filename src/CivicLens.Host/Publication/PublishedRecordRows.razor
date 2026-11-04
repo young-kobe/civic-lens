@@ -1,0 +1,37 @@
+<DataTable Roles="true" PagedRows="@(Paged ? "records" : null)" Items="Rows" RowClass="PublishedOfficialView.RowClass" RowFilterKeys="FilterKeys" Caption="@Caption" DefaultOrder="@PublishedRecordLabels.NewestFirst" class="table record-list">
+    <Head><TableCell Header>Record</TableCell>@if (HasCast){<TableCell Header>@PublicColumn.Cast</TableCell>}</Head>
+    <Row Context="row">
+        <TableCell Main Class="record-main">
+            <Icon Name="PublishedRecordLabels.Icon(row.Kind)" />
+            <span class="record-text">
+                <PublishedRecordTitle RecordId="@row.RecordId" RootPath="@RootPath">@row.Headline</PublishedRecordTitle>
+                <span class="record-kind">@row.Badge, @Moment.Day(row.Date)</span>
+                @if (row.Detail is not null)
+                {
+                    <span class="record-detail">@row.Detail</span>
+                }
+            </span>
+        </TableCell>
+        @if (HasCast)
+        {
+            <TableCell Class="record-cast" Label="@PublicColumn.Cast">
+                @if (row.Cast is not null)
+                {
+                    <span class="@PublishedOfficialView.CastClass(row.Cast)">@row.Cast</span>
+                }
+            </TableCell>
+        }
+    </Row>
+    <Empty>@Empty</Empty>
+</DataTable>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<PublishedOfficialRow> Rows { get; set; } = [];
+    [Parameter, EditorRequired] public string Caption { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+    [Parameter] public bool Paged { get; set; }
+    [Parameter] public Func<PublishedOfficialRow, string?>? FilterKeys { get; set; }
+    [Parameter] public RenderFragment? Empty { get; set; }
+
+    private bool HasCast => Rows.Any(row => row.Cast is not null);
+}

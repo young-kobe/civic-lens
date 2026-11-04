@@ -122,6 +122,22 @@ public sealed class TalkAndActionProfileTests
     }
 
     [Fact]
+    public void RecordsOnAnIssueAddsTheStatementsTheSponsoredBillsAndTheCastVotesSoAnIssueChipCountsWhatItsFilterShows()
+    {
+        var entries = new[]
+        {
+            Entry(1, PublishedRecordKind.Statement, InCongress, ["tax"]),
+            Entry(2, PublishedRecordKind.Action, InCongress, ["tax", "health"]),
+            Entry(3, PublishedRecordKind.Action, InCongress, ["health"])
+        };
+        var votes = new[] { Vote(1, PublishedVoteKind.Passage, ["tax"]), Vote(2, PublishedVoteKind.Passage, ["tax"]) with { Cast = PublishedOfficialVote.NotVoting }, Vote(3, PublishedVoteKind.Rule, ["tax"]) };
+
+        var profile = TalkAndActionProfile.Of(119, entries, votes);
+
+        Assert.Equal((3, 2, 0), (profile.RecordsOn("tax"), profile.RecordsOn("health"), profile.RecordsOn("none")));
+    }
+
+    [Fact]
     public void TheIssuesOfThePanelAreTheSortedUnionOfTheIssuesOfAllThreeColumns()
     {
         var profile = TalkAndActionProfile.Of(119, [Entry(1, PublishedRecordKind.Statement, InCongress, ["tax", "health"]),

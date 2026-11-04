@@ -1,0 +1,45 @@
+@using CivicLens.Application.Publication
+@using CivicLens.Publication.Contracts
+
+@foreach (var section in Sections)
+{
+    <section class="answer-section" id="@section.Id" aria-labelledby="@($"{section.Id}-title")">
+        <h2 id="@($"{section.Id}-title")">@section.Title</h2>
+        @if (section.Id == PublishedOfficialSectionsView.IssuesId)
+        {
+            @if (Page.TalkAndAction!.IssueIds.IsEmpty)
+            {
+                <p>@section.EmptyText</p>
+            }
+            else
+            {
+                <ul class="issue-chips" role="list">
+                    @foreach (var issueId in Page.TalkAndAction.IssueIds)
+                    {
+                        var issue = PublishedRecordView.IssueLink(issueId, Catalog, Page.RootPath);
+                        var count = Page.TalkAndAction.RecordsOn(issueId);
+                        <li><a class="issue-chip" href="@PublishedOfficialSectionsView.RecordPageLink(Page, issue: issueId)" aria-label="@($"{issue.Text}: {PublishedOfficialView.Counted(count, "record")}")">@issue.Text <span class="issue-chip-count">@count</span></a></li>
+                    }
+                </ul>
+            }
+        }
+        else if (section.Rows.Count == 0)
+        {
+            <p>@section.EmptyText</p>
+        }
+        else
+        {
+            <PublishedRecordRows Rows="section.Rows" Caption="@($"{section.Title}, {Page.Profile.Name}")" RootPath="@Page.RootPath" />
+        }
+        @if (section.SeeAllText is not null)
+        {
+            <p class="see-all"><a href="@section.SeeAllHref">@section.SeeAllText</a></p>
+        }
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public ReleaseOfficialPage Page { get; set; } = default!;
+    [Parameter, EditorRequired] public PublicationCatalog Catalog { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<OfficialSection> Sections { get; set; } = [];
+}

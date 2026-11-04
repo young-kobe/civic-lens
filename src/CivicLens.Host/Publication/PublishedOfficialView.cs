@@ -154,8 +154,6 @@ internal static class PublishedOfficialView
 
     public static string RecordCount(int count) => $"{Counted(count, "record")} other than votes";
 
-    public static string WebsiteHost(string website) => new Uri(website).IdnHost;
-
     public static IReadOnlyList<PublishedOfficialRow> Rows(ReleaseOfficialPage page)
     {
         var countKeys = page.TalkAndAction?.CountKeysByRecord();
@@ -167,11 +165,11 @@ internal static class PublishedOfficialView
     public static string StatusLine(ActionBillStatus billStatus) =>
         $"Latest official action on {Moment.Day(billStatus.Status.Date)} (read from Congress.gov on {Moment.Day(billStatus.Status.ObservedAtUtc)}): {BillStatusMeaning.Plain(billStatus.Status.Text, billStatus.BillType)}";
 
-    private const string AgainstPartyClass = "against-party";
+    public const string AgainstPartyClass = "against-party";
 
     public static string RowClass(PublishedOfficialRow row) => row.AgainstParty ? $"{KindClass(row.Kind)} {AgainstPartyClass}" : KindClass(row.Kind);
 
-    private static string KindClass(PublishedRecordKind kind) => $"kind-{PublicationProtocol.KindText(kind)}";
+    public static string KindClass(PublishedRecordKind kind) => $"kind-{PublicationProtocol.KindText(kind)}";
 
     public static IReadOnlyList<FilterTab> RecordTabs(IReadOnlyList<PublishedOfficialRow> rows, bool withProfile)
     {
@@ -197,6 +195,10 @@ internal static class PublishedOfficialView
     public static string CastClass(string cast) => PublishedOfficialVote.SideOf(cast) == PublishedPartyMajority.Yea ? "cast-pill cast-yes" : "cast-pill";
 
     public const string ShowAllRecords = "Show all records";
+
+    public const string NoTrackedIssue = "None of their statements, sponsored bills, or votes in this Congress is on a tracked issue.";
+
+    public static string IssueNotice(string issueName, int congress) => $"Filtered to records on {issueName} in the {CongressCalendar.Ordinal(congress)} Congress";
 
     public const string StatementsSubject = "their statements";
 

@@ -20,7 +20,8 @@ public sealed record PublishedKeyFigure(string Value, string Label, string Note)
     private static PublishedKeyFigure Voted(MissedVotes missed, bool namesChamber)
     {
         var voted = missed.Held - missed.Missed;
-        var rollCalls = namesChamber ? $"{missed.Chamber} roll calls voted on" : "roll calls voted on";
+        var noun = PublishedOfficialView.Noun(missed.Held, "roll call");
+        var rollCalls = namesChamber ? $"{missed.Chamber} {noun} voted on" : $"{noun} voted on";
         return missed.Share is null
             ? new($"{voted} of {missed.Held}", rollCalls, PublishedOfficialView.MissedVoteMeaning)
             : new(PublishedOfficialView.Percent(voted, missed.Held), $"of {rollCalls}: {voted} of {missed.Held}", PublishedOfficialView.MissedVoteMeaning);

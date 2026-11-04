@@ -29,12 +29,12 @@ internal static class PublishedVoteStripView
 
     public static string MarkClass(PublishedOfficialVote vote)
     {
-        if (VotesWithParty.IsBreak(vote)) return "vote-mark vote-mark-against";
-        return PublishedOfficialVote.SideOf(vote.Cast) switch
+        var cast = PublishedOfficialVote.SideOf(vote.Cast) switch
         {
             PublishedPartyMajority.Yea => "vote-mark vote-mark-yes",
             PublishedPartyMajority.Nay => "vote-mark vote-mark-no",
             _ => "vote-mark vote-mark-other"
         };
+        return VotesWithParty.IsBreak(vote) ? $"{cast} vote-mark-against" : cast;
     }
 }

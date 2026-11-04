@@ -505,6 +505,8 @@ internal sealed class FakeRenderer : IReleaseRenderer
         OfficialPages?.Add(page);
         return Task.FromResult($"<html>official {page.Profile.Id} {(page.IsTracked ? "tracked" : "untracked")} {(page.IsCurrent ? "current" : "past")} {page.Congress} congresses [{string.Join(',', page.Congresses)}] records [{string.Join(',', page.Records.Select(entry => entry.RecordId))}] votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]{StatusSuffix(page)}</html>");
     }
+    public Task<string> RenderOfficialRecordAsync(ReleaseOfficialPage page, PublicationCatalog catalog, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>record {page.Profile.Id} votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]</html>");
     private static string StatusSuffix(ReleaseOfficialPage page) =>
         page.BillStatuses?.Where(pair => page.Records.Any(entry => entry.RecordId == pair.Key)).ToArray() is { Length: > 0 } shown
             ? $" statuses [{string.Join(',', shown.Select(pair => $"{pair.Key[0]}:{pair.Value.Status.Text}"))}]" : "";
