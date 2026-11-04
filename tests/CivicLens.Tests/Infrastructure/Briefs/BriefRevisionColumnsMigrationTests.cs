@@ -83,8 +83,8 @@ public sealed class BriefRevisionColumnsMigrationTests(PostgresCollection postgr
             VALUES ('{revision.RecordId}', 1, 'auth0|editor', 'Person', NULL, '{json}', {revision.CreatedAtUtc.UtcTicks});
             INSERT INTO statement_revisions (candidate_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
             VALUES ('{new string('1', 64)}', 1, 'auth0|editor', 'Person', NULL, 'x', 1);
-            INSERT INTO document_change_revisions (draft_id, revision_number, revision_json, created_at_utc_ticks)
-            VALUES ('{new string('2', 32)}', 3, 'x', 1)
+            INSERT INTO document_change_revisions (draft_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
+            VALUES ('{new string('2', 32)}', 3, 'auth0|editor', 'Person', 'x', 1)
             """);
         return revision;
     }
