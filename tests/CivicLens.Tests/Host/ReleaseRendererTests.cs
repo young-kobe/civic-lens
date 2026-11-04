@@ -1899,8 +1899,8 @@ public sealed class ReleaseRendererTests
         var published = new DateTimeOffset(2026, 11, 1, 8, 0, 0, TimeSpan.Zero);
         release = release with
         {
-            Records = [release.Records[0] with { Kind = PublishedRecordKind.Vote, EventDate = new DateOnly(2025, 3, 2), FirstPublishedAtUtc = published },
-                release.Records[1] with { Kind = PublishedRecordKind.Vote, EventDate = null, FirstPublishedAtUtc = published }]
+            Records = [release.Records[0] with { Kind = PublishedRecordKind.Vote, Chamber = PublishedChamber.House, EventDate = new DateOnly(2025, 3, 2), FirstPublishedAtUtc = published },
+                release.Records[1] with { Kind = PublishedRecordKind.Vote, Chamber = PublishedChamber.House, EventDate = null, FirstPublishedAtUtc = published }]
         };
 
         var html = await new ReleaseRenderer(null, null).RenderHomeAsync(release, null, NoFacets, NoHighlights(release), CancellationToken.None);
@@ -1987,7 +1987,7 @@ public sealed class ReleaseRendererTests
     {
         var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None)).QuerySelector("main")!.TextContent;
 
-        Assert.Contains("The list \"Latest from the record\" shows the 4 newest votes and the 3 newest executive actions on this site", text, StringComparison.Ordinal);
+        Assert.Contains("The list \"Latest from the record\" shows the 4 newest House votes and the 3 newest executive actions on this site", text, StringComparison.Ordinal);
         Assert.Contains("It names the dates. With no such vote in these dates, the card does not appear.", text, StringComparison.Ordinal);
     }
 
@@ -2864,7 +2864,7 @@ public sealed class ReleaseRendererTests
     {
         var script = System.Text.Encoding.UTF8.GetString(new ReleaseRenderer(null, null).Assets.Single(asset => asset.RelativePath == "assets/js/public.js").Content);
 
-        Assert.Contains("sorted by ${label(current.header, current.direction)}. Sorted rows leave out the party badge and the vote counts.", script, StringComparison.Ordinal);
+        Assert.Contains("sorted by ${label(current.header, current.direction)}. Sorted rows leave out the kind icon, the party badge, and the vote counts.", script, StringComparison.Ordinal);
     }
 
     [Fact]

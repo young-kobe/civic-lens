@@ -20,6 +20,17 @@ public sealed class HomeHighlightsTests
     }
 
     [Fact]
+    public void OnlyHouseVotesAreChosenSoASenateVoteAndAnEntryWithNoChamberNeverFillTheHouseColumn()
+    {
+        var release = ReleaseOf(Vote('a', 1, 2) with { EventDate = new DateOnly(2026, 5, 1) }, Vote('b', 1, 2) with { Chamber = PublishedChamber.Senate, EventDate = new DateOnly(2026, 5, 6) },
+            Vote('c', 1, 2) with { Chamber = null, EventDate = new DateOnly(2026, 5, 5) });
+
+        var highlights = HomeHighlights.From(release, [], 0);
+
+        Assert.Equal([Id('a')], highlights.Votes.Select(entry => entry.RecordId));
+    }
+
+    [Fact]
     public void TheNewestExecutiveActionsComeNewestFirstAndOnlyTheThreeNewestStay()
     {
         var release = ReleaseOf(Executive('a', 1), Executive('b', 4), Executive('c', 2), Executive('d', 3), Vote('e', 1, 2));
@@ -149,6 +160,7 @@ public sealed class HomeHighlightsTests
 
     private static PublishedRecordEntry Vote(char id, int yea, int nay) => Entry(PublishedRecordKind.Vote, id) with
     {
+        Chamber = PublishedChamber.House,
         YeaCount = yea,
         NayCount = nay,
         Alignment = PublishedVoteAlignment.Split,

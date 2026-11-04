@@ -482,7 +482,7 @@
             if (pager) pager.hidden = true;
             commit(state);
             const total = source.total, count = Math.min(shown, total);
-            status.textContent = `Showing ${count.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "record" : "records"}, sorted by ${label(current.header, current.direction)}. Sorted rows leave out the party badge and the vote counts.`;
+            status.textContent = `Showing ${count.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "record" : "records"}, sorted by ${label(current.header, current.direction)}. Sorted rows leave out the kind icon, the party badge, and the vote counts.`;
         };
         const choose = state => {
             if (!state) { commit(null); restore(); return; }

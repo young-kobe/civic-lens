@@ -188,8 +188,6 @@ internal static class PublishedOfficialView
 
     public const string IssuesPane = "issues";
 
-    public static string RowKind(PublishedRecordEntry entry) => entry.Kind == PublishedRecordKind.Action ? "Bill" : PublishedRecordLabels.Badge(entry);
-
     private static string KindTabLabel(PublishedRecordKind kind) => kind == PublishedRecordKind.Action ? "Bills" : PublishedRecordLabels.KindPlural(kind);
 
     public static string CastClass(string cast) => PublishedOfficialVote.SideOf(cast) == PublishedPartyMajority.Yea ? "cast-pill cast-yes" : "cast-pill";
@@ -256,6 +254,8 @@ internal static class PublishedOfficialView
 
     private static string ChamberName(PublishedChamber chamber) => chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";
 
+    public static string WebsiteHost(string website) => new Uri(website).IdnHost;
+
     public static string Noun(int count, string singular) => count == 1 ? singular : singular + "s";
 
     public static string Percent(int count, int of)
@@ -269,6 +269,6 @@ internal static class PublishedOfficialView
     public static string RollCall(PublishedOfficialVote vote)
     {
         var roll = $"{vote.Chamber} roll call {vote.RollCallNumber}, Congress {vote.Congress}, session {vote.Session}";
-        return vote.BillType is null ? roll : $"{roll}, {ActionLabels.Bill(vote.Congress, vote.BillType, vote.BillNumber!.Value)}";
+        return vote.BillType is null ? roll : $"{roll}, {ActionLabels.BillNumber(vote.BillType, vote.BillNumber!.Value)}";
     }
 }

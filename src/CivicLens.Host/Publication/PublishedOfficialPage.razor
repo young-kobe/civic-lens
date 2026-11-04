@@ -102,6 +102,7 @@
             @if (Page.Profile.Website is { } website)
             {
                 <a href="@website" rel="noopener noreferrer">Official website</a>
+                <span class="muted small">@PublishedOfficialView.WebsiteHost(website)</span>
             }
         </text>
         : null;

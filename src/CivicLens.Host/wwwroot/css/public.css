@@ -108,6 +108,7 @@ table[data-paged]:focus { outline: none; }
 .vote-strip-legend li { display: flex; align-items: center; gap: 6px; }
 .vote-strip-legend .vote-mark { width: 8px; height: 18px; }
 .vote-strip-legend .vote-mark-no { height: 10px; }
+.vote-strip-legend .vote-mark-other { height: 6px; }
 
 .record-section, .answer-section { margin-top: var(--s6); }
 .record-section h2, .answer-section h2 { margin: 0 0 14px; font-size: var(--t-2xl); font-weight: 800; letter-spacing: -.02em; }

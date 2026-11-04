@@ -8,7 +8,7 @@ public sealed record PublishedOfficialRow(PublishedRecordKind Kind, DateOnly Dat
     DateTimeOffset PublishedAtUtc, bool AgainstParty, string? FilterKeys = null)
 {
     public static PublishedOfficialRow Of(PublishedRecordEntry entry, ActionBillStatus? billStatus) => new(
-        entry.Kind, ReleaseRecordOrder.Day(entry), entry.RecordId, entry.Headline, PublishedOfficialView.RowKind(entry),
+        entry.Kind, ReleaseRecordOrder.Day(entry), entry.RecordId, entry.Headline, PublishedRecordLabels.Badge(entry),
         billStatus is null ? null : PublishedOfficialView.StatusLine(billStatus), null, entry.FirstPublishedAtUtc, false);
 
     public static PublishedOfficialRow Of(PublishedOfficialVote vote) => new(

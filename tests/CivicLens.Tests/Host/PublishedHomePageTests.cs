@@ -95,7 +95,7 @@ public sealed class PublishedHomePageTests
         var section = main.QuerySelector("section#latest")!;
         Assert.Equal("Latest from the record", section.QuerySelector("h2")!.TextContent);
         var columns = section.QuerySelectorAll(".latest-columns > div").ToList();
-        Assert.Equal(["Votes", "Executive actions"], columns.Select(column => column.QuerySelector("h3")!.TextContent));
+        Assert.Equal(["House votes", "Executive actions"], columns.Select(column => column.QuerySelector("h3")!.TextContent));
         Assert.Equal([Id('e'), Id('d'), Id('c'), Id('b')], columns[0].QuerySelectorAll("li a").Select(link => link.GetAttribute("href")!.Split('/')[1][..32]));
         Assert.Equal([Id('i'), Id('h'), Id('g')], columns[1].QuerySelectorAll("li a").Select(link => link.GetAttribute("href")!.Split('/')[1][..32]));
         Assert.Equal(["Headline e", "5 May 2026"], columns[0].QuerySelector("li a")!.Children.Select(child => child.TextContent));
@@ -261,6 +261,7 @@ public sealed class PublishedHomePageTests
 
     private static PublishedRecordEntry Vote(char id, int yea, int nay, PublishedVoteAlignment? alignment, int day = 7) => Entry(PublishedRecordKind.Vote, id) with
     {
+        Chamber = PublishedChamber.House,
         YeaCount = yea,
         NayCount = nay,
         Alignment = alignment,
