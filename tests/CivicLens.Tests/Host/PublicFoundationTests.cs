@@ -17,19 +17,27 @@ namespace CivicLens.Tests.Host;
 public sealed class PublicFoundationTests
 {
     [Fact]
-    public async Task TheHeaderHoldsThreeSectionsAndASearchFormAndTheFooterHoldsTheOtherPagesSoThePhoneHeaderStaysShort()
+    public async Task TheHeaderHoldsThreeSectionsAndTheFooterHoldsTheOtherPagesSoThePhoneHeaderStaysShort()
     {
         var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None));
 
-        Assert.Equal(["Officials", "Issues", "All records"], document.QuerySelectorAll("nav[aria-label='Site'] a").Select(link => link.TextContent));
-        Assert.Equal(["Weekly briefs", "How the counts work", "Glossary", "About", "Report a problem"],
+        Assert.Equal(["Officials", "Issues", "Votes and bills"], document.QuerySelectorAll("nav[aria-label='Site'] a").Select(link => link.TextContent));
+        Assert.Equal(["How we check records", "Glossary", "About", "Report a problem"],
             document.QuerySelectorAll("nav[aria-label='Footer'] a").Select(link => link.TextContent));
-        var form = document.QuerySelector("header form[role='search']")!;
-        Assert.Equal("search.html", form.GetAttribute("action"));
-        Assert.Equal("q", form.QuerySelector("input[type='search']")!.GetAttribute("name"));
-        Assert.Equal("Search records", form.QuerySelector("label[for='site-search']")!.TextContent);
+        Assert.Equal("Civic Lens", document.QuerySelector("footer .public-footer-name")!.TextContent);
         Assert.NotNull(document.QuerySelector("a.skip[href='#main']"));
-        Assert.NotNull(document.QuerySelector(".theme-toggle"));
+    }
+
+    [Fact]
+    public async Task TheThemeMenuOffersLightSystemAndDarkAndKeepsTheStoredChoiceKeys()
+    {
+        var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None));
+
+        var menu = document.QuerySelector("header .theme-menu")!;
+        Assert.Equal("theme-menu", menu.QuerySelector("button[popovertarget]")!.GetAttribute("popovertarget"));
+        Assert.Equal(["Light", "Match system", "Dark"], menu.QuerySelectorAll("#theme-menu [data-theme-choice]").Select(button => button.TextContent));
+        Assert.Equal(["light", "", "dark"], menu.QuerySelectorAll("#theme-menu [data-theme-choice]").Select(button => button.GetAttribute("data-theme-choice")));
+        Assert.Null(document.QuerySelector(".theme-toggle"));
     }
 
     [Fact]
