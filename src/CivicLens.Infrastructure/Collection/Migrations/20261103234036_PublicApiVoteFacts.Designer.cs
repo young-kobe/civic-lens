@@ -2409,19 +2409,99 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("completed_at");
 
+                    b.Property<string>("ErrorCode")
+                        .HasColumnType("text")
+                        .HasColumnName("error_code");
+
                     b.Property<string>("JobId")
                         .IsRequired()
                         .HasColumnType("character varying(128)")
                         .HasColumnName("job_id");
 
-                    b.Property<string>("RequestJson")
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("outcome");
+
+                    b.Property<string>("RequestAllowedOrigin")
                         .IsRequired()
                         .HasColumnType("text")
-                        .HasColumnName("request_json");
+                        .HasColumnName("request_allowed_origin");
 
-                    b.Property<string>("ResolutionJson")
+                    b.Property<string>("RequestAllowedPathPrefix")
+                        .IsRequired()
                         .HasColumnType("text")
-                        .HasColumnName("resolution_json");
+                        .HasColumnName("request_allowed_path_prefix");
+
+                    b.Property<string>("RequestArtifactDirectory")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("request_artifact_directory");
+
+                    b.Property<string>("RequestCredential")
+                        .HasColumnType("text")
+                        .HasColumnName("request_credential");
+
+                    b.Property<string>("RequestETag")
+                        .HasColumnType("text")
+                        .HasColumnName("request_etag");
+
+                    b.Property<string>("RequestJobId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("request_job_id");
+
+                    b.Property<long?>("RequestLastModifiedUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("request_last_modified_utc_ticks");
+
+                    b.Property<long>("RequestMaxBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("request_max_bytes");
+
+                    b.Property<int>("RequestMaxCandidates")
+                        .HasColumnType("integer")
+                        .HasColumnName("request_max_candidates");
+
+                    b.Property<int>("RequestMaxRequests")
+                        .HasColumnType("integer")
+                        .HasColumnName("request_max_requests");
+
+                    b.Property<int>("RequestMinDelayMilliseconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("request_min_delay_milliseconds");
+
+                    b.Property<string>("RequestMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("request_mode");
+
+                    b.Property<string>("RequestSourceId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("request_source_id");
+
+                    b.Property<int>("RequestTimeoutSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("request_timeout_seconds");
+
+                    b.Property<string>("RequestUrl")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("request_url");
+
+                    b.Property<int>("RequestVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("request_version");
+
+                    b.Property<long?>("RetryDelayTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("retry_delay_ticks");
+
+                    b.Property<long?>("RobotsCrawlDelayMilliseconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("robots_crawl_delay_milliseconds");
 
                     b.Property<int>("Sequence")
                         .HasColumnType("integer")
@@ -2435,14 +2515,32 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("JobId")
                         .IsUnique()
-                        .HasFilter("resolution_json IS NULL");
+                        .HasFilter("completed_at IS NULL");
 
                     b.HasIndex("JobId", "Sequence")
                         .IsUnique();
 
                     b.ToTable("collection_job_attempts", null, t =>
                         {
-                            t.HasCheckConstraint("ck_job_attempt_resolution", "(resolution_json IS NULL) = (completed_at IS NULL)");
+                            t.HasCheckConstraint("ck_collection_job_attempts_request_last_modified_utc_ticks", "request_last_modified_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_job_attempt_outcome", "outcome IS NULL OR outcome IN ('Succeeded','RetryableFailure','PermanentFailure','Interrupted')");
+
+                            t.HasCheckConstraint("ck_job_attempt_request_budgets", "request_max_candidates BETWEEN 1 AND 1000 AND request_max_requests BETWEEN 2 AND 20 AND request_max_bytes BETWEEN 1 AND 100000000 AND request_timeout_seconds BETWEEN 1 AND 300 AND request_min_delay_milliseconds BETWEEN 0 AND 60000");
+
+                            t.HasCheckConstraint("ck_job_attempt_request_credential", "request_credential IS NULL OR request_mode = 'Api'");
+
+                            t.HasCheckConstraint("ck_job_attempt_request_identity", "request_version = 1 AND length(btrim(request_job_id)) > 0 AND length(btrim(request_source_id)) > 0 AND length(btrim(request_url)) > 0 AND length(btrim(request_allowed_origin)) > 0 AND length(btrim(request_allowed_path_prefix)) > 0 AND length(btrim(request_artifact_directory)) > 0");
+
+                            t.HasCheckConstraint("ck_job_attempt_request_last_modified_utc_ticks", "request_last_modified_utc_ticks IS NULL OR request_last_modified_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_job_attempt_request_mode", "request_mode IN ('Page','Feed','Html','Api')");
+
+                            t.HasCheckConstraint("ck_job_attempt_resolution", "(outcome IS NULL) = (completed_at IS NULL) AND (completed_at IS NOT NULL OR error_code IS NULL AND retry_delay_ticks IS NULL AND robots_crawl_delay_milliseconds IS NULL)");
+
+                            t.HasCheckConstraint("ck_job_attempt_retry_ticks", "retry_delay_ticks IS NULL OR retry_delay_ticks >= 0");
+
+                            t.HasCheckConstraint("ck_job_attempt_robots_delay", "robots_crawl_delay_milliseconds IS NULL OR (robots_crawl_delay_milliseconds BETWEEN 0 AND 922337203685000 AND outcome <> 'Interrupted')");
 
                             t.HasCheckConstraint("ck_job_attempt_sequence", "sequence > 0");
                         });
@@ -2595,6 +2693,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("text")
                         .HasColumnName("attempt_id");
 
+                    b.Property<long?>("BytesReceived")
+                        .HasColumnType("bigint")
+                        .HasColumnName("bytes_received");
+
                     b.Property<string>("CaptureSha256")
                         .HasColumnType("text")
                         .HasColumnName("capture_sha256");
@@ -2633,6 +2735,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<string>("PriorCaptureSha256")
                         .HasColumnType("text")
                         .HasColumnName("prior_capture_sha256");
+
+                    b.Property<int?>("RequestCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("request_count");
 
                     b.Property<string>("RequestedUrl")
                         .IsRequired()
@@ -2722,6 +2828,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_collection_attempts_robots_delay", "robots_crawl_delay_milliseconds IS NULL OR robots_crawl_delay_milliseconds BETWEEN 0 AND 922337203685000");
 
                             t.HasCheckConstraint("ck_collection_attempts_sent_last_modified_utc_ticks", "sent_last_modified_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_collection_attempts_transfer", "(request_count IS NULL) = (bytes_received IS NULL) AND (request_count IS NULL OR request_count >= 0 AND bytes_received >= 0 AND (bytes_received = 0 OR request_count > 0))");
 
                             t.HasCheckConstraint("ck_collection_attempts_validators", "(has_sent_validators OR (sent_etag IS NULL AND sent_last_modified_utc_ticks IS NULL))");
                         });
