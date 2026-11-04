@@ -8,7 +8,7 @@ namespace CivicLens.PublicApi.Votes;
 public sealed record VoteMemberRequest
 {
     private static readonly string[] CastWords =
-        [PublishedPartyMajority.Yea, PublishedPartyMajority.Nay, "Aye", "No", "Present", PublishedOfficialVote.NotVoting];
+        [PublishedPartyMajority.Yea, PublishedPartyMajority.Nay, PublishedOfficialVote.Aye, PublishedOfficialVote.No, PublishedOfficialVote.Present, PublishedOfficialVote.NotVoting];
 
     /// <summary>The stored form. A plain comparison lets the filter move below the view. A word that is no cast word stays as it is, because a cast can be a candidate name.</summary>
     public string? Cast { get; init; }
