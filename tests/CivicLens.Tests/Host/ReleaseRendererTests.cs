@@ -2623,6 +2623,7 @@ public sealed class ReleaseRendererTests
             ("policy area", facets.PolicyAreas[0].PagePath(1), await renderer.RenderFacetPageAsync(facets.PolicyAreas[0], 1, CancellationToken.None), "Issues"),
             ("issues", PublicationProtocol.FacetsPath, await renderer.RenderFacetsAsync(facets, CancellationToken.None), "Issues"),
             ("official", official.PagePath, await renderer.RenderOfficialAsync(official, PublicationCatalogs.None, CancellationToken.None), "Officials"),
+            ("official record", PublicationProtocol.OfficialRecordPagePath(profile.Id), await renderer.RenderOfficialRecordAsync(official, PublicationCatalogs.None, CancellationToken.None), "Officials"),
             ("past congress", pastOfficial.PagePath, await renderer.RenderOfficialAsync(pastOfficial, PublicationCatalogs.None, CancellationToken.None), "Officials"),
             ("officials", PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync([new OfficialListing(profile, 0)], DateTimeOffset.UnixEpoch, CancellationToken.None), "Officials"),
             ("board", OfficialBoard.All[0].PagePath, await renderer.RenderBoardAsync(OfficialBoardPage.All([], []).First(), null, CancellationToken.None), "Officials"),
@@ -2761,7 +2762,8 @@ public sealed class ReleaseRendererTests
             }
         }
 
-        Assert.True(labeled.GetValueOrDefault("official") >= 8);
+        Assert.True(labeled.GetValueOrDefault("official") >= 4);
+        Assert.True(labeled.GetValueOrDefault("official record") >= 5);
         Assert.True(labeled.Values.Sum() >= 16);
     }
 
