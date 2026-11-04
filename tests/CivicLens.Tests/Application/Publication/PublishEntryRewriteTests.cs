@@ -23,7 +23,7 @@ public sealed class PublishEntryRewriteTests
         Assert.Equal(before.Length, carried.Length);
         foreach (var old in before)
             Assert.Equal(Json(old), Json(carried.Single(entry => entry.RecordId == old.RecordId)));
-        Assert.All(carried, entry => Assert.Equal((null, null, null, null), (entry.YeaCount, entry.NayCount, entry.Alignment, entry.CosponsorIds)));
+        Assert.All(carried, entry => Assert.Equal((null, null, null, null, null), (entry.YeaCount, entry.NayCount, entry.Alignment, entry.Chamber, entry.CosponsorIds)));
     }
 
     [Fact]
@@ -68,6 +68,8 @@ public sealed class PublishEntryRewriteTests
         Assert.Equal((voteRecord.Totals!.Yea, voteRecord.Totals.Nay), (vote.YeaCount, vote.NayCount));
         Assert.Equal(voteRecord.ToEntry().Alignment, vote.Alignment);
         Assert.Equal(PublishedVoteAlignment.Split, vote.Alignment);
+        Assert.Equal(voteRecord.Chamber, vote.Chamber);
+        Assert.NotNull(vote.Chamber);
         var action = after.Single(entry => entry.Kind == PublishedRecordKind.Action);
         Assert.Equal(["chair"], action.CosponsorIds!);
         Assert.All(after.Where(entry => entry.Kind == PublishedRecordKind.Statement), entry => Assert.Null(entry.CosponsorIds));
@@ -327,7 +329,7 @@ public sealed class PublishEntryRewriteTests
     }
 
     private static PublishedRecordEntry WithoutNewFields(PublishedRecordEntry entry) =>
-        entry with { YeaCount = null, NayCount = null, Alignment = null, CosponsorIds = null };
+        entry with { YeaCount = null, NayCount = null, Alignment = null, Chamber = null, CosponsorIds = null };
 
     private static PublicationRelease Manifest(PublicationScenario scenario, PublicationReleaseSummary release) =>
         JsonSerializer.Deserialize<PublicationRelease>(scenario.Releases.Directories[release.DirectoryName][PublicationProtocol.ManifestPath],

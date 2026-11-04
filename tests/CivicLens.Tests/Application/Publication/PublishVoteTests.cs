@@ -85,6 +85,21 @@ public sealed class PublishVoteTests
     }
 
     [Theory]
+    [InlineData(Chamber.House, PublishedChamber.House)]
+    [InlineData(Chamber.Senate, PublishedChamber.Senate)]
+    public async Task TheManifestEntryNamesTheChamberOfTheVoteRevisionSoAPageCanListOneChamberWithoutReadingTheVoteFile(Chamber chamber, PublishedChamber expected)
+    {
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('d', chamber: chamber,
+            totalLines: chamber == Chamber.Senate ? ["Count: Yea 1, Nay 0, Present 0, Not voting 0"] : null);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        var entry = Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records, record => record.Kind == PublishedRecordKind.Vote);
+        Assert.Equal(expected, entry.Chamber);
+    }
+
+    [Theory]
     [InlineData(VoteSource.CongressGov, PublishedVoteSource.CongressGov)]
     [InlineData(VoteSource.Voteview, PublishedVoteSource.Voteview)]
     public async Task TheRecordNamesTheDataSourceOfItsRevisionSoAReaderKnowsWhoseDataTheCastsRestOn(VoteSource source, PublishedVoteSource expected)

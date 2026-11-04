@@ -70,9 +70,9 @@ public sealed record StatementDraftRevision(string CandidateId, int RevisionNumb
         ValidateText(Summary, MaximumSummaryLength, nameof(Summary));
         if ((StatementDate is null) != (StatementDateEvidence is null))
             throw new ArgumentException("A statement date requires an exact evidence span.");
-        if (SpeakerOfficialIds.IsDefault || SpeakerOfficialIds.Length > MaximumSelections ||
-            IssueIds.IsDefault || IssueIds.Length > MaximumSelections || PolicyAreaIds.IsDefault || PolicyAreaIds.Length > MaximumSelections)
-            throw new ArgumentException($"A selection can hold at most {MaximumSelections} values.");
+        ValidateSelections(SpeakerOfficialIds, nameof(SpeakerOfficialIds));
+        ValidateSelections(IssueIds, nameof(IssueIds));
+        ValidateSelections(PolicyAreaIds, nameof(PolicyAreaIds));
         if (OtherSpeakers.IsDefault || OtherSpeakers.Length > MaximumOtherSpeakers || !OtherSpeakers.All(IsPlainSpeakerName) ||
             OtherSpeakers.Distinct(StringComparer.Ordinal).Count() != OtherSpeakers.Length)
             throw new ArgumentException("Other speakers must be distinct plain names.");
@@ -92,6 +92,15 @@ public sealed record StatementDraftRevision(string CandidateId, int RevisionNumb
                 throw new ArgumentException("A statement can cite only the extraction of its candidate.");
             _ = new DocumentTextSpan(extraction, span.Start, span.Length);
         }
+    }
+
+    private static void ValidateSelections(ImmutableArray<string> values, string name)
+    {
+        if (values.IsDefault || values.Length > MaximumSelections)
+            throw new ArgumentException($"A selection can hold at most {MaximumSelections} values.", name);
+        if (values.Any(value => string.IsNullOrWhiteSpace(value) || value.Length > ReviewTextRules.MaximumConfigurationIdLength) ||
+            values.Distinct(StringComparer.Ordinal).Count() != values.Length)
+            throw new ArgumentException("A selection holds distinct, non-blank configuration IDs.", name);
     }
 
     private static bool IsBoundedSpan(SourceSpan span) =>
