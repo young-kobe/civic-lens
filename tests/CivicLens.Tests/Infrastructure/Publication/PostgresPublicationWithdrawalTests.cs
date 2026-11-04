@@ -3,6 +3,7 @@ using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -312,18 +313,21 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
         {
             WithdrawnRecords = [.. (withdrawn ?? []).Select(item => new PublishedRecordReference(item.Kind, item.RecordId))],
             Withdrawals = [.. (carried ?? []), .. withdrawn ?? []],
-            FirstPublications = [.. (added ?? []).Select(id => new PublishedFirstPublication(PublishedRecordKind.Action, id, First))]
+            AddedEntries = [.. (added ?? []).Select(id => PublishedEntryFixtures.Action(id, First))]
         };
 
     private async Task SeedActionsAsync(params string[] ids)
     {
         foreach (var (id, index) in ids.Select((id, index) => (id, index)))
+        {
+            await ExecuteAsync(PublishedEntryFixtures.InsertActionRevisionSql(id));
             await ExecuteAsync($"""
                 SET session_replication_role = replica;
                 INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks,
                     last_revised_at_utc_ticks, review_state_version, review_status)
                 VALUES ('{id}', 'congress-bills', 119, 'hr', {index + 1}, 1, 0, 0, 1, 'Approved')
                 """);
+        }
     }
 
     private Task SetStatusAsync(string id, string status) =>

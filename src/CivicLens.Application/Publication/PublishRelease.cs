@@ -100,7 +100,6 @@ public sealed class PublishRelease
         {
             WithdrawnRecords = withdrawn,
             Withdrawals = [.. withdrawals],
-            FirstPublications = [.. additions.Select(addition => new PublishedFirstPublication(addition.Entry.Kind, addition.RecordId, addition.Entry.FirstPublishedAtUtc))],
             AddedEntries = [.. additions.Select(addition => addition.Entry)]
         };
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
