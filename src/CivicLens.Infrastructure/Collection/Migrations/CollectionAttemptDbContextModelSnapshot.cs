@@ -609,9 +609,17 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("congress");
 
+                    b.Property<int?>("CosponsorCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("cosponsor_count");
+
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<DateOnly?>("EventOn")
+                        .HasColumnType("date")
+                        .HasColumnName("event_on");
 
                     b.Property<string>("Fingerprint")
                         .HasMaxLength(64)
@@ -727,6 +735,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("CandidateId");
 
+                    b.HasIndex("EventOn")
+                        .HasDatabaseName("ix_action_revisions_event_on");
+
                     b.HasIndex("PolicyAreaCitationExtractionId");
 
                     b.HasIndex("RunId")
@@ -758,7 +769,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_action_revisions_columns_written", "num_nulls(headline, summary, text_origin, source_id, congress, bill_type, bill_number, candidate_id, candidate_update_utc_ticks, candidate_includes_summaries, candidate_includes_subjects, fingerprint, bill_title, issue_revision_id, issue_candidates_recorded) IN (0, 15)");
 
+                            t.HasCheckConstraint("ck_action_revisions_cosponsor_count", "cosponsor_count >= 0");
+
                             t.HasCheckConstraint("ck_action_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_action_revisions_derived_columns_written", "num_nulls(event_on, cosponsor_count) IN (0, 2)");
 
                             t.HasCheckConstraint("ck_action_revisions_fingerprint", "fingerprint ~ '^[0-9a-f]{64}$'");
 

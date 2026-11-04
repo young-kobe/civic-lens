@@ -1,6 +1,7 @@
 using CivicLens.Core.Actions;
 using System.Text.Json;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Publication.Contracts;
 
@@ -158,6 +159,28 @@ public sealed class PublishedActionTests
     }
 
     [Fact]
+    public void TheEntryAndTheStoredRevisionAgreeOnTheCosponsorCountAndTheEventDateBecauseTwoProjectsHoldTheRule()
+    {
+        var withMayorCosponsoring = WithChairCosponsoring() with
+        {
+            Sponsorships = [.. WithChairCosponsoring().Sponsorships, Cosponsorship("mayor", "Mayor Example"), Cosponsorship("chair", "Chair Example")]
+        };
+
+        foreach (var action in new[] { Action(), WithChairCosponsoring(), withMayorCosponsoring })
+        {
+            var revision = ActionRevisionFixtures.Model() with { Sponsorships = [.. action.Sponsorships.Select(Stored)] };
+            var entry = action.ToEntry();
+
+            Assert.Equal(entry.CosponsorIds!.Length, revision.CosponsorCount());
+            Assert.Equal(entry.EventDate, revision.EventOn());
+        }
+
+        var sponsorship = ActionRevisionFixtures.Sponsorship();
+        var withdrawnBeforeItBegan = ActionRevisionFixtures.Model() with { Sponsorships = [sponsorship with { WithdrawnOn = sponsorship.SponsoredOn.AddDays(-1) }] };
+        Assert.Throws<ArgumentException>(withdrawnBeforeItBegan.ValidateShape);
+    }
+
+    [Fact]
     public void TheBillTitleIsBoundedInTheRecordAndInItsEntryAtTheLimitOfTheReviewSoTheTwoNeverDisagree()
     {
         Assert.Equal(ActionDraftRevision.MaximumTitleLength, PublishedAction.MaximumBillTitleLength);
@@ -289,6 +312,10 @@ public sealed class PublishedActionTests
     {
         Assert.Throws<InvalidDataException>((Action() with { RecordId = "0123456789abcdef0123456789abcdef" }).Validate);
     }
+
+    private static ActionSponsorship Stored(PublishedSponsorship sponsorship) => new(sponsorship.Official.Id, "B000000",
+        sponsorship.Role == PublishedSponsorshipRole.Sponsor ? ActionSponsorshipRole.Sponsor : ActionSponsorshipRole.Cosponsor,
+        sponsorship.IsOriginal, sponsorship.SponsoredOn, sponsorship.WithdrawnOn, []);
 
     private static PublishedAction WithChairCosponsoring() => Action() with
     {

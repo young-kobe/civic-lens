@@ -334,6 +334,22 @@ public sealed class ActionDraftRevisionTests
         Assert.Equal(revision.Sponsorships[0], back.Sponsorships[0]);
     }
 
+    [Fact]
+    public void TheCosponsorCountSkipsWithdrawnCosponsorsAndSponsorsAndCountsEachOfficialOnceBecauseTheCountIsOfOfficialsWhoBackTheBill()
+    {
+        var sponsor = Sponsorship() with { PersonId = "warren" };
+        ActionSponsorship Cosponsor(string person, DateOnly? withdrawn = null) =>
+            sponsor with { PersonId = person, Role = ActionSponsorshipRole.Cosponsor, WithdrawnOn = withdrawn };
+
+        var revision = Model() with
+        {
+            Sponsorships = [sponsor, Cosponsor("markey"), Cosponsor("markey"), Cosponsor("warren"), Cosponsor("kaine", new DateOnly(2025, 2, 1)), Cosponsor("booker")]
+        };
+
+        Assert.Equal(2, revision.CosponsorCount());
+        Assert.Equal(0, (Model() with { Sponsorships = [sponsor] }).CosponsorCount());
+    }
+
     // The review lists sort by this date, so a late withdrawal must count as the newest event of the bill.
     [Fact]
     public void TheEventDateIsTheNewestSponsoredOrWithdrawnDateAmongTheSponsorships()
