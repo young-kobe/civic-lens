@@ -10,8 +10,6 @@ namespace CivicLens.PublicApi.Votes;
 /// </summary>
 public sealed record VoteCursor(int Release, DateOnly VotedOn, PublishedChamber Chamber, int Session, int RollCall, string RecordId)
 {
-    private const int MaximumLength = 200;
-    private const string DateFormat = "yyyyMMdd";
     private const string Tag = "v";
 
     public static VoteCursor Of(int release, VoteRow last) =>
@@ -20,18 +18,13 @@ public sealed record VoteCursor(int Release, DateOnly VotedOn, PublishedChamber 
     public static VoteCursor? Parse(string? value)
     {
         if (value is null) return null;
-        var parts = value.Split('.');
-        if (value.Length > MaximumLength || parts is not [Tag, var release, var date, var chamber, var session, var rollCall, var id]) throw QueryValues.InvalidCursor();
-        if (!int.TryParse(release, NumberStyles.None, CultureInfo.InvariantCulture, out var releaseNumber) || releaseNumber < 1 ||
-            !DateOnly.TryParseExact(date, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var votedOn) ||
-            !int.TryParse(chamber, NumberStyles.None, CultureInfo.InvariantCulture, out var chamberNumber) || !Enum.IsDefined((PublishedChamber)chamberNumber) ||
-            !int.TryParse(session, NumberStyles.None, CultureInfo.InvariantCulture, out var sessionNumber) ||
-            !int.TryParse(rollCall, NumberStyles.None, CultureInfo.InvariantCulture, out var rollCallNumber) ||
-            !PublicationProtocol.IsAnyRecordId(id))
-            throw QueryValues.InvalidCursor();
-        return new(releaseNumber, votedOn, (PublishedChamber)chamberNumber, sessionNumber, rollCallNumber, id);
+        var parts = CursorFields.Split(value, Tag, 6);
+        var chamber = (PublishedChamber)CursorFields.Number(parts[2]);
+        return Enum.IsDefined(chamber)
+            ? new(CursorFields.Release(parts[0]), CursorFields.Date(parts[1]), chamber, CursorFields.Number(parts[3]), CursorFields.Number(parts[4]), CursorFields.RecordId(parts[5]))
+            : throw QueryValues.InvalidCursor();
     }
 
     public string Encode() => string.Create(CultureInfo.InvariantCulture,
-        $"{Tag}.{Release}.{VotedOn.ToString(DateFormat, CultureInfo.InvariantCulture)}.{(int)Chamber}.{Session}.{RollCall}.{RecordId}");
+        $"{Tag}.{Release}.{CursorFields.Format(VotedOn)}.{(int)Chamber}.{Session}.{RollCall}.{RecordId}");
 }

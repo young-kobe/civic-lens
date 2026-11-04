@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Data;
 using CivicLens.Application;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Publication;
@@ -99,6 +100,15 @@ public sealed class PostgresPublicationStore : IPublicationStore
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await PublishedEntries.ReadCandidatesAsync(db, cancellationToken);
+    }
+
+    public async Task<StoredRelease> ReadReleaseAsync(int releaseNumber, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var records = await PublishedEntries.ReadReleaseAsync(db, releaseNumber, cancellationToken);
+        var withdrawals = await PublicationWithdrawalRows.ReadAsync(db, releaseNumber, cancellationToken);
+        return new(records, withdrawals, await PublicationWithdrawalRows.PredateAsync(db, releaseNumber, cancellationToken));
     }
 
     public async Task<int> AddEntriesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken)

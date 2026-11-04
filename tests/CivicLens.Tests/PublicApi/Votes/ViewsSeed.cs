@@ -89,7 +89,7 @@ internal static class ViewsSeed
         VALUES ('{vote.RecordId}', 1, '{issue}', {position}, {(tracked ? "true" : "false")});
         """;
 
-    private static async Task ExecuteAsync(string database, string sql)
+    internal static async Task ExecuteAsync(string database, string sql)
     {
         await using var connection = new NpgsqlConnection(database);
         await connection.OpenAsync();

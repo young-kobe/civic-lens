@@ -32,6 +32,44 @@ internal static class PublicationWithdrawalRows
         await RequireOneRowForEachWithdrawalAsync(db, commit, cancellationToken);
     }
 
+    public static async Task<IReadOnlyList<PublishedWithdrawal>> ReadAsync(CollectionAttemptDbContext db, int releaseNumber,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.Set<PublicationWithdrawalRow>().AsNoTracking()
+            .Where(row => row.FirstRelease <= releaseNumber && (row.LastRelease == null || row.LastRelease >= releaseNumber))
+            .ToArrayAsync(cancellationToken);
+        var corrections = await (from correction in db.Set<PublicationWithdrawalCorrectionRow>().AsNoTracking()
+                                 join row in db.Set<PublicationWithdrawalRow>() on new { correction.Kind, correction.RecordId, correction.FirstRelease }
+                                     equals new { row.Kind, row.RecordId, row.FirstRelease }
+                                 where row.FirstRelease <= releaseNumber && (row.LastRelease == null || row.LastRelease >= releaseNumber)
+                                 orderby correction.Position
+                                 select correction).ToArrayAsync(cancellationToken);
+        var firstPublished = await PublishedRecords.ReadAsync(db, [.. rows.Select(ReferenceOf)], cancellationToken);
+        return [.. rows.Select(row => new PublishedWithdrawal
+        {
+            Kind = PublishedEntries.KindOf(row.Kind),
+            RecordId = row.RecordId,
+            WithdrawnRevisionNumber = row.WithdrawnRevisionNumber,
+            FirstPublishedAtUtc = firstPublished[ReferenceOf(row)],
+            WithdrawnAtUtc = new DateTimeOffset(row.WithdrawnAtUtcTicks, TimeSpan.Zero),
+            Note = row.Note,
+            Corrections = [.. corrections.Where(correction => correction.Kind == row.Kind && correction.RecordId == row.RecordId &&
+                    correction.FirstRelease == row.FirstRelease)
+                .Select(correction => new PublishedCorrection
+                {
+                    ReplacedRevisionNumber = correction.ReplacedRevisionNumber,
+                    PublishedAtUtc = new DateTimeOffset(correction.PublishedAtUtcTicks, TimeSpan.Zero),
+                    Note = correction.Note,
+                    FactsUnchanged = correction.FactsUnchanged
+                })]
+        })];
+    }
+
+    public static async Task<bool> PredateAsync(CollectionAttemptDbContext db, int releaseNumber, CancellationToken cancellationToken) =>
+        !await db.Set<PublicationWithdrawalRow>().AsNoTracking().AnyAsync(row => row.FirstRelease <= releaseNumber, cancellationToken);
+
+    private static PublishedRecordReference ReferenceOf(PublicationWithdrawalRow row) => new(PublishedEntries.KindOf(row.Kind), row.RecordId);
+
     private static async Task OpenAsync(CollectionAttemptDbContext db, int release, PublishedWithdrawal[] withdrawals,
         CancellationToken cancellationToken)
     {

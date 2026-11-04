@@ -31,12 +31,17 @@ public sealed record PublishedOfficialVote
     [JsonIgnore]
     public bool IsCast => Cast != NotVoting;
 
+    [JsonIgnore]
+    public bool IsCandidateCast => IsCandidate(Cast);
+
     public static string? SideOf(string cast) => cast switch
     {
         PublishedPartyMajority.Yea or Aye => PublishedPartyMajority.Yea,
         PublishedPartyMajority.Nay or No => PublishedPartyMajority.Nay,
         _ => null
     };
+
+    public static bool IsCandidate(string cast) => SideOf(cast) is null && cast is not (Present or NotVoting);
 
     public static PublishedOfficialVote Of(PublishedVote vote, PublishedMemberVote member) => new()
     {

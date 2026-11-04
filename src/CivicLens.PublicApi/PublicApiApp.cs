@@ -1,6 +1,7 @@
 using System.Net;
 using System.Threading.RateLimiting;
 using CivicLens.PublicApi.ActiveRelease;
+using CivicLens.PublicApi.Bills;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Ingest;
 using CivicLens.PublicApi.Reports;
@@ -42,6 +43,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new SearchIndex(reader));
         builder.Services.AddSingleton(new ActiveReleaseReader(views));
         builder.Services.AddSingleton(new VoteStore(views));
+        builder.Services.AddSingleton(new BillStore(views));
         builder.Services.AddSingleton(new ReportStore(writer, options));
         if (options.Turnstile is { } turnstile)
             builder.Services.AddSingleton(new TurnstileVerifier(
@@ -73,6 +75,7 @@ public static class PublicApiApp
         app.UseRateLimiter();
         app.MapRelease();
         app.MapVotes();
+        app.MapBills();
         app.MapSearch();
         app.MapReports(options);
         return app;

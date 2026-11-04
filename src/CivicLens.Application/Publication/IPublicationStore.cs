@@ -29,6 +29,8 @@ public interface IPublicationStore
 
     Task<IReadOnlyList<PublishedEntryCandidate>> ReadEntryCandidatesAsync(CancellationToken cancellationToken);
 
+    Task<StoredRelease> ReadReleaseAsync(int releaseNumber, CancellationToken cancellationToken);
+
     Task<int> AddEntriesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken);
 
     Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,

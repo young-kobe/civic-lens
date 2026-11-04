@@ -6,6 +6,7 @@ internal static class ActionLabels
 {
     public static string Bill(ActionDraftRevision revision) => Bill(revision.Congress, revision.BillType, revision.BillNumber);
 
-    public static string Bill(int congress, string billType, int billNumber) =>
-        $"{billType.ToUpperInvariant()} {billNumber}, Congress {congress}";
+    public static string Bill(int congress, string billType, int billNumber) => $"{BillNumber(billType, billNumber)}, Congress {congress}";
+
+    public static string BillNumber(string billType, int billNumber) => $"{billType.ToUpperInvariant()} {billNumber}";
 }
