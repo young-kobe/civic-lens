@@ -42,30 +42,6 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task EveryReaderFailsOnARowWithNullColumnsBecauseAGuessedRevisionWouldHideAnIncompleteRow()
-    {
-        var (recordId, candidate, _) = await SettledFullRevisionAsync();
-        await ExecuteAsync("UPDATE vote_analysis_runs SET prompt_version = 'vote-draft-prompt-v1'");
-        await MakeLegacyAsync(1);
-        var reviews = VoteReviews();
-        var named = new PublishedRevisionBinding[] { new(PublishedRecordKind.Vote, recordId, 1) };
-
-        await Assert.ThrowsAsync<InvalidDataException>(() => reviews.GetRevisionAsync(recordId, 1, default));
-        await Assert.ThrowsAsync<InvalidDataException>(() => reviews.GetAsync(recordId, default));
-        await Assert.ThrowsAsync<InvalidDataException>(() => VoteStore().ReadEvidenceAsync(candidate, default));
-        await Assert.ThrowsAsync<InvalidDataException>(() => reviews.GetForPublicationAsync([recordId], default));
-        await Assert.ThrowsAsync<InvalidDataException>(() => reviews.ReadMembersAsync([.. named], default));
-        await Assert.ThrowsAsync<InvalidDataException>(() => reviews.FindBillActionRecordIdsOfVotesAsync([.. named], default));
-        await Assert.ThrowsAsync<InvalidDataException>(() => new PostgresReviewQueueStore(QueueFactory()).SearchApprovedAsync("Headline", null, 10, default));
-        await Assert.ThrowsAsync<InvalidDataException>(() => VoteStore().RequeueOlderPromptAsync(default));
-        await using var db = await QueueFactory().CreateDbContextAsync();
-        var bill = await db.Database.SqlQueryRaw<LegacyBill>("SELECT congress AS \"Congress\", bill_type AS \"BillType\", bill_number AS \"BillNumber\" FROM vote_candidates").SingleAsync();
-        await Assert.ThrowsAsync<InvalidDataException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Votes.BillVoteDrafts", "ReadAsync",
-            db, bill.Congress, bill.BillType, bill.BillNumber, CancellationToken.None));
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_revisions WHERE headline IS NULL"));
-    }
-
-    [Fact]
     public async Task ARevisionKeepsItsFactsAndIssuesWhenAWriteCommitsBetweenTheParentReadAndTheChildReadsBecauseTheChildRowsComeByExactKeys()
     {
         var (recordId, candidate, written) = await SettledFullRevisionAsync();
@@ -142,18 +118,6 @@ public sealed partial class PostgresHouseVoteTests
         await SettleAsync(candidate, revision);
         return revision.RecordId;
     }
-
-    private Task MakeLegacyAsync(params int[] numbers)
-    {
-        var list = string.Join(", ", numbers);
-        return ExecuteAsync($"""
-            DELETE FROM vote_revision_facts WHERE revision_number IN ({list});
-            DELETE FROM vote_revision_issues WHERE revision_number IN ({list});
-            UPDATE vote_revisions SET {VoteRevisionColumnsSeed.NullColumns} WHERE revision_number IN ({list})
-            """);
-    }
-
-    private sealed record LegacyBill(int Congress, string BillType, int BillNumber);
 
     private IDbContextFactory<CollectionAttemptDbContext> QueueFactory() => new PooledDbContextFactory<CollectionAttemptDbContext>(
         new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);

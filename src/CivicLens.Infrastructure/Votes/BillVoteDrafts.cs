@@ -14,7 +14,7 @@ internal static class BillVoteDrafts
     {
         var rows = await db.Database.SqlQuery<BillVoteRow>($"""
             SELECT d.record_id AS "RecordId", d.chamber AS "Chamber", d.session_number AS "SessionNumber", d.roll_call_number AS "RollCallNumber",
-                   d.event_on AS "EventOn", d.review_status AS "ReviewStatus", r.kind AS "Kind", r.revision_number AS "RevisionNumber"
+                   d.event_on AS "EventOn", d.review_status AS "ReviewStatus", r.kind AS "Kind"
             FROM vote_drafts d
             JOIN vote_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
             WHERE EXISTS (SELECT 1 FROM vote_candidates c WHERE c.candidate_id = d.candidate_id
@@ -23,9 +23,9 @@ internal static class BillVoteDrafts
             LIMIT {BillVoteDraft.MaximumPerBill}
             """).ToArrayAsync(cancellationToken);
         return [.. rows.Select(row => new BillVoteDraft(row.RecordId, Enum.Parse<Chamber>(row.Chamber), row.SessionNumber, row.RollCallNumber,
-            Enum.Parse<VoteKind>(row.Kind ?? throw VoteRevisionRows.NotBackfilled($"Vote revision {row.RecordId} {row.RevisionNumber}")), row.EventOn,
+            Enum.Parse<VoteKind>(row.Kind), row.EventOn,
             Enum.Parse<ReviewStatus>(row.ReviewStatus)))];
     }
 
-    private sealed record BillVoteRow(string RecordId, string Chamber, int SessionNumber, int RollCallNumber, DateOnly EventOn, string ReviewStatus, string? Kind, int RevisionNumber);
+    private sealed record BillVoteRow(string RecordId, string Chamber, int SessionNumber, int RollCallNumber, DateOnly EventOn, string ReviewStatus, string Kind);
 }

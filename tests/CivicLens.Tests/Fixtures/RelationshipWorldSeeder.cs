@@ -57,7 +57,7 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         ("candidate", action.CandidateId), ("revised", revisedAtTicks), ("eventOn", action.EventOn()), ("issues", action.TrackedIssueIds.ToArray()),
         ("officials", action.OfficialIds().ToArray()), ("extraction", RelationshipFixtures.ExtractionId), ("hash", new string('f', 64)));
 
-    public Task VoteAsync(VoteDraftRevision vote, string reviewStatus = "Approved", long revisedAtTicks = 1) => ExecuteAsync("""
+    public Task VoteAsync(VoteDraftRevision vote, string reviewStatus = "Approved", long revisedAtTicks = 1) => ExecuteAsync($"""
         SET session_replication_role = replica;
         INSERT INTO vote_candidates (candidate_id, source_id, chamber, congress, session_number, roll_call_number, update_date_utc_ticks, bill_type,
             bill_number, detail_job_id, members_job_id, detail_extraction_id, members_extraction_id, configuration_revision_id, created_at_utc_ticks)
@@ -68,8 +68,8 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         VALUES (@id, @source, @chamber, @congress, @session, @roll, @number, 0, @status, 1, @revised, @candidate, @eventOn, @issues, @officials)
         ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number, review_status = @status, candidate_id = @candidate,
                                               last_revised_at_utc_ticks = @revised, event_on = @eventOn, issue_ids = @issues, official_ids = @officials;
-        INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, created_at_utc_ticks)
-        VALUES (@id, @number, 'auth0|editor', 'Person', NULL, 1)
+        INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, created_at_utc_ticks, {VoteRevisionColumnsSeed.RequiredColumns})
+        VALUES (@id, @number, 'auth0|editor', 'Person', NULL, 1, {VoteRevisionColumnsSeed.PlaceholderValues})
         ON CONFLICT (record_id, revision_number) DO NOTHING
         """ + VoteRevisionColumnsSeed.Sql, [.. VoteRevisionColumnsSeed.Parameters(vote), ("id", vote.RecordId), ("candidate", vote.CandidateId), ("revised", revisedAtTicks), ("source", vote.SourceId), ("chamber", vote.Chamber.ToString()),
         ("congress", vote.Congress),

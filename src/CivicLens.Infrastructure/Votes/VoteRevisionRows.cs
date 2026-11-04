@@ -73,10 +73,6 @@ internal static class VoteRevisionRows
         return new(rows, facts, issues, lists, entries);
     }
 
-    /// <summary>The failure of a reader that meets a vote revision row with null columns.</summary>
-    public static InvalidDataException NotBackfilled(string revision) =>
-        new($"{revision} has null columns.");
-
     /// <summary>The reader that the shared review code uses for votes.</summary>
     public static async Task<IReadOnlyList<StoredRevision<VoteRevisionRow, VoteDraftRevision>>> ReadAsync(CollectionAttemptDbContext db,
         IQueryable<VoteRevisionRow> query, CancellationToken cancellationToken) =>
@@ -105,17 +101,17 @@ internal static class VoteRevisionRows
         IEnumerable<VoteRevisionIssueRow> issueRows)
     {
         var issues = issueRows.OrderBy(issue => issue.Position).ToArray();
-        var recorded = row.IssueCandidatesRecorded!.Value;
+        var recorded = row.IssueCandidatesRecorded;
         var tracked = issues.Where(issue => issue.IsTracked).Select(issue => issue.IssueId);
         return new(row.RecordId, row.RevisionNumber, row.AuthorSubject, new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero),
             row.Headline!, row.Summary!, row.TextOrigin!.Value, ReviewTextRows.SuggestionOf(row),
-            row.SourceId!, row.VoteSource!.Value, row.Chamber!.Value, row.Congress!.Value, row.SessionNumber!.Value, row.RollCallNumber!.Value,
-            row.BillType, row.BillNumber, row.CandidateId!, new DateTimeOffset(row.CandidateUpdateUtcTicks!.Value, TimeSpan.Zero),
+            row.SourceId, row.VoteSource, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber,
+            row.BillType, row.BillNumber, row.CandidateId, new DateTimeOffset(row.CandidateUpdateUtcTicks, TimeSpan.Zero),
             [.. factRows.OrderBy(fact => fact.Position).Select(fact => new VoteFact(fact.FactText, new(fact.CitationExtractionId, fact.CitationStart, fact.CitationLength)))],
-            row.VotedOn!.Value, new(row.VotedOnCitationExtractionId!, row.VotedOnCitationStart!.Value, row.VotedOnCitationLength!.Value), row.Kind!.Value,
+            row.VotedOn, new(row.VotedOnCitationExtractionId, row.VotedOnCitationStart, row.VotedOnCitationLength), row.Kind,
             row.KindCitationExtractionId is null ? null : new(row.KindCitationExtractionId, row.KindCitationStart!.Value, row.KindCitationLength!.Value), members,
             [.. recorded ? tracked.Order(StringComparer.Ordinal) : tracked],
-            recorded ? [.. issues.Select(issue => issue.IssueId)] : default, row.IssueRevisionId!, row.SubjectsHash);
+            recorded ? [.. issues.Select(issue => issue.IssueId)] : default, row.IssueRevisionId, row.SubjectsHash);
     }
 
     private static VoteRevisionFactRow FactRow(VoteDraftRevision revision, VoteFact fact, int position) => new()

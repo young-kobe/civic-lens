@@ -8,7 +8,7 @@ namespace CivicLens.Tests.Infrastructure.Collection.HouseVotes;
 public sealed partial class PostgresHouseVoteTests
 {
     [Fact]
-    public async Task AFullRevisionWritesColumnsAndChildRowsThatEqualItsJsonBecauseTheReadersUseThem()
+    public async Task AFullRevisionWritesColumnsAndChildRowsThatEqualTheRevisionBecauseTheReadersUseThem()
     {
         var candidate = await PendingCandidateAsync();
         var basis = await RevisionAsync(candidate, 1);
@@ -31,15 +31,15 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task ALegacyShapeRevisionWritesTrackedIssueRowsOnlyAndRecordsThatNoCandidatesExistBecauseItsCandidatesAreUnknown()
+    public async Task ARevisionWithoutIssueCandidatesWritesTrackedIssueRowsOnlyAndRecordsThatNoCandidatesExistBecauseItsCandidatesAreUnknown()
     {
         var candidate = await PendingCandidateAsync();
-        var legacy = (await RevisionAsync(candidate, 1)) with { IssueCandidateIds = default, TrackedIssueIds = ["issue-a", "issue-b"], SubjectsHash = null };
+        var withoutCandidates = (await RevisionAsync(candidate, 1)) with { IssueCandidateIds = default, TrackedIssueIds = ["issue-a", "issue-b"], SubjectsHash = null };
 
-        await SettleAsync(candidate, legacy);
+        await SettleAsync(candidate, withoutCandidates);
 
-        await AssertColumnsEqualAsync(legacy);
-        Assert.Equal(["issue-a|true", "issue-b|true"], await LinesAsync($"SELECT issue_id || '|' || is_tracked FROM vote_revision_issues WHERE record_id = '{legacy.RecordId}' ORDER BY position"));
+        await AssertColumnsEqualAsync(withoutCandidates);
+        Assert.Equal(["issue-a|true", "issue-b|true"], await LinesAsync($"SELECT issue_id || '|' || is_tracked FROM vote_revision_issues WHERE record_id = '{withoutCandidates.RecordId}' ORDER BY position"));
         Assert.Equal(false, await ScalarAsync("SELECT issue_candidates_recorded FROM vote_revisions"));
     }
 
@@ -116,19 +116,23 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal(2L, await ScalarAsync("SELECT count(DISTINCT bill_number) FROM vote_revisions"));
     }
 
-    [Fact]
-    public async Task ARowThatOlderCodeWritesHasNoNewColumnsAndPassesEveryCheckBecauseRollbackMustStaySafe()
+    [Theory]
+    [InlineData("headline")]
+    [InlineData("text_origin")]
+    [InlineData("chamber")]
+    [InlineData("member_list_id")]
+    [InlineData("kind")]
+    [InlineData("voted_on_citation_length")]
+    [InlineData("issue_candidates_recorded")]
+    public async Task TheDatabaseRefusesANullInAColumnThatEveryRevisionSetsBecauseNoReaderGuessesAValue(string column)
     {
         var candidate = await PendingCandidateAsync();
-        var first = await RevisionAsync(candidate, 1);
-        await SettleAsync(candidate, first);
+        await SettleAsync(candidate, await RevisionAsync(candidate, 1));
 
-        await ExecuteAsync($"""
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, created_at_utc_ticks)
-            VALUES ('{first.RecordId}', 2, 'auth0|editor', 'Person', NULL, 0)
-            """);
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"UPDATE vote_revisions SET {column} = NULL"));
 
-        Assert.Equal(0, await ScalarAsync("SELECT num_nonnulls(headline, summary, text_origin, source_id, chamber, member_list_id, kind, issue_candidates_recorded) FROM vote_revisions WHERE revision_number = 2"));
+        Assert.Equal(PostgresErrorCodes.NotNullViolation, failure.SqlState);
+        Assert.Equal(column, failure.ColumnName);
     }
 
     [Theory]
@@ -145,7 +149,6 @@ public sealed partial class PostgresHouseVoteTests
     [InlineData("vote_revisions", "issue_revision_id = 'xyz'", "ck_vote_revisions_issue_revision")]
     [InlineData("vote_revisions", "subjects_hash = 'xyz'", "ck_vote_revisions_subjects_hash")]
     [InlineData("vote_revisions", "candidate_update_utc_ticks = -1", "ck_vote_revisions_candidate_update_utc_ticks")]
-    [InlineData("vote_revisions", "headline = NULL", "ck_vote_revisions_columns_written")]
     [InlineData("vote_revisions", "chamber = 'Other'", "ck_vote_revisions_chamber")]
     [InlineData("vote_revisions", "chamber = 'Senate', vote_source = 'Bogus'", "ck_vote_revisions_vote_source")]
     [InlineData("vote_member_lists", "member_count = 601", "ck_vote_member_lists_count")]

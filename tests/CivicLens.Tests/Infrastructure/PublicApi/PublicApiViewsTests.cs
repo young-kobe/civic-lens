@@ -357,23 +357,6 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
-    public async Task AVoteRevisionWithNoWrittenColumnsAppearsInNoVoteViewBecauseItHoldsNothingToShow()
-    {
-        await ExecuteAsync("""
-            SET session_replication_role = replica;
-            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
-              VALUES (1, '000001-00000000000000000000000000000001', 'test', 1, 1, true);
-            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('vote', 'old', 1, 1, NULL);
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, created_at_utc_ticks)
-              VALUES ('old', 1, 'test', 'Person', 1);
-            INSERT INTO vote_revision_issues (record_id, revision_number, issue_id, position, is_tracked) VALUES ('old', 1, 'health', 0, true);
-            """);
-        Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.votes"));
-        Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.vote_members"));
-        Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.vote_issues"));
-    }
-
-    [Fact]
     public async Task TheGrantsStepRunTwiceChangesNothingBecauseEveryDbMigrateRunsIt()
     {
         var store = PostgresCollectionAttemptStore.FromConnectionString(connectionString);

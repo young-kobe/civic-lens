@@ -36,4 +36,51 @@ public sealed class RevisionColumnsReadOnlyTests(PostgresCollection postgres) : 
         Assert.All(expectedHidden, column => Assert.Contains(column, columns));
         Assert.All(columns, column => Assert.Equal(expectedHidden.Contains(column), hidden.IsMatch(column)));
     }
+
+    // A kind that dropped revision_json and a kind that keeps it return the same one column, and neither shows the author.
+    [Fact]
+    public async Task TheRevisionFunctionReturnsTheRowWithoutTheAuthorForATableWithoutJsonAndForATableWithJsonAndTheOwnerReadsBoth()
+    {
+        var script = string.Join('\n', File.ReadAllLines(Path.Combine(RepositoryRoot.FullName, "deploy", "scripts", "readonly-grants.sql"))
+            .Where(line => !line.StartsWith('\\')));
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await ExecuteAsync(connection, $$"""
+            SET session_replication_role = replica;
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, created_at_utc_ticks,
+                headline, summary, text_origin, source_id, vote_source, chamber, congress, session_number, roll_call_number, candidate_id,
+                candidate_update_utc_ticks, voted_on, voted_on_citation_extraction_id, voted_on_citation_start, voted_on_citation_length, kind,
+                member_list_id, issue_revision_id, issue_candidates_recorded)
+            VALUES ('{{new string('a', 64)}}', 1, 'auth0|vote-author', 'Person', NULL, 100,
+                'Vote headline', 'Summary', 'Person', 'voteview-senate', 'Voteview', 'Senate', 119, 1, 7, 'c1',
+                1, DATE '2026-01-02', 'e1', 0, 5, 'Passage', '{{new string('1', 64)}}', '{{new string('2', 64)}}', true);
+            INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
+            VALUES ('{{new string('b', 64)}}', 1, 'auth0|action-author', 'Person', '{"authorSubject":"auth0|action-author","title":"Kept"}', 100);
+            {{script}}
+            SET ROLE civic_lens_readonly
+            """);
+
+        var vote = await ScalarAsync(connection, "SELECT row_data::text FROM readonly_access.revisions('vote_revisions')");
+        var action = await ScalarAsync(connection, "SELECT row_data::text FROM readonly_access.revisions('action_revisions')");
+
+        Assert.Contains("Vote headline", vote, StringComparison.Ordinal);
+        Assert.DoesNotContain("auth0|vote-author", vote, StringComparison.Ordinal);
+        Assert.DoesNotContain("author_subject", vote, StringComparison.Ordinal);
+        Assert.Contains("\"title\": \"Kept\"", action, StringComparison.Ordinal);
+        Assert.DoesNotContain("auth0|action-author", action, StringComparison.Ordinal);
+        await ExecuteAsync(connection, "RESET ROLE");
+        Assert.Equal("true", await ScalarAsync(connection, "SELECT has_table_privilege('civic_lens_readonly_owner', 'vote_revisions', 'SELECT')::text"));
+    }
+
+    private static async Task ExecuteAsync(NpgsqlConnection connection, string sql)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<string> ScalarAsync(NpgsqlConnection connection, string sql)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        return (string)(await command.ExecuteScalarAsync())!;
+    }
 }

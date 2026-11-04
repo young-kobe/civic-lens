@@ -39,6 +39,22 @@ public sealed class DropVoteRevisionJsonMigrationTests(PostgresCollection postgr
         Assert.Equal(["0"], await ReadAsync(RevisionColumnCount));
     }
 
+    [Fact]
+    public async Task TheCoreColumnsBecomeRequiredAndTheAllOrNoneCheckGoesBecauseNoRowWithoutColumnsCanRemain()
+    {
+        await InsertDraftAsync(RecordId);
+        await InsertRevisionWithColumnsAsync(RecordId, 1);
+        Assert.Equal(["19"], await ReadAsync(NullableCoreColumns));
+        Assert.Equal(["1"], await ReadAsync(ColumnsWrittenCheckCount));
+
+        await MigrateToAsync(Migration);
+
+        Assert.Equal(["0"], await ReadAsync(NullableCoreColumns));
+        Assert.Equal(["0"], await ReadAsync(ColumnsWrittenCheckCount));
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync("UPDATE vote_revisions SET headline = NULL"));
+        Assert.Equal(PostgresErrorCodes.NotNullViolation, failure.SqlState);
+    }
+
     // The JSON of a row without columns is the only copy of that revision, so the drop must refuse it and leave the column in place.
     [Fact]
     public async Task ARevisionWithoutColumnsStopsTheMigrationAndNamesTheRevisionBecauseTheDropWouldLoseIt()
@@ -62,7 +78,7 @@ public sealed class DropVoteRevisionJsonMigrationTests(PostgresCollection postgr
     }
 
     [Fact]
-    public async Task TheRollbackAddsAnEmptyNullableJsonColumnAndTheNextRunKeepsEveryColumnBecauseARollbackMustLoseNothing()
+    public async Task TheRollbackAddsAnEmptyNullableJsonColumnAndRestoresTheNullableColumnsAndTheCheckAndTheNextRunKeepsEveryColumnBecauseARollbackMustLoseNothing()
     {
         await InsertDraftAsync(RecordId);
         await InsertRevisionWithColumnsAsync(RecordId, 1);
@@ -73,12 +89,23 @@ public sealed class DropVoteRevisionJsonMigrationTests(PostgresCollection postgr
         Assert.Equal(["1"], await ReadAsync(RevisionColumnCount));
         Assert.Equal(["YES"], await ReadAsync("SELECT is_nullable FROM information_schema.columns WHERE table_name = 'vote_revisions' AND column_name = 'revision_json'"));
         Assert.Equal(["1|Headline"], await ReadAsync("SELECT revision_number || '|' || headline FROM vote_revisions"));
+        Assert.Equal(["19"], await ReadAsync(NullableCoreColumns));
+        Assert.Equal(["1"], await ReadAsync(ColumnsWrittenCheckCount));
 
         await MigrateToAsync(Migration);
 
         Assert.Equal(["0"], await ReadAsync(RevisionColumnCount));
         Assert.Equal(["1|Headline"], await ReadAsync("SELECT revision_number || '|' || headline FROM vote_revisions"));
     }
+
+    private const string NullableCoreColumns = """
+        SELECT count(*) FROM information_schema.columns WHERE table_name = 'vote_revisions' AND is_nullable = 'YES'
+          AND column_name IN ('headline', 'summary', 'text_origin', 'source_id', 'vote_source', 'chamber', 'congress', 'session_number', 'roll_call_number',
+              'candidate_id', 'candidate_update_utc_ticks', 'voted_on', 'voted_on_citation_extraction_id', 'voted_on_citation_start',
+              'voted_on_citation_length', 'kind', 'member_list_id', 'issue_revision_id', 'issue_candidates_recorded')
+        """;
+
+    private const string ColumnsWrittenCheckCount = "SELECT count(*) FROM pg_constraint WHERE conname = 'ck_vote_revisions_columns_written'";
 
     private Task InsertDraftAsync(string recordId) => ExecuteAsync($"""
         SET session_replication_role = replica;

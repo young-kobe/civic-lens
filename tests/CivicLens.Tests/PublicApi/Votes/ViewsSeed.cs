@@ -19,7 +19,6 @@ internal sealed record SeededVote(char Id, string VotedOn)
     public string[] UntrackedIssues { get; init; } = [];
     public int FirstRelease { get; init; } = 1;
     public int? LastRelease { get; init; }
-    public bool HasMemberList { get; init; } = true;
 
     public string RecordId { get; init; } = new(Id, 64);
 }
@@ -40,22 +39,7 @@ internal static class ViewsSeed
         foreach (var vote in votes) await ExecuteAsync(database, Insert(vote));
     }
 
-    private static string Insert(SeededVote vote) => vote.HasMemberList ? InsertWithMemberList(vote) : InsertWithoutMemberList(vote);
-
-    /// <summary>A revision whose columns were never written. The table check forces all 19 nullable columns to be null together.</summary>
-    private static string InsertWithoutMemberList(SeededVote vote)
-    {
-        var last = vote.LastRelease?.ToString(CultureInfo.InvariantCulture) ?? "NULL";
-        return $"""
-            SET session_replication_role = replica;
-            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
-              VALUES ('vote', '{vote.RecordId}', {vote.FirstRelease}, 1, {last});
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, created_at_utc_ticks)
-            VALUES ('{vote.RecordId}', 1, 'test', 'Person', 1);
-            """;
-    }
-
-    private static string InsertWithMemberList(SeededVote vote)
+    private static string Insert(SeededVote vote)
     {
         var list = vote.RecordId;
         var source = vote.Chamber == "House" ? "CongressGov" : "Voteview";

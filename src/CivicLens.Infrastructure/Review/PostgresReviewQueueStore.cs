@@ -31,7 +31,7 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         new(PublishedRecordKind.Action, "ac", "action_drafts", "headline",
             (db, ids, ct) => PostgresActionReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
         new(PublishedRecordKind.Vote, "vo", "vote_drafts", "headline",
-            (db, ids, ct) => VoteDraftRows.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct), Column: new("headline", recordId => VoteRevisionRows.NotBackfilled($"The current revision of vote {recordId}"))),
+            (db, ids, ct) => VoteDraftRows.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct), Column: new("headline")),
         new(PublishedRecordKind.Brief, "br", "brief_drafts", "headline",
             (db, ids, ct) => PostgresBriefReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct), Column: new("headline", recordId => BriefRevisionRows.NotBackfilled($"The current revision of brief {recordId}"))),
         new(PublishedRecordKind.Relationship, "re", "relationship_drafts", null,
@@ -116,7 +116,7 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
             .Take(limit + 1).ToArrayAsync(cancellationToken);
         var slice = KeysetSlice<ApprovedKey>.Create(fetched, limit, cursor, key => (key.LastRevisedAtUtcTicks, key.QueueId));
         return new([.. slice.Items.Select(key => new ApprovedRecordHit(KindsByCode[key.KindCode].Kind, key.RecordId,
-            key.Headline ?? throw KindsByCode[key.KindCode].Column!.NotBackfilled(key.RecordId)))],
+            key.Headline ?? throw KindsByCode[key.KindCode].Column!.NotBackfilled!(key.RecordId)))],
             slice.NewerCursor, slice.OlderCursor);
     }
 
@@ -168,11 +168,11 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
 
         public string HeadlineSql => Column is not null ? $"revision.{Column.Name}" : $"revision.revision_json::jsonb ->> '{HeadlineProperty}'";
 
-        /// <summary>A kind with a headline column returns a row with a null headline, so that the read fails and the search does not skip the row.</summary>
-        public string NullHeadlineMatch => Column is not null ? $"{HeadlineSql} IS NULL OR " : "";
+        /// <summary>A kind with a nullable headline column returns a row with a null headline, so that the read fails and the search does not skip the row.</summary>
+        public string NullHeadlineMatch => Column?.NotBackfilled is not null ? $"{HeadlineSql} IS NULL OR " : "";
     }
 
-    private sealed record HeadlineColumn(string Name, Func<string, InvalidDataException> NotBackfilled);
+    private sealed record HeadlineColumn(string Name, Func<string, InvalidDataException>? NotBackfilled = null);
 
     private class QueueKey
     {
