@@ -1,0 +1,7 @@
+TASK: R-63 model run storage PR 1 in the civic-lens repository (C#/.NET 10, Postgres): prompt text tables and run input, written by every analysis kind. Branch: model-run-input, from origin/main.
+
+The design is fixed and every owner question is decided. Read survey/model-run-storage.md on branch origin/survey-model-runs (git show origin/survey-model-runs:survey/model-run-storage.md). Read sections 1, 2, 3.1, 3.2, 4, the "PR 1" block of section 5 in full, and section 6 (decisions D1 to D12, O1, O2). Build exactly the PR 1 block: its migration, code, rules, grants, docs and its full test list, including the listed test helper sites that must pass or clear Input. PR 2 to PR 8 are out of scope: do not add error tables, context columns, quote rows, the backfill command or verify.
+
+The survey cites line numbers at an older commit. Find each site on origin/main by name before you edit it. If main differs from the survey in a way that changes the design (not only line numbers), choose nothing: stop, commit what is done, and report the difference with options.
+
+Final message under 1,800 characters: commit SHA, migration name, test classes run with counts, where main differed from the survey, departures, open questions.

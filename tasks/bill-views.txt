@@ -1,0 +1,14 @@
+TASK: R-68 step 21 PR 2 in the civic-lens repository (C#/.NET 10, Postgres): the bill views public_api.bills, public_api.bill_sponsorships and public_api.bill_issues. Branch: public-api-bill-views, from origin/main.
+
+The design is fixed. Read survey/public-api-serving.md on branch origin/survey-public-api-serving (git show origin/survey-public-api-serving:survey/public-api-serving.md): section 1.1, section 1.3, section 1.5 (proposed bill views, the unmoved-revision filter, public and never-public fields), section 4 (this is PR 2) and section 5. The owner accepted every recommendation, with these changes:
+- D5 (a): bills are keyed by record ID. Expose congress, bill_type and bill_number as filterable columns.
+- D6 changed to (b): do NOT compute the event date or the cosponsor count in the view. main already stores them as action_revisions.event_on and action_revisions.cosponsor_count, written once by C# (ActionRevisionRows.cs, ActionDraftRevision.CosponsorCount) and filled for old rows by the merged actions backfill, with index ix_action_revisions_event_on. The view reads those columns. Do not add a second owner of either rule in SQL.
+- D7 (b): bill_issues filters untracked issues inside the view, so the view never shows them. Check how main's vote_issues view treats untracked issues today. If vote_issues still exposes untracked issues, also make it filter in the view (owner choice 2026-11-03), with its Down restoring the previous view.
+- D12: views expose official_id, not bioguide_id.
+Routes are PR 5: add no PublicApi code. Members route and other routes are out of scope.
+
+Precedent to follow exactly: migrations 20261103165431_PublicApiViews and 20261103234036_PublicApiVoteFacts (security_barrier views, column grants only through the one grants owner src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs, a line per column in docs/architecture/public-api-columns.txt, fail-closed role tests, a Down that drops or restores). Tests go in tests/CivicLens.Tests/Infrastructure/PublicApi/PublicApiViewsTests.cs (or a sibling class in that folder if it grows too large), seeded like the vote tests. Tests: active bills appear and withdrawn or inactive ones do not; the unmoved-revision test (a revision with null columns or no sponsorship appears in no bill view), a test that the three bill views list the same record set, the label and text_origin, the event date and cosponsor count equal the stored columns, original cosponsors, untracked issues never shown, and the role cannot read any never-public field or base table. Each test must fail if its rule breaks.
+
+Docs: docs/architecture/publication.md (views section, invariants with enforcer and test), regenerate schema docs, docs/roadmap.md (remove done work only).
+
+Final message under 1,800 characters: commit SHA, migration name, test classes run with counts, where main differed from the survey, departures from this brief, open questions.
