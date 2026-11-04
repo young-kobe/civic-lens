@@ -57,25 +57,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
-                name: "change_date_evidence_extraction_id",
-                table: "document_change_revisions",
-                type: "character varying(64)",
-                maxLength: 64,
-                nullable: true);
-
-            migrationBuilder.AddColumn<int>(
-                name: "change_date_evidence_length",
-                table: "document_change_revisions",
-                type: "integer",
-                nullable: true);
-
-            migrationBuilder.AddColumn<int>(
-                name: "change_date_evidence_start",
-                table: "document_change_revisions",
-                type: "integer",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
                 name: "comparison_id",
                 table: "document_change_revisions",
                 type: "character varying(64)",
@@ -136,7 +117,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     position = table.Column<short>(type: "smallint", nullable: false),
                     citation_extraction_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     citation_start = table.Column<int>(type: "integer", nullable: false),
-                    citation_length = table.Column<int>(type: "integer", nullable: false)
+                    citation_length = table.Column<int>(type: "integer", nullable: false),
+                    is_change_date_evidence = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false)
                 },
                 constraints: table =>
                 {
@@ -203,11 +185,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_document_change_revisions_change_date_evidence_extraction_id",
-                table: "document_change_revisions",
-                column: "change_date_evidence_extraction_id");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_document_change_revisions_draft_id_comparison_id",
                 table: "document_change_revisions",
                 columns: new[] { "draft_id", "comparison_id" });
@@ -216,16 +193,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 name: "ck_document_change_revisions_author_kind",
                 table: "document_change_revisions",
                 sql: "author_kind IN ('Person', 'Analysis', 'Code')");
-
-            migrationBuilder.AddCheckConstraint(
-                name: "ck_document_change_revisions_change_date",
-                table: "document_change_revisions",
-                sql: "(change_date IS NULL) = (change_date_evidence_extraction_id IS NULL)");
-
-            migrationBuilder.AddCheckConstraint(
-                name: "ck_document_change_revisions_change_date_evidence",
-                table: "document_change_revisions",
-                sql: "(change_date_evidence_extraction_id IS NULL) = (change_date_evidence_start IS NULL) AND (change_date_evidence_extraction_id IS NULL) = (change_date_evidence_length IS NULL) AND change_date_evidence_start >= 0 AND change_date_evidence_length > 0");
 
             migrationBuilder.AddCheckConstraint(
                 name: "ck_document_change_revisions_columns_written",
@@ -263,20 +230,19 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 columns: new[] { "draft_id", "revision_number", "citation_extraction_id", "citation_start", "citation_length" },
                 unique: true);
 
+            migrationBuilder.CreateIndex(
+                name: "ux_document_change_revision_citations_change_date_evidence",
+                table: "document_change_revision_citations",
+                columns: new[] { "draft_id", "revision_number" },
+                unique: true,
+                filter: "is_change_date_evidence");
+
             migrationBuilder.AddForeignKey(
                 name: "FK_document_change_revisions_document_change_drafts_draft_id_c~",
                 table: "document_change_revisions",
                 columns: new[] { "draft_id", "comparison_id" },
                 principalTable: "document_change_drafts",
                 principalColumns: new[] { "draft_id", "comparison_id" },
-                onDelete: ReferentialAction.Restrict);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_document_change_revisions_document_extractions_change_date_~",
-                table: "document_change_revisions",
-                column: "change_date_evidence_extraction_id",
-                principalTable: "document_extractions",
-                principalColumn: "extraction_id",
                 onDelete: ReferentialAction.Restrict);
         }
 
@@ -285,10 +251,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         {
             migrationBuilder.DropForeignKey(
                 name: "FK_document_change_revisions_document_change_drafts_draft_id_c~",
-                table: "document_change_revisions");
-
-            migrationBuilder.DropForeignKey(
-                name: "FK_document_change_revisions_document_extractions_change_date_~",
                 table: "document_change_revisions");
 
             migrationBuilder.DropTable(
@@ -301,23 +263,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 name: "document_change_revision_officials");
 
             migrationBuilder.DropIndex(
-                name: "IX_document_change_revisions_change_date_evidence_extraction_id",
-                table: "document_change_revisions");
-
-            migrationBuilder.DropIndex(
                 name: "IX_document_change_revisions_draft_id_comparison_id",
                 table: "document_change_revisions");
 
             migrationBuilder.DropCheckConstraint(
                 name: "ck_document_change_revisions_author_kind",
-                table: "document_change_revisions");
-
-            migrationBuilder.DropCheckConstraint(
-                name: "ck_document_change_revisions_change_date",
-                table: "document_change_revisions");
-
-            migrationBuilder.DropCheckConstraint(
-                name: "ck_document_change_revisions_change_date_evidence",
                 table: "document_change_revisions");
 
             migrationBuilder.DropCheckConstraint(
@@ -354,18 +304,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             migrationBuilder.DropColumn(
                 name: "change_date",
-                table: "document_change_revisions");
-
-            migrationBuilder.DropColumn(
-                name: "change_date_evidence_extraction_id",
-                table: "document_change_revisions");
-
-            migrationBuilder.DropColumn(
-                name: "change_date_evidence_length",
-                table: "document_change_revisions");
-
-            migrationBuilder.DropColumn(
-                name: "change_date_evidence_start",
                 table: "document_change_revisions");
 
             migrationBuilder.DropColumn(

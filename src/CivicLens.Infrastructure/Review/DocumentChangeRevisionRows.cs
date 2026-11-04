@@ -42,9 +42,6 @@ internal static class DocumentChangeRevisionRows
         row.Limits = revision.Limits;
         row.Institution = revision.Institution;
         row.ChangeDate = revision.ChangeDate;
-        row.ChangeDateEvidenceExtractionId = revision.ChangeDateEvidence?.ExtractionId;
-        row.ChangeDateEvidenceStart = revision.ChangeDateEvidence?.Start;
-        row.ChangeDateEvidenceLength = revision.ChangeDateEvidence?.Length;
         row.Officials = [.. revision.OfficialIds.Select((officialId, position) => OfficialRow(revision, officialId, position))];
         row.Issues = [.. revision.IssueIds.Select((issueId, position) => IssueRow(revision, issueId, position))];
         row.Citations = [.. revision.Citations.Select((citation, position) => CitationRow(revision, citation, position))];
@@ -114,6 +111,7 @@ internal static class DocumentChangeRevisionRows
         Position = (short)position,
         CitationExtractionId = citation.ExtractionId,
         CitationStart = citation.Start,
-        CitationLength = citation.Length
+        CitationLength = citation.Length,
+        IsChangeDateEvidence = citation == revision.ChangeDateEvidence
     };
 }

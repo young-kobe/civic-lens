@@ -2,8 +2,6 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Infrastructure.Review.Persistence;
 
-/// <summary>The columns from <see cref="ComparisonId"/> on copy <see cref="RevisionJson"/>. They stay null on a row that older code wrote.
-/// The migration filled the author columns of every row.</summary>
 internal sealed class DocumentChangeRevisionRow : IReviewRevisionRow, IHeadlineSummaryRow
 {
     public string DraftId { get; set; } = string.Empty;
@@ -19,9 +17,6 @@ internal sealed class DocumentChangeRevisionRow : IReviewRevisionRow, IHeadlineS
     public string? Limits { get; set; }
     public string? Institution { get; set; }
     public DateOnly? ChangeDate { get; set; }
-    public string? ChangeDateEvidenceExtractionId { get; set; }
-    public int? ChangeDateEvidenceStart { get; set; }
-    public int? ChangeDateEvidenceLength { get; set; }
     public List<DocumentChangeRevisionOfficialRow> Officials { get; set; } = [];
     public List<DocumentChangeRevisionIssueRow> Issues { get; set; } = [];
     public List<DocumentChangeRevisionCitationRow> Citations { get; set; } = [];

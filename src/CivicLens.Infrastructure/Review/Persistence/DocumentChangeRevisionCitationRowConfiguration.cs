@@ -19,6 +19,9 @@ internal sealed class DocumentChangeRevisionCitationRowConfiguration : IEntityTy
         builder.Property(row => row.RevisionNumber).HasColumnName("revision_number");
         builder.Property(row => row.Position).HasColumnName("position");
         SourceSpanColumns.Configure(builder, "document_change_revision_citations", "Citation", "citation", optional: false);
+        builder.Property(row => row.IsChangeDateEvidence).HasColumnName("is_change_date_evidence").HasDefaultValue(false).IsRequired();
         builder.HasIndex(row => new { row.DraftId, row.RevisionNumber, row.CitationExtractionId, row.CitationStart, row.CitationLength }).IsUnique();
+        builder.HasIndex(row => new { row.DraftId, row.RevisionNumber }).IsUnique().HasFilter("is_change_date_evidence")
+            .HasDatabaseName("ux_document_change_revision_citations_change_date_evidence");
     }
 }

@@ -18,7 +18,6 @@ internal sealed class DocumentChangeRevisionRowConfiguration : IEntityTypeConfig
             table.HasCheckConstraint("ck_document_change_revisions_comparison", "comparison_id ~ '^[0-9a-f]{64}$'");
             table.HasCheckConstraint("ck_document_change_revisions_significance", $"length(significance) <= {DocumentChangeDraftRevision.MaximumSignificanceLength}");
             table.HasCheckConstraint("ck_document_change_revisions_limits", $"length(limits) <= {DocumentChangeDraftRevision.MaximumLimitsLength}");
-            table.HasCheckConstraint("ck_document_change_revisions_change_date", "(change_date IS NULL) = (change_date_evidence_extraction_id IS NULL)");
             table.HasCheckConstraint("ck_document_change_revisions_columns_written", $"num_nulls({string.Join(", ", WrittenTogether)}) IN (0, {WrittenTogether.Length})");
         });
         builder.HasKey(row => new { row.DraftId, row.RevisionNumber });
@@ -35,7 +34,6 @@ internal sealed class DocumentChangeRevisionRowConfiguration : IEntityTypeConfig
         builder.Property(row => row.ChangeDate).HasColumnName("change_date").HasColumnType("date");
         HeadlineSummaryColumns.Configure(builder, "document_change_revisions", DocumentChangeDraftRevision.MaximumHeadlineLength,
             DocumentChangeDraftRevision.MaximumSummaryLength, allowEmpty: true);
-        SourceSpanColumns.Configure(builder, "document_change_revisions", "ChangeDateEvidence", "change_date_evidence", optional: true);
         builder.HasOne<DocumentChangeDraftRow>().WithMany().HasForeignKey(row => row.DraftId)
             .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<DocumentChangeDraftRow>().WithMany().HasForeignKey(row => new { row.DraftId, row.ComparisonId })

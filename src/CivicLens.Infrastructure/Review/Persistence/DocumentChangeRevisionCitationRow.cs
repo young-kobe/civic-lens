@@ -8,4 +8,5 @@ internal sealed class DocumentChangeRevisionCitationRow
     public string CitationExtractionId { get; set; } = string.Empty;
     public int CitationStart { get; set; }
     public int CitationLength { get; set; }
+    public bool IsChangeDateEvidence { get; set; }
 }

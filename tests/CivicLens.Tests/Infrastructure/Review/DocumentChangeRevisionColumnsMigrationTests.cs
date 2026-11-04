@@ -17,7 +17,7 @@ namespace CivicLens.Tests.Infrastructure.Review;
 [Trait("Category", "Postgres")]
 public sealed class DocumentChangeRevisionColumnsMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private const string Migration = "20261103233209_DocumentChangeRevisionColumns";
+    private const string Migration = "20261104003149_DocumentChangeRevisionColumns";
     private static readonly string DraftId = new('a', 32);
     private static readonly string ComparisonId = new('c', 64);
     private static readonly string ExtractionId = new('e', 64);
@@ -91,6 +91,11 @@ public sealed class DocumentChangeRevisionColumnsMigrationTests(PostgresCollecti
         await MigrateToAsync(Before());
 
         Assert.Empty(await ReadAsync("SELECT 1 FROM information_schema.columns WHERE table_name = 'document_change_revisions' AND column_name = 'author_subject'"));
+        Assert.Empty(await ReadAsync("""
+            SELECT 1 FROM information_schema.tables
+            WHERE table_name IN ('document_change_revision_officials', 'document_change_revision_issues', 'document_change_revision_citations')
+            """));
+        Assert.Empty(await ReadAsync("SELECT 1 FROM pg_constraint WHERE conname = 'ux_document_change_drafts_draft_comparison'"));
         Assert.Equal(["""{"authorSubject":"auth0|person"}"""], await ReadAsync("SELECT revision_json FROM document_change_revisions"));
         await MigrateToAsync(Migration);
         Assert.Equal(["auth0|person"], await ReadAsync("SELECT author_subject FROM document_change_revisions"));

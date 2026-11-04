@@ -39,7 +39,6 @@ public sealed class PostgresDocumentChangeRevisionBackfillStore(IDbContextFactor
         {
             return (null, RevisionBackfillReasons.UnreadableJson);
         }
-        if (HasNullElements(revision)) return (null, RevisionBackfillReasons.InvalidShape);
         try
         {
             revision.ValidateShape();
@@ -50,10 +49,6 @@ public sealed class PostgresDocumentChangeRevisionBackfillStore(IDbContextFactor
         }
         return (revision, null);
     }
-
-    private static bool HasNullElements(DocumentChangeDraftRevision revision) =>
-        !revision.OfficialIds.IsDefault && revision.OfficialIds.Any(id => id is null) || !revision.IssueIds.IsDefault && revision.IssueIds.Any(id => id is null) ||
-        !revision.Citations.IsDefault && revision.Citations.Any(citation => citation is null);
 
     private static IReadOnlyList<string> DifferingFields(DocumentChangeRevisionRow row, DocumentChangeRevisionPage page)
     {

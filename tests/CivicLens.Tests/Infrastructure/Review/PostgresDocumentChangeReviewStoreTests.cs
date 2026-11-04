@@ -468,7 +468,7 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
     }
 
     [Fact]
-    public async Task PublicationReadAcceptsTheLargestPublishWithTheSameQueryCountAsOneDraft()
+    public async Task PublicationReadAcceptsTheLargestPublishWithTheSameQueryCountAsOneDraftBecauseTheOfficialIssueAndCitationChildQueriesTakeKeyArrays()
     {
         var drafts = await CreateDraftsAsync(PublishRelease.MaximumRecords);
         var counter = new ReadCommandCounter();
@@ -481,7 +481,8 @@ public sealed class PostgresDocumentChangeReviewStoreTests(PostgresCollection po
 
         Assert.Equal(PublishRelease.MaximumRecords, batch.Count);
         Assert.Equal(singleDraftReads, counter.ReadCount);
-        Assert.InRange(counter.ReadCount, 1, 10);
+        Assert.True(counter.ReadCount is >= 1 and <= 10,
+            $"The read took {counter.ReadCount} queries. Expected at most 10: the revision query plus the official, issue, and citation child queries.");
     }
 
     [Fact]

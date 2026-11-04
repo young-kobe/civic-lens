@@ -1,6 +1,6 @@
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Votes;
+using CivicLens.Infrastructure.Review;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Tests.Fixtures;
@@ -11,7 +11,7 @@ internal static class DocumentChangeRevisionSeeder
 {
     public static async Task AddAsync(string connectionString, DocumentChangeDraftRevision revision)
     {
-        var row = typeof(PostgresVoteReviewStore).Assembly.GetType("CivicLens.Infrastructure.Review.DocumentChangeRevisionRows")!
+        var row = typeof(PostgresDocumentChangeReviewStore).Assembly.GetType($"{typeof(PostgresDocumentChangeReviewStore).Namespace}.DocumentChangeRevisionRows")!
             .GetMethod("Create")!.Invoke(null, [revision])!;
         await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         await db.Database.OpenConnectionAsync();

@@ -61,7 +61,8 @@ public sealed class PostgresDocumentChangeRevisionColumnsTests(PostgresCollectio
             FROM document_change_revisions r WHERE revision_number = 2
             """));
         Assert.Equal((long)saved.Citations.Length, await ScalarAsync("SELECT count(*) FROM document_change_revision_citations WHERE revision_number = 2"));
-        Assert.Equal(saved.ChangeDateEvidence!.Start, (int)(await ScalarAsync("SELECT change_date_evidence_start FROM document_change_revisions WHERE revision_number = 2"))!);
+        Assert.Equal(saved.ChangeDateEvidence!.Start, (int)(await ScalarAsync("SELECT citation_start FROM document_change_revision_citations WHERE revision_number = 2 AND is_change_date_evidence"))!);
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM document_change_revision_citations WHERE revision_number = 2 AND is_change_date_evidence"));
         Assert.Equal("Fee rule", JsonDocument.Parse((string)(await ScalarAsync("SELECT revision_json FROM document_change_revisions WHERE revision_number = 2"))!)
             .RootElement.GetProperty("headline").GetString());
         Assert.Equal(Json(saved), Json((await reviews.GetAsync(saved.DraftId, default))!.CurrentRevision));
@@ -216,7 +217,7 @@ public sealed class PostgresDocumentChangeRevisionColumnsTests(PostgresCollectio
     [InlineData("DELETE FROM document_change_revision_officials WHERE position = 0", "officialIds")]
     [InlineData("UPDATE document_change_revision_issues SET position = 1 - position", "issueIds")]
     [InlineData("UPDATE document_change_revision_citations SET citation_start = citation_start + 1 WHERE revision_number = 2 AND position = 0", "citations")]
-    [InlineData("UPDATE document_change_revisions SET change_date_evidence_start = change_date_evidence_start + 1 WHERE revision_number = 2", "changeDateEvidence")]
+    [InlineData("UPDATE document_change_revision_citations SET is_change_date_evidence = false WHERE is_change_date_evidence", "changeDateEvidence")]
     public async Task VerifyFailsWhenAColumnDiffersFromTheJsonAndNamesTheFieldButNeverItsText(string change, string field)
     {
         await SaveFilledDraftAsync();
@@ -318,8 +319,6 @@ public sealed class PostgresDocumentChangeRevisionColumnsTests(PostgresCollectio
     [InlineData("UPDATE document_change_revisions SET significance = repeat('s', 4001)", "ck_document_change_revisions_significance")]
     [InlineData("UPDATE document_change_revisions SET limits = repeat('l', 4001)", "ck_document_change_revisions_limits")]
     [InlineData("UPDATE document_change_revisions SET headline = NULL", "ck_document_change_revisions_columns_written")]
-    [InlineData("UPDATE document_change_revisions SET change_date = NULL WHERE revision_number = 2", "ck_document_change_revisions_change_date")]
-    [InlineData("UPDATE document_change_revisions SET change_date_evidence_length = 0 WHERE revision_number = 2", "ck_document_change_revisions_change_date_evidence")]
     [InlineData("UPDATE document_change_revision_officials SET official_id = ' ' WHERE position = 0", "ck_document_change_revision_officials_official")]
     [InlineData("UPDATE document_change_revision_officials SET position = 64 WHERE position = 0", "ck_document_change_revision_officials_position")]
     [InlineData("UPDATE document_change_revision_issues SET issue_id = ' ' WHERE position = 0", "ck_document_change_revision_issues_issue")]
@@ -339,7 +338,6 @@ public sealed class PostgresDocumentChangeRevisionColumnsTests(PostgresCollectio
     [InlineData("INSERT INTO document_change_revision_citations SELECT draft_id, revision_number, 63, citation_extraction_id, citation_start, citation_length FROM document_change_revision_citations WHERE position = 0 AND revision_number = 2", PostgresErrorCodes.UniqueViolation)]
     [InlineData("UPDATE document_change_revisions SET comparison_id = repeat('f', 64) WHERE revision_number = 2", PostgresErrorCodes.ForeignKeyViolation)]
     [InlineData("UPDATE document_change_revision_citations SET citation_extraction_id = repeat('f', 64) WHERE position = 0", PostgresErrorCodes.ForeignKeyViolation)]
-    [InlineData("UPDATE document_change_revisions SET change_date_evidence_extraction_id = repeat('f', 64) WHERE revision_number = 2", PostgresErrorCodes.ForeignKeyViolation)]
     [InlineData("INSERT INTO document_change_revision_officials SELECT draft_id, revision_number, official_id, 40 FROM document_change_revision_officials WHERE position = 0", PostgresErrorCodes.UniqueViolation)]
     [InlineData("UPDATE document_change_revision_issues SET revision_number = 9", PostgresErrorCodes.ForeignKeyViolation)]
     [InlineData("DELETE FROM document_change_revisions WHERE revision_number = 2", PostgresErrorCodes.RestrictViolation)]
@@ -350,6 +348,17 @@ public sealed class PostgresDocumentChangeRevisionColumnsTests(PostgresCollectio
         var thrown = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(change));
 
         Assert.Equal(state, thrown.SqlState);
+    }
+
+    [Fact]
+    public async Task TheDatabaseRefusesASecondCitationFlaggedAsTheChangeDateEvidenceOfOneRevision()
+    {
+        await SaveFilledDraftAsync();
+
+        var thrown = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(
+            "UPDATE document_change_revision_citations SET is_change_date_evidence = true WHERE revision_number = 2 AND NOT is_change_date_evidence AND position = 1"));
+
+        Assert.Equal("ux_document_change_revision_citations_change_date_evidence", thrown.ConstraintName);
     }
 
     [Fact]
@@ -403,7 +412,7 @@ public sealed class PostgresDocumentChangeRevisionColumnsTests(PostgresCollectio
         DELETE FROM document_change_revision_issues;
         DELETE FROM document_change_revision_citations;
         UPDATE document_change_revisions SET comparison_id = NULL, headline = NULL, summary = NULL, significance = NULL, limits = NULL, institution = NULL,
-            change_date = NULL, change_date_evidence_extraction_id = NULL, change_date_evidence_start = NULL, change_date_evidence_length = NULL
+            change_date = NULL
         """);
 
     private Task<RevisionBackfillResult> BackfillAsync(int limit) => new BackfillRevisions(BackfillStore()).ExecuteAsync(Owner, limit);

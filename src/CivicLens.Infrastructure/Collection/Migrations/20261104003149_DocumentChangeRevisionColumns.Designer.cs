@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CivicLens.Infrastructure.Collection.Migrations
 {
     [DbContext(typeof(CollectionAttemptDbContext))]
-    [Migration("20261103233209_DocumentChangeRevisionColumns")]
+    [Migration("20261104003149_DocumentChangeRevisionColumns")]
     partial class DocumentChangeRevisionColumns
     {
         /// <inheritdoc />
@@ -603,6 +603,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("candidate_update_utc_ticks");
 
+                    b.Property<string>("CodeVersion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("code_version");
+
                     b.Property<int?>("Congress")
                         .HasColumnType("integer")
                         .HasColumnName("congress");
@@ -749,6 +754,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_action_revisions_candidate_update_utc_ticks", "candidate_update_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_action_revisions_code_bill_citation", "author_kind <> 'Code' OR headline IS NULL OR bill_citation_extraction_id IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_action_revisions_code_version", "code_version ~ '^[0-9a-f]{40}$'");
+
+                            t.HasCheckConstraint("ck_action_revisions_code_version_author", "code_version IS NULL OR author_kind = 'Code'");
 
                             t.HasCheckConstraint("ck_action_revisions_columns_written", "num_nulls(headline, summary, text_origin, source_id, congress, bill_type, bill_number, candidate_id, candidate_update_utc_ticks, candidate_includes_summaries, candidate_includes_subjects, fingerprint, bill_title, issue_revision_id, issue_candidates_recorded) IN (0, 15)");
 
@@ -3529,6 +3538,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("author_subject");
 
+                    b.Property<string>("CodeVersion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("code_version");
+
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
@@ -3597,6 +3611,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_executive_action_revisions_author", "author_kind = 'Code' AND author_subject = 'civic-lens:code'");
 
+                            t.HasCheckConstraint("ck_executive_action_revisions_code_version", "code_version ~ '^[0-9a-f]{40}$'");
+
                             t.HasCheckConstraint("ck_executive_action_revisions_columns_written", "num_nulls(source_id, document_number, kind, title, signed_on, published_on, federal_register_citation, president_name, person_id, document_url) IN (0, 10)");
 
                             t.HasCheckConstraint("ck_executive_action_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
@@ -3661,6 +3677,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("actor_subject");
 
+                    b.Property<string>("CodeVersion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("code_version");
+
                     b.Property<string>("DirectoryName")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -3690,6 +3711,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("publication_releases", null, t =>
                         {
+                            t.HasCheckConstraint("ck_publication_releases_code_version", "code_version ~ '^[0-9a-f]{40}$'");
+
                             t.HasCheckConstraint("ck_publication_releases_directory", "directory_name ~ '^[0-9]{6}-[0-9a-f]{32}$'");
 
                             t.HasCheckConstraint("ck_publication_releases_number", "release_number BETWEEN 1 AND 999999");
@@ -4507,9 +4530,20 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("citation_start");
 
+                    b.Property<bool>("IsChangeDateEvidence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_change_date_evidence");
+
                     b.HasKey("DraftId", "RevisionNumber", "Position");
 
                     b.HasIndex("CitationExtractionId");
+
+                    b.HasIndex("DraftId", "RevisionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_document_change_revision_citations_change_date_evidence")
+                        .HasFilter("is_change_date_evidence");
 
                     b.HasIndex("DraftId", "RevisionNumber", "CitationExtractionId", "CitationStart", "CitationLength")
                         .IsUnique();
@@ -4611,19 +4645,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("date")
                         .HasColumnName("change_date");
 
-                    b.Property<string>("ChangeDateEvidenceExtractionId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("change_date_evidence_extraction_id");
-
-                    b.Property<int?>("ChangeDateEvidenceLength")
-                        .HasColumnType("integer")
-                        .HasColumnName("change_date_evidence_length");
-
-                    b.Property<int?>("ChangeDateEvidenceStart")
-                        .HasColumnType("integer")
-                        .HasColumnName("change_date_evidence_start");
-
                     b.Property<string>("ComparisonId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -4662,17 +4683,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("DraftId", "RevisionNumber");
 
-                    b.HasIndex("ChangeDateEvidenceExtractionId");
-
                     b.HasIndex("DraftId", "ComparisonId");
 
                     b.ToTable("document_change_revisions", null, t =>
                         {
                             t.HasCheckConstraint("ck_document_change_revisions_author_kind", "author_kind IN ('Person', 'Analysis', 'Code')");
-
-                            t.HasCheckConstraint("ck_document_change_revisions_change_date", "(change_date IS NULL) = (change_date_evidence_extraction_id IS NULL)");
-
-                            t.HasCheckConstraint("ck_document_change_revisions_change_date_evidence", "(change_date_evidence_extraction_id IS NULL) = (change_date_evidence_start IS NULL) AND (change_date_evidence_extraction_id IS NULL) = (change_date_evidence_length IS NULL) AND change_date_evidence_start >= 0 AND change_date_evidence_length > 0");
 
                             t.HasCheckConstraint("ck_document_change_revisions_columns_written", "num_nulls(comparison_id, headline, summary, institution) IN (0, 4)");
 
@@ -7415,11 +7430,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionRow", b =>
                 {
-                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
-                        .WithMany()
-                        .HasForeignKey("ChangeDateEvidenceExtractionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("CivicLens.Infrastructure.Review.Persistence.DocumentChangeDraftRow", null)
                         .WithMany()
                         .HasForeignKey("DraftId")

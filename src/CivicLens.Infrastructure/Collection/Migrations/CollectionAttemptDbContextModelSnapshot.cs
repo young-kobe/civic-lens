@@ -4527,9 +4527,20 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("citation_start");
 
+                    b.Property<bool>("IsChangeDateEvidence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_change_date_evidence");
+
                     b.HasKey("DraftId", "RevisionNumber", "Position");
 
                     b.HasIndex("CitationExtractionId");
+
+                    b.HasIndex("DraftId", "RevisionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_document_change_revision_citations_change_date_evidence")
+                        .HasFilter("is_change_date_evidence");
 
                     b.HasIndex("DraftId", "RevisionNumber", "CitationExtractionId", "CitationStart", "CitationLength")
                         .IsUnique();
@@ -4631,19 +4642,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("date")
                         .HasColumnName("change_date");
 
-                    b.Property<string>("ChangeDateEvidenceExtractionId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("change_date_evidence_extraction_id");
-
-                    b.Property<int?>("ChangeDateEvidenceLength")
-                        .HasColumnType("integer")
-                        .HasColumnName("change_date_evidence_length");
-
-                    b.Property<int?>("ChangeDateEvidenceStart")
-                        .HasColumnType("integer")
-                        .HasColumnName("change_date_evidence_start");
-
                     b.Property<string>("ComparisonId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -4682,17 +4680,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("DraftId", "RevisionNumber");
 
-                    b.HasIndex("ChangeDateEvidenceExtractionId");
-
                     b.HasIndex("DraftId", "ComparisonId");
 
                     b.ToTable("document_change_revisions", null, t =>
                         {
                             t.HasCheckConstraint("ck_document_change_revisions_author_kind", "author_kind IN ('Person', 'Analysis', 'Code')");
-
-                            t.HasCheckConstraint("ck_document_change_revisions_change_date", "(change_date IS NULL) = (change_date_evidence_extraction_id IS NULL)");
-
-                            t.HasCheckConstraint("ck_document_change_revisions_change_date_evidence", "(change_date_evidence_extraction_id IS NULL) = (change_date_evidence_start IS NULL) AND (change_date_evidence_extraction_id IS NULL) = (change_date_evidence_length IS NULL) AND change_date_evidence_start >= 0 AND change_date_evidence_length > 0");
 
                             t.HasCheckConstraint("ck_document_change_revisions_columns_written", "num_nulls(comparison_id, headline, summary, institution) IN (0, 4)");
 
@@ -7435,11 +7427,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionRow", b =>
                 {
-                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
-                        .WithMany()
-                        .HasForeignKey("ChangeDateEvidenceExtractionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("CivicLens.Infrastructure.Review.Persistence.DocumentChangeDraftRow", null)
                         .WithMany()
                         .HasForeignKey("DraftId")

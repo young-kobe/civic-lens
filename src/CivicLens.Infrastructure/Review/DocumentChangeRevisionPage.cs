@@ -16,14 +16,17 @@ internal sealed record DocumentChangeRevisionPage(IReadOnlyList<DocumentChangeRe
         if (row.Headline is null)
             throw DocumentChangeRevisionRows.NotBackfilled($"Document change revision {row.DraftId} {row.RevisionNumber}");
         var key = (row.DraftId, row.RevisionNumber);
+        var citations = Citations[key].OrderBy(citation => citation.Position).ToArray();
         return new(row.DraftId, row.RevisionNumber, row.ComparisonId!, row.AuthorSubject, new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero),
             row.Headline, row.Summary!, row.Significance, row.Limits, row.Institution!, row.ChangeDate,
-            row.ChangeDateEvidenceExtractionId is null ? null : new SourceSpan(row.ChangeDateEvidenceExtractionId, row.ChangeDateEvidenceStart!.Value, row.ChangeDateEvidenceLength!.Value),
+            citations.Where(citation => citation.IsChangeDateEvidence).Select(SpanOf).SingleOrDefault(),
             [.. Officials[key].OrderBy(official => official.Position).Select(official => official.OfficialId)],
             [.. Issues[key].OrderBy(issue => issue.Position).Select(issue => issue.IssueId)],
-            [.. Citations[key].OrderBy(citation => citation.Position)
-                .Select(citation => new SourceSpan(citation.CitationExtractionId, citation.CitationStart, citation.CitationLength))]);
+            [.. citations.Select(SpanOf)]);
     }
+
+    private static SourceSpan SpanOf(DocumentChangeRevisionCitationRow citation) =>
+        new(citation.CitationExtractionId, citation.CitationStart, citation.CitationLength);
 
     public IReadOnlyList<StoredRevision<DocumentChangeRevisionRow, DocumentChangeDraftRevision>> ToStoredRevisions() =>
         [.. Rows.Select(row => new StoredRevision<DocumentChangeRevisionRow, DocumentChangeDraftRevision>(row, () => Rebuild(row)))];
