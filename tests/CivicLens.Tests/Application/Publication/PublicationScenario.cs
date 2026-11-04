@@ -649,7 +649,7 @@ internal sealed class FakePublicationStore : IPublicationStore
         if (FailOnCommit is not null) throw FailOnCommit;
         if (ConcurrentWinner is not null) return Task.FromResult(ConcurrentWinner);
         LastCommit = commit;
-        foreach (var record in commit.FirstPublications) FirstPublished.TryAdd(new(record.Kind, record.RecordId), record.FirstPublishedAtUtc);
+        foreach (var entry in commit.AddedEntries) FirstPublished.TryAdd(new(entry.Kind, entry.RecordId), entry.FirstPublishedAtUtc);
         var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName, DateTimeOffset.UnixEpoch, commit.Records.Length);
         Committed.Add(summary);
         ActiveReleaseNumber = summary.ReleaseNumber;

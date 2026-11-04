@@ -11,7 +11,7 @@ public sealed class BackfillFirstPublished(IPublicationStore publications, IRele
         var state = await publications.GetStateAsync(cancellationToken);
         if (state.Active is null) return new(0, 0, 0);
         var manifest = await PreviousRelease.LoadManifestAsync(releases, state.Active, cancellationToken);
-        var records = manifest.Records.Select(entry => new PublishedFirstPublication(entry.Kind, entry.RecordId, entry.FirstPublishedAtUtc))
+        var records = manifest.Records.Select(PublishedFirstPublication.Of)
             .Concat(manifest.Withdrawals.Select(withdrawal => new PublishedFirstPublication(withdrawal.Kind, withdrawal.RecordId, withdrawal.FirstPublishedAtUtc)))
             .ToList();
         var added = await publications.AddFirstPublishedAsync(records, cancellationToken);
