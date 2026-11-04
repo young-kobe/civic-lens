@@ -42,7 +42,8 @@ Each line gives the rule, what enforces it, and the test that protects it.
 - A row has a header row. Enforced by the foreign key `FK_zcta_districts_roster_snapshots_attempt_id`. Test: `PostgresZctaDistrictStoreTests.ARowWithoutAHeaderIsRefusedSoNoSnapshotExistsWithoutIt`.
 - A ZCTA has 5 digits and the land area is positive. Enforced by `ck_zcta_districts_zcta` and `ck_zcta_districts_land`. Tests: `PostgresZctaDistrictStoreTests.AFailedInsertLeavesNoPartialSnapshot`, `PostgresZctaDistrictStoreTests.AZeroLandRowIsRefusedByTheDatabase`.
 - The view `zip_districts` shows the rows of the newest snapshot only, by the rule of `RosterSnapshotRules`. Enforced by the SQL of the migration `PublicApiZipDistricts`. Tests: `PublicApiViewsTests.TheZipViewFollowsTheRosterRuleForTheNewestSnapshotWhenTheFileChangesAndChangesBack`, `PublicApiViewsTests.TheZipViewReadsTheOldestSnapshotWhenTwoSnapshotsHoldOneBodyLikeTheRosterRule`, `PublicApiViewsTests.TheZipViewIgnoresSnapshotsOfOtherSourcesAndShowsOneRowForEachZctaStateAndDistrict`.
-- The view `zip_districts` shows no attempt ID and no hash, and the land shares of a ZCTA add up to 1. Enforced by the column list of the view. Tests: `PublicApiViewsTests.TheZipViewShowsNoRowsBeforeTheFirstSnapshotAndHidesCaptureIdentifiers`, `PublicApiViewsTests.TheZipViewGivesTheLandOfTheOverlapAndTheShareOfTheZctaLandSoALargestFirstPageNeedsNoMoreMath`.
+- The view `zip_districts` shows no attempt ID and no hash. Enforced by the column list of the view. Test: `PublicApiViewsTests.TheZipViewShowsNoRowsBeforeTheFirstSnapshotAndHidesCaptureIdentifiers`.
+- The land shares of a ZCTA add up to 1. Enforced by the window sum `PARTITION BY attempt_id, zcta` in the SQL of the migration `PublicApiZipDistricts`. Test: `PublicApiViewsTests.TheZipViewGivesTheLandOfTheOverlapAndTheShareOfTheZctaLandSoALargestFirstPageNeedsNoMoreMath`.
 - A snapshot is complete or absent. Enforced by one `SaveChanges` in `PostgresZctaDistrictStore.AdmitAsync`. Test: `PostgresZctaDistrictStoreTests.AFailedInsertLeavesNoPartialSnapshot`.
 - Old snapshots stay when a changed capture arrives. Enforced by the insert-only store. Test: `PostgresZctaDistrictStoreTests.AChangedCaptureAppendsASnapshotAndTheOldRowsStay`.
 
@@ -84,3 +85,4 @@ Each weekly check downloads the whole file. An unchanged file adds an attempt ro
 - A ZCTA is not a USPS ZIP code. A ZIP code can lie in no ZCTA, and a ZCTA can cover parts of several ZIP codes. A reader must say this to a citizen.
 - Rows with a blank ZCTA, zero land, or the district `ZZ` are not stored. Their land area is not counted.
 - The Census names the file for the 2020 ZCTAs. A change of the Census column list fails preparation until a person updates the header in `ZctaDistrictParser`.
+- The view shows the newest snapshot of every source that owns ZCTA rows. A second district source, such as one for the 120th Congress, would show two snapshots for one ZCTA. The owner has not decided the fix.

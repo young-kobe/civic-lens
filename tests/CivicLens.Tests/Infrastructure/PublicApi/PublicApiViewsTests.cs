@@ -416,7 +416,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         public async Task<string> ImportOnlyAsync(char body, int day)
         {
             var districtAttempt = await RosterFixtures.ImportCaptureAsync(attempts, new string(body, 64), Morning.AddDays(day), DistrictFixtures.SourceId);
-            rosterAttempts[districtAttempt] = await RosterFixtures.ImportCaptureAsync(attempts, new string(body, 64), Morning.AddDays(day), RosterSource);
+            rosterAttempts[districtAttempt] = await RosterFixtures.ImportCaptureAsync(attempts, new string((char)(body - 'a' + '1'), 64), Morning.AddDays(day + 30), RosterSource);
             return districtAttempt;
         }
 
