@@ -12,6 +12,7 @@ internal sealed class ExecutiveActionRevisionRow : IReviewRevisionRow
     public long CreatedAtUtcTicks { get; set; }
     public string AuthorSubject { get; set; } = string.Empty;
     public ReviewAuthorKind AuthorKind { get; set; }
+    public string? CodeVersion { get; set; }
     public string? SourceId { get; set; }
     public string? DocumentNumber { get; set; }
     public ExecutiveActionKind? Kind { get; set; }

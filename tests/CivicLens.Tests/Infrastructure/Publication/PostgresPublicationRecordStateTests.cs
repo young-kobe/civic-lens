@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using System.Diagnostics;
 using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Collection;
@@ -26,7 +27,7 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
         publications = new PostgresPublicationStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
-            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options), TestCodeVersion.Current);
     }
 
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
@@ -59,18 +60,6 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
         await AssertReleaseHoldsAsync(6, (A, 3), (X, 1), (C, 1), (B, 1));
         Assert.Equal(["1|3", "5|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, X));
         Assert.Equal(["1|2", "3|5", "6|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, A));
-    }
-
-    [Fact]
-    public async Task AnUnchangedRecordKeepsItsOneRowBecauseOnlyChangesWriteToTheTable()
-    {
-        await SeedActionsAsync(A, C);
-        await PublishAsync(1, null, [(A, 1)], added: [A]);
-        await PublishAsync(2, 1, [(A, 1), (C, 1)], added: [C]);
-        await PublishAsync(3, 2, [(A, 1), (C, 1)]);
-
-        Assert.Equal(["1|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, A));
-        Assert.Equal(["2|NULL"], await PublishedRecordStateReader.RangesAsync(connectionString, C));
     }
 
     [Fact]

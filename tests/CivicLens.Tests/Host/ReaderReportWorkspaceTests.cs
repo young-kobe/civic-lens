@@ -392,7 +392,7 @@ public sealed class ReaderReportWorkspaceTests(PostgresCollection postgres) : IA
         var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden");
         var withdrawal = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",
             "Check the date.", [], DateTimeOffset.UtcNow);
-        await PostgresExecutiveActionReviewStore.FromConnectionString(host.ConnectionString)
+        await PostgresExecutiveActionReviewStore.FromConnectionString(host.ConnectionString, TestCodeVersion.Current)
             .DecideAsync("auth0|owner", withdrawal, 1, 1, "withdraw", new string('a', 64), [], default);
         await executiveActions.AdmitAsync(FederalRegisterFixtures.BidenProclamationCorrection, "joe-biden");
         var report = await SaveReportAsync(Report() with { RecordId = recordId, Kind = PublishedRecordKind.ExecutiveAction });

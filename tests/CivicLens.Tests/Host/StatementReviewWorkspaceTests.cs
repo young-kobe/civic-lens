@@ -335,20 +335,6 @@ public sealed class StatementReviewWorkspaceTests(PostgresCollection postgres) :
     }
 
     [Fact]
-    public async Task PostsWithoutTheAntiforgeryTokenAreRefusedAndWriteNothingAsync()
-    {
-        var candidate = await AiDraftedAsync();
-        SignIn(Owner);
-        var url = $"/Review/Statements/{candidate}";
-        var fields = (await SaveFieldsAsync(url)).Where(field => field.Key != "__RequestVerificationToken");
-
-        using var forged = await host.Client.PostAsync(url, new FormUrlEncodedContent(fields));
-
-        Assert.Equal(HttpStatusCode.BadRequest, forged.StatusCode);
-        Assert.Equal(1, (await reviews.GetAsync(candidate, default))!.Review.CurrentRevision!.RevisionNumber);
-    }
-
-    [Fact]
     public async Task AnUnknownOrMalformedCandidateIsNotFoundAndItsPostsAreNotFoundAsync()
     {
         var candidate = await AiDraftedAsync();

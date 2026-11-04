@@ -14,6 +14,8 @@ public static class ReleaseCommand
 
     public static bool Matches(string[] args) => args is ["releases", ..];
 
+    public static bool IsPublish(string[] args) => args is ["releases", "publish", ..];
+
     public static Task<int> ExecuteAsync(string[] args, PublishRelease publish,
         ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, BackfillFirstPublished backfill, ReviewActor owner,
         TextWriter output, TextWriter error, CancellationToken cancellationToken) =>

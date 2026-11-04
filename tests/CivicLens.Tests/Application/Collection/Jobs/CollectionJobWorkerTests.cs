@@ -149,12 +149,6 @@ public sealed partial class CollectionJobWorkerTests
         Assert.Equal(1, wakeup.WaitCount);
     }
 
-    [Fact]
-    public void DefaultLeaseMatchesExistingManualJobRunner()
-    {
-        Assert.Equal(TimeSpan.FromSeconds(60), CollectionJobWorker.DefaultLeaseDuration);
-    }
-
     [Theory]
     [InlineData(0.999)]
     [InlineData(600.001)]

@@ -1,4 +1,6 @@
+using System.Collections.Immutable;
 using System.Text.Json;
+using CivicLens.Application;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
@@ -33,7 +35,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        store = PostgresExecutiveActionReviewStore.FromConnectionString(connectionString);
+        store = PostgresExecutiveActionReviewStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         executiveActions = new ExecutiveActionSeeder(connectionString, captureRoot);
     }
 
@@ -116,6 +118,44 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         var review = (await store.GetAsync(recordId, default))!.Review;
         Assert.Equal(1, review.CurrentRevision.RevisionNumber);
         Assert.Equal(ReviewStatus.Rejected, review.CurrentStatus);
+    }
+
+    [Fact]
+    public async Task AnAdmittedRevisionStoresTheBuildShaBecauseTheCodeThatWroteTheFactsMustBeTraceable()
+    {
+        var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
+
+        Assert.Equal(TestCodeVersion.Sha, await ScalarAsync($"SELECT code_version FROM executive_action_revisions WHERE record_id = '{recordId}' AND revision_number = 1"));
+    }
+
+    [Fact]
+    public async Task ARevisionAppendedByAPersonApprovalStoresTheBuildShaBecauseCodeWritesItAndNotThePerson()
+    {
+        var recordId = await RejectedRecordWithTwoWaitingCorrectionsAsync();
+        var changes = await DecideAsync(recordId, 4, ReviewDecisionKind.RequestChanges, "Look again.");
+
+        await DecideAsync(recordId, 5, ReviewDecisionKind.Approve, "Looked again.", [(await ConcernIdsAsync(recordId)).Single(id => id != changes.DecisionId), changes.DecisionId]);
+
+        Assert.Equal(TestCodeVersion.Sha, await ScalarAsync($"SELECT code_version FROM executive_action_revisions WHERE record_id = '{recordId}' AND revision_number = 2"));
+    }
+
+    [Fact]
+    public async Task ABuildWithNoShaCannotSaveAPersonApprovalWithoutItsRevisionBecauseTheWholeApprovalRollsBack()
+    {
+        var recordId = await RejectedRecordWithTwoWaitingCorrectionsAsync();
+        var changes = await DecideAsync(recordId, 4, ReviewDecisionKind.RequestChanges, "Look again.");
+        var before = (await store.GetAsync(recordId, default))!.Review;
+        var unversioned = PostgresExecutiveActionReviewStore.FromConnectionString(connectionString, CodeVersion.Unknown);
+        ImmutableArray<string> resolved = [(await ConcernIdsAsync(recordId)).Single(id => id != changes.DecisionId), changes.DecisionId];
+        var approval = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 5, ReviewDecisionKind.Approve, "auth0|owner", "Looked again.",
+            resolved, DateTimeOffset.UtcNow);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            unversioned.DecideAsync("auth0|owner", approval, 1, 4, Guid.NewGuid().ToString("N"), new string('a', 64), [], default));
+
+        var after = (await store.GetAsync(recordId, default))!.Review;
+        Assert.Equal(before.CurrentRevision.RevisionNumber, after.CurrentRevision.RevisionNumber);
+        Assert.Equal(before.Decisions.Length, after.Decisions.Length);
     }
 
     [Fact]
@@ -265,7 +305,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
         var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
         var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
         var clock = new FakeClock(DateTimeOffset.UtcNow);
-        var publications = PostgresPublicationStore.FromConnectionString(connectionString);
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var publisher = new PublishRelease(publications, releases, new ReleaseRenderer(null, null), new PublishedRecordLoaders(
                 PostgresDocumentChangeReviewStore.FromConnectionString(connectionString), PostgresStatementReviewStore.FromConnectionString(connectionString),
                 PostgresActionReviewStore.FromConnectionString(connectionString), PostgresVoteReviewStore.FromConnectionString(connectionString),
@@ -336,7 +376,7 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
 
         Assert.Equal([ids[0], ids[2]], batch.Select(item => item.Action.RecordId));
         Assert.Equal([ids[0], ids[1]], replacementsOnly.Select(item => item.Action.RecordId));
-        Assert.Equal(1, await PostgresPublicationStore.FromConnectionString(connectionString).CountApprovedOutsideActiveReleaseAsync([], default));
+        Assert.Equal(1, await PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current).CountApprovedOutsideActiveReleaseAsync([], default));
     }
 
     [Theory]

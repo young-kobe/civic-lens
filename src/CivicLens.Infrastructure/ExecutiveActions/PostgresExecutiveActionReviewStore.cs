@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Data;
+using CivicLens.Application;
 using CivicLens.Application.ExecutiveActions;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
@@ -15,18 +16,18 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Infrastructure.ExecutiveActions;
 
-public sealed class PostgresExecutiveActionReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IExecutiveActionReviewStore
+public sealed class PostgresExecutiveActionReviewStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory, CodeVersion codeVersion) : IExecutiveActionReviewStore
 {
     private const string DecideOperation = "executive-action-decide";
 
-    private static ReviewRecords<ExecutiveActionDraftRow, ExecutiveActionRevisionRow, ExecutiveActionReviewDecisionRow, ExecutiveActionRevision> Records =>
-        ExecutiveActionRows.Records;
+    private ReviewRecords<ExecutiveActionDraftRow, ExecutiveActionRevisionRow, ExecutiveActionReviewDecisionRow, ExecutiveActionRevision> Records { get; } =
+        new ExecutiveActionRows(codeVersion).Records;
 
-    public static PostgresExecutiveActionReviewStore FromConnectionString(string connectionString)
+    public static PostgresExecutiveActionReviewStore FromConnectionString(string connectionString, CodeVersion codeVersion)
     {
         _ = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
-        return new(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
+        return new(new PooledDbContextFactory<CollectionAttemptDbContext>(options), codeVersion);
     }
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,

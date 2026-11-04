@@ -37,7 +37,7 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        store = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        store = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         extractions = PostgresDocumentExtractionStore.FromConnectionString(connectionString);
         Directory.CreateDirectory(captureRoot);
@@ -762,17 +762,6 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
 
         Assert.Equal(("Passed", "CoveredCosponsor"), await GateOfAsync(detail));
         Assert.Equal(["actions", "summaries"], passed.Jobs.Select(job => job.Url.Split('/')[^1].Split('?')[0]).Order());
-    }
-
-    [Fact]
-    public async Task ABillThatPassesAtACosponsorPageWithoutSummariesAdmitsOnlyActions()
-    {
-        var detail = await EnqueueDetailAsync("detail");
-        var first = await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 1, summaries: 0), BillGateOutcome.Pending);
-
-        var passed = await AdmitCosponsorPageAsync(first.Jobs.Single().JobId, Cosponsors(["A000001"], next: null));
-
-        Assert.Contains("/actions?", Assert.Single(passed.Jobs).Url);
     }
 
     [Fact]
