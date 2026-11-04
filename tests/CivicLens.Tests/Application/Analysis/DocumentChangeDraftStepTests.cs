@@ -2,6 +2,7 @@ using CivicLens.Application;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
 using CivicLens.Tests.Fixtures;
+using Microsoft.Extensions.Logging.Abstractions;
 using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Tests.Application.Analysis;
@@ -74,6 +75,24 @@ public sealed class DocumentChangeDraftStepTests
         }
         Assert.NotEqual(store.Runs[0].Input!.UserMessage, store.Runs[1].Input!.UserMessage);
         Assert.Contains("nobody", store.Runs[1].Input!.UserMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task APromptThatCannotBeStoredBlocksTheEntryBeforeAnyBudgetOrModelCallBecauseARunThatCalledTheModelMustHoldItsInput()
+    {
+        var store = new FakeAnalysisStore(1);
+        var model = new FakeDocumentChangeDraftModel();
+        var step = new UnstorablePromptStep(new DocumentChangeDraftStep(store, model, new DocumentChangeDraftSettings(10_000_000, concurrency: 1), []), model);
+        var worker = new AnalysisWorker<AnalysisRun>(step, new FakeAnalysisStatusStore(), new FakeClock(DateTimeOffset.UnixEpoch),
+            NullLogger<AnalysisWorker<AnalysisRun>>.Instance, TestBeat.Create());
+
+        await worker.ExecuteAsync(once: true);
+
+        var entry = store.Entries.Single();
+        Assert.Equal((State.Blocked, AnalysisErrorCodes.InvalidRunInput), (entry.Status, entry.ErrorCode));
+        Assert.Empty(model.Requests);
+        Assert.Equal(0, store.Charged);
+        Assert.Empty(store.Runs);
     }
 
     [Fact]
@@ -264,6 +283,21 @@ public sealed class DocumentChangeDraftStepTests
         AnalysisWorkers.Drafting(store, status ?? new FakeAnalysisStatusStore(), model,
             settings ?? new DocumentChangeDraftSettings(10_000_000, concurrency: 1), [],
             clock ?? new FakeClock(DateTimeOffset.UnixEpoch), wakeup, beat);
+
+    private sealed class UnstorablePromptStep(DocumentChangeDraftStep inner, FakeDocumentChangeDraftModel model) : IAnalysisTaskStep<AnalysisRun>
+    {
+        public IAnalysisQueue<AnalysisRun> Queue => inner.Queue;
+        public AnalysisSettings Settings => inner.Settings;
+        public AnalysisTaskIdentity Identity => inner.Identity;
+        public AnalysisRun Wrap(AnalysisRun run) => run;
+
+        public async Task<bool> RunAsync(IAnalysisAttempt<AnalysisRun> attempt, CancellationToken cancellationToken)
+        {
+            var request = AnalysisModelRequest.Create(DocumentChangeDraftTask.Model, 100, "System.", "", "{}", 10);
+            var call = await attempt.CallModelAsync(request, null, model.DraftAsync, cancellationToken);
+            return call.Progress;
+        }
+    }
 
     private sealed class FakeWakeup(Action onWait) : IWorkerWakeup
     {

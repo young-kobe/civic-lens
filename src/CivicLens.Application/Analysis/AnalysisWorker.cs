@@ -163,6 +163,8 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
         public async Task<AnalysisCall> CallModelAsync(AnalysisModelRequest modelRequest, string? previous,
             Func<AnalysisModelRequest, CancellationToken, Task<AnalysisModelResponse>> send, CancellationToken cancellationToken)
         {
+            try { InputOf(modelRequest).Validate(); }
+            catch (ArgumentException) { return new(null, await CompleteAsync(State.Blocked, Codes.InvalidRunInput, cancellationToken)); }
             var runId = Guid.NewGuid().ToString("N");
             var reservation = await worker.queue.ReserveAsync(Claim, runId, modelRequest.InputHash, modelRequest.ReservedTokens,
                 worker.settings.DailyTokenLimit, cancellationToken);
@@ -264,8 +266,11 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
             return new(RunId!, Claim.Record.SubjectId, identity.Task, identity.TaskVersion, request!.Model,
                 request.PromptVersion ?? identity.PromptVersion, request.SchemaVersion ?? identity.SchemaVersion, request.InputHash, previousRunId, outcome, usage, Math.Max(charged, usage.Total), stopReason,
                 requestId, outputJson, [], ContextJson, started, worker.clock.GetUtcNow(),
-                new AnalysisRunInput(request.SystemPrompt, request.UserPrompt, request.SchemaJson, request.Effort, request.MaximumOutputTokens));
+                InputOf(request));
         }
+
+        private static AnalysisRunInput InputOf(AnalysisModelRequest request) =>
+            new(request.SystemPrompt, request.UserPrompt, request.SchemaJson, request.Effort, request.MaximumOutputTokens);
 
         private bool MarkBudgetExhausted()
         {
