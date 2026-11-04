@@ -166,7 +166,7 @@ internal sealed class VoteWorld
         var configured = new ConfiguredCollectionSource(revision, sourceId, coveredFrom);
         var definition = configured.CreateApiJobDefinition(resource, url, coveredFrom, CollectionJobPriority.Check);
         var attempt = new CollectionJobAttempt("attempt-" + jobId, definition.CreateRequest(jobId, Path.GetFullPath("captures")),
-            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         jobs[jobId] = new CollectionJobRecord(jobId, definition, "key-" + jobId, CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
             false, [attempt]);
         bodies["attempt-" + jobId] = body;

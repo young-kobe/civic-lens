@@ -18,8 +18,9 @@ public static class CollectionAttemptImporter
         result.ValidateAgainst(request);
         var sentValidators = result.SentValidators is null ? null :
             new SentValidators(result.SentValidators.ETag, result.SentValidators.LastModified);
-        return new CollectionAttemptImport(Map(attemptId, result), sentValidators,
-            result.Discovery is null ? null : new DiscoveryEvidence(request, result.Discovery), result.RobotsCrawlDelayMilliseconds);
+        return new CollectionAttemptImport(request, Map(attemptId, result), sentValidators,
+            result.Discovery is null ? null : new DiscoveryEvidence(request, result.Discovery), result.RobotsCrawlDelayMilliseconds,
+            new AttemptTransfer(result.RequestCount, result.BytesReceived));
     }
 
     private static CollectionAttemptResult Map(string attemptId, CollectionResult result)
