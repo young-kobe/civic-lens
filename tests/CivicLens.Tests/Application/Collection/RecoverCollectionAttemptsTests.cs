@@ -237,6 +237,8 @@ public sealed class RecoverCollectionAttemptsTests
         int cancelOnImportNumber = -1, int cancelAfterCommitOnImportNumber = -1) : ICollectionAttemptStore
     {
         private int importCount;
+        public Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> GetManyAsync(IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken) => throw new NotSupportedException();
+
         private readonly Dictionary<string, StoredCollectionAttempt> retained = [];
         public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken) =>
             Task.FromResult(retained.GetValueOrDefault(attemptId));
