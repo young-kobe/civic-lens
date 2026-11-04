@@ -4,10 +4,12 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
 using CivicLens.Collector.Http;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Tests.Host;
 using static CivicLens.Tests.Fixtures.CollectionFixtures;
 
 namespace CivicLens.Tests.Infrastructure.Collection;
@@ -234,6 +236,31 @@ public sealed class CollectorProcessTests
             try { await server; } catch (Exception exception) when (exception is OperationCanceledException or SocketException) { }
             if (Directory.Exists(directory)) Directory.Delete(directory, true);
         }
+    }
+
+    [UnixFact]
+    public async Task AFreshResultWithoutElapsedTimeIsRefused()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "civic-no-elapsed-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var request = Request() with { ArtifactDirectory = directory };
+            var result = JsonNode.Parse(JsonSerializer.Serialize(Receipt(request), CollectionProtocol.JsonOptions))!.AsObject();
+            Assert.True(result.Remove("elapsedMilliseconds"));
+            var receiptFile = Path.Combine(directory, "receipt.json");
+            await File.WriteAllTextAsync(receiptFile, result.ToJsonString());
+            var script = Path.Combine(directory, "collector.sh");
+            await File.WriteAllTextAsync(script, $"#!/bin/sh\ncat '{receiptFile}'\n");
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+            var failure = await Assert.ThrowsAsync<JsonException>(() =>
+                new CollectorProcess(script, script).RunAsync(request, CancellationToken.None));
+
+            Assert.Contains("elapsedMilliseconds", failure.Message);
+        }
+        finally { Directory.Delete(directory, true); }
     }
 
     [Fact]

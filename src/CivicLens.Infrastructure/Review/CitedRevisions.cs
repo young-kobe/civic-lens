@@ -37,7 +37,7 @@ internal static class CitedRevisions
     }
 
     /// <summary>Reads the named revisions that are stored. A revision that is not stored is absent from the result.</summary>
-    public static async Task<StoredRevisionRow[]> ReadStoredRevisionsAsync(CollectionAttemptDbContext db, PublishedRecordKind kind,
+    private static async Task<StoredRevisionRow[]> ReadStoredRevisionsAsync(CollectionAttemptDbContext db, PublishedRecordKind kind,
         PublishedRevisionBinding[] requested, CancellationToken cancellationToken)
     {
         if (requested.Length == 0) return [];

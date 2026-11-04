@@ -780,6 +780,42 @@ public sealed class CollectorTests
     }
 
     [Fact]
+    public async Task ACapturedResultReportsTheWallTimeOfTheWholeFetch()
+    {
+        var handler = new QueueHandler(_ => Slow(Response(HttpStatusCode.OK, "User-agent: *\n")),
+            _ => Slow(Response(HttpStatusCode.OK, "body")));
+        using var directoryOwner = new TemporaryDirectory();
+        using var collector = new HttpCollector(handler);
+        var request = Request(directoryOwner.Path);
+        var result = await collector.FetchAsync(request);
+        Assert.Equal(CollectionOutcome.Captured, result.Outcome);
+        Assert.InRange(result.ElapsedMilliseconds, 100, CollectionProtocol.MaximumElapsedMilliseconds(request.TimeoutSeconds));
+    }
+
+    [Fact]
+    public async Task AFailedResultReportsTheWallTimeSpentBeforeTheFailure()
+    {
+        var handler = new QueueHandler(_ => Slow(Response(HttpStatusCode.OK, "User-agent: *\nDisallow: /watch*\n")));
+        using var directoryOwner = new TemporaryDirectory();
+        using var collector = new HttpCollector(handler);
+        var request = Request(directoryOwner.Path);
+        var result = await collector.FetchAsync(request);
+        Assert.Equal(CollectionFailureCode.RobotsDenied, result.FailureCode);
+        Assert.InRange(result.ElapsedMilliseconds, 50, CollectionProtocol.MaximumElapsedMilliseconds(request.TimeoutSeconds));
+    }
+
+    [Fact]
+    public async Task ATimeoutResultReportsTheWallTimeUpToTheDeadline()
+    {
+        using var directoryOwner = new TemporaryDirectory();
+        using var collector = new HttpCollector(new HangAfterRobotsHandler());
+        var request = Request(directoryOwner.Path) with { TimeoutSeconds = 1, MinDelayMilliseconds = 0 };
+        var result = await collector.FetchAsync(request);
+        Assert.Equal(CollectionFailureCode.Timeout, result.FailureCode);
+        Assert.InRange(result.ElapsedMilliseconds, 900, CollectionProtocol.MaximumElapsedMilliseconds(request.TimeoutSeconds));
+    }
+
+    [Fact]
     public async Task RobotsUsesCivicLensGroupInsteadOfWildcardAndCombinesConsecutiveAgents()
     {
         using var directory = new TemporaryDirectory();
@@ -1492,6 +1528,23 @@ public sealed class CollectorTests
         using var output = new MemoryStream();
         using (var gzip = new GZipStream(output, CompressionMode.Compress, leaveOpen: true)) gzip.Write(bytes);
         return output.ToArray();
+    }
+
+    private static HttpResponseMessage Slow(HttpResponseMessage response)
+    {
+        Thread.Sleep(60);
+        return response;
+    }
+
+    private sealed class HangAfterRobotsHandler : HttpMessageHandler
+    {
+        private int calls;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (calls++ == 0) return Response(HttpStatusCode.OK, "User-agent: *\n");
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new InvalidOperationException();
+        }
     }
 
     private sealed class QueueHandler(params Func<HttpRequestMessage, HttpResponseMessage>[] responses) : HttpMessageHandler

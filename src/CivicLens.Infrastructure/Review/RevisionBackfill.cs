@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 namespace CivicLens.Infrastructure.Review;
 
 /// <summary>Moves legacy revisions of one kind into columns and child rows, and checks each moved revision against its JSON.
-/// A batch takes the review lock of the kind, and only that lock. It writes only rows whose columns are null.
+/// A batch takes the review lock of the kind, and only that lock. It writes only the rows that the IsLegacy test of the kind selects.
 /// It proves each row inside its savepoint: it reads the row back, rebuilds the revision, and compares it to the stored JSON.</summary>
 internal sealed class RevisionBackfill<TRow, TRevision, TPage>(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
     RevisionBackfillKind<TRow, TRevision, TPage> kind)

@@ -92,7 +92,8 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
                     await db.SaveChangesAsync(cancellationToken);
                 }
                 db.Attempts.Add(ToRow(decision.AttemptResult, decision.PriorCapturedAttempt, decision.SentValidators,
-                    attempt.RobotsCrawlDelayMilliseconds, await ChargeableTransferAsync(db, attempt, cancellationToken)));
+                    attempt.RobotsCrawlDelayMilliseconds, attempt.ElapsedMilliseconds,
+                    await ChargeableTransferAsync(db, attempt, cancellationToken)));
                 if (attempt.Discovery is { } discovery)
                     db.Add(new DiscoveryRow
                     {
@@ -184,7 +185,7 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
         var discoveryRow = includeDiscovery ? await db.Set<DiscoveryRow>().AsNoTracking()
             .SingleOrDefaultAsync(item => item.AttemptId == row.AttemptId, cancellationToken) : null;
         return new StoredCollectionAttempt(result, row.HasSentValidators ? ReadSentValidators(row) : null, prior,
-            discoveryRow is null ? null : ToDiscovery(discoveryRow), row.RobotsCrawlDelayMilliseconds);
+            discoveryRow is null ? null : ToDiscovery(discoveryRow), row.RobotsCrawlDelayMilliseconds, row.ElapsedMilliseconds);
     }
 
     private static DiscoveryEvidence ToDiscovery(DiscoveryRow row) => new(
@@ -227,17 +228,18 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
                     ?? throw new InvalidOperationException("Stored prior evidence is not a captured attempt.");
             evidence.Add(new StoredCollectionAttempt(results[row.AttemptId],
                 row.HasSentValidators ? ReadSentValidators(row) : null, prior,
-                discoveries.GetValueOrDefault(row.AttemptId), row.RobotsCrawlDelayMilliseconds));
+                discoveries.GetValueOrDefault(row.AttemptId), row.RobotsCrawlDelayMilliseconds, row.ElapsedMilliseconds));
         }
         return evidence;
     }
 
     private static AttemptRow ToRow(CollectionAttemptResult result, CapturedAttemptResult? prior,
-        SentValidators? validators, long? robotsCrawlDelayMilliseconds, AttemptTransfer? transfer)
+        SentValidators? validators, long? robotsCrawlDelayMilliseconds, long elapsedMilliseconds, AttemptTransfer? transfer)
     {
         var row = new AttemptRow
         {
             RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds,
+            ElapsedMilliseconds = elapsedMilliseconds,
             RequestCount = transfer?.RequestCount,
             BytesReceived = transfer?.BytesReceived,
             AttemptId = result.AttemptId,

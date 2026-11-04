@@ -16,7 +16,7 @@ public sealed class PendingCollectionHandoffTests
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(handoff, CollectionProtocol.JsonOptions));
         var names = string.Join(",", json.RootElement.EnumerateObject().Select(property => property.Name));
 
-        Assert.Equal(1, PendingCollectionHandoff.CurrentVersion);
+        Assert.Equal(2, PendingCollectionHandoff.CurrentVersion);
         Assert.True(names == "version,attemptId,request,receipt",
             "The receipt handoff envelope changed. Bump PendingCollectionHandoff.CurrentVersion, update the version " +
             "table in docs/architecture.md, and keep reading older envelopes. Actual: " + names);
