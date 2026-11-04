@@ -15,6 +15,8 @@ internal sealed class PhotoCaptures : ICollectionAttemptStore, ICaptureBodyReade
 
     public List<string> Reads { get; } = [];
 
+    public Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> GetManyAsync(IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken) => throw new NotSupportedException();
+
     public CapturingLogger<ReleasePhotos> Log { get; } = new();
 
     public static ReleasePhotos None() => new(new PhotoCaptures(), new PhotoCaptures(), "artifacts", new CapturingLogger<ReleasePhotos>());

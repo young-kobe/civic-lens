@@ -4,6 +4,9 @@ using CivicLens.Collection.Contracts;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Infrastructure.Collection.Discovery;
 using CivicLens.Application.Collection;
+using CivicLens.Application.Collection.Jobs;
+using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Infrastructure.Collection.Jobs.Persistence;
 using CivicLens.Core.Collection;
 using CivicLens.Infrastructure.Collection.Persistence;
 using CivicLens.Infrastructure.Publication;
@@ -25,6 +28,16 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
         ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await GetAsync(db, attemptId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> GetManyAsync(
+        IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(attemptIds);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await db.Attempts.AsNoTracking().Where(row => attemptIds.Contains(row.AttemptId)).ToListAsync(cancellationToken);
+        var evidence = await ReadEvidenceAsync(db, rows, cancellationToken, includeDiscovery: true);
+        return evidence.ToDictionary(item => item.AttemptResult.AttemptId, StringComparer.Ordinal);
     }
 
     internal static async Task<StoredCollectionAttempt?> GetAsync(CollectionAttemptDbContext db, string attemptId,
@@ -78,7 +91,8 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
                     await RetainCaptureAsync(db, captured.Capture, cancellationToken);
                     await db.SaveChangesAsync(cancellationToken);
                 }
-                db.Attempts.Add(ToRow(decision.AttemptResult, decision.PriorCapturedAttempt, decision.SentValidators, attempt.RobotsCrawlDelayMilliseconds));
+                db.Attempts.Add(ToRow(decision.AttemptResult, decision.PriorCapturedAttempt, decision.SentValidators,
+                    attempt.RobotsCrawlDelayMilliseconds, await ChargeableTransferAsync(db, attempt, cancellationToken)));
                 if (attempt.Discovery is { } discovery)
                     db.Add(new DiscoveryRow
                     {
@@ -98,6 +112,15 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
             await transaction.RollbackAsync(CancellationToken.None);
             throw;
         }
+    }
+
+    private static async Task<AttemptTransfer?> ChargeableTransferAsync(CollectionAttemptDbContext db,
+        CollectionAttemptImport attempt, CancellationToken cancellationToken)
+    {
+        var reserved = await db.Set<JobAttemptRow>().AsNoTracking()
+            .SingleOrDefaultAsync(row => row.AttemptId == attempt.AttemptResult.AttemptId, cancellationToken);
+        return reserved is null ? attempt.Transfer : CollectionJobCharges.Chargeable(
+            PostgresCollectionJobStore.ToRequest(reserved), attempt.Request, attempt.Transfer);
     }
 
     /// <summary>Applies checked-in migrations and the public API grants explicitly; imports never run schema changes.</summary>
@@ -160,14 +183,16 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
         }
         var discoveryRow = includeDiscovery ? await db.Set<DiscoveryRow>().AsNoTracking()
             .SingleOrDefaultAsync(item => item.AttemptId == row.AttemptId, cancellationToken) : null;
-        var discovery = discoveryRow is null ? null : new DiscoveryEvidence(
-            JsonSerializer.Deserialize<CollectionRequest>(discoveryRow.RequestJson, CollectionProtocol.JsonOptions)!,
-            JsonSerializer.Deserialize<DiscoveryResult>(discoveryRow.DiscoveryJson, CollectionProtocol.JsonOptions)!);
-        return new StoredCollectionAttempt(result, row.HasSentValidators ? ReadSentValidators(row) : null, prior, discovery, row.RobotsCrawlDelayMilliseconds);
+        return new StoredCollectionAttempt(result, row.HasSentValidators ? ReadSentValidators(row) : null, prior,
+            discoveryRow is null ? null : ToDiscovery(discoveryRow), row.RobotsCrawlDelayMilliseconds);
     }
 
+    private static DiscoveryEvidence ToDiscovery(DiscoveryRow row) => new(
+        JsonSerializer.Deserialize<CollectionRequest>(row.RequestJson, CollectionProtocol.JsonOptions)!,
+        JsonSerializer.Deserialize<DiscoveryResult>(row.DiscoveryJson, CollectionProtocol.JsonOptions)!);
+
     internal static async Task<IReadOnlyList<StoredCollectionAttempt>> ReadEvidenceAsync(CollectionAttemptDbContext db,
-        IReadOnlyList<AttemptRow> rows, CancellationToken cancellationToken)
+        IReadOnlyList<AttemptRow> rows, CancellationToken cancellationToken, bool includeDiscovery = false)
     {
         var retainedRows = rows.ToDictionary(row => row.AttemptId, StringComparer.Ordinal);
         var missingPriorIds = rows.Select(row => row.PriorCaptureAttemptId)
@@ -188,6 +213,11 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
             cancellationToken.ThrowIfCancellationRequested();
             results.Add(row.AttemptId, FromRow(row, row.CaptureSha256 is null ? null : lengths[row.CaptureSha256]));
         }
+        var attemptIds = rows.Select(row => row.AttemptId).ToArray();
+        var discoveries = includeDiscovery
+            ? await db.Set<DiscoveryRow>().AsNoTracking().Where(item => attemptIds.Contains(item.AttemptId))
+                .ToDictionaryAsync(item => item.AttemptId, ToDiscovery, StringComparer.Ordinal, cancellationToken)
+            : [];
         var evidence = new List<StoredCollectionAttempt>(rows.Count);
         foreach (var row in rows)
         {
@@ -197,17 +227,19 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
                     ?? throw new InvalidOperationException("Stored prior evidence is not a captured attempt.");
             evidence.Add(new StoredCollectionAttempt(results[row.AttemptId],
                 row.HasSentValidators ? ReadSentValidators(row) : null, prior,
-                robotsCrawlDelayMilliseconds: row.RobotsCrawlDelayMilliseconds));
+                discoveries.GetValueOrDefault(row.AttemptId), row.RobotsCrawlDelayMilliseconds));
         }
         return evidence;
     }
 
     private static AttemptRow ToRow(CollectionAttemptResult result, CapturedAttemptResult? prior,
-        SentValidators? validators, long? robotsCrawlDelayMilliseconds)
+        SentValidators? validators, long? robotsCrawlDelayMilliseconds, AttemptTransfer? transfer)
     {
         var row = new AttemptRow
         {
             RobotsCrawlDelayMilliseconds = robotsCrawlDelayMilliseconds,
+            RequestCount = transfer?.RequestCount,
+            BytesReceived = transfer?.BytesReceived,
             AttemptId = result.AttemptId,
             SourceId = result.SourceId,
             RequestedUrl = result.RequestedUrl,

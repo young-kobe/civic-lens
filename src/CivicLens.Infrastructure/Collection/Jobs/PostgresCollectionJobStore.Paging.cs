@@ -86,7 +86,8 @@ public sealed partial class PostgresCollectionJobStore
         var attempts = await db.Set<JobAttemptRow>().AsNoTracking().Where(attempt => jobIds.Contains(attempt.JobId))
             .OrderBy(attempt => attempt.Sequence).ToListAsync(cancellationToken);
         var attemptsByJob = attempts.ToLookup(attempt => attempt.JobId);
+        var transfers = await ReadTransfersAsync(db, attempts, cancellationToken);
         var revisions = await StoredJobDefinition.LoadRevisionsAsync(db, rows.Select(row => row.ConfigurationRevisionId), cancellationToken);
-        return rows.Select(row => ToRecord(row, StoredJobDefinition.Read(row.DefinitionJson, row.ConfigurationRevisionId, revisions), attemptsByJob[row.JobId])).ToArray();
+        return rows.Select(row => ToRecord(row, StoredJobDefinition.Read(row.DefinitionJson, row.ConfigurationRevisionId, revisions), attemptsByJob[row.JobId], transfers)).ToArray();
     }
 }

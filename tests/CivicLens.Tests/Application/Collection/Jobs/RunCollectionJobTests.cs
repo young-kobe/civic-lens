@@ -218,6 +218,7 @@ public sealed class RunCollectionJobTests
 
     private sealed class ExistingAttemptStore(StoredCollectionAttempt stored) : ICollectionAttemptStore
     {
+        public Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> GetManyAsync(IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken) =>
             Task.FromResult<StoredCollectionAttempt?>(attemptId == stored.AttemptResult.AttemptId ? stored : null);
         public Task<CollectionImportDecision> ImportAtomicallyAsync(CollectionAttemptImport attempt,
@@ -226,6 +227,7 @@ public sealed class RunCollectionJobTests
 
     private sealed class BlockingAttemptStore : ICollectionAttemptStore
     {
+        public Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> GetManyAsync(IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken) => throw new NotSupportedException();
         public bool Cancelled { get; private set; }
         public async Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken)
         {
@@ -346,6 +348,7 @@ public sealed class RunCollectionJobTests
 
     private sealed class InMemoryAttemptStore : ICollectionAttemptStore
     {
+        public Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> GetManyAsync(IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken) => throw new NotSupportedException();
         private readonly Dictionary<string, StoredCollectionAttempt> retained = [];
         public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken) =>
             Task.FromResult(retained.GetValueOrDefault(attemptId));
