@@ -292,7 +292,7 @@ public sealed class RunCollectionJob(
         {
             return await handoffs.LoadAsync(attemptId, cancellationToken);
         }
-        catch (InvalidDataException exception)
+        catch (RefusedCollectionHandoffException exception)
         {
             logger.LogError(exception, "The saved receipt of attempt {AttemptId} was refused and is removed, so the job fetches again.", attemptId);
             await handoffs.DeleteAsync(attemptId, cancellationToken);

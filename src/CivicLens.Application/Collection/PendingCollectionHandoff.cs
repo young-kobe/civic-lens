@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Application.Collection;
@@ -18,6 +19,14 @@ public sealed record PendingCollectionHandoff(int Version, string AttemptId, Col
         ArgumentNullException.ThrowIfNull(Receipt);
         Request.Validate();
         Receipt.ValidateAgainst(Request);
+    }
+
+    public static void ThrowIfRefused(JsonNode envelope)
+    {
+        if (envelope["version"] is JsonValue version && version.TryGetValue<int>(out var number) && number != CurrentVersion)
+            throw new RefusedCollectionHandoffException($"Receipt handoff version {number} is unsupported.");
+        if (envelope["receipt"] is JsonObject receipt && !receipt.ContainsKey("elapsedMilliseconds"))
+            throw new RefusedCollectionHandoffException("Receipt handoff has no elapsed time.");
     }
 
     public static bool IsValidAttemptId(string? value) => value is { Length: > 0 and <= 128 } &&

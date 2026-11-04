@@ -62,11 +62,34 @@ public sealed class FileCollectionReceiptHandoffStoreTests
             Assert.DoesNotContain("elapsedMilliseconds", withoutElapsed);
 
             await File.WriteAllTextAsync(Path.Combine(root, ".pending", "attempt-1.json"), withoutElapsed);
-            await Assert.ThrowsAsync<InvalidDataException>(() => store.LoadAsync("attempt-1", CancellationToken.None));
+            await Assert.ThrowsAsync<RefusedCollectionHandoffException>(() => store.LoadAsync("attempt-1", CancellationToken.None));
 
             await File.WriteAllTextAsync(Path.Combine(root, ".pending", "attempt-1.json"),
                 withoutElapsed.Replace("\"version\":2", "\"version\":1"));
-            await Assert.ThrowsAsync<InvalidDataException>(() => store.LoadAsync("attempt-1", CancellationToken.None));
+            await Assert.ThrowsAsync<RefusedCollectionHandoffException>(() => store.LoadAsync("attempt-1", CancellationToken.None));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task ATornOrMismatchedCurrentHandoffIsInvalidButNotRefusedSoItIsNeverDeleted()
+    {
+        var root = TempDirectory();
+        try
+        {
+            var store = new FileCollectionReceiptHandoffStore(root);
+            var request = Request();
+            var current = new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion, "attempt-1", request, Receipt(request));
+            var json = System.Text.Json.JsonSerializer.Serialize(current, CivicLens.Collection.Contracts.CollectionProtocol.JsonOptions);
+            var path = Path.Combine(root, ".pending", "attempt-1.json");
+
+            await File.WriteAllTextAsync(path, json[..(json.Length / 2)]);
+            var torn = await Assert.ThrowsAsync<InvalidDataException>(() => store.LoadAsync("attempt-1", CancellationToken.None));
+            Assert.IsNotType<RefusedCollectionHandoffException>(torn);
+
+            await File.WriteAllTextAsync(path, json.Replace("\"attemptId\":\"attempt-1\"", "\"attemptId\":\"attempt-2\""));
+            var mismatched = await Assert.ThrowsAsync<InvalidDataException>(() => store.LoadAsync("attempt-1", CancellationToken.None));
+            Assert.IsNotType<RefusedCollectionHandoffException>(mismatched);
         }
         finally { Directory.Delete(root, true); }
     }
@@ -82,7 +105,7 @@ public sealed class FileCollectionReceiptHandoffStoreTests
             var handoff = new PendingCollectionHandoff(PendingCollectionHandoff.CurrentVersion + 1, "attempt-1", request, Receipt(request));
             await File.WriteAllTextAsync(Path.Combine(root, ".pending", "attempt-1.json"),
                 System.Text.Json.JsonSerializer.Serialize(handoff, CivicLens.Collection.Contracts.CollectionProtocol.JsonOptions));
-            await Assert.ThrowsAsync<InvalidDataException>(() => store.LoadAsync("attempt-1", CancellationToken.None));
+            await Assert.ThrowsAsync<RefusedCollectionHandoffException>(() => store.LoadAsync("attempt-1", CancellationToken.None));
 
             await using var lease = await store.AcquireRecoveryLeaseAsync(CancellationToken.None);
             using var cancelled = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
@@ -135,7 +158,7 @@ public sealed class FileCollectionReceiptHandoffStoreTests
             switch (invalidity)
             {
                 case "missingVersion": node.Remove("version"); json = node.ToJsonString(); break;
-                case "duplicateVersion": json = json.Replace("\"version\":1", "\"version\":1,\"version\":1"); break;
+                case "duplicateVersion": json = json.Replace("\"version\":2", "\"version\":2,\"version\":2"); break;
                 case "nullRequest": node["request"] = null; json = node.ToJsonString(); break;
                 case "identityMismatch": node["attemptId"] = "different-attempt"; json = node.ToJsonString(); break;
                 case "oversized": json = new string(' ', 1_048_577); break;

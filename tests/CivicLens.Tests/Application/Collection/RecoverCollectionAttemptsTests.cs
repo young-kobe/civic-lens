@@ -123,6 +123,18 @@ public sealed class RecoverCollectionAttemptsTests
         Assert.Equal(PriorCaptureLinkStatus.Unresolved, recovered.Last().Decision!.PriorCaptureLinkStatus);
     }
 
+    [Fact]
+    public async Task ARefusedHandoffIsReportedInvalidAndRetained()
+    {
+        var handoffs = new FakeHandoffs(NotModified("a-304")) { RefusedId = "a-304" };
+
+        var results = await new RecoverCollectionAttempts(handoffs, new FakeVerifier(), new FakeAttemptStore(new CancellationTokenSource()))
+            .ReplayAllAsync(Path.GetTempPath());
+
+        Assert.Equal(CollectionRecoveryStatus.InvalidHandoff, Assert.Single(results).Status);
+        Assert.Equal(new[] { "a-304" }, await handoffs.ListAsync(CancellationToken.None));
+    }
+
     private static PendingCollectionHandoff Captured(string id, char hashDigit)
     {
         var handoff = Handoff(id);
@@ -190,6 +202,7 @@ public sealed class RecoverCollectionAttemptsTests
     {
         private readonly Dictionary<string, PendingCollectionHandoff> entries = handoffs.ToDictionary(item => item.AttemptId);
         public string? InvalidId { get; set; }
+        public string? RefusedId { get; init; }
         public string? CleanupFailureId { get; init; }
         public Action? AfterDelete { get; init; }
 
@@ -206,6 +219,7 @@ public sealed class RecoverCollectionAttemptsTests
             Task.FromResult<IReadOnlyList<string>>(entries.Keys.Order(StringComparer.Ordinal).ToArray());
 
         public Task<PendingCollectionHandoff> LoadAsync(string handoffId, CancellationToken cancellationToken) =>
+            handoffId == RefusedId ? throw new RefusedCollectionHandoffException("Old version.") :
             handoffId == InvalidId ? throw new InvalidDataException("Unreadable envelope.") : Task.FromResult(entries[handoffId]);
 
         public Task DeleteAsync(string handoffId, CancellationToken cancellationToken)

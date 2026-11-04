@@ -167,6 +167,42 @@ public sealed class RunCollectionJobTests
         Assert.All(jobs.ReadJobIds, id => Assert.Equal("job-1", id));
     }
 
+    [Fact]
+    public async Task ARefusedHandoffIsDeletedAndItsAttemptSettlesInterruptedSoTheJobFetchesAgain()
+    {
+        var request = Request();
+        var jobs = new FakeJobs(Job(new CollectionJobAttempt("attempt-1", request, null, DateTimeOffset.UtcNow, null)));
+        var handoffs = new TrackingHandoffs { LoadFailure = new RefusedCollectionHandoffException("version 1") };
+        handoffs.Seed("attempt-1");
+        var runner = new RunCollectionJob(jobs, new InMemoryAttemptStore(), handoffs, new NoopVerifier(),
+            new CountingCollector(), NullLogger<RunCollectionJob>.Instance);
+
+        var result = await runner.ExecuteAsync("job-1", Path.GetTempPath(), TimeSpan.FromSeconds(30));
+
+        Assert.True(handoffs.Deleted);
+        var settled = Assert.Single(result.Job!.Attempts);
+        Assert.Equal(CollectionJobAttemptOutcome.Interrupted, settled.Resolution!.Outcome);
+        Assert.Equal("HandoffRefused", settled.Resolution.ErrorCode);
+    }
+
+    [Fact]
+    public async Task AnInvalidCurrentHandoffStaysOnDiskSoReceiptsReplayCanStillImportIt()
+    {
+        var request = Request();
+        var jobs = new FakeJobs(Job(new CollectionJobAttempt("attempt-1", request, null, DateTimeOffset.UtcNow, null)));
+        var handoffs = new TrackingHandoffs { LoadFailure = new InvalidDataException("torn JSON") };
+        handoffs.Seed("attempt-1");
+        var runner = new RunCollectionJob(jobs, new InMemoryAttemptStore(), handoffs, new NoopVerifier(),
+            new CountingCollector(), NullLogger<RunCollectionJob>.Instance);
+
+        var result = await runner.ExecuteAsync("job-1", Path.GetTempPath(), TimeSpan.FromSeconds(30));
+
+        Assert.Equal(CollectionJobRunStatus.RecoveryBlocked, result.Status);
+        Assert.False(handoffs.Deleted);
+        Assert.Equal(0, jobs.SettleCalls);
+        Assert.Equal(["attempt-1"], await handoffs.ListAsync(CancellationToken.None));
+    }
+
     private static CollectionRequest Request() => new()
     {
         JobId = "wire-request-1",
@@ -326,6 +362,8 @@ public sealed class RunCollectionJobTests
         public bool RecoveryLeaseUnavailable { get; init; }
         public bool Saved { get; private set; }
         public bool Deleted { get; private set; }
+        public Exception? LoadFailure { get; init; }
+        public void Seed(string attemptId) => entries.Add(attemptId, null!);
         public ValueTask<IAsyncDisposable> AcquireRecoveryLeaseAsync(CancellationToken cancellationToken) =>
             RecoveryLeaseUnavailable ? throw new IOException("Recovery lease unavailable.") :
             ValueTask.FromResult<IAsyncDisposable>(new NoopLease());
@@ -336,7 +374,8 @@ public sealed class RunCollectionJobTests
             return Task.CompletedTask;
         }
         public Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<string>>(entries.Keys.ToArray());
-        public Task<PendingCollectionHandoff> LoadAsync(string handoffId, CancellationToken cancellationToken) => Task.FromResult(entries[handoffId]);
+        public Task<PendingCollectionHandoff> LoadAsync(string handoffId, CancellationToken cancellationToken) =>
+            LoadFailure is null ? Task.FromResult(entries[handoffId]) : Task.FromException<PendingCollectionHandoff>(LoadFailure);
         public Task DeleteAsync(string handoffId, CancellationToken cancellationToken)
         {
             entries.Remove(handoffId);
