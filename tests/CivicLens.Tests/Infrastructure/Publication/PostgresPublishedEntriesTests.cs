@@ -396,8 +396,12 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
             INSERT INTO relationship_drafts (record_id, current_revision_number, review_state_version, review_status, no_longer_matches, created_at_utc_ticks,
                 last_revised_at_utc_ticks)
             VALUES ('{{A}}', 1, 1, 'Approved', false, 0, 0);
-            INSERT INTO relationship_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
-            VALUES ('{{A}}', 1, 'owner', 'Person', '{{json}}', 0);
+            INSERT INTO relationship_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks,
+                statement_candidate_id, statement_revision_number, target_kind, target_action_record_id, target_action_revision_number, match_basis,
+                match_extraction_id, match_start, match_length, type, reason, statement_quote_extraction_id, statement_quote_start, statement_quote_length,
+                target_fact_id, official_id)
+            VALUES ('{{A}}', 1, 'owner', 'Person', '{{json}}', 0, '{{B}}', 1, 'Action', '{{C}}', 1, 'BillNumber', '{{A}}', 0, 10, 'DescribesOwnBill',
+                '{{revision.Reason}}', '{{A}}', 0, 10, 'F2', 'S000002');
             INSERT INTO statement_review_decisions (decision_id, candidate_id, revision_number, review_state_version, kind, actor_subject, created_at_utc_ticks)
             VALUES ('{{Guid.NewGuid():N}}', '{{B}}', 1, 1, 'Approve', 'owner', 1);
             INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, kind, actor_subject, created_at_utc_ticks)
