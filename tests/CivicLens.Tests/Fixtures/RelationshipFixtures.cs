@@ -36,7 +36,7 @@ internal static class RelationshipFixtures
 
     public static ApprovedStatement Statement(DateOnly? date = null, bool dated = true, string[]? officials = null, string[]? passages = null,
         int revision = 1, string article = Article) => new(new StatementDraftRevision(StatementId, revision, "auth0|editor", Created, "Warren on rent", "Summary",
-        dated ? date ?? StatementDate : null, null, [.. officials ?? ["warren"]], [], [], [],
+        dated ? date ?? StatementDate : null, dated ? Span(passages?[0] ?? BillSentence, article) : null, [.. officials ?? ["warren"]], [], [], [],
         [.. (passages ?? [BillSentence, TitleSentence]).Select(text => new StatementQuotation(Span(text, article), StatementQuotationKind.DirectQuotation))], []),
         article);
 

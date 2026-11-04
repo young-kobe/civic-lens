@@ -22,7 +22,8 @@ namespace CivicLens.Infrastructure.Statements;
 public sealed class PostgresStatementReviewStore : IStatementReviewStore
 {
     internal static readonly ReviewRecords<StatementDraftRow, StatementRevisionRow, StatementReviewDecisionRow, StatementDraftRevision>
-        Records = new(PostgresAdvisoryLock.StatementReview, PublishedRecordKind.Statement, "Statement", nameof(StatementDraftRow.CandidateId));
+        Records = new(PostgresAdvisoryLock.StatementReview, PublishedRecordKind.Statement, "Statement", nameof(StatementDraftRow.CandidateId),
+            readRevisions: StatementRevisionRows.ReadAsync);
 
     private readonly AdmittingRevisionReader admittingRevisions = new();
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
@@ -56,7 +57,7 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
             if (draft is null) db.Add(draft = StatementDraftRows.NewDraft(revision.CandidateId, 1, revision.CreatedAtUtc.UtcTicks));
             else StartRevisionLessDraft(draft, revision);
             StatementDraftRows.SetListing(draft, revision, capturedOn);
-            db.Add(StatementDraftRows.NewRevision(revision, null));
+            db.Add(StatementRevisionRows.Create(revision, null));
             return revision;
         }, cancellationToken);
 
@@ -72,7 +73,7 @@ public sealed class PostgresStatementReviewStore : IStatementReviewStore
                 saved.ValidateShape();
                 StatementDraftRows.SetListing(draft, saved, await StatementDraftRows.RequireCandidateExtractionAsync(db, saved, cancellationToken));
                 return saved;
-            }, saved => StatementDraftRows.NewRevision(saved, null), null,
+            }, saved => StatementRevisionRows.Create(saved, null), null,
             approval is null ? null : new(approval,
                 (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, approvalSelections, cancellationToken), afterDecision,
                 revision => revision.ComparableForm(), correctedReportIds, current => AiProposedDate.IsProposed(current.AuthorSubject, current.StatementDate)),

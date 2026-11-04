@@ -47,6 +47,17 @@ public sealed class StatementDraftRevisionTests
     }
 
     [Fact]
+    public void ASelectionIdMustBeNonBlankAndHoldAtMostTheLengthOfAConfigurationIdBecauseItsColumnHoldsNoMore()
+    {
+        var longest = new string('x', ReviewTextRules.MaximumConfigurationIdLength);
+
+        (Revision() with { SpeakerOfficialIds = [longest], IssueIds = [longest], PolicyAreaIds = [longest] }).ValidateShape();
+        Assert.Throws<ArgumentException>((Revision() with { SpeakerOfficialIds = [" "] }).ValidateShape);
+        Assert.Throws<ArgumentException>((Revision() with { IssueIds = [longest + "x"] }).ValidateShape);
+        Assert.Throws<ArgumentException>((Revision() with { PolicyAreaIds = [new string('x', 129)] }).ValidateShape);
+    }
+
+    [Fact]
     public void AnAiProposedDateNeedsAHumanRevisionBeforeApproval()
     {
         var ai = Revision(ReviewAuthor.AnalysisSubject) with { StatementDate = Date, StatementDateEvidence = Span };
