@@ -140,7 +140,7 @@ The release holds the record file and a page for each record. The headline is th
 - A record holds no document text and no summary. The next slice adds the body text. An AI summary and issue tags follow.
 - A President's page lists the record. The talk and action counts do not count it.
 - Determinations, presidential orders, and other documents are out of scope. The list filter leaves them out.
-- The R-63 pilot has four steps for this kind too; see [roadmap](../roadmap.md). Steps 1 to 3 are done in code. Both write paths write the columns and `revision_json`. The commands `executive-actions revisions backfill` and `executive-actions revisions verify` move and check old revisions. The runbook is in [operations](../operations.md#executive-action-revision-backfill). Step 3 stays open until production runs this code. Step 4 drops the JSON. It needs a migration, a change of `readonly_access.revisions`, and a change of `ExecutiveActionRevisionRows.Create`.
+- The R-63 pilot has four steps for this kind too; see [roadmap](../roadmap.md). Steps 1 to 3 are done in code. Both write paths write the columns and `revision_json`. The commands `executive-actions revisions backfill` and `executive-actions revisions verify` move and check old revisions. The runbook is in [operations](../operations.md#executive-action-revision-backfill). Step 3 stays open until production runs this code. Step 4 drops the JSON. It needs a migration and a change of `ExecutiveActionRevisionRows.Create`.
 - A skipped revision stays legacy, and every run examines it again. Fix the cause first.
 - A list longer than one page blocks the job. Move `backfillFrom` forward to fit.
 - A document whose President is not a configured President blocks its job. Add the person to the configuration.
