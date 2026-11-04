@@ -9,6 +9,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Statements.Persistence;
+using CivicLens.Infrastructure.Statements;
 using CivicLens.Infrastructure.Votes;
 using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
@@ -42,21 +43,18 @@ internal static class RelationshipCitedReader
             CancellationToken cancellationToken)
     {
         var named = citations.Where(citation => citation.Kind == RelationshipRecordKind.Statement).Distinct().ToArray();
-        var stored = await CitedRevisions.ReadStoredRevisionsAsync(db, PublishedRecordKind.Statement,
-            [.. named.Select(citation => new PublishedRevisionBinding(PublishedRecordKind.Statement, citation.RecordId, citation.RevisionNumber))],
-            cancellationToken);
+        var stored = named.Length == 0 ? [] : await StatementRevisionRows.NamedRows(db,
+            [.. named.Select(citation => new PublishedRevisionBinding(PublishedRecordKind.Statement, citation.RecordId, citation.RevisionNumber))])
+            .Select(row => new { row.CandidateId, row.RevisionNumber, row.Headline }).ToArrayAsync(cancellationToken);
         Dictionary<RelationshipCitation, string> headlines = [];
         Dictionary<RelationshipCitation, Exception> unreadable = [];
         foreach (var citation in named)
         {
             try
             {
-                var row = stored.FirstOrDefault(row => row.RecordId == citation.RecordId && row.RevisionNumber == citation.RevisionNumber)
+                var row = stored.FirstOrDefault(row => row.CandidateId == citation.RecordId && row.RevisionNumber == citation.RevisionNumber)
                     ?? throw new InvalidDataException("A cited statement revision is not stored.");
-                var revision = ReviewJson.Deserialize<StatementDraftRevision>(row.RevisionJson, "revision");
-                if (revision.CandidateId != citation.RecordId || revision.RevisionNumber != citation.RevisionNumber || revision.Headline is null)
-                    throw new InvalidDataException("The stored revision does not match its citation.");
-                headlines[citation] = revision.Headline;
+                headlines[citation] = row.Headline ?? throw StatementRevisionRows.NotBackfilled("A cited statement revision");
             }
             catch (Exception exception) when (ReviewJson.IsUnreadableStoredData(exception))
             {
@@ -75,7 +73,8 @@ internal static class RelationshipCitedReader
         CollectionAttemptDbContext db, IReadOnlyCollection<RelationshipRevision> revisions, CancellationToken cancellationToken)
     {
         var citations = revisions.SelectMany(revision => new[] { revision.Statement, revision.Target }).ToArray();
-        var statements = (await ReadAsync<StatementDraftRevision>(db, RelationshipRecordKind.Statement, citations, cancellationToken))
+        var statements = (await StatementRevisionRows.ReadNamedAsync(db, [.. citations.Where(citation => citation.Kind == RelationshipRecordKind.Statement)
+                .Select(citation => new PublishedRevisionBinding(PublishedRecordKind.Statement, citation.RecordId, citation.RevisionNumber))], cancellationToken))
             .ToDictionary(item => (item.CandidateId, item.RevisionNumber));
         var targets = (await ReadAsync<ActionDraftRevision>(db, RelationshipRecordKind.Action, citations, cancellationToken))
             .Select(RelationshipTarget.Of).Concat((await ReadVotesAsync(db, citations, cancellationToken))
