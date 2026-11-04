@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CivicLens.Infrastructure.Collection.Migrations
 {
     [DbContext(typeof(CollectionAttemptDbContext))]
-    [Migration("20261104011105_RelationshipRevisionColumns")]
+    [Migration("20261104014100_RelationshipRevisionColumns")]
     partial class RelationshipRevisionColumns
     {
         /// <inheritdoc />

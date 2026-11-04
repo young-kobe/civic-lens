@@ -17,7 +17,7 @@ namespace CivicLens.Tests.Infrastructure.Relationships;
 [Trait("Category", "Postgres")]
 public sealed class RelationshipRevisionColumnsMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private const string Migration = "20261104011105_RelationshipRevisionColumns";
+    private const string Migration = "20261104014100_RelationshipRevisionColumns";
 
     private string connectionString = null!;
     private RelationshipWorldSeeder seeder = null!;
