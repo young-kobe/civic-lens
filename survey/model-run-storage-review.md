@@ -240,3 +240,58 @@ Each item was checked on `origin/main` at `14586748` with `git show`, `git grep`
 ### Resolution
 
 Every finding above is applied in `survey/model-run-storage.md`. D12 is recorded in section 6, and PR 2, 5, 6, 7 and 8 carry its steps.
+
+## Round 7 findings
+
+Each item was checked on `origin/main` at `e75180cd` with `git show`, `git grep` and file reads. The analysis code is unchanged since `14586748`. Lines in `survey/model-run-storage.md` cite the survey at `ac355714`. Nothing was built or run.
+
+P1: 0, P2: 4, P3: 6.
+
+### P1
+
+None found.
+
+### P2-1. A legacy NUL escape in `validation_json` stops every deploy, with no remedy
+
+- File: `survey/model-run-storage.md:261,285,448`.
+- Defect: validation errors quote model text, so `validation_json` can hold `\u0000`. The command skips such a run with `NulEscape` and exits 1. Under D12, `update.sh` then stops on every deploy, and no later step can fill the run, because `varchar` cannot hold NUL.
+- Evidence: `DocumentChangeDraftResolver.cs:167` writes `"{Shorten(value.Id)}"` from the model answer into an error. `AnalysisAnswerRules.Shorten` (`AnalysisAnswerRules.cs:62-73`) keeps NUL. `AnalysisRun.Validate` does not check errors for NUL (`AnalysisRun.cs:28-30`). `JsonSerializer` writes NUL as `\u0000` (`AnalysisRunRows.cs:29`).
+- Failure scenario: one legacy rejected run holds `\u0000`. The PR 2 deploy stops after `db migrate`, with the worker and the review host stopped. Each later deploy stops the same way. The PR 5 verify condition and the PR 6 drop check cast `validation_json::jsonb` on that row, so they fail with a raw Postgres error that names no run. "Fix forward" (`:448`) has no fix to apply.
+- Fix: give the rule one owner. `AnalysisAnswerRules.Bound` replaces NUL with U+FFFD, so new errors never hold it. The fill step maps `\u0000` to `�` in the text before the cast. Verify and the PR 6 drop check apply the same mapping and name it as the one allowed difference, as `votes revisions verify` allows the missing `source` key (`votes.md:150`). A test fills and verifies a legacy row with the escape.
+
+### P2-2. The PR 1 NUL rule turns a model mistake into a failed entry
+
+- File: `survey/model-run-storage.md:261,306`.
+- Defect: `ValidateForWrite()` refuses a NUL in each validation error and in the user message. Today a model answer with a NUL in an ID gives a rejected run and a retry. After PR 1, the refusal throws in `CheckpointAsync` (`PostgresAnalysisQueue.cs:164`).
+- Failure scenario: the model puts a NUL in an issue ID. The resolver rejects it and quotes it in an error. `CheckpointAsync` throws `ArgumentException`. `RunId` is still set, so `FailUnexpectedAsync` writes a ProcessingFailed run and moves the entry to Failed (`AnalysisWorker.cs:212-214`). The retry pass is lost. The retry user message would also hold the NUL (`AnalysisPromptText.cs:24`).
+- Fix: the same source fix as P2-1. Errors never hold NUL, so the retry message never holds one. `ValidateForWrite()` keeps the check as a guard. A test: a model answer with a NUL in an ID gives a rejected run and a second pass.
+
+### P2-3. A deploy that jumps to a drop PR runs the drop before the fill
+
+- File: `survey/model-run-storage.md:355,360,377,448`.
+- Defect: the plan says each drop runs "after verify passes in production". Nothing holds that order. `operator-command.sh:20-32` deploys any newer SHA on `origin/main`. `update.sh:38` runs every pending migration before the fill line.
+- Failure scenario: production runs an image from before PR 2, or the owner rolled back to one. The next deploy takes main after PR 6. `db migrate` applies PR 2 to PR 5, then the PR 6 drop. Its check finds legacy rejected runs with no error rows and fails. The PR 6 image no longer has the error step (`:355`), so running `update.sh` again with the same SHA fails again. The survey gives no recovery. If the drop check misses a case, the JSON is lost.
+- Fix: state the rule in PR 6, 7 and 8 and in `operations.md`. A deploy may cross a drop PR only from an image at or after PR 5 whose verify passed. Otherwise deploy the PR 5 merge SHA first. The drop check error names that step. A migration test runs the drop on unfilled legacy rows and asserts that it fails and keeps the column.
+
+### P2-4. PR 4 does not make the quote load required, and no test covers the carry-over read
+
+- File: `survey/model-run-storage.md:340-341`.
+- Defect: PR 4 moves `StatementGateQueueMapping.ToRun` (`:56-57`) to rows. That mapper is static and has two callers: `PostgresStatementGateStore.cs:32` and `PostgresStatementDraftStore.cs:53`. PR 2 makes the errors a required argument of `ToRun`. PR 4 does not do the same for quotes, and its test list has no store test for `PostgresStatementDraftStore.ReadEvidenceAsync`. `StatementGateCarryOverTests` is in memory.
+- Failure scenario: `PostgresStatementDraftStore.cs:47-53` reads the gate row but not its quote rows. `StatementGateCarryOver.From` gets empty quotes and raises no error (`StatementGateCarryOver.cs:15`). Every new draft loses its carried issues. The listed tests pass.
+- Fix: `StatementGateQueueMapping.ToRun` takes the quotes as a required argument, loaded through the D9 reader shape at both call sites. Add a store test: a passed gate run with quote rows gives the draft evidence its carried issue IDs.
+
+### P3
+
+- P3-1. `survey/model-run-storage.md:288,320,321,351,446`: `operations.md:1070` is now `:1085` (the `update.sh` paragraph), and `operations.md:1235` is now `:1250` (listed commands) on `e75180cd`.
+- P3-2. `survey/model-run-storage.md:449`: the D12 cost text says each step finds no row after the first fill. Verify is not a fill. From PR 5 to PR 8 it rescans every run on each deploy and recomputes the prompt hash over every stored user message in C#, while the worker and the review host are stopped. The time grows with the run count. Measure verify time too, or limit the hash recompute to runs written since the last passed verify.
+- P3-3. `survey/model-run-storage.md:377`: the PR 8 Down rebuilds `quotes_json` but does not name its keys. The old reader uses the default `JsonSerializer` (`StatementGateQueueMapping.cs:57`), which is case sensitive. camelCase keys would give quotes with a null `IssueId`. State PascalCase keys and test the Down through the old deserializer.
+- P3-4. `survey/model-run-storage.md:355`: PR 6 removes "the JSON code in `AnalysisRunRows.cs:29,41`". PR 2 already removes the read at `:41` (`:323`). PR 6 removes only the write at `:29` and the property.
+- P3-5. `survey/model-run-storage.md:241`: "They replace `SerializeContext` at `BriefDraftPrompt.cs:41` and `BriefCheckPrompt.cs:52`" is in the PR 3 design, but PR 3 keeps `context_json` written (`:327`) and PR 7 removes those methods (`:365`). Say that the rows are written beside the context until PR 7.
+- P3-6. `survey/model-run-storage.md:442-450`: D12 states a rule (no service starts before the fill and verify) with no enforcer test. No test reads `update.sh` today. Per AGENTS.md, the `operations.md` and `analysis.md` text must name the enforcer (`update.sh` order and `set -e`) and say "No test", or add a script test.
+
+### Claims checked and found correct
+
+- The ten `ToRun` queries, the nine context lines, the nine context methods and the six Bypassed `with` test sites match `e75180cd`.
+- `update.sh:2,37,38,39,40`, `compose.yaml:30` (Postgres 18.3), the read-only hidden pattern (`readonly-grants.sql:30`) and `PostgresBriefCheckStoreTests.cs:316-319` match.
+- `StatementGateStep.Wrap` sets `issueRevision.Id` on every gate run (`StatementGateStep.cs:20`), so the D1 claim that the gate issue revision is already a column holds for failure runs too.
+- No production code deletes rows from `document_extractions` or a revision table, so `MissingRevision` and `MissingExtraction` are guards, not expected cases.
