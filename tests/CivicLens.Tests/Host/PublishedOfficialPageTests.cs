@@ -686,6 +686,19 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task AVoteForACandidateHasItsOwnMarkAndLegendEntrySoAReaderDoesNotTakeItForAMissedVote()
+    {
+        var day = new DateOnly(2025, 1, 3);
+        var votes = new[] { Vote('a', day) with { Cast = "Jeffries" }, Vote('b', day.AddDays(1)) with { Cast = PublishedOfficialVote.Present } };
+
+        var strip = (await RenderedAsync(votes)).QuerySelector(".vote-strip")!;
+
+        Assert.Equal(["vote-mark vote-mark-candidate", "vote-mark vote-mark-other"], strip.QuerySelector(".vote-strip-marks")!.Children.Select(mark => mark.ClassName));
+        Assert.Equal(["Yes", "No", "Against most of their party", "Voted for a candidate", "Did not vote Yes or No"],
+            strip.QuerySelectorAll(".vote-strip-legend li").Select(item => item.TextContent));
+    }
+
+    [Fact]
     public async Task TheVoteStripOfOneRollCallNamesItsDayBecauseARangeOfOneDayReadsWrong()
     {
         var strip = (await RenderedAsync([Vote('a', new DateOnly(2026, 4, 1))])).QuerySelector(".vote-strip")!;
