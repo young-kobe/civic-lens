@@ -34,6 +34,8 @@ public sealed record PublicApiOptions
     public string? ReportPullToken { get; init; }
     public TimeSpan PollInterval { get; init; } = TimeSpan.FromSeconds(30);
     public TimeSpan QueryTimeout { get; init; } = TimeSpan.FromSeconds(2);
+    /// <summary>How long the views pool keeps an idle connection. The pool prunes every 10 seconds, so lifetime plus 10 seconds must stay below <c>idle_session_timeout</c> of the role (60 seconds, in <c>PublicApiGrants</c>). The server then never closes a connection that the pool still holds.</summary>
+    public TimeSpan PublicViewsIdleLifetime { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>The connection for searches. It limits the time of every statement, so one slow query cannot hold the database.</summary>
     public string ReaderDatabase => new NpgsqlConnectionStringBuilder(Database)
@@ -41,8 +43,12 @@ public sealed record PublicApiOptions
         Options = $"-c statement_timeout={(int)QueryTimeout.TotalMilliseconds}"
     }.ConnectionString;
 
-    /// <summary>The pool is one connection smaller than the connection limit of the role. The role sets its own statement timeout.</summary>
-    public string PublicViewsReaderDatabase => new NpgsqlConnectionStringBuilder(PublicViewsDatabase) { MaxPoolSize = PublicViewsPoolSize }.ConnectionString;
+    /// <summary>The pool is one connection smaller than the connection limit of the role. The role sets its own statement timeout and closes its idle sessions.</summary>
+    public string PublicViewsReaderDatabase => new NpgsqlConnectionStringBuilder(PublicViewsDatabase)
+    {
+        MaxPoolSize = PublicViewsPoolSize,
+        ConnectionIdleLifetime = (int)PublicViewsIdleLifetime.TotalSeconds
+    }.ConnectionString;
 
     public static PublicApiOptions FromEnvironment() => new()
     {

@@ -11,6 +11,7 @@ public sealed record VoteRequest
     public int? Congress { get; init; }
     public int? Session { get; init; }
     public PublishedVoteKind? Kind { get; init; }
+    /// <summary>Lower case, the stored form. A plain comparison lets the filter move below the view.</summary>
     public string? BillType { get; init; }
     public int? BillNumber { get; init; }
     public string? Issue { get; init; }
@@ -26,7 +27,7 @@ public sealed record VoteRequest
         Congress = QueryValues.Number(query, "congress", 1, int.MaxValue),
         Session = QueryValues.Number(query, "session", 1, 2),
         Kind = QueryValues.Choice<PublishedVoteKind>(query, "kind"),
-        BillType = QueryValues.Filter(query, "billType"),
+        BillType = QueryValues.Filter(query, "billType")?.ToLowerInvariant(),
         BillNumber = QueryValues.Number(query, "billNumber", 1, int.MaxValue),
         Issue = QueryValues.Filter(query, "issue"),
         From = QueryValues.Date(query, "from"),

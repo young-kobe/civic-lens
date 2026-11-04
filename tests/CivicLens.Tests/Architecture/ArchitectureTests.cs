@@ -1,5 +1,6 @@
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using CivicLens.Tests.Fixtures;
 
@@ -62,12 +63,39 @@ public sealed class ArchitectureTests
     }
 
     [Fact]
-    public void ThePublicApiReadsReleasesOnlyAndReferencesNoOperationalAssembly()
+    public void ThePublicApiReferencesNoOperationalAssembly()
     {
         var references = ReferencedAssemblies(Path.Combine(AppContext.BaseDirectory, "CivicLens.PublicApi.dll"));
 
         Assert.Equal(["CivicLens.Publication.Contracts"], references.Where(name => name.StartsWith("CivicLens.", StringComparison.Ordinal)));
         Assert.DoesNotContain(references, name => name.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ThePublicApiSqlNamesOnlyPublicApiViewsAndItsOwnSearchTables()
+    {
+        var apiRoot = Path.Combine(Root, "src", "CivicLens.PublicApi");
+        var ownTables = Directory.GetFiles(Path.Combine(apiRoot, "Schema"))
+            .SelectMany(path => Regex.Matches(File.ReadAllText(path), @"CREATE TABLE (?:IF NOT EXISTS )?(\w+)").Select(match => match.Groups[1].Value))
+            .ToHashSet();
+        Assert.NotEmpty(ownTables);
+
+        var violations = new List<string>();
+        foreach (var path in Directory.GetFiles(apiRoot, "*.cs", SearchOption.AllDirectories).Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")))
+        {
+            var source = File.ReadAllText(path);
+            var readsViews = source.Contains("NpgsqlDataSource views", StringComparison.Ordinal);
+            var commonTables = Regex.Matches(source, @"(?:WITH|,)\s*(\w+) AS \(").Select(match => match.Groups[1].Value).ToHashSet();
+            foreach (var name in Regex.Matches(source, @"\b(?:FROM|JOIN)\s+([a-z_][a-z0-9_.]*)(?![a-z0-9_.(])").Select(match => match.Groups[1].Value))
+            {
+                var allowed = readsViews
+                    ? name.StartsWith("public_api.", StringComparison.Ordinal)
+                    : ownTables.Contains(name) || commonTables.Contains(name);
+                if (!allowed) violations.Add($"{Path.GetFileName(path)}: {name}");
+            }
+        }
+
+        Assert.Empty(violations);
     }
 
     private static HashSet<string> ReferencedAssemblies(string path)

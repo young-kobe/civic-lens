@@ -32,6 +32,8 @@ internal static class QueryValues
             : throw new ArgumentException($"{name} holds at most {PublishedRecordEntry.MaximumFilterValueLength} characters.", name);
     }
 
+    public static ArgumentException InvalidCursor() => new("Page cursor is not valid.", "cursor");
+
     public static DateOnly? Date(IQueryCollection query, string name)
     {
         var value = Value(query, name);

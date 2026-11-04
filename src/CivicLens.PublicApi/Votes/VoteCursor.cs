@@ -1,5 +1,6 @@
 using System.Globalization;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicApi.Http;
 
 namespace CivicLens.PublicApi.Votes;
 
@@ -20,19 +21,17 @@ public sealed record VoteCursor(int Release, DateOnly VotedOn, PublishedChamber 
     {
         if (value is null) return null;
         var parts = value.Split('.');
-        if (value.Length > MaximumLength || parts is not [Tag, var release, var date, var chamber, var session, var rollCall, var id]) throw Invalid();
+        if (value.Length > MaximumLength || parts is not [Tag, var release, var date, var chamber, var session, var rollCall, var id]) throw QueryValues.InvalidCursor();
         if (!int.TryParse(release, NumberStyles.None, CultureInfo.InvariantCulture, out var releaseNumber) || releaseNumber < 1 ||
             !DateOnly.TryParseExact(date, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var votedOn) ||
             !int.TryParse(chamber, NumberStyles.None, CultureInfo.InvariantCulture, out var chamberNumber) || !Enum.IsDefined((PublishedChamber)chamberNumber) ||
             !int.TryParse(session, NumberStyles.None, CultureInfo.InvariantCulture, out var sessionNumber) ||
             !int.TryParse(rollCall, NumberStyles.None, CultureInfo.InvariantCulture, out var rollCallNumber) ||
             !PublicationProtocol.IsAnyRecordId(id))
-            throw Invalid();
+            throw QueryValues.InvalidCursor();
         return new(releaseNumber, votedOn, (PublishedChamber)chamberNumber, sessionNumber, rollCallNumber, id);
     }
 
     public string Encode() => string.Create(CultureInfo.InvariantCulture,
         $"{Tag}.{Release}.{VotedOn.ToString(DateFormat, CultureInfo.InvariantCulture)}.{(int)Chamber}.{Session}.{RollCall}.{RecordId}");
-
-    private static ArgumentException Invalid() => new("Page cursor is not valid.", "cursor");
 }

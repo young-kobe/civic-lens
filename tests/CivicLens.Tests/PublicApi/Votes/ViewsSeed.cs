@@ -11,7 +11,7 @@ internal sealed record SeededVote(char Id, string VotedOn)
     public int Session { get; init; } = 1;
     public int RollCall { get; init; } = 1;
     public string Kind { get; init; } = "Passage";
-    public string? BillType { get; init; } = "HR";
+    public string? BillType { get; init; } = "hr";
     public int? BillNumber { get; init; } = 1;
     public string TextOrigin { get; init; } = "Model";
     public string[] Casts { get; init; } = ["Yea", "Yea", "Nay"];

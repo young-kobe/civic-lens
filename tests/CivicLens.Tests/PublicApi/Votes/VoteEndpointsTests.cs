@@ -10,14 +10,14 @@ public sealed class VoteEndpointsTests(PostgresCollection postgres)
 {
     // The order is date desc, chamber, session desc, roll call desc, record ID. G and H share every key but the record ID.
     private static readonly SeededVote E = new('e', "2026-03-03") { Issues = ["health"] };
-    private static readonly SeededVote D = new('d', "2026-03-02") { Session = 2, Kind = "Rule", BillType = "HRES", BillNumber = 7 };
+    private static readonly SeededVote D = new('d', "2026-03-02") { Session = 2, Kind = "Rule", BillType = "hres", BillNumber = 7 };
     private static readonly SeededVote B = new('b', "2026-03-02") { RollCall = 9, BillNumber = 2, Issues = ["health", "tax"], UntrackedIssues = ["zoning"] };
     private static readonly SeededVote A = new('a', "2026-03-02") { RollCall = 5 };
     private static readonly SeededVote C = new('c', "2026-03-02")
     {
         Chamber = "Senate",
         Kind = "Cloture",
-        BillType = "S",
+        BillType = "s",
         BillNumber = 3,
         TextOrigin = "Person",
         Casts = ["Yea", "Smith"]
@@ -75,7 +75,7 @@ public sealed class VoteEndpointsTests(PostgresCollection postgres)
         Assert.Equal(1, vote.GetProperty("rollCall").GetInt32());
         Assert.Equal("2026-03-03", vote.GetProperty("votedOn").GetString());
         Assert.Equal("passage", vote.GetProperty("kind").GetString());
-        Assert.Equal("HR", vote.GetProperty("billType").GetString());
+        Assert.Equal("hr", vote.GetProperty("billType").GetString());
         Assert.Equal(1, vote.GetProperty("billNumber").GetInt32());
         Assert.Equal("Headline e", vote.GetProperty("headline").GetString());
         Assert.Equal("Summary e", vote.GetProperty("summary").GetString());

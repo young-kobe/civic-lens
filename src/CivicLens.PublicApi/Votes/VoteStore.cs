@@ -71,7 +71,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
         (request.Congress is null ? "" : " AND v.congress = @congress") +
         (request.Session is null ? "" : " AND v.session_number = @session") +
         (request.Kind is null ? "" : " AND v.kind = @kind") +
-        (request.BillType is null ? "" : " AND lower(v.bill_type) = lower(@bill_type)") +
+        (request.BillType is null ? "" : " AND v.bill_type = @bill_type") +
         (request.BillNumber is null ? "" : " AND v.bill_number = @bill_number") +
         (request.Issue is null ? "" : """
              AND EXISTS (SELECT 1 FROM public_api.vote_issues i

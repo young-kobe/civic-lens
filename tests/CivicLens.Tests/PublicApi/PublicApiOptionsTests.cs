@@ -51,4 +51,23 @@ public sealed class PublicApiOptionsTests
         Assert.Equal(4, views.MaxPoolSize);
         Assert.Equal(("operational", "civic_lens_public"), (views.Host, views.Username));
     }
+
+    [Fact]
+    public void ThePublicViewsPoolClosesIdleConnectionsBeforeTheRoleDoesBecauseAClosedConnectionFailsTheNextRequest()
+    {
+        const int RoleIdleSessionSeconds = 60;
+        const int PoolPruningIntervalSeconds = 10;
+        var options = new PublicApiOptions
+        {
+            ReleaseBaseUrl = PublicApiOptions.Directory("http://release.test"),
+            Database = "Host=search;Database=search",
+            PublicViewsDatabase = "Host=operational;Database=civic_lens;Username=civic_lens_public;Password=secret"
+        };
+
+        var views = new NpgsqlConnectionStringBuilder(options.PublicViewsReaderDatabase);
+
+        Assert.Equal(30, views.ConnectionIdleLifetime);
+        Assert.Equal(PoolPruningIntervalSeconds, views.ConnectionPruningInterval);
+        Assert.True(views.ConnectionIdleLifetime + views.ConnectionPruningInterval < RoleIdleSessionSeconds);
+    }
 }
