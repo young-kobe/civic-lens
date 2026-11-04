@@ -1,0 +1,27 @@
+Round 1 review of model-run-input (R-63 PR 1, migration 20261104135604_ModelRunInput) found no P1. Fix these, then stop. Do not ask for another review.
+Do setup steps 3 to 5 (git config) BEFORE step 9a (the merge), so the merge commit has the right author.
+P2: tests/CivicLens.Tests/Infrastructure/Collection/HouseVotes/PostgresHouseVoteTests.Drafting.cs:74. The vote kind has no worker test that the stored input equals the sent request, also on a retry. The test only stores a fixed sample through the queue. The docs invariant says "the matching test of each other task". Add a StoredRunInputs.AssertMatchAsync test for vote drafting with a rejected answer and then a valid one, as the other kinds have.
+P3-1: src/CivicLens.Infrastructure/Analysis/Persistence/AnalysisTableConfiguration.cs:57. ck_<table>_id cannot fire, because the hash check already covers it. Drop ck_<table>_id so the rule has one owner, and regenerate the schema docs. This needs a model change in the same migration, so regenerate the migration (it is not merged yet): remove the ModelRunInput migration files, then dotnet ef migrations add ModelRunInput again, and keep the hand-written parts of the old Up and Down. Keep the migration ID after the newest one on main.
+P3-2: src/CivicLens.Application/Votes/VoteDraftPrompt.cs:48,50 and the same in the other 8 prompt builders. AnalysisEffort.Medium is passed twice, once to the hash and once to the request. Give each builder one source for the effort (for example compute the hash inside one AnalysisModelRequest factory from the same values), so InputHash always covers the effort that was sent. Reuse an existing owner if one fits.
+P3-3: docs/architecture/analysis.md:257. The four new limit bullets sit under "design rules for the planned work", but they describe current behavior. Move them to the right section.
+P3-4 (the review text was cut off here): src/CivicLens.Core/Analysis/AnalysisRun.cs:21. An input that fails Validate also fails the ProcessingFailed run that FailUnexpectedAsync builds, because that run carries the same input. The entry then waits for l... (cut off). Check this claim. If it is real and the fix is clear and local, fix it with a test. If the fix needs a design choice (for example dropping the input from the failure run versus refusing the input earlier), choose nothing: describe the failure and the options in your final message.
+Final message under 1,800 characters: the pushed SHA, each finding and its fix, the test classes run with counts, and any open question.
+
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b model-run-input origin/model-run-input
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+6. curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+7. bash /tmp/dotnet-install.sh --version 10.0.403 --install-dir /root/.dotnet
+8. docker info  (if it fails: run sudo dockerd > /tmp/dockerd.log 2>&1 & in the background, then check docker info again after 10 seconds)
+9a. git merge --no-edit origin/main  (merge, never rebase; resolve conflicts keeping both sides' intent; for the EF model snapshot keep both sides' changes)
+9. export PATH=/root/.dotnet:$PATH && dotnet restore tests/CivicLens.Tests --locked-mode
+Prefix every later dotnet call with export PATH=/root/.dotnet:$PATH &&. If a Testcontainers pull fails with HTTP 429, wait 60 seconds and retry. Run test classes one filter at a time with --filter FullyQualifiedName~<Class> (no | in filters). Run at most one PublishReleaseTests class.
+
+Rules: read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Each rule has one owner; reuse the existing shared owners before adding any. Every added member needs a production caller. Delete code the change makes unused. No backward compatibility shims, dual reads or legacy fallbacks beyond what the named precedent already does. Comments only when absolutely necessary; intent goes in names. Tests encode why the rule matters and must fail if the rule breaks. EF migrations: generate with the repo EF tool manifest (dotnet tool restore, then dotnet ef migrations add), strip the UTF-8 BOM from generated files, and make the Designer match the model at the migration's position. Regenerate schema docs with CIVIC_LENS_WRITE_SCHEMA_DOCS=1 and the SchemaReferenceTests class. Prose (docs, commit messages): ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes. Update the owning feature docs in place (template headings Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, Limits and planned work); each invariant names its rule, enforcer and test. Do not write session reports or changelogs. If you hit a design choice the brief does not settle, choose nothing: stop, commit what is done, and list the question with options in your final message.
+
+Checks before the last commit: dotnet build tests/CivicLens.Tests -c Release (0 errors), the changed and related test classes, dotnet format CivicLens.slnx --verify-no-changes --no-restore, python3 tools/check-docs.py --check, python3 tools/render-architecture.py --check.
+
+Finish, each its own Bash call: git add -A; git commit -m "<one plain sentence>"; git push origin model-run-input. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only model-run-input.
