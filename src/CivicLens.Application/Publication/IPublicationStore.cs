@@ -1,4 +1,5 @@
 using CivicLens.Core.Review;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
@@ -23,6 +24,12 @@ public interface IPublicationStore
         IReadOnlyCollection<PublishedRecordReference> records, CancellationToken cancellationToken);
 
     Task<int> AddFirstPublishedAsync(IReadOnlyCollection<PublishedFirstPublication> records, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<PublicationReleaseSummary>> ListAllAsync(CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<PublishedEntryCandidate>> ReadEntryCandidatesAsync(CancellationToken cancellationToken);
+
+    Task<int> AddEntriesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken);
 
     Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken);

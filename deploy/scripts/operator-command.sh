@@ -138,6 +138,12 @@ case "$*" in
   "document-changes revisions verify") "$compose" run --rm cli document-changes revisions verify ;;
   # usage: releases first-published backfill
   "releases first-published backfill") "$compose" run --rm cli releases first-published backfill ;;
+  # usage: releases entries backfill <count>
+  "releases entries backfill "*)
+    [[ $# -eq 4 ]] || refuse
+    number "$4"
+    "$compose" run --rm cli releases entries backfill "$4"
+    ;;
   # usage: releases publish <key> [--rewrite-entries] [--rewrite-officials] [--rewrite-pages]
   "releases publish "*) shift 2; publish "$@" ;;
   *) refuse ;;
