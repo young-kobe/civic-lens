@@ -991,7 +991,7 @@ This command proves that the entry, state, first publication, and withdrawal tab
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases entries verify
 ```
 
-The command reads each kept manifest once. It writes the file again with no change, and it checks the bytes. Then it checks the records of the state table against the entries of the file. Last, it rebuilds the manifest from the tables and compares the bytes with the file. The rebuild takes only the official names, the four optional entry fields, `publishedAtUtc`, and some withdrawals from the file.
+The command reads each kept manifest once. It writes the file again with no change, and it checks the bytes. Then it checks the records of the state table against the entries of the file. Last, it rebuilds the manifest from the tables and compares the bytes with the file. The rebuild takes only the official names, the five optional entry fields, `publishedAtUtc`, and some withdrawals from the file.
 
 The command prints JSON with these keys:
 
