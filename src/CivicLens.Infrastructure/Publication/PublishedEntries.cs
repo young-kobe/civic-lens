@@ -22,6 +22,13 @@ internal static class PublishedEntries
             ON e.kind = k.kind AND e.record_id = k.record_id AND e.revision_number = k.revision_number
         """;
 
+    private const string ReadReleaseStates = """
+        SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber", p.first_published_at_utc_ticks AS "Ticks"
+        FROM publication_record_states s
+        LEFT JOIN published_records p ON p.kind = s.kind AND p.record_id = s.record_id
+        WHERE s.first_release <= {0} AND (s.last_release IS NULL OR s.last_release >= {0})
+        """;
+
     private static readonly string InsertEntries = BuildInsertEntries();
 
     private const string ReadCandidates = """
@@ -37,8 +44,18 @@ internal static class PublishedEntries
         CancellationToken cancellationToken)
     {
         var rows = await db.Database.SqlQueryRaw<CandidateRow>(ReadCandidates).ToArrayAsync(cancellationToken);
-        return [.. rows.Select(row => new PublishedEntryCandidate(Enum.Parse<PublishedRecordKind>(row.Kind, ignoreCase: true), row.RecordId,
+        return [.. rows.Select(row => new PublishedEntryCandidate(KindOf(row.Kind), row.RecordId,
             row.RevisionNumber, row.FirstRelease, row.LastRelease, row.HasEntry))];
+    }
+
+    public static async Task<IReadOnlyList<StoredReleaseRecord>> ReadReleaseAsync(CollectionAttemptDbContext db, int releaseNumber,
+        CancellationToken cancellationToken)
+    {
+        var states = await db.Database.SqlQueryRaw<ReleaseStateRow>(ReadReleaseStates, releaseNumber).ToArrayAsync(cancellationToken);
+        var facts = await ReadFactsAsync(db, KeyArrays(states.Select(state => (state.Kind, state.RecordId, state.RevisionNumber))), cancellationToken);
+        return [.. states.Select(state => new StoredReleaseRecord(KindOf(state.Kind), state.RecordId, state.RevisionNumber,
+            state.Ticks is { } ticks ? new DateTimeOffset(ticks, TimeSpan.Zero) : null,
+            facts.GetValueOrDefault((state.Kind, state.RecordId, state.RevisionNumber))))];
     }
 
     public static async Task<int> InsertAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,
@@ -110,7 +127,7 @@ internal static class PublishedEntries
         CancellationToken cancellationToken)
     {
         if (entries.Count == 0) return;
-        var stored = await ReadFactsAsync(db, entries, cancellationToken);
+        var stored = await ReadFactsAsync(db, KeyArrays(entries.Select(KeyOf)), cancellationToken);
         foreach (var entry in entries)
         {
             if (!stored.TryGetValue(KeyOf(entry), out var existing) || Serialize(existing) != Serialize(FactsOf(entry)))
@@ -119,17 +136,23 @@ internal static class PublishedEntries
         }
     }
 
-    private static string Serialize(EntryFacts facts) => JsonSerializer.Serialize(facts);
+    private static PublishedRecordKind KindOf(string name) => Enum.Parse<PublishedRecordKind>(name, ignoreCase: true);
 
-    private static EntryFacts FactsOf(PublishedRecordEntry entry) => new(entry.Headline, entry.SourceHost, entry.EventDate, entry.BillTitle, entry.LinkType,
-        entry.StatementRecordId, entry.TargetKind is { } target ? PublishedRecordReference.NameOf(target) : null, entry.TargetRecordId, entry.DocumentType,
+    private static string Serialize(PublishedEntryFacts facts) => JsonSerializer.Serialize(facts);
+
+    private static PublishedEntryFacts FactsOf(PublishedRecordEntry entry) => new(entry.Headline, entry.SourceHost, entry.EventDate, entry.BillTitle, entry.LinkType,
+        entry.StatementRecordId, entry.TargetKind, entry.TargetRecordId, entry.DocumentType,
         [.. entry.Officials.Select(official => official.Id)], entry.MatchedOfficialId, entry.IssueIds, entry.PolicyAreaIds);
 
-    private static async Task<Dictionary<(string Kind, string RecordId, int RevisionNumber), EntryFacts>> ReadFactsAsync(CollectionAttemptDbContext db,
-        List<PublishedRecordEntry> entries, CancellationToken cancellationToken)
+    private static object[] KeyArrays(IEnumerable<(string Kind, string RecordId, int RevisionNumber)> keys)
     {
-        object[] keys = [entries.Select(entry => PublishedRecordReference.NameOf(entry.Kind)).ToArray(),
-            entries.Select(entry => entry.RecordId).ToArray(), entries.Select(entry => entry.RevisionNumber).ToArray()];
+        var all = keys.ToArray();
+        return [all.Select(key => key.Kind).ToArray(), all.Select(key => key.RecordId).ToArray(), all.Select(key => key.RevisionNumber).ToArray()];
+    }
+
+    private static async Task<Dictionary<(string Kind, string RecordId, int RevisionNumber), PublishedEntryFacts>> ReadFactsAsync(
+        CollectionAttemptDbContext db, object[] keys, CancellationToken cancellationToken)
+    {
         var rows = await db.Set<PublishedEntryRow>().FromSqlRaw(ReadEntries, keys).AsNoTracking().ToArrayAsync(cancellationToken);
         var officials = await ReadChildrenAsync<PublishedEntryOfficialRow>(db, "published_entry_officials", keys, cancellationToken);
         var issues = await ReadChildrenAsync<PublishedEntryIssueRow>(db, "published_entry_issues", keys, cancellationToken);
@@ -137,8 +160,8 @@ internal static class PublishedEntries
         return rows.ToDictionary(row => (row.Kind, row.RecordId, row.RevisionNumber), row =>
         {
             var key = (row.Kind, row.RecordId, row.RevisionNumber);
-            return new EntryFacts(row.Headline, row.SourceHost, row.EventDate, row.BillTitle, row.LinkType, row.StatementRecordId, row.TargetKind,
-                row.TargetRecordId, row.DocumentType, [.. officials[key].Select(official => official.OfficialId)],
+            return new PublishedEntryFacts(row.Headline, row.SourceHost, row.EventDate, row.BillTitle, row.LinkType, row.StatementRecordId,
+                row.TargetKind is null ? null : KindOf(row.TargetKind), row.TargetRecordId, row.DocumentType, [.. officials[key].Select(official => official.OfficialId)],
                 officials[key].SingleOrDefault(official => official.IsMatched)?.OfficialId,
                 [.. issues[key].Select(issue => issue.Value)], [.. policyAreas[key].Select(area => area.Value)]);
         });
@@ -181,9 +204,13 @@ internal static class PublishedEntries
 
     private readonly record struct ChildRow<T>(PublishedRecordEntry Entry, short Position, T Value);
 
-    private sealed record EntryFacts(string Headline, string? SourceHost, DateOnly? EventDate, string? BillTitle, PublishedRelationshipType? LinkType,
-        string? StatementRecordId, string? TargetKind, string? TargetRecordId, PublishedExecutiveActionKind? DocumentType, string[] OfficialIds,
-        string? MatchedOfficialId, string[] IssueIds, string[] PolicyAreaIds);
+    private sealed class ReleaseStateRow
+    {
+        public string Kind { get; set; } = "";
+        public string RecordId { get; set; } = "";
+        public int RevisionNumber { get; set; }
+        public long? Ticks { get; set; }
+    }
 
     private sealed class CandidateRow
     {

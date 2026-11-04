@@ -32,6 +32,41 @@ internal static class PublicationWithdrawalRows
         await RequireOneRowForEachWithdrawalAsync(db, commit, cancellationToken);
     }
 
+    public static async Task<IReadOnlyList<PublishedWithdrawal>> ReadAsync(CollectionAttemptDbContext db, int releaseNumber,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.Set<PublicationWithdrawalRow>().AsNoTracking()
+            .Where(row => row.FirstRelease <= releaseNumber && (row.LastRelease == null || row.LastRelease >= releaseNumber))
+            .ToArrayAsync(cancellationToken);
+        var corrections = await (from correction in db.Set<PublicationWithdrawalCorrectionRow>().AsNoTracking()
+                                 join row in db.Set<PublicationWithdrawalRow>() on new { correction.Kind, correction.RecordId, correction.FirstRelease }
+                                     equals new { row.Kind, row.RecordId, row.FirstRelease }
+                                 where row.FirstRelease <= releaseNumber && (row.LastRelease == null || row.LastRelease >= releaseNumber)
+                                 orderby correction.Position
+                                 select correction).ToArrayAsync(cancellationToken);
+        var kinds = rows.ToDictionary(row => row.Kind, row => Enum.Parse<PublishedRecordKind>(row.Kind, ignoreCase: true));
+        var firstPublished = await PublishedRecords.ReadAsync(db,
+            [.. rows.Select(row => new PublishedRecordReference(kinds[row.Kind], row.RecordId))], cancellationToken);
+        return [.. rows.Select(row => new PublishedWithdrawal
+        {
+            Kind = kinds[row.Kind],
+            RecordId = row.RecordId,
+            WithdrawnRevisionNumber = row.WithdrawnRevisionNumber,
+            FirstPublishedAtUtc = firstPublished[new(kinds[row.Kind], row.RecordId)],
+            WithdrawnAtUtc = new DateTimeOffset(row.WithdrawnAtUtcTicks, TimeSpan.Zero),
+            Note = row.Note,
+            Corrections = [.. corrections.Where(correction => correction.Kind == row.Kind && correction.RecordId == row.RecordId &&
+                    correction.FirstRelease == row.FirstRelease)
+                .Select(correction => new PublishedCorrection
+                {
+                    ReplacedRevisionNumber = correction.ReplacedRevisionNumber,
+                    PublishedAtUtc = new DateTimeOffset(correction.PublishedAtUtcTicks, TimeSpan.Zero),
+                    Note = correction.Note,
+                    FactsUnchanged = correction.FactsUnchanged
+                })]
+        })];
+    }
+
     private static async Task OpenAsync(CollectionAttemptDbContext db, int release, PublishedWithdrawal[] withdrawals,
         CancellationToken cancellationToken)
     {

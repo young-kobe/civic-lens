@@ -12,6 +12,9 @@ public static class ReleaseRecordOrder
         Func<T, string> recordIdOf) =>
         rows.OrderByDescending(dayOf).ThenByDescending(publishedOf).ThenBy(recordIdOf, StringComparer.Ordinal);
 
+    public static IEnumerable<PublishedWithdrawal> WithdrawalsNewestFirst(IEnumerable<PublishedWithdrawal> withdrawals) =>
+        withdrawals.OrderByDescending(withdrawal => withdrawal.WithdrawnAtUtc).ThenBy(withdrawal => withdrawal.RecordId, StringComparer.Ordinal);
+
     /// <summary>The same order for rows that can lack a day: a row with no day comes last.</summary>
     public static IEnumerable<T> NewestFirstUndatedLast<T>(IEnumerable<T> rows, Func<T, DateOnly?> dayOf, Func<T, DateTimeOffset> publishedOf,
         Func<T, string> recordIdOf) =>
