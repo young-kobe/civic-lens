@@ -40,7 +40,7 @@ internal static class PublishedOfficialSectionsView
                 count => $"See all {PublishedOfficialView.Counted(count, "bill")} they introduced", NoBills));
         if (profile is not null)
         {
-            sections.Add(new(IssuesId, PublishedOfficialView.IssuesTabLabel, [], profile.IssueIds.Length,
+            sections.Add(new(IssuesId, PublishedOfficialView.IssuesTabLabel, [],
                 profile.IssueIds.IsEmpty ? null : $"See the counts for all {PublishedOfficialView.Counted(profile.IssueIds.Length, "issue")}",
                 RecordPageLink(page, PublishedOfficialView.IssuesPane), PublishedOfficialView.NoTrackedIssue));
             sections.Add(Latest(page, "votes", "How they voted recently", rows.Where(row => row.Kind == PublishedRecordKind.Vote).ToList(),
@@ -53,5 +53,5 @@ internal static class PublishedOfficialSectionsView
 
     private static OfficialSection Latest(ReleaseOfficialPage page, string id, string title, List<PublishedOfficialRow> matching, string tab,
         Func<int, string> seeAll, string empty) =>
-        new(id, title, [.. matching.Take(ItemCount)], matching.Count, matching.Count == 0 ? null : seeAll(matching.Count), RecordPageLink(page, tab), empty);
+        new(id, title, [.. matching.Take(ItemCount)], matching.Count == 0 ? null : seeAll(matching.Count), RecordPageLink(page, tab), empty);
 }
