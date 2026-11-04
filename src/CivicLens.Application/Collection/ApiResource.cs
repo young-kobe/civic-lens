@@ -26,6 +26,7 @@ public enum ApiResource
     MemberRoster,
     ExecutiveRoster,
     MemberPhoto,
+    ZctaDistricts,
     FederalRegisterList,
     FederalRegisterDocument
 }

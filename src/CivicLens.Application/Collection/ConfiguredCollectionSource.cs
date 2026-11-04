@@ -299,6 +299,8 @@ public sealed class ConfiguredCollectionSource
                 return new ApiTarget(ApiResource.MemberRoster, source.Url, CollectionJobPriority.Check);
             case ApiParser.CongressLegislatorsExecutive:
                 return new ApiTarget(ApiResource.ExecutiveRoster, source.Url, CollectionJobPriority.Check);
+            case ApiParser.CensusZctaDistricts:
+                return new ApiTarget(ApiResource.ZctaDistricts, source.Url, CollectionJobPriority.Check);
             case ApiParser.MemberPhotos:
             case ApiParser.CongressBillText:
             case ApiParser.FederalRegisterDocuments:

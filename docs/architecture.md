@@ -69,7 +69,7 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 | Infrastructure | Process lifecycle, protocol decoding, actual capture verification, Postgres persistence | Independent definitions of contract or editorial validity |
 | Collector | Bounded source interaction and complete raw capture production | Durable scheduling, imports, officials registry or publication |
 | Host | Command parsing, composition, and web presentation | Collection algorithms or evidence invariants |
-| PublicApi | Release ingest, the search index, and the public read API | Operational storage, credentials, job handlers, or unpublished evidence |
+| PublicApi | Release ingest, the search index, and the public read API | Operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence |
 
 `tools/render-architecture.py` generates the diagrams below. Run `python3 tools/render-architecture.py`, then open `artifacts/architecture.html` for the explorer. Planned components are labeled there; a diagram is not a claim that the pipeline exists.
 
@@ -271,6 +271,7 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | House vote members extraction | `congress-house-vote-members-v1` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteMembersParser.cs` | Extraction IDs, text, and citations of a House member list | The parse or the rendered text of a member list changes |
 | Feed item statement extraction | `feed-item-statement-v1` plus the version of the HTML extraction | `src/CivicLens.Application/Collection/FeedStatements/FeedStatementExtractions.cs` | Extraction IDs, text, and citations of a feed item | The parse or the rendered text of a feed item changes |
 | Voteview Senate vote extraction | `voteview-senate-vote-v1` | `src/CivicLens.Application/Collection/VoteviewVotes/VoteviewParser.cs` | Extraction IDs, text, and citations of a Voteview Senate vote | The parse or the rendered text of a roll call changes |
+| Federal Register document extraction | `federal-register-document-v1` | `src/CivicLens.Application/Collection/FederalRegister/FederalRegisterDocumentParser.cs` | Extraction IDs, text, and citations of a Federal Register document | The parse or the rendered text of a document changes |
 | Comparison algorithm | `line-lcs-context-v1` | `src/CivicLens.Core/Documents/DocumentComparison.cs` | Stored comparison IDs and hunks | Hunk or word-edit output changes |
 | Comparison settings | `bounded-lines-2000-...-v1` | same file | Limits recorded with each comparison | Any limit constant changes |
 | Draft task | `document-change-draft-v1` | `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs` | Analysis runs | Task flow or output handling changes |
@@ -287,6 +288,7 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Vote draft task | `vote-draft-v1` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |
 | Vote draft prompt | `vote-draft-prompt-v5` | same file | Vote analysis runs | Prompt text or input framing changes |
 | Vote draft schema | `vote-draft-schema-v2` | same file | Vote analysis runs | The model output schema changes |
+| Vote member list identity | `vote-member-list-v1` | `src/CivicLens.Infrastructure/Votes/VoteMemberLists.cs` | The ID of a stored vote member list | The canonical text of the list changes |
 | Vote fingerprint | `vote-fingerprint-v1` | `src/CivicLens.Application/Votes/VoteFingerprint.cs` | The run input hash of a draft that makes no call | The canonical text of the fingerprint changes |
 | Sponsorship fingerprint | `action-fingerprint-v1` | `src/CivicLens.Application/Collection/Bills/ActionFingerprint.cs` | The fingerprint in each action revision | The canonical text of an entry changes |
 | Relationship draft task | `relationship-draft-v1` | `src/CivicLens.Application/Relationships/RelationshipDraftTask.cs` | Relationship analysis runs | Task flow or output handling changes |
@@ -362,8 +364,9 @@ This is the only navigation index.
 | CLI collect and import commands | [Collection](architecture/collection.md#cli-composition) | `src/CivicLens.Host/Program.cs` |
 | Member and executive rosters, dated terms, proposals | [Roster](architecture/roster.md#behavior) | `src/CivicLens.Application/Roster/MemberRosterParser.cs` |
 | Member photo jobs, validation, and rows | [Roster](architecture/roster.md#member-photos) | `src/CivicLens.Application/Collection/MemberPhotos/MemberPhotoUrl.cs` |
+| ZCTA to congressional district snapshot | [Districts](architecture/districts.md#behavior) | `src/CivicLens.Application/Districts/ZctaDistrictParser.cs` |
 | Official photo files in a release and the portrait | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleasePhotos.cs` |
-| Generated schema: tables, keys, checks, indexes, triggers | [collection](architecture/schema/collection.md), [bills](architecture/schema/bills.md), [votes](architecture/schema/votes.md), [roster](architecture/schema/roster.md), [documents](architecture/schema/documents.md), [analysis](architecture/schema/analysis.md), [statements](architecture/schema/statements.md), [actions](architecture/schema/actions.md), [executive actions](architecture/schema/executive-actions.md), [briefs](architecture/schema/briefs.md), [relationships](architecture/schema/relationships.md), [review](architecture/schema/review.md), [reports](architecture/schema/reports.md), [publication](architecture/schema/publication.md) | `tests/CivicLens.Tests/Infrastructure/SchemaReferenceTests.cs` |
+| Generated schema: tables, keys, checks, indexes, triggers | [collection](architecture/schema/collection.md), [bills](architecture/schema/bills.md), [votes](architecture/schema/votes.md), [roster](architecture/schema/roster.md), [districts](architecture/schema/districts.md), [documents](architecture/schema/documents.md), [analysis](architecture/schema/analysis.md), [statements](architecture/schema/statements.md), [actions](architecture/schema/actions.md), [executive actions](architecture/schema/executive-actions.md), [briefs](architecture/schema/briefs.md), [relationships](architecture/schema/relationships.md), [review](architecture/schema/review.md), [reports](architecture/schema/reports.md), [publication](architecture/schema/publication.md) | `tests/CivicLens.Tests/Infrastructure/SchemaReferenceTests.cs` |
 | Collection tables and the import lock | [Collection](architecture/collection.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/PostgresCollectionAttemptStore.cs` |
 | Congress.gov bill list, window, cursor | [Bills](architecture/bills.md#daily-window) | `src/CivicLens.Application/Collection/Bills/BillStreamWindow.cs` |
 | Bill gate and follow-on pages | [Bills](architecture/bills.md#bill-gate) | `src/CivicLens.Application/Collection/Bills/BillGate.cs` |
@@ -432,6 +435,7 @@ This is the only navigation index.
 | Web host, security headers, components | [Host](architecture/host.md#behavior) | `src/CivicLens.Host/Program.cs` |
 | Production hosting plan | [Host](architecture/host.md#limits-and-planned-work) | none |
 | MCP plans | [Review](architecture/review.md#limits-and-planned-work), [Publication](architecture/publication.md#limits-and-planned-work) | none |
+| Public views, role, active release rule | [Publication](architecture/publication.md#public-api-views) | `src/CivicLens.Infrastructure/Collection/Migrations/20261103165431_PublicApiViews.cs`, `src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs` |
 | Public search service: ingest, index, read API, rate limit | [Search](architecture/search.md#decisions) | `src/CivicLens.PublicApi/PublicApiApp.cs` |
 | Reader report queue: pull, dismiss, editor panel, close by approval | [Review](architecture/review.md#reader-reports), [Search](architecture/search.md#operational-pull) | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Infrastructure/Reports/PostgresReaderReportStore.cs` |
 | Search ingest of a release | [Search](architecture/search.md#ingest) | `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs` |
