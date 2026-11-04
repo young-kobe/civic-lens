@@ -4,6 +4,7 @@ using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Briefs;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Collection;
@@ -70,12 +71,9 @@ internal sealed class BriefWorldSeeder(string connectionString)
             """, ("id", id), ("revision", revision), ("version", version), ("kind", decision.ToString()));
     }
 
-    public Task StatementAsync(string id, int revision, string headline, params string[] officials) => ExecuteAsync("""
-        SET session_replication_role = replica;
-        INSERT INTO statement_revisions (candidate_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-        VALUES (@id, @revision, 'auth0|editor', 'Person', NULL, @json, 0)
-        """, ("id", id), ("revision", revision), ("json", JsonSerializer.Serialize(new StatementDraftRevision(id, revision, "auth0|editor", Created,
-            headline, "Summary of " + headline, new DateOnly(2026, 10, 6), null, [.. officials], [], [], [], [], []), Web)));
+    public Task StatementAsync(string id, int revision, string headline, params string[] officials) =>
+        StatementRevisionSeeder.AddAsync(connectionString, new StatementDraftRevision(id, revision, "auth0|editor", Created,
+            headline, "Summary of " + headline, new DateOnly(2026, 10, 6), new SourceSpan(new string('e', 64), 0, 5), [.. officials], [], [], [], [], []));
 
     public Task DocumentChangeAsync(string id, int revision, string headline, params string[] officials) =>
         DocumentChangeRevisionSeeder.AddAsync(connectionString, new DocumentChangeDraftRevision(id, revision, new string('c', 64),

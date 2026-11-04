@@ -86,6 +86,8 @@ if (args is [] or ["--help"] or ["help"])
           statements draft list [drafted|over-cap|existing|pending|failed] [limit]
           statements draft run <run-id>
           statements draft requeue <candidate-id|--all>
+          statements revisions backfill <limit>
+          statements revisions verify
           actions draft status
           actions draft list [drafted|unchanged|superseded|no-official|pending|failed] [limit]
           actions draft requeue <candidate-id|--all>
@@ -310,13 +312,15 @@ try
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var gates = new PostgresStatementGateStore(contexts);
+        var backfillStore = new PostgresStatementRevisionBackfillStore(contexts);
         var gateCommands = new AnalysisQueueCommands<StatementGateRun, StatementGateView, StatementGateListItem>(gates,
             new PostgresAnalysisStatusStore(contexts, StatementGateTask.Task));
         var draftCommands = new AnalysisQueueCommands<StatementDraftRun, StatementDraftView, StatementDraftListItem>(
             new PostgresStatementDraftStore(contexts),
             new PostgresAnalysisStatusStore(contexts, StatementDraftTask.Task));
         var statements = new StatementCommand(gateCommands, draftCommands, new RegateStatementCandidates(gates),
-            new ExportGateLabels(new PostgresGateLabelStore(contexts)), owner,
+            new ExportGateLabels(new PostgresGateLabelStore(contexts)),
+            new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner,
             args is ["statements", "regate", ..] ? StatementIssueRubric.FromEnvironment()?.Id : null, GateLabelExport.DefaultRuntimeDirectory());
         executing = true;
         return await statements.ExecuteAsync(args, cancellation.Token);

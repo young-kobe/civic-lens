@@ -27,7 +27,6 @@ public sealed class RelationshipRevisionColumnsMigrationTests(PostgresCollection
         connectionString = await postgres.CreateEmptyDatabaseAsync();
         await MigrateToAsync(Before());
         seeder = new RelationshipWorldSeeder(connectionString);
-        await seeder.StatementAsync(Statement());
         await seeder.ActionAsync(Action());
     }
 
@@ -62,6 +61,7 @@ public sealed class RelationshipRevisionColumnsMigrationTests(PostgresCollection
         await InsertLegacyRevisionAsync(json);
         await MigrateToAsync(Migration);
         await using (var db = NewContext()) await db.Database.MigrateAsync();
+        await seeder.StatementAsync(Statement());
         var store = new PostgresRelationshipRevisionBackfillStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));
         var owner = new ReviewActor("auth0|owner", ReviewRole.Owner);

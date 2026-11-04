@@ -6338,6 +6338,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("CandidateId");
 
+                    b.HasAlternateKey("CandidateId", "ExtractionId")
+                        .HasName("ux_statement_candidates_candidate_extraction");
+
                     b.HasIndex("AttemptId");
 
                     b.HasIndex("ExtractionId");
@@ -6577,6 +6580,188 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionBillNumberRow", b =>
+                {
+                    b.Property<string>("CandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("candidate_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.Property<string>("BillNumber")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("bill_number");
+
+                    b.HasKey("CandidateId", "RevisionNumber", "Position");
+
+                    b.HasIndex("BillNumber");
+
+                    b.ToTable("statement_revision_bill_numbers", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_statement_revision_bill_numbers_bill_number", "length(btrim(bill_number)) > 0");
+
+                            t.HasCheckConstraint("ck_statement_revision_bill_numbers_position", "position >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionIssueRow", b =>
+                {
+                    b.Property<string>("CandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("candidate_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<string>("IssueId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("issue_id");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.HasKey("CandidateId", "RevisionNumber", "IssueId");
+
+                    b.ToTable("statement_revision_issues", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_statement_revision_issues_issue", "length(btrim(issue_id)) > 0");
+
+                            t.HasCheckConstraint("ck_statement_revision_issues_position", "position BETWEEN 0 AND 63");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionOtherSpeakerRow", b =>
+                {
+                    b.Property<string>("CandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("candidate_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.Property<string>("SpeakerName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("speaker_name");
+
+                    b.HasKey("CandidateId", "RevisionNumber", "Position");
+
+                    b.HasIndex("CandidateId", "RevisionNumber", "SpeakerName")
+                        .IsUnique();
+
+                    b.ToTable("statement_revision_other_speakers", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_statement_revision_other_speakers_name", "length(speaker_name) BETWEEN 1 AND 128 AND speaker_name = btrim(speaker_name)");
+
+                            t.HasCheckConstraint("ck_statement_revision_other_speakers_position", "position BETWEEN 0 AND 15");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionPolicyAreaRow", b =>
+                {
+                    b.Property<string>("CandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("candidate_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<string>("PolicyAreaId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("policy_area_id");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.HasKey("CandidateId", "RevisionNumber", "PolicyAreaId");
+
+                    b.ToTable("statement_revision_policy_areas", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_statement_revision_policy_areas_policy_area", "length(btrim(policy_area_id)) > 0");
+
+                            t.HasCheckConstraint("ck_statement_revision_policy_areas_position", "position BETWEEN 0 AND 63");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionQuotationRow", b =>
+                {
+                    b.Property<string>("CandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("candidate_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("QuotationExtractionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("quotation_extraction_id");
+
+                    b.Property<int>("QuotationLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("quotation_length");
+
+                    b.Property<int>("QuotationStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("quotation_start");
+
+                    b.HasKey("CandidateId", "RevisionNumber", "Position");
+
+                    b.HasIndex("QuotationExtractionId");
+
+                    b.HasIndex("CandidateId", "QuotationExtractionId");
+
+                    b.HasIndex("CandidateId", "RevisionNumber", "QuotationExtractionId", "QuotationStart", "QuotationLength")
+                        .IsUnique();
+
+                    b.ToTable("statement_revision_quotations", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_statement_revision_quotations_kind", "kind IN ('DirectQuotation', 'ReleaseText')");
+
+                            t.HasCheckConstraint("ck_statement_revision_quotations_length", "quotation_length <= 4096");
+
+                            t.HasCheckConstraint("ck_statement_revision_quotations_position", "position BETWEEN 0 AND 31");
+
+                            t.HasCheckConstraint("ck_statement_revision_quotations_quotation", "quotation_start >= 0 AND quotation_length > 0");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionRow", b =>
                 {
                     b.Property<string>("CandidateId")
@@ -6604,6 +6789,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
 
+                    b.Property<string>("Headline")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("headline");
+
                     b.Property<string>("RevisionJson")
                         .IsRequired()
                         .HasColumnType("text")
@@ -6614,20 +6804,85 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("run_id");
 
+                    b.Property<DateOnly?>("StatementDate")
+                        .HasColumnType("date")
+                        .HasColumnName("statement_date");
+
+                    b.Property<string>("StatementDateEvidenceExtractionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("statement_date_evidence_extraction_id");
+
+                    b.Property<int?>("StatementDateEvidenceLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("statement_date_evidence_length");
+
+                    b.Property<int?>("StatementDateEvidenceStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("statement_date_evidence_start");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("text")
+                        .HasColumnName("summary");
+
                     b.HasKey("CandidateId", "RevisionNumber");
 
                     b.HasIndex("RunId")
                         .IsUnique();
 
+                    b.HasIndex("StatementDateEvidenceExtractionId");
+
+                    b.HasIndex("CandidateId", "StatementDateEvidenceExtractionId");
+
                     b.ToTable("statement_revisions", null, t =>
                         {
                             t.HasCheckConstraint("ck_statement_revisions_author_kind", "author_kind IN ('Person','Analysis')");
 
+                            t.HasCheckConstraint("ck_statement_revisions_columns_written", "num_nulls(headline, summary) IN (0, 2)");
+
                             t.HasCheckConstraint("ck_statement_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_statement_revisions_date_evidence", "(statement_date IS NULL) = (statement_date_evidence_extraction_id IS NULL)");
+
+                            t.HasCheckConstraint("ck_statement_revisions_date_evidence_length", "statement_date_evidence_length <= 4096");
 
                             t.HasCheckConstraint("ck_statement_revisions_number", "revision_number >= 1");
 
                             t.HasCheckConstraint("ck_statement_revisions_run", "(author_kind = 'Analysis') = (run_id IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_statement_revisions_statement_date_evidence", "(statement_date_evidence_extraction_id IS NULL) = (statement_date_evidence_start IS NULL) AND (statement_date_evidence_extraction_id IS NULL) = (statement_date_evidence_length IS NULL) AND statement_date_evidence_start >= 0 AND statement_date_evidence_length > 0");
+
+                            t.HasCheckConstraint("ck_statement_revisions_summary", "length(summary) <= 8000");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionSpeakerRow", b =>
+                {
+                    b.Property<string>("CandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("candidate_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<string>("OfficialId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("official_id");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.HasKey("CandidateId", "RevisionNumber", "OfficialId");
+
+                    b.ToTable("statement_revision_speakers", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_statement_revision_speakers_official", "length(btrim(official_id)) > 0");
+
+                            t.HasCheckConstraint("ck_statement_revision_speakers_position", "position BETWEEN 0 AND 63");
                         });
                 });
 
@@ -8674,6 +8929,64 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionBillNumberRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionRow", null)
+                        .WithMany("BillNumbers")
+                        .HasForeignKey("CandidateId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionIssueRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionRow", null)
+                        .WithMany("Issues")
+                        .HasForeignKey("CandidateId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionOtherSpeakerRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionRow", null)
+                        .WithMany("OtherSpeakers")
+                        .HasForeignKey("CandidateId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionPolicyAreaRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionRow", null)
+                        .WithMany("PolicyAreas")
+                        .HasForeignKey("CandidateId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionQuotationRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("QuotationExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementCandidateRow", null)
+                        .WithMany()
+                        .HasForeignKey("CandidateId", "QuotationExtractionId")
+                        .HasPrincipalKey("CandidateId", "ExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionRow", null)
+                        .WithMany("Quotations")
+                        .HasForeignKey("CandidateId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementDraftRow", null)
@@ -8686,6 +8999,26 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .WithMany()
                         .HasForeignKey("RunId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("StatementDateEvidenceExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementCandidateRow", null)
+                        .WithMany()
+                        .HasForeignKey("CandidateId", "StatementDateEvidenceExtractionId")
+                        .HasPrincipalKey("CandidateId", "ExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionSpeakerRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionRow", null)
+                        .WithMany("Speakers")
+                        .HasForeignKey("CandidateId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteAnalysisRow", b =>
@@ -8861,6 +9194,21 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Navigation("Issues");
 
                     b.Navigation("Officials");
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionRow", b =>
+                {
+                    b.Navigation("BillNumbers");
+
+                    b.Navigation("Issues");
+
+                    b.Navigation("OtherSpeakers");
+
+                    b.Navigation("PolicyAreas");
+
+                    b.Navigation("Quotations");
+
+                    b.Navigation("Speakers");
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionRow", b =>

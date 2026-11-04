@@ -326,7 +326,15 @@ public sealed class PostgresBriefRevisionColumnsTests(PostgresCollection postgre
     public async Task ABriefCitationKeepsItsStatementRevision()
     {
         await SeedAsync();
-        await ExecuteAsync("DELETE FROM statement_review_decisions");
+        await ExecuteAsync("""
+            DELETE FROM statement_review_decisions;
+            DELETE FROM statement_revision_speakers;
+            DELETE FROM statement_revision_other_speakers;
+            DELETE FROM statement_revision_issues;
+            DELETE FROM statement_revision_policy_areas;
+            DELETE FROM statement_revision_quotations;
+            DELETE FROM statement_revision_bill_numbers
+            """);
 
         var thrown = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync("DELETE FROM statement_revisions"));
 
