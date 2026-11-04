@@ -20,6 +20,11 @@ public sealed record PublishedRecordReference(PublishedRecordKind Kind, string R
         return new PublishedRecordReference(kind, text[(separator + 1)..]);
     }
 
+    public static IEnumerable<PublishedRecordReference> LinkedBy(PublishedRecordEntry entry) =>
+        entry.StatementRecordId is null
+            ? []
+            : [new(PublishedRecordKind.Statement, entry.StatementRecordId), new(entry.TargetKind!.Value, entry.TargetRecordId!)];
+
     public override string ToString() => NameOf(Kind) + Separator + RecordId;
 
     private static bool TryParseKind(string name, out PublishedRecordKind kind)

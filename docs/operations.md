@@ -750,6 +750,21 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- st
 
 Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every statement read fails until it ends. That includes the review pages, the queue, the relationship and brief readers, and the bill mention priority. For a manual run, start the new code only when `verify` exits 0. A rollback past the migration keeps the JSON.
 
+### Brief revision backfill
+
+R-63 step 3 moves old brief revisions into columns and child rows. A revision written by current code already has them. The migration `BriefRevisionColumns` adds nullable columns and moves no data. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- brief revisions backfill 500
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- brief revisions verify
+```
+
+`backfill <limit>` moves at most `limit` legacy revisions. It walks the table in key order in batches of 25. Each batch is one short transaction that holds the brief review lock. For each row it writes the columns and the citation, paragraph, and paragraph citation rows, reads the row back, rebuilds the revision, and compares it to the stored JSON. A row that differs is skipped with `RebuildMismatch`. A citation of a revision that is not stored is skipped with `database:` and the name of the foreign key. The output and the exit code are the same as for the [vote backfill](#vote-revision-backfill). The reasons are `UnreadableJson`, `InvalidShape`, `RebuildMismatch`, and `database:<constraint>`.
+
+`verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. The output and the exit code are the same as for the vote `verify`. A revision whose rows cannot be read shows the field name `columns`. No key is allowed to be absent.
+
+Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. Run `backfill` right after the deploy, because every brief read fails until it ends. Production held 1 brief revision when the survey was made.
+
 ### Document change revision backfill
 
 R-63 step 3 moves old document change revisions into columns and child rows. A revision written by current code already has them. The migration `DocumentChangeRevisionColumns` fills the author columns of each old revision from its JSON. It fails and changes nothing when a `revision_json` is not valid JSON, or when it has no author of 1 to 256 characters. The error names the draft and the revision number. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
@@ -920,7 +935,7 @@ To list the published records that cannot move on, run `releases blocked`. It pr
 
 To write the pages of all officials again, add `--rewrite-officials`. The publish then treats every official as touched. The option itself adds no record. It keeps the release history, the withdrawals, and the first publication date of each record. A rewrite with no named record needs an active release. Use it once after a deploy that changes the layout of the official pages. Until then an untouched official keeps its old page. On a commit conflict, run the same command again. A stop that names a record kind and ID does not clear on a retry. Compare that record file with its manifest entry, and send the message to the developer. Do not publish around it. Stop the worker before every `--rewrite-*` publish with `sudo deploy/scripts/compose.sh stop worker`, and start it after the command ends with `sudo deploy/scripts/compose.sh start worker`. A worker publish that commits while a rewrite runs makes the rewrite conflict, so a rewrite can lose that race. If a conflict happens anyway, run the command again. See the [publication limits](architecture/publication.md#limits-and-planned-work).
 
-To fill the new fields of carried vote and action entries, add `--rewrite-entries`. The publish reads the record file of each carried vote and action and builds its manifest entry again. It adds `yeaCount`, `nayCount`, `alignment`, and `cosponsorIds`. It checks each record file and stops with an error that names the record when the file is invalid or when its entry differs in any other field. It changes no other entry field. It keeps the record files linked and writes none of them again. A withdrawn record stays withdrawn. The option adds no record, and it needs an active release. It reads one file for each carried vote and action. On a failure, run the same command again.
+To fill the new fields of carried vote and action entries, add `--rewrite-entries`. The publish reads the record file of each carried vote and action and builds its manifest entry again. It adds `yeaCount`, `nayCount`, `alignment`, `chamber`, and `cosponsorIds`. It checks each record file and stops with an error that names the record when the file is invalid or when its entry differs in any other field. It changes no other entry field. It keeps the record files linked and writes none of them again. A withdrawn record stays withdrawn. The option adds no record, and it needs an active release. It reads one file for each carried vote and action. On a failure, run the same command again.
 
 A page layout change, such as a new source link, reaches only the pages that a publish writes. A carried record page is a hard link to the page of the previous release. To render every carried page again, add `--rewrite-pages`. The publish reads the record file of each carried record, one at a time, and renders its page. It keeps the record files as the same files on disk, and it keeps the bill link, the related records, and the corrections of each page. A withdrawn record stays withdrawn. It adds no record, and it needs an active release. It reads one file for each carried record, and the cost grows with the number of records. Every page gets a new file, so each rewrite adds the full size of all pages to the kept releases. You may retry a failed run with the same key. A run that fails before the commit commits nothing. A run that fails after the commit, in the serve or prune step, replays the commit and serves the release. A run that overlaps a worker publish fails at the commit with a conflict message and exit code 1, and commits nothing. Run it again with the same key. After a success, use a new idempotency key for the next rewrite.
 
@@ -945,6 +960,28 @@ The command reads the manifest of the active release. It inserts a row for each 
 Until the backfill runs, a publish that adds a record of the active release stops with the message "Run releases first-published backfill". A guess could give one record two first times. The worker logs the error and tries again at its next wake. Run the backfill, and the next publish works. A rollback keeps the rows.
 
 The withdrawal tables add a second need. Every publish whose release lists a withdrawal, carried or new, also stops with the same message until the backfill runs. The database refuses a withdrawal row for a record that `published_records` lacks. On a deploy that adds the migration `PublicationWithdrawals`, do these steps in order: stop the worker, migrate, run `releases first-published backfill`, then start the worker.
+
+### Entries backfill
+
+The tables `published_entries`, `published_entry_officials`, `published_entry_issues`, and `published_entry_policy_areas` hold one entry for each record revision. A commit writes the rows of the revisions that it adds. This command fills the rows of revisions from earlier releases. Run `releases first-published backfill` first, because an entry row needs the `published_records` row of its record. The command needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. Other backfills do not need to finish first.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases entries backfill <limit>
+```
+
+The limit counts inserted rows. It does not bound the reads: each run reads every state row, every kept manifest that covers a range without a row, and the first record file of each such range. The command reads each kept manifest once, from the oldest to the newest. It takes the entry of a revision from the oldest kept folder of its range. It checks the record file of that folder, and it compares the entry in every later kept folder of the range. A kept folder of the range that omits the revision counts as a difference. It never fixes a value. A row that fails a check is skipped with a reason. A repeat is safe, because the command inserts only missing rows and a commit during the run cannot create a second row.
+
+The command prints JSON with these keys:
+
+- `examined`: the revision ranges without a row at the start.
+- `added`: the rows that this run inserted.
+- `alreadyPresent`: the ranges that already had a row.
+- `skipped`, `skippedByReason`, and `skippedEntries`: the skipped rows, a count for each reason, and the first 50 rows. The reasons are `manifestInvalid`, `recordFileInvalid`, `recordFileDiffers`, `foldersDiffer`, and `firstPublishedMissing`.
+- `openRangesWithoutRow`: the open ranges that still have no row.
+- `closedRangesWithoutKeptFolder`: the closed ranges that no kept folder lists. These ranges get no row, and this is expected.
+- `readyRangesWithoutRow`: the open or closed ranges that passed every check but got no row, because the limit stopped the run.
+
+The exit code is 0 only when `skipped`, `openRangesWithoutRow`, and `readyRangesWithoutRow` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
 
 ### Take a record off the site
 
@@ -1295,7 +1332,7 @@ The installer refuses a checkout that anyone other than root can write, because 
 
 Every result that an agent reads goes to its model vendor, so add a column to the hidden list before it holds private text.
 
-**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `votes revisions backfill`, `votes revisions verify`, `actions revisions backfill`, `actions revisions verify`, `executive-actions revisions backfill`, `executive-actions revisions verify`, `relationships revisions backfill`, `relationships revisions verify`, `statements revisions backfill`, `statements revisions verify`, `document-changes revisions backfill`, `document-changes revisions verify`, `releases first-published backfill`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
+**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `votes revisions backfill`, `votes revisions verify`, `actions revisions backfill`, `actions revisions verify`, `executive-actions revisions backfill`, `executive-actions revisions verify`, `relationships revisions backfill`, `relationships revisions verify`, `statements revisions backfill`, `statements revisions verify`, `brief revisions backfill`, `brief revisions verify`, `document-changes revisions backfill`, `document-changes revisions verify`, `releases first-published backfill`, `releases entries backfill` with a count, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
 
 `deploy` takes a full commit SHA on `origin/main` that is the checkout or newer. The scripts of that commit run as root, and a migration has no undo, so a rollback stays with the owner. It checks out the commit, runs `update.sh`, and runs `check-live.sh`. A merge to `main` is therefore the real approval. GitHub does not stop the agent from merging, because it uses the owner's token. Only the agent rules and the Claude Code permissions stop it.
 

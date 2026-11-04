@@ -97,7 +97,8 @@ public sealed record PublishedVote
         EventDate = VotedOn,
         YeaCount = Totals?.Yea,
         NayCount = Totals?.Nay,
-        Alignment = AlignmentOfParties()
+        Alignment = AlignmentOfParties(),
+        Chamber = Chamber
     };
 
     private PublishedVoteAlignment? AlignmentOfParties()
