@@ -1,7 +1,6 @@
-@using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="PublicSection.Briefs" Title="Weekly briefs" CanonicalPath="@PublicationProtocol.BriefsPagePath(Page)" Page="Page" PageCount="PageCount" Description="@Description" Crumbs="Crumbs">
+<PublicPage Title="Weekly briefs" CanonicalPath="@PublicationProtocol.BriefsPagePath(Page)" Page="Page" PageCount="PageCount" Description="@Description">
     <PageHeader Title="Weekly briefs" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
     @if (Briefs.Length == 0)
     {
@@ -23,7 +22,6 @@
 </PublicPage>
 
 @code {
-    private static readonly IReadOnlyList<Crumb> Crumbs = [PublicCrumbs.Home(""), PublicCrumbs.Current(PublicSection.Briefs)];
 
     [Parameter, EditorRequired] public PublicationRelease Release { get; set; } = default!;
     [Parameter, EditorRequired] public int Page { get; set; }

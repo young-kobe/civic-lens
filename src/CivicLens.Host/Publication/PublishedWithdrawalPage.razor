@@ -1,7 +1,6 @@
-@using CivicLens.Host.Components.Layout
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="PublicSection.AllRecords" CanonicalPath="@PublicationProtocol.RecordPagePath(Withdrawal.RecordId)" Title="@Title" Description="A person withdrew this record. Its content is no longer published." RootPath="../" UsesRecordFont="true" NoIndex="true" Crumbs="Crumbs">
+<PublicPage Section="PublicSection.AllRecords" CanonicalPath="@PublicationProtocol.RecordPagePath(Withdrawal.RecordId)" Title="@Title" Description="A person withdrew this record. Its content is no longer published." RootPath="../" UsesRecordFont="true" NoIndex="true">
     <RecordView HeadingLevel="1" Headline="This record was withdrawn"
                 Summary="A person withdrew this record. Its content is no longer published."
                 Facts="PublishedWithdrawalView.Facts(Withdrawal)" />
@@ -9,7 +8,6 @@
 </PublicPage>
 
 @code {
-    private IReadOnlyList<Crumb> Crumbs => [PublicCrumbs.Home("../"), PublicCrumbs.Section(PublicSection.AllRecords, "../"), new(Title)];
 
     private string Title => $"Withdrawn {PublishedRecordLabels.Kind(Withdrawal.Kind).ToLowerInvariant()}: {Withdrawal.RecordId[..12]}";
 
