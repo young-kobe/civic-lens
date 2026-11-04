@@ -261,7 +261,7 @@ public sealed class SourcesPageTests(PostgresCollection postgres) : IAsyncLifeti
 
     private ReviewWorkspaceHost Host => host!;
 
-    private PostgresCollectionJobStore Jobs => PostgresCollectionJobStore.FromConnectionString(Host.ConnectionString);
+    private PostgresCollectionJobStore Jobs => PostgresCollectionJobStore.FromConnectionString(Host.ConnectionString, TestCodeVersion.Current);
 
     private async Task<CollectionWorkspace> StartAsync(string subject)
     {

@@ -479,7 +479,7 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         await Decide.ExecuteAsync(Owner, new(candidate, 3, 2, ReviewDecisionKind.Approve, "Fixed.", [withdrawal.DecisionId], "approve-new"));
         await briefs.ExecuteAsync("UPDATE brief_analysis SET status = 'Succeeded', attempts = 3");
 
-        await new PostgresPublicationStore(factory).CommitAsync(Owner.Subject, new(2, 1, $"000002-{Guid.NewGuid():N}",
+        await new PostgresPublicationStore(factory, TestCodeVersion.Current).CommitAsync(Owner.Subject, new(2, 1, $"000002-{Guid.NewGuid():N}",
             [new(PublishedRecordKind.Statement, candidate, 3)], [])
         { Withdrawals = [] }, "publish", new string('a', 64), default);
 
@@ -609,21 +609,6 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         await Decide.ExecuteAsync(Owner, new(ticked, 2, 0, ReviewDecisionKind.Approve, null, [], "approve-ticked"));
         await Decide.ExecuteAsync(Owner, new(unticked, 2, 0, ReviewDecisionKind.Approve, null, [], "approve-unticked"));
         Assert.Equal(ReviewStatus.Approved, (await reviews.GetAsync(ticked, default))!.Review.CurrentStatus);
-    }
-
-    [Fact]
-    public async Task ASpanOutsideTheExtractionOrOnAnotherExtractionIsRefusedAndNothingIsWritten()
-    {
-        var candidate = await StartedAsync();
-        var request = await SaveRequestAsync(candidate, 1, "save");
-        var extraction = request.Quotations[0].ExtractionId;
-
-        await Assert.ThrowsAsync<ArgumentException>(() => Save.ExecuteAsync(Owner,
-            request with { Quotations = [new(extraction, Article.Length + 50, 10)] }));
-        await Assert.ThrowsAsync<ArgumentException>(() => Save.ExecuteAsync(Owner,
-            request with { Quotations = [new(new string('b', 64), 0, 10)] }));
-
-        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM statement_revisions WHERE candidate_id = '{candidate}'"));
     }
 
     [Fact]

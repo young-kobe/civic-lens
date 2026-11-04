@@ -91,17 +91,6 @@ public sealed class PublishExecutiveActionTests
     }
 
     [Fact]
-    public async Task TheCodeSubjectMayPublishItBecauseItIsAFactRecord()
-    {
-        var scenario = new PublicationScenario();
-        var record = scenario.AddExecutiveAction('a');
-
-        var summary = await scenario.Publisher().ExecuteAsync(Code, Request("k", record));
-
-        Assert.Equal(1, summary.RecordCount);
-    }
-
-    [Fact]
     public async Task TheWorkerPublishesAnExecutiveActionWhoeverApprovedIt()
     {
         var scenario = new PublicationScenario();

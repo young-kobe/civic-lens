@@ -16,7 +16,7 @@ python3 tools/render-architecture.py --check
 python3 tools/check-docs.py --check
 ```
 
-CI runs the tests in 4 parallel jobs, each with its own Postgres container. `tools/test-shards.py` puts each test class in one job by a hash of its name. To run one job locally after the Release build, run `python3 tools/test-shards.py --shards 4 --index 0 --runsettings shard.runsettings`. Then run `dotnet test tests/CivicLens.Tests --configuration Release --no-build --settings shard.runsettings`.
+CI runs the tests in 4 parallel jobs, each with its own Postgres container. `tools/test-shards.py` assigns each test class to one job. It sorts classes by the seconds in `tools/test-shard-weights.json`, heaviest first, and gives each to the lightest shard. A class missing from the table gets the mean weight. To refresh the table, run the full suite with `--logger trx --results-directory /tmp/trx`, then run `python3 tools/test-shards.py --write-weights /tmp/trx/*.trx`. To run one job locally after the Release build, run `python3 tools/test-shards.py --shards 4 --index 0 --runsettings shard.runsettings`. Then run `dotnet test tests/CivicLens.Tests --configuration Release --no-build --settings shard.runsettings`.
 
 Tests never call the paid Claude API. They use a fake model at each drafting port. The live tests, in category `LiveAi`, are skipped unless you set `CIVIC_LENS_LIVE_AI=1` and `ANTHROPIC_API_KEY`. CI does not set them. Each live test sends paid requests, so run them on request only:
 
@@ -976,7 +976,7 @@ Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (empty in development) and
 
 ## Container images
 
-The `Dockerfile` in the repository root builds two images for linux-arm64. The workflow `.github/workflows/release.yml` builds them on a native ARM64 runner. On main, from a push or a manual run, it pushes them to ghcr.io and adds a build provenance attestation to each. On a pull request that changes the build inputs, it builds them and does not push or attest. Pull request runs never wait for or cancel main runs. A newer main run can cancel a queued main run, so deploy only a commit whose image tag exists.
+The `Dockerfile` in the repository root builds two images for linux-arm64. The workflow `.github/workflows/release.yml` builds them on a native ARM64 runner. On main, from a push or a manual run, it pushes them to ghcr.io and adds a build provenance attestation to each. On a pull request that changes the build inputs, it builds them and does not push or attest. The workflow passes the commit SHA as the build argument `SOURCE_REVISION_ID`, and the `Dockerfile` fails without it. Each `dotnet publish` gets it as `SourceRevisionId`, and `CodeVersion` reads it from the assembly. A local `docker build` needs `--build-arg SOURCE_REVISION_ID=<40 hex digits>`. Pull request runs never wait for or cancel main runs. A newer main run can cancel a queued main run, so deploy only a commit whose image tag exists.
 
 | Image | Holds | Entry point |
 | --- | --- | --- |

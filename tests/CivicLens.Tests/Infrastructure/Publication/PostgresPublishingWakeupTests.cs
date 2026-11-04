@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using System.Diagnostics;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication;
@@ -24,7 +25,7 @@ public sealed class PostgresPublishingWakeupTests(PostgresCollection postgres) :
     public async Task TheAgeOfTheNewestReleaseComesFromTheNewestStoredTimeNotTheHighestNumberBecauseTheGapFollowsTheLastPublish()
     {
         var store = new PostgresPublicationStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
-            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options), TestCodeVersion.Current);
         Assert.Null(await store.ReadAgeOfNewestReleaseAsync(default));
         await InsertReleaseAsync(1, TimeSpan.FromSeconds(30));
         await InsertReleaseAsync(2, TimeSpan.FromHours(1));

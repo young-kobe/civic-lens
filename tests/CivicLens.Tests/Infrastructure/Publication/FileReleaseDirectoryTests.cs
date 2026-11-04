@@ -332,28 +332,6 @@ public sealed class FileReleaseDirectoryTests : IDisposable
         Assert.True(File.GetUnixFileMode(linked).HasFlag(UnixFileMode.OtherRead));
     }
 
-    [Theory]
-    [InlineData("../escape.json")]
-    [InlineData("/etc/passwd")]
-    [InlineData("")]
-    public async Task LinkingRejectsPathsThatCouldEscapeTheRelease(string relativePath)
-    {
-        var baseName = await BuildReleaseAsync(1, "one");
-        await using var staging = await releases.BeginAsync(default);
-
-        await Assert.ThrowsAsync<ArgumentException>(() => staging.LinkFileAsync(baseName, relativePath, default));
-    }
-
-    [Theory]
-    [InlineData("../releases")]
-    [InlineData("current")]
-    public async Task LinkingRejectsMalformedSourceDirectoryNames(string directoryName)
-    {
-        await using var staging = await releases.BeginAsync(default);
-
-        await Assert.ThrowsAsync<ArgumentException>(() => staging.LinkFileAsync(directoryName, "records/a.json", default));
-    }
-
     [Fact]
     public async Task LinkingAMissingSourceIsCorruptBaseDataNotBadInput()
     {

@@ -53,7 +53,7 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         reviews = new PostgresBriefReviewStore(factory);
         drafts = new PostgresBriefDraftStore(factory);
-        publications = new PostgresPublicationStore(factory);
+        publications = new PostgresPublicationStore(factory, TestCodeVersion.Current);
         seeder = new BriefWorldSeeder(connectionString);
         await seeder.ReleaseCitedRecordsAsync();
         await seeder.ReviewableBriefAsync(ReviewableRevision());

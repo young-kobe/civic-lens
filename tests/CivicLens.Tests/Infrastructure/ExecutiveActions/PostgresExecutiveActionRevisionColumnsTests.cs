@@ -252,7 +252,7 @@ public sealed class PostgresExecutiveActionRevisionColumnsTests(PostgresCollecti
     {
         var counter = new QueryCounter();
         var counted = new PostgresExecutiveActionReviewStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
-            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(counter).Options));
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(counter).Options), TestCodeVersion.Current);
         var first = await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
         await counted.GetForPublicationAsync([first], default);
         counter.Count = 0;
@@ -332,7 +332,7 @@ public sealed class PostgresExecutiveActionRevisionColumnsTests(PostgresCollecti
 
     private PostgresExecutiveActionRevisionBackfillStore BackfillStore() => new(ContextFactory());
 
-    private PostgresExecutiveActionReviewStore ReviewStore() => PostgresExecutiveActionReviewStore.FromConnectionString(connectionString);
+    private PostgresExecutiveActionReviewStore ReviewStore() => PostgresExecutiveActionReviewStore.FromConnectionString(connectionString, TestCodeVersion.Current);
 
     private PostgresReviewQueueStore QueueStore() => new(ContextFactory());
 

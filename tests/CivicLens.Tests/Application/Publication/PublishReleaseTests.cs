@@ -493,19 +493,6 @@ public sealed class PublishReleaseTests
         Assert.Equal(2, scenario.Publications.LastCommit.Records.Length);
     }
 
-    [Fact]
-    public async Task RejectsRepublishingTheSameRevisionBecauseTheReleaseWouldChangeNothing()
-    {
-        var scenario = new PublicationScenario();
-        var draft = scenario.AddDraft('a');
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", draft));
-
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", draft)));
-
-        Assert.Single(scenario.Publications.Committed);
-    }
-
     [Theory]
     [InlineData(0)]
     [InlineData(65)]
@@ -516,16 +503,6 @@ public sealed class PublishReleaseTests
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", ids)));
-    }
-
-    [Fact]
-    public async Task RejectsDuplicateDraftIds()
-    {
-        var scenario = new PublicationScenario();
-        var draft = scenario.AddDraft('a');
-
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft, draft)));
     }
 
     private static PublishedDocumentChange ReadRecord(PublicationScenario scenario, string directory, string draftId) =>

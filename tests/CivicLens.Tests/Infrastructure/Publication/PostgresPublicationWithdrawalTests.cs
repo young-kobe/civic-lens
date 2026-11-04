@@ -28,7 +28,7 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
         publications = new PostgresPublicationStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
-            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options), TestCodeVersion.Current);
     }
 
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);

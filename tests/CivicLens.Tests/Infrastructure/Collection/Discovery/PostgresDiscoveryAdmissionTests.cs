@@ -26,7 +26,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        jobs = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         Directory.CreateDirectory(artifacts);
     }
@@ -102,7 +102,7 @@ public sealed class PostgresDiscoveryAdmissionTests(PostgresCollection postgres)
         var countedFactory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString)
                 .AddInterceptors(counter).Options);
-        var countedJobs = new PostgresCollectionJobStore(countedFactory);
+        var countedJobs = new PostgresCollectionJobStore(countedFactory, TestCodeVersion.Current);
         var source = Source(policy: new DiscoveryAdmissionPolicy { MaxJobs = 40 });
 
         var admitted = await countedJobs.AdmitAsync(source, attempt, "candidate-mixed", default);

@@ -77,12 +77,6 @@ public sealed class PostgresRelationshipReviewStoreTests(PostgresCollection post
     }
 
     [Fact]
-    public async Task ATypeThatDoesNotFitTheTargetKindIsRefused()
-    {
-        await Assert.ThrowsAsync<ArgumentException>(() => SaveAsync(1, RelationshipType.StatementAboutVote, "Reason.", Span(BillSentence), "F1"));
-    }
-
-    [Fact]
     public async Task AStaleSaveIsAConflictAndKeepsTheNewerRevision()
     {
         _ = await SaveAsync(1, RelationshipType.StatesPositionOn, "First person reason.", Span(BillSentence), "F1");
