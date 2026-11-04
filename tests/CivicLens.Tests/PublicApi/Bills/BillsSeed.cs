@@ -19,6 +19,7 @@ internal sealed record SeededBill(char Id, string EventOn)
     public string[] UntrackedIssues { get; init; } = [];
     public int FirstRelease { get; init; } = 1;
     public int? LastRelease { get; init; }
+    public string RecordKind { get; init; } = "action";
 
     public string RecordId { get; init; } = new(Id, 64);
 }
@@ -37,7 +38,7 @@ internal static class BillsSeed
         return $"""
             SET session_replication_role = replica;
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
-              VALUES ('action', '{bill.RecordId}', {bill.FirstRelease}, 1, {last});
+              VALUES ('{bill.RecordKind}', '{bill.RecordId}', {bill.FirstRelease}, 1, {last});
             {PublicActionRows.ActionRevision(bill.RecordId, 1, bill.TextOrigin, bill.EventOn, cosponsors, bill.Congress, bill.BillType, bill.BillNumber, bill.PolicyAreaId)}
             {string.Join('\n', bill.Sponsorships.Select((item, position) => PublicActionRows.ActionSponsorship(
                 bill.RecordId, 1, position, item.Person, item.Role, item.IsOriginal, item.SponsoredOn, item.WithdrawnOn)))}

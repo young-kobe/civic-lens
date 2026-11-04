@@ -88,9 +88,10 @@ public sealed class BillStore(NpgsqlDataSource views)
         (request.BillType is null ? "" : " AND b.bill_type = @bill_type") +
         (request.BillNumber is null ? "" : " AND b.bill_number = @bill_number") +
         (request.PolicyArea is null ? "" : " AND b.policy_area_id = @policy_area") +
-        (request.Sponsor is null ? "" : """
+        (request.Sponsor is null ? "" : $"""
              AND EXISTS (SELECT 1 FROM public_api.bill_sponsorships s
-                          WHERE s.record_id = b.record_id AND s.revision_number = b.revision_number AND s.official_id = @sponsor)
+                          WHERE s.record_id = b.record_id AND s.revision_number = b.revision_number AND s.official_id = @sponsor
+                            AND s.role = '{nameof(PublishedSponsorshipRole.Sponsor)}')
             """) +
         (request.Issue is null ? "" : """
              AND EXISTS (SELECT 1 FROM public_api.bill_issues i

@@ -198,8 +198,9 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
     [InlineData("billType=hr&billNumber=7&congress=118", "c")]
     [InlineData("billNumber=3", "b")]
     [InlineData("sponsor=p1", "acf")]
-    [InlineData("sponsor=p2", "abf")]
-    [InlineData("sponsor=p4", "ea")]
+    [InlineData("sponsor=p2", "b")]
+    [InlineData("sponsor=p3", "")]
+    [InlineData("sponsor=p4", "e")]
     [InlineData("sponsor=nobody", "")]
     [InlineData("issue=health", "ea")]
     [InlineData("issue=tax", "a")]
@@ -369,12 +370,14 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task ARecordOfAnotherKindIsNotABillBecauseTheViewsShowActionsOnly()
     {
-        await using var host = await StartWithBillsAsync(A);
-        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, new SeededVote('d', "2026-03-02"));
+        var voteRecord = new SeededBill('d', "2026-03-02") { RecordKind = "vote" };
+        await using var host = await StartWithBillsAsync(A, voteRecord);
 
-        using var response = await host.Client.GetAsync($"/v1/bills/{new string('d', 64)}");
+        using var bill = await host.Client.GetAsync($"/v1/bills/{voteRecord.RecordId}");
+        using var sponsorships = await host.Client.GetAsync($"/v1/bills/{voteRecord.RecordId}/sponsorships");
 
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, bill.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, sponsorships.StatusCode);
     }
 
     [Fact]
