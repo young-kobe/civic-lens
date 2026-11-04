@@ -692,14 +692,14 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- vo
 
 ### Vote revision backfill
 
-The commands below move old vote revisions into columns and child rows. A revision written by current code already has the other columns, but it can lack `event_on` and `cosponsor_count`. They need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+The commands below move old vote revisions into columns and child rows. A revision written by current code already has them. They need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes revisions backfill 500
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes revisions verify
 ```
 
-`backfill <limit>` moves at most `limit` revisions that have no event date. Those are legacy revisions and revisions that current code wrote before the derived columns existed. It walks the table in key order in batches of 25. It stops when it reaches the limit or the end of the table, and a skipped row does not count against the limit. Each batch is one short transaction that holds the vote review lock, so reviewers and the worker wait for one batch at most. For each row it writes the columns, reads the row back, rebuilds the revision, and compares it to the stored JSON. A row that differs is skipped with `RebuildMismatch`. It prints `examined`, `moved`, `skipped`, `skippedByReason` (a count for each reason), and the first 50 skipped revisions as record ID, revision number, and reason. A skipped row is not changed. The JSON of every revision stays as it is. A rerun moves nothing that it moved before. The exit code is 1 when any row was skipped, and the counts still print. The [votes doc](architecture/votes.md#invariants) lists the reasons.
+`backfill <limit>` moves at most `limit` legacy revisions. It walks the table in key order in batches of 25. It stops when it reaches the limit or the end of the table, and a skipped row does not count against the limit. Each batch is one short transaction that holds the vote review lock, so reviewers and the worker wait for one batch at most. For each row it writes the columns, reads the row back, rebuilds the revision, and compares it to the stored JSON. A row that differs is skipped with `RebuildMismatch`. It prints `examined`, `moved`, `skipped`, `skippedByReason` (a count for each reason), and the first 50 skipped revisions as record ID, revision number, and reason. A skipped row is not changed. The JSON of every revision stays as it is. A rerun moves nothing that it moved before. The exit code is 1 when any row was skipped, and the counts still print. The [votes doc](architecture/votes.md#invariants) lists the reasons.
 
 `verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. It prints `checked`, `legacy`, `mismatched`, and the first 20 mismatches as record ID, revision number, and JSON key names. It never prints text. The exit code is 1 while `legacy` or `mismatched` is above 0. One absence passes: a missing `source` key on a revision of the source `congress-house-votes`. Any other difference fails.
 
@@ -707,14 +707,14 @@ Run order: `backfill`, then `verify`. Run the new code only when `verify` exits 
 
 ### Action revision backfill
 
-R-63 step 2 moves old action revisions into columns and child rows. A revision written by current code already has them. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+R-63 step 2 moves old action revisions into columns and child rows. A revision written by current code has them, but a revision written before the derived columns existed has no `event_on` and `cosponsor_count`. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions revisions backfill 500
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions revisions verify
 ```
 
-`backfill <limit>` moves at most `limit` legacy revisions. It walks the table in key order in batches of 25. Each batch is one short transaction that holds the action review lock. For each row it writes the columns and the issue, sponsorship, and citation rows, reads the row back, rebuilds the revision, and compares it to the stored JSON. A row that differs is skipped with `RebuildMismatch`. The output and the exit code are the same as for the [vote backfill](#vote-revision-backfill). The reasons are `UnreadableJson`, `InvalidShape`, `RebuildMismatch`, and `database:<constraint>`. A skipped row keeps its null columns.
+`backfill <limit>` moves at most `limit` revisions that have no event date. Those are legacy revisions and revisions without the derived columns. It walks the table in key order in batches of 25. Each batch is one short transaction that holds the action review lock. For each row it deletes the old child rows, writes the columns and the issue, sponsorship, and citation rows, reads the row back, rebuilds the revision, and compares it to the stored JSON. A row that differs is skipped with `RebuildMismatch`. The output and the exit code are the same as for the [vote backfill](#vote-revision-backfill). The reasons are `UnreadableJson`, `InvalidShape`, `RebuildMismatch`, and `database:<constraint>`. A skipped row keeps its earlier columns and child rows.
 
 `verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. The output and the exit code are the same as for the vote `verify`. No key is allowed to be absent.
 

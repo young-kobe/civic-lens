@@ -14,7 +14,7 @@ public sealed class ActionRevisionDerivedColumnsMigrationTests(PostgresCollectio
 {
     private static readonly string RecordId = new('a', 64);
     private const string Json = "{\"a\":1}";
-    private const string Migration = "20261104003140_ActionRevisionDerivedColumns";
+    private const string Migration = "20261104011000_ActionRevisionDerivedColumns";
     private const string DerivedColumnCount = """
         SELECT count(*) FROM information_schema.columns
         WHERE table_schema = current_schema() AND table_name = 'action_revisions' AND column_name IN ('event_on', 'cosponsor_count')
