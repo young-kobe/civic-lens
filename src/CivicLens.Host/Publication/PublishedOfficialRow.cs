@@ -8,7 +8,7 @@ internal sealed record PublishedOfficialRow(PublishedRecordKind Kind, DateOnly D
     DateTimeOffset PublishedAtUtc, bool AgainstParty, string? FilterKeys = null)
 {
     public static PublishedOfficialRow Of(PublishedRecordEntry entry, ActionBillStatus? billStatus) => new(
-        entry.Kind, ReleaseRecordOrder.Day(entry), entry.RecordId, entry.Headline, PublishedRecordLabels.Badge(entry),
+        entry.Kind, ReleaseRecordOrder.Day(entry), entry.RecordId, entry.Headline, PublishedOfficialView.RowKind(entry),
         billStatus is null ? null : PublishedOfficialView.StatusLine(billStatus), null, entry.FirstPublishedAtUtc, false);
 
     public static PublishedOfficialRow Of(PublishedOfficialVote vote) => new(

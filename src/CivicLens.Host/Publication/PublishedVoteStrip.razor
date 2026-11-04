@@ -1,0 +1,26 @@
+@using System.Collections.Immutable
+@using CivicLens.Publication.Contracts
+
+@if (!Votes.IsEmpty)
+{
+    var ordered = PublishedVoteStripView.OldestFirst(Votes);
+    <section class="vote-strip" aria-labelledby="vote-strip-title">
+        <h2 id="vote-strip-title">@PublishedVoteStripView.Title</h2>
+        <p class="muted">@PublishedVoteStripView.Intro(ordered)</p>
+        <div class="vote-strip-marks" role="img" aria-label="@PublishedVoteStripView.Description(ordered)">
+            @foreach (var vote in ordered)
+            {
+                <span class="@PublishedVoteStripView.MarkClass(vote)"></span>
+            }
+        </div>
+        <ul class="vote-strip-legend" role="list">
+            <li><span class="vote-mark vote-mark-yes"></span>Yes</li>
+            <li><span class="vote-mark vote-mark-no"></span>No</li>
+            <li><span class="vote-mark vote-mark-against"></span>Against most of their party</li>
+        </ul>
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public ImmutableArray<PublishedOfficialVote> Votes { get; set; }
+}

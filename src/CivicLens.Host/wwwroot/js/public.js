@@ -239,7 +239,7 @@
         const [previous, next] = ["Previous", "Next"].map(text => {
             const button = document.createElement("button");
             button.type = "button";
-            button.className = "btn btn-small";
+            button.className = text === "Next" ? "btn btn-small btn-primary" : "btn btn-small";
             button.textContent = text;
             return button;
         });
@@ -269,24 +269,29 @@
         showRows(table, true);
     };
 
-    const initRecordFilters = panel => {
-        const table = panel.querySelector("table");
-        const rows = Array.from(panel.querySelectorAll("tbody tr"));
+    const initRecordFilters = section => {
+        const listPane = section.querySelector("[data-list-pane]");
+        const issuesPane = section.querySelector("[data-issues-pane]");
+        const table = listPane.querySelector("table");
+        const rows = Array.from(listPane.querySelectorAll("tbody tr"));
         if (rows.length === 0) return;
-        const tabs = panel.querySelector("[data-record-filters]");
-        const kindButtons = tabs ? Array.from(tabs.querySelectorAll("[data-filter-value]")) : [];
-        const counts = Array.from(document.querySelectorAll("[data-count-filter]"));
-        const status = panel.querySelector("[data-filter-status]");
-        const notice = panel.querySelector("[data-filter-notice]");
+        const tabs = section.querySelector("[data-record-filters]");
+        const tabButtons = tabs ? Array.from(tabs.querySelectorAll("[data-filter-value]")) : [];
+        const counts = Array.from(section.querySelectorAll("[data-count-filter]"));
+        const status = listPane.querySelector("[data-filter-status]");
+        const notice = listPane.querySelector("[data-filter-notice]");
         const clearButton = notice?.querySelector("[data-filter-clear]");
-        let kind = "", issue = null;
+        let kind = "", issue = null, issuesOpen = false;
+        const isIssuesTab = button => button.dataset.filterValue === issuesPane?.dataset.issuesPane;
         const hides = row => (kind !== "" && !row.classList.contains(kind))
             || (issue !== null && !(row.dataset.filterKeys ?? "").split(" ").includes(issue.dataset.countFilter));
         const apply = () => {
             for (const row of rows) row.toggleAttribute("data-filtered-out", hides(row));
             const shown = rows.filter(row => !row.hasAttribute("data-filtered-out")).length;
             showRows(table, true);
-            for (const button of kindButtons) button.setAttribute("aria-pressed", String(button.dataset.filterValue === kind));
+            listPane.hidden = issuesOpen;
+            if (issuesPane) issuesPane.hidden = !issuesOpen;
+            for (const button of tabButtons) button.setAttribute("aria-pressed", String(isIssuesTab(button) ? issuesOpen : !issuesOpen && button.dataset.filterValue === kind));
             for (const count of counts) count.querySelector("button").setAttribute("aria-pressed", String(count === issue));
             if (notice) {
                 notice.querySelector("[data-filter-text]").textContent = issue?.dataset.filterShows ?? "";
@@ -304,9 +309,13 @@
             button.textContent = count.textContent;
             button.setAttribute("aria-label", count.dataset.filterLabel);
             count.replaceChildren(button);
-            button.addEventListener("click", () => { issue = issue === count ? null : count; apply(); });
+            button.addEventListener("click", () => { issue = issue === count ? null : count; issuesOpen = false; apply(); });
         }
-        for (const button of kindButtons) button.addEventListener("click", () => { kind = button.dataset.filterValue; apply(); });
+        for (const button of tabButtons) button.addEventListener("click", () => {
+            issuesOpen = isIssuesTab(button);
+            if (!issuesOpen) kind = button.dataset.filterValue;
+            apply();
+        });
         clearButton?.addEventListener("click", () => {
             const pressed = issue?.querySelector("button");
             kind = "";

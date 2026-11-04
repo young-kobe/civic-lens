@@ -19,12 +19,12 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var records = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-records']")!;
+        var records = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='record-title']")!;
         Assert.Equal([new string('2', 64), new string('3', 64), new string('1', 64), new string('4', 64)],
             records.QuerySelectorAll("a.cell-title").Select(link => link.GetAttribute("href")!.Replace("../records/", "").Replace(".html", "")));
-        Assert.Equal(["1 May 2026", "1 Apr 2026", "1 Mar 2026", "1 Dec 2025"], records.QuerySelectorAll("tbody td.num").Select(cell => cell.TextContent));
+        Assert.Equal(["Bill, 1 May 2026", "Vote, 1 Apr 2026", "Statement, 1 Mar 2026", "Vote, 1 Dec 2025"], records.QuerySelectorAll("tbody .record-kind").Select(line => line.TextContent));
         Assert.Contains("House roll call 100, Congress 119, session 1, HR 7, Congress 119. Result of the vote: Passed", records.TextContent, StringComparison.Ordinal);
-        Assert.Contains("Yea", records.TextContent, StringComparison.Ordinal);
+        Assert.Equal(["Yea", "Yea"], records.QuerySelectorAll("tbody .cast-pill").Select(pill => pill.TextContent));
     }
 
     [Fact]
@@ -33,10 +33,10 @@ public sealed class PublishedOfficialPageTests
         var bill = Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1));
         var page = Current([bill], []) with { BillStatuses = Statuses(bill, "Referred to the Committee on Armed Services.", "hr") };
 
-        var records = await PanelAsync(page, "panel-records");
+        var records = await PanelAsync(page, "record-title");
 
         Assert.Equal("Latest official action on 28 Jan 2026 (read from Congress.gov on 30 Jan 2026): In committee: sent to the Committee on Armed Services.",
-            records.QuerySelector("tbody .muted.small")!.TextContent);
+            records.QuerySelector("tbody .record-detail")!.TextContent);
     }
 
     [Theory]
@@ -47,9 +47,9 @@ public sealed class PublishedOfficialPageTests
         var bill = Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1));
         var page = Current([bill], []) with { BillStatuses = Statuses(bill, text, billType) };
 
-        var records = await PanelAsync(page, "panel-records");
+        var records = await PanelAsync(page, "record-title");
 
-        Assert.Equal($"Latest official action on 28 Jan 2026 (read from Congress.gov on 30 Jan 2026): {meaning}", records.QuerySelector("tbody .muted.small")!.TextContent);
+        Assert.Equal($"Latest official action on 28 Jan 2026 (read from Congress.gov on 30 Jan 2026): {meaning}", records.QuerySelector("tbody .record-detail")!.TextContent);
     }
 
     [Fact]
@@ -58,9 +58,9 @@ public sealed class PublishedOfficialPageTests
         var bill = Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1));
         var page = Current([bill], []) with { BillStatuses = Statuses(bill, "Introduced in House", "hr") };
 
-        var records = await PanelAsync(page, "panel-records");
+        var records = await PanelAsync(page, "record-title");
 
-        Assert.Equal("Latest official action on 28 Jan 2026 (read from Congress.gov on 30 Jan 2026): Introduced in House.", records.QuerySelector("tbody .muted.small")!.TextContent);
+        Assert.Equal("Latest official action on 28 Jan 2026 (read from Congress.gov on 30 Jan 2026): Introduced in House.", records.QuerySelector("tbody .record-detail")!.TextContent);
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public sealed class PublishedOfficialPageTests
     {
         var page = Current([Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1)), Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []);
 
-        var records = await PanelAsync(page, "panel-records");
+        var records = await PanelAsync(page, "record-title");
 
         Assert.DoesNotContain("Latest official action", records.TextContent, StringComparison.Ordinal);
     }
@@ -85,9 +85,9 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var badges = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-records']")!.QuerySelectorAll("tbody .badge, tbody [class*=badge]")
-            .Select(badge => badge.TextContent.Trim());
-        Assert.Equal(["Proclamation", "Bill or resolution"], badges);
+        var kinds = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='record-title']")!.QuerySelectorAll("tbody .record-kind")
+            .Select(line => line.TextContent.Split(',')[0]);
+        Assert.Equal(["Proclamation", "Bill"], kinds);
     }
 
     [Fact]
@@ -170,8 +170,9 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.Equal("Representative for WA, district 9. Party: Democrat. In the House since January 1997.",
-            new HtmlParser().ParseDocument(html).QuerySelector(".page-header-lede")!.TextContent);
+        var header = new HtmlParser().ParseDocument(html).QuerySelector("header.page-header")!;
+        Assert.Equal("Democratic representative for WA, district 9", header.QuerySelector(".page-header-lede")!.TextContent);
+        Assert.Equal("In the House since January 1997.", header.QuerySelector(".page-header-meta span")!.TextContent);
     }
 
     [Fact]
@@ -181,7 +182,7 @@ public sealed class PublishedOfficialPageTests
             [Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)), Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1)), Entry('5', PublishedRecordKind.Action, new DateOnly(2026, 5, 2))],
             [Vote('3', new DateOnly(2026, 4, 1)), Vote('4', new DateOnly(2025, 12, 1))]);
 
-        var records = await PanelAsync(page, "panel-records");
+        var records = await PanelAsync(page, "record-title");
 
         Assert.Equal("This list holds 5 published records: 1 statement, 2 bills and resolutions, and 2 votes in the 119th Congress. Rows are newest first.", records.QuerySelector("p.muted")!.TextContent);
     }
@@ -208,7 +209,7 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task TheRecordsCountLineUsesTheSingularForOneRecordAndItsOwnKind()
     {
-        var records = await PanelAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []), "panel-records");
+        var records = await PanelAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []), "record-title");
 
         Assert.Equal("This list holds 1 published record: 1 statement. Rows are newest first.", records.QuerySelector("p.muted")!.TextContent);
     }
@@ -216,7 +217,7 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task AnEmptyRecordsTableHasNoCountLineBecauseItsEmptyStateAlreadySaysThereAreNoRecords()
     {
-        var records = await PanelAsync(Current([], []), "panel-records");
+        var records = await PanelAsync(Current([], []), "record-title");
 
         Assert.Null(records.QuerySelector("p.muted"));
         Assert.Contains("There are no records here.", records.TextContent, StringComparison.Ordinal);
@@ -230,7 +231,7 @@ public sealed class PublishedOfficialPageTests
         var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None));
 
         Assert.Equal("Votes in the 117th Congress.", document.QuerySelector(".page-header-lede")!.TextContent);
-        Assert.Equal("This list holds 1 published record: 1 vote in the 117th Congress. Rows are newest first.", document.QuerySelector("[aria-labelledby='panel-records'] p.muted")!.TextContent);
+        Assert.Equal("This list holds 1 published record: 1 vote in the 117th Congress. Rows are newest first.", document.QuerySelector("[aria-labelledby='record-title'] p.muted")!.TextContent);
     }
 
     [Fact]
@@ -293,41 +294,45 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task TheTenureStartsAtTheStartOfTheUnbrokenStretchInTheChamberEvenAfterADistrictChange()
     {
-        var lede = await LedeAsync(Seat(new(1997, 1, 7), new(1999, 1, 3)), Seat(new(1999, 1, 6), new(2001, 1, 3)) with { District = 8 }, Seat(new(2001, 1, 3), new(2027, 1, 3)));
+        var tenure = await TenureAsync(Seat(new(1997, 1, 7), new(1999, 1, 3)), Seat(new(1999, 1, 6), new(2001, 1, 3)) with { District = 8 }, Seat(new(2001, 1, 3), new(2027, 1, 3)));
 
-        Assert.EndsWith("In the House since January 1997.", lede, StringComparison.Ordinal);
+        Assert.Equal("In the House since January 1997.", tenure);
     }
 
     [Fact]
     public async Task ASenatorWhoLeftTheHouseDatesTheTenureFromTheSenateBecauseTheTenureNamesOneChamber()
     {
-        var lede = await LedeAsync(Seat(new(2001, 1, 3), new(2007, 1, 3)), Senate(new(2007, 1, 4), new(2013, 1, 3)), Senate(new(2013, 1, 3), new(2027, 1, 3)));
+        var terms = new[] { Seat(new(2001, 1, 3), new(2007, 1, 3)), Senate(new(2007, 1, 4), new(2013, 1, 3)), Senate(new(2013, 1, 3), new(2027, 1, 3)) };
 
-        Assert.Equal("Senator for WA. Party: Democrat. In the Senate since January 2007.", lede);
+        Assert.Equal("Democratic senator for WA", await LedeAsync(terms));
+        Assert.Equal("In the Senate since January 2007.", await TenureAsync(terms));
     }
 
     [Fact]
     public async Task AFormerMemberGetsAClosedTenureAndFormerBecauseSinceWouldBeFalse()
     {
-        var lede = await LedeAsync(Seat(new(2001, 1, 3), new(2003, 1, 3)), Seat(new(2003, 1, 3), new(2005, 1, 3)));
+        var terms = new[] { Seat(new(2001, 1, 3), new(2003, 1, 3)), Seat(new(2003, 1, 3), new(2005, 1, 3)) };
 
-        Assert.Equal("Former Representative for WA, district 9. Party: Democrat. In the House from January 2001 to January 2005.", lede);
+        Assert.Equal("Former Democratic representative for WA, district 9", await LedeAsync(terms));
+        Assert.Equal("In the House from January 2001 to January 2005.", await TenureAsync(terms));
     }
 
     [Fact]
     public async Task ATermThatStartsAfterTheReleaseDateIsNotTheLatestTermSoTheLedeDescribesTheOfficeTheyHoldToday()
     {
-        var lede = await LedeAsync(Seat(new(2025, 1, 3), new(2027, 1, 3)), Seat(new(2027, 1, 3), null) with { District = 3 });
+        var terms = new[] { Seat(new(2025, 1, 3), new(2027, 1, 3)), Seat(new(2027, 1, 3), null) with { District = 3 } };
 
-        Assert.Equal("Representative for WA, district 9. Party: Democrat. In the House since January 2025.", lede);
+        Assert.Equal("Democratic representative for WA, district 9", await LedeAsync(terms));
+        Assert.Equal("In the House since January 2025.", await TenureAsync(terms));
     }
 
     [Fact]
     public async Task AnExecutiveHasNoTenureSentenceBecauseTenureNamesAChamber()
     {
-        var lede = await LedeAsync(new PublishedOfficeTerm { Office = "President", Kind = PublishedOfficeKind.Executive, Start = new(2025, 1, 20) });
+        var term = new PublishedOfficeTerm { Office = "President", Kind = PublishedOfficeKind.Executive, Start = new(2025, 1, 20) };
 
-        Assert.Equal("President.", lede);
+        Assert.Equal("President", await LedeAsync(term));
+        Assert.Null(await TenureAsync(term));
     }
 
     [Fact]
@@ -374,19 +379,19 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task APageWithNoCastOnAnyRowGetsNoCastColumnBecauseOnlyAVoteHasACast()
     {
-        var records = await PanelTableAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []), "panel-records");
+        var records = await PanelTableAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []), "record-title");
 
-        Assert.Equal(["Date", "Record"], records.QuerySelectorAll("thead th").Select(cell => cell.TextContent));
-        Assert.Equal(2, records.QuerySelectorAll("tbody td").Length);
+        Assert.Equal(["Record"], records.QuerySelectorAll("thead th").Select(cell => cell.TextContent));
+        Assert.Equal(1, records.QuerySelectorAll("tbody td").Length);
     }
 
     [Fact]
     public async Task APageWithOneVoteKeepsTheCastColumnForEveryRow()
     {
-        var records = await PanelTableAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], [Vote('3', new DateOnly(2026, 4, 1))]), "panel-records");
+        var records = await PanelTableAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], [Vote('3', new DateOnly(2026, 4, 1))]), "record-title");
 
-        Assert.Equal(["Date", "Record", "Cast"], records.QuerySelectorAll("thead th").Select(cell => cell.TextContent));
-        Assert.All(records.QuerySelectorAll("tbody tr"), row => Assert.Equal(3, row.QuerySelectorAll("td").Length));
+        Assert.Equal(["Record", "Cast"], records.QuerySelectorAll("thead th").Select(cell => cell.TextContent));
+        Assert.All(records.QuerySelectorAll("tbody tr"), row => Assert.Equal(2, row.QuerySelectorAll("td").Length));
     }
 
     [Fact]
@@ -406,8 +411,8 @@ public sealed class PublishedOfficialPageTests
         var header = new HtmlParser().ParseDocument(html).QuerySelector("header.page-header")!;
         Assert.Equal("Rita Rep", header.QuerySelector("h1")!.TextContent);
         Assert.NotNull(header.QuerySelector(".page-header-portrait figure.portrait img"));
-        Assert.Contains("Party: Democrat", header.QuerySelector(".page-header-lede")!.TextContent, StringComparison.Ordinal);
-        Assert.Equal("Official website (rep.example.gov)", header.QuerySelector(".page-header-meta a[href='https://rep.example.gov/home']")!.TextContent);
+        Assert.Equal("Democratic representative for WA, district 9", header.QuerySelector(".page-header-lede")!.TextContent);
+        Assert.Equal("Official website", header.QuerySelector(".page-header-meta a[href='https://rep.example.gov/home']")!.TextContent);
     }
 
     [Fact]
@@ -430,7 +435,7 @@ public sealed class PublishedOfficialPageTests
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
         var link = new HtmlParser().ParseDocument(html).QuerySelector("a[href='https://warren.senate.gov/about']")!;
-        Assert.Equal("Official website (warren.senate.gov)", link.TextContent);
+        Assert.Equal("Official website", link.TextContent);
         Assert.Equal("noopener noreferrer", link.GetAttribute("rel"));
     }
 
@@ -490,121 +495,82 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task TheProfilePanelStatesTheMissedVotesOfEachChamberOnceWithTheMeaningAfterThem()
+    public async Task TheVotedFigureOfEachChamberNamesTheChamberAndTheCountsAndItsNoteKeepsTheApprovedMeaningOfAMissedVote()
     {
         var day = new DateOnly(2026, 4, 1);
         var votes = new[] { Vote('a', day) with { Cast = PublishedOfficialVote.NotVoting }, Vote('b', day.AddDays(2)), Vote('c', day.AddDays(1)) with { Chamber = PublishedChamber.Senate } };
-        var page = Current([], votes);
-        page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
 
-        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+        var figures = FiguresOf(await RenderedAsync(votes));
 
-        var paragraphs = new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-missed-votes-in-congress-119'] p")
-            .Select(paragraph => paragraph.TextContent.Trim()).ToArray();
-        Assert.Equal(["Missed 1 of the 2 roll call votes of the House of Representatives on this site, 1 Apr 2026 to 3 Apr 2026 (119th Congress).",
-            "Missed 0 of the 1 roll call vote of the Senate on this site, on 2 Apr 2026 (119th Congress).",
-            "A missed vote means the official did not vote on it. The count includes procedural votes. It counts only the roll calls on this site, which can be fewer than the chamber held."], paragraphs[..3]);
-        Assert.All(paragraphs[..2], sentence => Assert.DoesNotContain("held in", sentence, StringComparison.Ordinal));
-        Assert.Contains("can be fewer than the chamber held", paragraphs[2], StringComparison.Ordinal);
-        Assert.Equal(["muted small"], new HtmlParser().ParseDocument(html).QuerySelectorAll("[aria-labelledby='panel-missed-votes-in-congress-119'] p.muted").Select(paragraph => paragraph.ClassName!));
+        Assert.Equal([("1 of 2", "House roll calls voted on"), ("1 of 1", "Senate roll calls voted on")], figures.Take(2).Select(figure => (figure.Value, figure.Label)));
+        Assert.All(figures.Take(2), figure => Assert.Equal("A missed vote means the official did not vote on it. The count includes procedural votes. It counts only the roll calls on this site, which can be fewer than the chamber held.", figure.Note));
     }
 
     [Fact]
-    public async Task TheMissedVotesSentenceShowsTheShareOnlyAtTheThresholdAndAnOfficialWithNoRowsOfAChamberGetsNoSentenceForIt()
+    public async Task TheVotedFigureShowsAShareOnlyAtTheThresholdAndAnOfficialWithNoRowsOfAChamberGetsNoFigureForIt()
     {
         var votes = Enumerable.Range(0, 5).Select(index => Vote((char)('a' + index), new DateOnly(2026, 4, 1)) with
         { Cast = index == 0 ? PublishedOfficialVote.NotVoting : "Yea" }).ToArray();
-        var page = Current([], votes);
-        page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
 
-        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+        var figures = FiguresOf(await RenderedAsync(votes));
 
-        var text = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-missed-votes-in-congress-119']")!.TextContent;
-        Assert.Contains("Missed 1 of the 5 roll call votes of the House of Representatives on this site (20%)", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("the Senate", text, StringComparison.Ordinal);
+        Assert.Equal(("80%", "of roll calls voted on: 4 of 5"), (figures[0].Value, figures[0].Label));
+        Assert.DoesNotContain(figures, figure => figure.Label.Contains("Senate", StringComparison.Ordinal));
     }
 
     [Fact]
-    public async Task AnOfficialWhoMissedEveryRollCallOfAChamberShowsAHundredPercent()
+    public async Task AnOfficialWhoMissedEveryRollCallOfAChamberShowsZeroPercentVotedSoTheFigureNeverHidesAFullAbsence()
     {
         var votes = Enumerable.Range(0, 5).Select(index => Vote((char)('a' + index), new DateOnly(2026, 4, 1).AddDays(index)) with { Cast = PublishedOfficialVote.NotVoting }).ToArray();
-        var page = Current([], votes);
-        page = page with { TalkAndAction = TalkAndActionProfile.Of(119, page.Records, page.Votes) };
 
-        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
+        var figures = FiguresOf(await RenderedAsync(votes));
 
-        var text = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-missed-votes-in-congress-119']")!.TextContent;
-        Assert.Contains("Missed 5 of the 5 roll call votes of the House of Representatives on this site (100%)", text, StringComparison.Ordinal);
+        Assert.Equal(("0%", "of roll calls voted on: 0 of 5"), (figures[0].Value, figures[0].Label));
     }
 
     [Fact]
-    public async Task TheVotesWithTheirPartyPanelStatesEachChamberOnceAndListsEveryBreakNewestFirstBetweenTheProfileAndTheRecords()
+    public async Task TheWithPartyFigureOfEachChamberNamesWhoAndHowManySplitVotesAndTheNoteSaysHowManyWereNotCast()
     {
         var day = new DateOnly(2026, 4, 1);
         var votes = new[] { Split('a', day, "Yea"), Split('b', day.AddDays(2), "Nay"), Split('c', day.AddDays(1), "No"), Split('d', day.AddDays(3), "Present"),
             Split('e', day, "Nay") with { Chamber = PublishedChamber.Senate, Party = PublishedPartyMajority.Democrat, PartyMajority = "Nay" } };
-        var document = await RenderedAsync(votes);
 
-        var panel = document.QuerySelector("[aria-labelledby='panel-votes-with-their-party']")!;
-        Assert.Equal(["Voted with most House Republicans on 1 of 3 split votes in the 119th Congress. They did not cast Yea or Nay on 1 other split vote.",
-            "Voted with most Senate Democrats on 1 of 1 split vote in the 119th Congress.",
-            "A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted on opposite sides."],
-            panel.QuerySelectorAll("p").Select(paragraph => paragraph.TextContent.Trim()));
-        var table = panel.QuerySelector("table")!;
-        Assert.Equal(["Date", "Vote", "Their vote", "Most House Republicans", "Result"], table.QuerySelectorAll("th").Select(cell => cell.TextContent.Trim()));
-        Assert.Equal(["3 Apr 2026", "2 Apr 2026"], table.QuerySelectorAll("tbody tr").Select(row => row.QuerySelector("td")!.TextContent.Trim()));
-        var first = table.QuerySelector("tbody tr")!.QuerySelectorAll("td");
-        Assert.Equal(["Vote b", "Nay", "Yea", "Passed"], first.Skip(1).Select(cell => cell.ShownText().Trim()));
-        Assert.EndsWith(PublicationProtocol.RecordPagePath(new string('b', 64)), first[1].QuerySelector("a")!.GetAttribute("href"));
-        Assert.Single(panel.QuerySelectorAll("table"));
-        var titles = document.QuerySelectorAll("h2").Select(title => title.TextContent.Trim()).ToArray();
-        Assert.True(Array.IndexOf(titles, "Missed votes in Congress 119") < Array.IndexOf(titles, "Votes with their party"));
-        Assert.True(Array.IndexOf(titles, "Votes with their party") < Array.IndexOf(titles, "Records"));
+        var figures = FiguresOf(await RenderedAsync(votes)).Where(figure => figure.Label.Contains("split vote", StringComparison.Ordinal)).ToArray();
+
+        Assert.Equal([("1 of 3", "split votes with most House Republicans"), ("1 of 1", "split vote with most Senate Democrats")], figures.Select(figure => (figure.Value, figure.Label)));
+        Assert.Equal(["A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted on opposite sides. They did not cast Yea or Nay on 1 other split vote.", "A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted on opposite sides."], figures.Select(figure => figure.Note));
     }
 
     [Fact]
-    public async Task TheCastCellsOfTheBreaksTableAreTermsOnFirstUse()
+    public async Task AnOfficialWhoNeverBrokeWithThePartyShowsAFullShareAndNoMarkAgainstItAndAnOfficialWithNoSplitVoteGetsNoPartyFigure()
     {
         var day = new DateOnly(2026, 4, 1);
-        var document = await RenderedAsync([Split('a', day, "Nay")]);
-
-        var cells = document.QuerySelectorAll("[aria-labelledby='panel-votes-with-their-party'] tbody td button.term").Select(button => (button.TextContent, button.GetAttribute("popovertarget"))).ToArray();
-        Assert.Equal([("Nay", "term-nay"), ("Yea", "term-yea")], cells);
-    }
-
-    [Fact]
-    public async Task AnOfficialWhoNeverBrokeWithThePartyGetsOneLineAndNoTableAndAnOfficialWithNoSplitVoteGetsAPlainSentence()
-    {
-        var day = new DateOnly(2026, 4, 1);
-        var matched = await RenderedAsync([Split('a', day, "Yea")]);
+        var matched = await RenderedAsync([.. Enumerable.Range(0, 5).Select(index => Split((char)('a' + index), day.AddDays(index), "Yea"))]);
         var none = await RenderedAsync([Vote('a', day)]);
 
-        var matchedPanel = matched.QuerySelector("[aria-labelledby='panel-votes-with-their-party']")!;
-        Assert.Contains("No votes against most of their party.", matchedPanel.TextContent, StringComparison.Ordinal);
-        Assert.Null(matchedPanel.QuerySelector("table"));
-        var nonePanel = none.QuerySelector("[aria-labelledby='panel-votes-with-their-party']")!;
-        Assert.DoesNotContain("No votes against most of their party.", nonePanel.TextContent, StringComparison.Ordinal);
-        Assert.Contains("No Yea or Nay cast yet on a split vote in the House of Representatives as a Republican in the 119th Congress.", nonePanel.TextContent, StringComparison.Ordinal);
+        Assert.Contains(("100%", "with most House Republicans: 5 of 5 split votes"), FiguresOf(matched).Select(figure => (figure.Value, figure.Label)));
+        Assert.Equal("5 votes. No mark shows a vote against most of their party on split votes.", matched.QuerySelector(".vote-strip-marks")!.GetAttribute("aria-label"));
+        Assert.DoesNotContain(FiguresOf(none), figure => figure.Label.Contains("with most", StringComparison.Ordinal));
     }
 
     [Theory]
-    [InlineData(4, "on 3 of 4 split votes in the 119th Congress.")]
-    [InlineData(5, "on 4 of 5 split votes (80%) in the 119th Congress.")]
-    public async Task ThePercentOfVotesWithTheirPartyShowsOnlyAtTheThreshold(int cast, string expected)
+    [InlineData(4, "3 of 4", "split votes with most House Republicans")]
+    [InlineData(5, "80%", "with most House Republicans: 4 of 5 split votes")]
+    public async Task ThePercentOfVotesWithTheirPartyShowsOnlyAtTheThreshold(int cast, string value, string label)
     {
         var votes = Enumerable.Range(0, cast).Select(index => Split((char)('a' + index), new DateOnly(2026, 4, 1).AddDays(index), index == 0 ? "Nay" : "Yea"));
 
-        var document = await RenderedAsync([.. votes]);
+        var figures = FiguresOf(await RenderedAsync([.. votes]));
 
-        Assert.Contains(expected, document.QuerySelector("[aria-labelledby='panel-votes-with-their-party']")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains((value, label), figures.Select(figure => (figure.Value, figure.Label)));
     }
 
     [Fact]
-    public async Task AnOfficialWhoseRowsNameNeitherMajorPartyGetsNoVotesWithTheirPartyPanel()
+    public async Task AnOfficialWhoseRowsNameNeitherMajorPartyGetsNoWithPartyFigure()
     {
         var document = await RenderedAsync([Split('a', new DateOnly(2026, 4, 1), "Yea") with { Party = "Independent" }]);
 
-        Assert.Null(document.QuerySelector("[aria-labelledby='panel-votes-with-their-party']"));
+        Assert.DoesNotContain(FiguresOf(document), figure => figure.Label.Contains("with most", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -616,9 +582,9 @@ public sealed class PublishedOfficialPageTests
 
         var document = await RenderedAsync(votes);
 
-        var marked = document.QuerySelectorAll("[aria-labelledby='panel-records'] tbody tr.against-party");
+        var marked = document.QuerySelectorAll("[aria-labelledby='record-title'] tbody tr.against-party");
         Assert.EndsWith(PublicationProtocol.RecordPagePath(Vote('a', day).RecordId), Assert.Single(marked).QuerySelector("a")!.GetAttribute("href"), StringComparison.Ordinal);
-        Assert.Equal(5, document.QuerySelectorAll("[aria-labelledby='panel-records'] tbody tr").Length);
+        Assert.Equal(5, document.QuerySelectorAll("[aria-labelledby='record-title'] tbody tr").Length);
     }
 
     [Fact]
@@ -627,8 +593,8 @@ public sealed class PublishedOfficialPageTests
         var document = await RenderedWithCountsAsync();
 
         var tabs = document.QuerySelectorAll("[data-records] [data-record-filters] [data-filter-value]").ToArray();
-        Assert.Equal(["All records 9", "Statements 4", "Bills and resolutions 2", "Votes 3"], tabs.Select(TabText));
-        foreach (var tab in tabs.Skip(1))
+        Assert.Equal(["All 9", "Statements 4", "Bills 2", "Votes 3", "Issues they work on"], tabs.Select(TabText));
+        foreach (var tab in tabs.Skip(1).Take(3))
         {
             var rows = document.QuerySelectorAll($"[data-records] tbody tr.{tab.GetAttribute("data-filter-value")}");
             Assert.Equal(int.Parse(tab.QuerySelector(".segmented-count")!.TextContent), rows.Length);
@@ -646,11 +612,14 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task ARecordsListOfOneKindHasNoKindTabsBecauseTheyCouldNotNarrowIt()
+    public async Task ARecordsListOfOneKindHasNoKindTabsBecauseTheyCouldNotNarrowItAndANoProfilePageHasNoTabAtAll()
     {
-        var document = await RenderedAsync([Split('a', new DateOnly(2026, 4, 1), "Yea")]);
+        var withProfile = await RenderedAsync([Split('a', new DateOnly(2026, 4, 1), "Yea")]);
+        var page = Current([], [Split('a', new DateOnly(2026, 4, 1), "Yea")]);
+        var noProfile = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None));
 
-        Assert.Null(document.QuerySelector("[data-record-filters]"));
+        Assert.Equal(["All 1", "Issues they work on"], withProfile.QuerySelectorAll("[data-record-filters] [data-filter-value]").Select(TabText));
+        Assert.Null(noProfile.QuerySelector("[data-record-filters]"));
     }
 
     [Fact]
@@ -661,9 +630,9 @@ public sealed class PublishedOfficialPageTests
         var withBreak = await RenderedAsync([Split('a', day, "Nay"), Split('b', day, "Yea")]);
         var withoutBreak = await RenderedAsync([Split('a', day, "Yea"), Split('b', day, "Yea")]);
 
-        Assert.Equal(["All records 2", "Votes against their party 1"],
-            withBreak.QuerySelectorAll("[aria-labelledby='panel-records'] [data-filter-value]").Select(TabText));
-        Assert.Null(withoutBreak.QuerySelector("[data-record-filters]"));
+        Assert.Equal(["All 2", "Against their party 1", "Issues they work on"],
+            withBreak.QuerySelectorAll("[aria-labelledby='record-title'] [data-filter-value]").Select(TabText));
+        Assert.DoesNotContain("Against their party 1", withoutBreak.QuerySelectorAll("[data-record-filters] [data-filter-value]").Select(TabText));
         Assert.Equal(1, withBreak.QuerySelectorAll("tbody tr.against-party").Length);
     }
 
@@ -679,6 +648,10 @@ public sealed class PublishedOfficialPageTests
         Assert.Null(document.QuerySelector("[data-record-filters]"));
     }
 
+    private static (string Value, string Label, string Note)[] FiguresOf(AngleSharp.Dom.IDocument document) =>
+        [.. document.QuerySelectorAll(".key-figure").Select(figure => (figure.QuerySelector(".key-figure-value")!.TextContent,
+            figure.QuerySelector(".key-figure-label span")!.TextContent, figure.QuerySelector(".term-popover")!.TextContent))];
+
     private static async Task<AngleSharp.Dom.IDocument> RenderedAsync(PublishedOfficialVote[] votes)
     {
         var page = Current([], votes);
@@ -691,6 +664,121 @@ public sealed class PublishedOfficialPageTests
         Vote(id, date) with { SplitVote = true, PartyMajority = PublishedPartyMajority.Yea, Cast = cast };
 
     [Fact]
+    public async Task TheVoteStripHasOneMarkForEachRollCallOldestFirstAndMarksASplitVoteAgainstThePartyBecauseItIsTheFactTheStripExists()
+    {
+        var day = new DateOnly(2026, 4, 1);
+        var votes = new[] { Split('a', day, "Yea"), Vote('b', day.AddDays(2)) with { Cast = "Nay" }, Split('c', day.AddDays(1), "Nay"), Vote('d', day.AddDays(3)) with { Cast = "Present" } };
+
+        var strip = (await RenderedAsync(votes)).QuerySelector(".vote-strip")!;
+
+        Assert.Equal("Every vote in this Congress", strip.QuerySelector("h2")!.TextContent);
+        Assert.Equal("One mark for each of 4 roll calls, from 1 Apr 2026 on the left to 4 Apr 2026 on the right.", strip.QuerySelector("p")!.TextContent);
+        var marks = strip.QuerySelector(".vote-strip-marks")!;
+        Assert.Equal("4 votes. 1 mark shows a vote against most House Republicans on split votes.", marks.GetAttribute("aria-label"));
+        Assert.Equal(["vote-mark-yes", "vote-mark-against", "vote-mark-no", "vote-mark-other"], marks.Children.Select(mark => mark.ClassList.Last()));
+        Assert.Equal(["Yes", "No", "Against most of their party"], strip.QuerySelectorAll(".vote-strip-legend li").Select(item => item.TextContent));
+    }
+
+    [Fact]
+    public async Task AnOfficialWithNoVoteHasNoVoteStripBecauseItWouldDrawNothing()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []), PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Null(new HtmlParser().ParseDocument(html).QuerySelector(".vote-strip"));
+    }
+
+    [Fact]
+    public async Task EachKeyFigureHasAnInfoButtonThatNamesItAndOpensItsNoteSoNoNumberStandsWithoutItsMeaning()
+    {
+        var document = await RenderedWithCountsAsync();
+
+        var section = document.QuerySelector("section.key-figures")!;
+        Assert.Equal("Key figures for the 119th Congress", section.GetAttribute("aria-label"));
+        var figures = section.QuerySelectorAll(".key-figure").ToArray();
+        Assert.Equal(["2 of 3", "1", "3"], figures.Select(figure => figure.QuerySelector(".key-figure-value")!.TextContent));
+        foreach (var figure in figures)
+        {
+            var button = figure.QuerySelector("button.info-button")!;
+            Assert.StartsWith("What this means: " + figure.QuerySelector(".key-figure-label span")!.TextContent, button.GetAttribute("aria-label"), StringComparison.Ordinal);
+            Assert.Equal(figure.QuerySelector(".term-popover")!.Id, button.GetAttribute("popovertarget"));
+        }
+    }
+
+    [Fact]
+    public async Task TheBillAndStatementFiguresCountTheCongressOnlyAndOnlyAZeroStatementFigureSaysNothingWasPublishedYet()
+    {
+        var withRecords = FiguresOf(await RenderedWithCountsAsync());
+        var none = FiguresOf(await RenderedAsync([Vote('a', new DateOnly(2026, 4, 1))]));
+
+        Assert.Equal(("1", "bill or resolution sponsored", "Counts the bills of this official in this release, in the 119th Congress."), withRecords[^2]);
+        Assert.Equal(("3", "statements published so far", "Counts the statements of this official in this release, in the 119th Congress."), withRecords[^1]);
+        Assert.Equal(("0", "statements published so far", "This means we have not yet published a statement from this official. It does not mean they made none."), none[^1]);
+    }
+
+    [Fact]
+    public async Task ThePageHasNoKeyFiguresWithoutAProfileBecauseTheirCountsComeFromIt()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []), PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Null(new HtmlParser().ParseDocument(html).QuerySelector(".key-figures"));
+    }
+
+    [Fact]
+    public async Task TheHeaderIsInTheHeroBandAndNotInTheMainColumnSoTheNameAndPortraitSitOnTheNavyBand()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(Current([], []), PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Equal("Mayor Example", document.QuerySelector(".public-hero .official-hero header.page-header h1")!.TextContent);
+        Assert.Null(document.QuerySelector("main header.page-header"));
+    }
+
+    [Fact]
+    public async Task TheIssuesTabIsLastAndOpensAPaneOutsideTheRecordListSoTheListKeepsOnlyRecordRows()
+    {
+        var document = await RenderedWithCountsAsync();
+
+        Assert.Equal("issues", document.QuerySelectorAll("[data-record-filters] [data-filter-value]").Last().GetAttribute("data-filter-value"));
+        var pane = document.QuerySelector("[data-records] [data-issues-pane='issues']")!;
+        Assert.Equal("Issues they work on", pane.QuerySelector("h3")!.TextContent);
+        Assert.Null(pane.Closest("[data-list-pane]"));
+        Assert.Null(document.QuerySelector("[data-list-pane] [data-issues-pane]"));
+        Assert.Equal(1, document.QuerySelectorAll("[data-list-pane] table").Length);
+    }
+
+    [Theory]
+    [InlineData("Yea", "cast-pill cast-yes")]
+    [InlineData("Aye", "cast-pill cast-yes")]
+    [InlineData("Nay", "cast-pill")]
+    [InlineData("No", "cast-pill")]
+    [InlineData("Present", "cast-pill")]
+    public async Task OnlyAYesCastGetsTheFilledPillSoTheColorNeverClaimsMoreThanTheWordSays(string cast, string expectedClass)
+    {
+        var document = await RenderedAsync([Vote('a', new DateOnly(2026, 4, 1)) with { Cast = cast }]);
+
+        var pill = document.QuerySelector("[data-list-pane] .cast-pill")!;
+        Assert.Equal((cast, expectedClass), (pill.TextContent, pill.ClassName));
+    }
+
+    [Fact]
+    public async Task ARecordRowHasOneLinkOnItsTitleThatCoversTheWholeRowAndAnIconThatIsHiddenFromReaders()
+    {
+        var document = await RenderedAsync([Vote('a', new DateOnly(2026, 4, 1))]);
+
+        var row = document.QuerySelector("[data-list-pane] tbody tr")!;
+        Assert.Single(row.QuerySelectorAll("a"));
+        Assert.Equal("true", row.QuerySelector("svg.icon")!.GetAttribute("aria-hidden"));
+    }
+
+    [Fact]
+    public async Task TheLedeNamesACaucusThatDiffersFromThePartyBecauseAnIndependentVotesWithThatCaucus()
+    {
+        var lede = await LedeAsync(Senate(new(2013, 1, 3), new(2027, 1, 3)) with { Party = "Independent", Caucus = "Democrat" });
+
+        Assert.Equal("Independent senator for WA, caucuses with Democrats", lede);
+    }
+
+    [Fact]
     public async Task TheIssuePanelShowsPlainCountsAndTheTitlesOfTheSponsoredBillsAndLeavesOutProceduralVotes()
     {
         PublishedRecordEntry[] entries = [.. Enumerable.Range(1, 3).Select(index => Entry((char)('0' + index), PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)) with { IssueIds = index < 3 ? ["housing", "health"] : ["housing"] }),
@@ -701,7 +789,7 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-issues-they-work-on']")!;
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='issues-title']")!;
         Assert.Equal(["Issue", "Their statements", "Bills they sponsored", "Votes they cast"], panel.QuerySelectorAll("th").Select(cell => cell.TextContent.Trim()));
         Assert.Equal(["health", "2 statements", "0 bills", "0 votes"], panel.QuerySelectorAll("tbody tr:nth-child(1) td").Select(cell => cell.TextContent.Trim()));
         var housing = panel.QuerySelectorAll("tbody tr:nth-child(2) td").ToArray();
@@ -721,7 +809,7 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='panel-issues-they-work-on']")!;
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='issues-title']")!;
         Assert.Null(panel.QuerySelector("table"));
         Assert.Contains("No tracked issue", panel.TextContent, StringComparison.Ordinal);
         Assert.Contains("None of their statements, sponsored bills, or votes in this Congress is on a tracked issue.", panel.TextContent, StringComparison.Ordinal);
@@ -867,7 +955,7 @@ public sealed class PublishedOfficialPageTests
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, catalog, CancellationToken.None);
 
         var cells = new HtmlParser().ParseDocument(html)
-            .QuerySelectorAll("[aria-labelledby='panel-issues-they-work-on'] tbody tr td:first-child").ToList();
+            .QuerySelectorAll("[aria-labelledby='issues-title'] tbody tr td:first-child").ToList();
         Assert.Equal(["Housing costs", "mystery"], cells.Select(cell => cell.TextContent.Trim()));
         Assert.Equal("../" + PublicationProtocol.IssuePagePath("housing", 1), cells[0].QuerySelector("a")!.GetAttribute("href"));
         Assert.Null(cells[1].QuerySelector("a"));
@@ -1066,7 +1154,7 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
-    public async Task TheLinkedPairsPanelComesBeforeTheVotesWithTheirPartyPanelAndListsEachPairWithTheLinkWordsTheTitleAndTheCast()
+    public async Task TheLinkedPairsPanelComesAfterTheRecordListAndListsEachPairWithTheLinkWordsTheTitleAndTheCast()
     {
         var page = Current([], [Split('a', new DateOnly(2026, 4, 1), "Nay")]);
         page = page with
@@ -1080,7 +1168,8 @@ public sealed class PublishedOfficialPageTests
 
         var document = new HtmlParser().ParseDocument(html);
         var panels = document.QuerySelectorAll("section[aria-labelledby]").Select(panel => panel.GetAttribute("aria-labelledby")).ToArray();
-        Assert.True(Array.IndexOf(panels, "panel-what-they-said-and-what-they-did") + 1 == Array.IndexOf(panels, "panel-votes-with-their-party"));
+        Assert.True(Array.IndexOf(panels, "record-title") < Array.IndexOf(panels, "panel-what-they-said-and-what-they-did"));
+        Assert.True(Array.IndexOf(panels, "issues-title") < Array.IndexOf(panels, "panel-what-they-said-and-what-they-did"));
         var panel = document.QuerySelector("[aria-labelledby='panel-what-they-said-and-what-they-did']")!;
         Assert.Equal(["Statement date", "What they said", "Link", "What they did", "Their vote"], panel.QuerySelectorAll("thead th").Select(cell => cell.TextContent.Trim()));
         var rows = panel.QuerySelectorAll("tbody tr").Select(row => row.QuerySelectorAll("td").Select(cell => cell.TextContent.Trim()).ToArray()).ToArray();
@@ -1106,27 +1195,15 @@ public sealed class PublishedOfficialPageTests
 
         string[] Kinds(string panel) => [.. document.QuerySelectorAll($"[aria-labelledby='{panel}'] thead th").Select(header => header.GetAttribute("data-sort") ?? "none")];
         string[] Values(string panel, string label) => [.. document.QuerySelectorAll($"[aria-labelledby='{panel}'] tbody td[data-label='{label}']").Select(cell => cell.GetAttribute("data-sort-value") ?? "none")];
-        Assert.Equal(["text", "number", "number", "number"], Kinds("panel-issues-they-work-on"));
-        Assert.Equal(["1"], Values("panel-issues-they-work-on", "Their statements"));
-        Assert.Equal(["0"], Values("panel-issues-they-work-on", "Bills they sponsored"));
-        Assert.Equal(["1"], Values("panel-issues-they-work-on", "Votes they cast"));
+        Assert.Equal(["text", "number", "number", "number"], Kinds("issues-title"));
+        Assert.Equal(["1"], Values("issues-title", "Their statements"));
+        Assert.Equal(["0"], Values("issues-title", "Bills they sponsored"));
+        Assert.Equal(["1"], Values("issues-title", "Votes they cast"));
         Assert.Equal(["date", "text", "text", "text", "text"], Kinds("panel-what-they-said-and-what-they-did"));
         Assert.Equal(["2026-03-01", ""], Values("panel-what-they-said-and-what-they-did", "Statement date"));
-        Assert.Equal(["date", "text", "text", "text", "text"], Kinds("panel-votes-with-their-party"));
-        Assert.Equal(["2026-04-01"], Values("panel-votes-with-their-party", "Date"));
-        Assert.Equal(["date", "text", "text"], Kinds("panel-records"));
-        Assert.Equal(["2026-04-01", "2026-03-01"], Values("panel-records", "Date"));
+        Assert.Equal(["none", "none"], document.QuerySelectorAll("[data-list-pane] thead th").Select(header => header.GetAttribute("data-sort") ?? "none"));
         Assert.Equal(["text", "text", "date", "none"], Kinds("panel-offices"));
         Assert.Equal(["1997-01-07"], Values("panel-offices", "From"));
-    }
-
-    [Fact]
-    public async Task TheCastCellsOfTheBreaksTableSortByTheCastWordNeverByThePopoverText()
-    {
-        var document = await RenderedAsync([Split('a', new DateOnly(2026, 4, 1), "Nay")]);
-
-        var cells = document.QuerySelectorAll("[aria-labelledby='panel-votes-with-their-party'] tbody td[data-label='Their vote'], [aria-labelledby='panel-votes-with-their-party'] tbody td[data-label^='Most']");
-        Assert.Equal(["Nay", "Yea"], cells.Select(cell => cell.GetAttribute("data-sort-value")));
     }
 
     [Fact]
@@ -1141,7 +1218,7 @@ public sealed class PublishedOfficialPageTests
         };
         var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None));
 
-        Assert.Equal(["Default order", "Newest first", "Newest first", "Newest first", "Default order"],
+        Assert.Equal(["Newest first", "Default order", "Newest first", "Default order"],
             document.QuerySelectorAll("table").Select(table => table.GetAttribute("data-default-order")));
         Assert.All(document.QuerySelectorAll("table"), table =>
             Assert.EndsWith($". {table.GetAttribute("data-default-order")}.", table.QuerySelector("caption")!.TextContent, StringComparison.Ordinal));
@@ -1213,11 +1290,11 @@ public sealed class PublishedOfficialPageTests
     {
         var document = await RenderedWithCountsAsync();
 
-        var counts = document.QuerySelectorAll("[aria-labelledby='panel-issues-they-work-on'] [data-count-filter]").ToArray();
+        var counts = document.QuerySelectorAll("[aria-labelledby='issues-title'] [data-count-filter]").ToArray();
         Assert.Equal(["statement:health", "statement:housing", "bill:housing", "vote:housing"], counts.Select(count => count.GetAttribute("data-count-filter")));
         foreach (var count in counts)
         {
-            var rows = document.QuerySelectorAll("[data-records] tbody tr").Where(row => row.GetAttribute("data-filter-keys")!.Split(' ').Contains(count.GetAttribute("data-count-filter"))).ToArray();
+            var rows = document.QuerySelectorAll("[data-list-pane] tbody tr").Where(row => row.GetAttribute("data-filter-keys")!.Split(' ').Contains(count.GetAttribute("data-count-filter"))).ToArray();
             Assert.Equal(int.Parse(count.TextContent.Split(' ')[0]), rows.Length);
             Assert.StartsWith(count.TextContent + ":", count.GetAttribute("data-filter-label"), StringComparison.Ordinal);
         }
@@ -1228,7 +1305,7 @@ public sealed class PublishedOfficialPageTests
     {
         var document = await RenderedWithCountsAsync();
 
-        var marked = document.QuerySelectorAll("[data-records] tbody tr").ToDictionary(row => row.QuerySelector("a.cell-title")!.TextContent, row => row.GetAttribute("data-filter-keys"));
+        var marked = document.QuerySelectorAll("[data-list-pane] tbody tr").ToDictionary(row => row.QuerySelector("a.cell-title")!.TextContent, row => row.GetAttribute("data-filter-keys"));
         Assert.Equal("statement:health statement:housing", marked["Entry 1"]);
         Assert.Equal("", marked["Entry 5"]);
         Assert.Equal("", marked["Entry 6"]);
@@ -1243,12 +1320,12 @@ public sealed class PublishedOfficialPageTests
     {
         var document = await RenderedWithCountsAsync();
 
-        var health = document.QuerySelectorAll("[aria-labelledby='panel-issues-they-work-on'] tbody tr:nth-child(1) td").Select(cell => cell.TextContent.Trim()).ToArray();
+        var health = document.QuerySelectorAll("[aria-labelledby='issues-title'] tbody tr:nth-child(1) td").Select(cell => cell.TextContent.Trim()).ToArray();
         Assert.Equal(["health", "1 statement", "0 bills", "0 votes"], health);
         Assert.Equal(4, document.QuerySelectorAll("[data-count-filter]").Length);
         Assert.Empty(document.QuerySelectorAll("[data-count-filter] button"));
         Assert.Empty(document.QuerySelectorAll("[data-records] tbody tr[hidden]"));
-        Assert.Equal(9, document.QuerySelectorAll("[data-records] tbody tr").Length);
+        Assert.Equal(9, document.QuerySelectorAll("[data-list-pane] tbody tr").Length);
     }
 
     [Fact]
@@ -1296,12 +1373,12 @@ public sealed class PublishedOfficialPageTests
             Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], [Vote('a', new DateOnly(2026, 4, 1))]), PublicationCatalogs.None, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
-        Assert.Equal(["All records 2", "Statements 1", "Votes 1"], document.QuerySelectorAll("[data-records] [data-record-filters] [data-filter-value]").Select(TabText));
+        Assert.Equal(["All 2", "Statements 1", "Votes 1"], document.QuerySelectorAll("[data-records] [data-record-filters] [data-filter-value]").Select(TabText));
         Assert.NotNull(document.QuerySelector("[data-records] [data-filter-status][role='status']"));
         Assert.Null(document.QuerySelector("[data-filter-notice]"));
     }
 
-    private static string TabText(AngleSharp.Dom.IElement tab) => $"{tab.FirstChild!.TextContent.Trim()} {tab.QuerySelector(".segmented-count")!.TextContent}";
+    private static string TabText(AngleSharp.Dom.IElement tab) => tab.QuerySelector(".segmented-count") is { } count ? $"{tab.FirstChild!.TextContent.Trim()} {count.TextContent}" : tab.TextContent.Trim();
 
     private static async Task<AngleSharp.Dom.IDocument> RenderedWithCountsAsync()
     {
@@ -1376,6 +1453,8 @@ public sealed class PublishedOfficialPageTests
     private static async Task<AngleSharp.Dom.IDocument> OfficialAsync(params PublishedOfficeTerm[] terms) =>
         new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(
             Current([], []) with { Profile = Profile("rep", "Rita Rep", terms) }, PublicationCatalogs.None, CancellationToken.None));
+
+    private static async Task<string?> TenureAsync(params PublishedOfficeTerm[] terms) => (await OfficialAsync(terms)).QuerySelector(".page-header-meta span")?.TextContent;
 
     private static async Task<string?> LedeAsync(params PublishedOfficeTerm[] terms) => (await OfficialAsync(terms)).QuerySelector(".page-header-lede")?.TextContent;
 

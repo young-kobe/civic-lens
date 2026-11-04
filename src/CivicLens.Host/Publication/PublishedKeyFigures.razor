@@ -1,0 +1,17 @@
+<section class="key-figures" aria-label="@Label">
+    @foreach (var (index, figure) in Figures.Index())
+    {
+        <div class="key-figure">
+            <div class="key-figure-value">@figure.Value</div>
+            <div class="key-figure-label">
+                <span>@figure.Label</span>
+                <InfoPopover Id="@($"key-figure-{index}")" Label="@figure.HelpLabel">@figure.Note</InfoPopover>
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public IReadOnlyList<PublishedKeyFigure> Figures { get; set; } = [];
+}

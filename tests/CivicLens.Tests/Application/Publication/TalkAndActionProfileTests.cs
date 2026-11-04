@@ -108,6 +108,20 @@ public sealed class TalkAndActionProfileTests
     }
 
     [Fact]
+    public void TheStatementCountCountsEachStatementOfTheCongressOnceWhateverItsIssuesSoAKeyFigureNeverOvercountsOrDropsOne()
+    {
+        var entries = new[]
+        {
+            Entry(1, PublishedRecordKind.Statement, InCongress, ["tax", "health"]),
+            Entry(2, PublishedRecordKind.Statement, InCongress, []),
+            Entry(3, PublishedRecordKind.Statement, new DateOnly(2023, 5, 1), ["tax"]),
+            Entry(4, PublishedRecordKind.Action, InCongress, ["tax"])
+        };
+
+        Assert.Equal(2, TalkAndActionProfile.Of(119, entries, []).StatementsInCongress);
+    }
+
+    [Fact]
     public void TheIssuesOfThePanelAreTheSortedUnionOfTheIssuesOfAllThreeColumns()
     {
         var profile = TalkAndActionProfile.Of(119, [Entry(1, PublishedRecordKind.Statement, InCongress, ["tax", "health"]),

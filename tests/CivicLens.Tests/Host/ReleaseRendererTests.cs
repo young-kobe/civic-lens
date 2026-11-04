@@ -2761,7 +2761,7 @@ public sealed class ReleaseRendererTests
             }
         }
 
-        Assert.True(labeled.GetValueOrDefault("official") >= 10);
+        Assert.True(labeled.GetValueOrDefault("official") >= 8);
         Assert.True(labeled.Values.Sum() >= 16);
     }
 

@@ -9,7 +9,7 @@ namespace CivicLens.Application.Publication;
 /// and the votes with their party. A statement or a sponsorship is in the Congress of its day. An action entry names only its sponsors, so a cosponsor never counts.
 /// </summary>
 public sealed record TalkAndActionProfile(TalkAndActionColumn Statements, ImmutableArray<PublishedRecordEntry> SponsoredBills,
-    TalkAndActionColumn Votes, ImmutableArray<MissedVotes> MissedByChamber, ImmutableArray<VotesWithParty> WithPartyByChamber)
+    TalkAndActionColumn Votes, ImmutableArray<MissedVotes> MissedByChamber, ImmutableArray<VotesWithParty> WithPartyByChamber, int StatementsInCongress)
 {
     public const int MinimumRecordsForShare = 5;
     public const string StatementCount = "statement";
@@ -36,7 +36,7 @@ public sealed record TalkAndActionProfile(TalkAndActionColumn Statements, Immuta
         return new(TalkAndActionColumn.Of(inCongress[PublishedRecordKind.Statement].Select(entry => (entry.RecordId, entry.IssueIds))),
             [.. inCongress[PublishedRecordKind.Action]],
             TalkAndActionColumn.Of(allVotes.Where(vote => vote.Kind.IsSubstantive() && vote.IsCast).Select(vote => (vote.RecordId, vote.IssueIds))),
-            MissedVotes.Of(allVotes), VotesWithParty.Of(allVotes));
+            MissedVotes.Of(allVotes), VotesWithParty.Of(allVotes), inCongress[PublishedRecordKind.Statement].Count());
     }
 
     public static double? ShareOf(int count, int of) => of >= MinimumRecordsForShare ? (double)count / of : null;

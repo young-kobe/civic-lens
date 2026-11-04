@@ -11,14 +11,23 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedOfficialView
 {
-    public static string Office(PublishedOfficeTerm term) => term.Office switch
+    public static string Office(PublishedOfficeTerm term) => Role(term) + Place(term);
+
+    private static string Role(PublishedOfficeTerm term) => term.Office switch
     {
-        MemberRosterParser.Senate => $"Senator for {term.State}",
-        MemberRosterParser.House when term.District is { } district => $"Representative for {term.State}, district {district}",
-        MemberRosterParser.House => $"Representative for {term.State}",
+        MemberRosterParser.Senate => "Senator",
+        MemberRosterParser.House => "Representative",
         ExecutiveRosterParser.President => "President",
         ExecutiveRosterParser.VicePresident => "Vice President",
         _ => term.Office
+    };
+
+    private static string Place(PublishedOfficeTerm term) => term.Office switch
+    {
+        MemberRosterParser.Senate => $" for {term.State}",
+        MemberRosterParser.House when term.District is { } district => $" for {term.State}, district {district}",
+        MemberRosterParser.House => $" for {term.State}",
+        _ => ""
     };
 
     public static string CardOffice(PublishedOfficeTerm term, DateTimeOffset publishedAtUtc) =>
@@ -29,14 +38,12 @@ internal static class PublishedOfficialView
     public static string? Lede(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc)
     {
         if (LatestTerm(terms, publishedAtUtc) is not { } term) return null;
-        var sentences = new[]
-        {
-            $"{CardOffice(term, publishedAtUtc)}.",
-            term.Party is { } party ? $"{PartyLine(party, term.Caucus)}." : null,
-            Tenure(terms, publishedAtUtc)
-        };
-        return string.Join(' ', sentences.OfType<string>());
+        var role = string.Join(' ', new[] { HasEnded(term.End, publishedAtUtc) ? "former" : null, term.Party is { } party ? PartyAdjective(party) : null, Role(term).ToLowerInvariant() }.OfType<string>());
+        var caucus = term.Party is { } caucusParty && CaucusWith(caucusParty, term.Caucus) is { } with ? $", {with}" : "";
+        return $"{char.ToUpperInvariant(role[0])}{role[1..]}{Place(term)}{caucus}";
     }
+
+    private static string PartyAdjective(string party) => party == PublishedPartyMajority.Democrat ? "Democratic" : party;
 
     public static string? Tenure(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc)
     {
@@ -126,7 +133,10 @@ internal static class PublishedOfficialView
     };
 
     public static string PartyLine(string party, string? caucus) =>
-        caucus is null || caucus == party ? $"Party: {party}" : $"Party: {party}, caucuses with {Members(caucus)}";
+        CaucusWith(party, caucus) is { } with ? $"Party: {party}, {with}" : $"Party: {party}";
+
+    private static string? CaucusWith(string party, string? caucus) =>
+        caucus is null || caucus == party ? null : $"caucuses with {Members(caucus)}";
 
     public static PublishedOfficeTerm? LatestTerm(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc) =>
         Started(terms, publishedAtUtc).OrderBy(term => term.Start).LastOrDefault();
@@ -163,17 +173,28 @@ internal static class PublishedOfficialView
 
     private static string KindClass(PublishedRecordKind kind) => $"kind-{PublicationProtocol.KindText(kind)}";
 
-    public static IReadOnlyList<FilterTab> RecordTabs(IReadOnlyList<PublishedOfficialRow> rows, bool withBreaks)
+    public static IReadOnlyList<FilterTab> RecordTabs(IReadOnlyList<PublishedOfficialRow> rows, bool withProfile)
     {
         var kinds = rows.GroupBy(row => row.Kind).OrderBy(group => group.Key).ToList();
-        var breaks = withBreaks ? rows.Count(row => row.AgainstParty) : 0;
+        var breaks = withProfile ? rows.Count(row => row.AgainstParty) : 0;
         var kindTabs = kinds.Count > 1 ? kinds : [];
-        if (kindTabs.Count + breaks == 0) return [];
-        var tabs = new List<FilterTab> { FilterTab.Button("All records", "", true, rows.Count) };
-        tabs.AddRange(kindTabs.Select(group => FilterTab.Button(PublishedRecordLabels.KindPlural(group.Key), KindClass(group.Key), false, group.Count())));
-        if (breaks > 0) tabs.Add(FilterTab.Button("Votes against their party", AgainstPartyClass, false, breaks));
+        if (kindTabs.Count + breaks == 0 && !withProfile) return [];
+        var tabs = new List<FilterTab> { FilterTab.Button("All", "", true, rows.Count) };
+        tabs.AddRange(kindTabs.Select(group => FilterTab.Button(KindTabLabel(group.Key), KindClass(group.Key), false, group.Count())));
+        if (breaks > 0) tabs.Add(FilterTab.Button("Against their party", AgainstPartyClass, false, breaks));
+        if (withProfile) tabs.Add(FilterTab.Button(IssuesTabLabel, IssuesPane, false));
         return tabs;
     }
+
+    public const string IssuesTabLabel = "Issues they work on";
+
+    public const string IssuesPane = "issues";
+
+    public static string RowKind(PublishedRecordEntry entry) => entry.Kind == PublishedRecordKind.Action ? "Bill" : PublishedRecordLabels.Badge(entry);
+
+    private static string KindTabLabel(PublishedRecordKind kind) => kind == PublishedRecordKind.Action ? "Bills" : PublishedRecordLabels.KindPlural(kind);
+
+    public static string CastClass(string cast) => PublishedOfficialVote.SideOf(cast) == PublishedPartyMajority.Yea ? "cast-pill cast-yes" : "cast-pill";
 
     public const string ShowAllRecords = "Show all records";
 
@@ -217,16 +238,6 @@ internal static class PublishedOfficialView
 
     public static readonly string PartiesAgreedMeaning = $"A vote where both parties agreed is a substantive roll call vote where {BothMajorities} voted the same way.";
 
-    public static string WithParty(VotesWithParty votes, int congress)
-    {
-        var inCongress = $"in the {CongressCalendar.Ordinal(congress)} Congress";
-        var sentence = votes.Cast == 0
-            ? $"No Yea or Nay cast yet on a split vote in {ChamberName(votes.Chamber)} as a {votes.Party} {inCongress}."
-            : $"Voted with most {PartyOf(votes)} on {SplitVoteCount(votes.Matched, votes.Cast)} {inCongress}.";
-        var other = votes.Cast == 0 ? "" : "other ";
-        return votes.NotCast == 0 ? sentence : $"{sentence} They did not cast Yea or Nay on {votes.NotCast} {other}split {Noun(votes.NotCast, "vote")}.";
-    }
-
     public static string SplitVoteCount(int count, int cast)
     {
         var share = TalkAndActionProfile.ShareOf(count, cast) is not null ? $" ({Percent(count, cast)})" : "";
@@ -245,7 +256,7 @@ internal static class PublishedOfficialView
 
     public static string Noun(int count, string singular) => count == 1 ? singular : singular + "s";
 
-    private static string Percent(int count, int of)
+    public static string Percent(int count, int of)
     {
         var percent = 100.0 * count / of;
         if (count > 0 && percent < 0.5) return "under 1%";
