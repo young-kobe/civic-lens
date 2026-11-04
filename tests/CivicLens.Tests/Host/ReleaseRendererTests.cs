@@ -1586,9 +1586,63 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderAllRecordsAsync(release, 1, CancellationToken.None);
 
         var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody tr")
-            .Select(row => (row.QuerySelector("a")!.GetAttribute("href"), row.QuerySelector(".badge")!.TextContent));
+            .Select(row => (row.QuerySelector("a")!.GetAttribute("href"), row.QuerySelector(".cell-note")!.TextContent));
         Assert.Equal([($"records/{release.Records[0].RecordId}.html", "Document change"),
             ($"records/{new string('d', 64)}.html", "Statement"), ($"records/{new string('f', 64)}.html", "Bill or resolution")], rows);
+    }
+
+    [Fact]
+    public async Task AllRecordsPageDefinesTheVoteBadgesAndTheCountsOnceSoNoRowRepeatsAParagraph()
+    {
+        var votes = Enumerable.Range(0, 3).Select(index => FacetEntry(PublishedRecordKind.Vote, index, PublishedVoteAlignment.Split, DateTimeOffset.UnixEpoch, [], []) with { YeaCount = 200 + index, NayCount = 210 }).ToArray();
+        var release = ReleaseOf(0) with { Records = votes };
+
+        var html = await new ReleaseRenderer(null, null).RenderAllRecordsAsync(release, 1, CancellationToken.None);
+
+        var main = new HtmlParser().ParseDocument(html).QuerySelector("main")!;
+        Assert.Equal(1, main.TextContent.Split("A split vote is a substantive roll call vote").Length - 1);
+        Assert.Equal(1, main.TextContent.Split("Yea and Nay counts are casts of all members of the chamber who voted Yea or Nay.").Length - 1);
+        var rows = main.QuerySelectorAll("tbody tr").ToList();
+        Assert.Equal(["Split vote", "Split vote", "Split vote"], rows.Select(row => row.QuerySelector(".badge")!.TextContent));
+        Assert.Equal(["Vote, Yea 200, Nay 210", "Vote, Yea 201, Nay 210", "Vote, Yea 202, Nay 210"], rows.Select(row => row.QuerySelector(".cell-note")!.TextContent));
+    }
+
+    [Fact]
+    public async Task AnIssuePageDefinesTheVoteBadgesOnlyWhereItsSummaryDoesNotSoEachPageSaysItOnce()
+    {
+        var published = new DateTimeOffset(2026, 5, 11, 8, 0, 0, TimeSpan.Zero);
+        var votes = Enumerable.Range(0, PublicationProtocol.PageSize + 1).Select(index => FacetEntry(PublishedRecordKind.Vote, index, PublishedVoteAlignment.Split, published.AddDays(-index), ["housing"], []));
+        var release = ReleaseOf(0) with { Records = [.. votes] };
+
+        foreach (var page in new[] { 1, 2 })
+        {
+            var text = (await FacetMainAsync(release, FacetKind.Issue, page)).TextContent;
+
+            Assert.Equal(1, text.Split("A split vote is a substantive roll call vote").Length - 1);
+        }
+    }
+
+    [Fact]
+    public async Task EveryPanelOfARecordPageSitsInOneSectionListSoTheRecordPagesShareOneFlatLook()
+    {
+        var document = await RenderedAsync(Vote());
+
+        var sections = document.QuerySelector(".record-panels")!;
+        Assert.Equal(document.QuerySelectorAll("main .panel").Length, sections.QuerySelectorAll(".panel").Length);
+    }
+
+    [Fact]
+    public async Task AnIssuePageShowsItsIconBesideTheTitleAndAPolicyAreaPageShowsNone()
+    {
+        var release = ReleaseOf(1) with { Records = [.. ReleaseOf(1).Records.Select(entry => entry with { IssueIds = ["housing"], PolicyAreaIds = ["land-use"] })] };
+        var facets = ReleaseFacets.From(release, HousingCatalog);
+        var renderer = new ReleaseRenderer(null, null);
+
+        var issue = new HtmlParser().ParseDocument(await renderer.RenderFacetPageAsync(facets.Issues.Single(), 1, CancellationToken.None));
+        var area = new HtmlParser().ParseDocument(await renderer.RenderFacetPageAsync(facets.PolicyAreas.Single(), 1, CancellationToken.None));
+
+        Assert.NotNull(issue.QuerySelector(".page-header-portrait svg.icon"));
+        Assert.Null(area.QuerySelector(".page-header-portrait"));
     }
 
     [Fact]
@@ -2160,9 +2214,9 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 1, CancellationToken.None);
 
         var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody tr")
-            .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.TextContent.Trim())));
-        Assert.Equal(["Headline c Document change||12 May 2026", "Headline d Document change|Ann Roe|10 May 2026",
-            "Headline b Document change|Jane Doe|10 May 2026", "Headline a Document change|Jane Doe, Ann Roe|2 Jan 2026"], rows);
+            .Select(row => string.Join("|", row.QuerySelectorAll("td").Select(cell => cell.QuerySelector(".cell-note") is { } kind ? $"{cell.QuerySelector(".cell-title")!.TextContent} ({kind.TextContent})" : cell.TextContent.Trim())));
+        Assert.Equal(["Headline c (Document change)||12 May 2026", "Headline d (Document change)|Ann Roe|10 May 2026",
+            "Headline b (Document change)|Jane Doe|10 May 2026", "Headline a (Document change)|Jane Doe, Ann Roe|2 Jan 2026"], rows);
     }
 
     [Fact]

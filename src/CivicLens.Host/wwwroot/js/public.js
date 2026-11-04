@@ -336,10 +336,10 @@
             link.className = "cell-title";
             link.href = source.root + hit.pagePath;
             link.textContent = hit.headline;
-            const badge = document.createElement("span");
-            badge.className = "badge badge-neutral";
-            badge.textContent = source.kinds[hit.kind];
-            cell.append(link, " ", badge);
+            const kind = document.createElement("span");
+            kind.className = "cell-note";
+            kind.textContent = source.kinds[hit.kind];
+            cell.append(link, kind);
             return cell;
         },
         officials: hit => hit.officials.map(official => official.name).join(", "),
