@@ -191,6 +191,17 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         });
     }
 
+    public Task<string> RenderOfficialRecordAsync(ReleaseOfficialPage page, PublicationCatalog catalog, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        page.Profile.Validate();
+        return RenderAsync<PublishedOfficialRecordPage>(new Dictionary<string, object?>
+        {
+            [nameof(PublishedOfficialRecordPage.Page)] = page,
+            [nameof(PublishedOfficialRecordPage.Catalog)] = catalog
+        });
+    }
+
     public Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, DateTimeOffset publishedAtUtc,
         CancellationToken cancellationToken)
     {

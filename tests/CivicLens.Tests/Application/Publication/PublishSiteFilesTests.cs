@@ -24,7 +24,7 @@ public sealed class PublishSiteFilesTests
         Assert.Equal(
         [
             $"{Base}/", $"{Base}/about.html", $"{Base}/all.html", $"{Base}/board-house-democrat.html", $"{Base}/board-house-republican.html", $"{Base}/board-senate-democrat.html", $"{Base}/board-senate-republican.html", $"{Base}/briefs.html", $"{Base}/glossary.html", $"{Base}/issues.html", $"{Base}/issues/housing.html", $"{Base}/method.html",
-            $"{Base}/officials.html", $"{Base}/officials/chair.html", $"{Base}/officials/mayor.html",
+            $"{Base}/officials.html", $"{Base}/officials/chair.html", $"{Base}/officials/chair/record.html", $"{Base}/officials/mayor.html", $"{Base}/officials/mayor/record.html",
             $"{Base}/policy-areas/land-use.html",
             .. new[] { 'a', 'b', 'c' }.Select(id => $"{Base}/records/{new string(id, 64)}.html")
         ], urls);

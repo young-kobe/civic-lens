@@ -4,11 +4,11 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Host.Publication;
 
-internal sealed record PublishedOfficialRow(PublishedRecordKind Kind, DateOnly Date, string RecordId, string Headline, string Badge, string? Detail, string? Cast,
+public sealed record PublishedOfficialRow(PublishedRecordKind Kind, DateOnly Date, string RecordId, string Headline, string Badge, string? Detail, string? Cast,
     DateTimeOffset PublishedAtUtc, bool AgainstParty, string? FilterKeys = null)
 {
     public static PublishedOfficialRow Of(PublishedRecordEntry entry, ActionBillStatus? billStatus) => new(
-        entry.Kind, ReleaseRecordOrder.Day(entry), entry.RecordId, entry.Headline, PublishedRecordLabels.Badge(entry),
+        entry.Kind, ReleaseRecordOrder.Day(entry), entry.RecordId, entry.Headline, PublishedOfficialView.RowKind(entry),
         billStatus is null ? null : PublishedOfficialView.StatusLine(billStatus), null, entry.FirstPublishedAtUtc, false);
 
     public static PublishedOfficialRow Of(PublishedOfficialVote vote) => new(

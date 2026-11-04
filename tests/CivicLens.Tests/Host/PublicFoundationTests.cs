@@ -78,7 +78,7 @@ public sealed class PublicFoundationTests
         var votes = Enumerable.Range(0, 40).Select(index => Vote(index)).ToArray();
         var page = new ReleaseOfficialPage(new PublishedOfficialProfile { Id = "doe", Name = "Jane Doe", Terms = [] }, true, 119, true, [119], [], [.. votes], DateTimeOffset.UnixEpoch);
 
-        var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None));
+        var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialRecordAsync(page, PublicationCatalogs.None, CancellationToken.None));
 
         var table = document.QuerySelector("table[data-paged]")!;
         Assert.Equal("15", table.GetAttribute("data-paged"));
