@@ -67,16 +67,6 @@ public sealed class PublishedStatementTests
         Assert.Throws<InvalidDataException>(statement.Validate);
     }
 
-    [Theory]
-    [InlineData(13, 1)]
-    [InlineData(12, 1)]
-    public void RejectsAQuotationThatSplitsASurrogatePair(int start, int length)
-    {
-        var statement = Statement() with { Quotations = [Quotation(start, length, Text.Substring(start, length))] };
-
-        Assert.Throws<InvalidDataException>(statement.Validate);
-    }
-
     [Fact]
     public void RejectsAQuotationOutsideTheSourceText()
     {

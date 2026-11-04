@@ -40,7 +40,7 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
         connectionString = await postgres.CreateMigratedDatabaseAsync();
         var factory = new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
-        publications = new PostgresPublicationStore(factory);
+        publications = new PostgresPublicationStore(factory, TestCodeVersion.Current);
         briefs = new PostgresBriefDraftStore(factory);
         seeder = new BriefWorldSeeder(connectionString);
         await seeder.ReleaseAsync(1, InPriorWeek, active: false, Binding(PublishedRecordKind.Statement, P1, 1));

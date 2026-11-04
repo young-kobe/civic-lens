@@ -36,7 +36,7 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         new(PublishedRecordKind.Relationship, "re", "relationship_drafts", null,
             ReadRelationshipsAsync),
         new(PublishedRecordKind.ExecutiveAction, "ea", "executive_action_drafts", "title",
-            (db, ids, ct) => ExecutiveActionRows.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Title, ct), Column: new("title", recordId => ExecutiveActionRevisionRows.NotBackfilled($"The current revision of executive action {recordId}")))
+            (db, ids, ct) => ExecutiveActionRows.ForReading.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Title, ct), Column: new("title", recordId => ExecutiveActionRevisionRows.NotBackfilled($"The current revision of executive action {recordId}")))
     ];
 
     private static readonly Dictionary<string, QueueKind> KindsByCode = Kinds.ToDictionary(kind => kind.Code);

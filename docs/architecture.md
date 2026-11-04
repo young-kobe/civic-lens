@@ -69,7 +69,7 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 | Infrastructure | Process lifecycle, protocol decoding, actual capture verification, Postgres persistence | Independent definitions of contract or editorial validity |
 | Collector | Bounded source interaction and complete raw capture production | Durable scheduling, imports, officials registry or publication |
 | Host | Command parsing, composition, and web presentation | Collection algorithms or evidence invariants |
-| PublicApi | Release ingest, the search index, and the public read API | Operational storage, credentials, job handlers, or unpublished evidence |
+| PublicApi | Release ingest, the search index, and the public read API | Operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence |
 
 `tools/render-architecture.py` generates the diagrams below. Run `python3 tools/render-architecture.py`, then open `artifacts/architecture.html` for the explorer. Planned components are labeled there; a diagram is not a claim that the pipeline exists.
 
@@ -187,6 +187,8 @@ A refused renewal cancels the work at once. A failed renewal is tried again whil
 The collection and evidence workers keep their own claim, checkpoint, and progress logic. `AnalysisWorker` owns that logic, and the budget and pause logic, for every analysis feature; see [analysis](architecture/analysis.md#behavior).
 
 `IWorkerWakeup` is the one wakeup port. `DatabaseClock`, at the Infrastructure project root, owns the database clock expression and its read. Every store that reads database time uses it, and so does `PostgresDeadlineWakeup`. `PostgresDeadlineWakeup`, also at the project root, implements the port with a LISTEN connection and a deadline query.
+
+`CodeVersion`, at the Application project root, owns the git commit SHA of the running build. The SDK property `SourceRevisionId` puts the SHA in the assembly. `BuildCodeVersion` in the Host reads it once at startup and Host composition hands it to the stores. A build with no valid SHA fails every Code revision write and every release write. The worker, `releases publish`, and the review workspace refuse to start without one. They exit with code 2, and the error names a SHA that is present but invalid.
 
 Each wakeup factory gives `PostgresDeadlineWakeup` its own channel and deadline query. `PostgresCollectionPipelineWakeup` is a small factory in its feature folder. `PostgresAnalysisWakeup` is the one factory for analysis queues, and it takes the queue table name and task. `PostgresIntervalWakeup` and `PostgresBriefDraftStore.Wakeup` also build a `PostgresDeadlineWakeup`.
 
@@ -435,6 +437,7 @@ This is the only navigation index.
 | Web host, security headers, components | [Host](architecture/host.md#behavior) | `src/CivicLens.Host/Program.cs` |
 | Production hosting plan | [Host](architecture/host.md#limits-and-planned-work) | none |
 | MCP plans | [Review](architecture/review.md#limits-and-planned-work), [Publication](architecture/publication.md#limits-and-planned-work) | none |
+| Public views, role, active release rule | [Publication](architecture/publication.md#public-api-views) | `src/CivicLens.Infrastructure/Collection/Migrations/20261103165431_PublicApiViews.cs`, `src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs` |
 | Public search service: ingest, index, read API, rate limit | [Search](architecture/search.md#decisions) | `src/CivicLens.PublicApi/PublicApiApp.cs` |
 | Reader report queue: pull, dismiss, editor panel, close by approval | [Review](architecture/review.md#reader-reports), [Search](architecture/search.md#operational-pull) | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Infrastructure/Reports/PostgresReaderReportStore.cs` |
 | Search ingest of a release | [Search](architecture/search.md#ingest) | `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs` |

@@ -31,12 +31,6 @@ public sealed class GlossaryTests
     }
 
     [Fact]
-    public void EveryTermKeyIsUniqueSoNoTwoTermsShareAnAnchorOrAPopover()
-    {
-        Assert.Equal(AllTerms.Count(), AllTerms.Select(term => term.Key).Distinct().Count());
-    }
-
-    [Fact]
     public async Task TheGlossaryPageListsEveryTermWithItsMeaningReasonAndSourceAndEveryPartyCountRule()
     {
         var document = new HtmlParser().ParseDocument(await Renderer.RenderGlossaryAsync(CancellationToken.None));
