@@ -29,7 +29,7 @@ DO $$
 DECLARE
   hidden_column constant text := '(^|_)(notes?|body|secret|password|email|credential|reviewer|actor)($|_)'
     || '|(^|_)(subject|token|key)$|^resolved_by$'
-    || '|^(headline|summary|fact_text)$|^suggestion_'
+    || '|^(headline|summary|fact_text|user_message)$|^suggestion_'
     || '|^(revision|decision|label|request|definition|input|resolution|discovery|result)_json$';
   hidden_table constant text[] := ARRAY['document_change_review_idempotency'];
   listed record;

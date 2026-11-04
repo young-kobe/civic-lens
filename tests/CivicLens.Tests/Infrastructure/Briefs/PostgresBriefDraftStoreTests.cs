@@ -265,6 +265,19 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
     }
 
     [Fact]
+    public async Task EveryBriefDraftRunStoresTheExactRequestAndARetryRunStoresItsOwnUserMessage()
+    {
+        await SeedWeekAsync();
+        var model = new FakeBriefDraftModel().Draft("not json").Draft(BriefFixtures.Output(paragraphs: [("Text.", ["R1"])]));
+
+        await DraftAsync(model);
+
+        Assert.Equal(2, model.Requests.Count);
+        var recordId = (string)(await ScalarAsync("SELECT record_id FROM brief_analysis_runs LIMIT 1"))!;
+        await StoredRunInputs.AssertMatchAsync(connectionString, "brief_analysis_runs", "record_id", recordId, model.Requests);
+    }
+
+    [Fact]
     public async Task ARedraftOfUnchangedRecordsSettlesWithoutAModelCallOrANewRevision()
     {
         await SeedWeekAsync();

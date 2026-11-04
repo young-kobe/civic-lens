@@ -1,3 +1,5 @@
+using CivicLens.Core.Analysis;
+
 namespace CivicLens.Application.Analysis;
 
 public static class DocumentChangeDraftTask
@@ -7,10 +9,9 @@ public static class DocumentChangeDraftTask
     public const string PromptVersion = "document-change-draft-prompt-v1";
     public const string SchemaVersion = "document-change-draft-schema-v1";
     public const string Model = "claude-haiku-5-5";
-    public const string Effort = "medium";
     public const int MaximumOutputTokens = 16_000;
     public const int MaximumHunks = 64;
-    public const int MaximumPromptBytes = 100_000;
+    public const int MaximumPromptBytes = AnalysisRunInput.MaximumPromptBytes;
     public const int MaximumValidationPasses = 2;
 
     public static readonly AnalysisTaskIdentity Identity = new(Task, TaskVersion, Model, PromptVersion, SchemaVersion);

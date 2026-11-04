@@ -5,11 +5,23 @@ namespace CivicLens.Core.Analysis;
 public sealed record AnalysisRun(string RunId, string ComparisonId, string Task, string TaskVersion, string Model,
     string PromptVersion, string SchemaVersion, string InputHash, string? PreviousRunId, AnalysisRunOutcome Outcome,
     AnalysisTokenUsage Usage, long ChargedTokens, string? StopReason, string? ProviderRequestId, string? OutputJson,
-    ImmutableArray<string> ValidationErrors, string? ContextJson, DateTimeOffset StartedAtUtc, DateTimeOffset FinishedAtUtc)
+    ImmutableArray<string> ValidationErrors, string? ContextJson, DateTimeOffset StartedAtUtc, DateTimeOffset FinishedAtUtc,
+    AnalysisRunInput? Input = null)
 {
     public const int MaximumValidationErrors = 64;
     public const int MaximumValidationErrorLength = 512;
     public const int MaximumOutputLength = 1_000_000;
+
+    public void ValidateForWrite()
+    {
+        Validate();
+        var madeCall = Outcome is not (AnalysisRunOutcome.Bypassed or AnalysisRunOutcome.Interrupted);
+        if (madeCall != (Input is not null))
+            throw new ArgumentException("A run that called the model must retain its input, and a run without a call must retain none.");
+        Input?.Validate();
+        if (ValidationErrors.Any(error => error.Contains('\0')))
+            throw new ArgumentException("Analysis run validation errors must contain no NUL character.");
+    }
 
     public void Validate()
     {
