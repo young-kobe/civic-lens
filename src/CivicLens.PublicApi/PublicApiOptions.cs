@@ -10,6 +10,9 @@ public sealed record PublicApiOptions
 {
     public const string ReleaseBaseUrlVariable = "CIVIC_LENS_RELEASE_BASE_URL";
     public const string DatabaseVariable = "CIVIC_LENS_SEARCH_DATABASE";
+    public const string PublicViewsDatabaseVariable = "CIVIC_LENS_PUBLIC_VIEWS_DATABASE";
+    public const int PublicViewsPoolSize = 4;
+    public const int PublicViewsPruningIntervalSeconds = 10;
     public const string TrustedProxyRangesVariable = "CIVIC_LENS_TRUSTED_PROXY_RANGES";
     public const string RequestsPerMinuteVariable = "CIVIC_LENS_REQUESTS_PER_MINUTE";
     public const string ReportsPerHourVariable = "CIVIC_LENS_REPORTS_PER_HOUR";
@@ -20,6 +23,8 @@ public sealed record PublicApiOptions
 
     public required Uri ReleaseBaseUrl { get; init; }
     public required string Database { get; init; }
+    /// <summary>The connection of the role <c>civic_lens_public</c> to the operational database. Only the views of <c>public_api</c> are readable through it.</summary>
+    public required string PublicViewsDatabase { get; init; }
     public IReadOnlyList<IPNetwork> TrustedProxyRanges { get; init; } = [];
     public int RequestsPerMinute { get; init; } = 60;
     public int ReportsPerHour { get; init; } = 5;
@@ -30,6 +35,8 @@ public sealed record PublicApiOptions
     public string? ReportPullToken { get; init; }
     public TimeSpan PollInterval { get; init; } = TimeSpan.FromSeconds(30);
     public TimeSpan QueryTimeout { get; init; } = TimeSpan.FromSeconds(2);
+    /// <summary>How long the views pool keeps an idle connection. The pool prunes every <see cref="PublicViewsPruningIntervalSeconds"/> seconds, so lifetime plus that interval must stay below <c>idle_session_timeout</c> of the role (60 seconds, in <c>PublicApiGrants</c>). The server then never closes a connection that the pool still holds.</summary>
+    public TimeSpan PublicViewsIdleLifetime { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>The connection for searches. It limits the time of every statement, so one slow query cannot hold the database.</summary>
     public string ReaderDatabase => new NpgsqlConnectionStringBuilder(Database)
@@ -37,10 +44,20 @@ public sealed record PublicApiOptions
         Options = $"-c statement_timeout={(int)QueryTimeout.TotalMilliseconds}"
     }.ConnectionString;
 
+    /// <summary>The pool is one connection smaller than the connection limit of the role. The role sets its own statement timeout and closes its idle sessions. A minimum pool size above 0 would keep connections that pruning never closes.</summary>
+    public string PublicViewsReaderDatabase => new NpgsqlConnectionStringBuilder(PublicViewsDatabase)
+    {
+        MaxPoolSize = PublicViewsPoolSize,
+        MinPoolSize = 0,
+        ConnectionIdleLifetime = (int)PublicViewsIdleLifetime.TotalSeconds,
+        ConnectionPruningInterval = PublicViewsPruningIntervalSeconds
+    }.ConnectionString;
+
     public static PublicApiOptions FromEnvironment() => new()
     {
         ReleaseBaseUrl = Directory(Required(ReleaseBaseUrlVariable)),
         Database = Required(DatabaseVariable),
+        PublicViewsDatabase = Required(PublicViewsDatabaseVariable),
         TrustedProxyRanges = [.. (Environment.GetEnvironmentVariable(TrustedProxyRangesVariable) ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(IPNetwork.Parse)],
         RequestsPerMinute = ParseLimit(RequestsPerMinuteVariable, 60),

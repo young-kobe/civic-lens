@@ -277,9 +277,9 @@ The migration `PublicApiViews` creates the roles `civic_lens_public` and `civic_
 
 The same step revokes `TEMPORARY` on the database and `EXECUTE` on the `pg_advisory_*` and `pg_try_advisory_*` functions from `PUBLIC`. So `db migrate` needs a superuser. It is the only place that revokes `TEMPORARY`, so `readonly-grants.sql` relies on it. The app role of the compose database is one. The role `civic_lens_public` then creates no temporary table and takes no advisory lock.
 
-Enable the login by hand, after the first `db migrate` that holds the migration. Open an interactive `psql` session on the database host as the database owner. Run `ALTER ROLE civic_lens_public LOGIN PASSWORD` with a long random password. Keep the password out of shell history, logs, and Git. Store it only where the future `PublicApi` reads its settings.
+Enable the login by hand, after the first `db migrate` that holds the migration. Open an interactive `psql` session on the database host as the database owner. Run `ALTER ROLE civic_lens_public LOGIN PASSWORD` with a long random password. Keep the password out of shell history, logs, and Git. Store it only where `PublicApi` reads its settings. The service reads the connection from `CIVIC_LENS_PUBLIC_VIEWS_DATABASE`, for example `Host=<host>;Database=<database>;Username=civic_lens_public;Password=<password>`. It sets `Maximum Pool Size=4` itself and no timeout, because the role sets the statement timeout. The service stops at startup when the variable is missing.
 
-The role reads only the views in `public_api`. It cannot write, a statement stops after 2 seconds, an idle session ends after 60 seconds, and it holds at most 5 connections. After a restore, run `db migrate`. It creates a missing role and sets the grants again, because `pg_restore --no-privileges` drops them. Roles belong to the cluster and a dump can leave them out, so the login of the role needs a new `ALTER ROLE` after a restore into a new cluster. Without the login the views stay closed, which is the safe state. `PublicApi` does not use the role yet.
+The role reads only the views in `public_api`. It cannot write, a statement stops after 2 seconds, an idle session ends after 60 seconds, and it holds at most 5 connections. After a restore, run `db migrate`. It creates a missing role and sets the grants again, because `pg_restore --no-privileges` drops them. Roles belong to the cluster and a dump can leave them out, so the login of the role needs a new `ALTER ROLE` after a restore into a new cluster. Without the login the views stay closed, which is the safe state. `PublicApi` uses the role for `/v1/release` and the vote routes. Without the login those routes fail and the search routes keep working.
 
 ## Managed collection jobs
 
@@ -961,6 +961,28 @@ Until the backfill runs, a publish that adds a record of the active release stop
 
 The withdrawal tables add a second need. Every publish whose release lists a withdrawal, carried or new, also stops with the same message until the backfill runs. The database refuses a withdrawal row for a record that `published_records` lacks. On a deploy that adds the migration `PublicationWithdrawals`, do these steps in order: stop the worker, migrate, run `releases first-published backfill`, then start the worker.
 
+### Entries backfill
+
+The tables `published_entries`, `published_entry_officials`, `published_entry_issues`, and `published_entry_policy_areas` hold one entry for each record revision. A commit writes the rows of the revisions that it adds. This command fills the rows of revisions from earlier releases. Run `releases first-published backfill` first, because an entry row needs the `published_records` row of its record. The command needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. Other backfills do not need to finish first.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases entries backfill <limit>
+```
+
+The limit counts inserted rows. It does not bound the reads: each run reads every state row, every kept manifest that covers a range without a row, and the first record file of each such range. The command reads each kept manifest once, from the oldest to the newest. It takes the entry of a revision from the oldest kept folder of its range. It checks the record file of that folder, and it compares the entry in every later kept folder of the range. A kept folder of the range that omits the revision counts as a difference. It never fixes a value. A row that fails a check is skipped with a reason. A repeat is safe, because the command inserts only missing rows and a commit during the run cannot create a second row.
+
+The command prints JSON with these keys:
+
+- `examined`: the revision ranges without a row at the start.
+- `added`: the rows that this run inserted.
+- `alreadyPresent`: the ranges that already had a row.
+- `skipped`, `skippedByReason`, and `skippedEntries`: the skipped rows, a count for each reason, and the first 50 rows. The reasons are `manifestInvalid`, `recordFileInvalid`, `recordFileDiffers`, `foldersDiffer`, and `firstPublishedMissing`.
+- `openRangesWithoutRow`: the open ranges that still have no row.
+- `closedRangesWithoutKeptFolder`: the closed ranges that no kept folder lists. These ranges get no row, and this is expected.
+- `readyRangesWithoutRow`: the open or closed ranges that passed every check but got no row, because the limit stopped the run.
+
+The exit code is 0 only when `skipped`, `openRangesWithoutRow`, and `readyRangesWithoutRow` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
+
 ### Take a record off the site
 
 Only the owner sees Take off site. It is on the editor of every record kind that releases publish, below the decision panel. The button shows only while the active release holds the record. Type a reason of 1 to 500 characters and press the button. The page then does these steps:
@@ -1019,6 +1041,7 @@ Run the service in a second shell. It applies its schema at startup, ingests the
 ```sh
 export CIVIC_LENS_RELEASE_BASE_URL=http://127.0.0.1:8090/
 export CIVIC_LENS_SEARCH_DATABASE="Host=127.0.0.1;Port=5434;Database=search;Username=search;Password=search"
+export CIVIC_LENS_PUBLIC_VIEWS_DATABASE="Host=127.0.0.1;Port=5432;Database=civic_lens;Username=civic_lens_public;Password=<password of the public role>"
 export ASPNETCORE_URLS=http://127.0.0.1:8100
 dotnet run --project src/CivicLens.PublicApi
 ```
@@ -1309,7 +1332,7 @@ The installer refuses a checkout that anyone other than root can write, because 
 
 Every result that an agent reads goes to its model vendor, so add a column to the hidden list before it holds private text.
 
-**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `votes revisions backfill`, `votes revisions verify`, `actions revisions backfill`, `actions revisions verify`, `executive-actions revisions backfill`, `executive-actions revisions verify`, `relationships revisions backfill`, `relationships revisions verify`, `statements revisions backfill`, `statements revisions verify`, `brief revisions backfill`, `brief revisions verify`, `document-changes revisions backfill`, `document-changes revisions verify`, `releases first-published backfill`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
+**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `votes revisions backfill`, `votes revisions verify`, `actions revisions backfill`, `actions revisions verify`, `executive-actions revisions backfill`, `executive-actions revisions verify`, `relationships revisions backfill`, `relationships revisions verify`, `statements revisions backfill`, `statements revisions verify`, `brief revisions backfill`, `brief revisions verify`, `document-changes revisions backfill`, `document-changes revisions verify`, `releases first-published backfill`, `releases entries backfill` with a count, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
 
 `deploy` takes a full commit SHA on `origin/main` that is the checkout or newer. The scripts of that commit run as root, and a migration has no undo, so a rollback stays with the owner. It checks out the commit, runs `update.sh`, and runs `check-live.sh`. A merge to `main` is therefore the real approval. GitHub does not stop the agent from merging, because it uses the owner's token. Only the agent rules and the Claude Code permissions stop it.
 
