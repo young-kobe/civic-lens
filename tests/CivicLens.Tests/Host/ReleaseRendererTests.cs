@@ -1917,12 +1917,12 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task TheMethodPageDescribesTheLatestListAndNoLongerClaimsAClosestVoteCardThatHomeDoesNotShow()
+    public async Task TheMethodPageDescribesTheLatestListAndSaysTheClosestVoteCardDoesNotAppearWhenNoVoteFits()
     {
         var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None)).QuerySelector("main")!.TextContent;
 
         Assert.Contains("The list \"Latest from the record\" shows the 4 newest votes and the 3 newest executive actions on this site", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("closest vote", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("It names the dates. With no such vote in these dates, the card does not appear.", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2625,7 +2625,7 @@ public sealed class ReleaseRendererTests
             ("official", official.PagePath, await renderer.RenderOfficialAsync(official, PublicationCatalogs.None, CancellationToken.None), "Officials"),
             ("past congress", pastOfficial.PagePath, await renderer.RenderOfficialAsync(pastOfficial, PublicationCatalogs.None, CancellationToken.None), "Officials"),
             ("officials", PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync([new OfficialListing(profile, 0)], DateTimeOffset.UnixEpoch, CancellationToken.None), "Officials"),
-            ("board", OfficialBoard.All[0].PagePath, await renderer.RenderBoardAsync(OfficialBoardPage.All([], []).First(), CancellationToken.None), "Officials"),
+            ("board", OfficialBoard.All[0].PagePath, await renderer.RenderBoardAsync(OfficialBoardPage.All([], []).First(), null, CancellationToken.None), "Officials"),
             ("search", PublicationProtocol.SearchPagePath, await renderer.RenderSearchAsync(release, facets, CancellationToken.None), null),
             ("method", PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(CancellationToken.None), null),
             ("about", PublicationProtocol.AboutPagePath, await renderer.RenderAboutAsync(CancellationToken.None), "About"),
