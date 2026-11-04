@@ -1,4 +1,5 @@
 using CivicLens.Application.Actions;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Npgsql;
 
@@ -158,17 +159,9 @@ public sealed class ActionCommandTests(PostgresCollection postgres) : IAsyncLife
 
     private async Task InsertLegacyRevisionAsync(string revisionJson)
     {
-        var record = new string('a', 64);
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($$"""
-            SET session_replication_role = replica;
-            INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
-                review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)
-            VALUES ('{{record}}', 'congress-bills', 119, 'hr', 7, 1, 0, 'AwaitingReview', 100, 100, '{{record}}');
-            INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-            VALUES ('{{record}}', 1, 'auth0|editor', 'Person', NULL, '{{revisionJson}}', 100)
-            """, connection);
+        await using var command = new NpgsqlCommand(LegacyActionRevisionInsert.Sql(new string('a', 64), revisionJson), connection);
         await command.ExecuteNonQueryAsync();
     }
 

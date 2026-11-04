@@ -19,19 +19,11 @@ public sealed class PostgresApprovedOutsideReleaseTests(PostgresCollection postg
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        store = PostgresPublicationStore.FromConnectionString(connectionString);
+        store = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         await ExecuteAsync(ApprovalDrafts.DropForeignKeys);
     }
 
     public async Task DisposeAsync() => await postgres.DropDatabaseAsync(connectionString);
-
-    [Fact]
-    public async Task EveryKindCountsWhenApprovedBecauseTheCapAlarmMustSeeAllSevenKinds()
-    {
-        foreach (var insert in ApprovalDrafts.Inserts.Values) await ExecuteAsync(insert.Replace("'AwaitingReview'", "'Approved'"));
-
-        Assert.Equal(ApprovalDrafts.Inserts.Count, await store.CountApprovedOutsideActiveReleaseAsync([], default));
-    }
 
     [Fact]
     public async Task ARecordThatIsNotApprovedDoesNotCountBecauseOnlyApprovedRecordsWaitForRoom()

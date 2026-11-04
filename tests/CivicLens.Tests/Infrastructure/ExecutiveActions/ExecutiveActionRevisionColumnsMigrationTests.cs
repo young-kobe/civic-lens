@@ -109,6 +109,7 @@ public sealed class ExecutiveActionRevisionColumnsMigrationTests(PostgresCollect
         var original = OldShapeRevision();
         await InsertRecordAsync(Notice, "civic-lens:code", JsonSerializer.Serialize(original, JsonSerializerOptions.Web), original.CreatedAtUtc.UtcTicks);
         await MigrateToAsync(Migration);
+        await using (var db = NewContext()) await db.Database.MigrateAsync();
         var contexts = new PooledDbContextFactory<CollectionAttemptDbContext>(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         var owner = new ReviewActor("auth0|owner", ReviewRole.Owner);
         var store = new PostgresExecutiveActionRevisionBackfillStore(contexts);

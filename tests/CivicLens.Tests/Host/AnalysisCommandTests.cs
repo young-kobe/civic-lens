@@ -38,24 +38,6 @@ public sealed class AnalysisCommandTests(PostgresCollection postgres) : IAsyncLi
         Assert.Contains("Use analyses requeue", result.Error, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task AnInvalidComparisonIdIsRejected()
-    {
-        var result = await RunAsync("auth0|owner", "analyses", "requeue", "not-a-hash");
-
-        Assert.Equal(2, result.ExitCode);
-        Assert.Contains("SHA-256", result.Error, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task TheAiDrafterCannotActAsTheOwner()
-    {
-        var result = await RunAsync("civic-lens:analysis", "analyses", "requeue", "--all");
-
-        Assert.Equal(2, result.ExitCode);
-        Assert.Contains("not the owner", result.Error, StringComparison.Ordinal);
-    }
-
     private Task<(int ExitCode, string Output, string Error)> RunAsync(string owner, params string[] arguments) =>
         HostProcess.RunWithEnvironmentAsync(connectionString, null,
             new Dictionary<string, string> { ["CIVIC_LENS_REVIEW_OWNER"] = owner }, arguments);

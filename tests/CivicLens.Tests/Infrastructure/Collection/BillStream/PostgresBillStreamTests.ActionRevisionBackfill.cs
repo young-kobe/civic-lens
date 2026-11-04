@@ -43,6 +43,21 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task ARevisionWrittenWithoutTheDerivedValuesGetsThemFromTheBackfillBecauseEarlierCodeWroteTheOtherColumnsOnly()
+    {
+        var full = await SettleFullRevisionAsync();
+        await ExecuteAsync(connectionString, "UPDATE action_revisions SET event_on = NULL, cosponsor_count = NULL");
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_revisions WHERE headline IS NOT NULL AND event_on IS NULL"));
+
+        var result = await BackfillActionRevisionsAsync(10);
+
+        Assert.Equal((1, 1, 0), (result.Examined, result.Moved, result.Skipped));
+        await AssertColumnsEqualAsync(full);
+        var verification = await VerifyActionRevisionsAsync();
+        Assert.Equal((1, 0, 0), (verification.Checked, verification.Legacy, verification.Mismatched));
+    }
+
+    [Fact]
     public async Task ARevisionWithNoCandidateSetKeepsItsTrackedIssuesInOrderAndRecordsThatCandidatesAreUnknown()
     {
         var candidate = await CandidateWithoutSummariesAsync();
@@ -57,7 +72,7 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task ARerunChangesNothingBecauseTheBackfillTouchesOnlyRowsWithNullColumns()
+    public async Task ARerunChangesNothingBecauseTheBackfillTouchesOnlyRowsWithoutAnEventDate()
     {
         await SettleFullRevisionAsync();
         await MakeActionRevisionsLegacyAsync(1);

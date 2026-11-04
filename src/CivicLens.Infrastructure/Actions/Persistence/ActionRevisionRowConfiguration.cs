@@ -12,8 +12,7 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
     private static readonly string[] WrittenTogether =
     [
         "headline", "summary", "text_origin", "source_id", "congress", "bill_type", "bill_number", "candidate_id", "candidate_update_utc_ticks",
-        "candidate_includes_summaries", "candidate_includes_subjects", "fingerprint", "bill_title", "issue_revision_id", "issue_candidates_recorded",
-        "event_on", "cosponsor_count"
+        "candidate_includes_summaries", "candidate_includes_subjects", "fingerprint", "bill_title", "issue_revision_id", "issue_candidates_recorded"
     ];
 
     public void Configure(EntityTypeBuilder<ActionRevisionRow> builder)
@@ -36,6 +35,9 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
                 "author_kind <> 'Code' OR headline IS NULL OR bill_citation_extraction_id IS NOT NULL");
             table.HasCheckConstraint("ck_action_revisions_cosponsor_count", "cosponsor_count >= 0");
             table.HasCheckConstraint("ck_action_revisions_columns_written", $"num_nulls({string.Join(", ", WrittenTogether)}) IN (0, {WrittenTogether.Length})");
+            table.HasCheckConstraint("ck_action_revisions_derived_columns_written", "num_nulls(event_on, cosponsor_count) IN (0, 2)");
+            table.HasCheckConstraint("ck_action_revisions_code_version", "code_version ~ '^[0-9a-f]{40}$'");
+            table.HasCheckConstraint("ck_action_revisions_code_version_author", "code_version IS NULL OR author_kind = 'Code'");
         });
         builder.HasKey(row => new { row.RecordId, row.RevisionNumber });
         builder.Property(row => row.RecordId).HasColumnName("record_id").HasMaxLength(64);
@@ -43,6 +45,7 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.AuthorSubject).HasColumnName("author_subject").HasMaxLength(256).IsRequired();
         builder.Property(row => row.AuthorKind).HasColumnName("author_kind").HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(row => row.RunId).HasColumnName("run_id").HasMaxLength(32);
+        builder.Property(row => row.CodeVersion).HasColumnName("code_version").HasMaxLength(40);
         builder.Property(row => row.RevisionJson).HasColumnName("revision_json").IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
         builder.Property(row => row.SourceId).HasColumnName("source_id").HasMaxLength(ActionDraftRevision.MaximumSourceIdLength);

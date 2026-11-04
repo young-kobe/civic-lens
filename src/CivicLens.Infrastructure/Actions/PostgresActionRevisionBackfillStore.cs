@@ -13,7 +13,7 @@ public sealed class PostgresActionRevisionBackfillStore(IDbContextFactory<Collec
     private static readonly HashSet<string> NoAllowedAbsences = [];
 
     private readonly RevisionBackfill<ActionRevisionRow, ActionDraftRevision, ActionRevisionPage> backfill = new(contextFactory, new(
-        "action_revision_backfill", PostgresAdvisoryLock.ActionReview, row => row.Headline == null,
+        "action_revision_backfill", PostgresAdvisoryLock.ActionReview, row => row.EventOn == null,
         ActionRevisionRows.ReadPageAsync, FillColumnsAsync, ReadMovable, DifferingFields));
 
     public Task<RevisionBackfillBatch> BackfillBatchAsync(RevisionKey? after, int size, CancellationToken cancellationToken) =>
@@ -22,11 +22,21 @@ public sealed class PostgresActionRevisionBackfillStore(IDbContextFactory<Collec
     public Task<RevisionVerification> VerifyAsync(int mismatchLimit, CancellationToken cancellationToken) =>
         backfill.VerifyAsync(mismatchLimit, cancellationToken);
 
-    private static Task FillColumnsAsync(CollectionAttemptDbContext db, ActionRevisionRow row, ActionDraftRevision revision,
+    private static async Task FillColumnsAsync(CollectionAttemptDbContext db, ActionRevisionRow row, ActionDraftRevision revision,
         CancellationToken cancellationToken)
     {
+        await DeleteChildRowsAsync(db, row, cancellationToken);
         ActionRevisionRows.FillColumns(row, revision);
-        return Task.CompletedTask;
+    }
+
+    private static async Task DeleteChildRowsAsync(CollectionAttemptDbContext db, ActionRevisionRow row, CancellationToken cancellationToken)
+    {
+        await db.Set<ActionRevisionSponsorshipCitationRow>().Where(citation => citation.RecordId == row.RecordId && citation.RevisionNumber == row.RevisionNumber)
+            .ExecuteDeleteAsync(cancellationToken);
+        await db.Set<ActionRevisionSponsorshipRow>().Where(item => item.RecordId == row.RecordId && item.RevisionNumber == row.RevisionNumber)
+            .ExecuteDeleteAsync(cancellationToken);
+        await db.Set<ActionRevisionIssueRow>().Where(issue => issue.RecordId == row.RecordId && issue.RevisionNumber == row.RevisionNumber)
+            .ExecuteDeleteAsync(cancellationToken);
     }
 
     private static (ActionDraftRevision? Revision, string? Refusal) ReadMovable(ActionRevisionRow row)

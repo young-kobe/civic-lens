@@ -14,7 +14,7 @@ public sealed class PostgresCollectionWorkerQueue(IDbContextFactory<CollectionAt
 
     public static PostgresCollectionWorkerQueue FromConnectionString(string connectionString)
     {
-        _ = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        _ = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
         return new(new PooledDbContextFactory<CollectionAttemptDbContext>(options));
     }

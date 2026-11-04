@@ -63,7 +63,7 @@ public sealed class PostgresCollectionPipelineWakeupTests(PostgresCollection pos
     [Fact]
     public async Task ReleasingRunnableClaimWakesAfterQueueSkippedItsLease()
     {
-        var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var job = await jobs.EnqueueAsync(Source(), "release-runnable", default);
         var claim = await jobs.TryClaimAsync(job.JobId, TimeSpan.FromSeconds(30), default);
         Assert.NotNull(claim);
@@ -81,7 +81,7 @@ public sealed class PostgresCollectionPipelineWakeupTests(PostgresCollection pos
     [Fact]
     public async Task ReleasingOriginBlockedClaimDoesNotWakeItself()
     {
-        var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var job = await jobs.EnqueueAsync(Source(), "release-blocked", default);
         var claim = await jobs.TryClaimAsync(job.JobId, TimeSpan.FromSeconds(30), default);
         Assert.NotNull(claim);
@@ -104,7 +104,7 @@ public sealed class PostgresCollectionPipelineWakeupTests(PostgresCollection pos
     [Fact]
     public async Task ReleaseCommittedAfterBarrierDeadlineStillWakesListener()
     {
-        var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var job = await jobs.EnqueueAsync(Source(), "late-release", default);
         var claim = await jobs.TryClaimAsync(job.JobId, TimeSpan.FromSeconds(30), default);
         Assert.NotNull(claim);

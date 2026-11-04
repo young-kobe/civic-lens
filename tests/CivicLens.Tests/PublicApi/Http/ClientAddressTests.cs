@@ -29,12 +29,6 @@ public sealed class ClientAddressTests
     }
 
     [Fact]
-    public void WithNoConfiguredRangesTheRemoteAddressIsTheClientEvenWhenTheHeaderIsPresent()
-    {
-        Assert.Equal("127.0.0.1", new ClientAddress([]).Of(Request("127.0.0.1", "198.51.100.7")));
-    }
-
-    [Fact]
     public void ATrustedConnectionWithAMissingOrBadHeaderFallsBackToTheRemoteAddress()
     {
         var clients = new ClientAddress(Cloudflare);

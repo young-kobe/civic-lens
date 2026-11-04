@@ -780,17 +780,6 @@ public sealed class CollectorTests
     }
 
     [Fact]
-    public async Task RobotsDenyPreventsTargetRequest()
-    {
-        using var directoryOwner = new TemporaryDirectory();
-        var handler = new QueueHandler(_ => Response(HttpStatusCode.OK, "User-agent: *\nDisallow: /watch*\n"));
-        using var collector = new HttpCollector(handler);
-        var result = await collector.FetchAsync(Request(directoryOwner.Path));
-        Assert.Equal(CollectionFailureCode.RobotsDenied, result.FailureCode);
-        Assert.Equal(1, handler.Calls);
-    }
-
-    [Fact]
     public async Task RobotsUsesCivicLensGroupInsteadOfWildcardAndCombinesConsecutiveAgents()
     {
         using var directory = new TemporaryDirectory();

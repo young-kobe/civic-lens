@@ -1,4 +1,5 @@
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -12,7 +13,8 @@ namespace CivicLens.Tests.Infrastructure.Actions;
 public sealed class ActionRevisionDerivedColumnsMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private static readonly string RecordId = new('a', 64);
-    private const string Migration = "20261103233644_ActionRevisionDerivedColumns";
+    private const string Json = "{\"a\":1}";
+    private const string Migration = "20261104003140_ActionRevisionDerivedColumns";
     private const string DerivedColumnCount = """
         SELECT count(*) FROM information_schema.columns
         WHERE table_schema = current_schema() AND table_name = 'action_revisions' AND column_name IN ('event_on', 'cosponsor_count')
@@ -40,6 +42,16 @@ public sealed class ActionRevisionDerivedColumnsMigrationTests(PostgresCollectio
     }
 
     [Fact]
+    public async Task ARowThatAlreadyHasTheEarlierColumnsMigratesWithNullDerivedColumnsBecauseTheSetCheckStaysAtItsFirstColumns()
+    {
+        await InsertRowWithTheEarlierColumnsAsync();
+
+        await MigrateToAsync(Migration);
+
+        Assert.Equal(["H||"], await ReadAsync("SELECT headline || '|' || COALESCE(event_on::text, '') || '|' || COALESCE(cosponsor_count::text, '') FROM action_revisions"));
+    }
+
+    [Fact]
     public async Task TheMigrationGoesDownAndUpAgainWithALegacyRowAndTheJsonSurvivesBecauseARollbackMustLoseNoRevision()
     {
         await InsertLegacyRowAsync();
@@ -57,13 +69,13 @@ public sealed class ActionRevisionDerivedColumnsMigrationTests(PostgresCollectio
         Assert.Equal(["ix_action_revisions_event_on"], await ReadAsync("SELECT indexname FROM pg_indexes WHERE indexname = 'ix_action_revisions_event_on'"));
     }
 
-    private Task InsertLegacyRowAsync() => ExecuteAsync($$"""
-        SET session_replication_role = replica;
-        INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, review_state_version,
-            review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)
-        VALUES ('{{RecordId}}', 'congress-bills', 119, 'hr', 7, 1, 0, 'AwaitingReview', 100, 100, 'c1');
-        INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-        VALUES ('{{RecordId}}', 1, 'analysis', 'Analysis', 'run1', '{"a":1}', 100)
+    private Task InsertLegacyRowAsync() => ExecuteAsync(LegacyActionRevisionInsert.Sql(RecordId, Json));
+
+    private Task InsertRowWithTheEarlierColumnsAsync() => ExecuteAsync($"""
+        {LegacyActionRevisionInsert.Sql(RecordId, Json)};
+        UPDATE action_revisions SET headline = 'H', summary = 'S', text_origin = 'Person', source_id = 'congress-bills', congress = 119, bill_type = 'hr',
+            bill_number = 7, candidate_id = '{RecordId}', candidate_update_utc_ticks = 100, candidate_includes_summaries = false,
+            candidate_includes_subjects = false, fingerprint = '{RecordId}', bill_title = 'T', issue_revision_id = '{RecordId}', issue_candidates_recorded = true
         """);
 
     private string PreviousMigration()

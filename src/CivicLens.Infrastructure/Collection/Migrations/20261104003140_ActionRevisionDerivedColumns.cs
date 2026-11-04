@@ -11,10 +11,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropCheckConstraint(
-                name: "ck_action_revisions_columns_written",
-                table: "action_revisions");
-
             migrationBuilder.AddColumn<int>(
                 name: "cosponsor_count",
                 table: "action_revisions",
@@ -33,14 +29,14 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 column: "event_on");
 
             migrationBuilder.AddCheckConstraint(
-                name: "ck_action_revisions_columns_written",
-                table: "action_revisions",
-                sql: "num_nulls(headline, summary, text_origin, source_id, congress, bill_type, bill_number, candidate_id, candidate_update_utc_ticks, candidate_includes_summaries, candidate_includes_subjects, fingerprint, bill_title, issue_revision_id, issue_candidates_recorded, event_on, cosponsor_count) IN (0, 17)");
-
-            migrationBuilder.AddCheckConstraint(
                 name: "ck_action_revisions_cosponsor_count",
                 table: "action_revisions",
                 sql: "cosponsor_count >= 0");
+
+            migrationBuilder.AddCheckConstraint(
+                name: "ck_action_revisions_derived_columns_written",
+                table: "action_revisions",
+                sql: "num_nulls(event_on, cosponsor_count) IN (0, 2)");
         }
 
         /// <inheritdoc />
@@ -51,11 +47,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 table: "action_revisions");
 
             migrationBuilder.DropCheckConstraint(
-                name: "ck_action_revisions_columns_written",
+                name: "ck_action_revisions_cosponsor_count",
                 table: "action_revisions");
 
             migrationBuilder.DropCheckConstraint(
-                name: "ck_action_revisions_cosponsor_count",
+                name: "ck_action_revisions_derived_columns_written",
                 table: "action_revisions");
 
             migrationBuilder.DropColumn(
@@ -65,11 +61,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             migrationBuilder.DropColumn(
                 name: "event_on",
                 table: "action_revisions");
-
-            migrationBuilder.AddCheckConstraint(
-                name: "ck_action_revisions_columns_written",
-                table: "action_revisions",
-                sql: "num_nulls(headline, summary, text_origin, source_id, congress, bill_type, bill_number, candidate_id, candidate_update_utc_ticks, candidate_includes_summaries, candidate_includes_subjects, fingerprint, bill_title, issue_revision_id, issue_candidates_recorded) IN (0, 15)");
         }
     }
 }

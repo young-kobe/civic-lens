@@ -1,3 +1,4 @@
+using CivicLens.Application;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
@@ -10,15 +11,17 @@ namespace CivicLens.Infrastructure.Actions;
 
 internal static class ActionRevisionRows
 {
-    public static ActionRevisionRow Create(ActionDraftRevision revision, string? runId)
+    public static ActionRevisionRow Create(ActionDraftRevision revision, string? runId, CodeVersion codeVersion)
     {
+        var authorKind = ReviewAuthor.KindOf(revision.AuthorSubject);
         var row = new ActionRevisionRow
         {
             RecordId = revision.RecordId,
             RevisionNumber = revision.RevisionNumber,
             AuthorSubject = revision.AuthorSubject,
-            AuthorKind = ReviewAuthor.KindOf(revision.AuthorSubject),
+            AuthorKind = authorKind,
             RunId = runId,
+            CodeVersion = authorKind == ReviewAuthorKind.Code ? codeVersion.Sha : null,
             RevisionJson = ReviewJson.Serialize(revision),
             CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
         };

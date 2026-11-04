@@ -12,7 +12,7 @@ internal sealed record ActionRevisionPage(IReadOnlyList<ActionRevisionRow> Rows,
     ILookup<(string RecordId, int RevisionNumber), ActionRevisionSponsorshipRow> Sponsorships,
     ILookup<(string RecordId, int RevisionNumber, short SponsorshipPosition), ActionRevisionSponsorshipCitationRow> Citations) : IRevisionRowPage<ActionRevisionRow>
 {
-    /// <summary>Rebuilds the revision of a row. A row with null columns fails here, and the JSON is no fallback. The tracked issues come back in ordinal order, because the drafting code stores them that way.</summary>
+    /// <summary>Rebuilds the revision of a row. A row with null columns fails here, and the JSON is no fallback.</summary>
     public ActionDraftRevision Rebuild(ActionRevisionRow row)
     {
         if (row.Headline is null)
@@ -26,7 +26,7 @@ internal sealed record ActionRevisionPage(IReadOnlyList<ActionRevisionRow> Rows,
             new DateTimeOffset(row.CandidateUpdateUtcTicks!.Value, TimeSpan.Zero), row.CandidateIncludesSummaries!.Value, row.CandidateIncludesSubjects!.Value,
             row.Fingerprint!, row.SummaryVersion, SpanOf(row.SummaryCitationExtractionId, row.SummaryCitationStart, row.SummaryCitationLength),
             row.PolicyArea, SpanOf(row.PolicyAreaCitationExtractionId, row.PolicyAreaCitationStart, row.PolicyAreaCitationLength), row.PolicyAreaId,
-            [.. recorded ? tracked.Order(StringComparer.Ordinal) : tracked], recorded ? [.. issues.Select(issue => issue.IssueId)] : default,
+            [.. tracked], recorded ? [.. issues.Select(issue => issue.IssueId)] : default,
             row.IssueRevisionId!, SponsorshipsOf(row), row.BillTitle!, row.SubjectsHash,
             SpanOf(row.BillCitationExtractionId, row.BillCitationStart, row.BillCitationLength));
     }

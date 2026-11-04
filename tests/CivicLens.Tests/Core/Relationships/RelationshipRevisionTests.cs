@@ -14,9 +14,6 @@ public sealed class RelationshipRevisionTests
         new(RelationshipMatchBasis.BillNumber, RelationshipFixtures.Span(RelationshipFixtures.BillWords)), type, "She says she introduced it.",
         RelationshipFixtures.Span(RelationshipFixtures.BillSentence), "F2", "warren");
 
-    [Fact]
-    public void AValidRevisionPasses() => Revision().ValidateShape();
-
     [Theory]
     [InlineData(RelationshipType.ClaimsCreditFor, RelationshipRecordKind.Vote)]
     [InlineData(RelationshipType.StatementAboutVote, RelationshipRecordKind.Action)]

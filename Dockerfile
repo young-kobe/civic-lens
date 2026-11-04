@@ -6,9 +6,11 @@ COPY src ./src
 RUN dotnet restore src/CivicLens.Host --locked-mode \
  && dotnet restore src/CivicLens.Collector --locked-mode \
  && dotnet restore src/CivicLens.PublicApi --locked-mode
-RUN dotnet publish src/CivicLens.Host --no-restore -c Release -p:UseAppHost=false -o /out/host \
- && dotnet publish src/CivicLens.Collector --no-restore -c Release -p:UseAppHost=false -o /out/collector \
- && dotnet publish src/CivicLens.PublicApi --no-restore -c Release -p:UseAppHost=false -o /out/search
+ARG SOURCE_REVISION_ID
+RUN test -n "$SOURCE_REVISION_ID" || (echo "SOURCE_REVISION_ID is required" >&2; exit 1)
+RUN dotnet publish src/CivicLens.Host --no-restore -c Release -p:UseAppHost=false -p:SourceRevisionId=$SOURCE_REVISION_ID -o /out/host \
+ && dotnet publish src/CivicLens.Collector --no-restore -c Release -p:UseAppHost=false -p:SourceRevisionId=$SOURCE_REVISION_ID -o /out/collector \
+ && dotnet publish src/CivicLens.PublicApi --no-restore -c Release -p:UseAppHost=false -p:SourceRevisionId=$SOURCE_REVISION_ID -o /out/search
 
 # mcr.microsoft.com/dotnet/aspnet:10.0.14
 FROM mcr.microsoft.com/dotnet/aspnet@sha256:de0ee358cdd672f7017a003bed21e9ac9ed48a27c922a59b18175b6e82fa7fee AS runtime

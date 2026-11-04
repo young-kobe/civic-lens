@@ -120,7 +120,7 @@ public sealed class PostgresZctaDistrictStoreTests(PostgresCollection postgres) 
     [Fact]
     public async Task TheWeeklyCheckCreatesADistrictJobAndSchedulesTheNextCheckOneWeekLater()
     {
-        var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        var jobs = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         await jobs.SynchronizeAsync(DistrictFixtures.Configuration(), default);
         await ExecuteAsync("UPDATE collection_source_schedules SET next_due_utc_ticks = 0");
 

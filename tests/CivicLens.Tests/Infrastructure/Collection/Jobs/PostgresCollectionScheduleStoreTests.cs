@@ -23,7 +23,7 @@ public sealed class PostgresCollectionScheduleStoreTests(PostgresCollection post
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();
-        store = PostgresCollectionJobStore.FromConnectionString(connectionString);
+        store = PostgresCollectionJobStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
     }
 

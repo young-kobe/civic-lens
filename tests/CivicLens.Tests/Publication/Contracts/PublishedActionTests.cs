@@ -174,6 +174,10 @@ public sealed class PublishedActionTests
             Assert.Equal(entry.CosponsorIds!.Length, revision.CosponsorCount());
             Assert.Equal(entry.EventDate, revision.EventOn());
         }
+
+        var sponsorship = ActionRevisionFixtures.Sponsorship();
+        var withdrawnBeforeItBegan = ActionRevisionFixtures.Model() with { Sponsorships = [sponsorship with { WithdrawnOn = sponsorship.SponsoredOn.AddDays(-1) }] };
+        Assert.Throws<ArgumentException>(withdrawnBeforeItBegan.ValidateShape);
     }
 
     [Fact]
