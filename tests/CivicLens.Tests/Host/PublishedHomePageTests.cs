@@ -85,9 +85,10 @@ public sealed class PublishedHomePageTests
     }
 
     [Fact]
-    public async Task TheLatestListHoldsTheFourNewestVotesAndTheThreeNewestActionsNewestFirstWithTheirDateAndALink()
+    public async Task TheLatestListHoldsTheNewestVotesOfEachChamberAndTheThreeNewestActionsNewestFirstWithTheirDateAndALink()
     {
-        var release = ReleaseOf(Vote('a', 1, 1, null, 1), Vote('b', 1, 1, null, 2), Vote('c', 1, 1, null, 3), Vote('d', 1, 1, null, 4), Vote('e', 1, 1, null, 5),
+        var split = PublishedVoteAlignment.Split;
+        var release = ReleaseOf(Vote('a', 1, 1, split, 1), Vote('b', 1, 1, split, 2), Vote('c', 1, 1, split, 3) with { Chamber = PublishedChamber.Senate }, Vote('d', 1, 1, split, 4), Vote('e', 1, 1, split, 5),
             Executive('f', 1), Executive('g', 2), Executive('h', 3), Executive('i', 4));
 
         var main = await HomeAsync(release, []);
@@ -96,9 +97,11 @@ public sealed class PublishedHomePageTests
         Assert.Equal("Latest from the record", section.QuerySelector("h2")!.TextContent);
         var columns = section.QuerySelectorAll(".latest-columns > div").ToList();
         Assert.Equal(["Votes", "Executive actions"], columns.Select(column => column.QuerySelector("h3")!.TextContent));
-        Assert.Equal([Id('e'), Id('d'), Id('c'), Id('b')], columns[0].QuerySelectorAll("li a").Select(link => link.GetAttribute("href")!.Split('/')[1][..32]));
+        Assert.Equal([Id('e'), Id('d'), Id('c')], columns[0].QuerySelectorAll("li a").Select(link => link.GetAttribute("href")!.Split('/')[1][..32]));
         Assert.Equal([Id('i'), Id('h'), Id('g')], columns[1].QuerySelectorAll("li a").Select(link => link.GetAttribute("href")!.Split('/')[1][..32]));
-        Assert.Equal(["Headline e", "5 May 2026"], columns[0].QuerySelector("li a")!.Children.Select(child => child.TextContent));
+        Assert.Equal(["Headline e", "House, 5 May 2026"], columns[0].QuerySelector("li a")!.Children.Select(child => child.TextContent));
+        Assert.Equal(["Headline c", "Senate, 3 May 2026"], columns[0].QuerySelectorAll("li a")[2].Children.Select(child => child.TextContent));
+        Assert.Equal(["Headline i", "4 Apr 2026"], columns[1].QuerySelector("li a")!.Children.Select(child => child.TextContent));
     }
 
     [Fact]
@@ -109,6 +112,15 @@ public sealed class PublishedHomePageTests
         Assert.Null(main.QuerySelector("#latest"));
         Assert.Null(main.QuerySelector("#issues"));
         Assert.Null(main.QuerySelector(".break-card"));
+    }
+
+    [Fact]
+    public async Task AColumnWithNoEntryIsHiddenSoTheOtherColumnStandsAlone()
+    {
+        var main = await HomeAsync(ReleaseOf(Vote('a', 1, 1, PublishedVoteAlignment.Split, 1)), []);
+
+        var columns = main.QuerySelectorAll("section#latest .latest-columns > div").ToList();
+        Assert.Equal(["Votes"], columns.Select(column => column.QuerySelector("h3")!.TextContent));
     }
 
     [Fact]
@@ -261,6 +273,7 @@ public sealed class PublishedHomePageTests
 
     private static PublishedRecordEntry Vote(char id, int yea, int nay, PublishedVoteAlignment? alignment, int day = 7) => Entry(PublishedRecordKind.Vote, id) with
     {
+        Chamber = PublishedChamber.House,
         YeaCount = yea,
         NayCount = nay,
         Alignment = alignment,

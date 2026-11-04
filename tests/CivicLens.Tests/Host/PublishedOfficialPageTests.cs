@@ -22,8 +22,8 @@ public sealed class PublishedOfficialPageTests
         var records = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='record-title']")!;
         Assert.Equal([new string('2', 64), new string('3', 64), new string('1', 64), new string('4', 64)],
             records.QuerySelectorAll("a.cell-title").Select(link => link.GetAttribute("href")!.Replace("../", "").Replace("records/", "").Replace(".html", "")));
-        Assert.Equal(["Bill, 1 May 2026", "Vote, 1 Apr 2026", "Statement, 1 Mar 2026", "Vote, 1 Dec 2025"], records.QuerySelectorAll("tbody .record-kind").Select(line => line.TextContent));
-        Assert.Contains("House roll call 100, Congress 119, session 1, HR 7, Congress 119. Result of the vote: Passed", records.TextContent, StringComparison.Ordinal);
+        Assert.Equal(["Bill or resolution, 1 May 2026", "Vote, 1 Apr 2026", "Statement, 1 Mar 2026", "Vote, 1 Dec 2025"], records.QuerySelectorAll("tbody .record-kind").Select(line => line.TextContent));
+        Assert.Contains("House roll call 100, Congress 119, session 1, HR 7. Result of the vote: Passed", records.TextContent, StringComparison.Ordinal);
         Assert.Equal(["Yea", "Yea"], records.QuerySelectorAll("tbody .cast-pill").Select(pill => pill.TextContent));
     }
 
@@ -87,7 +87,7 @@ public sealed class PublishedOfficialPageTests
 
         var kinds = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='record-title']")!.QuerySelectorAll("tbody .record-kind")
             .Select(line => line.TextContent.Split(',')[0]);
-        Assert.Equal(["Proclamation", "Bill"], kinds);
+        Assert.Equal(["Proclamation", "Bill or resolution"], kinds);
     }
 
     [Fact]
@@ -430,13 +430,15 @@ public sealed class PublishedOfficialPageTests
     [Fact]
     public async Task TheCurrentPageLinksTheOfficialWebsiteNamingItsHostWithNoReferrerAndNoOpener()
     {
-        var page = Current([], []) with { Profile = Profile() with { Website = "https://warren.senate.gov/about" } };
+        var page = Current([], []) with { Profile = Profile() with { Website = "https://warren.senate.gov:8443/about?a=1" } };
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        var link = new HtmlParser().ParseDocument(html).QuerySelector("a[href='https://warren.senate.gov/about']")!;
+        var link = new HtmlParser().ParseDocument(html).QuerySelector("a[href='https://warren.senate.gov:8443/about?a=1']")!;
         Assert.Equal("Official website", link.TextContent);
         Assert.Equal("noopener noreferrer", link.GetAttribute("rel"));
+        Assert.Equal("warren.senate.gov", link.NextElementSibling!.TextContent);
+        Assert.Equal("muted small", link.NextElementSibling.ClassName);
     }
 
     [Fact]
@@ -680,7 +682,20 @@ public sealed class PublishedOfficialPageTests
         var marks = strip.QuerySelector(".vote-strip-marks")!;
         Assert.Equal("4 votes. 1 mark shows a vote against most House Republicans on split votes.", marks.GetAttribute("aria-label"));
         Assert.Equal(["vote-mark vote-mark-yes", "vote-mark vote-mark-no vote-mark-against", "vote-mark vote-mark-no", "vote-mark vote-mark-other"], marks.Children.Select(mark => mark.ClassName));
-        Assert.Equal(["Yes", "No", "Against most of their party"], strip.QuerySelectorAll(".vote-strip-legend li").Select(item => item.TextContent));
+        Assert.Equal(["Yes", "No", "Against most of their party", "Did not vote Yes or No"], strip.QuerySelectorAll(".vote-strip-legend li").Select(item => item.TextContent));
+    }
+
+    [Fact]
+    public async Task AVoteForACandidateHasItsOwnMarkAndLegendEntrySoAReaderDoesNotTakeItForAMissedVote()
+    {
+        var day = new DateOnly(2025, 1, 3);
+        var votes = new[] { Vote('a', day) with { Cast = "Jeffries", Totals = null, BillType = null, BillNumber = null }, Vote('b', day.AddDays(1)) with { Cast = PublishedOfficialVote.Present } };
+
+        var strip = (await RenderedAsync(votes)).QuerySelector(".vote-strip")!;
+
+        Assert.Equal(["vote-mark vote-mark-candidate", "vote-mark vote-mark-other"], strip.QuerySelector(".vote-strip-marks")!.Children.Select(mark => mark.ClassName));
+        Assert.Equal(["Yes", "No", "Against most of their party", "Voted for a candidate", "Did not vote Yes or No"],
+            strip.QuerySelectorAll(".vote-strip-legend li").Select(item => item.TextContent));
     }
 
     [Fact]

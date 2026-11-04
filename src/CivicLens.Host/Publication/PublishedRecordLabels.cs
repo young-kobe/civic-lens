@@ -187,12 +187,10 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Executive action kind has no term.")
     };
 
-    public const string Present = "Present";
-
     public static string? CastTermKey(string cast) => cast switch
     {
         PublishedOfficialVote.NotVoting => "not-voting",
-        Present => "present",
+        PublishedOfficialVote.Present => "present",
         _ => PublishedOfficialVote.SideOf(cast) switch
         {
             PublishedPartyMajority.Yea => "yea",
@@ -216,7 +214,7 @@ public static class PublishedRecordLabels
     private static string CandidateTotal(string name, string members) => name switch
     {
         PublishedOfficialVote.NotVoting => $"Not voting, all {members}",
-        Present => $"{Present}, all {members}",
+        PublishedOfficialVote.Present => $"{PublishedOfficialVote.Present}, all {members}",
         _ => $"Votes for {name}, all {members}"
     };
 

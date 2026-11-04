@@ -8,15 +8,24 @@ public sealed class HomeHighlightsTests
     private static readonly DateTimeOffset Published = new(2026, 5, 11, 8, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void TheNewestVotesComeNewestFirstAndOnlyTheFourNewestStayWhateverTheCountsOrAlignment()
+    public void TheTwoNewestSubstantiveVotesOfEachChamberComeNewestFirstSoNeitherChamberCrowdsOutTheOther()
     {
-        var release = ReleaseOf(Vote('a', 1, 2) with { EventDate = new DateOnly(2026, 5, 1) }, Vote('b', 1, 2) with { EventDate = new DateOnly(2026, 5, 5) },
-            Vote('c', 1, 2) with { EventDate = new DateOnly(2026, 5, 3), Alignment = null }, Vote('d', 0, 0) with { YeaCount = null, NayCount = null, Alignment = null, EventDate = new DateOnly(2026, 5, 4) },
-            Vote('e', 1, 2) with { EventDate = new DateOnly(2026, 5, 2) }, Executive('f', 28));
+        var release = ReleaseOf(House('a', 1), House('b', 5), House('c', 6), House('d', 7), Senate('e', 2), Senate('f', 3), Senate('g', 4), Executive('h', 28));
 
         var highlights = HomeHighlights.From(release, [], 0);
 
-        Assert.Equal([Id('b'), Id('d'), Id('c'), Id('e')], highlights.Votes.Select(entry => entry.RecordId));
+        Assert.Equal([Id('d'), Id('c'), Id('g'), Id('f')], highlights.Votes.Select(entry => entry.RecordId));
+    }
+
+    [Fact]
+    public void AProceduralVoteAndAnEntryWithNoChamberAreLeftOutAndAChamberWithFewerVotesShowsFewerRows()
+    {
+        var release = ReleaseOf(House('a', 1), House('b', 2), House('c', 3), House('d', 6) with { Alignment = null }, House('e', 7) with { Chamber = null },
+            Senate('f', 4), Senate('g', 5) with { Alignment = null });
+
+        var highlights = HomeHighlights.From(release, [], 0);
+
+        Assert.Equal([Id('f'), Id('c'), Id('b')], highlights.Votes.Select(entry => entry.RecordId));
     }
 
     [Fact]
@@ -147,8 +156,13 @@ public sealed class HomeHighlightsTests
         Records = entries
     };
 
+    private static PublishedRecordEntry House(char id, int day) => Vote(id, 1, 2) with { EventDate = new DateOnly(2026, 5, day) };
+
+    private static PublishedRecordEntry Senate(char id, int day) => House(id, day) with { Chamber = PublishedChamber.Senate };
+
     private static PublishedRecordEntry Vote(char id, int yea, int nay) => Entry(PublishedRecordKind.Vote, id) with
     {
+        Chamber = PublishedChamber.House,
         YeaCount = yea,
         NayCount = nay,
         Alignment = PublishedVoteAlignment.Split,
