@@ -6,7 +6,7 @@
     <section class="home-section" id="latest" aria-labelledby="home-latest-title">
         <h2 id="home-latest-title">Latest from the record</h2>
         <div class="latest-columns">
-            @LatestColumn("House votes", IconName.Vote, Highlights.Votes)
+            @LatestColumn("Votes", IconName.Vote, Highlights.Votes)
             @LatestColumn("Executive actions", IconName.ExecutiveAction, Highlights.ExecutiveActions)
         </div>
     </section>
@@ -23,10 +23,17 @@
                 <li>
                     <a href="@PublicationProtocol.RecordPagePath(row.RecordId)">
                         <span>@row.Headline</span>
-                        <span class="muted small">@Moment.Day(ReleaseRecordOrder.Day(row))</span>
+                        <span class="muted small">@RowDate(row)</span>
                     </a>
                 </li>
             }
         </ul>
     </div>;
+
+    private static string RowDate(PublishedRecordEntry row) => row.Chamber switch
+    {
+        PublishedChamber.House => $"House, {Moment.Day(ReleaseRecordOrder.Day(row))}",
+        PublishedChamber.Senate => $"Senate, {Moment.Day(ReleaseRecordOrder.Day(row))}",
+        _ => Moment.Day(ReleaseRecordOrder.Day(row))
+    };
 }

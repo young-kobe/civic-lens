@@ -1899,14 +1899,14 @@ public sealed class ReleaseRendererTests
         var published = new DateTimeOffset(2026, 11, 1, 8, 0, 0, TimeSpan.Zero);
         release = release with
         {
-            Records = [release.Records[0] with { Kind = PublishedRecordKind.Vote, Chamber = PublishedChamber.House, EventDate = new DateOnly(2025, 3, 2), FirstPublishedAtUtc = published },
-                release.Records[1] with { Kind = PublishedRecordKind.Vote, Chamber = PublishedChamber.House, EventDate = null, FirstPublishedAtUtc = published }]
+            Records = [release.Records[0] with { Kind = PublishedRecordKind.Vote, Chamber = PublishedChamber.House, Alignment = PublishedVoteAlignment.Split, EventDate = new DateOnly(2025, 3, 2), FirstPublishedAtUtc = published },
+                release.Records[1] with { Kind = PublishedRecordKind.Vote, Chamber = PublishedChamber.House, Alignment = PublishedVoteAlignment.Split, EventDate = null, FirstPublishedAtUtc = published }]
         };
 
         var html = await new ReleaseRenderer(null, null).RenderHomeAsync(release, null, NoFacets, NoHighlights(release), CancellationToken.None);
 
         var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("#latest .latest-rows li a");
-        Assert.Equal(["1 Nov 2026", "2 Mar 2025"], rows.Select(row => row.QuerySelector(".muted")!.TextContent));
+        Assert.Equal(["House, 1 Nov 2026", "House, 2 Mar 2025"], rows.Select(row => row.QuerySelector(".muted")!.TextContent));
     }
 
     [Fact]
@@ -1987,7 +1987,7 @@ public sealed class ReleaseRendererTests
     {
         var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None)).QuerySelector("main")!.TextContent;
 
-        Assert.Contains("The list \"Latest from the record\" shows the 4 newest House votes and the 3 newest executive actions on this site", text, StringComparison.Ordinal);
+        Assert.Contains("The list \"Latest from the record\" shows the 2 newest substantive votes of the House, the 2 newest substantive votes of the Senate, and the 3 newest executive actions on this site", text, StringComparison.Ordinal);
         Assert.Contains("It names the dates. With no such vote in these dates, the card does not appear.", text, StringComparison.Ordinal);
     }
 
