@@ -304,6 +304,7 @@ Each finding was checked on `origin/main` at `745682d6` with `git show`, `git gr
 - P2-2: fixed. PR 1 makes `AnalysisAnswerRules.Bound` replace NUL with U+FFFD, so no new error or retry message holds NUL. `ValidateForWrite()` keeps the NUL check as a guard for code defects. PR 1 adds a `Bound` test and a worker test for a rejected run and its second pass.
 - P2-3: open owner question O2 in section 6. It gives three options: a guard in each drop migration, a deploy check in `operator-command.sh`, or a runbook rule. It recommends the migration guard, after the `DropDecisionJson.CheckSql` precedent. PR 6, 7 and 8 point to O2, and PR 6 adds a test for the chosen guard.
 - P2-4: fixed. PR 4 makes the quotes a required argument of `StatementGateQueueMapping.ToRun`, loaded at both call sites. It adds a store test for `PostgresStatementDraftStore.ReadEvidenceAsync`.
+- Owner decisions, 2026-11-04: O1 option (a) and O2 option (a). The survey now states both rules in sections 4, 5 and 6 and in PR 2, 5, 6, 7 and 8.
 - P3-1: fixed. The survey cites `operations.md:1100` (the `update.sh` paragraph), `:1267` (listed commands) and `:736` (the executive action run order) at `745682d6`.
 - P3-2: fixed. The D12 cost text says that verify reads every run on each deploy. It asks to measure the verify time on the PR 5 deploy.
 - P3-3: fixed. The PR 8 Down rebuilds `quotes_json` with PascalCase keys, and a test reads it through the old deserializer.
