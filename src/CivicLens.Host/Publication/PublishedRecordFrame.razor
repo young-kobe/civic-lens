@@ -1,7 +1,6 @@
 @using CivicLens.Publication.Contracts
 
 <PublicPage Section="Section" Title="@Headline" Description="@(string.IsNullOrWhiteSpace(Summary) ? Headline : Summary)" CanonicalPath="@PublicationProtocol.RecordPagePath(RecordId)" IsArticle="true" UsesRecordFont="true" RootPath="../">
-    @ReportLink
     <RecordView HeadingLevel="1" Headline="@Headline" Summary="@Summary" Significance="@Significance"
                 Limits="@Limits" Facts="Facts" />
     <PublishedCorrectionList Corrections="Corrections" />

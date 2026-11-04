@@ -18,7 +18,7 @@
         @switch (Columns)
         {
             case RecordTableColumns.Facet:
-                <TableCell Header>@PublicColumn.Officials</TableCell>
+                <TableCell Header Class="officials-col">@PublicColumn.Officials</TableCell>
                 <TableCell Header Class="fit num" Sort="@Sortable(SortKind.Date)" SortKey="@Key("date")">@PublicColumn.Date</TableCell>
                 break;
             case RecordTableColumns.Week:
@@ -44,7 +44,7 @@
         @switch (Columns)
         {
             case RecordTableColumns.Facet:
-                <TableCell Label="@PublicColumn.Officials">@string.Join(", ", entry.Officials.Select(official => official.Name))</TableCell>
+                <TableCell Class="officials-col" Label="@PublicColumn.Officials">@string.Join(", ", entry.Officials.Select(official => official.Name))</TableCell>
                 <TableCell Class="fit num" Label="@PublicColumn.Date">@Moment.Day(ReleaseRecordOrder.Day(entry))</TableCell>
                 break;
             case RecordTableColumns.Week:

@@ -205,17 +205,16 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task ARecordPageOffersTheReportLinkAboveAndBelowTheRecordSoAReaderFindsItWithoutScrolling()
+    public async Task ARecordPageOffersTheReportLinkOnceBelowTheRecordSoTheTopOfThePageHoldsTheRecord()
     {
         var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
         var links = document.QuerySelectorAll("main a[href^='../report.html']");
 
-        Assert.Equal(2, links.Length);
-        Assert.All(links, link => Assert.Equal(PublishedRecordLabels.ReportRecordLink, link.TextContent));
-        Assert.True(document.QuerySelector("main h1")!.CompareDocumentPosition(links[0]).HasFlag(DocumentPositions.Preceding));
-        Assert.True(document.QuerySelector("main .facts, main dl")!.CompareDocumentPosition(links[1]).HasFlag(DocumentPositions.Following));
+        var link = Assert.Single(links);
+        Assert.Equal(PublishedRecordLabels.ReportRecordLink, link.TextContent);
+        Assert.True(document.QuerySelector("main .facts, main dl")!.CompareDocumentPosition(link).HasFlag(DocumentPositions.Following));
     }
 
     [Fact]
@@ -1657,9 +1656,9 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderAllRecordsAsync(release, 1, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
-        var panel = document.QuerySelector("section[aria-labelledby='panel-search-by-kind']")!;
-        Assert.Equal("Search by kind", panel.QuerySelector("h2")!.TextContent);
-        Assert.Contains("Each link opens the search page with that kind of record chosen.", panel.TextContent);
+        var line = document.QuerySelector(".kind-search")!;
+        Assert.Equal("Search by kind", line.QuerySelector("span")!.TextContent);
+        Assert.Null(document.QuerySelector("section[aria-labelledby='panel-search-by-kind']"));
         var links = document.QuerySelectorAll("nav[aria-label='Search one kind of record'] a").ToList();
         Assert.Equal(["Document changes", "Statements", "Bills and resolutions", "Weekly briefs", "Votes", "Relationships", "Executive actions"], links.Select(link => link.TextContent.Trim()));
         foreach (var link in links)
