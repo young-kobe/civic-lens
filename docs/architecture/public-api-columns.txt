@@ -34,3 +34,8 @@ votes present
 votes not_voting
 votes question
 votes result
+zip_districts zcta
+zip_districts state
+zip_districts district
+zip_districts land_area_square_meters
+zip_districts land_share

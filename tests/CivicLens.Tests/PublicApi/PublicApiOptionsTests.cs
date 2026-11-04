@@ -56,18 +56,18 @@ public sealed class PublicApiOptionsTests
     public void ThePublicViewsPoolClosesIdleConnectionsBeforeTheRoleDoesBecauseAClosedConnectionFailsTheNextRequest()
     {
         const int RoleIdleSessionSeconds = 60;
-        const int PoolPruningIntervalSeconds = 10;
         var options = new PublicApiOptions
         {
             ReleaseBaseUrl = PublicApiOptions.Directory("http://release.test"),
             Database = "Host=search;Database=search",
-            PublicViewsDatabase = "Host=operational;Database=civic_lens;Username=civic_lens_public;Password=secret"
+            PublicViewsDatabase = "Host=operational;Database=civic_lens;Username=civic_lens_public;Password=secret;Minimum Pool Size=2;Connection Pruning Interval=60"
         };
 
         var views = new NpgsqlConnectionStringBuilder(options.PublicViewsReaderDatabase);
 
+        Assert.Equal(0, views.MinPoolSize);
         Assert.Equal(30, views.ConnectionIdleLifetime);
-        Assert.Equal(PoolPruningIntervalSeconds, views.ConnectionPruningInterval);
+        Assert.Equal(PublicApiOptions.PublicViewsPruningIntervalSeconds, views.ConnectionPruningInterval);
         Assert.True(views.ConnectionIdleLifetime + views.ConnectionPruningInterval < RoleIdleSessionSeconds);
     }
 }

@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CivicLens.Infrastructure.Collection.Migrations
 {
     [DbContext(typeof(CollectionAttemptDbContext))]
-    [Migration("20261104013000_PublicApiReleaseTime")]
-    partial class PublicApiReleaseTime
+    [Migration("20261104013000_PublicApiZipDistricts")]
+    partial class PublicApiZipDistricts
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

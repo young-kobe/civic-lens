@@ -60,7 +60,7 @@ public sealed class PresentationArchitectureTests
     [Fact]
     public void ShellsLoadTheSameThemeSoTheWorkspaceAndPublishedPagesMatch()
     {
-        Assert.Contains("ThemeToggle", File.ReadAllText(DocumentShells[1]), StringComparison.Ordinal);
+        Assert.Contains("PublicThemeMenu", File.ReadAllText(Path.Combine(HostRoot, "Publication", "PublicPage.razor")), StringComparison.Ordinal);
         Assert.Contains("ThemeToggle", File.ReadAllText(Path.Combine(ComponentsRoot, "Layout", "WorkspaceLayout.razor")), StringComparison.Ordinal);
         Assert.Contains("css/theme.css", File.ReadAllText(DocumentShells[0]), StringComparison.Ordinal);
         Assert.Contains("assets/css/theme.css", File.ReadAllText(Path.Combine(HostRoot, "Publication", "PublicAssets.cs")), StringComparison.Ordinal);

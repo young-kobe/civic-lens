@@ -82,8 +82,9 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - With no active release the vote list answers 503. Enforced by `VoteEndpoints`. Test: `VoteEndpointsTests.WithNoActiveReleaseTheListAnswers503AndALookupAnswers404`.
 - A vote answer allows any origin, sets no cookie, and sets no cache header. Enforced by `PublicApiApp`. Test: `VoteEndpointsTests.VoteAnswersAllowAnyOriginSetNoCookieAndSetNoCacheHeaderBecauseTheOriginServesEveryRequest`.
 - The views connection holds at most 4 connections. Enforced by `PublicApiOptions.PublicViewsReaderDatabase`. Test: `PublicApiOptionsTests.ThePublicViewsConnectionKeepsItsLoginAndCapsThePoolAtFourBecauseTheRoleAllowsFiveConnections`.
-- The views pool closes an idle connection before the role ends its session. Enforced by `PublicApiOptions.PublicViewsIdleLifetime`. Tests: `PublicApiOptionsTests.ThePublicViewsPoolClosesIdleConnectionsBeforeTheRoleDoesBecauseAClosedConnectionFailsTheNextRequest` and `PublicViewsIdleConnectionTests.ThePoolClosesAnIdleConnectionBeforeTheRoleEndsItsSessionSoTheNextRequestNeverMeetsAClosedConnection`.
-- The bill type filter compares the lower case form that the views store, so the filter reaches the rows below the view. Enforced by `VoteRequest.Parse`. Test: `VoteEndpointsTests.EveryFilterNarrowsTheListAndKeepsTheOrder`.
+- The views pool closes an idle connection before the role ends its session. It keeps no minimum pool size, whatever the operator connection string says. Enforced by `PublicApiOptions.PublicViewsReaderDatabase`. Tests: `PublicApiOptionsTests.ThePublicViewsPoolClosesIdleConnectionsBeforeTheRoleDoesBecauseAClosedConnectionFailsTheNextRequest` and `PublicViewsIdleConnectionTests.ThePoolClosesAnIdleConnectionBeforeTheRoleEndsItsSessionSoTheNextRequestNeverMeetsAClosedConnection`.
+- The bill type filter compares the lower case form that the views store. `CongressBillListItem.NormalizeType` writes that form, and no database check enforces it. `VoteRequest.Parse` lowers the filter. Test: `VoteEndpointsTests.EveryFilterNarrowsTheListAndKeepsTheOrder`.
+- The bill type filter moves below the view into the base tables. No test.
 - A pinned query sees the revisions that its release held. Enforced by the release range in `SearchIndex`. Tests: `SearchIndexTests.APinnedReleaseSeesTheRevisionThatReleaseHeldAndTheActiveReleaseSeesTheNewOne` and `SearchIndexTests.ARecordDroppedByALaterReleaseIsGoneFromTheActiveReleaseButStaysInThePinnedOne`.
 - A release that the service never ingested answers 404 with "release not indexed". Enforced by `SearchEndpoints`. Test: `SearchEndpointsTests.APinnedReleaseThatWasNeverIngestedAnswers404WithTheReasonReleaseNotIndexed`.
 - Text beyond the source limit is not searchable, and the vector stays under the Postgres limit. Enforced by `RecordReader` and `IndexedRecord`. Tests: `SearchIndexTests.TextBeyondTheSourceLimitIsNotSearchableAndTextBeforeItIs` and `SearchIndexTests.ASourceTextOfManyDistinctWordsStaysUnderThePostgresVectorLimit`.
@@ -183,7 +184,7 @@ A result has the manifest entry fields, `firstRelease`, `lastRelease`, `pagePath
 | 409 | A vote cursor names another release than the active one. The answer holds the active release number. |
 | 413 | The report body is over 32 KB. |
 | 429 | The client passed the rate limit. |
-| 503 | One of these cases. No release is indexed yet. A search or a vote read ran over the timeout. Reports are not available. The Turnstile check is not available. The daily report cap is reached. |
+| 503 | One of these cases. No release is active yet. A search or a vote read ran over the timeout. Reports are not available. The Turnstile check is not available. The daily report cap is reached. |
 
 ### Configuration
 

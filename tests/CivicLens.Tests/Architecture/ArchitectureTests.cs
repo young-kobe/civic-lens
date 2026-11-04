@@ -86,7 +86,7 @@ public sealed class ArchitectureTests
             var source = File.ReadAllText(path);
             var readsViews = source.Contains("NpgsqlDataSource views", StringComparison.Ordinal);
             var commonTables = Regex.Matches(source, @"(?:WITH|,)\s*(\w+) AS \(").Select(match => match.Groups[1].Value).ToHashSet();
-            foreach (var name in Regex.Matches(source, @"\b(?:FROM|JOIN)\s+([a-z_][a-z0-9_.]*)(?![a-z0-9_.(])").Select(match => match.Groups[1].Value))
+            foreach (var name in SqlLiterals(source).Where(IsStatement).SelectMany(SqlTableNames))
             {
                 var allowed = readsViews
                     ? name.StartsWith("public_api.", StringComparison.Ordinal)
@@ -97,6 +97,33 @@ public sealed class ArchitectureTests
 
         Assert.Empty(violations);
     }
+
+    [Theory]
+    [InlineData("SELECT 1 FROM public_api.votes v, publication_releases r WHERE true", "public_api.votes,publication_releases")]
+    [InlineData("select 1 from publication_releases", "publication_releases")]
+    [InlineData("SELECT 1 FROM public_api.votes v JOIN publication_releases r ON r.id = v.id", "public_api.votes,publication_releases")]
+    [InlineData("SELECT 1 FROM public_api.votes AS v, public_api.vote_members AS m, record_state s", "public_api.votes,public_api.vote_members,record_state")]
+    [InlineData("SELECT 1 FROM {table}", "{")]
+    [InlineData("SELECT 1 FROM \"publication_releases\"", "\"")]
+    [InlineData("SELECT 1 JOIN \"public_api\".\"votes\" v ON true", "\"")]
+    [InlineData("SELECT 1 FROM \\\"publication_releases\\\"", "\\")]
+    [InlineData("SELECT 1 FROM generate_series(1, 3)", "")]
+    [InlineData("SELECT 1 FROM public_api.votes v JOIN LATERAL (SELECT 1 FROM public_api.vote_issues) i ON true", "public_api.votes,public_api.vote_issues")]
+    public void TheSqlScanFindsEveryTableAFromOrJoinNamesWhateverTheCaseCommaListOrQuoting(string sql, string expected)
+    {
+        Assert.Equal(expected, string.Join(',', SqlTableNames(sql)));
+    }
+
+    private static IEnumerable<string> SqlTableNames(string sql) =>
+        Regex.Matches(sql, @"\b(?:FROM|JOIN)\s+(?<list>" + TableItem + @"(?:\s*,\s*" + TableItem + ")*)", RegexOptions.IgnoreCase)
+            .SelectMany(clause => clause.Groups["name"].Captures.Select(capture => capture.Value.ToLowerInvariant()));
+
+    private static IEnumerable<string> SqlLiterals(string source) =>
+        Regex.Matches(source, @"\$?\""\""\""[\s\S]*?\""\""\""|\$?@?""(?:[^""\\]|\\.)*""").Select(match => match.Value);
+
+    private static bool IsStatement(string literal) => Regex.IsMatch(literal, @"\b(?:SELECT|INSERT|UPDATE|DELETE)\b", RegexOptions.IgnoreCase);
+
+    private const string TableItem = @"(?<name>[{""\\]|(?!LATERAL\b)[\w.]+(?![\w.(]))(?:\s+(?:AS\s+)?\w+)?";
 
     private static HashSet<string> ReferencedAssemblies(string path)
     {

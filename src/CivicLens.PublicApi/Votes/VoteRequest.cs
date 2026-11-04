@@ -12,6 +12,7 @@ public sealed record VoteRequest
     public int? Session { get; init; }
     public PublishedVoteKind? Kind { get; init; }
     /// <summary>Lower case, the stored form. A plain comparison lets the filter move below the view.</summary>
+    /// <summary>The lower case form. <c>CongressBillListItem.NormalizeType</c> writes the stored form, and no database check enforces it.</summary>
     public string? BillType { get; init; }
     public int? BillNumber { get; init; }
     public string? Issue { get; init; }

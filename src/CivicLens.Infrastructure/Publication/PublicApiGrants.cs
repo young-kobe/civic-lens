@@ -35,9 +35,12 @@ internal static class PublicApiGrants
         GRANT SELECT (record_id, revision_number, "position", fact_text) ON vote_revision_facts TO civic_lens_public_owner;
         GRANT SELECT (list_id, "position", person_id, vote_cast) ON vote_member_list_entries TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, is_tracked) ON vote_revision_issues TO civic_lens_public_owner;
+        GRANT SELECT (zcta, state, district, land_area_square_meters, attempt_id) ON zcta_districts TO civic_lens_public_owner;
+        GRANT SELECT (attempt_id) ON roster_snapshots TO civic_lens_public_owner;
+        GRANT SELECT (attempt_id, source_id, capture_sha256, observed_at_utc_ticks) ON collection_attempts TO civic_lens_public_owner;
 
         GRANT USAGE ON SCHEMA public_api TO civic_lens_public;
-        GRANT SELECT ON public_api.active_records, public_api.votes, public_api.vote_members, public_api.vote_issues TO civic_lens_public;
+        GRANT SELECT ON public_api.active_records, public_api.votes, public_api.vote_members, public_api.vote_issues, public_api.zip_districts TO civic_lens_public;
         """;
 
     public static Task ApplyAsync(DbContext db, CancellationToken cancellationToken) =>

@@ -12,7 +12,7 @@ public static class ApiResults
     public static IResult Json<T>(T value) => Results.Json(value, PublicationProtocol.JsonOptions);
 
     public static IResult NoRelease() =>
-        Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "no release is indexed yet");
+        Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "no release is active yet");
 
     public static IResult RecordNotFound() =>
         Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "record not found");
