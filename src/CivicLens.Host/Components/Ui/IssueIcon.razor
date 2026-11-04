@@ -1,9 +1,7 @@
-@if (IssueIcons.PathOf(IssueId) is { } path)
-{
-    <IconFrame><path d="@path" /></IconFrame>
-}
+@using CivicLens.Application.Issues
+<IconFrame><path d="@IssueIcons.PathOf(Name)" /></IconFrame>
 
 @code {
-    /// <summary>A configured issue ID. An ID with no icon renders nothing.</summary>
-    [Parameter, EditorRequired] public string IssueId { get; set; } = string.Empty;
+    /// <summary>A configured icon name. Leave it unset for the neutral default icon.</summary>
+    [Parameter] public string? Name { get; set; }
 }

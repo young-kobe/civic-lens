@@ -47,6 +47,7 @@ public static class PublicationProtocol
     public static string BoardPagePath(PublishedChamber chamber, string party) => $"board-{chamber}-{party}.html".ToLowerInvariant();
     public static string OfficialPagePath(string officialId) => $"officials/{officialId}.html";
     public static string OfficialCongressPagePath(string officialId, int congress) => $"officials/{officialId}/{congress}.html";
+    public static string OfficialRecordPagePath(string officialId) => $"officials/{officialId}/record.html";
     public static string OfficialVotesPath(string officialId, int congress) => $"officials/{officialId}/votes-{congress}.json";
     public static string OfficialFolder(string officialId) => $"officials/{officialId}";
     public static string PhotoPath(string captureSha256) => $"{PhotoFolder}{captureSha256}{PhotoExtension}";

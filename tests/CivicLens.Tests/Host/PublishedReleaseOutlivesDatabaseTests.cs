@@ -106,7 +106,7 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
             new PublishedRecordLoaders(reviews, new PostgresStatementReviewStore(factory), new PostgresActionReviewStore(factory),
                 new PostgresVoteReviewStore(factory), new PostgresRelationshipReviewStore(factory),
                 new PostgresBriefReviewStore(factory), new PostgresExecutiveActionReviewStore(factory, TestCodeVersion.Current)),
-            new PublicationCatalog(new Dictionary<string, string> { ["mayor"] = "Mayor Example" }, IssueConfiguration.None), FixedRosters.NamedOnly(["mayor"]), PhotoCaptures.None(), TimeProvider.System,
+            new PublicationCatalog(new Dictionary<string, string> { ["mayor"] = "Mayor Example" }, IssueConfiguration.None, IssueIconConfiguration.None), FixedRosters.NamedOnly(["mayor"]), PhotoCaptures.None(), TimeProvider.System,
             new PruneReleases(store, directory, NullLogger<PruneReleases>.Instance));
         return await publish.ExecuteAsync(Owner, new PublishReleaseRequest([new(PublishedRecordKind.DocumentChange, saved.DraftId)], "publish"));
     }

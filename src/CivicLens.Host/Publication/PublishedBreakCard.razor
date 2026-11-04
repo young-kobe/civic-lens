@@ -1,0 +1,38 @@
+@using CivicLens.Application.Publication
+@using CivicLens.Publication.Contracts
+
+@if (!Highlights.BreakLeaders.IsEmpty)
+{
+    <section class="break-card" aria-labelledby="break-card-title">
+        <div class="break-card-head">
+            <h2 id="break-card-title">@PublishedBreakCardView.Title</h2>
+            <InfoPopover Id="break-card-rule" Label="@PublishedBreakCardView.RuleLabel">
+                <span>@PublishedBreakCardView.Rule</span>
+                @if (PublishedBreakCardView.LeavesOutGroups(Highlights))
+                {
+                    <span>@PublishedBreakCardView.LeftOut</span>
+                }
+                <a href="@PublicationProtocol.MethodPagePath#home-picks">@PublishedBreakCardView.MethodLinkText</a>
+            </InfoPopover>
+        </div>
+        <p class="break-card-lede">@PublishedBreakCardView.Lede(Highlights.BreakLeaders)</p>
+        <ul class="break-rows" role="list">
+            @foreach (var leader in Highlights.BreakLeaders)
+            {
+                <li>
+                    <div class="break-row-text">
+                        <span class="break-row-name"><a href="@leader.Member.PagePath">@leader.Member.Official.Profile.Name</a> <span class="muted">@PublishedBreakCardView.PartyAndState(leader, PublishedAtUtc)</span></span>
+                        <span class="muted">@PublishedBreakCardView.Votes(leader)</span>
+                    </div>
+                    <meter class="break-bar" aria-hidden="true" min="0" max="@leader.Member.Cast" value="@leader.Member.Breaks"></meter>
+                </li>
+            }
+        </ul>
+        <p><a href="@PublicationProtocol.OfficialsPagePath">@PublishedBreakCardView.BoardsLinkText</a></p>
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public HomeHighlights Highlights { get; set; } = default!;
+    [Parameter, EditorRequired] public DateTimeOffset PublishedAtUtc { get; set; }
+}

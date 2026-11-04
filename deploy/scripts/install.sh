@@ -29,4 +29,4 @@ for template in "$deploy_directory"/env/*.env.example; do
   fi
 done
 
-echo "Edit the files in $CIVIC_LENS_ROOT/env and add collection.json and issues.json to $CIVIC_LENS_ROOT/config. Follow the runbook for the tunnel credential file and the restic password file."
+echo "Edit the files in $CIVIC_LENS_ROOT/env and add collection.json, issues.json and issue-icons.json to $CIVIC_LENS_ROOT/config. Follow the runbook for the tunnel credential file and the restic password file."

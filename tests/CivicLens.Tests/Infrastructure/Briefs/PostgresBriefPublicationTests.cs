@@ -290,7 +290,7 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
         return new PublishRelease(publications, directory, new ReleaseRenderer(null, null),
             new PublishedRecordLoaders(new FakeReviewStore(), new FakeStatementReviewStore(), new FakeActionReviewStore(), new FakeVoteReviewStore(),
                 new FakeRelationshipReviewStore(), reviews, new FakeExecutiveActionReviewStore()),
-            new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None), FixedRosters.NoOfficials(), PhotoCaptures.None(), new FakeClock(InWeek.AddDays(10)),
+            new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None, IssueIconConfiguration.None), FixedRosters.NoOfficials(), PhotoCaptures.None(), new FakeClock(InWeek.AddDays(10)),
             new PruneReleases(publications, directory, NullLogger<PruneReleases>.Instance));
     }
 }

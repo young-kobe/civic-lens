@@ -3,159 +3,86 @@
 @using CivicLens.Publication.Contracts
 
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@Page.PagePath" Title="@Title" Description="@Description" RootPath="@Page.RootPath">
-    <PageHeader Title="@Page.Profile.Name" Lede="@Lede" Portrait="Portrait" Meta="Links" />
-    @if (Page.Congresses.Length > 1)
-    {
-        <FilterTabs Label="@PublishedOfficialView.CongressTabsLabel(Page)" Tabs="PublishedOfficialView.CongressTabs(Page)" />
-    }
-    @if (Page.TalkAndAction is { } profile)
-    {
-        <Panel Title="Issues they work on">
-            <DataTable Roles="true" Items="profile.IssueIds" Caption="@($"Statements, sponsored bills, and votes of {Page.Profile.Name} on each tracked issue in Congress {Page.Congress}")" DefaultOrder="@PublishedRecordLabels.DefaultOrder">
-                <Head><TableCell Header Sort="SortKind.Text">Issue</TableCell><TableCell Header Class="num" Sort="SortKind.Number">@PublicColumn.TheirStatements</TableCell><TableCell Header Sort="SortKind.Number">@PublicColumn.BillsTheySponsored</TableCell><TableCell Header Class="num" Sort="SortKind.Number">@PublicColumn.VotesTheyCast</TableCell></Head>
-                <Row Context="issueId">
-                    @{
-                        var issue = PublishedRecordView.IssueLink(issueId, Catalog, Page.RootPath);
-                        var bills = profile.SponsoredOn(issueId);
-                    }
-                    <TableCell Main><CellTitle Href="@issue.Href">@issue.Text</CellTitle></TableCell>
-                    <TableCell Class="num" Label="@PublicColumn.TheirStatements" SortValue="@profile.Statements.CountOf(issueId).ToString()">@IssueCount(profile.Statements.CountOf(issueId), TalkAndActionProfile.StatementCount, issueId, PublishedOfficialView.StatementsSubject, issue.Text)</TableCell>
-                    <TableCell Label="@PublicColumn.BillsTheySponsored" SortValue="@bills.Length.ToString()">
-                        @IssueCount(bills.Length, TalkAndActionProfile.BillCount, issueId, PublishedOfficialView.BillsSubject, issue.Text)
-                        @if (!bills.IsEmpty)
-                        {
-                            <ul class="choices">
-                                @foreach (var bill in bills)
-                                {
-                                    <li class="clamp-2"><a href="@(Page.RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" title="@bill.BillTitle">@bill.BillTitle</a></li>
-                                }
-                            </ul>
-                        }
-                    </TableCell>
-                    <TableCell Class="num" Label="@PublicColumn.VotesTheyCast" SortValue="@profile.Votes.CountOf(issueId).ToString()">@IssueCount(profile.Votes.CountOf(issueId), TalkAndActionProfile.VoteCount, issueId, PublishedOfficialView.VotesSubject, issue.Text)</TableCell>
-                </Row>
-                <Empty><EmptyState Title="No tracked issue" Text="None of their statements, sponsored bills, or votes in this Congress is on a tracked issue." /></Empty>
-            </DataTable>
-            <p class="muted small">Each count is for this Congress. "Votes they cast" counts only substantive votes. A statement, bill, or vote on several issues counts once for each issue. <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">How these counts work</a></p>
-        </Panel>
-        <Panel Title="@($"Missed votes in Congress {Page.Congress}")" Padded="true">
-            @foreach (var missed in profile.MissedByChamber)
-            {
-                <p>@PublishedOfficialView.MissedVotes(missed, TalkAndActionCongress)</p>
-            }
-            <p class="muted small">@PublishedOfficialView.MissedVoteMeaning</p>
-        </Panel>
-        <Panel Title="What they said and what they did" Padded="true">
-            <p class="muted small">@PublishedOfficialView.LinkMeaning <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">What a link is</a></p>
-            @if (Page.Pairs.IsDefaultOrEmpty)
-            {
-                <p>@PublishedOfficialView.NoLinks</p>
-            }
-            else
-            {
-                <DataTable Roles="true" PagedRows="links" Items="Page.Pairs" Caption="@($"Reviewed links between statements of {Page.Profile.Name} and their bills or votes")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
-                    <Head><TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.StatementDate</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.WhatTheySaid</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.Link</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.WhatTheyDid</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.TheirVote</TableCell></Head>
-                    <Row Context="pair">
-                        <TableCell Class="fit num" Label="@PublicColumn.StatementDate" SortValue="@(pair.StatementDay is { } day ? Moment.Iso(day) : "")">@PublishedOfficialView.StatementDay(pair)</TableCell>
-                        <TableCell Main><PublishedRecordTitle RecordId="@pair.StatementRecordId" RootPath="@Page.RootPath">@pair.StatementHeadline</PublishedRecordTitle></TableCell>
-                        <TableCell Label="@PublicColumn.Link">@PublishedRecordLabels.RelationshipType(pair.Type)</TableCell>
-                        <TableCell Label="@PublicColumn.WhatTheyDid"><a href="@(Page.RootPath + PublicationProtocol.RecordPagePath(pair.TargetRecordId))">@pair.TargetTitle</a></TableCell>
-                        <TableCell Label="@PublicColumn.TheirVote">@PublishedOfficialView.TheirVote(pair)</TableCell>
-                    </Row>
-                </DataTable>
-            }
-        </Panel>
-        @if (!profile.WithPartyByChamber.IsEmpty)
+    <Hero>
+        <div class="official-hero"><PageHeader Title="@Page.Profile.Name" Lede="@Lede" Portrait="Portrait" Meta="Introduction" /></div>
+    </Hero>
+    <ChildContent>
+        @if (Page.Congresses.Length > 1)
         {
-            <Panel Title="Votes with their party" Padded="true">
-                @foreach (var withParty in profile.WithPartyByChamber)
+            <FilterTabs Label="@PublishedOfficialView.CongressTabsLabel(Page)" Tabs="PublishedOfficialView.CongressTabs(Page)" />
+        }
+        @if (Page.TalkAndAction is { } profile)
+        {
+            <PublishedKeyFigures Label="@PublishedKeyFigure.SectionLabel(TalkAndActionCongress)" Figures="PublishedKeyFigure.Of(profile, TalkAndActionCongress)" />
+        }
+        @if (Page.IsCurrent)
+        {
+            <nav class="jump-links" aria-label="@PublishedOfficialSectionsView.JumpLabel">
+                @foreach (var section in Sections)
                 {
-                    <p>@PublishedOfficialView.WithParty(withParty, TalkAndActionCongress)</p>
+                    <a href="@($"#{section.Id}")">@section.Title</a>
                 }
-                <p class="muted small">@PublishedOfficialView.SplitVoteMeaning</p>
-                @if (profile.WithPartyByChamber.Any(withParty => withParty.Cast > 0) && profile.WithPartyByChamber.All(withParty => withParty.Breaks.IsEmpty))
+            </nav>
+        }
+        <PublishedVoteStrip Votes="Page.Votes" />
+        @if (Page.IsCurrent)
+        {
+            <PublishedOfficialSections Page="Page" Catalog="Catalog" Sections="Sections" />
+            @if (Rows.Count > 0)
+            {
+                <p class="see-all"><a href="@PublishedOfficialSectionsView.RecordPageLink(Page)">@PublishedOfficialSectionsView.AllRecordsText(Rows.Count)</a></p>
+            }
+        }
+        else
+        {
+            <PublishedRecordList Page="Page" Catalog="Catalog" RootPath="@Page.RootPath" />
+        }
+        @if (Page.TalkAndAction is not null)
+        {
+            <Panel Title="What they said and what they did" Padded="true">
+                <p class="muted small">@PublishedOfficialView.LinkMeaning <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">What a link is</a></p>
+                @if (Page.Pairs.IsDefaultOrEmpty)
                 {
-                    <p>No votes against most of their party.</p>
+                    <p>@PublishedOfficialView.NoLinks</p>
                 }
-                @foreach (var withParty in profile.WithPartyByChamber.Where(withParty => !withParty.Breaks.IsEmpty))
+                else
                 {
-                    <DataTable Roles="true" PagedRows="votes" Items="withParty.Breaks" Caption="@($"Votes of {Page.Profile.Name} against most {PublishedOfficialView.PartyOf(withParty)}")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
-                        <Head><TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.Date</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.Vote</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.TheirVote</TableCell><TableCell Header Sort="SortKind.Text">Most @PublishedOfficialView.PartyOf(withParty)</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.Result</TableCell></Head>
-                        <Row Context="vote">
-                            <TableCell Class="fit num" Label="@PublicColumn.Date" SortValue="@Moment.Iso(vote.VotedOn)">@Moment.Day(vote.VotedOn)</TableCell>
-                            <TableCell Main><PublishedRecordTitle RecordId="@vote.RecordId" RootPath="@Page.RootPath">@vote.Headline</PublishedRecordTitle></TableCell>
-                            <TableCell Label="@PublicColumn.TheirVote" SortValue="@vote.Cast"><CastWord Cast="@vote.Cast" /></TableCell>
-                            <TableCell Label="@($"Most {PublishedOfficialView.PartyOf(withParty)}")" SortValue="@vote.PartyMajority"><CastWord Cast="@(vote.PartyMajority ?? string.Empty)" /></TableCell>
-                            <TableCell Label="@PublicColumn.Result">@vote.Result</TableCell>
+                    <DataTable Roles="true" PagedRows="links" Items="Page.Pairs" Caption="@($"Reviewed links between statements of {Page.Profile.Name} and their bills or votes")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
+                        <Head><TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.StatementDate</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.WhatTheySaid</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.Link</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.WhatTheyDid</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.TheirVote</TableCell></Head>
+                        <Row Context="pair">
+                            <TableCell Class="fit num" Label="@PublicColumn.StatementDate" SortValue="@(pair.StatementDay is { } day ? Moment.Iso(day) : "")">@PublishedOfficialView.StatementDay(pair)</TableCell>
+                            <TableCell Main><PublishedRecordTitle RecordId="@pair.StatementRecordId" RootPath="@Page.RootPath">@pair.StatementHeadline</PublishedRecordTitle></TableCell>
+                            <TableCell Label="@PublicColumn.Link">@PublishedRecordLabels.RelationshipType(pair.Type)</TableCell>
+                            <TableCell Label="@PublicColumn.WhatTheyDid"><a href="@(Page.RootPath + PublicationProtocol.RecordPagePath(pair.TargetRecordId))">@pair.TargetTitle</a></TableCell>
+                            <TableCell Label="@PublicColumn.TheirVote">@PublishedOfficialView.TheirVote(pair)</TableCell>
                         </Row>
                     </DataTable>
                 }
             </Panel>
         }
-    }
-    <Panel Title="Records" Aside="@RecordFilter" data-records="@(HasRecordFilters ? "" : null)">
-        @if (Rows.Count > 0)
+        @if (Page.IsCurrent)
         {
-            <div class="records-lead">
-                @if (PublishedOfficialView.RecordsCountLine(Page) is { } countLine)
+            <Panel Title="Offices">
+                <DataTable Roles="true" Items="OfficeStretches" Caption="@($"Offices of {Page.Profile.Name}")" DefaultOrder="@PublishedRecordLabels.DefaultOrder">
+                    <Head><TableCell Header Sort="SortKind.Text">Office</TableCell>@if (HasParty){<TableCell Header Sort="SortKind.Text">@PublicColumn.Party</TableCell>}<TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.From</TableCell><TableCell Header Class="fit num">@PublicColumn.To</TableCell></Head>
+                    <Row Context="stretch">
+                        <TableCell Main>@PublishedOfficialView.Office(stretch.Latest)</TableCell>
+                        @if (HasParty)
+                        {
+                            <TableCell Label="@PublicColumn.Party">@stretch.Latest.Party</TableCell>
+                        }
+                        <TableCell Class="fit num" Label="@PublicColumn.From" SortValue="@Moment.Iso(stretch.Start)">@Moment.Day(stretch.Start)</TableCell>
+                        <TableCell Class="fit num" Label="@PublicColumn.To">@(stretch.End is { } end ? Moment.Day(end) : "Present")</TableCell>
+                    </Row>
+                    <Empty><EmptyState Title="No office on record" Text="@NoOfficeText" /></Empty>
+                </DataTable>
+                @if (OfficeStretches.Count > 0)
                 {
-                    <p class="muted small">@countLine</p>
+                    <p class="muted small">@PublishedOfficialView.OfficeStretchNote(Page.Profile.Terms)</p>
                 }
-                @if (HasRecordFilters)
-                {
-                    <p class="muted small" role="status" data-filter-status></p>
-                }
-                @if (Page.TalkAndAction is not null)
-                {
-                    <div class="notice" data-filter-notice hidden>
-                        <span data-filter-text></span>
-                        <button class="btn" type="button" data-filter-clear>@PublishedOfficialView.ShowAllRecords</button>
-                    </div>
-                }
-            </div>
+            </Panel>
         }
-        <DataTable Roles="true" PagedRows="records" Items="Rows" RowClass="PublishedOfficialView.RowClass" RowFilterKeys="@(row => row.FilterKeys)" Caption="@($"Published records of {Page.Profile.Name}")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
-            <Head><TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.Date</TableCell><TableCell Header Sort="SortKind.Text">Record</TableCell>@if (HasCast){<TableCell Header Sort="SortKind.Text">@PublicColumn.Cast</TableCell>}</Head>
-            <Row Context="row">
-                <TableCell Class="fit num" Label="@PublicColumn.Date" SortValue="@Moment.Iso(row.Date)">@Moment.Day(row.Date)</TableCell>
-                <TableCell Main SortValue="@row.Headline">
-                    <PublishedRecordTitle RecordId="@row.RecordId" RootPath="@Page.RootPath">@row.Headline</PublishedRecordTitle>
-                    <StatusBadge Text="@row.Badge" Icon="PublishedRecordLabels.Icon(row.Kind)" />
-                    @if (row.Detail is not null)
-                    {
-                        <div class="muted small">@row.Detail</div>
-                    }
-                </TableCell>
-                @if (HasCast)
-                {
-                    <TableCell Label="@PublicColumn.Cast">@row.Cast</TableCell>
-                }
-            </Row>
-            <Empty><EmptyState Title="No records yet" Text="There are no records here." /></Empty>
-        </DataTable>
-    </Panel>
-    @if (Page.IsCurrent)
-    {
-        <Panel Title="Offices">
-            <DataTable Roles="true" Items="OfficeStretches" Caption="@($"Offices of {Page.Profile.Name}")" DefaultOrder="@PublishedRecordLabels.DefaultOrder">
-                <Head><TableCell Header Sort="SortKind.Text">Office</TableCell>@if (HasParty){<TableCell Header Sort="SortKind.Text">@PublicColumn.Party</TableCell>}<TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.From</TableCell><TableCell Header Class="fit num">@PublicColumn.To</TableCell></Head>
-                <Row Context="stretch">
-                    <TableCell Main>@PublishedOfficialView.Office(stretch.Latest)</TableCell>
-                    @if (HasParty)
-                    {
-                        <TableCell Label="@PublicColumn.Party">@stretch.Latest.Party</TableCell>
-                    }
-                    <TableCell Class="fit num" Label="@PublicColumn.From" SortValue="@Moment.Iso(stretch.Start)">@Moment.Day(stretch.Start)</TableCell>
-                    <TableCell Class="fit num" Label="@PublicColumn.To">@(stretch.End is { } end ? Moment.Day(end) : "Present")</TableCell>
-                </Row>
-                <Empty><EmptyState Title="No office on record" Text="@NoOfficeText" /></Empty>
-            </DataTable>
-            @if (OfficeStretches.Count > 0)
-            {
-                <p class="muted small">@PublishedOfficialView.OfficeStretchNote(Page.Profile.Terms)</p>
-            }
-        </Panel>
-    }
+    </ChildContent>
 </PublicPage>
 
 @code {
@@ -166,35 +93,34 @@
         ? @<OfficialPortrait Profile="Page.Profile" RootPath="@Page.RootPath" />
         : null;
 
-    private RenderFragment? Links => Page.IsCurrent && Page.Profile.Website is { } website
-        ? @<a href="@website" rel="noopener noreferrer">Official website (@PublishedOfficialView.WebsiteHost(website))</a>
+    private RenderFragment? Introduction => Page.IsCurrent && (Tenure is not null || Page.Profile.Website is not null)
+        ? @<text>
+            @if (Tenure is not null)
+            {
+                <span>@Tenure</span>
+            }
+            @if (Page.Profile.Website is { } website)
+            {
+                <a href="@website" rel="noopener noreferrer">Official website</a>
+            }
+        </text>
         : null;
 
-    private int TalkAndActionCongress => Page.Congress!.Value;
+    private string? Tenure => PublishedOfficialView.Tenure(Page.Profile.Terms, Page.PublishedAtUtc);
 
-    private RenderFragment IssueCount(int count, string countKind, string issueId, string subject, string issueName)
-    {
-        var counted = PublishedOfficialView.Counted(count, countKind);
-        return @<CountFilter Filterable="count > 0" Text="@counted" Key="@TalkAndActionProfile.CountKey(countKind, issueId)"
-            Label="@PublishedOfficialView.CountFilterLabel(counted, subject, issueName)"
-            Notice="@PublishedOfficialView.CountFilterNotice(subject, issueName, TalkAndActionCongress)" />;
-    }
+    private int TalkAndActionCongress => Page.Congress!.Value;
 
     private string NoOfficeText => Page.IsTracked
         ? "The rosters and the configuration list no dated office for this official."
         : "Civic Lens no longer tracks this official, so it lists no office. The records on this page stay published.";
 
-    private RenderFragment? RecordFilter => RecordTabs.Count == 0
-        ? null
-        : @<div data-record-filters hidden><FilterTabs Label="Show records" Tabs="RecordTabs" /></div>;
-
-    private IReadOnlyList<FilterTab> RecordTabs => recordTabs ??= PublishedOfficialView.RecordTabs(Rows, Page.TalkAndAction is not null);
-
-    private IReadOnlyList<FilterTab>? recordTabs;
-
-    private bool HasRecordFilters => RecordTabs.Count > 0 || Page.TalkAndAction is not null;
+    private IReadOnlyList<PublishedOfficialRow> Rows => rows ??= PublishedOfficialView.Rows(Page);
 
     private IReadOnlyList<PublishedOfficialRow>? rows;
+
+    private IReadOnlyList<OfficialSection> Sections => sections ??= PublishedOfficialSectionsView.Of(Page, Rows);
+
+    private IReadOnlyList<OfficialSection>? sections;
 
     private IReadOnlyList<PublishedOfficeStretch> OfficeStretches => officeStretches ??= PublishedOfficialView.OfficeStretches(Page.Profile.Terms, Page.PublishedAtUtc);
 
@@ -202,14 +128,10 @@
 
     private bool HasParty => Page.Profile.Terms.Any(term => term.Party is not null);
 
-    private bool HasCast => Rows.Any(row => row.Cast is not null);
-
-    private IReadOnlyList<PublishedOfficialRow> Rows => rows ??= PublishedOfficialView.Rows(Page);
-
     private string Title => Page.IsCurrent ? Page.Profile.Name : $"{Page.Profile.Name}, {PublishedOfficialView.TheCongress(Page.Congress!.Value)}";
 
     private string Description => Page.IsCurrent
-        ? Lede is null ? Page.Profile.Name : $"{Page.Profile.Name}. {Lede}"
+        ? string.Join(' ', new[] { $"{Page.Profile.Name}.", Lede is null ? null : $"{Lede}.", Tenure }.OfType<string>())
         : OfficeInPage() is { } term
             ? $"{Page.Profile.Name}, {PublishedOfficialView.Office(term)}. {Lede}"
             : $"{Page.Profile.Name}. {Lede}";

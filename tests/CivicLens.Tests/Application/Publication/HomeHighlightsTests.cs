@@ -8,70 +8,31 @@ public sealed class HomeHighlightsTests
     private static readonly DateTimeOffset Published = new(2026, 5, 11, 8, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void TheClosestVoteHasTheSmallestGapBetweenItsYeaAndNayCountsAndATieGoesToTheLowerRecordId()
+    public void TheNewestVotesComeNewestFirstAndOnlyTheFourNewestStayWhateverTheCountsOrAlignment()
     {
-        var release = ReleaseOf(Vote('b', 216, 214), Vote('a', 215, 217), Vote('c', 300, 120));
+        var release = ReleaseOf(Vote('a', 1, 2) with { EventDate = new DateOnly(2026, 5, 1) }, Vote('b', 1, 2) with { EventDate = new DateOnly(2026, 5, 5) },
+            Vote('c', 1, 2) with { EventDate = new DateOnly(2026, 5, 3), Alignment = null }, Vote('d', 0, 0) with { YeaCount = null, NayCount = null, Alignment = null, EventDate = new DateOnly(2026, 5, 4) },
+            Vote('e', 1, 2) with { EventDate = new DateOnly(2026, 5, 2) }, Executive('f', 28));
 
-        var highlights = HomeHighlights.From(release, []);
+        var highlights = HomeHighlights.From(release, [], 0);
 
-        Assert.Equal(Id('a'), highlights.ClosestVote!.RecordId);
-        Assert.Equal(3, highlights.VotesInWindow);
+        Assert.Equal([Id('b'), Id('d'), Id('c'), Id('e')], highlights.Votes.Select(entry => entry.RecordId));
     }
 
     [Fact]
-    public void OnlyVotesDatedInTheSevenDaysThatEndOnTheReleaseDayCountSoARecessGivesNoStaleCard()
-    {
-        var release = ReleaseOf(Vote('a', 216, 215) with { EventDate = new DateOnly(2026, 5, 4) }, Vote('b', 300, 100) with { EventDate = new DateOnly(2026, 5, 5) },
-            Vote('c', 216, 215) with { EventDate = new DateOnly(2026, 5, 12) });
-
-        var highlights = HomeHighlights.From(release, []);
-
-        Assert.Equal(new DateOnly(2026, 5, 5), highlights.WindowStart);
-        Assert.Equal(new DateOnly(2026, 5, 11), highlights.WindowEnd);
-        Assert.Equal(Id('b'), highlights.ClosestVote!.RecordId);
-        Assert.Equal(1, highlights.VotesInWindow);
-    }
-
-    [Fact]
-    public void AVoteDatedOnTheReleaseDayCountsAndOneDatedTheDayAfterDoesNot()
-    {
-        var release = ReleaseOf(Vote('a', 216, 215) with { EventDate = new DateOnly(2026, 5, 11) }, Vote('b', 100, 100) with { EventDate = new DateOnly(2026, 5, 12) });
-
-        var highlights = HomeHighlights.From(release, []);
-
-        Assert.Equal(Id('a'), highlights.ClosestVote!.RecordId);
-        Assert.Equal(1, highlights.VotesInWindow);
-    }
-
-    [Fact]
-    public void AVoteWithNoAlignmentIsNeverTheClosestVoteBecauseProceduralVotesAndSpeakerElectionsAreOut()
-    {
-        var release = ReleaseOf(Vote('a', 100, 100) with { Alignment = null }, Vote('b', 0, 0) with { YeaCount = null, NayCount = null, Alignment = null }, Vote('c', 220, 200));
-
-        var highlights = HomeHighlights.From(release, []);
-
-        Assert.Equal(Id('c'), highlights.ClosestVote!.RecordId);
-        Assert.Equal(1, highlights.VotesInWindow);
-    }
-
-    [Fact]
-    public void WithNoVoteInTheWindowThereIsNoClosestVote()
-    {
-        var highlights = HomeHighlights.From(ReleaseOf(Vote('a', 216, 215) with { EventDate = new DateOnly(2026, 1, 1) }), []);
-
-        Assert.Null(highlights.ClosestVote);
-        Assert.Equal(0, highlights.VotesInWindow);
-    }
-
-    [Fact]
-    public void TheNewestExecutiveActionsComeNewestFirstAndTheTotalCountsAllOfThem()
+    public void TheNewestExecutiveActionsComeNewestFirstAndOnlyTheThreeNewestStay()
     {
         var release = ReleaseOf(Executive('a', 1), Executive('b', 4), Executive('c', 2), Executive('d', 3), Vote('e', 1, 2));
 
-        var highlights = HomeHighlights.From(release, []);
+        var highlights = HomeHighlights.From(release, [], 0);
 
         Assert.Equal([Id('b'), Id('d'), Id('c')], highlights.ExecutiveActions.Select(entry => entry.RecordId));
-        Assert.Equal(4, highlights.ExecutiveActionTotal);
+    }
+
+    [Fact]
+    public void TheOfficialCountIsTheCountThatThePublishGives()
+    {
+        Assert.Equal(541, HomeHighlights.From(ReleaseOf(), [], 541).OfficialCount);
     }
 
     [Fact]
@@ -88,7 +49,7 @@ public sealed class HomeHighlightsTests
         var leader = Assert.Single(BreakLeader.All(OfficialBoardPage.All(officials, summaries)));
 
         Assert.Equal(("share", PublishedChamber.House, PublishedPartyMajority.Democrat, 40, 10),
-            (leader.Official.Profile.Id, leader.Chamber, leader.Party, leader.Cast, leader.Breaks));
+            (leader.Member.Official.Profile.Id, leader.Chamber, leader.Party, leader.Member.Cast, leader.Member.Breaks));
     }
 
     [Fact]
@@ -102,8 +63,8 @@ public sealed class HomeHighlightsTests
         var kept = Assert.Single(BreakLeader.All(OfficialBoardPage.All([Listing("moved"), Listing("stayed")], [moved, stayed])));
         var current = Assert.Single(BreakLeader.All(OfficialBoardPage.All([Listing("stayed")], [stayed])));
 
-        Assert.Equal(("moved", 119, "officials/moved/119.html"), (kept.Official.Profile.Id, kept.Congress, kept.PagePath));
-        Assert.Equal((119, "officials/stayed.html"), (current.Congress, current.PagePath));
+        Assert.Equal(("moved", 119, "officials/moved/119.html"), (kept.Member.Official.Profile.Id, kept.Congress, kept.Member.PagePath));
+        Assert.Equal((119, "officials/stayed.html"), (current.Congress, current.Member.PagePath));
     }
 
     [Fact]
@@ -114,7 +75,7 @@ public sealed class HomeHighlightsTests
 
         var leader = Assert.Single(BreakLeader.All(OfficialBoardPage.All(officials, summaries)));
 
-        Assert.Equal(("exact", OfficialBoardPage.MinimumSplitVotes), (leader.Official.Profile.Id, leader.Cast));
+        Assert.Equal(("exact", OfficialBoardPage.MinimumSplitVotes), (leader.Member.Official.Profile.Id, leader.Member.Cast));
     }
 
     [Fact]
@@ -130,8 +91,8 @@ public sealed class HomeHighlightsTests
 
         var leader = Assert.Single(BreakLeader.All(boards));
 
-        Assert.Equal("b", leader.Official.Profile.Id);
-        Assert.Equal(boards.Single(page => page.Board.Chamber == PublishedChamber.House && page.Board.Party == PublishedPartyMajority.Democrat).Breakers[0].Official, leader.Official);
+        Assert.Equal("b", leader.Member.Official.Profile.Id);
+        Assert.Equal(boards.Single(page => page.Board.Chamber == PublishedChamber.House && page.Board.Party == PublishedPartyMajority.Democrat).Breakers[0], leader.Member);
     }
 
     [Fact]
@@ -148,8 +109,25 @@ public sealed class HomeHighlightsTests
 
         var leaders = BreakLeader.All(OfficialBoardPage.All(officials, summaries));
 
-        Assert.Equal([("newer", PublishedChamber.House), ("senator", PublishedChamber.Senate)],
-            leaders.Select(leader => (leader.Official.Profile.Id, leader.Chamber)));
+        Assert.Equal([("senator", PublishedChamber.Senate), ("newer", PublishedChamber.House)],
+            leaders.Select(leader => (leader.Member.Official.Profile.Id, leader.Chamber)));
+    }
+
+    [Fact]
+    public void BreakLeadersComeHighestShareFirstThenMoreBreaksThenLowerOfficialIdSoTheCardOrderNeverDependsOnBoardOrder()
+    {
+        var officials = new[] { Listing("low"), Listing("big"), Listing("z-small"), Listing("a-small") };
+        var summaries = new[]
+        {
+            Summary("low", 119, PublishedChamber.House, PublishedPartyMajority.Democrat, 100, 10),
+            Summary("big", 119, PublishedChamber.House, PublishedPartyMajority.Republican, 200, 40),
+            Summary("z-small", 119, PublishedChamber.Senate, PublishedPartyMajority.Democrat, 100, 20),
+            Summary("a-small", 119, PublishedChamber.Senate, PublishedPartyMajority.Republican, 100, 20)
+        };
+
+        var leaders = BreakLeader.All(OfficialBoardPage.All(officials, summaries));
+
+        Assert.Equal(["big", "a-small", "z-small", "low"], leaders.Select(leader => leader.Member.Official.Profile.Id));
     }
 
     [Fact]

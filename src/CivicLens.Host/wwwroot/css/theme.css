@@ -112,6 +112,8 @@ body.public {
     --frame-pad: max(var(--gutter), calc((100% - var(--content)) / 2 + var(--gutter)));
     --t-h1: clamp(2.5rem, 6vw, 4rem);
     --t-h2: 1.5rem;
+    --t-display: clamp(2.75rem, 7vw, 5.25rem);
+    --t-section: 2.25rem;
     --marigold: #f5b301;
     --bar: #14213d;
     --bar-ink: #ffffff;
@@ -136,6 +138,7 @@ body.public {
     --focus-halo: rgba(39, 71, 217, .25);
     --info: #2747d9;
     --info-bg: #e7ecfc;
+    --against: #e08600;
 }
 
 @media (max-width: 760px) {
@@ -161,6 +164,7 @@ body.public {
         --focus-halo: light-dark(rgba(39, 71, 217, .25), rgba(245, 179, 1, .3));
         --info: light-dark(#2747d9, #9db2ff);
         --info-bg: light-dark(#e7ecfc, rgba(111, 140, 255, .16));
+        --against: light-dark(#e08600, #f5a623);
     }
 }
 

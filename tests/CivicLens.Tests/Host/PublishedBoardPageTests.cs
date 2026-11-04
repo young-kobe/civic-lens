@@ -103,8 +103,59 @@ public sealed class PublishedBoardPageTests
         Assert.Equal(["House Democrats"], tabs.Where(tab => tab.GetAttribute("aria-current") is not null).Select(tab => tab.TextContent.Trim()));
     }
 
-    private static async Task<AngleSharp.Dom.IDocument> RenderAsync(OfficialBoardPage page) =>
-        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderBoardAsync(page, CancellationToken.None));
+    [Fact]
+    public async Task TheClosestVoteCardNamesTheDatesTheGapAndTheSizeOfThePoolAndLinksTheVote()
+    {
+        var closest = ClosestVote.From(ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split), Vote('b', 300, 100, PublishedVoteAlignment.PartiesAgree)))!;
+
+        var document = await RenderAsync(Page(), closest);
+
+        Assert.Contains("Closest vote, 5 May 2026 to 11 May 2026", document.QuerySelectorAll("h2").Select(heading => heading.TextContent));
+        Assert.Contains("The Yea and Nay counts differ by 2 votes.", document.Body!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("closest of 2 substantive roll call votes with counts", document.Body.TextContent, StringComparison.Ordinal);
+        Assert.NotNull(document.QuerySelector($"a[href='records/{new string('a', 64)}.html']"));
+    }
+
+    [Fact]
+    public async Task ATiedClosestVoteSaysTheCountsAreEqualAndNoVoteInTheWindowHidesTheCard()
+    {
+        var tied = ClosestVote.From(ReleaseOf(Vote('a', 50, 50, PublishedVoteAlignment.Mixed)))!;
+        var stale = ClosestVote.From(ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split) with { EventDate = new DateOnly(2026, 1, 1) }));
+
+        Assert.Contains("The Yea and Nay counts are equal.", (await RenderAsync(Page(), tied)).Body!.TextContent, StringComparison.Ordinal);
+        Assert.Null(stale);
+        Assert.DoesNotContain("Closest vote", (await RenderAsync(Page(), stale)).Body!.TextContent, StringComparison.Ordinal);
+    }
+
+    private static readonly DateTimeOffset Published = new(2026, 5, 11, 8, 0, 0, TimeSpan.Zero);
+
+    private static PublicationRelease ReleaseOf(params PublishedRecordEntry[] entries) => new()
+    {
+        SchemaVersion = PublicationProtocol.SchemaVersion,
+        ReleaseNumber = 3,
+        PublishedAtUtc = Published,
+        Withdrawals = [],
+        Records = entries
+    };
+
+    private static PublishedRecordEntry Vote(char id, int yea, int nay, PublishedVoteAlignment alignment) => new()
+    {
+        Kind = PublishedRecordKind.Vote,
+        RecordId = new string(id, 64),
+        RevisionNumber = 1,
+        Headline = $"Headline {id}",
+        FirstPublishedAtUtc = Published,
+        Officials = [],
+        IssueIds = [],
+        PolicyAreaIds = [],
+        YeaCount = yea,
+        NayCount = nay,
+        Alignment = alignment,
+        EventDate = new DateOnly(2026, 5, 7)
+    };
+
+    private static async Task<AngleSharp.Dom.IDocument> RenderAsync(OfficialBoardPage page, ClosestVote? closestVote = null) =>
+        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderBoardAsync(page, closestVote, CancellationToken.None));
 
     private static OfficialBoardPage Page(params BoardMember[] members) => new(Board, 119, [.. members], 0, 0, 0);
 

@@ -1,7 +1,7 @@
 namespace CivicLens.Application.Publication;
 
-/// <summary>The Congresses that an official has in the previous release: those with a vote file, and those with a past page.</summary>
-internal sealed record OfficialFiles(HashSet<int> VoteCongresses, HashSet<int> PageCongresses)
+/// <summary>The files that an official has in the previous release: the Congresses with a vote file, the Congresses with a past page, and the record page.</summary>
+internal sealed record OfficialFiles(HashSet<int> VoteCongresses, HashSet<int> PageCongresses, bool HasRecordPage)
 {
-    public static OfficialFiles None => new([], []);
+    public static OfficialFiles None => new([], [], false);
 }

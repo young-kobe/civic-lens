@@ -22,6 +22,16 @@ public sealed class IssueConfigurationRevisionTests
         Assert.Matches("^[0-9a-f]{64}$", IssueConfigurationRevision.Create(configuration).Id);
     }
 
+    [Fact]
+    public void TheShippedIssueFileKeepsTheRevisionIdOfBeforeIconsSoNoPaidRedraftRunsBecauseOfAnIcon()
+    {
+        var json = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "config", "issues.json"));
+
+        var configuration = JsonSerializer.Deserialize<IssueConfiguration>(json, CollectionProtocol.JsonOptions)!;
+
+        Assert.Equal("86259521afcbe72ada61ed672ba6bb3768d9033cccd10ea82d5d52a8eaa8d428", IssueConfigurationRevision.Create(configuration).Id);
+    }
+
     [Theory]
     [InlineData(60, true)]
     [InlineData(61, false)]

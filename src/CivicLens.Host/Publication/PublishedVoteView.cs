@@ -99,8 +99,21 @@ internal static class PublishedVoteView
         _ => null
     };
 
+    public static string? ListYeaNay(PublishedRecordEntry entry) =>
+        entry.YeaCount is { } yea && entry.NayCount is { } nay ? $"Yea {yea}, Nay {nay}" : null;
+
+    private const string CountsWho = "of all members of the chamber who voted Yea or Nay";
+
     public static string? ListCounts(PublishedRecordEntry entry) =>
-        entry.YeaCount is { } yea && entry.NayCount is { } nay ? $"Casts of all members of the chamber who voted Yea or Nay: Yea {yea}, Nay {nay}." : null;
+        ListYeaNay(entry) is { } counts ? $"Casts {CountsWho}: {counts}." : null;
+
+    public static IEnumerable<string> ListNotes(IEnumerable<PublishedRecordEntry> entries, bool defineBadges)
+    {
+        var votes = entries.Where(entry => entry.Kind == PublishedRecordKind.Vote).ToArray();
+        if (defineBadges && votes.Any(entry => entry.Alignment == PublishedVoteAlignment.Split)) yield return PublishedOfficialView.SplitVoteMeaning;
+        if (defineBadges && votes.Any(entry => entry.Alignment == PublishedVoteAlignment.PartiesAgree)) yield return PublishedOfficialView.PartiesAgreedMeaning;
+        if (votes.Any(entry => ListYeaNay(entry) is not null)) yield return $"Yea and Nay counts are casts {CountsWho}.";
+    }
 
     public static VoteBadge? Badge(PublishedVote vote)
     {

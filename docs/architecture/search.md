@@ -281,7 +281,8 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 
 - `/v1/release` reads `public_api.active_records`. An active release that holds no record reads as no release and answers 503.
 - The timeout answer of a vote or bill read says "the search took too long", because `ApiResults.GuardAsync` has one wording.
-- The members of a vote are planned for a later step of R-68. The `issue` and `sponsor` filters of the bill list match an ID as given. An ID that no bill carries gives an empty page, because `PublicApi` holds no issue or official catalog. The release manifest stays the data path of the static pages until then.
+- The `issue` and `sponsor` filters of the bill list match an ID as given. An ID that no bill carries gives an empty page, because `PublicApi` holds no issue or official catalog.
+- The release manifest stays the data path of the static pages until the pages read `PublicApi`.
 - One worker pulls. Two workers would pull the same pages. The unique report ID keeps the queue correct.
 - The pull address and token are set by hand in the worker environment. [R-24](../roadmap.md#later) sets them in the container configuration.
 - The rail and the Review home page link the queue. The operational application sends no notice when a report arrives.

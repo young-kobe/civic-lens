@@ -4,6 +4,15 @@
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@Board.PagePath" Title="@PublishedBoardView.Title(Board)" Description="@PublishedBoardView.Description(Page)">
     <PageHeader Title="@PublishedBoardView.Title(Board)" Lede="@PublishedBoardView.Lede(Page)" />
     <FilterTabs Label="@PublishedBoardView.TabsLabel" Tabs="PublishedBoardView.Tabs(Board)" />
+    @if (ClosestVote is { } closest)
+    {
+        <Panel Title="@PublishedBoardView.ClosestTitle(closest)" Padded="true">
+            <p><PublishedRecordTitle RecordId="@closest.Entry.RecordId">@closest.Entry.Headline</PublishedRecordTitle><PublishedVoteListFacts Entry="closest.Entry" /></p>
+            <p>@PublishedBoardView.VoteGap(closest)</p>
+            <p class="muted small">@PublishedBoardView.VotePool(closest)</p>
+            <p class="muted small">@PublishedBoardView.ClosestRule</p>
+        </Panel>
+    }
     @if (Page.Congress is { } congress)
     {
         @if (Page.NewerCongress is { } newer)
@@ -61,6 +70,7 @@
 
 @code {
     [Parameter, EditorRequired] public OfficialBoardPage Page { get; set; } = default!;
+    [Parameter] public ClosestVote? ClosestVote { get; set; }
 
     private OfficialBoard Board => Page.Board;
 

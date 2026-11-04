@@ -54,6 +54,10 @@
         }
         <div class="topbar-tools"><PublicThemeMenu /></div>
     </header>
+    @if (Hero is not null)
+    {
+        <div class="public-hero">@Hero</div>
+    }
     <main class="public-main" id="main" tabindex="-1"><div class="content"><CascadingValue Value="glossaryUse" IsFixed="true">@ChildContent</CascadingValue></div></main>
     <footer class="public-footer">
         <span class="public-footer-name">Civic Lens</span>
@@ -80,6 +84,7 @@
     [Parameter, EditorRequired] public string? CanonicalPath { get; set; }
     [Parameter] public string? ExternalScript { get; set; }
     [Parameter] public string RootPath { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? Hero { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
     private RenderFragment NavLinks(IReadOnlyList<PublicSections.NavLink> links) => @<text>

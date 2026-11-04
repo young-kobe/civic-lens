@@ -566,6 +566,38 @@ public sealed class PublishOfficialPagesTests
     }
 
     [Fact]
+    public async Task EveryPublishWritesTheRecordPageBesideTheOfficialPageAndLinksItWhenTheOfficialIsUntouchedSoTheSeeAllLinksNeverBreak()
+    {
+        var scenario = new PublicationScenario();
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('a'))));
+        Assert.Contains(PublicationProtocol.OfficialRecordPagePath("mayor"), scenario.Releases.Directories[first.DirectoryName].Keys);
+        scenario.Releases.WriteOrder.Clear();
+        scenario.Releases.Links.Clear();
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", scenario.AddDraft('c')));
+
+        Assert.DoesNotContain(PublicationProtocol.OfficialRecordPagePath("mayor"), scenario.Releases.WriteOrder);
+        Assert.Contains((first.DirectoryName, PublicationProtocol.OfficialRecordPagePath("mayor")), scenario.Releases.Links);
+        Assert.Contains(PublicationProtocol.OfficialRecordPagePath("mayor"), scenario.Releases.Directories[second.DirectoryName].Keys);
+    }
+
+    [Fact]
+    public async Task AnUntouchedOfficialWhosePreviousReleaseHasNoRecordPageGetsOneBecauseALinkedPageThatIsMissingWouldBeADeadLink()
+    {
+        var scenario = new PublicationScenario();
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, scenario.AddVote('a'))));
+        scenario.Releases.Directories[first.DirectoryName].Remove(PublicationProtocol.OfficialRecordPagePath("mayor"));
+        scenario.Releases.WriteOrder.Clear();
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", scenario.AddDraft('c')));
+
+        Assert.Contains(PublicationProtocol.OfficialRecordPagePath("mayor"), scenario.Releases.WriteOrder);
+        Assert.Contains(PublicationProtocol.OfficialRecordPagePath("mayor"), scenario.Releases.Directories[second.DirectoryName].Keys);
+    }
+
+    [Fact]
     public async Task TheCurrentCongressIsTheNewestWithAVoteAndEarlierCongressesGetOnePageEach()
     {
         var scenario = new PublicationScenario();

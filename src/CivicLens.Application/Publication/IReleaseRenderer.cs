@@ -22,8 +22,9 @@ public interface IReleaseRenderer
     Task<string> RenderFacetPageAsync(ReleaseFacet facet, int page, CancellationToken cancellationToken);
     Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken);
     Task<string> RenderOfficialAsync(ReleaseOfficialPage page, PublicationCatalog catalog, CancellationToken cancellationToken);
+    Task<string> RenderOfficialRecordAsync(ReleaseOfficialPage page, PublicationCatalog catalog, CancellationToken cancellationToken);
     Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, DateTimeOffset publishedAtUtc, CancellationToken cancellationToken);
-    Task<string> RenderBoardAsync(OfficialBoardPage page, CancellationToken cancellationToken);
+    Task<string> RenderBoardAsync(OfficialBoardPage page, ClosestVote? closestVote, CancellationToken cancellationToken);
     Task<string> RenderReportAsync(CancellationToken cancellationToken);
     Task<string> RenderMethodAsync(CancellationToken cancellationToken);
     Task<string> RenderAboutAsync(CancellationToken cancellationToken);
