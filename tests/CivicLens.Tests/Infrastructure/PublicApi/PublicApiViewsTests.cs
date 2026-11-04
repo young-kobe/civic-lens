@@ -1,7 +1,11 @@
+using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Publication;
+using CivicLens.Application.Votes;
+using CivicLens.Core.Documents;
+using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Districts;
 using CivicLens.Infrastructure.Roster;
 using CivicLens.Host.Publication;
@@ -23,7 +27,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     private const string LoginPassword = "test-only-password";
 
     private static readonly string[] BaseTables =
-        ["vote_revisions", "vote_member_list_entries", "vote_revision_issues", "publication_releases", "publication_record_states", "vote_drafts", "vote_member_lists",
+        ["vote_revisions", "vote_revision_facts", "vote_member_list_entries", "vote_revision_issues", "publication_releases", "publication_record_states", "vote_drafts", "vote_member_lists",
          "zcta_districts", "roster_snapshots", "collection_attempts"];
 
     private string connectionString = null!;
@@ -291,6 +295,28 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task QuestionAndResultEqualTheCSharpOwnersBecauseTheViewMustShowWhatTheReleaseFileShows()
+    {
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('d', result: "Agreed to");
+        var published = await PublishedVoteAsync(scenario, vote);
+        var scenarioFacts = scenario.Votes.Publishable[vote].Review.CurrentRevision.Facts;
+        string[] repeated = ["Started: 2025-04-10", "Vote title: Question: not the question", "Question: First", "Question: Second", "Result: Passed", "Result: Later"];
+
+        await InsertActiveVoteAsync("scenario", ["Yea"], [.. scenarioFacts.Select(fact => fact.Text)]);
+        await InsertActiveVoteAsync("repeated", ["Yea"], repeated);
+        await InsertActiveVoteAsync("unasked", ["Yea"], ["Result: Failed"]);
+
+        Assert.Equal([$"{FactValue(scenarioFacts, VoteFactPrefixes.Question)}|{published.Result}"],
+            await PublicAsync("SELECT question || '|' || result FROM public_api.votes WHERE record_id = 'scenario'"));
+        var repeatedFacts = repeated.Select(text => new VoteFact(text, new SourceSpan("ext", 0, 1))).ToImmutableArray();
+        Assert.Equal("First|Passed", $"{FactValue(repeatedFacts, VoteFactPrefixes.Question)}|{FactValue(repeatedFacts, VoteFactPrefixes.Result)}");
+        Assert.Equal(["First|Passed"], await PublicAsync("SELECT question || '|' || result FROM public_api.votes WHERE record_id = 'repeated'"));
+        Assert.Null(VoteFacts.Find([new VoteFact("Result: Failed", new SourceSpan("ext", 0, 1))], VoteFactPrefixes.Question));
+        Assert.Equal(["none|Failed"], await PublicAsync("SELECT coalesce(question, 'none') || '|' || result FROM public_api.votes WHERE record_id = 'unasked'"));
+    }
+
+    [Fact]
     public async Task AMemberRowCarriesTheOfficialIdAndHidesTheBioguideIdBecausePublicContractsKeyOfficialsByOurId()
     {
         await SeedAsync();
@@ -350,7 +376,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await ExecuteAsync($"""
             REVOKE SELECT ON ALL TABLES IN SCHEMA public_api FROM {Role};
             REVOKE USAGE ON SCHEMA public_api FROM {Role};
-            REVOKE SELECT ON publication_releases, publication_record_states, vote_revisions, vote_member_list_entries, vote_revision_issues, zcta_districts, roster_snapshots, collection_attempts FROM {Owner};
+            REVOKE SELECT ON publication_releases, publication_record_states, vote_revisions, vote_revision_facts, vote_member_list_entries, vote_revision_issues, zcta_districts, roster_snapshots, collection_attempts FROM {Owner};
             ALTER ROLE {Role} RESET ALL;
             ALTER ROLE {Role} CONNECTION LIMIT -1;
             GRANT TEMPORARY ON DATABASE {new NpgsqlConnectionStringBuilder(connectionString).Database} TO PUBLIC;
@@ -439,13 +465,27 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         var scenario = new PublicationScenario();
         var vote = scenario.AddVote('d', totalLines: totalLines, cast: casts[0],
             otherMemberLines: [.. casts[1..].Select((cast, index) => $"Member: X{index}, N, D, MA, {cast}")]);
+        return (await PublishedVoteAsync(scenario, vote)).Totals;
+    }
+
+    private static async Task<PublishedVote> PublishedVoteAsync(PublicationScenario scenario, string vote)
+    {
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k", new PublishedRecordReference(PublishedRecordKind.Vote, vote)));
         return JsonSerializer.Deserialize<PublishedVote>(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(vote)],
-            PublicationProtocol.JsonOptions)!.Totals;
+            PublicationProtocol.JsonOptions)!;
     }
 
+    private static string FactValue(ImmutableArray<VoteFact> facts, string prefix) => VoteFacts.Find(facts, prefix)!.Text[prefix.Length..];
+
     private async Task<string[]> ViewCountsAsync(string record, string[] casts)
+    {
+        await InsertActiveVoteAsync(record, casts);
+        return await PublicAsync($"SELECT concat_ws(' ', coalesce(yea::text, 'none'), coalesce(nay::text, 'none'), coalesce(present::text, 'none'), coalesce(not_voting::text, 'none')) FROM public_api.votes WHERE record_id = '{record}'");
+    }
+
+    // The fact rows go in last position first, so only the position column can give the order.
+    private async Task InsertActiveVoteAsync(string record, string[] casts, string[]? facts = null)
     {
         var list = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(record)));
         await ExecuteAsync($"""
@@ -456,8 +496,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             INSERT INTO vote_member_lists (list_id, member_count, created_at_utc_ticks) VALUES ('{list}', {casts.Length}, 1);
             {Revision(record, 1, "Person", list)}
             {string.Join('\n', casts.Select((cast, index) => Entry(list, index, cast)))}
+            {string.Join('\n', (facts ?? []).Select((text, position) => Fact(record, position, text)).Reverse())}
             """);
-        return await PublicAsync($"SELECT concat_ws(' ', coalesce(yea::text, 'none'), coalesce(nay::text, 'none'), coalesce(present::text, 'none'), coalesce(not_voting::text, 'none')) FROM public_api.votes WHERE record_id = '{record}'");
     }
 
     private static string Revision(string record, int revision, string origin, string list) => $"""
@@ -467,6 +507,11 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             kind, member_list_id, issue_revision_id, issue_candidates_recorded, bill_type, bill_number)
         VALUES ('{record}', {revision}, 'test', 'Person', 'x', 1, 'Headline {record}', 'Summary {record}', '{origin}', 'src', 'CongressGov', 'House', 119, 1, 7,
             'cand', 1, '2026-01-02', 'ext', 0, 1, 'Passage', '{list}', '{new string('a', 64)}', true, 'HR', 1);
+        """;
+
+    private static string Fact(string record, int position, string text) => $"""
+        INSERT INTO vote_revision_facts (record_id, revision_number, "position", fact_text, citation_extraction_id, citation_start, citation_length)
+        VALUES ('{record}', 1, {position}, '{text.Replace("'", "''")}', 'ext', 0, 1);
         """;
 
     private static string Entry(string list, int position, string cast) => $"""

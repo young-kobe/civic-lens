@@ -71,7 +71,7 @@ internal static class ReviewValidation
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var value in values)
         {
-            if (string.IsNullOrWhiteSpace(value) || value.Length > 128 || !allowed.Contains(value) || !seen.Add(value))
+            if (string.IsNullOrWhiteSpace(value) || value.Length > ReviewTextRules.MaximumConfigurationIdLength || !allowed.Contains(value) || !seen.Add(value))
                 throw new ArgumentException("Selection contains an unknown, duplicate, or invalid value.", name);
             result.Add(value);
         }

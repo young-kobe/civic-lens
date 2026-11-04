@@ -75,7 +75,7 @@ Each weekly check downloads the whole file. An unchanged file adds an attempt ro
 | Preparation | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs` |
 | Eligibility and validation | `src/CivicLens.Application/Collection/CollectionConfiguration.cs` |
 | Store and rows | `src/CivicLens.Infrastructure/Districts/PostgresZctaDistrictStore.cs`, `src/CivicLens.Infrastructure/Districts/Persistence/ZctaDistrictRow.cs`, `src/CivicLens.Infrastructure/Districts/Persistence/ZctaDistrictRowConfiguration.cs`, `src/CivicLens.Infrastructure/Roster/RosterSnapshotRules.cs` |
-| Public view | `src/CivicLens.Infrastructure/Collection/Migrations/20261104003905_PublicApiZipDistricts.cs`, `src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs`, `docs/architecture/public-api-columns.txt`, `tests/CivicLens.Tests/Infrastructure/PublicApi/PublicApiViewsTests.cs` |
+| Public view | `src/CivicLens.Infrastructure/Collection/Migrations/20261104011500_PublicApiZipDistricts.cs`, `src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs`, `docs/architecture/public-api-columns.txt`, `tests/CivicLens.Tests/Infrastructure/PublicApi/PublicApiViewsTests.cs` |
 | Sources | `config/federal-coverage.json` |
 
 ## Limits and planned work

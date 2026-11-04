@@ -3929,6 +3929,304 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryIssueRow", b =>
+                {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("issue_id");
+
+                    b.HasKey("Kind", "RecordId", "RevisionNumber", "Position");
+
+                    b.HasAlternateKey("Kind", "RecordId", "RevisionNumber", "Value");
+
+                    b.ToTable("published_entry_issues", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_published_entry_issues_issue_id", "length(btrim(issue_id)) > 0");
+
+                            t.HasCheckConstraint("ck_published_entry_issues_position", "position >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryOfficialRow", b =>
+                {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.Property<bool>("IsMatched")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_matched");
+
+                    b.Property<string>("OfficialId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("official_id");
+
+                    b.HasKey("Kind", "RecordId", "RevisionNumber", "Position");
+
+                    b.HasAlternateKey("Kind", "RecordId", "RevisionNumber", "OfficialId");
+
+                    b.HasIndex(new[] { "Kind", "RecordId", "RevisionNumber" }, "ux_published_entry_officials_matched")
+                        .IsUnique()
+                        .HasFilter("is_matched");
+
+                    b.ToTable("published_entry_officials", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_published_entry_officials_matched_kind", "NOT is_matched OR kind = 'relationship'");
+
+                            t.HasCheckConstraint("ck_published_entry_officials_official_id", "length(btrim(official_id)) > 0");
+
+                            t.HasCheckConstraint("ck_published_entry_officials_position", "position >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryPolicyAreaRow", b =>
+                {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("policy_area_id");
+
+                    b.HasKey("Kind", "RecordId", "RevisionNumber", "Position");
+
+                    b.HasAlternateKey("Kind", "RecordId", "RevisionNumber", "Value");
+
+                    b.ToTable("published_entry_policy_areas", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_published_entry_policy_areas_policy_area_id", "length(btrim(policy_area_id)) > 0");
+
+                            t.HasCheckConstraint("ck_published_entry_policy_areas_position", "position >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryRow", b =>
+                {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<string>("ActionRecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("action_record_id");
+
+                    b.Property<int?>("ActionRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("action_revision_number");
+
+                    b.Property<string>("BillTitle")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("bill_title");
+
+                    b.Property<string>("BriefRecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("brief_record_id");
+
+                    b.Property<int?>("BriefRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("brief_revision_number");
+
+                    b.Property<string>("DocumentChangeDraftId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("document_change_draft_id");
+
+                    b.Property<int?>("DocumentChangeRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("document_change_revision_number");
+
+                    b.Property<string>("DocumentType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("document_type");
+
+                    b.Property<DateOnly?>("EventDate")
+                        .HasColumnType("date")
+                        .HasColumnName("event_date");
+
+                    b.Property<string>("ExecutiveActionRecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("executive_action_record_id");
+
+                    b.Property<int?>("ExecutiveActionRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("executive_action_revision_number");
+
+                    b.Property<string>("Headline")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("headline");
+
+                    b.Property<string>("LinkType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("link_type");
+
+                    b.Property<string>("RelationshipRecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("relationship_record_id");
+
+                    b.Property<int?>("RelationshipRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("relationship_revision_number");
+
+                    b.Property<string>("SourceHost")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("source_host");
+
+                    b.Property<string>("StatementCandidateId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("statement_candidate_id");
+
+                    b.Property<string>("StatementKind")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("statement_kind")
+                        .HasComputedColumnSql("CASE WHEN statement_record_id IS NULL THEN NULL ELSE 'statement' END", true);
+
+                    b.Property<string>("StatementRecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("statement_record_id");
+
+                    b.Property<int?>("StatementRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("statement_revision_number");
+
+                    b.Property<string>("TargetKind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("target_kind");
+
+                    b.Property<string>("TargetRecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("target_record_id");
+
+                    b.Property<string>("VoteRecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("vote_record_id");
+
+                    b.Property<int?>("VoteRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("vote_revision_number");
+
+                    b.HasKey("Kind", "RecordId", "RevisionNumber");
+
+                    b.HasIndex("ActionRecordId", "ActionRevisionNumber");
+
+                    b.HasIndex("BriefRecordId", "BriefRevisionNumber");
+
+                    b.HasIndex("DocumentChangeDraftId", "DocumentChangeRevisionNumber");
+
+                    b.HasIndex("ExecutiveActionRecordId", "ExecutiveActionRevisionNumber");
+
+                    b.HasIndex("RelationshipRecordId", "RelationshipRevisionNumber");
+
+                    b.HasIndex("StatementCandidateId", "StatementRevisionNumber");
+
+                    b.HasIndex("StatementKind", "StatementRecordId");
+
+                    b.HasIndex("TargetKind", "TargetRecordId");
+
+                    b.HasIndex("VoteRecordId", "VoteRevisionNumber");
+
+                    b.ToTable("published_entries", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_published_entries_bill_title", "(kind = 'action') = (bill_title IS NOT NULL) AND (bill_title IS NULL OR length(btrim(bill_title)) > 0)");
+
+                            t.HasCheckConstraint("ck_published_entries_document_type", "(kind = 'executiveAction') = (document_type IS NOT NULL) AND (document_type IS NULL OR document_type IN ('ExecutiveOrder', 'Proclamation', 'Notice', 'Memorandum'))");
+
+                            t.HasCheckConstraint("ck_published_entries_headline", "length(btrim(headline)) > 0");
+
+                            t.HasCheckConstraint("ck_published_entries_kind", "kind IN ('documentChange', 'statement', 'action', 'brief', 'vote', 'relationship', 'executiveAction')");
+
+                            t.HasCheckConstraint("ck_published_entries_link", "(kind = 'relationship') = (link_type IS NOT NULL) AND num_nonnulls(link_type, statement_record_id, target_kind, target_record_id) IN (0, 4) AND (link_type IS NULL OR (link_type IN ('DescribesOwnBill', 'StatesPositionOn', 'ClaimsCreditFor', 'StatementAboutVote') AND target_kind IN ('action', 'vote') AND statement_record_id ~ '^[0-9a-f]{64}$' AND target_record_id ~ '^[0-9a-f]{64}$' AND (target_kind = 'vote') = (link_type = 'StatementAboutVote')))");
+
+                            t.HasCheckConstraint("ck_published_entries_record_id", "record_id ~ CASE WHEN kind = 'documentChange' THEN '^[0-9a-f]{32}$' ELSE '^[0-9a-f]{64}$' END");
+
+                            t.HasCheckConstraint("ck_published_entries_revision_key", "(kind = 'documentChange' AND document_change_draft_id IS NOT DISTINCT FROM record_id AND document_change_revision_number IS NOT DISTINCT FROM revision_number AND num_nonnulls(statement_candidate_id, statement_revision_number, action_record_id, action_revision_number, brief_record_id, brief_revision_number, vote_record_id, vote_revision_number, relationship_record_id, relationship_revision_number, executive_action_record_id, executive_action_revision_number) = 0) OR (kind = 'statement' AND statement_candidate_id IS NOT DISTINCT FROM record_id AND statement_revision_number IS NOT DISTINCT FROM revision_number AND num_nonnulls(document_change_draft_id, document_change_revision_number, action_record_id, action_revision_number, brief_record_id, brief_revision_number, vote_record_id, vote_revision_number, relationship_record_id, relationship_revision_number, executive_action_record_id, executive_action_revision_number) = 0) OR (kind = 'action' AND action_record_id IS NOT DISTINCT FROM record_id AND action_revision_number IS NOT DISTINCT FROM revision_number AND num_nonnulls(document_change_draft_id, document_change_revision_number, statement_candidate_id, statement_revision_number, brief_record_id, brief_revision_number, vote_record_id, vote_revision_number, relationship_record_id, relationship_revision_number, executive_action_record_id, executive_action_revision_number) = 0) OR (kind = 'brief' AND brief_record_id IS NOT DISTINCT FROM record_id AND brief_revision_number IS NOT DISTINCT FROM revision_number AND num_nonnulls(document_change_draft_id, document_change_revision_number, statement_candidate_id, statement_revision_number, action_record_id, action_revision_number, vote_record_id, vote_revision_number, relationship_record_id, relationship_revision_number, executive_action_record_id, executive_action_revision_number) = 0) OR (kind = 'vote' AND vote_record_id IS NOT DISTINCT FROM record_id AND vote_revision_number IS NOT DISTINCT FROM revision_number AND num_nonnulls(document_change_draft_id, document_change_revision_number, statement_candidate_id, statement_revision_number, action_record_id, action_revision_number, brief_record_id, brief_revision_number, relationship_record_id, relationship_revision_number, executive_action_record_id, executive_action_revision_number) = 0) OR (kind = 'relationship' AND relationship_record_id IS NOT DISTINCT FROM record_id AND relationship_revision_number IS NOT DISTINCT FROM revision_number AND num_nonnulls(document_change_draft_id, document_change_revision_number, statement_candidate_id, statement_revision_number, action_record_id, action_revision_number, brief_record_id, brief_revision_number, vote_record_id, vote_revision_number, executive_action_record_id, executive_action_revision_number) = 0) OR (kind = 'executiveAction' AND executive_action_record_id IS NOT DISTINCT FROM record_id AND executive_action_revision_number IS NOT DISTINCT FROM revision_number AND num_nonnulls(document_change_draft_id, document_change_revision_number, statement_candidate_id, statement_revision_number, action_record_id, action_revision_number, brief_record_id, brief_revision_number, vote_record_id, vote_revision_number, relationship_record_id, relationship_revision_number) = 0)");
+
+                            t.HasCheckConstraint("ck_published_entries_revision_number", "revision_number >= 1");
+
+                            t.HasCheckConstraint("ck_published_entries_source_host", "source_host IS NULL OR length(btrim(source_host)) > 0");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedRecordRow", b =>
                 {
                     b.Property<string>("Kind")
@@ -4582,6 +4880,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("DraftId");
 
+                    b.HasAlternateKey("DraftId", "ComparisonId")
+                        .HasName("ux_document_change_drafts_draft_comparison");
+
                     b.HasIndex("ComparisonId");
 
                     b.HasIndex("LastRevisedAtUtcTicks", "DraftId")
@@ -4603,6 +4904,123 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionCitationRow", b =>
+                {
+                    b.Property<string>("DraftId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("draft_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.Property<string>("CitationExtractionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("citation_extraction_id");
+
+                    b.Property<int>("CitationLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("citation_length");
+
+                    b.Property<int>("CitationStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("citation_start");
+
+                    b.Property<bool>("IsChangeDateEvidence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_change_date_evidence");
+
+                    b.HasKey("DraftId", "RevisionNumber", "Position");
+
+                    b.HasIndex("CitationExtractionId");
+
+                    b.HasIndex("DraftId", "RevisionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_document_change_revision_citations_change_date_evidence")
+                        .HasFilter("is_change_date_evidence");
+
+                    b.HasIndex("DraftId", "RevisionNumber", "CitationExtractionId", "CitationStart", "CitationLength")
+                        .IsUnique();
+
+                    b.ToTable("document_change_revision_citations", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_document_change_revision_citations_citation", "citation_start >= 0 AND citation_length > 0");
+
+                            t.HasCheckConstraint("ck_document_change_revision_citations_length", "citation_length <= 8192");
+
+                            t.HasCheckConstraint("ck_document_change_revision_citations_position", "position BETWEEN 0 AND 63");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionIssueRow", b =>
+                {
+                    b.Property<string>("DraftId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("draft_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<string>("IssueId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("issue_id");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.HasKey("DraftId", "RevisionNumber", "IssueId");
+
+                    b.ToTable("document_change_revision_issues", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_document_change_revision_issues_issue", "length(btrim(issue_id)) > 0");
+
+                            t.HasCheckConstraint("ck_document_change_revision_issues_position", "position BETWEEN 0 AND 63");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionOfficialRow", b =>
+                {
+                    b.Property<string>("DraftId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("draft_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<string>("OfficialId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("official_id");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.HasKey("DraftId", "RevisionNumber", "OfficialId");
+
+                    b.ToTable("document_change_revision_officials", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_document_change_revision_officials_official", "length(btrim(official_id)) > 0");
+
+                            t.HasCheckConstraint("ck_document_change_revision_officials_position", "position BETWEEN 0 AND 63");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionRow", b =>
                 {
                     b.Property<string>("DraftId")
@@ -4614,22 +5032,79 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("revision_number");
 
+                    b.Property<string>("AuthorKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("author_kind");
+
+                    b.Property<string>("AuthorSubject")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("author_subject");
+
+                    b.Property<DateOnly?>("ChangeDate")
+                        .HasColumnType("date")
+                        .HasColumnName("change_date");
+
+                    b.Property<string>("ComparisonId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("comparison_id");
+
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<string>("Headline")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("headline");
+
+                    b.Property<string>("Institution")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("institution");
+
+                    b.Property<string>("Limits")
+                        .HasColumnType("text")
+                        .HasColumnName("limits");
 
                     b.Property<string>("RevisionJson")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("revision_json");
 
+                    b.Property<string>("Significance")
+                        .HasColumnType("text")
+                        .HasColumnName("significance");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("text")
+                        .HasColumnName("summary");
+
                     b.HasKey("DraftId", "RevisionNumber");
+
+                    b.HasIndex("DraftId", "ComparisonId");
 
                     b.ToTable("document_change_revisions", null, t =>
                         {
+                            t.HasCheckConstraint("ck_document_change_revisions_author_kind", "author_kind IN ('Person', 'Analysis', 'Code')");
+
+                            t.HasCheckConstraint("ck_document_change_revisions_columns_written", "num_nulls(comparison_id, headline, summary, institution) IN (0, 4)");
+
+                            t.HasCheckConstraint("ck_document_change_revisions_comparison", "comparison_id ~ '^[0-9a-f]{64}$'");
+
                             t.HasCheckConstraint("ck_document_change_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
+                            t.HasCheckConstraint("ck_document_change_revisions_limits", "length(limits) <= 4000");
+
                             t.HasCheckConstraint("ck_document_change_revisions_number", "revision_number >= 1");
+
+                            t.HasCheckConstraint("ck_document_change_revisions_significance", "length(significance) <= 4000");
+
+                            t.HasCheckConstraint("ck_document_change_revisions_summary", "length(summary) <= 8000");
                         });
                 });
 
@@ -7263,6 +7738,87 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryIssueRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryRow", null)
+                        .WithMany()
+                        .HasForeignKey("Kind", "RecordId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryOfficialRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryRow", null)
+                        .WithMany()
+                        .HasForeignKey("Kind", "RecordId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryPolicyAreaRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryRow", null)
+                        .WithMany()
+                        .HasForeignKey("Kind", "RecordId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ActionRecordId", "ActionRevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Briefs.Persistence.BriefRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("BriefRecordId", "BriefRevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentChangeDraftId", "DocumentChangeRevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ExecutiveActionRecordId", "ExecutiveActionRevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedRecordRow", null)
+                        .WithMany()
+                        .HasForeignKey("Kind", "RecordId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Relationships.Persistence.RelationshipRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("RelationshipRecordId", "RelationshipRevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Statements.Persistence.StatementRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("StatementCandidateId", "StatementRevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedRecordRow", null)
+                        .WithMany()
+                        .HasForeignKey("StatementKind", "StatementRecordId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedRecordRow", null)
+                        .WithMany()
+                        .HasForeignKey("TargetKind", "TargetRecordId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionRow", null)
+                        .WithMany()
+                        .HasForeignKey("VoteRecordId", "VoteRevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Relationships.Persistence.RelationshipAnalysisRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Relationships.Persistence.RelationshipAnalysisRunRow", null)
@@ -7323,6 +7879,39 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionCitationRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("CitationExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionRow", null)
+                        .WithMany("Citations")
+                        .HasForeignKey("DraftId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionIssueRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionRow", null)
+                        .WithMany("Issues")
+                        .HasForeignKey("DraftId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionOfficialRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionRow", null)
+                        .WithMany("Officials")
+                        .HasForeignKey("DraftId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Review.Persistence.DocumentChangeDraftRow", null)
@@ -7330,6 +7919,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("DraftId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Review.Persistence.DocumentChangeDraftRow", null)
+                        .WithMany()
+                        .HasForeignKey("DraftId", "ComparisonId")
+                        .HasPrincipalKey("DraftId", "ComparisonId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.ReviewDecisionResolutionRow<CivicLens.Infrastructure.Actions.Persistence.ActionReviewDecisionRow>", b =>
@@ -7766,6 +8361,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Navigation("Facts");
 
                     b.Navigation("Notices");
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Review.Persistence.DocumentChangeRevisionRow", b =>
+                {
+                    b.Navigation("Citations");
+
+                    b.Navigation("Issues");
+
+                    b.Navigation("Officials");
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionRow", b =>
