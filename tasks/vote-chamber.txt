@@ -1,0 +1,34 @@
+TASK: add an optional chamber field to vote entries in the release manifest, in the civic-lens repository (C#/.NET 10, Postgres). Branch: vote-entry-chamber, from origin/main.
+
+Why: the redesigned home page lists "House votes". A vote entry (PublishedRecordEntry with Kind Vote) has no chamber today, so a page cannot filter by chamber. The owner chose (2026-11-04) an optional entry field, following the R-47 optional entry field precedent (find how yeaCount, nayCount and alignment were added to vote entries: docs/architecture/publication.md, PublishedRecordEntry and its Validate, the release builder that fills them, and their tests).
+
+Build:
+- PublishedRecordEntry gains an optional Chamber of type PublishedChamber (the enum exists in Publication.Contracts). Validate: only a vote entry may hold it; a vote entry from a new build always holds it. Follow how the R-47 fields state which kinds may hold them.
+- The release builder fills it from the vote revision's Chamber (CivicLens.Core.Votes.Chamber), mapped once. Reuse an existing Chamber to PublishedChamber mapping if one exists (PublishedOfficialVote builds one); do not add a second mapping rule.
+- R-63 stores published entries as rows (published_entries and related tables; see PublishedEntries, PostgresPublishedEntriesTests and the entry row checks that mirror PublishedRecordEntry.Validate). If entry rows hold the R-47 vote fields as columns, add chamber the same way with a migration, a check that mirrors Validate, and the Designer at its position. If they do not, add nothing there. Rewrites and comparisons of entries (ReleaseEntryComparison, ReleaseEntryRewrite) must treat the new field as the R-47 fields are treated.
+- No backfill command and no reset in this PR. Old releases keep entries without the field. State in publication.md that the field is optional and when it appears.
+- Do not change any page. The home page change is a separate PR.
+
+Tests: Validate refuses chamber on a non-vote entry; a built vote entry holds the right chamber for a House and a Senate vote; round trip through the entry rows if you added a column; the comparison treats it like the R-47 fields. Each test must fail if its rule breaks. Update docs/architecture/publication.md (contract section and invariants) and schema docs if a migration is added.
+
+If entries hold the field in a way this brief does not cover, or a contract version bump seems needed, choose nothing: stop, commit what is done, and report options.
+
+Final message under 1,800 characters: SHA, migration name or none, test classes with counts, departures, open questions.
+
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b vote-entry-chamber origin/main
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+6. curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+7. bash /tmp/dotnet-install.sh --version 10.0.403 --install-dir /root/.dotnet
+8. docker info  (if it fails: run sudo dockerd > /tmp/dockerd.log 2>&1 & in the background, then check docker info again after 10 seconds)
+9. export PATH=/root/.dotnet:$PATH && dotnet restore tests/CivicLens.Tests --locked-mode
+Prefix every later dotnet call with export PATH=/root/.dotnet:$PATH &&. If a Testcontainers pull fails with HTTP 429, wait 60 seconds and retry. Run test classes one filter at a time with --filter FullyQualifiedName~<Class> (no | in filters). Run at most one PublishReleaseTests class.
+
+Rules: read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Each rule has one owner; reuse the existing shared owners before adding any. Every added member needs a production caller. Delete code the change makes unused. No backward compatibility shims, dual reads or legacy fallbacks beyond what the named precedent already does. Comments only when absolutely necessary; intent goes in names. Tests encode why the rule matters and must fail if the rule breaks. EF migrations: generate with the repo EF tool manifest (dotnet tool restore, then dotnet ef migrations add), strip the UTF-8 BOM from generated files, and make the Designer match the model at the migration's position. Regenerate schema docs with CIVIC_LENS_WRITE_SCHEMA_DOCS=1 and the SchemaReferenceTests class. Prose (docs, commit messages): ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes. Update the owning feature docs in place (template headings Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, Limits and planned work); each invariant names its rule, enforcer and test. Do not write session reports or changelogs. If you hit a design choice the brief does not settle, choose nothing: stop, commit what is done, and list the question with options in your final message.
+
+Checks before the last commit: dotnet build tests/CivicLens.Tests -c Release (0 errors), the changed and related test classes, dotnet format CivicLens.slnx --verify-no-changes --no-restore, python3 tools/check-docs.py --check, python3 tools/render-architecture.py --check.
+
+Finish, each its own Bash call: git add -A; git commit -m "<one plain sentence>"; git push origin vote-entry-chamber. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only vote-entry-chamber.
