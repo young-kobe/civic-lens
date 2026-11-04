@@ -80,7 +80,7 @@ internal sealed class VoteviewVoteWorld
         var url = VoteviewUrl.File(VoteviewVoteFixtures.SourceUrl, resource, 119);
         var definition = configured.CreateApiJobDefinition(resource, url, VoteviewVoteFixtures.Backfill, CollectionJobPriority.Check);
         var attempt = new CollectionJobAttempt("attempt-" + jobId, definition.CreateRequest(jobId, Path.GetFullPath("captures")),
-            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded, null), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
+            new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
         jobs[jobId] = new CollectionJobRecord(jobId, definition, "key-" + jobId, CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
             false, [attempt]);
         bodies["attempt-" + jobId] = body;
