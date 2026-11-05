@@ -38,12 +38,21 @@ public sealed class RateLimitTests(PostgresCollection postgres)
         Assert.Equal([HttpStatusCode.ServiceUnavailable, HttpStatusCode.ServiceUnavailable, HttpStatusCode.TooManyRequests], statuses);
     }
 
-    private static async Task<List<HttpStatusCode>> StatusesAsync(ApiHost host, string forwarded, int count)
+    [Fact]
+    public async Task TheZipRouteCountsAgainstTheGlobalLimitLikeTheVoteRoutes()
+    {
+        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { RequestsPerMinute = 2 });
+
+        Assert.Equal([HttpStatusCode.ServiceUnavailable, HttpStatusCode.ServiceUnavailable, HttpStatusCode.TooManyRequests],
+            await StatusesAsync(host, "198.51.100.1", 3, "/v1/zip-districts/99501"));
+    }
+
+    private static async Task<List<HttpStatusCode>> StatusesAsync(ApiHost host, string forwarded, int count, string path = "/v1/release")
     {
         var statuses = new List<HttpStatusCode>();
         for (var i = 0; i < count; i++)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, "/v1/release");
+            using var request = new HttpRequestMessage(HttpMethod.Get, path);
             request.Headers.Add(ClientAddress.ForwardedHeader, forwarded);
             statuses.Add((await host.Client.SendAsync(request)).StatusCode);
         }

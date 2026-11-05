@@ -1,0 +1,8 @@
+@if (Line is not null)
+{
+    <span class="bill-line">@Line</span>
+}
+
+@code {
+    [Parameter] public string? Line { get; set; }
+}

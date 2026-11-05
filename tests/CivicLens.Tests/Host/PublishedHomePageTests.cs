@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Publication;
@@ -236,8 +237,96 @@ public sealed class PublishedHomePageTests
         Assert.DoesNotContain("A split vote is", main.TextContent, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task TheLatestVotesShowTheBillLineOfTheirActionWithTheSourceNoteOnceAndShowNoNoteWhenNoVoteHoldsALine()
+    {
+        var action = Entry(PublishedRecordKind.Action, 'b') with { BillLine = "This bill funds rent aid." };
+        var votes = new[] { Vote('a', 216, 214, PublishedVoteAlignment.Split), Vote('c', 300, 100, PublishedVoteAlignment.PartiesAgree) };
+        var release = ReleaseOf([action, .. votes]);
+        var lines = ReleaseBillLines.From(release.Records, new Dictionary<string, ImmutableArray<string>> { [Id('a')] = [action.RecordId] });
+        var withLine = HomeHighlights.From(release, [], 0) with { BillLines = lines };
+
+        var shown = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderHomeAsync(release, null, new ReleaseFacets([], []), withLine, CancellationToken.None)).Body!;
+        var bare = await HomeAsync(release, []);
+
+        Assert.Equal(["This bill funds rent aid."], shown.QuerySelectorAll("#latest .bill-line").Select(line => line.TextContent));
+        Assert.Equal(1, shown.TextContent.Split("From the Congressional Research Service summary.").Length - 1);
+        Assert.DoesNotContain("From the Congressional Research Service summary.", bare.TextContent, StringComparison.Ordinal);
+    }
+
     private static async Task<AngleSharp.Dom.IElement> AllRecordsAsync(PublicationRelease release) =>
-        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAllRecordsAsync(release, 1, CancellationToken.None)).QuerySelector("main")!;
+        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAllRecordsAsync(release, 1, ReleaseBillLines.None, CancellationToken.None)).QuerySelector("main")!;
+
+    [Fact]
+    public async Task TheZipFormCallsTheServiceAtTheConfiguredAddressAndStaysHiddenUntilScriptRuns()
+    {
+        var html = await HomeHtmlAsync("https://api.example.test");
+        var document = new HtmlParser().ParseDocument(html);
+
+        var form = document.QuerySelector("form[data-zip-api]")!;
+        Assert.Equal("https://api.example.test", form.GetAttribute("data-zip-api"));
+        Assert.True(form.HasAttribute("hidden"));
+        Assert.Equal("officials/{id}.html", form.GetAttribute("data-official-page"));
+        Assert.Equal("officials.html", form.GetAttribute("data-officials-page"));
+        Assert.Equal("District of Columbia", System.Text.Json.JsonDocument.Parse(form.GetAttribute("data-states")!).RootElement.GetProperty("DC").GetString());
+        var offices = System.Text.Json.JsonDocument.Parse(form.GetAttribute("data-house-offices")!).RootElement;
+        Assert.Equal("Resident Commissioner", offices.GetProperty("PR").GetString());
+        Assert.Equal("Delegate", offices.GetProperty("DC").GetString());
+        Assert.Equal(6, offices.EnumerateObject().Count());
+        var input = form.QuerySelector("input")!;
+        Assert.Equal(("zip", "5", "numeric"), (input.GetAttribute("name"), input.GetAttribute("maxlength"), input.GetAttribute("inputmode")));
+        Assert.Equal("Your ZIP code", form.QuerySelector("label[for='zip-code']")!.TextContent);
+        Assert.Equal("5 digits", input.GetAttribute("placeholder"));
+        Assert.Equal("Find my officials", form.QuerySelector("button[type=submit]")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheZipFormHasAJavaScriptNoticeBeforeItBecauseTheFormIsHiddenWithoutScript()
+    {
+        var html = await HomeHtmlAsync("https://api.example.test");
+
+        var noscriptStart = html.IndexOf("<noscript>", StringComparison.Ordinal);
+        var noscriptEnd = html.IndexOf("</noscript>", StringComparison.Ordinal);
+        var notice = html.IndexOf("The ZIP lookup needs JavaScript. Without it, browse ", StringComparison.Ordinal);
+        Assert.True(noscriptStart >= 0);
+        Assert.InRange(notice, noscriptStart, noscriptEnd);
+        Assert.True(noscriptEnd < html.IndexOf("<form class=\"zip-form\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task TheResultPanelIsHiddenUntilALookupAndCreditsTheCensusBureauAndSaysAZctaIsNotAZipCode()
+    {
+        var document = new HtmlParser().ParseDocument(await HomeHtmlAsync("https://api.example.test"));
+
+        var panel = document.QuerySelector("[data-zip-results]")!;
+        Assert.True(panel.HasAttribute("hidden"));
+        Assert.Equal("Your officials", panel.QuerySelector("h2")!.TextContent);
+        Assert.Equal("status", panel.QuerySelector("[data-zip-body]")!.GetAttribute("role"));
+        var notes = panel.QuerySelector("[data-zip-notes]")!;
+        Assert.True(notes.HasAttribute("hidden"));
+        Assert.Equal(["Source: U.S. Census Bureau", "A ZIP Code Tabulation Area is a Census Bureau area. It is not a USPS ZIP code. Near a border, check your address with your House office."],
+            notes.QuerySelectorAll("p").Select(note => note.TextContent));
+        Assert.Single(panel.QuerySelectorAll("[data-zip-notes]"));
+    }
+
+    [Fact]
+    public async Task WithoutAServiceAddressTheHomePageHasNoZipFormNoResultPanelAndNoNotice()
+    {
+        var html = await HomeHtmlAsync(null);
+        var document = new HtmlParser().ParseDocument(html);
+
+        Assert.Null(document.QuerySelector("main form"));
+        Assert.Null(document.QuerySelector("[data-zip-results]"));
+        Assert.DoesNotContain("ZIP lookup", html, StringComparison.Ordinal);
+        Assert.NotNull(document.QuerySelector(".home-browse a"));
+    }
+
+    private static async Task<string> HomeHtmlAsync(string? publicApiUrl)
+    {
+        var release = ReleaseOf();
+        var highlights = HomeHighlights.From(release, [], 0);
+        return await new ReleaseRenderer(publicApiUrl, null).RenderHomeAsync(release, null, new ReleaseFacets([], []), highlights, CancellationToken.None);
+    }
 
     private static async Task<AngleSharp.Dom.IElement> HomeAsync(PublicationRelease release, BreakLeader[] leaders, int officialCount = 0, ReleaseFacets? facets = null)
     {

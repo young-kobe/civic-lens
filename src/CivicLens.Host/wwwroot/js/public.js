@@ -172,6 +172,86 @@
         panel.hidden = false;
     };
 
+    const initZipLookup = form => {
+        const api = form.dataset.zipApi;
+        const states = JSON.parse(form.dataset.states);
+        const panel = document.querySelector("[data-zip-results]");
+        const body = panel.querySelector("[data-zip-body]");
+        const notes = panel.querySelector("[data-zip-notes]");
+        const input = form.elements.namedItem("zip");
+        const houseOffices = JSON.parse(form.dataset.houseOffices);
+        const stateName = code => states[code] ?? code;
+        const element = (tag, text, className) => {
+            const node = document.createElement(tag);
+            if (text !== undefined) node.textContent = text;
+            if (className) node.className = className;
+            return node;
+        };
+        const seatTitle = district => {
+            if (district.state in houseOffices) return `${houseOffices[district.state]} for ${stateName(district.state)}`;
+            return district.district === 0
+                ? `Representative for ${stateName(district.state)}, at large`
+                : `Representative for ${stateName(district.state)}, district ${district.district}`;
+        };
+        const seat = (title, holder) => {
+            const item = element("li", undefined, "zip-seat");
+            item.append(element("span", title, "muted small"));
+            if (holder === null) { item.append(element("span", "No current member is in our records.")); return item; }
+            const link = element("a", holder.name);
+            link.href = form.dataset.officialPage.replace("{id}", encodeURIComponent(holder.officialId));
+            const line = element("span");
+            line.append(link);
+            if (holder.party) line.append(`, ${holder.party}`);
+            item.append(line);
+            return item;
+        };
+        const show = (nodes, listed = false) => { panel.hidden = false; notes.hidden = !listed; body.replaceChildren(...nodes); };
+        const showAnswer = answer => {
+            const list = element("ul", undefined, "zip-seats");
+            const nodes = [];
+            if (answer.districts.length > 1)
+                nodes.push(element("p", `Your ZIP area lies in ${answer.districts.length} districts. The district with the most land is first.`, "zip-count"));
+            for (const district of answer.districts)
+                list.append(seat(seatTitle(district), district.representative));
+            for (const state of answer.states) {
+                if (state.senators.length === 0) { list.append(element("li", `${stateName(state.state)} has no senators.`, "zip-seat")); continue; }
+                for (const senator of state.senators) list.append(seat(`Senator for ${stateName(state.state)}`, senator));
+            }
+            nodes.push(list);
+            show(nodes, true);
+        };
+        const failure = (zip, status) => {
+            const texts = {
+                404: `No match for ${zip}. Check the 5 digits. Some ZIP codes, such as a PO box, are not in the Census data.`,
+                429: "Too many lookups. Wait one minute and try again."
+            };
+            if (status in texts) return element("p", texts[status]);
+            const message = element("p", "The lookup failed. Try again, or ");
+            const link = element("a", "browse all officials");
+            link.href = form.dataset.officialsPage;
+            message.append(link, ".");
+            return message;
+        };
+        let running = 0;
+        form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const zip = input.value.trim();
+            const mine = ++running;
+            if (!/^[0-9]{5}$/.test(zip)) { show([element("p", "Enter a ZIP code with 5 digits.")]); return; }
+            show([element("p", "Looking up your officials.")]);
+            let answer;
+            try {
+                const response = await fetch(`${api}/v1/zip-districts/${zip}`);
+                if (mine !== running) return;
+                if (!response.ok) { show([failure(zip, response.status)]); return; }
+                answer = await response.json();
+            }
+            catch { if (mine === running) show([failure(zip, 0)]); return; }
+            if (mine === running) showAnswer(answer);
+        });
+        form.hidden = false;
+    };
+
     const initOfficialsFilter = controls => {
         const list = document.querySelector("[data-officials]");
         const cards = Array.from(list.children);
@@ -362,6 +442,12 @@
             kind.className = "cell-note";
             kind.textContent = source.kinds[hit.kind];
             cell.append(link, kind);
+            if (hit.billLine) {
+                const line = document.createElement("span");
+                line.className = "bill-line";
+                line.textContent = hit.billLine;
+                cell.append(line);
+            }
             return cell;
         },
         officials: hit => hit.officials.map(official => official.name).join(", "),
@@ -431,8 +517,11 @@
             for (const header of sortable) header.setAttribute("aria-sort", state?.header === header ? { asc: "ascending", desc: "descending" }[state.direction] : "none");
             select.value = state && !isDefault(state.header, state.direction) ? `${headers.indexOf(state.header)}:${state.direction}` : "";
         };
+        const lineNote = document.createElement("p");
+        lineNote.className = "muted small";
         const restore = () => {
             running++;
+            lineNote.remove();
             body.replaceChildren(...staticRows);
             showRows(table, true);
             more.hidden = true;
@@ -475,14 +564,18 @@
                 return;
             }
             if (mine !== running) return;
-            if (append) body.append(...rows); else body.replaceChildren(...rows);
+            if (append) body.append(...rows); else { body.replaceChildren(...rows); lineNote.remove(); }
+            if (page.hits.some(hit => hit.billLine) && !table.closest(".record-list")?.parentElement.querySelector(".records-lead")?.textContent.includes(source.billLineNote)) {
+                lineNote.textContent = source.billLineNote;
+                bar.append(lineNote);
+            }
             shown = append ? shown + rows.length : rows.length;
             nextCursor = page.nextCursor;
             more.hidden = nextCursor === null;
             if (pager) pager.hidden = true;
             commit(state);
             const total = source.total, count = Math.min(shown, total);
-            status.textContent = `Showing ${count.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "record" : "records"}, sorted by ${label(current.header, current.direction)}. Sorted rows leave out the kind icon, the party badge, and the vote counts.`;
+            status.textContent = `Showing ${count.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "record" : "records"}, sorted by ${label(current.header, current.direction)}. Sorted rows leave out the kind icon, the party badge, the vote counts, and the bill line of a vote. An action that the search index stored before the bill line existed shows no line.`;
         };
         const choose = state => {
             if (!state) { commit(null); restore(); return; }
@@ -515,5 +608,6 @@
     document.querySelectorAll("[data-officials-filters]").forEach(initOfficialsFilter);
     document.querySelectorAll("[data-search-api]").forEach(initSearchService);
     document.querySelectorAll("[data-report-api]").forEach(initReportForm);
+    document.querySelectorAll("[data-zip-api]").forEach(initZipLookup);
     new Set(Array.from(document.querySelectorAll("th[data-sort]"), header => header.closest("table"))).forEach(initSortable);
 })();

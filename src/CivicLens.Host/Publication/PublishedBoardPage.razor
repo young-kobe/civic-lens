@@ -8,6 +8,11 @@
     {
         <Panel Title="@PublishedBoardView.ClosestTitle(closest)" Padded="true">
             <p><PublishedRecordTitle RecordId="@closest.Entry.RecordId">@closest.Entry.Headline</PublishedRecordTitle><PublishedVoteListFacts Entry="closest.Entry" /></p>
+            @if (closest.BillLine is not null)
+            {
+                <p><PublishedBillLine Line="@closest.BillLine" /></p>
+                <PublishedBillLineNote />
+            }
             <p>@PublishedBoardView.VoteGap(closest)</p>
             <p class="muted small">@PublishedBoardView.VotePool(closest)</p>
             <p class="muted small">@PublishedBoardView.ClosestRule</p>

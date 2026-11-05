@@ -20,14 +20,12 @@ public sealed partial class PostgresHouseVoteTests
     public async Task ApprovingAVoteQueuesTheRelationshipPairWithAnApprovedStatementOfAMember()
     {
         var candidate = await PendingCandidateAsync();
-        await SettleForReviewAsync(candidate, await RevisionAsync(candidate, 1));
+        var vote = await RevisionAsync(candidate, 1);
+        await SettleForReviewAsync(candidate, vote);
         var recordId = await RecordIdAsync(candidate);
-        using var revision = System.Text.Json.JsonDocument.Parse((string)(await ScalarAsync(
-            $"SELECT revision_json FROM vote_revisions WHERE record_id = '{recordId}' AND revision_number = 1"))!);
-        var vote = revision.RootElement;
-        var member = vote.GetProperty("members")[0].GetProperty("personId").GetString()!;
+        var member = vote.Members[0].PersonId;
         await new RelationshipWorldSeeder(connectionString).StatementAsync(RelationshipFixtures.StatementAboutBill(member,
-            vote.GetProperty("congress").GetInt32(), vote.GetProperty("billNumber").GetInt32(), "H.Con.Res."));
+            vote.Congress, vote.BillNumber!.Value, "H.Con.Res."));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM relationship_analysis"));
 
         await DecideAsync(recordId, 1, 0, ReviewDecisionKind.Approve);
@@ -41,13 +39,11 @@ public sealed partial class PostgresHouseVoteTests
     public async Task ApprovingAVotePairsOnlyDatedStatementsOfItsCongressBecauseAVotePairsByNumberAndANumberNeedsTheDate()
     {
         var candidate = await PendingCandidateAsync();
-        await SettleForReviewAsync(candidate, await RevisionAsync(candidate, 1));
+        var vote = await RevisionAsync(candidate, 1);
+        await SettleForReviewAsync(candidate, vote);
         var recordId = await RecordIdAsync(candidate);
-        using var revision = System.Text.Json.JsonDocument.Parse((string)(await ScalarAsync(
-            $"SELECT revision_json FROM vote_revisions WHERE record_id = '{recordId}' AND revision_number = 1"))!);
-        var vote = revision.RootElement;
-        var (member, congress, number) = (vote.GetProperty("members")[0].GetProperty("personId").GetString()!,
-            vote.GetProperty("congress").GetInt32(), vote.GetProperty("billNumber").GetInt32());
+        var (member, congress, number) = (vote.Members[0].PersonId,
+            vote.Congress, vote.BillNumber!.Value);
         var seeder = new RelationshipWorldSeeder(connectionString);
         await seeder.StatementAsync(RelationshipFixtures.StatementAboutBill(member, congress, number, "H.Con.Res.", new string('1', 64)));
         await seeder.StatementAsync(RelationshipFixtures.StatementAboutBill(member, congress - 1, number, "H.Con.Res.", new string('2', 64)));
@@ -94,14 +90,12 @@ public sealed partial class PostgresHouseVoteTests
     public async Task ACodeApprovalOfAVoteRunsTheRelationshipHookSoAnApprovedStatementOfAMemberQueuesItsPair()
     {
         var first = await PendingCandidateAsync();
-        await SettleAsync(first, await RevisionAsync(first, 1));
+        var vote = await RevisionAsync(first, 1);
+        await SettleAsync(first, vote);
         var recordId = await RecordIdAsync(first);
-        using var revision = System.Text.Json.JsonDocument.Parse((string)(await ScalarAsync(
-            $"SELECT revision_json FROM vote_revisions WHERE record_id = '{recordId}' AND revision_number = 1"))!);
-        var vote = revision.RootElement;
-        var member = vote.GetProperty("members")[0].GetProperty("personId").GetString()!;
+        var member = vote.Members[0].PersonId;
         await new RelationshipWorldSeeder(connectionString).StatementAsync(RelationshipFixtures.StatementAboutBill(member,
-            vote.GetProperty("congress").GetInt32(), vote.GetProperty("billNumber").GetInt32(), "H.Con.Res."));
+            vote.Congress, vote.BillNumber!.Value, "H.Con.Res."));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM relationship_analysis"));
 
         var second = await PendingCandidateAsync(Updated.AddDays(1));

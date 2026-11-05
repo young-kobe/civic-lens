@@ -110,12 +110,10 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
         var currents = histories.Values.Select(history => history.CurrentRevision!).ToArray();
         var extractions = (await ReadExtractionsAsync(db, currents, cancellationToken)).ToImmutableDictionary(StringComparer.Ordinal);
-        var billActions = await ReadBillActionRecordIdsAsync(db, [.. currents.Select(VoteBill.Of).OfType<VoteBill>()], cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         foreach (var current in currents) current.ValidateAgainst(extractions);
         return drafts.ToDictionary(draft => draft.RecordId, draft =>
-            new PublishableVote(ToReview(draft, histories[draft.RecordId]), extractions,
-                billActions.GetValueOrDefault(draft.RecordId, [])), StringComparer.Ordinal);
+            new PublishableVote(ToReview(draft, histories[draft.RecordId]), extractions), StringComparer.Ordinal);
     }
 
     public async Task<string?> FindRecordIdByRollAsync(Chamber chamber, int congress, int sessionNumber, int rollCallNumber,
@@ -136,15 +134,13 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         CitedRevisions.RequireKind(PublishedRecordKind.Vote, requested, nameof(revisions));
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         var rows = await db.Database.SqlQueryRaw<StoredVoteMember>("""
-                SELECT k.id AS "VoteRecordId", r.record_id IS NOT NULL AS "IsStored", r.member_list_id AS "MemberListId", m.person_id AS "PersonId"
+                SELECT k.id AS "VoteRecordId", r.record_id IS NOT NULL AS "IsStored", m.person_id AS "PersonId"
                 FROM unnest({0}, {1}) AS k(id, number)
                 LEFT JOIN vote_revisions r ON r.record_id = k.id AND r.revision_number = k.number
                 LEFT JOIN LATERAL (SELECT DISTINCT e.person_id FROM vote_member_list_entries e WHERE e.list_id = r.member_list_id) m ON true
                 """, requested.Select(binding => binding.RecordId).ToArray(), requested.Select(binding => binding.RevisionNumber).ToArray())
             .ToArrayAsync(cancellationToken);
         if (rows.Any(row => !row.IsStored)) throw CitedRevisions.NotStored(PublishedRecordKind.Vote);
-        if (rows.FirstOrDefault(row => row.MemberListId is null) is { } legacy)
-            throw VoteRevisionRows.NotBackfilled($"A vote revision of {legacy.VoteRecordId}");
         return [.. rows.Select(row => new VoteMembership(row.VoteRecordId,
             row.PersonId ?? throw new InvalidDataException("A stored vote revision names no member.")))];
     }
@@ -163,7 +159,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
             .ToArrayAsync(cancellationToken);
         if (stored.Length != requested.Length) throw CitedRevisions.NotStored(PublishedRecordKind.Vote);
         var bills = stored.Select(row => VoteBill.Of(row.VoteRecordId,
-            row.Congress ?? throw VoteRevisionRows.NotBackfilled($"A vote revision of {row.VoteRecordId}"), row.BillType, row.BillNumber)).OfType<VoteBill>();
+            row.Congress, row.BillType, row.BillNumber)).OfType<VoteBill>();
         return await ReadBillActionRecordIdsAsync(db, [.. bills], cancellationToken);
     }
 
@@ -208,7 +204,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
         return await ConfiguredPersonNames.ReadAsync(db, candidateIds, revisionIds, cancellationToken);
     }
 
-    private sealed record StoredVoteMember(string VoteRecordId, bool IsStored, string? MemberListId, string? PersonId);
+    private sealed record StoredVoteMember(string VoteRecordId, bool IsStored, string? PersonId);
 
-    private sealed record StoredVoteBill(string VoteRecordId, int? Congress, string? BillType, int? BillNumber);
+    private sealed record StoredVoteBill(string VoteRecordId, int Congress, string? BillType, int? BillNumber);
 }

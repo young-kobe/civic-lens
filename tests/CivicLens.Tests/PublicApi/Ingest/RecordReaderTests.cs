@@ -29,6 +29,16 @@ public sealed class RecordReaderTests
     }
 
     [Fact]
+    public void AnActionKeepsTheBillLineOfItsManifestEntryBecauseTheRecordFileHoldsNoSuchField()
+    {
+        var sample = PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001");
+
+        var read = Read(sample with { Entry = sample.Entry with { BillLine = "This bill funds housing." } });
+
+        Assert.Equal("This bill funds housing.", read.Entry.BillLine);
+    }
+
+    [Fact]
     public void AnExecutiveActionIndexesNoSummaryAndItsSavedRecordAsSourceSoSearchAcceptsTheNewKind()
     {
         var sample = PublishedSamples.ExecutiveAction("Ending the Weaponization", "Tail text.");

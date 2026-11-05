@@ -31,7 +31,7 @@ internal sealed class ExecutiveActionRecordLoader(IExecutiveActionReviewStore ac
         var record = new PublishedExecutiveActionBuilder(build.Rules).Build(addition, build.FirstPublishedAt(Kind, recordId),
             build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
-            (_, cancellationToken) => build.Renderer.RenderExecutiveActionAsync(record, cancellationToken));
+            (_, _, cancellationToken) => build.Renderer.RenderExecutiveActionAsync(record, cancellationToken));
     }
 
     public override Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,

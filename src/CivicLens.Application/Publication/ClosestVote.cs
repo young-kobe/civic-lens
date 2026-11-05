@@ -10,6 +10,8 @@ public sealed record ClosestVote(DateOnly WindowStart, DateOnly WindowEnd, Publi
 {
     public const int WindowDays = 7;
 
+    public string? BillLine { get; init; }
+
     public int Gap => GapOf(Entry);
 
     public static ClosestVote? From(PublicationRelease release)

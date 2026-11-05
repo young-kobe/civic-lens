@@ -7,6 +7,8 @@ namespace CivicLens.Application.Publication;
 public sealed record HomeHighlights(ImmutableArray<PublishedRecordEntry> Votes, ImmutableArray<PublishedRecordEntry> ExecutiveActions,
     ImmutableArray<BreakLeader> BreakLeaders, int OfficialCount)
 {
+    public ReleaseBillLines BillLines { get; init; } = ReleaseBillLines.None;
+
     public const int VotesPerChamber = 2;
     public const int ExecutiveActionCount = 3;
 
