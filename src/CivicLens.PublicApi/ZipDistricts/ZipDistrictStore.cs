@@ -106,10 +106,7 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
     }
 
     private static SeatHolder? ReadHolder(NpgsqlDataReader reader, int first) =>
-        reader.IsDBNull(first) ? null : new(reader.GetString(first), reader.GetString(first + 1), ViewColumns.Text(reader, first + 2), NullableDate(reader, first + 3));
-
-    private static DateOnly? NullableDate(NpgsqlDataReader reader, int ordinal) =>
-        reader.IsDBNull(ordinal) ? null : reader.GetFieldValue<DateOnly>(ordinal);
+        reader.IsDBNull(first) ? null : new(reader.GetString(first), reader.GetString(first + 1), ViewColumns.Text(reader, first + 2), ViewColumns.Date(reader, first + 3));
 
     private sealed record DistrictRow(string State, int District, SeatHolder? Representative);
 

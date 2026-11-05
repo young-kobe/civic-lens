@@ -157,6 +157,6 @@ public sealed class BillStore(NpgsqlDataSource views)
         Role = ViewColumns.Enum<PublishedSponsorshipRole>(reader, 4),
         IsOriginal = reader.GetBoolean(5),
         SponsoredOn = reader.GetFieldValue<DateOnly>(6),
-        WithdrawnOn = reader.IsDBNull(7) ? null : reader.GetFieldValue<DateOnly>(7)
+        WithdrawnOn = ViewColumns.Date(reader, 7)
     };
 }
