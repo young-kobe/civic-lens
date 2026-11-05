@@ -16,6 +16,11 @@ internal static class PeopleCommand
         OwnerCommand.RunAsync(async () =>
         {
             var (words, note) = SplitNote(args);
+            if (words.Skip(2).Any(word => word.StartsWith("--", StringComparison.Ordinal)))
+            {
+                Console.Error.WriteLine(Usage);
+                return 2;
+            }
             var settings = new ChangePersonSetting(people);
             object? result = words switch
             {

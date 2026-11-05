@@ -169,7 +169,7 @@ public sealed class PublishOfficialsTests
     }
 
     [Fact]
-    public async Task AnExecutiveGetsTheConfiguredWebsiteBecauseTheExecutiveRosterHasNoUrl()
+    public async Task AnExecutiveGetsTheWebsiteSettingBecauseTheExecutiveRosterHasNoUrl()
     {
         var scenario = new PublicationScenario();
         scenario.ExternalIds["mayor"] = (null, Trump);
@@ -182,7 +182,7 @@ public sealed class PublishOfficialsTests
     }
 
     [Fact]
-    public async Task AValidRosterUrlWinsOverTheConfiguredWebsiteBecauseTheRosterTracksTheCurrentOffice()
+    public async Task AValidRosterUrlWinsOverTheWebsiteSettingBecauseTheRosterTracksTheCurrentOffice()
     {
         var scenario = new PublicationScenario();
         scenario.ExternalIds["mayor"] = (Cantwell, null);
@@ -195,7 +195,7 @@ public sealed class PublishOfficialsTests
     }
 
     [Fact]
-    public async Task AFormerMemberWhoIsNotInTheCurrentRosterTakesTheConfiguredWebsite()
+    public async Task AFormerMemberWhoIsNotInTheCurrentRosterTakesTheWebsiteSetting()
     {
         var scenario = new PublicationScenario();
         scenario.ExternalIds["mayor"] = ("B000444", "Q6279");

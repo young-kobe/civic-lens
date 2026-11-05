@@ -39,6 +39,8 @@ public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLife
     [InlineData("people", "import")]
     [InlineData("people", "export", "x")]
     [InlineData("people", "photo", "withhold")]
+    [InlineData("people", "photo", "withhold", "--note")]
+    [InlineData("people", "photo", "restore", "--note")]
     [InlineData("people", "photo", "hide", "mayor")]
     [InlineData("people", "photo", "restore", "mayor", "extra")]
     [InlineData("people", "website", "set", "mayor")]

@@ -72,6 +72,23 @@ public sealed class PostgresPersonRegistryStoreTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task TwoChangesOfOnePersonAtTheSameTimeLetOneWinAndWriteNothingForTheOther()
+    {
+        await people.ImportAsync(Shipped(), Owner, default);
+
+        var loser = await Assert.ThrowsAsync<DbUpdateException>(() => people.AppendSettingAsync("maria-cantwell", setting =>
+        {
+            people.AppendSettingAsync("maria-cantwell", other => other with { Website = "https://cantwell.senate.gov/" }, "Winner.", Owner, default)
+                .GetAwaiter().GetResult();
+            return setting with { WithholdPhoto = true };
+        }, "Loser.", Owner, default));
+
+        Assert.Equal("PK_person_setting_revisions", ((PostgresException)loser.InnerException!).ConstraintName);
+        Assert.Equal([(1, "Winner.")],
+            await QueryAsync("SELECT revision_number, note FROM person_setting_revisions", reader => (reader.GetInt32(0), reader.GetString(1))));
+    }
+
+    [Fact]
     public async Task APersonWithNoRevisionIsAbsentFromTheNewestSettingsSoTheReaderUsesNoSetting()
     {
         await people.ImportAsync(Shipped(), Owner, default);

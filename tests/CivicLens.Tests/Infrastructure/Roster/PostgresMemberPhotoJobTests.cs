@@ -47,7 +47,7 @@ public sealed class PostgresMemberPhotoJobTests(PostgresCollection postgres) : I
     }
 
     [Fact]
-    public async Task AWithheldPersonStillGetsAPhotoJobSoRemovingTheFlagRestoresTheNewestPhoto()
+    public async Task AWithheldPersonStillGetsAPhotoJobSoARestoreBringsBackTheNewestPhoto()
     {
         var registry = PostgresPersonRegistryStore.FromConnectionString(connectionString);
         await registry.ImportAsync(People(), "owner", default);

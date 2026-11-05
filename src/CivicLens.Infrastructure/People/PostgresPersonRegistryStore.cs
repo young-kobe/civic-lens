@@ -55,7 +55,7 @@ public sealed class PostgresPersonRegistryStore(IDbContextFactory<CollectionAtte
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         if (!await db.Set<PersonRow>().AnyAsync(row => row.PersonId == personId, cancellationToken))
-            throw new ArgumentException($"Person '{personId}' is unknown.", nameof(personId));
+            throw new ArgumentException($"Person '{personId}' is unknown. Run people import first.", nameof(personId));
         var newest = await db.Set<PersonSettingRevisionRow>().AsNoTracking().Where(row => row.PersonId == personId)
             .OrderByDescending(row => row.RevisionNumber).FirstOrDefaultAsync(cancellationToken);
         var setting = change(newest is null ? PersonSetting.None : new PersonSetting(newest.WithholdPhoto, newest.Website));
