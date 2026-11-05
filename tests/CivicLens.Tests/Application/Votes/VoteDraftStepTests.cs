@@ -454,6 +454,19 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
+    public async Task AVoteWithNoResultLineBlocksBeforeAnyCallBecauseTheRevisionNeedsAResult()
+    {
+        var model = new FakeHeadlineSummaryModel();
+
+        var (store, _) = await RunAsync(Create(result: ""), model);
+
+        Assert.Equal((State.Blocked, "noResult"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Empty(model.Requests);
+        Assert.Empty(store.Revisions);
+        Assert.Equal(0, store.Charged);
+    }
+
+    [Fact]
     public async Task ACastOverTheLimitBlocksBeforeAnyCallSoOneBadVoteNeverStopsTheOtherRecordsFromPublishing()
     {
         var model = new FakeHeadlineSummaryModel();

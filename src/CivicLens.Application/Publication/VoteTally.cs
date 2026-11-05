@@ -50,9 +50,9 @@ internal sealed class VoteTally
 
     private static Dictionary<string, PublishedVoteTotals> SenateTotals(string recordId, ImmutableArray<VoteFact> facts)
     {
-        var count = VoteFacts.Find(facts, VoteFactPrefixes.Count)
+        var count = VoteFacts.ValueOf(facts, VoteFactPrefixes.Count)
             ?? throw new ArgumentException($"Vote {recordId} has no count line.");
-        return new() { [""] = ParseCounts(recordId, count.Text[VoteFactPrefixes.Count.Length..]) };
+        return new() { [""] = ParseCounts(recordId, count) };
     }
 
     private static Dictionary<string, PublishedVoteTotals> HouseTotals(string recordId, ImmutableArray<VoteFact> facts)
