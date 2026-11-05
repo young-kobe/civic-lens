@@ -207,7 +207,7 @@ The search routes are GET and read-only. The report routes are the only writes. 
 
 A vote row has `recordId`, `revisionNumber`, `chamber`, `congress`, `session`, `rollCall`, `votedOn`, `kind`, `billType`, `billNumber`, `headline`, `summary`, `textOrigin`, `label`, `question`, and `result`. Four counts follow: `yea`, `nay`, `present`, and `notVoting`. The enums have the text form of the release files. `label`, `question`, `billType`, and `billNumber` can be null. The counts are null when a cast is a candidate name. The members of a vote are not served yet.
 
-A bill row has `recordId`, `revisionNumber`, `congress`, `billType`, `billNumber`, `billTitle`, `headline`, `summary`, `textOrigin`, `label`, `policyArea`, `policyAreaId`, `eventDate`, `sponsorCount`, and `cosponsorCount`. `label`, `policyArea`, and `policyAreaId` can be null. The event date is the newest sponsored or withdrawn date. A sponsorship row has `position`, `officialId`, `role`, `isOriginal`, `sponsoredOn`, and `withdrawnOn`. `withdrawnOn` can be null.
+A bill row has `recordId`, `revisionNumber`, `congress`, `billType`, `billNumber`, `billTitle`, `headline`, `summary`, `textOrigin`, `label`, `policyArea`, `policyAreaId`, `eventDate`, `sponsorCount`, `cosponsorCount`, and `billLine`. `label`, `policyArea`, `policyAreaId`, and `billLine` can be null. The event date is the newest sponsored or withdrawn date. A sponsorship row has `position`, `officialId`, `role`, `isOriginal`, `sponsoredOn`, and `withdrawnOn`. `withdrawnOn` can be null.
 
 A result has the manifest entry fields, including `billLine` of an action, `firstRelease`, `lastRelease`, `pagePath`, `dataPath`, and the snippet. The paths are relative to the release root. The API does not serve record bodies.
 

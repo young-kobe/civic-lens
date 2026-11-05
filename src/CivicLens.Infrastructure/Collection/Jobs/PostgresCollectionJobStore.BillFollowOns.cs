@@ -59,7 +59,7 @@ public sealed partial class PostgresCollectionJobStore
     {
         ArgumentNullException.ThrowIfNull(page);
         return AdmitNextPageAsync(source, pageJobId, BillPageRole.Actions, ApiResource.BillActions, page.Next, extractionId,
-            cancellationToken);
+            (db, detailJobId) => RecordActionsAsync(db, detailJobId, pageJobId, page.Actions, cancellationToken), cancellationToken);
     }
 
     public Task<DiscoveryAdmissionResult> AdmitSummariesPageAsync(ConfiguredCollectionSource source, string pageJobId,
@@ -67,7 +67,7 @@ public sealed partial class PostgresCollectionJobStore
     {
         ArgumentNullException.ThrowIfNull(page);
         return AdmitNextPageAsync(source, pageJobId, BillPageRole.Summaries, ApiResource.BillSummaries, page.Next, extractionId,
-            cancellationToken);
+            null, cancellationToken);
     }
 
     public Task<DiscoveryAdmissionResult> AdmitSubjectsPageAsync(ConfiguredCollectionSource source, string pageJobId,
@@ -75,11 +75,12 @@ public sealed partial class PostgresCollectionJobStore
     {
         ArgumentNullException.ThrowIfNull(page);
         return AdmitNextPageAsync(source, pageJobId, BillPageRole.Subjects, ApiResource.BillSubjects, page.Next, extractionId,
-            cancellationToken);
+            null, cancellationToken);
     }
 
     private Task<DiscoveryAdmissionResult> AdmitNextPageAsync(ConfiguredCollectionSource source, string pageJobId,
-        BillPageRole role, ApiResource resource, string? next, string extractionId, CancellationToken cancellationToken)
+        BillPageRole role, ApiResource resource, string? next, string extractionId,
+        Func<CollectionAttemptDbContext, string, Task>? recordNewPageRows, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(pageJobId);
@@ -87,7 +88,8 @@ public sealed partial class PostgresCollectionJobStore
         return TransactionAsync(async (db, now) =>
         {
             var gate = await ReadGateOfPageJobAsync(db, pageJobId, cancellationToken);
-            await RecordPageAsync(db, gate.DetailJobId, pageJobId, role, extractionId, next is null, cancellationToken);
+            var recorded = await RecordPageAsync(db, gate.DetailJobId, pageJobId, role, extractionId, next is null, cancellationToken);
+            if (recorded && recordNewPageRows is not null) await recordNewPageRows(db, gate.DetailJobId);
             ApiJob[] jobs = next is null
                 ? []
                 : [source.CreateNextPageJob(resource, pageJobId, next, BillGate.DayOf(UpdateDateOf(gate)), Today(now))];

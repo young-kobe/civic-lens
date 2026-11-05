@@ -32,15 +32,56 @@ public sealed partial class PostgresCollectionJobStore
             ClosesChain = closesChain
         };
 
-    private static async Task RecordPageAsync(CollectionAttemptDbContext db, string detailJobId, string jobId,
+    private static async Task<bool> RecordPageAsync(CollectionAttemptDbContext db, string detailJobId, string jobId,
         BillPageRole role, string extractionId, bool closesChain, CancellationToken cancellationToken)
     {
-        if (await db.Set<BillPageRow>().AnyAsync(row => row.JobId == jobId, cancellationToken)) return;
+        if (await db.Set<BillPageRow>().AnyAsync(row => row.JobId == jobId, cancellationToken)) return false;
         await EnsureExtractionIsOfJobAsync(db, jobId, extractionId, cancellationToken);
         var order = await db.Set<BillPageRow>().CountAsync(row => row.DetailJobId == detailJobId && row.Role == role,
             cancellationToken);
         db.Add(NewPageRow(detailJobId, jobId, role, order, extractionId, closesChain));
+        return true;
     }
+
+    private static async Task RecordActionsAsync(CollectionAttemptDbContext db, string detailJobId, string jobId,
+        IReadOnlyList<CongressBillAction> actions, CancellationToken cancellationToken)
+    {
+        var first = await db.Set<BillActionRow>().CountAsync(row => row.DetailJobId == detailJobId, cancellationToken);
+        for (var index = 0; index < actions.Count; index++)
+        {
+            var position = first + index;
+            db.Add(NewActionRow(detailJobId, jobId, position, actions[index]));
+            db.AddRange(actions[index].RecordedVotes.Select((vote, order) => NewRecordedVoteRow(detailJobId, position, order, vote)));
+        }
+    }
+
+    private static BillActionRow NewActionRow(string detailJobId, string jobId, int position, CongressBillAction action) => new()
+    {
+        DetailJobId = detailJobId,
+        Position = position,
+        JobId = jobId,
+        ActionDate = action.ActionDate,
+        ActionTime = action.ActionTime,
+        Text = action.Text,
+        Type = action.Type,
+        ActionCode = action.ActionCode,
+        SourceSystemCode = action.SourceSystemCode,
+        SourceSystemName = action.SourceSystemName
+    };
+
+    private static BillActionRecordedVoteRow NewRecordedVoteRow(string detailJobId, int actionPosition, int order,
+        CongressBillRecordedVote vote) => new()
+        {
+            DetailJobId = detailJobId,
+            ActionPosition = actionPosition,
+            Position = order,
+            Chamber = vote.Chamber,
+            Congress = vote.Congress,
+            SessionNumber = vote.SessionNumber,
+            RollNumber = vote.RollNumber,
+            VotedAtUtcTicks = vote.VotedAt?.UtcTicks,
+            Url = vote.Url
+        };
 
     private static async Task EnsureExtractionIsOfJobAsync(CollectionAttemptDbContext db, string jobId, string extractionId,
         CancellationToken cancellationToken)

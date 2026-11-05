@@ -103,6 +103,7 @@ public sealed class PublishRelease
             WithdrawnRecords = withdrawn,
             Withdrawals = [.. withdrawals],
             AddedEntries = [.. additions.Select(addition => addition.Entry)],
+            RewrittenEntries = request.RewriteEntries ? [.. carried.Where(entry => entry.Kind == PublishedRecordKind.Action)] : [],
             Names = names
         };
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
