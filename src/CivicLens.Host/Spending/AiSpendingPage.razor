@@ -45,7 +45,7 @@
         <Panel Title="Model prices" Id="prices">
             <Aside>US dollars for one million tokens</Aside>
             <ChildContent>
-                <DataTable Items="view.CurrentPrices" Caption="Model prices">
+                <DataTable Items="view.CurrentPrices" Caption="Model prices" Stack="true">
                     <Head>
                         <th>Model</th>
                         <th>Input</th>
@@ -54,11 +54,11 @@
                         <th>Cache write</th>
                     </Head>
                     <Row Context="item">
-                        <td>@item.Price.Model</td>
-                        <td>@Dollars(item.Price.InputMicros)</td>
-                        <td>@Dollars(item.Price.OutputMicros)</td>
-                        <td>@Dollars(item.Price.CacheReadMicros)</td>
-                        <td>@Dollars(item.Price.CacheWriteMicros)</td>
+                        <TableCell Label="Model" Main>@item.Price.Model</TableCell>
+                        <TableCell Label="Input">@Dollars(item.Price.InputMicros)</TableCell>
+                        <TableCell Label="Output">@Dollars(item.Price.OutputMicros)</TableCell>
+                        <TableCell Label="Cache read">@Dollars(item.Price.CacheReadMicros)</TableCell>
+                        <TableCell Label="Cache write">@Dollars(item.Price.CacheWriteMicros)</TableCell>
                     </Row>
                     <Empty>
                         <EmptyState Title="No prices" Text="Save a price for each model below." />
@@ -93,16 +93,16 @@
 
         <Panel Title="Last changes" Id="changes">
             <ChildContent>
-                <DataTable Items="Changes" Caption="Last changes">
+                <DataTable Items="Changes" Caption="Last changes" Stack="true">
                     <Head>
                         <th>Change</th>
                         <th>Saved by</th>
                         <th>When</th>
                     </Head>
                     <Row Context="item">
-                        <td>@item.Text</td>
-                        <td>@item.AuthorSubject</td>
-                        <td><Timestamp Value="item.RecordedAt" /></td>
+                        <TableCell Label="Change" Main>@item.Text</TableCell>
+                        <TableCell Label="Saved by">@item.AuthorSubject</TableCell>
+                        <TableCell Label="When"><Timestamp Value="item.RecordedAt" /></TableCell>
                     </Row>
                     <Empty>
                         <EmptyState Title="No changes yet" Text="A saved cap or price shows here." />

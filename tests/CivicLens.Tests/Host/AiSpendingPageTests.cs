@@ -53,6 +53,19 @@ public sealed class AiSpendingPageTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task TheSpendingTablesStackIntoLabeledCardsSoNoColumnIsCutOffOnAPhone()
+    {
+        SignIn(Owner);
+
+        var page = await host.GetDocumentAsync(Page);
+
+        var table = page.QuerySelector("[aria-labelledby='prices'] table")!;
+        Assert.True(table.ClassList.Contains("table-stack"));
+        Assert.Equal(["Model", "Input", "Output", "Cache read", "Cache write"], table.QuerySelectorAll("tbody tr:first-child td").Select(cell => cell.GetAttribute("data-label")));
+        Assert.True(table.QuerySelector("tbody tr:first-child td")!.ClassList.Contains("cell-main"));
+    }
+
+    [Fact]
     public async Task ASavedCapIsStoredInMicroDollarsAndShownInTheLastChanges()
     {
         SignIn(Owner);

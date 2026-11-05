@@ -32,7 +32,17 @@ public sealed class DataTableTests
         Assert.Equal("7", document.QuerySelector("td[data-sort-value]")!.GetAttribute("data-sort-value"));
     }
 
-    private static async Task<string> RenderAsync(bool sortable)
+    [Fact]
+    public async Task OnlyATableThatAsksToStackBecomesLabeledCardsOnANarrowScreen()
+    {
+        var plain = new HtmlParser().ParseDocument(await RenderAsync(sortable: false));
+        var stacked = new HtmlParser().ParseDocument(await RenderAsync(sortable: false, stack: true));
+
+        Assert.False(plain.QuerySelector("table")!.ClassList.Contains("table-stack"));
+        Assert.True(stacked.QuerySelector("table")!.ClassList.Contains("table-stack"));
+    }
+
+    private static async Task<string> RenderAsync(bool sortable, bool stack = false)
     {
         await using var renderer = new HtmlRenderer(new ServiceCollection().BuildServiceProvider(), NullLoggerFactory.Instance);
         return await renderer.Dispatcher.InvokeAsync(async () =>
@@ -53,6 +63,7 @@ public sealed class DataTableTests
                 [nameof(DataTable<string>.Head)] = head,
                 [nameof(DataTable<string>.Row)] = row,
                 [nameof(DataTable<string>.Caption)] = "Words",
+                [nameof(DataTable<string>.Stack)] = stack,
                 [nameof(DataTable<string>.DefaultOrder)] = sortable ? "Newest first" : null
             };
             return (await renderer.RenderComponentAsync<DataTable<string>>(ParameterView.FromDictionary(parameters))).ToHtmlString();

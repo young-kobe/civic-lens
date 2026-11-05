@@ -179,4 +179,13 @@ a.cell-title:hover { text-decoration: underline; }
     .facts dd + dt { margin-top: var(--s2); }
     .page-header h1 { font-size: var(--t-lg); }
     .record-headline { font-size: var(--t-xl); }
+    :is(.public-main .table, .table-stack) thead, :is(.public-main .table, .table-stack) td:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    :is(.public-main .table, .table-stack), :is(.public-main .table, .table-stack) tbody { display: block; }
+    :is(.public-main .table, .table-stack) tbody { display: grid; gap: var(--s2); }
+    :is(.public-main .table, .table-stack) tr { display: flex; flex-direction: column; gap: 2px; padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--surface); }
+    :is(.public-main .table, .table-stack) tr:hover { background: var(--raised); }
+    :is(.public-main .table, .table-stack) td { display: block; width: auto; max-width: none; padding: 0; border: 0; text-align: left; white-space: normal; }
+    :is(.public-main .table, .table-stack) td[data-label]::before { content: attr(data-label) ": "; content: attr(data-label) ": " / ""; color: var(--muted); font-weight: 600; font-variant-numeric: normal; }
+    :is(.public-main .table, .table-stack) .cell-main { order: -1; }
+    :is(.public-main .table, .table-stack) td:empty::before { content: none; }
 }
