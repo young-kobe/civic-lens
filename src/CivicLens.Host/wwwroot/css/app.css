@@ -184,6 +184,7 @@ a.cell-title:hover { text-decoration: underline; }
     :is(.public-main .table, .table-stack) tbody { display: grid; gap: var(--s2); }
     :is(.public-main .table, .table-stack) tr { display: flex; flex-direction: column; gap: 2px; padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--surface); }
     :is(.public-main .table, .table-stack) tr:hover { background: var(--raised); }
+    :is(.public-main .panel, .panel:has(.table-stack)) .table-wrap { padding: var(--s3); }
     :is(.public-main .table, .table-stack) td { display: block; width: auto; max-width: none; padding: 0; border: 0; text-align: left; white-space: normal; }
     :is(.public-main .table, .table-stack) td[data-label]::before { content: attr(data-label) ": "; content: attr(data-label) ": " / ""; color: var(--muted); font-weight: 600; font-variant-numeric: normal; }
     :is(.public-main .table, .table-stack) .cell-main { order: -1; }

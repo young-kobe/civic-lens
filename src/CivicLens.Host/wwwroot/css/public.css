@@ -200,7 +200,6 @@ table[data-paged]:focus { outline: none; }
     .public-search { grid-area: search; margin-left: 0; }
     .public-header .topbar-tools { grid-area: tools; }
     .public-nav { grid-area: nav; margin-inline: calc(-1 * var(--s2)); }
-    .public-main .panel .table-wrap { padding: var(--s3); }
     .record-list .cell-icon { flex-wrap: wrap; }
     .record-list .record-row-text { flex-basis: calc(100% - 30px); }
     .record-list .badge { margin-left: 30px; }
