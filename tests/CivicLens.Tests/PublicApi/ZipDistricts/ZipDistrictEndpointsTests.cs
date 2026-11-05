@@ -102,6 +102,27 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task EachSeatHolderCarriesTheEndDateOfTheCurrentTermOrNullWhenTheReleaseHasNoEndDate()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 0, 0, 0, TimeSpan.Zero));
+        await ZipSeed.AddRecordAsync(host.OperationalDatabase, 2);
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2,
+            new SeededSeat("al2", "Alice Two", Representative, "AL", 2, End: "2999-01-03"),
+            new SeededSeat("al1", "Al One", Representative, "AL", 1),
+            new SeededSeat("sen-a", "Ann Ending", Senator, "AL", null, "2021-01-03", "2999-01-03"),
+            new SeededSeat("sen-b", "Bo Open", Senator, "AL", null, "2025-01-03"));
+
+        var answer = await GetAsync(host, "/v1/zip-districts/36009");
+
+        var districts = answer.GetProperty("districts");
+        Assert.Equal("2999-01-03", districts[0].GetProperty("representative").GetProperty("termEndsOn").GetString());
+        Assert.Equal(JsonValueKind.Null, districts[1].GetProperty("representative").GetProperty("termEndsOn").ValueKind);
+        var senators = answer.GetProperty("states")[0].GetProperty("senators");
+        Assert.Equal(["2999-01-03", null], senators.EnumerateArray().Select(senator => senator.GetProperty("termEndsOn").GetString()));
+    }
+
+    [Fact]
     public async Task OnTheDayATermEndsTheNextTermHasStartedSoTheNewSenatorTakesTheSeatAndAReelectedSenatorHoldsOneSeat()
     {
         await using var host = await StartAsync();
