@@ -22,6 +22,25 @@ public sealed class StatementCodeApprovalTests
     }
 
     [Fact]
+    public async Task ARedraftOfAStaleModelDraftRunsTheCodeApprovalChecksAgainSoAPassingRevisionIsApprovedByCode()
+    {
+        var store = await DraftAsync(DraftEvidence(existingDraft: new(1, IsStaleModelDraft: true), configuration: OwnOfficeOf(Warren)), Output());
+
+        Assert.Equal(2, Assert.Single(store.Revisions).RevisionNumber);
+        Assert.Equal([store.Evidence.Article.CandidateId], store.CodeApproved);
+    }
+
+    [Fact]
+    public async Task ARedraftThatFailsTheCodeApprovalChecksWaitsForAPersonLikeANewDraft()
+    {
+        var store = await DraftAsync(DraftEvidence(existingDraft: new(1, IsStaleModelDraft: true), configuration: OwnOfficeOf(Warren)),
+            Output(otherSpeakers: ["Jo Rivera"]));
+
+        Assert.Equal(2, Assert.Single(store.Revisions).RevisionNumber);
+        Assert.Empty(store.CodeApproved);
+    }
+
+    [Fact]
     public async Task ADraftFromASourceWithoutOfficeOfWaitsForAPersonBecauseCoverageIsNotAuthorship()
     {
         var store = await DraftAsync(DraftEvidence(configuration: SpeakerRevision()), Output());

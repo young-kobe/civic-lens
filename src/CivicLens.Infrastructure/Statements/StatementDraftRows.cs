@@ -10,20 +10,31 @@ namespace CivicLens.Infrastructure.Statements;
 
 internal static class StatementDraftRows
 {
-    public static async Task<bool> TryAddAnalysisDraftAsync(CollectionAttemptDbContext db, StatementDraftRevision revision, string runId,
+    /// <summary>Appends the revision of the worker under the review key. The revision must follow the current revision of the draft, so a
+    /// person save that came first makes the append fail and write nothing. Only a draft that no person has acted on takes a revision.</summary>
+    public static async Task<bool> TryAppendAnalysisRevisionAsync(CollectionAttemptDbContext db, StatementDraftRevision revision, string runId,
         ApprovalCheck codeApproval, CancellationToken cancellationToken)
     {
-        revision.ValidateAsFirstAnalysisRevision();
+        revision.ValidateAsAnalysisRevision();
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.StatementReview, cancellationToken);
-        if (await ExistsAsync(db, revision.CandidateId, cancellationToken)) return false;
+        var draft = await db.Set<StatementDraftRow>().SingleOrDefaultAsync(row => row.CandidateId == revision.CandidateId, cancellationToken);
+        if (!FollowsUntouchedDraft(draft, revision)) return false;
         var capturedOn = await RequireCandidateExtractionAsync(db, revision, cancellationToken);
-        var draft = NewDraft(revision.CandidateId, 1, revision.CreatedAtUtc.UtcTicks);
+        var records = PostgresStatementReviewStore.Records;
+        var cycle = draft is null ? [] : await records.ReadCycleAsync(db, draft, cancellationToken);
+        if (draft is null) db.Add(draft = NewDraft(revision.CandidateId, 1, revision.CreatedAtUtc.UtcTicks));
         SetListing(draft, revision, capturedOn);
-        db.Add(draft);
-        await PostgresStatementReviewStore.Records.AppendCodeApprovedAsync(db, draft, revision, StatementRevisionRows.Create(revision, runId), [],
+        await records.AppendCodeApprovedAsync(db, draft, revision, StatementRevisionRows.Create(revision, runId), cycle,
             () => Task.FromResult(codeApproval));
         return true;
     }
+
+    /// <summary>The statuses that no person decision has set. A rejection, a request for changes, and a withdrawal are decisions of a person.</summary>
+    public static readonly ReviewStatus[] UntouchedStatuses = [ReviewStatus.AwaitingReview, ReviewStatus.Approved];
+
+    private static bool FollowsUntouchedDraft(StatementDraftRow? draft, StatementDraftRevision revision) =>
+        draft is null ? revision.RevisionNumber == 1
+            : draft.CurrentRevisionNumber == revision.RevisionNumber - 1 && UntouchedStatuses.Contains(draft.ReviewStatus);
 
     public static async Task AddDraftWithoutRevisionAsync(CollectionAttemptDbContext db, string candidateId, long createdAtUtcTicks,
         CancellationToken cancellationToken)

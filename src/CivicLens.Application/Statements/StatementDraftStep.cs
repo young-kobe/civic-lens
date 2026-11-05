@@ -22,7 +22,7 @@ public sealed class StatementDraftStep(IStatementDraftStore store, IStatementDra
         var evidence = await store.ReadEvidenceAsync(attempt.Claim.Record.SubjectId, cancellationToken);
         if (evidence is null)
             return await attempt.CompleteAsync(State.Blocked, StatementDraftErrorCodes.EvidenceUnavailable, cancellationToken);
-        if (evidence.ExistingDraftId is not null)
+        if (evidence.ExistingDraft is { IsStaleModelDraft: false })
             return await attempt.CompleteAsync(State.Succeeded, StatementDraftErrorCodes.HumanDraftExists, cancellationToken);
         var (allowed, officials, officeOf) = selections.Resolve(evidence.ConfigurationRevision, evidence.Article.Extraction.SourceAttempt.SourceId,
             evidence.Article.FirstCapturedOn);

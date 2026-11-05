@@ -18,7 +18,7 @@ public sealed class StatementDraftResolverTests
         Assert.Equal((1, "civic-lens:analysis"), (revision.RevisionNumber, revision.AuthorSubject));
         Assert.Equal(["rent-affordability"], revision.IssueIds.ToArray());
         Assert.Equal(new DateOnly(2026, 10, 3), revision.StatementDate);
-        revision.ValidateAsFirstAnalysisRevision();
+        revision.ValidateAsAnalysisRevision();
     }
 
     [Theory]

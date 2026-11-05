@@ -63,10 +63,10 @@ internal static class StatementDraftFixtures
     public static ImmutableArray<AnalysisOfficial> Officials(params string[] ids) =>
         [.. ids.Select(id => new AnalysisOfficial(id, id == Warren ? "Elizabeth Warren" : "Ed Markey"))];
 
-    public static StatementDraftEvidence DraftEvidence(string text = Article, StatementGateCarryOver? carryOver = null, string? existingDraftId = null,
+    public static StatementDraftEvidence DraftEvidence(string text = Article, StatementGateCarryOver? carryOver = null, StatementExistingDraft? existingDraft = null,
         DateTimeOffset? observed = null, CollectionConfigurationRevision? configuration = null) =>
         new(StatementGateFixtures.Evidence(text, observed), carryOver ?? new(["rent-affordability"], ["housing-and-community-development"], GatePassed: true),
-            existingDraftId, configuration ?? SpeakerRevision());
+            existingDraft, configuration ?? SpeakerRevision());
 
     public static string Output(string[]? speakers = null, (string Date, string Quote)? date = null, string[]? quotes = null,
         string[]? otherSpeakers = null, double confidence = 0.8, string headline = "Warren announces a rent cap") =>

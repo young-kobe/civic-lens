@@ -4,7 +4,7 @@ namespace CivicLens.Application.Statements;
 
 public static class StatementDraftLifecycle
 {
-    private static readonly AnalysisLifecycle Rules = new(AcceptsSuccess);
+    private static readonly AnalysisLifecycle Rules = new(AcceptsSuccess, record => record.ErrorCode is null);
 
     public static bool CanTransition(AnalysisRecord record, AnalysisCheckpoint update) =>
         Rules.CanTransition(record, update) && HasConsistentRevision(record, update);

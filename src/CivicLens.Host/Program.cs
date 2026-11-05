@@ -77,7 +77,7 @@ if (args is [] or ["--help"] or ["help"])
           documents compare <before-extraction-id> <after-extraction-id>
           documents comparison <comparison-id>
           analyses requeue <comparison-id|--all>
-          analyses redraft --stale [actions|votes|briefs]
+          analyses redraft --stale [actions|votes|statements|briefs]
           statements status
           statements list [passed|skipped|failed-open|over-cap|pending|failed] [limit]
           statements run <run-id>
@@ -311,6 +311,7 @@ try
         var redraftStale = new RedraftStaleAnalyses([
             new("actions", new PostgresActionDraftStore(contexts, codeVersion)),
             new("votes", new PostgresVoteDraftStore(contexts)),
+            new("statements", new PostgresStatementDraftStore(contexts)),
             new("briefs", new PostgresBriefDraftStore(contexts))]);
         executing = true;
         return await AnalysisCommand.ExecuteAsync(args, requeue, redraftStale, owner, cancellation.Token);

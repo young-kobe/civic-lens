@@ -153,6 +153,97 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task AStaleModelDraftThatCodeApprovedGetsASecondModelRevisionThatCodeApprovesAgain()
+    {
+        var candidate = await PassedCandidateAsync(admittedBy: AdmittedDefinition(OwnOffice(Warren)));
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+        await AgeRunsAsync(candidate);
+
+        Assert.Equal(1, await drafts.RequeueStaleAsync(default));
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"], headline: "Warren announces a new rent cap"))).ExecuteAsync(once: true);
+
+        Assert.Equal(2L, await ScalarAsync($"SELECT current_revision_number FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal("Approved", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(("civic-lens:analysis", "Warren announces a new rent cap"), (
+            await TextAsync($"SELECT author_subject FROM statement_revisions WHERE candidate_id = '{candidate}' AND revision_number = 2"),
+            await TextAsync($"SELECT headline FROM statement_revisions WHERE candidate_id = '{candidate}' AND revision_number = 2")));
+        Assert.Equal("civic-lens:code,civic-lens:code", await TextAsync(
+            $"SELECT string_agg(actor_subject, ',' ORDER BY revision_number) FROM statement_review_decisions WHERE candidate_id = '{candidate}'"));
+        Assert.Equal([(StatementDraftTask.Task, "Succeeded", null)], await QueueAsync(candidate, StatementDraftTask.Task));
+        await AssertColumnsAndChildRowsMatchJsonAsync(candidate);
+    }
+
+    [Fact]
+    public async Task AStaleModelDraftThatFailsTheCodeApprovalChecksWaitsForAPersonLikeANewDraft()
+    {
+        var candidate = await PassedCandidateAsync();
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+        await AgeRunsAsync(candidate);
+
+        Assert.Equal(1, await drafts.RequeueStaleAsync(default));
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+
+        Assert.Equal(2L, await ScalarAsync($"SELECT current_revision_number FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal("AwaitingReview", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(StatementCodeApproval.SpeakerIsNotOfficeOwner, await TextAsync($"SELECT held_reason FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM statement_review_decisions WHERE candidate_id = '{candidate}'"));
+    }
+
+    [Fact]
+    public async Task APersonRevisionBlocksTheRedraftBecauseTheRecordIsNoLongerAnUntouchedModelDraft()
+    {
+        var candidate = await PassedCandidateAsync(admittedBy: AdmittedDefinition(OwnOffice(Warren)));
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+        await SavePersonRevisionAsync(candidate, 1, "edit-before-redraft");
+        await AgeRunsAsync(candidate);
+
+        Assert.Equal(0, await drafts.RequeueStaleAsync(default));
+        Assert.False((await drafts.ReadEvidenceAsync(candidate, default))!.ExistingDraft!.IsStaleModelDraft);
+    }
+
+    [Fact]
+    public async Task ADraftWithCurrentVersionsIsNotRedrafted()
+    {
+        var candidate = await PassedCandidateAsync(admittedBy: AdmittedDefinition(OwnOffice(Warren)));
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+
+        Assert.Equal(0, await drafts.RequeueStaleAsync(default));
+        Assert.False((await drafts.ReadEvidenceAsync(candidate, default))!.ExistingDraft!.IsStaleModelDraft);
+    }
+
+    [Fact]
+    public async Task ARejectedStaleDraftIsNotRedraftedBecauseTheRejectionIsAPersonDecision()
+    {
+        var candidate = await PassedCandidateAsync();
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+        await AgeRunsAsync(candidate);
+        await ExecuteAsync(connectionString, $"UPDATE statement_drafts SET review_status = 'Rejected' WHERE candidate_id = '{candidate}'");
+
+        Assert.Equal(0, await drafts.RequeueStaleAsync(default));
+    }
+
+    [Fact]
+    public async Task APersonSaveDuringTheRedraftCallFailsTheExpectedRevisionCheckAndAppendsNothing()
+    {
+        var candidate = await PassedCandidateAsync(admittedBy: AdmittedDefinition(OwnOffice(Warren)));
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+        await AgeRunsAsync(candidate);
+        Assert.Equal(1, await drafts.RequeueStaleAsync(default));
+        var model = new FakeStatementDraftModel().Reply(async _ =>
+        {
+            await SavePersonRevisionAsync(candidate, 1, "edit-during-redraft");
+            return new AnalysisModelResponse("end_turn", Output(quotes: ["a rent cap for tenants"]), new(900, 100, 0, 0), "req_fixture");
+        });
+
+        await DraftingWorker(model).ExecuteAsync(once: true);
+
+        Assert.Equal([(StatementDraftTask.Task, "Succeeded", "draftDiscarded")], await QueueAsync(candidate, StatementDraftTask.Task));
+        Assert.Equal(2L, await ScalarAsync($"SELECT count(*) FROM statement_revisions WHERE candidate_id = '{candidate}'"));
+        Assert.Equal("Person", await TextAsync($"SELECT author_kind FROM statement_revisions WHERE candidate_id = '{candidate}' AND revision_number = 2"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM statement_analysis_runs WHERE task = '{StatementDraftTask.Task}' AND outcome = 'DraftDiscarded'"));
+    }
+
+    [Fact]
     public async Task ASavedStatementDraftRaisesTheActionRowOfABillThatItsSpeakerSponsorsAndLeavesOtherRowsAlone()
     {
         var article = Article + "\nShe backs H.R. 77 to cap rent.";
@@ -402,6 +493,19 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
             """));
 
         Assert.Equal("ck_statement_drafts_not_drafted", failure.ConstraintName);
+    }
+
+    private Task AgeRunsAsync(string candidate) => ExecuteAsync(connectionString,
+        $"UPDATE statement_analysis_runs SET prompt_version = 'statement-draft-prompt-v1' WHERE candidate_id = '{candidate}' AND task = '{StatementDraftTask.Task}'");
+
+    private async Task SavePersonRevisionAsync(string candidate, int expectedRevision, string key)
+    {
+        var extraction = (await drafts.ReadEvidenceAsync(candidate, default))!.Article.Extraction;
+        var span = new SourceSpan(extraction.ExtractionId, extraction.Text.IndexOf("a rent cap for tenants", StringComparison.Ordinal), 22);
+        var save = new SaveStatementDraft(new PostgresStatementReviewStore(factory),
+            new StatementReviewContextReader(drafts, new StatementSelectionResolver(StatementGateFixtures.Configuration())));
+        await save.ExecuteAsync(Owner, new(candidate, expectedRevision, "Warren edit", "The senator announced a rent cap.", null, null, [Warren], [],
+            [RentIssue], [HousingArea], [span], key));
     }
 
     private StatementGateSettings BigGate => new(StatementGatePrompt.MinimumReservation, 1);
