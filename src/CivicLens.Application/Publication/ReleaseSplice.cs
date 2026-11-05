@@ -4,8 +4,9 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 /// <summary>
-/// Builds a manifest from the tables and takes from the file only what the tables leave out: the names of officials, the six optional entry fields, the
-/// time of the build, and the withdrawals of a release that no withdrawal row covers.
+/// Builds a manifest from the tables and takes from the file only what the tables leave out: the names of officials, the five optional entry fields
+/// that the tables do not hold, the time of the build, and the withdrawals of a release that no withdrawal row covers. The bill line comes from the
+/// table. A file with no bill line keeps none, because a release from before the line has none for any revision.
 /// </summary>
 internal static class ReleaseSplice
 {
@@ -61,7 +62,7 @@ internal static class ReleaseSplice
             YeaCount = fromFile.YeaCount,
             NayCount = fromFile.NayCount,
             Alignment = fromFile.Alignment,
-            BillLine = fromFile.BillLine,
+            BillLine = fromFile.BillLine is null ? null : facts.BillLine,
             Chamber = fromFile.Chamber,
             VoteKind = fromFile.VoteKind,
             Congress = fromFile.Congress,

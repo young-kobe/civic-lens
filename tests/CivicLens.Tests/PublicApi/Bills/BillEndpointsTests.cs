@@ -27,7 +27,8 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
     {
         Issues = ["health", "tax"],
         UntrackedIssues = ["zoning"],
-        Sponsorships = ManySponsorships
+        Sponsorships = ManySponsorships,
+        BillLine = "This bill funds rent aid."
     };
     private static readonly SeededBill B = new('b', "2026-03-02")
     {
@@ -128,6 +129,21 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
         Assert.Equal("2026-03-02", bill.GetProperty("eventDate").GetString());
         Assert.Equal(1, bill.GetProperty("sponsorCount").GetInt32());
         Assert.Equal(4, bill.GetProperty("cosponsorCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task ABillRowAndABillDetailShowTheBillLineOfTheEntryRowAndNullWhenTheBillHasNone()
+    {
+        await using var host = await StartWithBillsAsync(A, B);
+
+        using var page = await GetAsync(host, "/v1/bills");
+        using var detail = await GetAsync(host, $"/v1/bills/{A.RecordId}");
+
+        var lines = page.RootElement.GetProperty("bills").EnumerateArray().ToDictionary(bill => bill.GetProperty("recordId").GetString()![0],
+            bill => bill.GetProperty("billLine"));
+        Assert.Equal("This bill funds rent aid.", lines['a'].GetString());
+        Assert.Equal(JsonValueKind.Null, lines['b'].ValueKind);
+        Assert.Equal("This bill funds rent aid.", detail.RootElement.GetProperty("bill").GetProperty("billLine").GetString());
     }
 
     [Fact]

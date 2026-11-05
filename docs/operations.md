@@ -970,6 +970,8 @@ The bill line needs one rollout command, because carried vote pages and official
 sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --rewrite-entries --rewrite-officials --rewrite-pages
 ```
 
+The rewrite needs a stored entry row for every carried action, and a missing row stops it. So do these steps in this order. Deploy. Run the [entries backfill](#entries-backfill) until it exits with 0 and `openRangesWithoutRow` is 0. Run the rewrite publish, which fills the bill line of the rows of the open ranges at once. Then run `releases entries verify`. The backfill creates the rows that are still missing. Rows of closed ranges from before the line keep a null line. `public_api.bills` and the bills routes show a null `bill_line` for a row until it is filled.
+
 Every publish now reads all release vote revisions. Before the deploy, run `votes revisions verify` and expect exit code 0. One vote revision that is not stored or not backfilled stops every publish.
 
 ### First publication backfill
@@ -994,12 +996,13 @@ The tables `published_entries`, `published_entry_officials`, `published_entry_is
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases entries backfill <limit>
 ```
 
-The limit counts inserted rows. It does not bound the reads: each run reads every state row, every kept manifest that covers a range without a row, and the first record file of each such range. The command reads each kept manifest once, from the oldest to the newest. It takes the entry of a revision from the oldest kept folder of its range. It checks the record file of that folder, and it compares the entry in every later kept folder of the range. A kept folder of the range that omits the revision counts as a difference. It never fixes a value. A row that fails a check is skipped with a reason. A repeat is safe, because the command inserts only missing rows and a commit during the run cannot create a second row.
+The limit counts inserted rows. It does not bound the reads: each run reads every state row, every kept manifest that covers a range without a row, and the first record file of each such range. The command reads each kept manifest once, from the oldest to the newest. It takes the entry of a revision from the oldest kept folder of its range. It checks the record file of that folder, and it compares the entry in every later kept folder of the range. A kept folder of the range that omits the revision counts as a difference. It never fixes a value. A row that fails a check is skipped with a reason. The command also fills the bill line of action rows that hold none, from the same kept folders. It never changes a line that a row holds. A repeat is safe, because the command inserts only missing rows and writes a line only into a null column, so a commit during the run cannot create a second row or a second line.
 
 The command prints JSON with these keys:
 
 - `examined`: the revision ranges without a row at the start.
 - `added`: the rows that this run inserted.
+- `billLinesFilled`: the action rows that had no bill line and got one in this run. The limit does not cap them.
 - `alreadyPresent`: the ranges that already had a row.
 - `skipped`, `skippedByReason`, and `skippedEntries`: the skipped rows, a count for each reason, and the first 50 rows. The reasons are `manifestInvalid`, `recordFileInvalid`, `recordFileDiffers`, `foldersDiffer`, and `firstPublishedMissing`.
 - `openRangesWithoutRow`: the open ranges that still have no row.
@@ -1016,7 +1019,7 @@ This command proves that the entry, state, first publication, and withdrawal tab
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases entries verify
 ```
 
-The command reads each kept manifest once. It writes the file again with no change, and it checks the bytes. Then it checks the records of the state table against the entries of the file. Last, it rebuilds the manifest from the tables and compares the bytes with the file. The rebuild takes only the official names, the five optional entry fields, `publishedAtUtc`, and some withdrawals from the file.
+The command reads each kept manifest once. It writes the file again with no change, and it checks the bytes. Then it checks the records of the state table against the entries of the file. Last, it rebuilds the manifest from the tables and compares the bytes with the file. The rebuild takes the bill line from the table. It takes only the official names, the five other optional entry fields, `publishedAtUtc`, and some withdrawals from the file.
 
 The command prints JSON with these keys:
 
