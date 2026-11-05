@@ -1,0 +1,32 @@
+TASK: a build plan, written to survey/explain-legislation.md, for three owner-approved features that explain what legislation is and what an issue means. Readers today see a bill number, a title, and often a line that code wrote from the title only, because 8,729 of 12,413 bills of the 119th Congress have no Congress.gov (CRS) summary. The owner wants these three features built first, in this order, before any new insight boards.
+
+Feature 1, AI summary from the official bill text. Decisions the owner already accepted (do not reopen them):
+- Code fetches the official bill text (already built: bill_text_versions, text_state on the bill gate; see docs/architecture/bills.md and git log --grep "bill text"). Only bills with no CRS summary get text today.
+- Extend the action draft step. One writer chooses the source in this order: the official CRS summary, then the bill text, then the code-written text. No second drafting path.
+- The model is the cheap model already used for action drafts. It writes 2 or 3 sentences, and each sentence must quote the text; code checks the quotes as citations, like the existing action citations.
+- "Why it matters" covers only what the text states: who it affects and what it changes. No judgment.
+- The prompt reads the first 60,000 characters of the text, and the page says so when it cuts.
+- Code approves after its checks, but only after the owner reads a measured sample of 20 fixed bills. One small paid measure, opt-in and budgeted, with the numbers on the PR, before any backfill. The measure follows docs R-67.
+- Approved public wording: label "AI summary of the bill text. An AI model wrote this. Code checked that each sentence quotes the text." Heading "Why it matters, as the text states it." Source line "Based on: Introduced in House, March 3, 2025. Read the full text on Congress.gov." Cut note "This summary covers the first 60,000 of 412,000 characters. Later sections are not covered."
+- A backfill command for older bills runs after the current draft queue drains, with a drain guard.
+
+Feature 2, show each issue's definition, includes, and excludes from config/issues.json on its public issue page (src/CivicLens.Host/Publication/PublishedFacetPage.razor). The text exists and no reader sees it. The published catalog (PublishedCatalog, PublishedCatalogEntry) carries no definition today. Schema decision D2 (accepted): publish writes release-bound name rows for officials, terms, issues and policy areas, for the public API. Decide where the definition travels (catalog contract field, the D2 issue rows, or both with one owner) and give options.
+
+Feature 3, one shared owner for a short "what this bill does" line, reused beside every bill in vote rows, record tables, insight rows and the later ZIP lookup. Source order: CRS summary, else the AI text summary, else nothing (never the title-only code text as if it were a summary). Find every place that lists a bill today and where the line would come from (the release entries, PublishedRecordEntry, the public_api views per docs R-68).
+
+Report, in this order:
+1. What exists now for each feature, with file:line: the action draft step and prompt versions, the code-written text path, the action revision columns, PublishedAction fields, the action page, the facet page, record tables, the public_api views.
+2. The PR list for all three features, each PR sized (small, medium, large), with what it changes, its tests, and its order. Feature 1 first. Name the precedent each PR follows (git log on origin/main).
+3. Open decisions only where the accepted decisions above leave a real choice. For each: the concrete problem, 2 to 4 options with tradeoffs, the precedent you checked, and a recommendation first.
+4. New public strings that need owner approval, listed exactly.
+Keep the file under 2,500 words.
+
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b survey-explain-legislation origin/main
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+Read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Facts come from file reads and git grep on origin/main; cite file:line for every claim. Do not change code. Prose: ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes.
+Finish, each its own Bash call: git add survey/explain-legislation.md; git commit -m "<one plain sentence>"; git push origin survey-explain-legislation. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only survey-explain-legislation.
+Final message under 1,800 characters: the pushed SHA, the PR list with one line each, and the decision list with one line each.
