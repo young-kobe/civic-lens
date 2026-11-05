@@ -42,24 +42,13 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
             Corrections = build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions, textRewritten)
         };
         PublishedCorrection.ValidateAll(record.Corrections, record.RevisionNumber);
-        var billActionRecordId = BillActionRecordIn(addition.Vote.BillActionRecordIds, build);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
-            (related, cancellationToken) => build.Renderer.RenderVoteAsync(record, billActionRecordId, related, build.Catalog, cancellationToken));
+            (related, billLines, cancellationToken) => build.Renderer.RenderVoteAsync(record, billLines.BillOfVote(recordId), related, build.Catalog, cancellationToken));
     }
 
     public Task<IReadOnlyList<VoteMembership>> MembersAsync(IEnumerable<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         votes.ReadMembersAsync([.. entries.Where(entry => entry.Kind == Kind).Select(PublishedRevisionBinding.Of)],
             cancellationToken);
-
-    public async Task<IReadOnlySet<string>> FindOnBillsOfActionsAsync(IEnumerable<string> actionRecordIds,
-        IEnumerable<PublishedRevisionBinding> releaseRecords, CancellationToken cancellationToken)
-    {
-        var actionIds = actionRecordIds.ToHashSet(StringComparer.Ordinal);
-        ImmutableArray<PublishedRevisionBinding> releaseVotes = [.. releaseRecords.Where(record => record.Kind == Kind)];
-        if (actionIds.Count == 0 || releaseVotes.IsEmpty) return new HashSet<string>();
-        var billActions = await BillActionRecordIdsAsync(releaseVotes, cancellationToken);
-        return billActions.Where(vote => vote.Value.Any(actionIds.Contains)).Select(vote => vote.Key).ToHashSet(StringComparer.Ordinal);
-    }
 
     public Task<IReadOnlyDictionary<string, ImmutableArray<string>>> BillActionRecordIdsAsync(ImmutableArray<PublishedRevisionBinding> revisions,
         CancellationToken cancellationToken) =>
@@ -67,10 +56,5 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
 
     public override Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
         CancellationToken cancellationToken) =>
-        build.Renderer.RenderVoteAsync(Parse<PublishedVote>(json), BillActionRecordIn(build.VoteBillActions.GetValueOrDefault(recordId, []), build),
-            links.Citing(Kind, recordId), build.Catalog, cancellationToken);
-
-    private static string? BillActionRecordIn(ImmutableArray<string> billActionRecordIds, PublicationBuild build) =>
-        billActionRecordIds.FirstOrDefault(id =>
-            build.ReleaseRecords.Any(record => record.Kind == PublishedRecordKind.Action && record.RecordId == id));
+        build.Renderer.RenderVoteAsync(Parse<PublishedVote>(json), build.BillLines.BillOfVote(recordId), links.Citing(Kind, recordId), build.Catalog, cancellationToken);
 }

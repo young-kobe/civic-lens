@@ -362,6 +362,12 @@
             kind.className = "cell-note";
             kind.textContent = source.kinds[hit.kind];
             cell.append(link, kind);
+            if (hit.billLine) {
+                const line = document.createElement("span");
+                line.className = "bill-line";
+                line.textContent = hit.billLine;
+                cell.append(line);
+            }
             return cell;
         },
         officials: hit => hit.officials.map(official => official.name).join(", "),
@@ -431,8 +437,11 @@
             for (const header of sortable) header.setAttribute("aria-sort", state?.header === header ? { asc: "ascending", desc: "descending" }[state.direction] : "none");
             select.value = state && !isDefault(state.header, state.direction) ? `${headers.indexOf(state.header)}:${state.direction}` : "";
         };
+        const lineNote = document.createElement("p");
+        lineNote.className = "muted small";
         const restore = () => {
             running++;
+            lineNote.remove();
             body.replaceChildren(...staticRows);
             showRows(table, true);
             more.hidden = true;
@@ -475,14 +484,18 @@
                 return;
             }
             if (mine !== running) return;
-            if (append) body.append(...rows); else body.replaceChildren(...rows);
+            if (append) body.append(...rows); else { body.replaceChildren(...rows); lineNote.remove(); }
+            if (page.hits.some(hit => hit.billLine) && !document.querySelector(".records-lead")?.textContent.includes(source.billLineNote)) {
+                lineNote.textContent = source.billLineNote;
+                bar.append(lineNote);
+            }
             shown = append ? shown + rows.length : rows.length;
             nextCursor = page.nextCursor;
             more.hidden = nextCursor === null;
             if (pager) pager.hidden = true;
             commit(state);
             const total = source.total, count = Math.min(shown, total);
-            status.textContent = `Showing ${count.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "record" : "records"}, sorted by ${label(current.header, current.direction)}. Sorted rows leave out the kind icon, the party badge, and the vote counts.`;
+            status.textContent = `Showing ${count.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "record" : "records"}, sorted by ${label(current.header, current.direction)}. Sorted rows leave out the kind icon, the party badge, the vote counts, and the bill line of a vote.`;
         };
         const choose = state => {
             if (!state) { commit(null); restore(); return; }

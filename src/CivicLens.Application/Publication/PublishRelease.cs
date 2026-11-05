@@ -82,18 +82,20 @@ public sealed class PublishRelease
         var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster, byCode, firstPublished)
             .WithRemoved(withdrawn).WithReturned(returned).WithBillStatuses(statuses);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
-        var released = build.WithAdded(additions);
         await WithdrawalCascade.RequireNoCitersAsync(releases, loaders, previous, withdrawn, additions, cancellationToken);
-        var pages = await releasePages.PlanAsync(released, additions, request.RewritePages, cancellationToken);
         var replaced = references.Concat(withdrawn).ToHashSet();
         var carried = previous.Entries.Where(entry => !replaced.Contains(new(entry.Kind, entry.RecordId))).ToList();
         if (request.RewriteEntries) carried = await ReleaseEntryRewrite.RebuildAsync(releases, carried, previous, cancellationToken);
+        var released = build.WithAdded(additions);
+        released = released.WithVoteBills([.. carried, .. additions.Select(addition => addition.Entry)], await loaders.Votes.BillActionRecordIdsAsync(
+            [.. released.ReleaseRecords.Where(record => record.Kind == PublishedRecordKind.Vote)], cancellationToken));
+        var pages = await releasePages.PlanAsync(released, additions, request.RewritePages, cancellationToken);
         var removed = previous.Entries.Where(entry => withdrawalNotes.ContainsKey(new(entry.Kind, entry.RecordId))).ToList();
         List<PublishedWithdrawal> withdrawals = [.. previous.Withdrawals.Where(withdrawal => !build.Returned.Any(record => record.RecordId == withdrawal.RecordId)), .. newWithdrawals];
         RequireRoom(previous, carried.Count + additions.Count + withdrawals.Count, additions);
 
         var number = state.LatestReleaseNumber + 1;
-        var (directory, entries) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, statuses, roster, photos, request.RewriteOfficials, request.RewriteEntries, request.RewritePages, cancellationToken);
+        var (directory, entries) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, released.BillLines, statuses, roster, photos, request.RewriteOfficials, request.RewriteEntries, request.RewritePages, cancellationToken);
         var commit = new PublicationCommit(number, state.Active?.ReleaseNumber, directory,
             [.. entries.Select(PublishedRevisionBinding.Of)],
             [.. additions.Select(addition => addition.Expectation)])
@@ -176,7 +178,7 @@ public sealed class PublishRelease
 
     private async Task<(string Directory, List<PublishedRecordEntry> Entries)> StageAsync(int number, DateTimeOffset now,
         PreviousRelease previous, List<PublishedRecordEntry> carried, List<PendingRecord> additions,
-        List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, StagedPage> pages, IReadOnlyDictionary<string, ActionBillStatus> statuses, IReadOnlyList<RosterMember> roster,
+        List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, StagedPage> pages, ReleaseBillLines billLines, IReadOnlyDictionary<string, ActionBillStatus> statuses, IReadOnlyList<RosterMember> roster,
         IReadOnlyList<OfficialPhoto> photos, bool rewriteOfficials, bool rewriteEntries, bool rewritePages, CancellationToken cancellationToken)
     {
         List<PublishedRecordEntry> entries = [.. carried, .. additions.Select(addition => addition.Entry)];
@@ -217,14 +219,14 @@ public sealed class PublishRelease
         await staging.WriteFileAsync(PublicationProtocol.ManifestBrotliPath,
             Compress(manifestJson, stream => new BrotliStream(stream, CompressionLevel.Optimal)), cancellationToken);
         var facets = ReleaseFacets.From(manifest, catalog);
-        await indexPages.WriteAsync(staging, manifest, facets, cancellationToken);
+        await indexPages.WriteAsync(staging, manifest, facets, billLines, cancellationToken);
         await ReleaseBillStatuses.WriteAsync(staging, ReleaseBillStatuses.ActionIdsOf(manifest.Records), statuses, cancellationToken);
         var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, photos, cancellationToken);
         if (additions.Count == 0 && removed.Count == 0 && !rewriteOfficials && !rewriteEntries && !rewritePages && !ReleaseOfficialPages.ChangesProfiles(previous, officials) &&
             !ReleaseBillStatuses.ChangedActionIds(ReleaseBillStatuses.ActionIdsOf(manifest.Records), previous, statuses).Any())
             throw new ArgumentException("Nothing to publish: no record, official, or bill status changed.");
-        var boards = await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, statuses, rewriteOfficials, cancellationToken);
-        await indexPages.WriteHomeAsync(staging, manifest, facets, HomeHighlights.From(manifest, boards, officials.Officials.Length), additions, previous, cancellationToken);
+        var boards = await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, statuses, billLines, rewriteOfficials, cancellationToken);
+        await indexPages.WriteHomeAsync(staging, manifest, facets, HomeHighlights.From(manifest, boards, officials.Officials.Length) with { BillLines = billLines }, additions, previous, cancellationToken);
         await staging.WriteSiteFilesAsync(manifest, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
         return (await staging.CompleteAsync(number, cancellationToken), entries);

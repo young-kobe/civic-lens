@@ -192,6 +192,69 @@ public sealed class PublishVoteTests
     }
 
     [Fact]
+    public async Task TheVotePageAndTheListPagesShowTheBillLineOfTheActionOnItsBillBecauseOneMapOfTheBuildFeedsEveryPage()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid. It adds a cap.");
+        var vote = scenario.AddVote('d', billActionRecordIds: [action]);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
+            new PublishedRecordReference(PublishedRecordKind.Vote, vote), new PublishedRecordReference(PublishedRecordKind.Action, action)));
+
+        Assert.Equal($"<html>vote {vote} bill {action} line This bill funds rent aid.</html>", PageOf(scenario, summary, vote));
+        var index = Encoding.UTF8.GetString(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.AllRecordsPagePath(1)]);
+        Assert.Contains("lines [c:This bill funds rent aid.,d:This bill funds rent aid.]", index, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheHomeHighlightsGetTheSameBillLinesAsTheListPages()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid.");
+        var vote = scenario.AddVote('d', billActionRecordIds: [action]);
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
+            new PublishedRecordReference(PublishedRecordKind.Vote, vote), new PublishedRecordReference(PublishedRecordKind.Action, action)));
+
+        Assert.Equal("This bill funds rent aid.", scenario.Highlights!.BillLines.BillOfVote(vote)!.Line);
+    }
+
+    [Fact]
+    public async Task ACarriedVotePageRendersAgainWhenAnActionWithABillLineJoinsItsBillAndStaysAsItWasWhenAnUnrelatedRecordPublishes()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid.");
+        var vote = scenario.AddVote('d', billActionRecordIds: [action]);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", vote));
+        scenario.PageLayout = " layout-2";
+
+        var unrelated = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
+            new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('b'))));
+        var joined = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3",
+            new PublishedRecordReference(PublishedRecordKind.Action, action)));
+
+        Assert.Equal($"<html>vote {vote} bill </html>", PageOf(scenario, unrelated, vote));
+        Assert.Equal($"<html>vote {vote} bill {action} line This bill funds rent aid. layout-2</html>", PageOf(scenario, joined, vote));
+    }
+
+    [Fact]
+    public async Task ACarriedVotePageStaysAsItWasWhenANewRevisionOfItsActionKeepsTheSameBillLine()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid.");
+        var vote = scenario.AddVote('d', billActionRecordIds: [action]);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
+            new PublishedRecordReference(PublishedRecordKind.Vote, vote), new PublishedRecordReference(PublishedRecordKind.Action, action)));
+        scenario.PageLayout = " layout-2";
+        scenario.ReviseAction(action, 2);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
+            new PublishedRecordReference(PublishedRecordKind.Action, action)));
+
+        Assert.DoesNotContain("layout-2", PageOf(scenario, summary, vote), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ARepublishedVoteReplacesItsCarriedEntryAndKeepsItsFirstPublicationTime()
     {
         var scenario = new PublicationScenario();

@@ -62,7 +62,7 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         });
     }
 
-    public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, ImmutableArray<PublishedRelationship> related,
+    public Task<string> RenderVoteAsync(PublishedVote record, VoteBillLink? bill, ImmutableArray<PublishedRelationship> related,
         PublicationCatalog catalog, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
@@ -70,7 +70,7 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         return RenderAsync<PublishedVotePage>(new Dictionary<string, object?>
         {
             [nameof(PublishedVotePage.Record)] = record,
-            [nameof(PublishedVotePage.BillActionRecordId)] = billActionRecordId,
+            [nameof(PublishedVotePage.Bill)] = bill,
             [nameof(PublishedVotePage.Related)] = related,
             [nameof(PublishedVotePage.Catalog)] = catalog
         });
@@ -130,7 +130,7 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         });
     }
 
-    public Task<string> RenderAllRecordsAsync(PublicationRelease release, int page, CancellationToken cancellationToken)
+    public Task<string> RenderAllRecordsAsync(PublicationRelease release, int page, ReleaseBillLines billLines, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(release);
         ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
@@ -139,6 +139,7 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         {
             [nameof(PublishedAllRecordsPage.Release)] = release,
             [nameof(PublishedAllRecordsPage.Page)] = page,
+            [nameof(PublishedAllRecordsPage.BillLines)] = billLines,
             [nameof(PublishedAllRecordsPage.PublicApiUrl)] = publicApiUrl
         });
     }
@@ -158,7 +159,7 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         });
     }
 
-    public Task<string> RenderFacetPageAsync(ReleaseFacet facet, int page, CancellationToken cancellationToken)
+    public Task<string> RenderFacetPageAsync(ReleaseFacet facet, int page, ReleaseBillLines billLines, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(facet);
         ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
@@ -167,6 +168,7 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         {
             [nameof(PublishedFacetPage.Facet)] = facet,
             [nameof(PublishedFacetPage.Page)] = page,
+            [nameof(PublishedFacetPage.BillLines)] = billLines,
             [nameof(PublishedFacetPage.PublicApiUrl)] = publicApiUrl
         });
     }

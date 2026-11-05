@@ -51,13 +51,9 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task PublicationReadReturnsTheApprovedVoteWithItsExtractionsAndTheActionRecordsOfTheSameBillOnly()
+    public async Task PublicationReadReturnsTheApprovedVoteWithItsExtractions()
     {
         var recordId = await ApprovedVoteAsync();
-        var match = new string('7', 64);
-        await InsertActionDraftAsync(match, "hconres", 14);
-        await InsertActionDraftAsync(new string('8', 64), "hconres", 15);
-        await InsertActionDraftAsync(new string('9', 64), "hr", 14);
 
         var found = await VoteReviews().GetForPublicationAsync([recordId, new string('f', 64)], default);
 
@@ -66,7 +62,6 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal(ReviewStatus.Approved, read.Value.Review.CurrentStatus);
         Assert.Equal(read.Value.Review.CurrentRevision.Citations.Select(span => span.ExtractionId).Distinct().Order(),
             read.Value.Extractions.Keys.Order());
-        Assert.Equal(new[] { match }, read.Value.BillActionRecordIds.ToArray());
     }
 
     [Fact]
@@ -243,16 +238,6 @@ public sealed partial class PostgresHouseVoteTests
             [new(PublishedRecordKind.Vote, recordId, 1), new(PublishedRecordKind.Statement, recordId, 1)], default));
         await Assert.ThrowsAsync<ArgumentException>(() => VoteReviews().FindBillActionRecordIdsOfVotesAsync(
             [new(PublishedRecordKind.Vote, recordId, 1), new(PublishedRecordKind.Statement, recordId, 1)], default));
-    }
-
-    [Fact]
-    public async Task AVoteWithoutAnActionDraftOfItsBillGetsNoActionRecordId()
-    {
-        var recordId = await ApprovedVoteAsync();
-
-        var read = (await VoteReviews().GetForPublicationAsync([recordId], default))[recordId];
-
-        Assert.Empty(read.BillActionRecordIds);
     }
 
     private async Task<string> ApprovedVoteAsync()

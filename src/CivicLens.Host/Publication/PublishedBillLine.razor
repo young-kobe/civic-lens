@@ -1,6 +1,6 @@
-@if (!string.IsNullOrWhiteSpace(Line))
+@if (Line is not null)
 {
-    <span class="bill-line">@Line <span class="bill-line-source">@PublishedRecordLabels.BillLineSource</span></span>
+    <span class="bill-line">@Line</span>
 }
 
 @code {

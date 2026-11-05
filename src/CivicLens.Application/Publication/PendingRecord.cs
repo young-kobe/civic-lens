@@ -4,7 +4,7 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-internal delegate Task<string> PageRenderer(ImmutableArray<PublishedRelationship> related, CancellationToken cancellationToken);
+internal delegate Task<string> PageRenderer(ImmutableArray<PublishedRelationship> related, ReleaseBillLines billLines, CancellationToken cancellationToken);
 
 internal record PendingRecord(PublishedRecordEntry Entry, int ReviewStateVersion, byte[] Json, PageRenderer RenderPage)
 {

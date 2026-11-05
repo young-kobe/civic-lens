@@ -20,9 +20,14 @@
     @if (PublishedVoteView.Bill(Record) is { } bill)
     {
         <Panel Title="Bill" Id="bill-title" Padded="true">
-            @if (BillActionRecordId is not null)
+            @if (Bill is not null)
             {
-                <a href="@PublishedRecordView.RecordLink(BillActionRecordId)">@bill</a>
+                <a href="@PublishedRecordView.RecordLink(Bill.ActionRecordId)">@bill</a>
+                @if (Bill.Line is not null)
+                {
+                    <PublishedBillLine Line="@Bill.Line" />
+                    <PublishedBillLineNote />
+                }
             }
             else
             {
@@ -87,5 +92,5 @@
     [Parameter, EditorRequired] public PublishedVote Record { get; set; } = default!;
     [Parameter, EditorRequired] public PublicationCatalog Catalog { get; set; } = default!;
     [Parameter] public ImmutableArray<PublishedRelationship> Related { get; set; }
-    [Parameter] public string? BillActionRecordId { get; set; }
+    [Parameter] public VoteBillLink? Bill { get; set; }
 }

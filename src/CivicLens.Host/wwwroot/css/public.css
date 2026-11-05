@@ -209,7 +209,6 @@ table[data-paged]:focus { outline: none; }
 .record-text .cell-title { max-width: none; font-weight: 500; line-height: 1.3; }
 .record-text .cell-title::after { content: ""; position: absolute; inset: 0; }
 .bill-line { display: block; margin-top: 2px; font-size: var(--t-sm); overflow-wrap: anywhere; }
-.bill-line-source { color: var(--muted); font-size: var(--t-xs); }
 .record-kind, .record-detail { margin-top: 2px; color: var(--muted); font-size: var(--t-sm); }
 .record-detail { font-size: var(--t-xs); }
 .public-main .record-list .record-cast { flex: none; min-width: 52px; }
