@@ -355,7 +355,8 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
             [.. entries.Select(entry => new ReviewStateExpectation(entry.Kind, entry.RecordId, 1, 1))])
         {
             Withdrawals = [],
-            AddedEntries = [.. entries]
+            AddedEntries = [.. entries],
+            Names = ReleaseNameFixtures.None
         },
             $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
 
