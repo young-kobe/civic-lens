@@ -367,6 +367,7 @@ This is the only navigation index.
 | Sources page | [Collection](architecture/collection.md#sources-page) | `src/CivicLens.Host/Collection/SourcesPage.razor` |
 | CLI collect and import commands | [Collection](architecture/collection.md#cli-composition) | `src/CivicLens.Host/Program.cs` |
 | Member and executive rosters, dated terms, proposals | [Roster](architecture/roster.md#behavior) | `src/CivicLens.Application/Roster/MemberRosterParser.cs` |
+| People tables and the one-time import | [Roster](architecture/roster.md#officials-in-tables) | `src/CivicLens.Infrastructure/People/PostgresPersonRegistryStore.cs` |
 | Member photo jobs, validation, and rows | [Roster](architecture/roster.md#member-photos) | `src/CivicLens.Application/Collection/MemberPhotos/MemberPhotoUrl.cs` |
 | ZCTA to congressional district snapshot | [Districts](architecture/districts.md#behavior) | `src/CivicLens.Application/Districts/ZctaDistrictParser.cs` |
 | Official photo files in a release and the portrait | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleasePhotos.cs` |

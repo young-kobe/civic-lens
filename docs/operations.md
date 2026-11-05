@@ -874,6 +874,14 @@ Enable the source `member-photos` to capture one portrait for each configured me
 
 The output lists the members to add and the configured people who left the roster. Edit the configuration by hand and commit it. Press sources of a new member are a manual step. See [roster](architecture/roster.md#proposals).
 
+### Import people into tables
+
+The tables `people`, `person_setting_revisions`, `person_office_revisions`, and `person_office_revision_terms` hold the people of the configuration. Run the import once after `db migrate`. It needs `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`. It prints `added` and `alreadyKnown`. Two imports at the same time make the second fail with exit code 1 and write nothing, so run it once. A repeat adds nothing. It exits with code 2 and writes nothing when a bioguide ID or a Wikidata ID belongs to another person. No reader uses the tables yet. See [roster](architecture/roster.md#officials-in-tables).
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- people import config/federal-coverage.json
+```
+
 ### Take down a member photo
 
 Set `"withholdPhoto": true` on the person in the collection configuration and commit it. Restart the worker and the review workspace, because each reads the configuration only at start. A worker with the old configuration writes the photo back at its next automatic publish. Then run `releases publish <idempotency-key>` with no record. The command makes a release that applies the flag. When the person has no published record, no release shows their photo. The command then refuses with "Nothing to publish", and nothing needs to be done. The new release shows no photo for the person, and the official page shows the neutral line "No portrait is shown for this official." Collection continues, so removing the flag, restarting, and publishing again restores the newest photo.
