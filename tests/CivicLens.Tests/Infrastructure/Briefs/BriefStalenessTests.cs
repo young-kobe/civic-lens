@@ -108,7 +108,7 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
         _ = await publications.CommitAsync("auth0|owner", new(3, 2, $"000003-{Guid.NewGuid():N}",
             [Binding(PublishedRecordKind.Statement, P1, 1), Binding(PublishedRecordKind.Statement, S1, 1),
              Binding(PublishedRecordKind.Statement, S2, 1), Binding(PublishedRecordKind.DocumentChange, D1, 1)], [])
-        { Withdrawals = [], WithdrawnRecords = [new(PublishedRecordKind.Action, A1)] }, "key-3",
+        { Withdrawals = [], Names = ReleaseNameFixtures.None, WithdrawnRecords = [new(PublishedRecordKind.Action, A1)] }, "key-3",
             Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("payload"))), default);
 
         Assert.Equal(("Pending:0", "Succeeded:3"), (await seeder.BriefQueueStatusAsync(Week), await seeder.BriefQueueStatusAsync(PriorWeek)));
@@ -330,7 +330,7 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
     private Task<PublicationReleaseSummary> CommitAsync(params PublishedRevisionBinding[] records) => CommitAsync(3, 2, records);
 
     private Task<PublicationReleaseSummary> CommitAsync(int number, int baseNumber, params PublishedRevisionBinding[] records) =>
-        publications.CommitAsync("auth0|owner", new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", [.. records], []) { Withdrawals = [] }, $"key-{number}",
+        publications.CommitAsync("auth0|owner", new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", [.. records], []) { Withdrawals = [], Names = ReleaseNameFixtures.None }, $"key-{number}",
             Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("payload"))), default);
 
     private async Task<int> ReadRevisionAsync(string statementId) =>

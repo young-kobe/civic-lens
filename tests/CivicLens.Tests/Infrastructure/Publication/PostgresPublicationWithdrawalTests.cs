@@ -329,7 +329,8 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
         {
             WithdrawnRecords = [.. (withdrawn ?? []).Select(item => new PublishedRecordReference(item.Kind, item.RecordId))],
             Withdrawals = [.. (carried ?? []), .. withdrawn ?? []],
-            AddedEntries = [.. (added ?? []).Select(id => PublishedEntryFixtures.Action(id, First))]
+            AddedEntries = [.. (added ?? []).Select(id => PublishedEntryFixtures.Action(id, First))],
+            Names = ReleaseNameFixtures.None
         };
 
     private async Task SeedActionsAsync(params string[] ids)
