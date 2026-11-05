@@ -1,5 +1,6 @@
 using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Core.Actions;
 using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
@@ -20,6 +21,10 @@ internal sealed class FakeActionDraftStore : FakeAnalysisQueue<ActionDraftRun>, 
 
     public Task<ActionDraftEvidence?> ReadEvidenceAsync(string candidateId, bool withBillText, CancellationToken cancellationToken) =>
         Task.FromResult<ActionDraftEvidence?>(withBillText ? Evidence : Evidence with { BillText = null });
+
+    public Task<string?> NewestCandidateIdAsync(CongressBillListItem bill, CancellationToken cancellationToken) =>
+        Task.FromResult<string?>(bill.Congress == Evidence.Candidate.Congress && bill.Type == Evidence.Candidate.BillType &&
+            bill.Number == Evidence.Candidate.BillNumber ? Evidence.Candidate.CandidateId : null);
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) => throw new NotSupportedException();
 

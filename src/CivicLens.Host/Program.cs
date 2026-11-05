@@ -93,6 +93,7 @@ if (args is [] or ["--help"] or ["help"])
           actions draft requeue <candidate-id|--all>
           actions draft requeue --refused
           actions draft redraft
+          actions text measure <token-cap> <bills-file>
           actions revisions backfill <limit>
           actions revisions verify
           votes draft status
@@ -135,6 +136,8 @@ if (args is [] or ["--help"] or ["help"])
         worker requires CIVIC_LENS_ISSUES_CONFIG when a Congress.gov bill list source is enabled.
         worker also drafts statements when CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also drafts bill actions when CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
+        actions text measure calls the paid model and needs CIVIC_LENS_DATABASE, CIVIC_LENS_REVIEW_OWNER, CIVIC_LENS_ARTIFACT_DIRECTORY, CIVIC_LENS_ISSUES_CONFIG, and ANTHROPIC_API_KEY.
+        actions text measure stops before a call that could pass the token cap, writes a report under artifacts/action-text-measure, and writes no database row.
         worker also drafts House and Senate votes when CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
         worker also drafts relationships when CIVIC_LENS_RELATIONSHIP_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also drafts weekly briefs when CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
@@ -326,6 +329,13 @@ try
             args is ["statements", "regate", ..] ? StatementIssueRubric.FromEnvironment()?.Id : null, GateLabelExport.DefaultRuntimeDirectory());
         executing = true;
         return await statements.ExecuteAsync(args, cancellation.Token);
+    }
+
+    if (ActionTextMeasureCommand.Matches(args))
+    {
+        executing = true;
+        return await ActionTextMeasureCommand.ExecuteAsync(args, () => ActionDraftComposition.CreateMeasure(codeVersion), Path.GetFullPath("artifacts"), Console.Out, TimeProvider.System,
+            cancellation.Token);
     }
 
     if (ActionCommand.Matches(args))

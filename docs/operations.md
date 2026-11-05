@@ -651,6 +651,14 @@ The `worker` command drafts one action record for each bill that has a candidate
 
 Leave `CIVIC_LENS_ACTION_DRAFTING_BILL_TEXT` unset. The setting stays off until the owner reads the measured sample and the publish pull request merges. With the setting on, each text draft waits for a person, and code does not approve it. A person cannot approve it either, until the publish pull request merges. That pull request adds the text citations, the label, and code approval. With the setting off, the step writes the text by code, as before.
 
+The owner measures the text prompt before the setting goes on. The command calls the paid model, so run it on request only. It reads the 20 fixed bills of `config/action-text-measure-bills.json` from the database that `CIVIC_LENS_DATABASE` names. Point it at the dev database. It needs `CIVIC_LENS_REVIEW_OWNER`, `CIVIC_LENS_ARTIFACT_DIRECTORY`, `CIVIC_LENS_ISSUES_CONFIG`, and `ANTHROPIC_API_KEY`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions text measure 1500000 config/action-text-measure-bills.json
+```
+
+The first argument is the spend cap in tokens. The command refuses to start without it. It stops before a call that could pass the cap. Each call of a 60,000 character text reserves about 65,000 tokens, so 20 bills can reserve 1,300,000 tokens. The command writes no database row. It writes the report to `artifacts/action-text-measure/<time>.json`. A bill with no stored text is skipped with its reason. Read each sentence and its quote in the report. Put the totals and your reading of the sample on the pull request, before the publish pull request. See [text measure](architecture/actions.md#text-measure).
+
 Drafting uses Claude Haiku 5.5. The first run can spend up to the daily limit on queued candidates. Start with a low limit. A bill version whose summaries or subjects have closed has up to three queued candidates. Each older one settles as `supersededByNewerCandidate` with no call, also when the newest candidate blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
 
 The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
