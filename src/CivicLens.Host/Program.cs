@@ -405,13 +405,14 @@ try
 
     if (BillBackfillCommand.Matches(args))
     {
-        var (_, owner) = OwnerCommand.ReadEnvironment();
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var jobs = CreateJobs(codeVersion);
         var responses = new ApiResponseReader(CreateDatabase(), new CaptureBodyReader());
         var artifactRoot = PublicationComposition.RequireArtifactRoot();
         executing = true;
         return await new BillBackfillCommand(new BackfillBillSubjects(jobs, jobs, responses, artifactRoot),
-            new BackfillBillStatus(jobs, jobs, responses, artifactRoot), () => new BackfillBillText(jobs, CollectionConfigurationRevision.Create(
+            new BackfillBillStatus(jobs, jobs, responses, artifactRoot), () => new BackfillBillText(jobs, new PostgresActionDraftStore(AnalysisDbContextFactory.Create(connectionString), codeVersion),
+                CollectionConfigurationRevision.Create(
                 ConfigurationFile.ReadCollectionFromEnvironment() ?? throw new ArgumentException("The text backfill requires CIVIC_LENS_COLLECTION_CONFIG."))),
             owner).ExecuteAsync(args, cancellation.Token);
     }

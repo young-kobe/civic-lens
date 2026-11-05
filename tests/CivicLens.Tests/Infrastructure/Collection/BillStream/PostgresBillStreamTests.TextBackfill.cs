@@ -1,3 +1,4 @@
+using CivicLens.Application.Actions;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Tests.Fixtures;
@@ -18,7 +19,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM collection_jobs WHERE idempotency_key LIKE '{VersionsJobKeyPattern}'"));
         Assert.Null(oldRevision.Configuration.SourceOf(ApiParser.CongressBillText));
 
-        Assert.Equal([new BillTextBackfillTarget(detail, SourceId)], await backfill.ListNewestBillsWithoutTextAsync(10, default));
+        Assert.Equal([new BillTextBackfillTarget(detail, SourceId, "119-hr-7")], await backfill.ListNewestBillsWithoutTextAsync(10, default));
         var admitted = await backfill.AdmitTextVersionsChainAsync(BillsWithText(), detail, default);
 
         Assert.True(admitted);
@@ -70,6 +71,26 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task AGateWithANewerGateOfTheSameBillIsNotAdmitted()
+    {
+        var older = await AdmitBillAsync("older", 13, UpdatedAt.AddDays(-1));
+        await AdmitBillAsync("newest", 13);
+
+        Assert.False(await ((IBillTextBackfillStore)store).AdmitTextVersionsChainAsync(BillsWithText(), older, default));
+        Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM collection_jobs WHERE idempotency_key LIKE '{VersionsJobKeyPattern}'"));
+    }
+
+    [Fact]
+    public async Task AVersionsJobThatDetailAdmissionMadeBlocksTheBackfillJob()
+    {
+        var detail = await EnqueueDetailAsync("detail");
+        await AdmitDetailWithTextAsync(detail, DetailBill(UpdatedAt, cosponsors: 0), passed: true);
+
+        Assert.False(await ((IBillTextBackfillStore)store).AdmitTextVersionsChainAsync(BillsWithText(), detail, default));
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM collection_jobs WHERE idempotency_key LIKE '{VersionsJobKeyPattern}'"));
+    }
+
+    [Fact]
     public async Task TheLimitBoundsTheList()
     {
         foreach (var number in new[] { 11, 12, 13 }) await AdmitBillAsync("bill-" + number, number);
@@ -87,10 +108,12 @@ public sealed partial class PostgresBillStreamTests
         var backfill = (IBillTextBackfillStore)store;
         CongressBillListItem[] listed = [new(119, "hr", 12, default), new(119, "hr", 11, default), new(119, "hr", 14, default), new(119, "s", 11, default)];
 
-        var targets = await backfill.ListNewestBillsWithoutTextAsync(listed, default);
+        var listing = await backfill.ListNewestBillsWithoutTextAsync(listed, default);
 
-        Assert.Equal(new[] { eleven, twelve }.Order(), targets.Select(target => target.DetailJobId).Order());
-        Assert.DoesNotContain(summarized, targets.Select(target => target.DetailJobId));
+        Assert.Equal(new[] { eleven, twelve }.Order(), listing.Targets.Select(target => target.DetailJobId).Order());
+        Assert.DoesNotContain(summarized, listing.Targets.Select(target => target.DetailJobId));
+        Assert.Equal([new SkippedBill("119-hr-14", BillTextSkipReason.HasSummary), new SkippedBill("119-s-11", BillTextSkipReason.NoGate)],
+            listing.Skipped.OrderBy(skipped => skipped.BillId));
     }
 
     [Theory]
@@ -103,16 +126,15 @@ public sealed partial class PostgresBillStreamTests
     [InlineData("Blocked", 0)]
     public async Task OnlyQueuedOrLeasedActionDraftsAreCountedAsPending(string status, int expected)
     {
-        var backfill = (IBillTextBackfillStore)store;
-        Assert.Equal(0, await backfill.CountPendingActionDraftsAsync(default));
+        Assert.Equal(0, (await ActionStore().CountAsync(default))[ActionDraftView.Pending]);
         var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
         await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
-        Assert.Equal(1, await backfill.CountPendingActionDraftsAsync(default));
+        Assert.Equal(1, (await ActionStore().CountAsync(default))[ActionDraftView.Pending]);
         var candidate = Assert.Single(await CandidatesAsync());
         if (status == "Running") Assert.NotNull(await ActionStore().TryClaimAsync(candidate.CandidateId, Lease, default));
-        else await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = '{status}', error_code = 'x', attempts = 2");
+        else await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = '{status}', error_code = {(status == "Succeeded" ? "NULL" : "'x'")}, attempts = 2");
 
-        Assert.Equal(expected, await backfill.CountPendingActionDraftsAsync(default));
+        Assert.Equal(expected, (await ActionStore().CountAsync(default))[ActionDraftView.Pending]);
     }
 
     private async Task<string> AdmitBillAsync(string name, int number, DateTimeOffset? updatedAt = null, int summaries = 0)

@@ -1,6 +1,8 @@
+using CivicLens.Application.Actions;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Core.Review;
+using CivicLens.Tests.Application.Actions;
 using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection.Bills;
@@ -10,16 +12,14 @@ public sealed class BackfillBillTextTests
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
     private static readonly CollectionConfigurationRevision WithText = CollectionConfigurationRevision.Create(BillTextFixtures.Configuration());
 
-    [Theory]
-    [InlineData(1)]
-    [InlineData(3)]
-    public async Task APendingActionDraftRefusesTheRunAndAdmitsNothing(int pending)
+    [Fact]
+    public async Task APendingActionDraftRefusesTheRunAndAdmitsNothing()
     {
-        var store = new RecordingStore([new("detail", "congress-bills")]) { Pending = pending };
+        var store = new RecordingStore([Target("detail")]);
 
-        var result = await new BackfillBillText(store, WithText).ExecuteAsync(Owner, 10);
+        var result = await Backfill(store, draftPending: true).ExecuteAsync(Owner, 10);
 
-        Assert.Equal(new BillTextBackfillResult(pending, 0, 0), result);
+        Assert.Equal((1, 0, 0), Counts(result));
         Assert.Empty(store.Admitted);
         Assert.Null(store.ListedLimit);
     }
@@ -27,11 +27,11 @@ public sealed class BackfillBillTextTests
     [Fact]
     public async Task TheIdListRunIsRefusedTooWhileADraftIsPending()
     {
-        var store = new RecordingStore([new("detail", "congress-bills")]) { Pending = 2 };
+        var store = new RecordingStore([Target("detail")]);
 
-        var result = await new BackfillBillText(store, WithText).ExecuteAsync(Owner, [new(119, "hr", 7, default)]);
+        var result = await Backfill(store, draftPending: true).ExecuteAsync(Owner, [new(119, "hr", 7, default)]);
 
-        Assert.Equal(new BillTextBackfillResult(2, 0, 0), result);
+        Assert.Equal((1, 0, 0), Counts(result));
         Assert.Empty(store.Admitted);
         Assert.Null(store.ListedBills);
     }
@@ -39,11 +39,12 @@ public sealed class BackfillBillTextTests
     [Fact]
     public async Task TheLimitGoesToTheStoreAndEachBillIsAdmittedUnderTheRevisionOfTheCurrentConfiguration()
     {
-        var store = new RecordingStore([new("first", "congress-bills"), new("second", "congress-bills")]);
+        var store = new RecordingStore([Target("first"), Target("second")]);
 
-        var result = await new BackfillBillText(store, WithText).ExecuteAsync(Owner, 2);
+        var result = await Backfill(store).ExecuteAsync(Owner, 2);
 
-        Assert.Equal(new BillTextBackfillResult(0, 2, 2), result);
+        Assert.Equal((0, 2, 2), Counts(result));
+        Assert.Empty(result.Skipped);
         Assert.Equal(2, store.ListedLimit);
         Assert.Equal(["first", "second"], store.Admitted.Select(call => call.DetailJobId));
         Assert.All(store.Admitted, call => Assert.Equal((WithText.Id, "congress-bills"), (call.Source.Revision.Id, call.Source.SourceId)));
@@ -52,34 +53,47 @@ public sealed class BackfillBillTextTests
     [Fact]
     public async Task ABillThatTheStoreDoesNotAdmitIsExaminedButNotCounted()
     {
-        var store = new RecordingStore([new("first", "congress-bills"), new("second", "congress-bills")]) { AdmitsOnly = "second" };
+        var store = new RecordingStore([Target("first"), Target("second")]) { AdmitsOnly = "second" };
 
-        var result = await new BackfillBillText(store, WithText).ExecuteAsync(Owner, 5);
+        var result = await Backfill(store).ExecuteAsync(Owner, 5);
 
-        Assert.Equal(new BillTextBackfillResult(0, 2, 1), result);
+        Assert.Equal((0, 2, 1), Counts(result));
+        Assert.Equal([new SkippedBill("119-hr-first", BillTextSkipReason.NotAdmitted)], result.Skipped);
     }
 
     [Fact]
     public async Task TheIdListGoesToTheStoreAsGiven()
     {
-        var store = new RecordingStore([new("listed", "congress-bills")]);
+        var store = new RecordingStore([Target("listed")]);
         CongressBillListItem[] bills = [new(119, "hr", 7, default), new(119, "s", 9, default)];
 
-        var result = await new BackfillBillText(store, WithText).ExecuteAsync(Owner, bills);
+        var result = await Backfill(store).ExecuteAsync(Owner, bills);
 
-        Assert.Equal(new BillTextBackfillResult(0, 1, 1), result);
+        Assert.Equal((0, 1, 1), Counts(result));
         Assert.Equal(bills, store.ListedBills);
+        Assert.Equal([new SkippedBill("119-s-9", BillTextSkipReason.HasSummary)], result.Skipped);
     }
 
     [Fact]
     public async Task AConfigurationWithoutAnEnabledTextSourceIsRefusedBeforeAnyRead()
     {
-        var store = new RecordingStore([new("detail", "congress-bills")]);
+        var store = new RecordingStore([Target("detail")]);
         var disabled = CollectionConfigurationRevision.Create(BillTextFixtures.Configuration(enabled: false));
 
-        await Assert.ThrowsAsync<ArgumentException>(() => new BackfillBillText(store, disabled).ExecuteAsync(Owner, 10));
+        await Assert.ThrowsAsync<ArgumentException>(() => new BackfillBillText(store, Drafts(), disabled).ExecuteAsync(Owner, 10));
 
-        Assert.False(store.Counted);
+        Assert.False(store.Listed);
+        Assert.Empty(store.Admitted);
+    }
+
+    [Fact]
+    public async Task ASourceThatTheConfigurationDoesNotHoldFailsBeforeAnyAdmission()
+    {
+        var store = new RecordingStore([Target("first"), new("second", "gone-source", "119-hr-second")]);
+
+        var failure = await Assert.ThrowsAsync<ArgumentException>(() => Backfill(store).ExecuteAsync(Owner, 5));
+
+        Assert.Contains("gone-source", failure.Message);
         Assert.Empty(store.Admitted);
     }
 
@@ -87,39 +101,47 @@ public sealed class BackfillBillTextTests
     public async Task OnlyTheOwnerRunsItTheLimitMustBePositiveAndTheListMustHoldABill()
     {
         var store = new RecordingStore([]);
-        var backfill = new BackfillBillText(store, WithText);
+        var backfill = Backfill(store);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => backfill.ExecuteAsync(new ReviewActor("auth0|reviewer", ReviewRole.Reviewer), 10));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => backfill.ExecuteAsync(Owner, 0));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => backfill.ExecuteAsync(Owner, []));
     }
 
+    private static BillTextBackfillTarget Target(string detail) => new(detail, "congress-bills", "119-hr-" + detail);
+
+    private static BackfillBillText Backfill(RecordingStore store, bool draftPending = false) => new(store, Drafts(draftPending), WithText);
+
+    private static FakeActionDraftStore Drafts(bool pending = false)
+    {
+        var drafts = new FakeActionDraftStore(ActionBillWorld.Create().Evidence());
+        if (!pending) drafts.Drain();
+        return drafts;
+    }
+
+    private static (int Pending, int Examined, int Admitted) Counts(BillTextBackfillResult result) =>
+        (result.PendingActionDrafts, result.Examined, result.Admitted);
+
     private sealed class RecordingStore(BillTextBackfillTarget[] targets) : IBillTextBackfillStore
     {
-        public int Pending { get; init; }
         public string? AdmitsOnly { get; init; }
-        public bool Counted { get; private set; }
+        public bool Listed { get; private set; }
         public int? ListedLimit { get; private set; }
         public IReadOnlyList<CongressBillListItem>? ListedBills { get; private set; }
         public List<(ConfiguredCollectionSource Source, string DetailJobId)> Admitted { get; } = [];
 
-        public Task<int> CountPendingActionDraftsAsync(CancellationToken cancellationToken)
-        {
-            Counted = true;
-            return Task.FromResult(Pending);
-        }
-
         public Task<IReadOnlyList<BillTextBackfillTarget>> ListNewestBillsWithoutTextAsync(int limit, CancellationToken cancellationToken)
         {
+            Listed = true;
             ListedLimit = limit;
             return Task.FromResult<IReadOnlyList<BillTextBackfillTarget>>(targets);
         }
 
-        public Task<IReadOnlyList<BillTextBackfillTarget>> ListNewestBillsWithoutTextAsync(IReadOnlyList<CongressBillListItem> bills,
-            CancellationToken cancellationToken)
+        public Task<BillTextListing> ListNewestBillsWithoutTextAsync(IReadOnlyList<CongressBillListItem> bills, CancellationToken cancellationToken)
         {
+            Listed = true;
             ListedBills = bills;
-            return Task.FromResult<IReadOnlyList<BillTextBackfillTarget>>(targets);
+            return Task.FromResult(new BillTextListing(targets, [new("119-s-9", BillTextSkipReason.HasSummary)]));
         }
 
         public Task<bool> AdmitTextVersionsChainAsync(ConfiguredCollectionSource source, string detailJobId, CancellationToken cancellationToken)
