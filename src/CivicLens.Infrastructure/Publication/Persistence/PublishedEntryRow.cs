@@ -25,6 +25,7 @@ internal sealed class PublishedEntryRow
     public string? SourceHost { get; set; }
     public DateOnly? EventDate { get; set; }
     public string? BillTitle { get; set; }
+    public string? BillLine { get; set; }
     public PublishedRelationshipType? LinkType { get; set; }
     public string? StatementRecordId { get; set; }
     public string? StatementKind { get; set; }

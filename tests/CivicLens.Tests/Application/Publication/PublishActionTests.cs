@@ -25,6 +25,78 @@ public sealed class PublishActionTests
     }
 
     [Fact]
+    public async Task TheEntryLineIsTheFirstSentenceOfTheCrsSummaryBecauseOneRowNeedsOneShortLine()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid for veterans. It also sets a cap on fees.");
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
+
+        Assert.Equal("This bill funds rent aid for veterans.", Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine);
+    }
+
+    [Fact]
+    public async Task AnAbbreviationInTheSummaryDoesNotEndTheLineBecauseTheNextWordIsNotACapital()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c', summaryText: "This bill amends 5 U.S.C. to fund aid. It adds a cap.");
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
+
+        Assert.Equal("This bill amends 5 U.S.C. to fund aid.", Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine);
+    }
+
+    [Fact]
+    public async Task ATitleLineWithNoFinalPunctuationIsSkippedBecauseItIsNotASentence()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c', summaryText: "Veterans Rent Aid Act\nThis bill funds rent aid.");
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
+
+        Assert.Equal("This bill funds rent aid.", Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine);
+    }
+
+    [Fact]
+    public async Task ALongFirstSentenceIsCutAtAWordBoundaryWithinTheCap()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c', summaryText: string.Join(' ', Enumerable.Repeat("housing", 60)) + ".");
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
+
+        var line = Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine!;
+        Assert.InRange(line.Length, 1, PublishedRecordEntry.MaximumBillLineLength);
+        Assert.Equal(string.Join(' ', Enumerable.Repeat("housing", line.Split(' ').Length)), line);
+        Assert.True(line.Length > PublishedRecordEntry.MaximumBillLineLength - "housing".Length - 1);
+    }
+
+    [Fact]
+    public async Task AnActionWithNoCrsSummaryHasNoLineAndNeverShowsTheActionTextInItsPlace()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c');
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
+
+        var record = JsonSerializer.Deserialize<PublishedAction>(
+            scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(action)], PublicationProtocol.JsonOptions)!;
+        Assert.NotEmpty(record.Summary);
+        Assert.Null(Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine);
+    }
+
+    [Fact]
+    public async Task ASummaryWithNoSentenceHasNoLine()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c', summaryText: "");
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
+
+        Assert.Null(Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine);
+    }
+
+    [Fact]
     public async Task APersonWrittenActionPublishesWithPersonTextOriginSoThePageNeverCallsItAnAiSummary()
     {
         var scenario = new PublicationScenario();

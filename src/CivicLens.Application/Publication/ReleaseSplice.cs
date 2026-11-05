@@ -4,7 +4,7 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 /// <summary>
-/// Builds a manifest from the tables and takes from the file only what the tables leave out: the names of officials, the five optional entry fields, the
+/// Builds a manifest from the tables and takes from the file only what the tables leave out: the names of officials, the optional entry fields that no row holds, the
 /// time of the build, and the withdrawals of a release that no withdrawal row covers.
 /// </summary>
 internal static class ReleaseSplice
@@ -52,6 +52,7 @@ internal static class ReleaseSplice
             SourceHost = facts.SourceHost,
             EventDate = facts.EventDate,
             BillTitle = facts.BillTitle,
+            BillLine = facts.BillLine,
             LinkType = facts.LinkType,
             StatementRecordId = facts.StatementRecordId,
             TargetKind = facts.TargetKind,

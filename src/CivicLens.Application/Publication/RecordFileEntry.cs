@@ -9,7 +9,7 @@ internal static class RecordFileEntry
     {
         PublishedRecordKind.DocumentChange => Of<PublishedDocumentChange>(json, record => { record.Validate(); return record.ToEntry(); }),
         PublishedRecordKind.Statement => Of<PublishedStatement>(json, record => { record.Validate(); return record.ToEntry(); }),
-        PublishedRecordKind.Action => Of<PublishedAction>(json, record => { record.Validate(); return record.ToEntry(); }),
+        PublishedRecordKind.Action => Of<PublishedAction>(json, record => { record.Validate(); return BillLine.EntryOf(record); }),
         PublishedRecordKind.Brief => Of<PublishedBrief>(json, record => { record.Validate(); return record.ToEntry(); }),
         PublishedRecordKind.Vote => Of<PublishedVote>(json, record => { record.Validate(); return record.ToEntry(); }),
         PublishedRecordKind.Relationship => Of<PublishedRelationship>(json, record => { record.Validate(); return record.ToEntry(); }),

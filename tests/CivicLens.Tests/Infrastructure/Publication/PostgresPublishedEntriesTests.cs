@@ -207,6 +207,8 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         { "ck_published_entries_source_host", ["source_host", "'  '"] },
         { "ck_published_entries_bill_title", ["bill_title", "NULL"] },
         { "ck_published_entries_bill_title", [.. AsVote, "bill_title", "'A title'"] },
+        { "ck_published_entries_bill_line", ["bill_line", "'  '"] },
+        { "ck_published_entries_bill_line", [.. AsVote, "bill_line", "'A line.'"] },
         { "ck_published_entries_document_type", ["document_type", "'Notice'"] },
         { "ck_published_entries_document_type", [.. AsExecutiveAction, "document_type", "NULL"] },
         { "ck_published_entries_document_type", [.. AsExecutiveAction, "document_type", "'Order'"] },

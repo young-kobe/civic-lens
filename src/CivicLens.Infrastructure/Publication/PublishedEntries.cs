@@ -79,13 +79,13 @@ internal static class PublishedEntries
         var columns = revisionColumns.SelectMany(pair => new[] { pair.RecordId, pair.RevisionNumber });
         var values = kinds.SelectMany(kind => new[] { $"CASE WHEN k.kind = '{kind}' THEN k.record_id END", $"CASE WHEN k.kind = '{kind}' THEN k.revision_number END" });
         return $$"""
-            INSERT INTO published_entries (kind, record_id, revision_number, {{string.Join(", ", columns)}}, headline, source_host, event_date, bill_title,
+            INSERT INTO published_entries (kind, record_id, revision_number, {{string.Join(", ", columns)}}, headline, source_host, event_date, bill_title, bill_line,
                 link_type, statement_record_id, target_kind, target_record_id, document_type)
-            SELECT k.kind, k.record_id, k.revision_number, {{string.Join(", ", values)}}, k.headline, k.source_host, k.event_date, k.bill_title,
+            SELECT k.kind, k.record_id, k.revision_number, {{string.Join(", ", values)}}, k.headline, k.source_host, k.event_date, k.bill_title, k.bill_line,
                 k.link_type, k.statement_record_id, k.target_kind, k.target_record_id, k.document_type
             FROM unnest({0}::text[], {1}::text[], {2}::int[], {3}::text[], {4}::text[], {5}::date[], {6}::text[], {7}::text[], {8}::text[],
-                {9}::text[], {10}::text[], {11}::text[])
-                AS k(kind, record_id, revision_number, headline, source_host, event_date, bill_title, link_type, statement_record_id, target_kind,
+                {9}::text[], {10}::text[], {11}::text[], {12}::text[])
+                AS k(kind, record_id, revision_number, headline, source_host, event_date, bill_title, bill_line, link_type, statement_record_id, target_kind,
                     target_record_id, document_type)
             ON CONFLICT DO NOTHING
             RETURNING kind AS "Kind", record_id AS "RecordId", revision_number AS "RevisionNumber"
@@ -141,7 +141,7 @@ internal static class PublishedEntries
 
     private static string Serialize(PublishedEntryFacts facts) => JsonSerializer.Serialize(facts);
 
-    private static PublishedEntryFacts FactsOf(PublishedRecordEntry entry) => new(entry.Headline, entry.SourceHost, entry.EventDate, entry.BillTitle, entry.LinkType,
+    private static PublishedEntryFacts FactsOf(PublishedRecordEntry entry) => new(entry.Headline, entry.SourceHost, entry.EventDate, entry.BillTitle, entry.BillLine, entry.LinkType,
         entry.StatementRecordId, entry.TargetKind, entry.TargetRecordId, entry.DocumentType,
         [.. entry.Officials.Select(official => official.Id)], entry.MatchedOfficialId, entry.IssueIds, entry.PolicyAreaIds);
 
@@ -161,7 +161,7 @@ internal static class PublishedEntries
         return rows.ToDictionary(row => (row.Kind, row.RecordId, row.RevisionNumber), row =>
         {
             var key = (row.Kind, row.RecordId, row.RevisionNumber);
-            return new PublishedEntryFacts(row.Headline, row.SourceHost, row.EventDate, row.BillTitle, row.LinkType, row.StatementRecordId,
+            return new PublishedEntryFacts(row.Headline, row.SourceHost, row.EventDate, row.BillTitle, row.BillLine, row.LinkType, row.StatementRecordId,
                 row.TargetKind is null ? null : KindOf(row.TargetKind), row.TargetRecordId, row.DocumentType, [.. officials[key].Select(official => official.OfficialId)],
                 officials[key].SingleOrDefault(official => official.IsMatched)?.OfficialId,
                 [.. issues[key].Select(issue => issue.Value)], [.. policyAreas[key].Select(area => area.Value)]);
@@ -185,7 +185,8 @@ internal static class PublishedEntries
         entries.Select(entry => PublishedRecordReference.NameOf(entry.Kind)).ToArray(), entries.Select(entry => entry.RecordId).ToArray(),
         entries.Select(entry => entry.RevisionNumber).ToArray(), entries.Select(entry => entry.Headline).ToArray(),
         entries.Select(entry => entry.SourceHost).ToArray(), entries.Select(entry => entry.EventDate).ToArray(),
-        entries.Select(entry => entry.BillTitle).ToArray(), entries.Select(entry => entry.LinkType?.ToString()).ToArray(),
+        entries.Select(entry => entry.BillTitle).ToArray(), entries.Select(entry => entry.BillLine).ToArray(),
+        entries.Select(entry => entry.LinkType?.ToString()).ToArray(),
         entries.Select(entry => entry.StatementRecordId).ToArray(),
         entries.Select(entry => entry.TargetKind is { } target ? PublishedRecordReference.NameOf(target) : null).ToArray(),
         entries.Select(entry => entry.TargetRecordId).ToArray(), entries.Select(entry => entry.DocumentType?.ToString()).ToArray()

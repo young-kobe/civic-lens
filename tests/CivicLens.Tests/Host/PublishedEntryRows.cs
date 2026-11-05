@@ -15,7 +15,7 @@ public static class PublishedEntryRows
         var entries = new List<PublishedRecordEntry>();
         await using var command = new NpgsqlCommand("""
             SELECT e.kind, e.record_id, e.revision_number, e.headline, p.first_published_at_utc_ticks, e.source_host, e.event_date, e.bill_title,
-                e.link_type, e.statement_record_id, e.target_kind, e.target_record_id, e.document_type
+                e.link_type, e.statement_record_id, e.target_kind, e.target_record_id, e.document_type, e.bill_line
             FROM published_entries e JOIN published_records p ON p.kind = e.kind AND p.record_id = e.record_id
             ORDER BY e.kind, e.record_id, e.revision_number
             """, connection);
@@ -40,6 +40,7 @@ public static class PublishedEntryRows
                 TargetRecordId = Text(reader, 11),
                 MatchedOfficialId = officials[key].Select(value => value.Split('|')).SingleOrDefault(parts => parts[1] == "true")?.ElementAt(0),
                 DocumentType = Parse<PublishedExecutiveActionKind>(Text(reader, 12)),
+                BillLine = Text(reader, 13),
                 Officials = [.. officials[key].Select(value => value.Split('|')).Select(parts => new PublishedOfficial { Id = parts[0], Name = string.Empty })],
                 IssueIds = [.. issues[key]],
                 PolicyAreaIds = [.. policyAreas[key]]

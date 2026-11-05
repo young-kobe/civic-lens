@@ -4,6 +4,7 @@ public sealed record PublishedRecordEntry
 {
     public const int MaximumFilterValues = 64;
     public const int MaximumFilterValueLength = 256;
+    public const int MaximumBillLineLength = 200;
 
     public required PublishedRecordKind Kind { get; init; }
     public required string RecordId { get; init; }
@@ -16,6 +17,7 @@ public sealed record PublishedRecordEntry
     public string? SourceHost { get; init; }
     public DateOnly? EventDate { get; init; }
     public string? BillTitle { get; init; }
+    public string? BillLine { get; init; }
     public PublishedRelationshipType? LinkType { get; init; }
     public string? StatementRecordId { get; init; }
     public PublishedRecordKind? TargetKind { get; init; }
@@ -47,6 +49,8 @@ public sealed record PublishedRecordEntry
             throw new InvalidDataException("A vote manifest entry holds both Yea and Nay counts or none, and an alignment only with them. Other entries hold none.");
         if (!HasValidChamber)
             throw new InvalidDataException("A vote manifest entry may name its chamber. Other entries name none.");
+        if (!HasValidBillLine)
+            throw new InvalidDataException($"An action manifest entry may hold a bill line of 1 to {MaximumBillLineLength} characters. Other entries hold none.");
         if (!HasValidCosponsors)
             throw new InvalidDataException(
                 $"An action manifest entry may hold at most {PublishedAction.MaximumSponsorships} distinct cosponsors. Other entries hold none.");
@@ -59,6 +63,9 @@ public sealed record PublishedRecordEntry
 
     private bool HasValidChamber =>
         Chamber is null || Kind == PublishedRecordKind.Vote && Enum.IsDefined(Chamber.Value);
+
+    private bool HasValidBillLine =>
+        BillLine is null || Kind == PublishedRecordKind.Action && !string.IsNullOrWhiteSpace(BillLine) && BillLine.Length <= MaximumBillLineLength;
 
     private bool HasValidCosponsors =>
         CosponsorIds is null ||
