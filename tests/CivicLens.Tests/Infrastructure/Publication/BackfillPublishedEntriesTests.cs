@@ -21,6 +21,7 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
 {
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
     private static readonly string StatementId = new('1', 64);
+    private const string Line = "This bill funds rent aid.";
     private readonly FakeReleaseDirectory releases = new();
     private readonly Dictionary<int, string> folders = [];
     private string connectionString = null!;
@@ -102,7 +103,7 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
         var action = await SeedActionAsync('a');
         await AddReleasesAsync(1);
         await AddRangeAsync(action, 1, null);
-        Keep(1, Listed(action));
+        Keep(1, Listed(action, action.ToEntry() with { BillLine = Line }));
         await RunAsync(10);
         var reads = releases.ReadPaths.Count;
 
@@ -111,6 +112,78 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
         Assert.Equal((0, 0, 1, 0, 0), (rerun.Examined, rerun.Added, rerun.AlreadyPresent, rerun.Skipped, rerun.OpenRangesWithoutRow));
         Assert.Equal(reads, releases.ReadPaths.Count);
         Assert.Equal(["1"], await ReadAsync("SELECT count(*) FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task ANewRowTakesTheBillLineThatAnyKeptFolderOfItsRangeHoldsBecauseAnOlderFolderHoldsNone()
+    {
+        var action = await SeedActionAsync('a');
+        await AddReleasesAsync(2);
+        await AddRangeAsync(action, 1, null);
+        Keep(1, Listed(action));
+        Keep(2, Listed(action, action.ToEntry() with { BillLine = Line }));
+
+        var result = await RunAsync(10);
+
+        Assert.Equal((1, 0, 0), (result.Added, result.BillLinesFilled, result.Skipped));
+        Assert.Equal([Line], await ReadAsync("SELECT bill_line FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task ARowWithNoBillLineGetsTheLineOfTheKeptFoldersAndAnEntryWithNoLineStaysAsItIsBecauseTheFoldersHoldNone()
+    {
+        var withLine = await SeedActionAsync('a');
+        var withoutLine = await SeedActionAsync('b');
+        await AddReleasesAsync(2);
+        foreach (var action in new[] { withLine, withoutLine }) await AddRangeAsync(action, 1, null);
+        Keep(1, Listed(withLine), Listed(withoutLine));
+        await RunAsync(10);
+        Keep(2, Listed(withLine, withLine.ToEntry() with { BillLine = Line }), Listed(withoutLine));
+
+        var result = await RunAsync(10);
+
+        Assert.Equal((0, 1, 0), (result.Added, result.BillLinesFilled, result.Skipped));
+        Assert.Equal([$"{withLine.RecordId}|{Line}", $"{withoutLine.RecordId}|none"], await ReadAsync(
+            "SELECT record_id || '|' || coalesce(bill_line, 'none') FROM published_entries ORDER BY bill_line NULLS LAST"));
+    }
+
+    [Fact]
+    public async Task ARowThatHoldsABillLineIsNeverChangedAndNoManifestIsReadForItBecauseTheLineIsWrittenOnce()
+    {
+        var action = await SeedActionAsync('a');
+        await AddReleasesAsync(2);
+        await AddRangeAsync(action, 1, null);
+        Keep(1, Listed(action, action.ToEntry() with { BillLine = Line }));
+        await RunAsync(10);
+        Keep(2, Listed(action, action.ToEntry() with { BillLine = "This bill funds school meals." }));
+        var reads = releases.ReadPaths.Count;
+
+        var result = await RunAsync(10);
+
+        Assert.Equal((0, 0, 0), (result.Added, result.BillLinesFilled, result.Skipped));
+        Assert.Equal(reads, releases.ReadPaths.Count);
+        Assert.Equal([Line], await ReadAsync("SELECT bill_line FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task TwoKeptFoldersThatHoldDifferentBillLinesBlockTheRangeAndNoLineIsWrittenBecauseTheBackfillNeverPicksAValue()
+    {
+        var newRow = await SeedActionAsync('a');
+        var oldRow = await SeedActionAsync('b');
+        await AddReleasesAsync(3);
+        await AddRangeAsync(oldRow, 1, null);
+        Keep(1, Listed(oldRow));
+        await RunAsync(10);
+        await AddRangeAsync(newRow, 2, null);
+        Keep(2, Listed(newRow, newRow.ToEntry() with { BillLine = Line }), Listed(oldRow, oldRow.ToEntry() with { BillLine = Line }));
+        Keep(3, Listed(newRow, newRow.ToEntry() with { BillLine = "This bill funds school meals." }),
+            Listed(oldRow, oldRow.ToEntry() with { BillLine = "This bill funds school meals." }));
+
+        var result = await RunAsync(10);
+
+        Assert.Equal((0, 0, 2), (result.Added, result.BillLinesFilled, result.Skipped));
+        Assert.Equal(new Dictionary<string, int> { ["foldersDiffer"] = 2 }, result.SkippedByReason);
+        Assert.Equal(["none"], await ReadAsync("SELECT DISTINCT coalesce(bill_line, 'none') FROM published_entries"));
     }
 
     [Fact]

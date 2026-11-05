@@ -121,6 +121,17 @@ public sealed class PostgresPublicationStore : IPublicationStore
         return created;
     }
 
+    public async Task<int> FillBillLinesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var filled = await PublishedEntries.FillBillLinesAsync(db, entries,
+            "A commit or another run wrote this row with another bill line or other facts than the kept folder. Compare the row with the kept folders before you run the backfill again.",
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return filled;
+    }
+
     public async Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, Func<string, CancellationToken, Task> requireFiles,
         CancellationToken cancellationToken)
     {

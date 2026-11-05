@@ -63,7 +63,7 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
     }
 
     [Fact]
-    public async Task AnActionEntryWithABillLineRebuildsByteForByteBecauseTheSpliceTakesTheLineFromTheFile()
+    public async Task AnActionEntryWithABillLineRebuildsByteForByteBecauseTheBackfillFilledTheLineAndTheSpliceTakesItFromTheTable()
     {
         var action = await SeedActionAsync('a');
         await AddReleasesAsync(1);
@@ -75,6 +75,41 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
 
         Assert.Equal(0, exit);
         Assert.Equal(0, json.GetProperty("failedReleases").GetArrayLength());
+        Assert.Equal(["This bill funds rent aid."], await ReadAsync("SELECT bill_line FROM published_entries"));
+    }
+
+    [Theory]
+    [InlineData("bill_line = 'This bill funds school meals.'")]
+    [InlineData("bill_line = NULL")]
+    public async Task ABillLineThatTheTableHoldsDifferentlyFromTheFileFailsTheReleaseBecauseTheTableOwnsTheLine(string change)
+    {
+        var action = await SeedActionAsync('a');
+        await AddReleasesAsync(1);
+        await AddRangeAsync(action, 1, null);
+        Keep(1, [new SampleRecord(action.ToEntry() with { BillLine = "This bill funds rent aid." }, action)], []);
+        await FillRowsAsync();
+        await ExecuteAsync($"UPDATE published_entries SET {change} WHERE record_id = '{action.RecordId}'");
+
+        var (exit, json) = await RunCommandAsync();
+
+        Assert.Equal(1, exit);
+        Assert.Equal(1, json.GetProperty("failedByReason").GetProperty("bytesDiffer").GetInt32());
+    }
+
+    [Fact]
+    public async Task ABillLineInTheTableIsNotAddedToAReleaseFileThatHoldsNoneBecauseAReleaseFromBeforeTheLineHasNone()
+    {
+        var action = await SeedActionAsync('a');
+        await AddReleasesAsync(2);
+        await AddRangeAsync(action, 1, null);
+        Keep(1, action);
+        Keep(2, [new SampleRecord(action.ToEntry() with { BillLine = "This bill funds rent aid." }, action)], []);
+        await FillRowsAsync();
+
+        var (exit, json) = await RunCommandAsync();
+
+        Assert.Equal(0, exit);
+        Assert.Equal(2, json.GetProperty("passed").GetInt32());
     }
 
     [Fact]

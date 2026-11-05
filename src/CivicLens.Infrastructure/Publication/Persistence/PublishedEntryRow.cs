@@ -31,4 +31,5 @@ internal sealed class PublishedEntryRow
     public string? TargetKind { get; set; }
     public string? TargetRecordId { get; set; }
     public PublishedExecutiveActionKind? DocumentType { get; set; }
+    public string? BillLine { get; set; }
 }

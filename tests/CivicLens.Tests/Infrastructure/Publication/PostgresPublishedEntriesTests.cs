@@ -76,15 +76,53 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
     }
 
     [Fact]
-    public async Task APublishOfAnOlderActionRevisionAgainWithABillLineSucceedsBecauseTheRowHoldsNoLine()
+    public async Task ACommitWritesTheBillLineOfAnActionAndNoLineForAnActionWithNoneBecauseTheTableOwnsTheLine()
+    {
+        await SeedActionAsync(A, B);
+
+        await CommitAsync(1, null, PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds rent aid." },
+            PublishedEntryFixtures.Action(B, First));
+
+        Assert.Equal(["a|This bill funds rent aid.", "b|none"], await ReadAsync(
+            "SELECT left(record_id, 1) || '|' || coalesce(bill_line, 'none') FROM published_entries ORDER BY record_id"));
+    }
+
+    [Fact]
+    public async Task APublishOfTheSameActionRevisionWithAnotherBillLineConflictsAndWritesNoReleaseBecauseTheRowHoldsTheLine()
+    {
+        await SeedActionAsync(A);
+        await CommitAsync(1, null, PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds rent aid." });
+        await publications.ActivateAsync(1, (_, _) => Task.CompletedTask, default);
+
+        await Assert.ThrowsAsync<PublicationConflictException>(() =>
+            CommitAsync(2, 1, PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds school meals." }));
+
+        Assert.Equal(["1"], await ReadAsync("SELECT release_number FROM publication_releases ORDER BY 1"));
+    }
+
+    [Fact]
+    public async Task TheFillWritesTheBillLineOfARowThatHoldsNoneAndLeavesTheOtherFactsAsTheyAre()
     {
         await SeedActionAsync(A);
         await CommitAsync(1, null, PublishedEntryFixtures.Action(A, First));
 
-        await CommitAsync(2, 1, PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds rent aid." });
+        var filled = await publications.FillBillLinesAsync([PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds rent aid." }], default);
 
-        Assert.Equal(["1", "2"], await ReadAsync("SELECT release_number FROM publication_releases ORDER BY 1"));
-        Assert.Equal(["1"], await ReadAsync("SELECT count(*) FROM published_entries"));
+        Assert.Equal(1, filled);
+        Assert.Equal(["This bill funds rent aid.|A bill about housing"], await ReadAsync("SELECT bill_line || '|' || headline FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task TheFillNeverChangesABillLineThatARowHoldsAndRefusesAnotherLineBecauseTheLineIsWrittenOnce()
+    {
+        await SeedActionAsync(A);
+        await CommitAsync(1, null, PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds rent aid." });
+
+        Assert.Equal(0, await publications.FillBillLinesAsync([PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds rent aid." }], default));
+        await Assert.ThrowsAsync<PublicationConflictException>(() =>
+            publications.FillBillLinesAsync([PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds school meals." }], default));
+
+        Assert.Equal(["This bill funds rent aid."], await ReadAsync("SELECT bill_line FROM published_entries"));
     }
 
     [Theory]
@@ -194,6 +232,14 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task AnActionRowWithABillLineOfTheLongestLengthIsAccepted()
+    {
+        await ExecuteAsync(WithoutKeyChecks(InsertEntry("bill_line", "'" + new string('x', 200) + "'")));
+
+        Assert.Equal(["200"], await ReadAsync("SELECT length(bill_line) FROM published_entries"));
+    }
+
+    [Fact]
     public async Task ABaseRowWithoutAnyOverrideIsAccepted()
     {
         await ExecuteAsync(WithoutKeyChecks(InsertEntry()));
@@ -219,6 +265,9 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         { "ck_published_entries_source_host", ["source_host", "'  '"] },
         { "ck_published_entries_bill_title", ["bill_title", "NULL"] },
         { "ck_published_entries_bill_title", [.. AsVote, "bill_title", "'A title'"] },
+        { "ck_published_entries_bill_line", ["bill_line", "'  '"] },
+        { "ck_published_entries_bill_line", ["bill_line", "'" + new string('x', 201) + "'"] },
+        { "ck_published_entries_bill_line", [.. AsVote, "bill_title", "NULL", "bill_line", "'A line'"] },
         { "ck_published_entries_document_type", ["document_type", "'Notice'"] },
         { "ck_published_entries_document_type", [.. AsExecutiveAction, "document_type", "NULL"] },
         { "ck_published_entries_document_type", [.. AsExecutiveAction, "document_type", "'Order'"] },
