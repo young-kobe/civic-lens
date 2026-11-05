@@ -485,7 +485,7 @@
             }
             if (mine !== running) return;
             if (append) body.append(...rows); else { body.replaceChildren(...rows); lineNote.remove(); }
-            if (page.hits.some(hit => hit.billLine) && !document.querySelector(".records-lead")?.textContent.includes(source.billLineNote)) {
+            if (page.hits.some(hit => hit.billLine) && !table.closest(".record-list")?.parentElement.querySelector(".records-lead")?.textContent.includes(source.billLineNote)) {
                 lineNote.textContent = source.billLineNote;
                 bar.append(lineNote);
             }
@@ -495,7 +495,7 @@
             if (pager) pager.hidden = true;
             commit(state);
             const total = source.total, count = Math.min(shown, total);
-            status.textContent = `Showing ${count.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "record" : "records"}, sorted by ${label(current.header, current.direction)}. Sorted rows leave out the kind icon, the party badge, the vote counts, and the bill line of a vote.`;
+            status.textContent = `Showing ${count.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "record" : "records"}, sorted by ${label(current.header, current.direction)}. Sorted rows leave out the kind icon, the party badge, the vote counts, and the bill line of a vote. An action that the search index stored before the bill line existed shows no line.`;
         };
         const choose = state => {
             if (!state) { commit(null); restore(); return; }

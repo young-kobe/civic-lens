@@ -2971,7 +2971,7 @@ public sealed class ReleaseRendererTests
     {
         var script = System.Text.Encoding.UTF8.GetString(new ReleaseRenderer(null, null).Assets.Single(asset => asset.RelativePath == "assets/js/public.js").Content);
 
-        Assert.Contains("sorted by ${label(current.header, current.direction)}. Sorted rows leave out the kind icon, the party badge, the vote counts, and the bill line of a vote.", script, StringComparison.Ordinal);
+        Assert.Contains("sorted by ${label(current.header, current.direction)}. Sorted rows leave out the kind icon, the party badge, the vote counts, and the bill line of a vote. An action that the search index stored before the bill line existed shows no line.", script, StringComparison.Ordinal);
     }
 
     [Fact]

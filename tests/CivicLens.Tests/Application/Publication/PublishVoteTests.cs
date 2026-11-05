@@ -204,6 +204,8 @@ public sealed class PublishVoteTests
         Assert.Equal($"<html>vote {vote} bill {action} line This bill funds rent aid.</html>", PageOf(scenario, summary, vote));
         var index = Encoding.UTF8.GetString(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.AllRecordsPagePath(1)]);
         Assert.Contains("lines [c:This bill funds rent aid.,d:This bill funds rent aid.]", index, StringComparison.Ordinal);
+        var facet = Encoding.UTF8.GetString(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.PolicyAreaPagePath("housing-development", 1)]);
+        Assert.Contains("lines [c:This bill funds rent aid.", facet, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -235,6 +237,21 @@ public sealed class PublishVoteTests
 
         Assert.Equal($"<html>vote {vote} bill </html>", PageOf(scenario, unrelated, vote));
         Assert.Equal($"<html>vote {vote} bill {action} line This bill funds rent aid. layout-2</html>", PageOf(scenario, joined, vote));
+    }
+
+    [Fact]
+    public async Task ACarriedVotePageGetsTheBillLinkWhenAnActionWithNoBillLineJoinsItsBill()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c');
+        var vote = scenario.AddVote('d', billActionRecordIds: [action]);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", vote));
+        scenario.PageLayout = " layout-2";
+
+        var joined = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
+            new PublishedRecordReference(PublishedRecordKind.Action, action)));
+
+        Assert.Equal($"<html>vote {vote} bill {action} layout-2</html>", PageOf(scenario, joined, vote));
     }
 
     [Fact]

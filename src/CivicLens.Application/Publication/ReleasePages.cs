@@ -57,7 +57,7 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
 
     private static IEnumerable<string> ActionsWithChangedLine(PublicationBuild build, IReadOnlyList<PendingRecord> additions) =>
         additions.Where(addition => addition.Entry.Kind == PublishedRecordKind.Action
-                && build.Previous.Find(PublishedRecordKind.Action, addition.RecordId)?.BillLine != addition.Entry.BillLine)
+                && (build.Previous.Find(PublishedRecordKind.Action, addition.RecordId) is not { } old || old.BillLine != addition.Entry.BillLine))
             .Select(addition => addition.RecordId);
 
     private static IReadOnlyList<PublishedRecordReference> AllCarried(PublicationBuild build, IReadOnlyList<PendingRecord> additions)
