@@ -1,4 +1,5 @@
 using CivicLens.Application.People;
+using CivicLens.Application.Roster;
 using CivicLens.Core.Review;
 
 namespace CivicLens.Host.People;
@@ -12,7 +13,7 @@ internal static class PeopleCommand
 
     public static bool Matches(string[] args) => args is ["people", ..];
 
-    public static Task<int> ExecuteAsync(string[] args, IPersonRegistryStore people, ReviewActor owner, CancellationToken cancellationToken) =>
+    public static Task<int> ExecuteAsync(string[] args, IPersonRegistryStore people, MemberRoster? roster, ReviewActor owner, CancellationToken cancellationToken) =>
         OwnerCommand.RunAsync(async () =>
         {
             var (words, note) = SplitNote(args);
@@ -31,7 +32,7 @@ internal static class PeopleCommand
                 ["people", "photo", "restore", var id] =>
                     await settings.RestorePhotoAsync(owner, id, note ?? "Photo restored by the owner.", cancellationToken),
                 ["people", "website", "set", var id, var url] =>
-                    await settings.SetWebsiteAsync(owner, id, url, note ?? "Website set by the owner.", cancellationToken),
+                    await SetWebsiteAsync(settings, roster, owner, id, url, note ?? "Website set by the owner.", cancellationToken),
                 ["people", "website", "clear", var id] =>
                     await settings.ClearWebsiteAsync(owner, id, note ?? "Website cleared by the owner.", cancellationToken),
                 _ => null
@@ -44,6 +45,16 @@ internal static class PeopleCommand
             CommandOutput.Write(result);
             return 0;
         });
+
+    // The setting is saved even when the roster URL wins. The warning tells the owner that the saved URL will not publish.
+    private static async Task<PersonSettingRevision> SetWebsiteAsync(ChangePersonSetting settings, MemberRoster? roster, ReviewActor owner,
+        string id, string url, string note, CancellationToken cancellationToken)
+    {
+        var revision = await settings.SetWebsiteAsync(owner, id, url, note, cancellationToken);
+        if (roster is not null && await roster.PublishedWebsiteOfAsync(id, cancellationToken) is { } rosterUrl)
+            Console.Error.WriteLine($"Warning: {id} has a roster website, {rosterUrl}. The roster website publishes, not this one.");
+        return revision;
+    }
 
     // The note is the last two arguments. A note option anywhere else makes a bad call.
     private static (string[] Words, string? Note) SplitNote(string[] args) =>

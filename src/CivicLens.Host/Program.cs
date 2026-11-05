@@ -434,8 +434,11 @@ try
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var people = PostgresPersonRegistryStore.FromConnectionString(connectionString);
+        var peopleConfiguration = ConfigurationFile.ReadCollectionFromEnvironment();
+        var memberRoster = peopleConfiguration is null ? null
+            : new MemberRoster(peopleConfiguration, PostgresMemberRosterStore.FromConnectionString(connectionString));
         executing = true;
-        return await PeopleCommand.ExecuteAsync(args, people, owner, cancellation.Token);
+        return await PeopleCommand.ExecuteAsync(args, people, memberRoster, owner, cancellation.Token);
     }
 
     if (ReleaseCommand.Matches(args))

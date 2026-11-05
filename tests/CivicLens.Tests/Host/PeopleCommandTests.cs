@@ -1,4 +1,7 @@
 using System.Text.Json;
+using CivicLens.Application.Configuration;
+using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Roster;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.Fixtures;
 using Npgsql;
@@ -9,13 +12,18 @@ namespace CivicLens.Tests.Host;
 [Trait("Category", "Postgres")]
 public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLifetime
 {
+    private readonly string configurationPath = Path.Combine(Path.GetTempPath(), "people-config-" + Guid.NewGuid().ToString("N") + ".json");
     private static readonly string ShippedConfiguration = Path.Combine(RepositoryRoot.FullName, "config", "federal-coverage.json");
     private static readonly Dictionary<string, string> Owner = new() { ["CIVIC_LENS_REVIEW_OWNER"] = "owner-subject" };
     private string connectionString = null!;
 
     public async Task InitializeAsync() => connectionString = await postgres.CreateMigratedDatabaseAsync();
 
-    public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
+    public async Task DisposeAsync()
+    {
+        File.Delete(configurationPath);
+        await postgres.DropDatabaseAsync(connectionString);
+    }
 
     [Fact]
     public async Task ImportKeepsEveryShippedPersonIdAndKeyAndALaterRunAddsNothing()
@@ -71,6 +79,76 @@ public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLife
                 (3, false, "https://www.whitehouse.gov/", "Photo restored by the owner."), (4, false, null, "Website cleared by the owner.")],
             await ReadSettingsAsync());
     }
+
+    [Fact]
+    public async Task AWebsiteForAMemberWithAValidRosterUrlIsSavedAndWarnsThatTheRosterUrlPublishes()
+    {
+        await SeedRosterAsync(member => member);
+
+        var result = await SetWebsiteAsync("maria-cantwell");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("Warning: maria-cantwell has a roster website, https://www.cantwell.senate.gov. The roster website publishes, not this one.",
+            result.Error.Trim());
+        Assert.Equal(1, JsonDocument.Parse(result.Output).RootElement.GetProperty("revisionNumber").GetInt32());
+        Assert.Equal([(1, false, "https://example.gov/", "Website set by the owner.")], await ReadSettingsAsync());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("http://www.cantwell.senate.gov")]
+    public async Task AWebsiteForAMemberWithNoValidRosterUrlIsSavedWithNoWarning(string? rosterUrl)
+    {
+        await SeedRosterAsync(member => member with { Url = rosterUrl });
+
+        var result = await SetWebsiteAsync("maria-cantwell");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("", result.Error);
+        Assert.Equal([(1, false, "https://example.gov/", "Website set by the owner.")], await ReadSettingsAsync());
+    }
+
+    [Fact]
+    public async Task AWebsiteForAPersonWhoIsNotAMemberIsSavedWithNoWarning()
+    {
+        await SeedRosterAsync(member => member);
+
+        var result = await SetWebsiteAsync("no-bioguide");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("", result.Error);
+        Assert.Single(await ReadSettingsAsync());
+    }
+
+    [Fact]
+    public async Task AWebsiteWithNoCollectionConfigurationIsSavedWithNoWarning()
+    {
+        await SeedRosterAsync(member => member);
+
+        var result = await HostProcess.RunWithEnvironmentAsync(connectionString, null, Owner, "people", "website", "set", "maria-cantwell", "https://example.gov/");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("", result.Error);
+        Assert.Single(await ReadSettingsAsync());
+    }
+
+    private async Task SeedRosterAsync(Func<CivicLens.Application.Roster.RosterMember, CivicLens.Application.Roster.RosterMember> change)
+    {
+        File.WriteAllText(configurationPath, JsonSerializer.Serialize(RosterFixtures.Configuration(
+            RosterFixtures.Person("maria-cantwell", "Maria Cantwell", "C000127"),
+            RosterFixtures.Person("no-bioguide", "No Bioguide", null)), ConfigurationJson.Options));
+        var imported = await HostProcess.RunWithEnvironmentAsync(connectionString, null, Owner, "people", "import", configurationPath);
+        Assert.Equal(0, imported.ExitCode);
+        var attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
+        var attemptId = await RosterFixtures.ImportCaptureAsync(attempts, new string('a', 64), DateTimeOffset.UtcNow);
+        await PostgresMemberRosterStore.FromConnectionString(connectionString)
+            .AdmitAsync(attemptId, [.. RosterFixtures.Members().Select(change)], null, default);
+    }
+
+    private Task<(int ExitCode, string Output, string Error)> SetWebsiteAsync(string personId) =>
+        HostProcess.RunWithEnvironmentAsync(connectionString, null,
+            new Dictionary<string, string>(Owner) { ["CIVIC_LENS_COLLECTION_CONFIG"] = configurationPath },
+            "people", "website", "set", personId, "https://example.gov/");
 
     [Theory]
     [InlineData("people", "photo", "withhold", "no-such-person")]

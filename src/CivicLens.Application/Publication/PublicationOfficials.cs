@@ -14,14 +14,12 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
 {
     private static readonly PublishedOfficeTerm[] NoTerms = [];
 
+    private readonly MemberRoster memberRoster = new(configuration, members);
     private readonly HashSet<string> configuredIds = [.. configuration.People.Select(person => person.Id)];
 
     public bool IsConfigured(string officialId) => configuredIds.Contains(officialId);
 
-    internal async Task<IReadOnlyList<RosterMember>> ReadRosterAsync(CancellationToken cancellationToken) =>
-        configuration.SourceOf(ApiParser.CongressLegislators) is { } source
-            ? await members.ReadLatestAsync(source.Id, cancellationToken)
-            : [];
+    internal Task<IReadOnlyList<RosterMember>> ReadRosterAsync(CancellationToken cancellationToken) => memberRoster.ReadAsync(cancellationToken);
 
     /// <summary>Reads the newest setting of every configured person once, so the photo choice and the website of one publish agree.</summary>
     internal async Task<IReadOnlyDictionary<string, PersonSetting>> ReadSettingsAsync(CancellationToken cancellationToken) =>
@@ -33,11 +31,11 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
             cancellationToken);
 
     internal async Task<PublishedOfficials> ResolveAsync(IReadOnlySet<string> officialIds, IReadOnlyDictionary<string, string> recordNames,
-        IReadOnlyList<RosterMember> roster, IReadOnlyDictionary<string, PersonSetting> settings,
+        IReadOnlyList<RosterMember> rosterMembers, IReadOnlyDictionary<string, PersonSetting> settings,
         IReadOnlyDictionary<string, PublishedPhoto> photos, CancellationToken cancellationToken)
     {
         var people = configuration.People.Where(person => officialIds.Contains(person.Id)).ToArray();
-        var memberFacts = people.Any(person => person.BioguideId is not null) ? MemberFactsOf(roster) : [];
+        var memberFacts = people.Any(person => person.BioguideId is not null) ? MemberFactsOf(rosterMembers) : [];
         var needsExecutives = people.Any(person => person.WikidataId is not null && MemberTermsOf(person, memberFacts).Length == 0);
         var executiveTerms = await ReadExecutiveTermsAsync(needsExecutives, cancellationToken);
         var published = new PublishedOfficials
@@ -50,8 +48,8 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
         return published;
     }
 
-    private static Dictionary<string, MemberFacts> MemberFactsOf(IReadOnlyList<RosterMember> roster) =>
-        roster.ToDictionary(member => member.BioguideId, member => new MemberFacts([.. member.Terms.Select(ToTerm)], ValidWebsite(member.Url)), StringComparer.Ordinal);
+    private static Dictionary<string, MemberFacts> MemberFactsOf(IReadOnlyList<RosterMember> rosterMembers) =>
+        rosterMembers.ToDictionary(member => member.BioguideId, member => new MemberFacts([.. member.Terms.Select(ToTerm)], member.PublishableWebsite), StringComparer.Ordinal);
 
     private async Task<Dictionary<string, PublishedOfficeTerm[]>> ReadExecutiveTermsAsync(bool needed, CancellationToken cancellationToken)
     {
@@ -135,8 +133,6 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
 
     private static PersonSetting SettingOf(IReadOnlyDictionary<string, PersonSetting> settings, string personId) =>
         settings.GetValueOrDefault(personId, PersonSetting.None);
-
-    private static string? ValidWebsite(string? url) => PublishedWebsite.IsValid(url) ? url : null;
 
     private sealed record MemberFacts(PublishedOfficeTerm[] Terms, string? Website);
 }
