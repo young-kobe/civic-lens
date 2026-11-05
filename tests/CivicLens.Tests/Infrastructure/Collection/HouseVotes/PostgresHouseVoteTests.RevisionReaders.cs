@@ -75,7 +75,7 @@ public sealed partial class PostgresHouseVoteTests
         await Assert.ThrowsAsync<InvalidDataException>(() => reviews.ReadMembersAsync([.. named], default));
         await Assert.ThrowsAsync<InvalidDataException>(() => reviews.FindBillActionRecordIdsOfVotesAsync([.. named], default));
         await Assert.ThrowsAsync<InvalidDataException>(() => new PostgresReviewQueueStore(QueueFactory()).SearchApprovedAsync("Headline", null, 10, default));
-        await Assert.ThrowsAsync<InvalidDataException>(() => VoteStore().RequeueOlderPromptAsync(default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => VoteStore().RequeueStaleAsync(default));
         await using var db = await QueueFactory().CreateDbContextAsync();
         var bill = await db.Database.SqlQueryRaw<LegacyBill>("SELECT congress AS \"Congress\", bill_type AS \"BillType\", bill_number AS \"BillNumber\" FROM vote_candidates").SingleAsync();
         await Assert.ThrowsAsync<InvalidDataException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Votes.BillVoteDrafts", "ReadAsync",

@@ -6,11 +6,11 @@ using CivicLens.Host.Analysis;
 namespace CivicLens.Host.Votes;
 
 internal sealed class VoteCommand(AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem> drafts, GetVoteDraftStatus status,
-    RequeueBlockedVoteDrafts requeueBlocked, RequeueRefusedVoteDrafts requeueRefused, RedraftVoteDrafts redraft, BackfillRevisions backfill,
+    RequeueBlockedVoteDrafts requeueBlocked, RequeueRefusedVoteDrafts requeueRefused, BackfillRevisions backfill,
     VerifyRevisions verify, ReviewActor owner)
 {
     private const string Usage = "Use votes draft status, votes draft list [drafted|unchanged|superseded|no-member|pending|failed] [limit], " +
-        "votes draft requeue <candidate-id|--all>, votes draft requeue --blocked --code <block-code>, votes draft requeue --refused, votes draft redraft, " +
+        "votes draft requeue <candidate-id|--all>, votes draft requeue --blocked --code <block-code>, votes draft requeue --refused, " +
         "votes revisions backfill <limit>, or votes revisions verify.";
     private const int DefaultListLimit = 100;
 
@@ -41,9 +41,6 @@ internal sealed class VoteCommand(AnalysisQueueCommands<VoteDraftRun, VoteDraftV
                     return 0;
                 case ["votes", "draft", "requeue", "--refused"]:
                     CommandOutput.Write(new { requeued = await requeueRefused.ExecuteAsync(owner, cancellationToken) });
-                    return 0;
-                case ["votes", "draft", "redraft"]:
-                    CommandOutput.Write(new { requeued = await redraft.ExecuteAsync(owner, cancellationToken) });
                     return 0;
                 case ["votes", "revisions", "backfill", var limit]:
                     return await OwnerCommand.BackfillRevisionsAsync(backfill, owner, limit, Usage, cancellationToken);

@@ -2,7 +2,7 @@ using CivicLens.Application.Analysis;
 
 namespace CivicLens.Application.Briefs;
 
-public interface IBriefDraftStore : IAnalysisQueue<BriefDraftRun>
+public interface IBriefDraftStore : IAnalysisQueue<BriefDraftRun>, IStaleAnalysisRequeue
 {
     Task<BriefDraftEvidence?> ReadEvidenceAsync(string recordId, CancellationToken cancellationToken);
 

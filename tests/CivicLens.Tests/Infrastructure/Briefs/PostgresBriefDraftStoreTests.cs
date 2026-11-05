@@ -249,6 +249,51 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
         Assert.Equal("Running", (await StatusAsync(Week)).Status);
     }
 
+    [Theory]
+    [InlineData("prompt_version", "brief-draft-prompt-v0", 1)]
+    [InlineData("schema_version", "brief-draft-schema-v0", 1)]
+    [InlineData("task_version", "brief-draft-v0", 1)]
+    [InlineData("prompt_version", BriefDraftTask.PromptVersion, 0)]
+    public async Task RequeueStaleMovesAFinishedWeekOnlyWhenItsDraftRunUsedAnOlderVersion(string column, string value, int requeued)
+    {
+        await SeedWeekAsync();
+        await DraftAsync(new FakeBriefDraftModel().Draft(BriefFixtures.Output(paragraphs: [("Text.", ["R1"])])));
+        await seeder.ExecuteAsync($"UPDATE brief_analysis_runs SET {column} = @value", ("value", value));
+
+        Assert.Equal(requeued, await store.RequeueStaleAsync(default));
+
+        Assert.Equal(requeued == 1 ? "Pending" : "Succeeded", (await StatusAsync(Week)).Status);
+    }
+
+    [Theory]
+    [InlineData("Approved")]
+    [InlineData("Rejected")]
+    public async Task RequeueStaleLeavesAWeekWhoseBriefIsApprovedOrRejectedBecauseOnlyAPersonMayChangeThatDecision(string reviewStatus)
+    {
+        await SeedWeekAsync();
+        await DraftAsync(new FakeBriefDraftModel().Draft(BriefFixtures.Output(paragraphs: [("Text.", ["R1"])])));
+        await seeder.ExecuteAsync("UPDATE brief_analysis_runs SET prompt_version = 'brief-draft-prompt-v0'");
+        await seeder.ExecuteAsync($"UPDATE brief_drafts SET review_status = '{reviewStatus}'");
+
+        Assert.Equal(0, await store.RequeueStaleAsync(default));
+
+        Assert.Equal(("Succeeded", null), await StatusAsync(Week));
+    }
+
+    [Fact]
+    public async Task RequeueStaleLeavesARunningWeekAloneEvenWhenItsLastRunIsStaleSoItNeverStealsALeaseFromAWorker()
+    {
+        await SeedWeekAsync();
+        await DraftAsync(new FakeBriefDraftModel().Draft(BriefFixtures.Output(paragraphs: [("Text.", ["R1"])])));
+        await seeder.ExecuteAsync("UPDATE brief_analysis_runs SET prompt_version = 'brief-draft-prompt-v0'");
+        await seeder.ExecuteAsync("UPDATE brief_analysis SET status = 'Running', error_code = NULL, lease_token = 'lease', lease_expires_at = 1, fence = 1");
+
+        Assert.Equal(0, await store.RequeueStaleAsync(default));
+
+        Assert.Equal("Running", (await StatusAsync(Week)).Status);
+        Assert.Equal(1L, await ScalarAsync("SELECT fence::bigint FROM brief_analysis"));
+    }
+
     [Fact]
     public async Task TheWorkerWritesTheBriefAndItsRevisionInOneTransaction()
     {

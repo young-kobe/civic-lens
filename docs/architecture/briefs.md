@@ -324,6 +324,7 @@ Its required variables are in [operations](../operations.md#brief-drafting). A d
 
 | Command | Effect |
 |---|---|
+| `analyses redraft --stale briefs` | Moves each Succeeded week whose newest drafted run used an older task, prompt, or schema version back to Pending. It leaves a week with an approved or rejected brief. Needs no argument and calls no model itself |
 | `brief redraft --week <yyyy-MM-dd>` | Queues the week if it has no entry. Moves a Succeeded, Blocked, or Failed entry back to Pending. The date must be a Monday, and the week must have ended |
 | `brief revisions backfill <limit>` | Moves legacy revisions into columns and child rows. See [operations](../operations.md#brief-revision-backfill) |
 | `brief revisions verify` | Compares each moved revision to its JSON. See [operations](../operations.md#brief-revision-backfill) |

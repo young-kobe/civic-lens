@@ -77,6 +77,7 @@ if (args is [] or ["--help"] or ["help"])
           documents compare <before-extraction-id> <after-extraction-id>
           documents comparison <comparison-id>
           analyses requeue <comparison-id|--all>
+          analyses redraft --stale [actions|votes|briefs]
           statements status
           statements list [passed|skipped|failed-open|over-cap|pending|failed] [limit]
           statements run <run-id>
@@ -92,7 +93,6 @@ if (args is [] or ["--help"] or ["help"])
           actions draft list [drafted|unchanged|superseded|no-official|pending|failed] [limit]
           actions draft requeue <candidate-id|--all>
           actions draft requeue --refused
-          actions draft redraft
           actions text measure <token-cap> <bills-file>
           actions revisions backfill <limit>
           actions revisions verify
@@ -101,7 +101,6 @@ if (args is [] or ["--help"] or ["help"])
           votes draft requeue <candidate-id|--all>
           votes draft requeue --blocked --code <block-code>
           votes draft requeue --refused
-          votes draft redraft
           executive-actions revisions backfill <limit>
           executive-actions revisions verify
           document-changes revisions backfill <limit>
@@ -308,8 +307,13 @@ try
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var requeue = new RequeueAnalyses<AnalysisRun>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
+        var contexts = AnalysisDbContextFactory.Create(connectionString);
+        var redraftStale = new RedraftStaleAnalyses([
+            new("actions", new PostgresActionDraftStore(contexts, codeVersion)),
+            new("votes", new PostgresVoteDraftStore(contexts)),
+            new("briefs", new PostgresBriefDraftStore(contexts))]);
         executing = true;
-        return await AnalysisCommand.ExecuteAsync(args, requeue, owner, cancellation.Token);
+        return await AnalysisCommand.ExecuteAsync(args, requeue, redraftStale, owner, cancellation.Token);
     }
 
     if (StatementCommand.Matches(args))
@@ -346,7 +350,7 @@ try
         var draftCommands = new AnalysisQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
         var backfillStore = new PostgresActionRevisionBackfillStore(contexts);
-        var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), new RequeueRefusedActionDrafts(draftStore), new RedraftActionDrafts(draftStore),
+        var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), new RequeueRefusedActionDrafts(draftStore),
             new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
         executing = true;
         return await actions.ExecuteAsync(args, cancellation.Token);
@@ -361,7 +365,7 @@ try
         var draftCommands = new AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, VoteDraftTask.Task));
         var votes = new VoteCommand(draftCommands, new GetVoteDraftStatus(draftCommands.Status, draftStore),
-            new RequeueBlockedVoteDrafts(draftStore), new RequeueRefusedVoteDrafts(draftStore), new RedraftVoteDrafts(draftStore),
+            new RequeueBlockedVoteDrafts(draftStore), new RequeueRefusedVoteDrafts(draftStore),
             new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
         executing = true;
         return await votes.ExecuteAsync(args, cancellation.Token);

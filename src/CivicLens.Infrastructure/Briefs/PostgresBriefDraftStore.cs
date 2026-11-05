@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using CivicLens.Application;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Publication;
+using CivicLens.Core.Analysis;
 using CivicLens.Core.Briefs;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Analysis;
@@ -121,6 +122,21 @@ public sealed class PostgresBriefDraftStore : PostgresAnalysisStore<BriefDraftRu
             requeued += await queue.RequeueAsync(state, null, recordId, null, cancellationToken);
         return requeued;
     }
+
+    public Task<int> RequeueStaleAsync(CancellationToken cancellationToken) =>
+        queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
+        {
+            var recordIds = settled.Select(row => row.RecordId).ToArray();
+            var newest = await AnalysisRunLookup.Latest<BriefAnalysisRunRow>(db, BriefDraftTask.Task, nameof(BriefAnalysisRunRow.RecordId),
+                recordIds, AnalysisRunOutcome.Drafted).Select(run => new { run.RecordId, run.RunId }).ToArrayAsync(token);
+            var staleRunIds = await StaleAnalysisRuns.FindStaleRunIdsAsync<BriefAnalysisRunRow>(db,
+                [.. newest.Select(run => run.RunId)], BriefDraftTask.CurrentVersions, token);
+            var closed = await db.Set<BriefDraftRow>().AsNoTracking()
+                .Where(draft => recordIds.Contains(draft.RecordId) && (draft.ReviewStatus == ReviewStatus.Approved || draft.ReviewStatus == ReviewStatus.Rejected))
+                .Select(draft => draft.RecordId).ToArrayAsync(token);
+            var staleRecordIds = newest.Where(run => staleRunIds.Contains(run.RunId)).Select(run => run.RecordId).Except(closed).ToHashSet(StringComparer.Ordinal);
+            return settled.Where(row => staleRecordIds.Contains(row.RecordId));
+        }, cancellationToken);
 
     private static async Task<ImmutableArray<PublishedRevisionBinding>> ReadNewRecordsAsync(CollectionAttemptDbContext db, WindowRow bounds,
         CancellationToken cancellationToken)

@@ -83,7 +83,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
             return settled.Where(row => refused.Contains(row.CandidateId));
         }, cancellationToken);
 
-    public Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken) =>
+    public Task<int> RequeueStaleAsync(CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
         {
             var ids = settled.Select(row => row.CandidateId).ToArray();
@@ -127,16 +127,19 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
                                    draft.BillType == candidate.BillType && draft.BillNumber == candidate.BillNumber &&
                                    (revision.AuthorKind == ReviewAuthorKind.Code || draft.ReviewStatus == ReviewStatus.Rejected)
                                select draft.RecordId).Any()
-                           let newestDraftPrompt = (from run in db.Set<ActionAnalysisRunRow>()
-                                                    join sibling in db.Set<ActionCandidateRow>() on run.CandidateId equals sibling.CandidateId
-                                                    where run.Task == ActionDraftTask.Task && run.Outcome == AnalysisRunOutcome.Drafted &&
-                                                        sibling.SourceId == candidate.SourceId && sibling.Congress == candidate.Congress &&
-                                                        sibling.BillType == candidate.BillType && sibling.BillNumber == candidate.BillNumber
-                                                    orderby run.StartedAtUtcTicks descending
-                                                    select run.PromptVersion).FirstOrDefault()
-                           where newestDraftPrompt != null && !ActionDraftTask.CurrentPromptVersions.Contains(newestDraftPrompt)
-                           select candidate.CandidateId).ToArrayAsync(cancellationToken);
-        return stale.ToHashSet(StringComparer.Ordinal);
+                           let newestDraftRunId = (from run in db.Set<ActionAnalysisRunRow>()
+                                                   join sibling in db.Set<ActionCandidateRow>() on run.CandidateId equals sibling.CandidateId
+                                                   where run.Task == ActionDraftTask.Task && run.Outcome == AnalysisRunOutcome.Drafted &&
+                                                       sibling.SourceId == candidate.SourceId && sibling.Congress == candidate.Congress &&
+                                                       sibling.BillType == candidate.BillType && sibling.BillNumber == candidate.BillNumber
+                                                   orderby run.StartedAtUtcTicks descending
+                                                   select run.RunId).FirstOrDefault()
+                           where newestDraftRunId != null
+                           select new { candidate.CandidateId, newestDraftRunId }).ToArrayAsync(cancellationToken);
+        var staleRunIds = await StaleAnalysisRuns.FindStaleRunIdsAsync<ActionAnalysisRunRow>(db,
+            [.. stale.Select(candidate => candidate.newestDraftRunId).Distinct()], ActionDraftTask.CurrentVersions, cancellationToken);
+        return stale.Where(candidate => staleRunIds.Contains(candidate.newestDraftRunId)).Select(candidate => candidate.CandidateId)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     private static async Task<IReadOnlyList<ActionDraftPage>> ReadPagesAsync(CollectionAttemptDbContext db, string detailJobId,

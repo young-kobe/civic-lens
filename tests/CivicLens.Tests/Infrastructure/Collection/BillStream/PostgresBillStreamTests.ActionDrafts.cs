@@ -575,7 +575,7 @@ public sealed partial class PostgresBillStreamTests
         await InsertRunAsync(older, "action-draft-prompt-v1", 1);
         await InsertRunAsync(newer, "action-draft-prompt-v1", 2);
 
-        Assert.Equal(1, await ActionStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(1, await ActionStore().RequeueStaleAsync(default));
 
         var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => (row.Status, row.Attempts));
         Assert.Equal(("Succeeded", 2), queue[older]);
@@ -589,7 +589,7 @@ public sealed partial class PostgresBillStreamTests
         await InsertRunAsync(older, "action-draft-prompt-v1", 1);
         await InsertRunAsync(newer, ActionDraftTask.PromptVersion, 2);
 
-        Assert.Equal(0, await ActionStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(0, await ActionStore().RequeueStaleAsync(default));
 
         Assert.All(await QueueAsync(), row => Assert.Equal(("Succeeded", 2), (row.Status, row.Attempts)));
     }
@@ -603,7 +603,7 @@ public sealed partial class PostgresBillStreamTests
         await InsertRunAsync(newer, "action-draft-prompt-v1", 1);
         await InsertRunAsync(newer, ActionDraftTask.PromptVersion, 2, "Bypassed");
 
-        Assert.Equal(1, await ActionStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(1, await ActionStore().RequeueStaleAsync(default));
 
         var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => row.Status);
         Assert.Equal("Pending", queue[newer]);
@@ -634,7 +634,20 @@ public sealed partial class PostgresBillStreamTests
         await InsertRunAsync(older, "action-draft-prompt-v1", 1);
         await InsertRunAsync(newer, newestDraftPrompt, 2);
 
-        Assert.Equal(requeued, await ActionStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(requeued, await ActionStore().RequeueStaleAsync(default));
+    }
+
+    [Theory]
+    [InlineData("action-draft-v0", ActionDraftTask.SchemaVersion, 1)]
+    [InlineData(ActionDraftTask.TaskVersion, "action-draft-schema-v1", 1)]
+    [InlineData(ActionDraftTask.TaskVersion, ActionDraftTask.SchemaVersion, 0)]
+    public async Task RedraftTreatsADraftRunWithAnOlderTaskOrSchemaVersionAsStaleEvenWhenItsPromptIsCurrent(string taskVersion, string schemaVersion, int requeued)
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(ActionDraftErrorCodes.SupersededByNewerCandidate, null);
+        await InsertRunAsync(older, ActionDraftTask.PromptVersion, 1);
+        await InsertRunAsync(newer, ActionDraftTask.PromptVersion, 2, taskVersion: taskVersion, schemaVersion: schemaVersion);
+
+        Assert.Equal(requeued, await ActionStore().RequeueStaleAsync(default));
     }
 
     [Fact]
@@ -645,7 +658,7 @@ public sealed partial class PostgresBillStreamTests
         var issueRun = await InsertRunAsync(newer, "action-issue-prompt-v3", 2);
         await InsertDraftAndRevisionAsync("Code", "civic-lens:code", issueRun);
 
-        Assert.Equal(0, await ActionStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(0, await ActionStore().RequeueStaleAsync(default));
     }
 
     [Fact]
@@ -656,7 +669,7 @@ public sealed partial class PostgresBillStreamTests
         var codeRun = await InsertRunAsync(newer, ActionDraftTask.PromptVersion, 2, "Bypassed", ActionDraftErrorCodes.CodeWritten);
         await InsertDraftAndRevisionAsync("Code", "civic-lens:code", codeRun);
 
-        Assert.Equal(0, await ActionStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(0, await ActionStore().RequeueStaleAsync(default));
     }
 
     [Fact]
@@ -715,14 +728,15 @@ public sealed partial class PostgresBillStreamTests
 
     private static string SqlLiteral(string? value) => value is null ? "NULL" : $"'{value}'";
 
-    private async Task<string> InsertRunAsync(string candidate, string promptVersion, long startedAtTicks, string outcome = "Drafted", string? reason = null)
+    private async Task<string> InsertRunAsync(string candidate, string promptVersion, long startedAtTicks, string outcome = "Drafted", string? reason = null,
+        string taskVersion = ActionDraftTask.TaskVersion, string schemaVersion = ActionDraftTask.SchemaVersion)
     {
         var runId = Guid.NewGuid().ToString("N");
         await ExecuteAsync(connectionString, $"""
         INSERT INTO action_analysis_runs (run_id, candidate_id, task, task_version, model, prompt_version, schema_version, input_hash, outcome,
             input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks, reason)
-        VALUES ('{runId}', '{candidate}', '{ActionDraftTask.Task}', '{ActionDraftTask.TaskVersion}', '{ActionDraftTask.Model}', '{promptVersion}',
-            '{ActionDraftTask.SchemaVersion}', '{new string('1', 64)}', '{outcome}', 0, 0, 0, 0, 0, {startedAtTicks}, {startedAtTicks}, {SqlLiteral(reason)})
+        VALUES ('{runId}', '{candidate}', '{ActionDraftTask.Task}', '{taskVersion}', '{ActionDraftTask.Model}', '{promptVersion}',
+            '{schemaVersion}', '{new string('1', 64)}', '{outcome}', 0, 0, 0, 0, 0, {startedAtTicks}, {startedAtTicks}, {SqlLiteral(reason)})
         """);
         return runId;
     }
