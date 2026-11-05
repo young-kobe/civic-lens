@@ -4,7 +4,7 @@
 <TopBarTitle Crumbs="Crumbs" />
 
 <div class="content">
-    <PageHeader Title="AI spending" Lede="Set the most that AI calls can cost in one UTC month. A call that could pass the cap waits. A raised cap or a new price takes effect at the next UTC midnight, or when the worker restarts." />
+    <PageHeader Title="AI spending" Lede="Set the most that AI calls can cost in one UTC month. A call that could pass the cap waits. A call with no cap or no price retries every 5 minutes. A raised cap takes effect at the next UTC midnight, or when the worker restarts." />
     @if (StatusMessage is not null)
     {
         <Notice Tone="Tone.Ok" Dismissible="true">@StatusMessage</Notice>

@@ -13,6 +13,7 @@ using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Infrastructure.Spending;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -46,6 +47,7 @@ internal static class ActionDraftComposition
             new CaptureDocumentTextExtractor(), PublicationComposition.RequireArtifactRoot());
         var store = new PostgresActionDraftStore(AnalysisDbContextFactory.Create(connectionString), codeVersion);
         var settings = new ActionDraftSettings(AnalysisSettings.DefaultCallTokenLimit, draftsFromBillText: true);
-        return new(store, new ActionDraftStep(store, reader, new AnthropicActionDraftModel(apiKey), settings, issues));
+        return new(store, new ActionDraftStep(store, reader, new AnthropicActionDraftModel(apiKey), settings, issues),
+            new PostgresAiSpendingStore(AnalysisDbContextFactory.Create(connectionString)));
     }
 }

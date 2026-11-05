@@ -2,17 +2,21 @@ using System.Collections.Immutable;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Spending;
 using CivicLens.Core.Analysis;
 
 namespace CivicLens.Application.Actions;
 
 /// <summary>Drafts the bill text summary of fixed bills through the real step, and keeps nothing. It reads evidence and sends model calls only.
-/// It clears the draft history of each bill, so a bill with a current record is drafted again as a new bill.</summary>
-public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep step)
+/// It clears the draft history of each bill, so a bill with a current record is drafted again as a new bill.
+/// It has its own token cap and never waits on the monthly dollar cap, but it adds its real cost to the month.</summary>
+public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep step, IAiSpendingStore spending)
 {
     public async Task<ActionTextMeasureReport> RunAsync(IReadOnlyList<CongressBillListItem> bills, long tokenCap, CancellationToken cancellationToken)
     {
         if (tokenCap < 1) throw new ArgumentOutOfRangeException(nameof(tokenCap), tokenCap, "The spend cap must be at least 1 token.");
+        var price = await spending.GetPriceAsync(ActionDraftTask.Model, cancellationToken) ?? throw new InvalidOperationException(
+            $"The model {ActionDraftTask.Model} has no price. Save its price on /Review/Spending, then run the measure again.");
         var results = ImmutableArray.CreateBuilder<ActionTextMeasureBill>();
         var spent = 0L;
         try
@@ -26,10 +30,17 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         }
         catch (OperationCanceledException exception)
         {
-            throw new ActionTextMeasureCanceledException(ReportOf(tokenCap, results), exception);
+            var canceled = ReportOf(tokenCap, results);
+            await ChargeMonthAsync(price, canceled);
+            throw new ActionTextMeasureCanceledException(canceled, exception);
         }
-        return ReportOf(tokenCap, results);
+        var report = ReportOf(tokenCap, results);
+        await ChargeMonthAsync(price, report);
+        return report;
     }
+
+    private Task ChargeMonthAsync(ModelPrice price, ActionTextMeasureReport report) =>
+        spending.AddChargeAsync(price.CostMicros(report.Totals.Usage, report.Totals.ChargedTokens), CancellationToken.None);
 
     private static ActionTextMeasureReport ReportOf(long tokenCap, ImmutableArray<ActionTextMeasureBill>.Builder results) =>
         new(ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model, tokenCap, results.ToImmutable());

@@ -1,6 +1,7 @@
 using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Spending;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Analysis;
 using CivicLens.Tests.Application.Analysis;
@@ -14,6 +15,7 @@ public sealed class ActionTextMeasureTests
     private const long Cap = 10_000_000;
     private static readonly CongressBillListItem Bill = new(119, "hr", 1, default);
     private static readonly CongressBillListItem OtherBill = new(119, "s", 2, default);
+    private static readonly ModelPrice Price = new(ActionDraftTask.Model, 1_000_000, 5_000_000, 0, 0);
     private static readonly ActionDraftSettings On = new(10_000_000, concurrency: 1, draftsFromBillText: true);
 
     [Fact]
@@ -243,27 +245,53 @@ public sealed class ActionTextMeasureTests
     }
 
     [Fact]
+    public async Task TheMeasureAddsItsRealCostToTheMonthBecauseThePageShowsTheWholeSpend()
+    {
+        var (report, _, _) = await MeasureAsync(Cap, new FakeHeadlineSummaryModel().Draft(Output()));
+
+        Assert.Equal(1_000L, report.Totals.Usage.Total);
+        Assert.Equal([1_400L], Spending.Charges);
+    }
+
+    [Fact]
+    public async Task AModelWithoutAPriceStopsTheMeasureBeforeAnyCallBecauseItsCostWouldBeUnknown()
+    {
+        var model = new FakeHeadlineSummaryModel().Draft(Output());
+        var world = ActionBillWorld.Create(summaries: []);
+        var (store, step) = Parts(world, model, world.Evidence() with { BillText = Of() });
+        var unpriced = new FakeAiSpendingStore(null);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => new ActionTextMeasure(store, step, unpriced).RunAsync([Bill], Cap, default));
+
+        Assert.Contains("has no price", exception.Message, StringComparison.Ordinal);
+        Assert.Empty(model.Requests);
+        Assert.Empty(unpriced.Charges);
+    }
+
+    [Fact]
     public async Task TheMeasureRefusesACapBelowOneToken()
     {
         var (store, step) = Parts(ActionBillWorld.Create(summaries: []), new FakeHeadlineSummaryModel());
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => new ActionTextMeasure(store, step).RunAsync([Bill], 0, default));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => new ActionTextMeasure(store, step, Spending).RunAsync([Bill], 0, default));
     }
 
-    private static async Task<(ActionTextMeasureReport Report, FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> MeasureAsync(long cap,
+    private FakeAiSpendingStore Spending { get; } = new(Price);
+
+    private async Task<(ActionTextMeasureReport Report, FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> MeasureAsync(long cap,
         FakeHeadlineSummaryModel model, bool withText = true, CongressBillListItem[]? bills = null)
     {
         var world = ActionBillWorld.Create(summaries: []);
         var evidence = world.Evidence() with { BillText = withText ? Of() : null };
         var (store, step) = Parts(world, model, evidence);
-        return (await new ActionTextMeasure(store, step).RunAsync(bills ?? [Bill], cap, default), store, model);
+        return (await new ActionTextMeasure(store, step, Spending).RunAsync(bills ?? [Bill], cap, default), store, model);
     }
 
-    private static Task<ActionTextMeasureReport> RunAsync(ActionBillWorld world, ActionDraftEvidence evidence, long cap, FakeHeadlineSummaryModel model,
+    private Task<ActionTextMeasureReport> RunAsync(ActionBillWorld world, ActionDraftEvidence evidence, long cap, FakeHeadlineSummaryModel model,
         CongressBillListItem[] bills)
     {
         var (store, step) = Parts(world, model, evidence);
-        return new ActionTextMeasure(store, step).RunAsync(bills, cap, default);
+        return new ActionTextMeasure(store, step, Spending).RunAsync(bills, cap, default);
     }
 
     private static (FakeActionDraftStore Store, ActionDraftStep Step) Parts(ActionBillWorld world, FakeHeadlineSummaryModel model,

@@ -75,6 +75,10 @@ public sealed class AiSpendingUseCaseTests
 
         public Task<AiSpendingView> GetAsync(int changeLimit, CancellationToken cancellationToken) => throw new InvalidOperationException();
 
+        public Task<ModelPrice?> GetPriceAsync(string model, CancellationToken cancellationToken) => throw new InvalidOperationException();
+
+        public Task AddChargeAsync(long micros, CancellationToken cancellationToken) => throw new InvalidOperationException();
+
         public Task SaveCapAsync(string authorSubject, long capMicros, CancellationToken cancellationToken)
         {
             Saved.Add($"cap {authorSubject} {capMicros}");

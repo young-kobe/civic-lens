@@ -23,6 +23,21 @@ public sealed class PostgresAiSpendingStore(IDbContextFactory<CollectionAttemptD
         return new(month, charged, [.. caps.Select(ToRevision)], [.. current.Select(ToRevision)], [.. changes.Select(ToRevision)]);
     }
 
+    public async Task<ModelPrice?> GetPriceAsync(string model, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await AiSpendLedger.NewestPriceAsync(db, model, cancellationToken);
+    }
+
+    public async Task AddChargeAsync(long micros, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await AiSpendLedger.AddAsync(db, (await DatabaseClock.ReadAsync(db, cancellationToken)).Day, micros, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task SaveCapAsync(string authorSubject, long capMicros, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);

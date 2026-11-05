@@ -10,12 +10,12 @@ public sealed record ModelPrice(string Model, long InputMicros, long OutputMicro
 
     private long HighestMicros => Math.Max(Math.Max(InputMicros, OutputMicros), Math.Max(CacheReadMicros, CacheWriteMicros));
 
-    public long WorstCaseMicros(long tokens) => Ceiling(tokens * HighestMicros);
+    public long WorstCaseMicros(long tokens) => Ceiling(checked(tokens * HighestMicros));
 
     /// <summary>Prices the used tokens at their own price and the rest of the charged tokens at the highest price.</summary>
     public long CostMicros(AnalysisTokenUsage usage, long chargedTokens) =>
-        Ceiling(usage.InputTokens * InputMicros + usage.OutputTokens * OutputMicros + usage.CacheReadTokens * CacheReadMicros +
-            usage.CacheWriteTokens * CacheWriteMicros + (chargedTokens - usage.Total) * HighestMicros);
+        Ceiling(checked(usage.InputTokens * InputMicros + usage.OutputTokens * OutputMicros + usage.CacheReadTokens * CacheReadMicros +
+            usage.CacheWriteTokens * CacheWriteMicros + (chargedTokens - usage.Total) * HighestMicros));
 
-    private static long Ceiling(long scaled) => (scaled + TokensPerPrice - 1) / TokensPerPrice;
+    private static long Ceiling(long scaled) => checked(scaled + TokensPerPrice - 1) / TokensPerPrice;
 }

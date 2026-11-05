@@ -21,6 +21,7 @@ internal static class AiSpendLedger
         var cap = await db.Set<AiMonthlyCapRevisionRow>().AsNoTracking().OrderByDescending(row => row.RevisionNumber)
             .FirstOrDefaultAsync(cancellationToken);
         if (cap is null) return new(0, AnalysisErrorCodes.MonthlyCapNotSet);
+        if (cap.CapMicros == 0) return new(0, AnalysisErrorCodes.MonthlyDollarCap);
         var price = await NewestPriceAsync(db, model, cancellationToken);
         if (price is null) return new(0, AnalysisErrorCodes.ModelPriceMissing);
         var worstCase = price.WorstCaseMicros(tokens);
@@ -30,16 +31,19 @@ internal static class AiSpendLedger
         return new(worstCase, null);
     }
 
+    /// <summary>Takes the month row lock. Call it as the last statement before the commit, so no transaction waits on another lock while it holds the month row.</summary>
     public static async Task SettleAsync(CollectionAttemptDbContext db, DateOnly budgetDay, AnalysisRun run, long reservedMicros,
         CancellationToken cancellationToken)
     {
         var price = await NewestPriceAsync(db, run.Model, cancellationToken)
             ?? throw new InvalidOperationException("A run that settles a reservation needs the price of its model.");
-        var month = await LockMonthAsync(db, budgetDay, cancellationToken);
-        month.ChargedMicros += price.CostMicros(run.Usage, run.ChargedTokens) - reservedMicros;
+        await AddAsync(db, budgetDay, price.CostMicros(run.Usage, run.ChargedTokens) - reservedMicros, cancellationToken);
     }
 
-    private static async Task<ModelPrice?> NewestPriceAsync(CollectionAttemptDbContext db, string model, CancellationToken cancellationToken) =>
+    public static async Task AddAsync(CollectionAttemptDbContext db, DateOnly day, long micros, CancellationToken cancellationToken) =>
+        (await LockMonthAsync(db, day, cancellationToken)).ChargedMicros += micros;
+
+    public static async Task<ModelPrice?> NewestPriceAsync(CollectionAttemptDbContext db, string model, CancellationToken cancellationToken) =>
         (await db.Set<AiModelPriceRevisionRow>().AsNoTracking().Where(row => row.Model == model)
             .OrderByDescending(row => row.RevisionNumber).FirstOrDefaultAsync(cancellationToken))?.ToPrice();
 

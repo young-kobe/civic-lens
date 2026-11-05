@@ -5,12 +5,14 @@ using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents;
+using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Spending;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
+using static CivicLens.Tests.Fixtures.RelationshipFixtures;
 
 namespace CivicLens.Tests.Infrastructure.Spending;
 
@@ -25,6 +27,8 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
     private string connectionString = null!;
     private PostgresAiSpendingStore spending = null!;
     private PostgresDocumentChangeAnalysisStore analysis = null!;
+    private PostgresRelationshipDraftStore relationships = null!;
+    private RelationshipWorldSeeder relationshipSeeder = null!;
     private ComparisonSeeder seeder = null!;
     private int seeded;
 
@@ -35,6 +39,8 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         spending = new PostgresAiSpendingStore(factory);
         analysis = new PostgresDocumentChangeAnalysisStore(factory);
+        relationships = new PostgresRelationshipDraftStore(factory);
+        relationshipSeeder = new RelationshipWorldSeeder(connectionString);
         seeder = new ComparisonSeeder(new PostgresCollectionAttemptStore(factory), new PostgresDocumentExtractionStore(factory),
             new PostgresDocumentComparisonStore(factory), captureRoot);
         Directory.CreateDirectory(captureRoot);
@@ -56,6 +62,8 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
 
         Assert.Equal(AnalysisReservation.WaitingForBudget, over);
         Assert.Equal(("monthlyDollarCap", 0L, 0L), await EntryAndSpendAsync(claim));
+        Assert.True(await RetryDelayAsync() > TimeSpan.Zero);
+        Assert.Equal(TimeSpan.Zero, await RetryAtMinusNextMidnightAsync());
         await spending.SaveCapAsync(Owner, 25_000, default);
         await analysis.ReleaseBudgetWaitsAsync(default);
         var again = await analysis.TryClaimAsync(claim.Record.SubjectId, Lease, default);
@@ -73,6 +81,7 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
         Assert.Equal(AnalysisReservation.WaitingForBudget, await ReserveAsync(claim, Haiku, 1_000));
 
         Assert.Equal(("monthlyCapNotSet", 0L, 0L), await EntryAndSpendAsync(claim));
+        await AssertRetriesInAboutFiveMinutesAsync();
         Assert.Equal(0, await ChargedTokensTodayAsync());
     }
 
@@ -84,6 +93,7 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
         Assert.Equal(AnalysisReservation.WaitingForBudget, await ReserveAsync(claim, "claude-unpriced", 1_000));
 
         Assert.Equal(("modelPriceMissing", 0L, 0L), await EntryAndSpendAsync(claim));
+        await AssertRetriesInAboutFiveMinutesAsync();
         Assert.Equal(0, await ChargedTokensTodayAsync());
     }
 
@@ -98,6 +108,68 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
 
         Assert.Equal(3, results.Count(result => result == AnalysisReservation.Reserved));
         Assert.Equal(15_000, await MonthChargedAsync());
+    }
+
+    [Fact]
+    public async Task ReservationsOfDifferentStagesNeverPassTheMonthlyCapBecauseTheyShareOneMonthRow()
+    {
+        await spending.SaveCapAsync(Owner, 10_000, default);
+        var first = await ClaimAsync();
+        var second = await ClaimAsync();
+        await relationshipSeeder.StatementAsync(Statement());
+        await relationshipSeeder.ActionAsync(Action());
+        _ = await relationships.RefreshPairsAsync(default);
+        var pairClaim = (await relationships.TryClaimAsync(ActionPair().PairId, Lease, default))!;
+
+        var results = await Task.WhenAll(ReserveAsync(first, Haiku, 1_000), ReserveAsync(second, Haiku, 1_000),
+            relationships.ReserveAsync(pairClaim, Guid.NewGuid().ToString("N"), new string('f', 64), Haiku, 1_000, 10_000_000, default));
+
+        Assert.Equal(2, results.Count(result => result == AnalysisReservation.Reserved));
+        Assert.Equal(10_000, await MonthChargedAsync());
+    }
+
+    [Fact]
+    public async Task AReservationLocksTheMonthRowBeforeItReadsTheTotalSoNoTwoStagesCanBothPassTheCap()
+    {
+        await spending.SaveCapAsync(Owner, 1_000_000, default);
+        var claim = await ClaimAsync();
+        await ExecuteAsync("INSERT INTO ai_month_spend (month_start, charged_micros) VALUES (date_trunc('month', now() AT TIME ZONE 'UTC')::date, 0)");
+        await using var holder = new NpgsqlConnection(connectionString);
+        await holder.OpenAsync();
+        await using var transaction = await holder.BeginTransactionAsync();
+        await using (var lockMonth = new NpgsqlCommand("SELECT 1 FROM ai_month_spend FOR UPDATE", holder, transaction))
+            _ = await lockMonth.ExecuteScalarAsync();
+
+        var reservation = ReserveAsync(claim, Haiku, 1_000);
+        var waiting = await WaitingStatementAsync();
+
+        Assert.Contains("FOR UPDATE", waiting, StringComparison.Ordinal);
+        await transaction.CommitAsync();
+        Assert.Equal(AnalysisReservation.Reserved, await reservation.WaitAsync(TimeSpan.FromSeconds(30)));
+    }
+
+    private async Task<string> WaitingStatementAsync()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        while (true)
+        {
+            var statement = await ScalarAsync<string?>(
+                "SELECT query FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' LIMIT 1");
+            if (statement is not null) return statement;
+            await Task.Delay(50, timeout.Token);
+        }
+    }
+
+    [Fact]
+    public async Task ACapOfZeroStopsEveryCallEvenOfAModelWithAZeroPrice()
+    {
+        await spending.SaveCapAsync(Owner, 0, default);
+        await spending.SavePriceAsync(Owner, new ModelPrice(Haiku, 0, 0, 0, 0), default);
+        var claim = await ClaimAsync();
+
+        Assert.Equal(AnalysisReservation.WaitingForBudget, await ReserveAsync(claim, Haiku, 1_000));
+
+        Assert.Equal(("monthlyDollarCap", 0L, 0L), await EntryAndSpendAsync(claim));
     }
 
     [Fact]
@@ -167,8 +239,8 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
 
         var view = await spending.GetAsync(10, default);
 
-        var today = DateTime.UtcNow;
-        Assert.Equal((new DateOnly(today.Year, today.Month, 1), 25_000), (view.Month, view.ChargedMicros));
+        var month = DateOnly.FromDateTime(await ScalarAsync<DateTime>("SELECT date_trunc('month', now() AT TIME ZONE 'UTC')"));
+        Assert.Equal((month, 25_000), (view.Month, view.ChargedMicros));
     }
 
     private async Task<AnalysisClaim> ClaimAsync()
@@ -190,6 +262,18 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
         (await ScalarAsync<string>($"SELECT error_code FROM document_change_analysis WHERE comparison_id = '{claim.Record.SubjectId}'"),
             await ScalarAsync<long>($"SELECT reserved_micros FROM document_change_analysis WHERE comparison_id = '{claim.Record.SubjectId}'"),
             await MonthChargedAsync());
+
+    private async Task AssertRetriesInAboutFiveMinutesAsync()
+    {
+        var delay = await RetryDelayAsync();
+        Assert.InRange(delay, TimeSpan.FromMinutes(4), TimeSpan.FromMinutes(5));
+    }
+
+    private async Task<TimeSpan> RetryDelayAsync() => TimeSpan.FromTicks(await ScalarAsync<long>(
+        "SELECT (retry_at - ((extract(epoch FROM clock_timestamp()) * 10000000)::bigint + 621355968000000000))::bigint FROM document_change_analysis"));
+
+    private async Task<TimeSpan> RetryAtMinusNextMidnightAsync() => TimeSpan.FromTicks(await ScalarAsync<long>(
+        "SELECT (retry_at - (((extract(epoch FROM date_trunc('day', now() AT TIME ZONE 'UTC') + interval '1 day') * 10000000)::bigint) + 621355968000000000))::bigint FROM document_change_analysis"));
 
     private Task<long> MonthChargedAsync() => ScalarAsync<long>("SELECT COALESCE(sum(charged_micros), 0)::bigint FROM ai_month_spend");
 
