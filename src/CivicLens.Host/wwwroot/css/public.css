@@ -200,6 +200,10 @@ table[data-paged]:focus { outline: none; }
     .record-list .cell-icon { flex-wrap: wrap; }
     .record-list .record-row-text { flex-basis: calc(100% - 30px); }
     .record-list .badge { margin-left: 30px; }
+    .public-main .record-list tr:has(> .fit) { flex-wrap: wrap; row-gap: 2px; }
+    .public-main .record-list tr:has(> .fit) > .cell-main { flex-basis: 100%; }
+    .public-main .record-list tr > .fit, .public-main .record-list tr > .officials-col { margin-left: 30px; }
+    .public-main .record-list .fit { white-space: nowrap; }
 }
 
 .public-main .record-list, .public-main .record-list tbody { display: block; }
