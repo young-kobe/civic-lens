@@ -43,6 +43,35 @@ public sealed class IssueConfigurationRevisionTests
         Assert.Equal(valid, IsValid(Configuration(Issue() with { PolicyAreaIds = [id] }) with { PolicyAreas = [new() { Id = id, Name = "Area" }] }));
     }
 
+    [Theory]
+    [InlineData(TrackedIssueConfiguration.MaximumDefinitionLength, true)]
+    [InlineData(TrackedIssueConfiguration.MaximumDefinitionLength + 1, false)]
+    public void ADefinitionOverTheCapIsRefusedBecauseTheIssuePageShowsItInOneShortParagraph(int length, bool valid)
+    {
+        Assert.Equal(valid, IsValid(Configuration(Issue() with { Definition = new string('d', length) })));
+    }
+
+    [Theory]
+    [InlineData(TrackedIssueConfiguration.MaximumTermLength, true)]
+    [InlineData(TrackedIssueConfiguration.MaximumTermLength + 1, false)]
+    public void AnIncludeOrExcludeTermOverTheCapIsRefusedBecauseTheIssuePageShowsEachTermAsOneListLine(int length, bool valid)
+    {
+        var term = new string('t', length);
+
+        Assert.Equal(valid, IsValid(Configuration(Issue() with { Includes = [term] })));
+        Assert.Equal(valid, IsValid(Configuration(Issue() with { Excludes = [term] })));
+    }
+
+    [Fact]
+    public void EveryShippedDefinitionAndTermFitsTheCapsSoTheOwnerFileStaysValid()
+    {
+        var json = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "config", "issues.json"));
+
+        var configuration = JsonSerializer.Deserialize<IssueConfiguration>(json, CollectionProtocol.JsonOptions)!;
+
+        Assert.True(IsValid(configuration));
+    }
+
     [Fact]
     public void RevisionJsonAndIdMatchThePinnedConfigurationVersion()
     {

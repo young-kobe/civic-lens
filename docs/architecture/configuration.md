@@ -117,6 +117,7 @@ The file has a `version` (only 1 is supported), a list of `policyAreas` (`id`, `
 - Policy area IDs and names are unique, and issue IDs are unique.
 - Each policy area ID in an issue must exist and may appear once.
 - List entries must be nonblank and unique within their list. The date range must be valid.
+- A definition has at most 120 characters. An include or exclude term has at most 75 characters. The issue page shows them in full, so each cap sits just above the longest shipped value. Enforced by `TrackedIssueConfiguration.Validate`. Tests: `IssueConfigurationRevisionTests.ADefinitionOverTheCapIsRefusedBecauseTheIssuePageShowsItInOneShortParagraph`, `IssueConfigurationRevisionTests.AnIncludeOrExcludeTermOverTheCapIsRefusedBecauseTheIssuePageShowsEachTermAsOneListLine`, and `IssueConfigurationRevisionTests.EveryShippedDefinitionAndTermFitsTheCapsSoTheOwnerFileStaysValid`.
 - The file holds at most 256 issues. The Host accepts a file of at most 1 MB.
 - The host reads and validates the file once at process start. An invalid file stops startup.
 - `ConfigurationFile` in Host reads and validates every collection and issue file. It rejects a file over 1 MB or a relative environment path. The largest file, `config/federal-coverage.json`, is 814 KB.
