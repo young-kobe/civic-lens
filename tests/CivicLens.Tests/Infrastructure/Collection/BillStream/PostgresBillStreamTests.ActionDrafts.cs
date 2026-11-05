@@ -133,7 +133,7 @@ public sealed partial class PostgresBillStreamTests
         var store = ActionStore();
 
         async Task<ActionDraftEvidence> EvidenceOf(bool summaries, bool subjects) => (await store.ReadEvidenceAsync(
-            candidates.Single(item => item.IncludesSummaries == summaries && item.IncludesSubjects == subjects).CandidateId, default))!;
+            candidates.Single(item => item.IncludesSummaries == summaries && item.IncludesSubjects == subjects).CandidateId, false, default))!;
         var none = await EvidenceOf(false, false);
         var summariesOnly = await EvidenceOf(true, false);
         var both = await EvidenceOf(true, true);
@@ -154,7 +154,7 @@ public sealed partial class PostgresBillStreamTests
         await AdmitSubjectsAsync(bill.Subjects!, new CongressBillSubjectsPage([], null));
         var subjectsOnly = (await CandidatesAsync()).Single(item => item.IncludesSubjects);
 
-        var evidence = (await ActionStore().ReadEvidenceAsync(subjectsOnly.CandidateId, default))!;
+        var evidence = (await ActionStore().ReadEvidenceAsync(subjectsOnly.CandidateId, false, default))!;
 
         Assert.False(evidence.HasNewerCandidate);
         Assert.Equal([ApiResource.Bill, ApiResource.BillSubjects], evidence.Pages.Select(page => page.Resource));
@@ -434,7 +434,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal(("Succeeded", (string?)null), queue[march3]);
         Assert.Equal(("Succeeded", ActionDraftErrorCodes.SupersededByNewerCandidate), queue[march4]);
         Assert.Equal(("Succeeded", ActionDraftErrorCodes.Unchanged), queue[march5]);
-        Assert.Equal(march3, (await ActionStore().ReadEvidenceAsync(march4, default))!.Current!.CandidateId);
+        Assert.Equal(march3, (await ActionStore().ReadEvidenceAsync(march4, false, default))!.Current!.CandidateId);
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
     }
 
@@ -444,7 +444,7 @@ public sealed partial class PostgresBillStreamTests
         var (_, earlierWithSummaries) = await BothCandidatesPendingAsync();
         await ReadableCandidateAsync(sponsor: "A000001", UpdatedAt.AddDays(1));
 
-        var evidence = (await ActionStore().ReadEvidenceAsync(earlierWithSummaries, default))!;
+        var evidence = (await ActionStore().ReadEvidenceAsync(earlierWithSummaries, false, default))!;
 
         Assert.True(evidence.Candidate.IncludesSummaries);
         Assert.True(evidence.HasNewerCandidate);
@@ -460,7 +460,7 @@ public sealed partial class PostgresBillStreamTests
         var model = await RunActionWorkerAsync(new FakeHeadlineSummaryModel().Draft(DraftableOutput));
 
         Assert.Single(model.Requests);
-        var current = (await store.ReadEvidenceAsync(older, default))!.Current!;
+        var current = (await store.ReadEvidenceAsync(older, false, default))!.Current!;
         Assert.Equal((newer, UpdatedAt, true), (current.CandidateId, current.CandidateUpdateDate, current.CandidateIncludesSummaries));
         Assert.Equal([(newer, "action-draft", "Succeeded", null, 0), (older, "action-draft", "Succeeded", ActionDraftErrorCodes.SupersededByNewerCandidate, 0)],
             (await QueueAsync()).OrderBy(row => row.CandidateId == older));
@@ -528,7 +528,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.Empty(model.Requests);
         Assert.Equal(("Succeeded", ActionDraftErrorCodes.SupersededByNewerCandidate),
             (await QueueAsync()).Where(row => row.CandidateId == older).Select(row => (row.Status, row.ErrorCode)).Single());
-        Assert.Null((await store.ReadEvidenceAsync(older, default))!.Current);
+        Assert.Null((await store.ReadEvidenceAsync(older, false, default))!.Current);
     }
 
     [Theory]
@@ -600,11 +600,11 @@ public sealed partial class PostgresBillStreamTests
         var candidate = await CandidateWithoutSummariesAsync();
         await SettleAsync(candidate, Revision(candidate, 1));
         _ = await InsertRunAsync(candidate, ActionDraftTask.PromptVersion, DateTimeOffset.UnixEpoch.UtcTicks + 1);
-        Assert.False((await ActionStore().ReadEvidenceAsync(candidate, default))!.HasOlderPromptDraft);
+        Assert.False((await ActionStore().ReadEvidenceAsync(candidate, false, default))!.HasOlderPromptDraft);
 
         _ = await InsertRunAsync(candidate, "action-draft-prompt-v1", DateTimeOffset.UnixEpoch.UtcTicks + 2);
 
-        Assert.True((await ActionStore().ReadEvidenceAsync(candidate, default))!.HasOlderPromptDraft);
+        Assert.True((await ActionStore().ReadEvidenceAsync(candidate, false, default))!.HasOlderPromptDraft);
     }
 
     [Theory]
@@ -884,7 +884,7 @@ public sealed partial class PostgresBillStreamTests
         var candidate = Assert.Single(await CandidatesAsync());
         await SettleAsync(candidate.CandidateId, Revision(candidate.CandidateId, 1, includesSummaries: true));
 
-        var evidence = (await ActionStore().ReadEvidenceAsync(candidate.CandidateId, default))!;
+        var evidence = (await ActionStore().ReadEvidenceAsync(candidate.CandidateId, false, default))!;
 
         Assert.Equal([ApiResource.Bill, ApiResource.BillCosponsors, ApiResource.BillSummaries], evidence.Pages.Select(page => page.Resource));
         Assert.Equal(RecordId, evidence.Candidate.RecordId);
@@ -901,7 +901,7 @@ public sealed partial class PostgresBillStreamTests
         var expected = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
         var candidate = await CandidateWithoutSummariesAsync();
 
-        var evidence = (await ActionStore().ReadEvidenceAsync(candidate, default))!;
+        var evidence = (await ActionStore().ReadEvidenceAsync(candidate, false, default))!;
 
         Assert.Equal(expected, evidence.Candidate.RecordId);
         Assert.Equal(RecordId, expected);

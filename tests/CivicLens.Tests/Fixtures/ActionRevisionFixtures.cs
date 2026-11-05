@@ -23,6 +23,19 @@ internal static class ActionRevisionFixtures
         Fingerprint, null, null,
         null, null, null, [], [], IssueRevisionId, [Sponsorship()], "A housing bill");
 
+    public static ActionDraftRevision TextModel(int number = 1) => Model(number) with
+    {
+        Summary = "First sentence. Second sentence.",
+        TextPackageId = "BILLS-119hr1ih",
+        WhyItMatters = "Third sentence.",
+        TextCitations =
+        [
+            new(ActionTextPart.Summary, new(ExtractionId, 0, 15), "First sentence."),
+            new(ActionTextPart.Summary, new(ExtractionId, 16, 16), "Second sentence."),
+            new(ActionTextPart.WhyItMatters, new(ExtractionId, 33, 15), "Third sentence.")
+        ]
+    };
+
     public static ActionDraftRevision PersonEditOf(ActionDraftRevision previous, string headline, string summary) => previous with
     {
         RevisionNumber = previous.RevisionNumber + 1,

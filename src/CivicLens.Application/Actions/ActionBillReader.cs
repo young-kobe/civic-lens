@@ -18,7 +18,9 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
         var candidate = evidence.Candidate;
         var configuration = evidence.ConfigurationRevision.Configuration;
         var detailPage = evidence.Pages.Single(page => page.Resource == ApiResource.Bill);
-        if (!evidence.Pages.All(HasCurrentVersion)) return new(null, ActionDraftErrorCodes.ExtractionVersionChanged);
+        if (!evidence.Pages.All(HasCurrentVersion) || evidence.BillText is { } stored && !HasCurrentVersion(stored))
+            return new(null, ActionDraftErrorCodes.ExtractionVersionChanged);
+        if (evidence.BillText is { } billText && !HasRenderedWindow(billText)) return new(null, ActionDraftErrorCodes.RenderedTextMismatch);
         var (detailJob, detailResponse) = await LoadAsync(detailPage, cancellationToken);
         var bill = CongressBillDetailJob.Parse(detailJob, detailResponse);
         if (TextError(detailPage, CongressBillRenderer.RenderDetail(bill)) is { } detailError) return new(null, detailError);
@@ -137,6 +139,12 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
             ApiResource.BillSubjects => CongressBillSubjectsParser.ExtractionVersion,
             _ => CongressBillSummariesParser.ExtractionVersion(textExtractor)
         };
+
+    private bool HasCurrentVersion(ActionDraftBillText billText) =>
+        billText.ExtractionVersion == CongressBillTextParser.ExtractionVersion(textExtractor);
+
+    private static bool HasRenderedWindow(ActionDraftBillText billText) =>
+        billText.BodyStart >= 0 && billText.Body.Length == billText.CharsRead && billText.CharsRead <= CongressBillRenderer.TextWindowLength;
 
     private static string? TextError(ActionDraftPage page, string rendered) =>
         string.Equals(rendered, page.Text, StringComparison.Ordinal) ? null : ActionDraftErrorCodes.RenderedTextMismatch;
