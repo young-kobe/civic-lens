@@ -9,14 +9,22 @@ namespace CivicLens.Tests.Fixtures;
 /// as the revision insert, after the batch has relaxed the foreign keys.</summary>
 internal static class VoteRevisionColumnsSeed
 {
-    /// <summary>The assignments that turn a revision row into a row that older code wrote.</summary>
-    public const string NullColumns = """
-        headline = NULL, summary = NULL, text_origin = NULL, suggestion_headline = NULL, suggestion_summary = NULL, suggestion_run_id = NULL,
-        suggestion_fingerprint = NULL, source_id = NULL, vote_source = NULL, chamber = NULL, congress = NULL, session_number = NULL,
-        roll_call_number = NULL, bill_type = NULL, bill_number = NULL, candidate_id = NULL, candidate_update_utc_ticks = NULL, voted_on = NULL,
-        voted_on_citation_extraction_id = NULL, voted_on_citation_start = NULL, voted_on_citation_length = NULL, kind = NULL,
-        kind_citation_extraction_id = NULL, kind_citation_start = NULL, kind_citation_length = NULL, member_list_id = NULL,
-        issue_revision_id = NULL, subjects_hash = NULL, issue_candidates_recorded = NULL
+    /// <summary>The columns that every vote revision row must set. A test that checks another rule inserts a row with <see cref="PlaceholderValues"/>.</summary>
+    public const string RequiredColumns = """
+        headline, summary, text_origin, source_id, vote_source, chamber, congress, session_number, roll_call_number, candidate_id,
+        candidate_update_utc_ticks, voted_on, voted_on_citation_extraction_id, voted_on_citation_start, voted_on_citation_length, kind,
+        member_list_id, issue_revision_id, issue_candidates_recorded, result
+        """;
+
+    /// <summary>One valid value for each column of <see cref="RequiredColumns"/>, in the same order. The roll call is House 119, session 1, roll 100.</summary>
+    public static readonly string PlaceholderValues = $"""
+        'Headline', 'Summary', 'Person', 'congress-house-votes', 'CongressGov', 'House', 119, 1, 100, 'placeholder-candidate',
+        1, DATE '2026-01-02', 'placeholder-extraction', 0, 1, 'Passage', '{new string('1', 64)}', '{new string('2', 64)}', true, 'Passed'
+        """;
+
+    /// <summary>The statement that leaves the member list of a revision incomplete, so that a reader refuses the revision. It takes the parameter <c>id</c>, the vote record ID.</summary>
+    public const string RemoveMemberEntries = """
+        DELETE FROM vote_member_list_entries WHERE list_id IN (SELECT member_list_id FROM vote_revisions WHERE record_id = @id)
         """;
 
     public const string Sql = """

@@ -113,7 +113,7 @@ public sealed class ActionReviewWorkspaceTests(PostgresCollection postgres) : IA
         var broken = RelationshipFixtures.Vote();
         await seeder.ActionAsync(good, "AwaitingReview", 100);
         await seeder.VoteAsync(broken, "AwaitingReview", 200);
-        await seeder.ExecuteAsync($"UPDATE vote_revisions SET {VoteRevisionColumnsSeed.NullColumns} WHERE record_id = @id", ("id", broken.RecordId));
+        await seeder.ExecuteAsync(VoteRevisionColumnsSeed.RemoveMemberEntries, ("id", broken.RecordId));
         host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
 
         var home = await host.GetDocumentAsync("/Review");

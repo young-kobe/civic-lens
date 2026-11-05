@@ -13,7 +13,7 @@ internal static class RelationshipDraftRows
 {
     internal static readonly ReviewRecords<RelationshipDraftRow, RelationshipRevisionRow, RelationshipReviewDecisionRow, RelationshipRevision> Records =
         new(PostgresAdvisoryLock.RelationshipReview, PublishedRecordKind.Relationship, "Relationship", nameof(RelationshipDraftRow.RecordId),
-            readRevisions: RelationshipRevisionRows.ReadAsync);
+            RelationshipRevisionRows.ReadAsync);
 
     public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, RelationshipRevision revision, string runId,
         CancellationToken cancellationToken)

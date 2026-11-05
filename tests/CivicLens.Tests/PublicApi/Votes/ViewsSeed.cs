@@ -19,7 +19,6 @@ internal sealed record SeededVote(char Id, string VotedOn)
     public string[] UntrackedIssues { get; init; } = [];
     public int FirstRelease { get; init; } = 1;
     public int? LastRelease { get; init; }
-    public bool HasMemberList { get; init; } = true;
 
     public string RecordId { get; init; } = new(Id, 64);
 }
@@ -40,22 +39,7 @@ internal static class ViewsSeed
         foreach (var vote in votes) await ExecuteAsync(database, Insert(vote));
     }
 
-    private static string Insert(SeededVote vote) => vote.HasMemberList ? InsertWithMemberList(vote) : InsertWithoutMemberList(vote);
-
-    /// <summary>A revision whose columns were never written. The table check forces all 19 nullable columns to be null together.</summary>
-    private static string InsertWithoutMemberList(SeededVote vote)
-    {
-        var last = vote.LastRelease?.ToString(CultureInfo.InvariantCulture) ?? "NULL";
-        return $"""
-            SET session_replication_role = replica;
-            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
-              VALUES ('vote', '{vote.RecordId}', {vote.FirstRelease}, 1, {last});
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks, result)
-            VALUES ('{vote.RecordId}', 1, 'test', 'Person', 'x', 1, '');
-            """;
-    }
-
-    private static string InsertWithMemberList(SeededVote vote)
+    private static string Insert(SeededVote vote)
     {
         var list = vote.RecordId;
         var source = vote.Chamber == "House" ? "CongressGov" : "Voteview";
@@ -66,11 +50,11 @@ internal static class ViewsSeed
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
               VALUES ('vote', '{vote.RecordId}', {vote.FirstRelease}, 1, {last});
             INSERT INTO vote_member_lists (list_id, member_count, created_at_utc_ticks) VALUES ('{list}', {vote.Casts.Length}, 1);
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks,
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, created_at_utc_ticks,
                 headline, summary, text_origin, source_id, vote_source, chamber, congress, session_number, roll_call_number, candidate_id,
                 candidate_update_utc_ticks, voted_on, voted_on_citation_extraction_id, voted_on_citation_start, voted_on_citation_length,
                 kind, member_list_id, issue_revision_id, issue_candidates_recorded, bill_type, bill_number, question, result)
-            VALUES ('{vote.RecordId}', 1, 'test', 'Person', 'x', 1, 'Headline {vote.Id}', 'Summary {vote.Id}', '{vote.TextOrigin}', 'src', '{source}',
+            VALUES ('{vote.RecordId}', 1, 'test', 'Person', 1, 'Headline {vote.Id}', 'Summary {vote.Id}', '{vote.TextOrigin}', 'src', '{source}',
                 '{vote.Chamber}', {vote.Congress}, {vote.Session}, {vote.RollCall}, 'cand', 1, '{vote.VotedOn}', 'ext', 0, 1,
                 '{vote.Kind}', '{list}', '{new string('a', 64)}', true, {bill}, 'On {vote.Id}', 'Passed {vote.Id}');
             INSERT INTO vote_revision_facts (record_id, revision_number, "position", fact_text, citation_extraction_id, citation_start, citation_length)
