@@ -50,7 +50,7 @@ internal static class PublishedVoteView
     public static string Caveat(PublishedVote vote) =>
         "This record lists only the officials that Civic Lens tracks. " + vote.Source switch
         {
-            PublishedVoteSource.Voteview => "Voteview stores each vote as a number code. Civic Lens shows that code as a word such as Yea or Nay. The Senate roll call may use other words. Voteview does not list a Vice President tie-break vote.",
+            PublishedVoteSource.Voteview => "Voteview stores each vote as a number code. Civic Lens shows that code as a word such as Yes (Yea) or No (Nay). The Senate roll call may use other words. Voteview does not list a Vice President tie-break vote.",
             _ => $"Each cast is the wording of the {(vote.Chamber == PublishedChamber.Senate ? "Senate" : "House Clerk")} roll call at the observation time of its source."
         };
 
@@ -120,16 +120,18 @@ internal static class PublishedVoteView
     {
         var democrats = $"most {PartyOf(vote, PublishedPartyMajority.Democrat)}";
         var republicans = $"most {PartyOf(vote, PublishedPartyMajority.Republican)}";
-        var democratSide = vote.MajorityOf(PublishedPartyMajority.Democrat);
-        const string cast = "who cast Yea or Nay";
+        const string cast = "who cast Yes or No";
         if (vote.IsSplit())
-            return new(SplitVoteText, $"{SplitVoteText}: {democrats} {cast} voted {democratSide}, and {republicans} {cast} voted {vote.MajorityOf(PublishedPartyMajority.Republican)}.", PartyCounts(vote));
-        return vote.PartiesAgree() ? new(PartiesAgreedText, $"{PartiesAgreedText}: {democrats} and {republicans} {cast} voted {democratSide}.", PartyCounts(vote)) : null;
+            return new(SplitVoteText, $"{SplitVoteText}: {democrats} {cast} voted {SideWord(vote, PublishedPartyMajority.Democrat)}, and {republicans} {cast} voted {SideWord(vote, PublishedPartyMajority.Republican)}.", PartyCounts(vote));
+        return vote.PartiesAgree() ? new(PartiesAgreedText, $"{PartiesAgreedText}: {democrats} and {republicans} {cast} voted {SideWord(vote, PublishedPartyMajority.Democrat)}.", PartyCounts(vote)) : null;
     }
+
+    private static string SideWord(PublishedVote vote, string party) =>
+        PlainVoteWords.CastWord(vote.MajorityOf(party) ?? "") ?? throw new InvalidOperationException("A vote with a badge has a majority for each party.");
 
     private static string PartyCounts(PublishedVote vote) =>
         string.Join(' ', new[] { PublishedPartyMajority.Democrat, PublishedPartyMajority.Republican }.Select(party => PartyCount(vote, party))) +
-        " These counts include every member of the party, tracked or not. An independent counts with the party they caucus with, so these counts can differ from the source totals. Yea and Aye count as Yes. Nay counts as No.";
+        " These counts include every member of the party, tracked or not. An independent counts with the party they caucus with, so these counts can differ from the source totals. Yes here means Yea or Aye in the record. No means Nay.";
 
     private static string PartyCount(PublishedVote vote, string party)
     {
@@ -137,7 +139,7 @@ internal static class PublishedVoteView
         return $"{PartyOf(vote, party)}: {count.YeaCount} Yes, {count.NayCount} No.";
     }
 
-    public const string BreakMeaning = "A member is listed when they cast Yea or Nay against the cast of most members of their own party on this vote. A current independent counts with the party they caucus with. A former independent counts with no party. A member with another party, or with no known party, is not listed. Present and Not voting never count as a break.";
+    public const string BreakMeaning = "A member is listed when they cast Yes or No against the cast of most members of their own party on this vote. A current independent counts with the party they caucus with. A former independent counts with no party. A member with another party, or with no known party, is not listed. Present and Not voting never count as a break.";
 
     public static IEnumerable<PartyBreakers> Breakers(PublishedVote vote) =>
         vote.IsSplit() ? new[] { PublishedPartyMajority.Democrat, PublishedPartyMajority.Republican }.Select(party => BreakersOf(vote, party)) : [];

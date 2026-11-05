@@ -574,7 +574,7 @@ public sealed class PublishedOfficialPageTests
         var figures = FiguresOf(await RenderedAsync(votes)).Where(figure => figure.Label.Contains("split vote", StringComparison.Ordinal)).ToArray();
 
         Assert.Equal([("1 of 3", "split votes with most House Republicans"), ("1 of 1", "split vote with most Senate Democrats")], figures.Select(figure => (figure.Value, figure.Label)));
-        Assert.Equal(["A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted on opposite sides. They did not cast Yea or Nay on 1 other split vote.", "A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted on opposite sides."], figures.Select(figure => figure.Note));
+        Assert.Equal(["A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yes or No voted on opposite sides. They did not cast Yes or No on 1 other split vote.", "A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yes or No voted on opposite sides."], figures.Select(figure => figure.Note));
     }
 
     [Fact]
