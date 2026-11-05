@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Core.Actions;
 using CivicLens.Core.Analysis;
 
 namespace CivicLens.Application.Actions;
@@ -66,10 +67,15 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         var usage = attempt.Runs.Aggregate(AnalysisTokenUsage.None, (sum, run) => new(sum.InputTokens + run.Usage.InputTokens,
             sum.OutputTokens + run.Usage.OutputTokens, sum.CacheReadTokens + run.Usage.CacheReadTokens, sum.CacheWriteTokens + run.Usage.CacheWriteTokens));
         var rejections = attempt.Runs.SelectMany(run => run.ValidationErrors).ToImmutableArray();
-        ActionTextMeasureBill With(ActionTextMeasureOutcome outcome, string? reason, ImmutableArray<ActionTextMeasureSentence> sentences = default) =>
-            new(billId, TitleOf(evidence), outcome, reason, billText.CharsRead, billText.CharsTotal, attempt.Calls, usage,
-                attempt.Runs.Sum(run => run.ChargedTokens), sentences.IsDefault ? [] : sentences, rejections,
-                [.. attempt.Runs.Where(run => run.OutputJson is not null).Select(run => new ActionTextMeasurePass(run.Outcome, run.OutputJson))]);
+        var textFigures = BillFigures.Count(billText.Text[Math.Max(0, BillTextBody.Start(billText.Text))..]);
+        ActionTextMeasureBill With(ActionTextMeasureOutcome outcome, string? reason, ImmutableArray<ActionTextMeasureSentence> sentences = default)
+        {
+            var kept = sentences.IsDefault ? [] : sentences;
+            return new(billId, TitleOf(evidence), outcome, reason, billText.CharsRead, billText.CharsTotal, attempt.Calls, usage,
+                attempt.Runs.Sum(run => run.ChargedTokens), kept, rejections,
+                [.. attempt.Runs.Where(run => run.OutputJson is not null).Select(run => new ActionTextMeasurePass(run.Outcome, run.OutputJson))],
+                textFigures, BillFigures.Count(string.Join('\n', kept.Select(sentence => sentence.Sentence))));
+        }
 
         if (attempt.RefusedOtherPrompt) return With(ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.NotTextPrompt);
         if (attempt.Failure is { } failure)

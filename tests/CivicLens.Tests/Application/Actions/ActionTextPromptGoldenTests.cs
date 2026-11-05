@@ -7,9 +7,9 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionTextPromptGoldenTests
 {
-    private const string SystemSha256 = "8aef78ca24072f663194e5866ec7699be587865df91690211b173a681d5dfc1d";
+    private const string SystemSha256 = "5d431e1cde4a147e43be1545ea4f0ee077e6ddcd6ef44275e92cbea09213a440";
     private const string SchemaSha256 = "1842aea9479adba4bd6244a32833f17e655bb8083b18fb5c87380619258bc9e8";
-    private const string InputHash = "32c99727c2757706ef78c8c483885878b8b7ba682450ca0582195a7f0da05e9f";
+    private const string InputHash = "d079b81fe5e0ef86da4e1507bd24b5534ce53b97c6924a7b6737394cba9a0f12";
 
     [Fact]
     public async Task TheTextPromptAndSchemaMatchTheirPinnedVersions()
@@ -30,6 +30,20 @@ public sealed class ActionTextPromptGoldenTests
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");
         Assert.True(request.InputHash == InputHash, $"{bump} Input hash: {request.InputHash}");
+    }
+
+    [Fact]
+    public async Task TheSystemPromptAsksForSpecificSentencesAndSaysTheGradeLimitNeverAsksForFewerFacts()
+    {
+        var world = ActionBillWorld.Create(summaries: []);
+        var snapshot = (await world.Reader().ReadAsync(world.Evidence() with { BillText = ActionBillTexts.Of() }, default)).Snapshot!;
+
+        var system = ActionTextPrompt.Build(snapshot, ActionBillTexts.Of(), BillGateFixtures.HousingChoice(), ActionDraftTask.MaximumPromptBytes)!.SystemPrompt;
+
+        Assert.Contains("It never asks for fewer facts.", system, StringComparison.Ordinal);
+        Assert.Contains("If a fact needs a long word, split the sentence in two.", system, StringComparison.Ordinal);
+        Assert.Contains("Name who the bill affects, what it changes, and each dollar amount, date, or deadline in the bill text that is central to a change.", system, StringComparison.Ordinal);
+        Assert.Contains("helps, supports, addresses, or improves", system, StringComparison.Ordinal);
     }
 
     [Fact]

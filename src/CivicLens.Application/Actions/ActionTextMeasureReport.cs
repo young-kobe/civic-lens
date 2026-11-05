@@ -12,20 +12,25 @@ public sealed record ActionTextMeasurePass(AnalysisRunOutcome Outcome, string? O
 
 public sealed record ActionTextMeasureBill(string BillId, string? Title, ActionTextMeasureOutcome Outcome, string? Reason, int CharsRead, int CharsTotal,
     int Calls, AnalysisTokenUsage Usage, long ChargedTokens, ImmutableArray<ActionTextMeasureSentence> Sentences, ImmutableArray<string> Rejections,
-    ImmutableArray<ActionTextMeasurePass> Passes)
+    ImmutableArray<ActionTextMeasurePass> Passes, BillFigureCounts TextFigures, BillFigureCounts SentenceFigures)
 {
     public double? MeanGrade => ActionTextMeasureGrades.Mean(Sentences);
+
+    /// <summary>True when the sent text has a dollar amount or a date and the accepted sentences have none of that kind. It is a measure only.
+    /// A bill with no accepted sentence is not flagged.</summary>
+    public bool LosesFigures => Outcome == ActionTextMeasureOutcome.Accepted &&
+        (TextFigures.Amounts > 0 && SentenceFigures.Amounts == 0 || TextFigures.Dates > 0 && SentenceFigures.Dates == 0);
 
     public bool EndsRun => Outcome is ActionTextMeasureOutcome.StoppedByCap or ActionTextMeasureOutcome.StoppedByModel;
 
     public static ActionTextMeasureBill Skipped(string billId, string reason) => WithoutCall(billId, ActionTextMeasureOutcome.Skipped, reason);
 
     public static ActionTextMeasureBill WithoutCall(string billId, ActionTextMeasureOutcome outcome, string reason) =>
-        new(billId, null, outcome, reason, 0, 0, 0, AnalysisTokenUsage.None, 0, [], [], []);
+        new(billId, null, outcome, reason, 0, 0, 0, AnalysisTokenUsage.None, 0, [], [], [], new(0, 0), new(0, 0));
 }
 
 public sealed record ActionTextMeasureTotals(int Accepted, int Rejected, int Failed, int Skipped, int StoppedByCap, int StoppedByModel, int Calls,
-    AnalysisTokenUsage Usage, long ChargedTokens, double? MeanGrade);
+    AnalysisTokenUsage Usage, long ChargedTokens, double? MeanGrade, int BillsLosingFigures);
 
 public sealed record ActionTextMeasureReport(string PromptVersion, string SchemaVersion, string Model, long TokenCap,
     ImmutableArray<ActionTextMeasureBill> Bills)
@@ -33,7 +38,7 @@ public sealed record ActionTextMeasureReport(string PromptVersion, string Schema
     public ActionTextMeasureTotals Totals => new(Count(ActionTextMeasureOutcome.Accepted), Count(ActionTextMeasureOutcome.Rejected),
         Count(ActionTextMeasureOutcome.Failed), Count(ActionTextMeasureOutcome.Skipped), Count(ActionTextMeasureOutcome.StoppedByCap),
         Count(ActionTextMeasureOutcome.StoppedByModel), Bills.Sum(bill => bill.Calls), TotalUsage(), Bills.Sum(bill => bill.ChargedTokens),
-        ActionTextMeasureGrades.Mean(Bills.SelectMany(bill => bill.Sentences)));
+        ActionTextMeasureGrades.Mean(Bills.SelectMany(bill => bill.Sentences)), Bills.Count(bill => bill.LosesFigures));
 
     private int Count(ActionTextMeasureOutcome outcome) => Bills.Count(bill => bill.Outcome == outcome);
 
