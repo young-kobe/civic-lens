@@ -42,6 +42,44 @@ internal static class PublishedBoardView
         ? "This is the only substantive roll call vote with counts in these dates."
         : $"The pick is the closest of {closest.VotesInWindow} substantive roll call votes with counts in these dates. The gap is the difference between the Yea count and the Nay count.";
 
+    public const string AgreementCaption = "Votes where both parties agreed, by kind of vote";
+
+    public const string AgreementKindHeader = "Kind of vote";
+
+    public const string AgreementCountHeader = "Both parties agreed";
+
+    public const string AgreementTotalLabel = "All substantive votes";
+
+    public const string AgreementCaution = "That the parties voted the same way is about the question of each vote. It does not show that they agree on an issue.";
+
+    public const string AgreementLinkText = "How this count works";
+
+    public const string AgreementAnchor = "#parties-agreed";
+
+    public static string AgreementTitle(ChamberAgreement agreement) =>
+        $"When both parties agreed ({CongressCalendar.Ordinal(agreement.Congress)} Congress, {ChamberOf(agreement)})";
+
+    public static string AgreementLead(ChamberAgreement agreement) => agreement.Total == 0
+        ? $"This site has no substantive {ChamberOf(agreement)} roll call vote with both parties in the {CongressCalendar.Ordinal(agreement.Congress)} Congress."
+        : $"On {agreement.Agreed} of the {agreement.Total} substantive {ChamberOf(agreement)} roll call {PublishedOfficialView.Noun(agreement.Total, "vote")} on this site, most Democrats and most Republicans voted the same way.";
+
+    public static IReadOnlyList<AgreementRow> AgreementRows(ChamberAgreement agreement) =>
+    [
+        .. agreement.Kinds.Select(kind => new AgreementRow(PublishedRecordLabels.VoteKind(kind.Kind), $"{kind.Agreed} of {kind.Total}")),
+        new(AgreementTotalLabel, $"{agreement.Agreed} of {agreement.Total}")
+    ];
+
+    public static string AgreementSplit(ChamberAgreement agreement) => $"On {agreement.Split} of the {agreement.Total}, the two parties took opposite sides.";
+
+    public static string AgreementMixed(ChamberAgreement agreement) => $"On {agreement.Mixed} of the {agreement.Total}, one party had no majority, as in a tie.";
+
+    public static bool ShowsNominationNote(ChamberAgreement agreement) => agreement.Nominations * 2 > agreement.Total;
+
+    public static string NominationNote(ChamberAgreement agreement) =>
+        $"Most {ChamberOf(agreement)} roll call votes are on nominations. Look at each kind of vote, not only the total.";
+
+    private static string ChamberOf(ChamberAgreement agreement) => agreement.Chamber == PublishedChamber.Senate ? "Senate" : "House";
+
     public static string PartyOf(OfficialBoard board) => PublishedOfficialView.PartyOf(board.Chamber, board.Party);
 
     public static string Title(OfficialBoard board) => $"{PartyOf(board)}: voting boards";
@@ -97,3 +135,5 @@ internal static class PublishedBoardView
         yield return "Roll calls that are not on this site, and casts of Present or Not Voting. The split vote counts hold only Yea and Nay casts.";
     }
 }
+
+internal sealed record AgreementRow(string Label, string Count);

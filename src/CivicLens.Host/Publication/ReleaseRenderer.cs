@@ -216,13 +216,14 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
         });
     }
 
-    public Task<string> RenderBoardAsync(OfficialBoardPage page, ClosestVote? closestVote, CancellationToken cancellationToken)
+    public Task<string> RenderBoardAsync(OfficialBoardPage page, ClosestVote? closestVote, ChamberAgreement? agreement, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(page);
         return RenderAsync<PublishedBoardPage>(new Dictionary<string, object?>
         {
             [nameof(PublishedBoardPage.Page)] = page,
-            [nameof(PublishedBoardPage.ClosestVote)] = closestVote
+            [nameof(PublishedBoardPage.ClosestVote)] = closestVote,
+            [nameof(PublishedBoardPage.Agreement)] = agreement
         });
     }
 

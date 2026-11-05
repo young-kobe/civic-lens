@@ -303,6 +303,19 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task TheMethodPageExplainsTheAgreementCountAndTheBoardLinkReachesIt()
+    {
+        var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None));
+
+        var panel = document.QuerySelector("[aria-labelledby='parties-agreed']")!;
+        var text = panel.ShownText();
+        Assert.Contains("A vote is in the total when its kind is substantive and both the Democrats and the Republicans voted in it.", text, StringComparison.Ordinal);
+        Assert.Contains("When a party has a tie, that party has no majority.", text, StringComparison.Ordinal);
+        Assert.Contains("The page does not appear until every vote on this site names its Congress.", text, StringComparison.Ordinal);
+        Assert.Equal("When both parties agreed", panel.QuerySelector("h2")!.TextContent);
+    }
+
+    [Fact]
     public async Task TheMethodPageExplainsALinkWithTheFourPublicLinkWordsAndSaysThatALinkIsNotAVerdict()
     {
         var html = await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None);
@@ -2799,7 +2812,7 @@ public sealed class ReleaseRendererTests
             ("official record", PublicationProtocol.OfficialRecordPagePath(profile.Id), await renderer.RenderOfficialRecordAsync(official, PublicationCatalogs.None, CancellationToken.None), "Officials"),
             ("past congress", pastOfficial.PagePath, await renderer.RenderOfficialAsync(pastOfficial, PublicationCatalogs.None, CancellationToken.None), "Officials"),
             ("officials", PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync([new OfficialListing(profile, 0)], DateTimeOffset.UnixEpoch, CancellationToken.None), "Officials"),
-            ("board", OfficialBoard.All[0].PagePath, await renderer.RenderBoardAsync(OfficialBoardPage.All([], []).First(), null, CancellationToken.None), "Officials"),
+            ("board", OfficialBoard.All[0].PagePath, await renderer.RenderBoardAsync(OfficialBoardPage.All([], []).First(), null, null, CancellationToken.None), "Officials"),
             ("search", PublicationProtocol.SearchPagePath, await renderer.RenderSearchAsync(release, facets, CancellationToken.None), null),
             ("method", PublicationProtocol.MethodPagePath, await renderer.RenderMethodAsync(CancellationToken.None), null),
             ("about", PublicationProtocol.AboutPagePath, await renderer.RenderAboutAsync(CancellationToken.None), "About"),

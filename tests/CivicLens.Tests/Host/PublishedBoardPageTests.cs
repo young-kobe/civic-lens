@@ -141,6 +141,66 @@ public sealed class PublishedBoardPageTests
         Assert.DoesNotContain("Closest vote", (await RenderAsync(Page(), stale)).Body!.TextContent, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task TheAgreementPanelStatesEveryCountWithItsDenominatorAndSitsBelowTheClosestVoteCard()
+    {
+        var closest = ClosestVote.From(ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split)))!;
+        var agreement = AgreementOf(Agreed(PublishedVoteKind.Passage, 3), Split(PublishedVoteKind.Passage, 1), Agreed(PublishedVoteKind.Amendment, 1), Mixed(PublishedVoteKind.Amendment, 1));
+
+        var document = await RenderAsync(Page(), closest, agreement);
+
+        var panel = document.QuerySelector("[aria-labelledby='panel-when-both-parties-agreed-(119th-congress,-house)']")!;
+        var text = panel.TextContent;
+        Assert.Contains("On 4 of the 6 substantive House roll call votes on this site, most Democrats and most Republicans voted the same way.", text);
+        Assert.Contains("On 1 of the 6, the two parties took opposite sides.", text);
+        Assert.Contains("On 1 of the 6, one party had no majority, as in a tie.", text);
+        Assert.Equal(["Kind of vote", "Both parties agreed"], panel.QuerySelectorAll("thead th").Select(header => header.TextContent));
+        Assert.Equal([("Passage", "3 of 4"), ("Amendment", "1 of 2"), ("All substantive votes", "4 of 6")],
+            panel.QuerySelectorAll("tbody tr").Select(row => (row.Children[0].TextContent.Trim(), row.Children[1].TextContent.Trim())));
+        Assert.Equal("method.html#parties-agreed", panel.QuerySelector("a")!.GetAttribute("href"));
+        Assert.True(document.QuerySelector("[aria-labelledby^='panel-closest-vote']")!.CompareDocumentPosition(panel).HasFlag(AngleSharp.Dom.DocumentPositions.Following));
+    }
+
+    [Fact]
+    public async Task TheAgreementPanelIsHiddenWithoutACountAndNamesAChamberWithNoAlignedVote()
+    {
+        var hidden = await RenderAsync(Page());
+        var empty = await RenderAsync(Page(), agreement: AgreementOf());
+
+        Assert.DoesNotContain("When both parties agreed", hidden.Body!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("This site has no substantive House roll call vote with both parties in the 119th Congress.", empty.Body!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain(empty.QuerySelectorAll("table"), table => table.TextContent.Contains("Both parties agreed"));
+    }
+
+    [Fact]
+    public async Task TheNominationNoteShowsOnlyWhenNominationsAreMoreThanHalfOfTheTotal()
+    {
+        var most = AgreementOf(Agreed(PublishedVoteKind.Nomination, 3), Agreed(PublishedVoteKind.Passage, 2), Split(PublishedVoteKind.Passage, 0));
+        var half = AgreementOf(Agreed(PublishedVoteKind.Nomination, 2), Agreed(PublishedVoteKind.Passage, 2));
+
+        Assert.Contains("Most House roll call votes are on nominations. Look at each kind of vote, not only the total.", (await RenderAsync(Page(), agreement: most)).Body!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("are on nominations", (await RenderAsync(Page(), agreement: half)).Body!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task NoPercentShowsInTheAgreementPanelAndAOneVoteLeadUsesTheSingular()
+    {
+        var many = await RenderAsync(Page(), agreement: AgreementOf(Agreed(PublishedVoteKind.Passage, 3), Split(PublishedVoteKind.Passage, 1)));
+        var one = await RenderAsync(Page(), agreement: AgreementOf(Agreed(PublishedVoteKind.Passage, 1)));
+
+        Assert.DoesNotContain("%", many.QuerySelector("[aria-labelledby^='panel-when-both-parties-agreed']")!.TextContent);
+        Assert.Contains("On 1 of the 1 substantive House roll call vote on this site", one.Body!.TextContent, StringComparison.Ordinal);
+    }
+
+    private static ChamberAgreement AgreementOf(params KindAgreement[] rows) => new(PublishedChamber.House, 119,
+        [.. rows.GroupBy(row => row.Kind).Select(group => new KindAgreement(group.Key, group.Sum(row => row.Agreed), group.Sum(row => row.Split), group.Sum(row => row.Mixed)))]);
+
+    private static KindAgreement Agreed(PublishedVoteKind kind, int count) => new(kind, count, 0, 0);
+
+    private static KindAgreement Split(PublishedVoteKind kind, int count) => new(kind, 0, count, 0);
+
+    private static KindAgreement Mixed(PublishedVoteKind kind, int count) => new(kind, 0, 0, count);
+
     private static readonly DateTimeOffset Published = new(2026, 5, 11, 8, 0, 0, TimeSpan.Zero);
 
     private static PublicationRelease ReleaseOf(params PublishedRecordEntry[] entries) => new()
@@ -168,8 +228,8 @@ public sealed class PublishedBoardPageTests
         EventDate = new DateOnly(2026, 5, 7)
     };
 
-    private static async Task<AngleSharp.Dom.IDocument> RenderAsync(OfficialBoardPage page, ClosestVote? closestVote = null) =>
-        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderBoardAsync(page, closestVote, CancellationToken.None));
+    private static async Task<AngleSharp.Dom.IDocument> RenderAsync(OfficialBoardPage page, ClosestVote? closestVote = null, ChamberAgreement? agreement = null) =>
+        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderBoardAsync(page, closestVote, agreement, CancellationToken.None));
 
     private static OfficialBoardPage Page(params BoardMember[] members) => new(Board, 119, [.. members], 0, 0, 0);
 
