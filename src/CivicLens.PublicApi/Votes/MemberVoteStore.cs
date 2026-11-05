@@ -45,9 +45,11 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
 
     private static MemberVote ReadVote(NpgsqlDataReader reader)
     {
+        var kind = ViewColumns.Enum<PublishedVoteKind>(reader, 7);
+        var result = reader.GetString(12);
         var cast = reader.GetString(13);
         return new(reader.GetString(1), reader.GetFieldValue<DateOnly>(6), ViewColumns.Enum<PublishedChamber>(reader, 2), reader.GetInt32(3), reader.GetInt32(4),
-            reader.GetInt32(5), ViewColumns.Enum<PublishedVoteKind>(reader, 7), ViewColumns.Text(reader, 8), ViewColumns.Number(reader, 9), reader.GetString(10),
-            ViewColumns.Text(reader, 11), reader.GetString(12), cast, PublishedOfficialVote.CastWord(cast));
+            reader.GetInt32(5), kind, PlainVoteWords.Kind(kind), ViewColumns.Text(reader, 8), ViewColumns.Number(reader, 9), reader.GetString(10),
+            ViewColumns.Text(reader, 11), result, PlainVoteWords.Result(result), cast, PlainVoteWords.Cast(cast));
     }
 }

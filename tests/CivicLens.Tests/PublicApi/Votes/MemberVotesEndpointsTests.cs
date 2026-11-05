@@ -63,7 +63,7 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
         var votes = new[]
         {
             new SeededVote('a', "2026-03-01") { RollCall = 1, Casts = ["Yea", "Nay", "Present"] },
-            new SeededVote('b', "2026-03-02") { Chamber = "Senate", RollCall = 2, Casts = ["Aye", "No", "Not Voting"] },
+            new SeededVote('b', "2026-03-02") { Chamber = "Senate", RollCall = 2, Casts = ["Aye", "No", "Not Voting"], Result = "Agreed to" },
             new SeededVote('c', "2026-03-03") { RollCall = 3, Casts = ["Nay", "Yea", "Yea"] }
         };
         await using var host = await StartWithVotesAsync(votes);
@@ -74,14 +74,41 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
         Assert.Equal([("Nay", "No (Nay)"), ("Aye", "Yes (Aye)"), ("Yea", "Yes (Yea)")], Casts(first));
         Assert.Equal([("Yea", "Yes (Yea)"), ("No", "No"), ("Nay", "No (Nay)")], Casts(second));
         var vote = first.GetProperty("votes")[1];
-        Assert.Equal(("senate", 119, 1, 2, "passage", "hr", 1, "Headline b", "An AI summary of the official record", "Passed b"),
+        Assert.Equal(("senate", 119, 1, 2, "passage", "hr", 1, "Headline b", "An AI summary of the official record", "Agreed to"),
             (vote.GetProperty("chamber").GetString(), vote.GetProperty("congress").GetInt32(), vote.GetProperty("session").GetInt32(), vote.GetProperty("rollCall").GetInt32(),
              vote.GetProperty("kind").GetString(), vote.GetProperty("billType").GetString(), vote.GetProperty("billNumber").GetInt32(), vote.GetProperty("headline").GetString(),
              vote.GetProperty("label").GetString(), vote.GetProperty("result").GetString()));
     }
 
+    [Fact]
+    public async Task EachVoteSendsPlainWordsForKindResultAndCastNextToTheSourceWordsFromTheOneTable()
+    {
+        var votes = new[]
+        {
+            new SeededVote('a', "2026-03-01") { RollCall = 1, Kind = "Suspension", Result = "Failed" },
+            new SeededVote('b', "2026-03-02") { RollCall = 2, Kind = "Passage", Result = "Agreed to" },
+            new SeededVote('c', "2026-03-03") { RollCall = 3, Kind = "Nomination", Result = "Nomination Rejected" },
+            new SeededVote('d', "2026-03-04") { RollCall = 4, Kind = "Passage", Result = "Point of Order Sustained" }
+        };
+        await using var host = await StartWithVotesAsync(votes);
+
+        var answer = await GetAsync(host, "/v1/member-votes?official=p0");
+
+        var rows = answer.GetProperty("votes").EnumerateArray().Select(vote => (
+            vote.GetProperty("kind").GetString(), vote.GetProperty("kindWords").GetString(),
+            vote.GetProperty("result").GetString(), vote.GetProperty("resultWords").GetString(),
+            vote.GetProperty("cast").GetString(), vote.GetProperty("castWords").GetString()));
+        Assert.Equal(
+            [("passage", PlainVoteWords.Kind(PublishedVoteKind.Passage), "Point of Order Sustained", "Point of Order Sustained", "Yea", PlainVoteWords.Cast("Yea")),
+             ("nomination", PlainVoteWords.Kind(PublishedVoteKind.Nomination), "Nomination Rejected", PlainVoteWords.Result("Nomination Rejected"), "Yea", PlainVoteWords.Cast("Yea")),
+             ("passage", PlainVoteWords.Kind(PublishedVoteKind.Passage), "Agreed to", PlainVoteWords.Result("Agreed to"), "Yea", PlainVoteWords.Cast("Yea")),
+             ("suspension", PlainVoteWords.Kind(PublishedVoteKind.Suspension), "Failed", PlainVoteWords.Result("Failed"), "Yea", PlainVoteWords.Cast("Yea"))],
+            rows);
+        Assert.Equal("Passed (Agreed to)", PlainVoteWords.Result("Agreed to"));
+    }
+
     private static (string, string)[] Casts(JsonElement answer) =>
-        [.. answer.GetProperty("votes").EnumerateArray().Select(vote => (vote.GetProperty("cast").GetString()!, vote.GetProperty("castWord").GetString()!))];
+        [.. answer.GetProperty("votes").EnumerateArray().Select(vote => (vote.GetProperty("cast").GetString()!, vote.GetProperty("castWords").GetString()!))];
 
     [Fact]
     public async Task AnOfficialWithNoCastGetsAnEmptyListAndAVoteOutsideTheActiveReleaseIsLeftOut()
