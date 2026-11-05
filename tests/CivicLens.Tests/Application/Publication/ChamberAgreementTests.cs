@@ -50,7 +50,7 @@ public sealed class ChamberAgreementTests
         var agreement = ChamberAgreement.From(release, PublishedChamber.House, 119)!;
 
         Assert.Equal([(PublishedVoteKind.Passage, 1, 2), (PublishedVoteKind.Nomination, 1, 1)],
-            agreement.Kinds.Select(kind => (kind.Kind, kind.Agreed, kind.Total)).OrderBy(row => row.Kind == PublishedVoteKind.Nomination));
+            agreement.Kinds.Select(kind => (kind.Kind, kind.Agreed, kind.Total)));
         Assert.Equal(agreement.Total, agreement.Kinds.Sum(kind => kind.Total));
         Assert.Equal(1, agreement.Nominations);
     }

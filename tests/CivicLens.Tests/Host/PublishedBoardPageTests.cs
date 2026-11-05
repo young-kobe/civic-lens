@@ -179,7 +179,7 @@ public sealed class PublishedBoardPageTests
         var most = AgreementOf(Agreed(PublishedVoteKind.Nomination, 3), Agreed(PublishedVoteKind.Passage, 2), Split(PublishedVoteKind.Passage, 0));
         var half = AgreementOf(Agreed(PublishedVoteKind.Nomination, 2), Agreed(PublishedVoteKind.Passage, 2));
 
-        Assert.Contains("Most House roll call votes are on nominations. Look at each kind of vote, not only the total.", (await RenderAsync(Page(), agreement: most)).Body!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Most of these 5 votes are on nominations. Look at each kind of vote, not only the total.", (await RenderAsync(Page(), agreement: most)).Body!.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("are on nominations", (await RenderAsync(Page(), agreement: half)).Body!.TextContent, StringComparison.Ordinal);
     }
 

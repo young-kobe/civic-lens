@@ -323,8 +323,9 @@ public sealed class ReleaseRendererTests
         var text = panel.ShownText();
         Assert.Contains("A vote is in the total when its kind is substantive and both the Democrats and the Republicans voted in it.", text, StringComparison.Ordinal);
         Assert.Contains("When a party has a tie, that party has no majority.", text, StringComparison.Ordinal);
+        Assert.Contains("A member who has left the roster counts with the party letter in the vote record.", text, StringComparison.Ordinal);
         Assert.Contains("That the parties voted the same way is about the question of each vote. It does not show that they agree on an issue.", text, StringComparison.Ordinal);
-        Assert.Contains("The page does not appear until every vote on this site names its Congress.", text, StringComparison.Ordinal);
+        Assert.Contains("The count does not appear until every vote on this site names its Congress.", text, StringComparison.Ordinal);
         Assert.Equal("When both parties agreed", panel.QuerySelector("h2")!.TextContent);
     }
 

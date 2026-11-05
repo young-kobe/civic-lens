@@ -76,7 +76,7 @@ internal static class PublishedBoardView
     public static bool ShowsNominationNote(ChamberAgreement agreement) => agreement.Nominations * 2 > agreement.Total;
 
     public static string NominationNote(ChamberAgreement agreement) =>
-        $"Most {agreement.Chamber} roll call votes are on nominations. Look at each kind of vote, not only the total.";
+        $"Most of these {agreement.Total} votes are on nominations. Look at each kind of vote, not only the total.";
 
     public static string PartyOf(OfficialBoard board) => PublishedOfficialView.PartyOf(board.Chamber, board.Party);
 
