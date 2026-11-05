@@ -48,7 +48,7 @@ public sealed class PublishedOfficialPageTests
             records.QuerySelectorAll("a.cell-title").Select(link => link.GetAttribute("href")!.Replace("../", "").Replace("records/", "").Replace(".html", "")));
         Assert.Equal(["Bill or resolution, 1 May 2026", "Vote, 1 Apr 2026", "Statement, 1 Mar 2026", "Vote, 1 Dec 2025"], records.QuerySelectorAll("tbody .record-kind").Select(line => line.TextContent));
         Assert.Contains("House roll call 100, Congress 119, session 1, HR 7. Result of the vote: Passed", records.TextContent, StringComparison.Ordinal);
-        Assert.Equal(["Yea", "Yea"], records.QuerySelectorAll("tbody .cast-pill").Select(pill => pill.TextContent));
+        Assert.Equal(["Yes (Yea)", "Yes (Yea)"], records.QuerySelectorAll("tbody .cast-pill").Select(pill => pill.TextContent));
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialRecordAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.Contains("Result of the vote: Approved (Cloture Motion Agreed to)", new HtmlParser().ParseDocument(html).Body!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Result of the vote: Passed (Cloture Motion Agreed to)", new HtmlParser().ParseDocument(html).Body!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -808,17 +808,17 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Theory]
-    [InlineData("Yea", "cast-pill cast-yes")]
-    [InlineData("Aye", "cast-pill cast-yes")]
-    [InlineData("Nay", "cast-pill")]
-    [InlineData("No", "cast-pill")]
-    [InlineData("Present", "cast-pill")]
-    public async Task OnlyAYesCastGetsTheFilledPillSoTheColorNeverClaimsMoreThanTheWordSays(string cast, string expectedClass)
+    [InlineData("Yea", "Yes (Yea)", "cast-pill cast-yes")]
+    [InlineData("Aye", "Yes (Aye)", "cast-pill cast-yes")]
+    [InlineData("Nay", "No (Nay)", "cast-pill")]
+    [InlineData("No", "No", "cast-pill")]
+    [InlineData("Present", "Present", "cast-pill")]
+    public async Task OnlyAYesCastGetsTheFilledPillSoTheColorNeverClaimsMoreThanTheWordSays(string cast, string expectedText, string expectedClass)
     {
         var document = await RecordRenderedAsync([Vote('a', new DateOnly(2026, 4, 1)) with { Cast = cast }]);
 
         var pill = document.QuerySelector("[data-list-pane] .cast-pill")!;
-        Assert.Equal((cast, expectedClass), (pill.TextContent, pill.ClassName));
+        Assert.Equal((expectedText, expectedClass), (pill.TextContent, pill.ClassName));
     }
 
     [Fact]
@@ -873,7 +873,7 @@ public sealed class PublishedOfficialPageTests
 
         var ids = document.QuerySelectorAll("#break tbody a.cell-title").Select(link => link.GetAttribute("href")![^69..^5]).ToArray();
         Assert.Equal([new string('g', 64), new string('f', 64), new string('e', 64), new string('d', 64), new string('c', 64)], ids);
-        Assert.Equal(["Nay", "Nay", "Nay", "Nay", "Nay"], document.QuerySelectorAll("#break .cast-pill").Select(pill => pill.TextContent));
+        Assert.Equal(["No (Nay)", "No (Nay)", "No (Nay)", "No (Nay)", "No (Nay)"], document.QuerySelectorAll("#break .cast-pill").Select(pill => pill.TextContent));
     }
 
     [Fact]
@@ -1378,7 +1378,7 @@ public sealed class PublishedOfficialPageTests
         var panel = document.QuerySelector("[aria-labelledby='panel-what-they-said-and-what-they-did']")!;
         Assert.Equal(["Statement date", "What they said", "Link", "What they did", "Their vote"], panel.QuerySelectorAll("thead th").Select(cell => cell.TextContent.Trim()));
         var rows = panel.QuerySelectorAll("tbody tr").Select(row => row.QuerySelectorAll("td").Select(cell => cell.TextContent.Trim()).ToArray()).ToArray();
-        Assert.Equal(["5 Apr 2026", "Statement 2", "Statement about a vote", "Official title a", "Nay"], rows[0]);
+        Assert.Equal(["5 Apr 2026", "Statement 2", "Statement about a vote", "Official title a", "No (Nay)"], rows[0]);
         Assert.Equal(["1 Mar 2026", "Statement 1", "States position on", "Official title b", "Not a vote"], rows[1]);
         Assert.Equal([$"../records/{new string('2', 64)}.html", $"../records/{new string('a', 64)}.html"],
             panel.QuerySelectorAll("tbody tr")[0].QuerySelectorAll("a").Select(link => link.GetAttribute("href")));

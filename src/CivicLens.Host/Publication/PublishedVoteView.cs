@@ -17,7 +17,7 @@ internal static class PublishedVoteView
         new Fact("Voted on", Moment.Day(vote.VotedOn)).CitedAt(Anchor(vote, vote.VotedOnCitation)),
         new Fact("Kind", KindValue(vote)) { TermKey = PublishedRecordLabels.VoteKindTermKey(vote.Kind) },
         .. Question(vote),
-        new Fact("Result", PublishedRecordLabels.VoteResult(vote.Result)).CitedAt(Anchor(vote, ResultFact(vote).Citation)),
+        new Fact("Result", PlainVoteWords.Result(vote.Result)).CitedAt(Anchor(vote, ResultFact(vote).Citation)),
         .. Totals(vote),
         .. ResultFacts(vote).Select(fact => new Fact(PublishedRecordLabels.VoteResultLabel(fact, MemberNoun(vote) + "s"), PublishedRecordLabels.VoteFactValue(fact.Text)).CitedAt(Anchor(vote, fact.Citation))),
         new("Chamber", vote.Chamber.ToString()),
@@ -33,15 +33,15 @@ internal static class PublishedVoteView
 
     private static string KindValue(PublishedVote vote) =>
         vote.Kind == PublishedVoteKind.Other && vote.KindCitation is null
-            ? $"{PublishedRecordLabels.OtherQuestion}. The source gives no question."
-            : PublishedRecordLabels.VoteKind(vote.Kind);
+            ? $"{PlainVoteWords.OtherKind}. The source gives no question."
+            : PlainVoteWords.Kind(vote.Kind);
 
     private static IEnumerable<Fact> Question(PublishedVote vote) =>
-        vote.KindCitation is { } kind ? [new Fact("Question", PublishedRecordLabels.VoteQuestion(vote.Kind, PublishedRecordLabels.VoteFactValue(kind.Quote))).CitedAt(Anchor(vote, kind))] : [];
+        vote.KindCitation is { } kind ? [new Fact("Question", PlainVoteWords.Question(vote.Kind, PublishedRecordLabels.VoteFactValue(kind.Quote))).CitedAt(Anchor(vote, kind))] : [];
 
     private static IEnumerable<Fact> Totals(PublishedVote vote) =>
         vote.Totals is { } totals
-            ? [new Fact("Totals", $"Casts of all {MemberNoun(vote)}s: Yea {totals.Yea}, Nay {totals.Nay}, Present {totals.Present}, Not voting {totals.NotVoting}")
+            ? [new Fact("Totals", $"Casts of all {MemberNoun(vote)}s: {PlainVoteWords.Totals(totals)}")
                 .CitedAt(CountFact(vote) is { } count ? Anchor(vote, count.Citation) : null)]
             : [];
 
@@ -100,9 +100,9 @@ internal static class PublishedVoteView
     };
 
     public static string? ListYeaNay(PublishedRecordEntry entry) =>
-        entry.YeaCount is { } yea && entry.NayCount is { } nay ? $"Yea {yea}, Nay {nay}" : null;
+        entry.YeaCount is { } yea && entry.NayCount is { } nay ? PlainVoteWords.YesNo(yea, nay) : null;
 
-    private const string CountsWho = "of all members of the chamber who voted Yea or Nay";
+    private const string CountsWho = "of all members of the chamber who voted Yes or No";
 
     public static string? ListCounts(PublishedRecordEntry entry) =>
         ListYeaNay(entry) is { } counts ? $"Casts {CountsWho}: {counts}." : null;
@@ -112,7 +112,7 @@ internal static class PublishedVoteView
         var votes = entries.Where(entry => entry.Kind == PublishedRecordKind.Vote).ToArray();
         if (defineBadges && votes.Any(entry => entry.Alignment == PublishedVoteAlignment.Split)) yield return PublishedOfficialView.SplitVoteMeaning;
         if (defineBadges && votes.Any(entry => entry.Alignment == PublishedVoteAlignment.PartiesAgree)) yield return PublishedOfficialView.PartiesAgreedMeaning;
-        if (votes.Any(entry => ListYeaNay(entry) is not null)) yield return $"Yea and Nay counts are casts {CountsWho}.";
+        if (votes.Any(entry => ListYeaNay(entry) is not null)) yield return $"Yes and No counts are casts {CountsWho}.";
         if (billLines.AnyOf(entries)) yield return PublishedRecordLabels.BillLineSource;
     }
 
@@ -129,12 +129,12 @@ internal static class PublishedVoteView
 
     private static string PartyCounts(PublishedVote vote) =>
         string.Join(' ', new[] { PublishedPartyMajority.Democrat, PublishedPartyMajority.Republican }.Select(party => PartyCount(vote, party))) +
-        " These counts include every member of the party, tracked or not. An independent counts with the party they caucus with, so these counts can differ from the source totals. Aye counts as Yea and No counts as Nay.";
+        " These counts include every member of the party, tracked or not. An independent counts with the party they caucus with, so these counts can differ from the source totals. Yea and Aye count as Yes. Nay counts as No.";
 
     private static string PartyCount(PublishedVote vote, string party)
     {
         var count = vote.PartyMajorities.Single(majority => majority.Party == party);
-        return $"{PartyOf(vote, party)}: {count.YeaCount} Yea, {count.NayCount} Nay.";
+        return $"{PartyOf(vote, party)}: {count.YeaCount} Yes, {count.NayCount} No.";
     }
 
     public const string BreakMeaning = "A member is listed when they cast Yea or Nay against the cast of most members of their own party on this vote. A current independent counts with the party they caucus with. A former independent counts with no party. A member with another party, or with no known party, is not listed. Present and Not voting never count as a break.";
@@ -166,9 +166,9 @@ internal static class PublishedVoteView
         var (lead, word) = cast switch
         {
             PublishedOfficialVote.NotVoting => ("", "Did not vote"),
-            PublishedOfficialVote.Present => ("Voted ", PublishedOfficialVote.Present),
+            PublishedOfficialVote.Present => ("Voted ", PlainVoteWords.Present),
             _ when PublishedOfficialVote.IsCandidate(cast) => ("Voted for ", cast),
-            _ => ("Voted ", cast)
+            _ => ("Voted ", PlainVoteWords.Cast(cast))
         };
         return new(lead, word, cast, $" ({count} tracked {PublishedOfficialView.Noun(count, MemberNoun(vote))})", members);
     }
