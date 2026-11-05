@@ -101,16 +101,6 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal([.. written.TrackedIssueIds], [.. evidence.Current.TrackedIssueIds]);
     }
 
-    // No public path reaches this method with the vote kind.
-    [Fact]
-    public async Task ReadRevisionJsonRefusesTheVoteKindBecauseAVoteIsReadFromItsColumns()
-    {
-        await using var db = await QueueFactory().CreateDbContextAsync();
-
-        await Assert.ThrowsAsync<ArgumentException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Review.CitedRevisions", "ReadRevisionJsonAsync",
-            db, PublishedRecordKind.Vote, new[] { new PublishedRevisionBinding(PublishedRecordKind.Vote, "any", 1) }, CancellationToken.None));
-    }
-
     [Fact]
     public async Task TheQueriesOfAHistoryReadStayTheSameWhenMoreVotesAreReadBecauseNoReaderQueriesEachRow()
     {

@@ -33,6 +33,8 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
             table.HasCheckConstraint("ck_action_revisions_policy_area_id", "policy_area_id IS NULL OR policy_area IS NOT NULL");
             table.HasCheckConstraint("ck_action_revisions_code_bill_citation",
                 "author_kind <> 'Code' OR headline IS NULL OR bill_citation_extraction_id IS NOT NULL");
+            table.HasCheckConstraint("ck_action_revisions_text_source", "text_package_id IS NULL OR summary_citation_extraction_id IS NULL");
+            table.HasCheckConstraint("ck_action_revisions_why_it_matters", "(text_package_id IS NULL) = (why_it_matters IS NULL)");
             table.HasCheckConstraint("ck_action_revisions_cosponsor_count", "cosponsor_count >= 0");
             table.HasCheckConstraint("ck_action_revisions_columns_written", $"num_nulls({string.Join(", ", WrittenTogether)}) IN (0, {WrittenTogether.Length})");
             table.HasCheckConstraint("ck_action_revisions_derived_columns_written", "num_nulls(event_on, cosponsor_count) IN (0, 2)");
@@ -63,6 +65,8 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.BillTitle).HasColumnName("bill_title").HasMaxLength(ActionDraftRevision.MaximumTitleLength);
         builder.Property(row => row.IssueRevisionId).HasColumnName("issue_revision_id").HasMaxLength(64);
         builder.Property(row => row.SubjectsHash).HasColumnName("subjects_hash").HasMaxLength(64);
+        builder.Property(row => row.TextPackageId).HasColumnName("text_package_id").HasMaxLength(ActionDraftRevision.MaximumTextPackageIdLength);
+        builder.Property(row => row.WhyItMatters).HasColumnName("why_it_matters").HasMaxLength(ActionDraftRevision.MaximumSummaryLength);
         builder.Property(row => row.IssueCandidatesRecorded).HasColumnName("issue_candidates_recorded");
         builder.Property(row => row.EventOn).HasColumnName("event_on");
         builder.Property(row => row.CosponsorCount).HasColumnName("cosponsor_count");
@@ -80,6 +84,10 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
             .HasForeignKey(row => new { row.RecordId, row.SourceId, row.Congress, row.BillType, row.BillNumber })
             .HasPrincipalKey(draft => new { draft.RecordId, draft.SourceId, draft.Congress, draft.BillType, draft.BillNumber }).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.Issues).WithOne().HasForeignKey(issue => new { issue.RecordId, issue.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<BillTextVersionRow>().WithMany()
+            .HasForeignKey(row => new { row.Congress, row.BillType, row.BillNumber, row.TextPackageId })
+            .HasPrincipalKey(text => new { text.Congress, text.BillType, text.BillNumber, text.PackageId }).OnDelete(DeleteBehavior.Restrict);
+        builder.HasMany(row => row.TextCitations).WithOne().HasForeignKey(citation => new { citation.RecordId, citation.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.Sponsorships).WithOne().HasForeignKey(item => new { item.RecordId, item.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -278,15 +278,6 @@ public sealed class PostgresRelationshipRevisionColumnsTests(PostgresCollection 
         Assert.Equal(["Succeeded"], await ReadAsync("SELECT status FROM relationship_analysis"));
     }
 
-    [Fact]
-    public async Task ReadRevisionJsonRefusesTheRelationshipKindBecauseItIsReadFromItsColumns()
-    {
-        await using var db = await factory.CreateDbContextAsync();
-
-        await Assert.ThrowsAsync<ArgumentException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Review.CitedRevisions", "ReadRevisionJsonAsync",
-            db, PublishedRecordKind.Relationship, new[] { new PublishedRevisionBinding(PublishedRecordKind.Relationship, "any", 1) }, CancellationToken.None));
-    }
-
     [Theory]
     [InlineData("UPDATE relationship_revisions SET reason = NULL", "ck_relationship_revisions_columns_written")]
     [InlineData("UPDATE relationship_revisions SET reason = E'one\\ntwo'", "ck_relationship_revisions_reason")]

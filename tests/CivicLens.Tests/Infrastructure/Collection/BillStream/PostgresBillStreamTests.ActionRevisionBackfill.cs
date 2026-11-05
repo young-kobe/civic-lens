@@ -16,16 +16,6 @@ public sealed partial class PostgresBillStreamTests
 {
     private static readonly ReviewActor BackfillOwner = new("auth0|owner", ReviewRole.Owner);
 
-    private const string NullRevisionColumns = """
-        headline = NULL, summary = NULL, text_origin = NULL, suggestion_headline = NULL, suggestion_summary = NULL, suggestion_run_id = NULL,
-        suggestion_fingerprint = NULL, source_id = NULL, congress = NULL, bill_type = NULL, bill_number = NULL, candidate_id = NULL,
-        candidate_update_utc_ticks = NULL, candidate_includes_summaries = NULL, candidate_includes_subjects = NULL, fingerprint = NULL,
-        summary_version = NULL, summary_citation_extraction_id = NULL, summary_citation_start = NULL, summary_citation_length = NULL,
-        policy_area = NULL, policy_area_citation_extraction_id = NULL, policy_area_citation_start = NULL, policy_area_citation_length = NULL,
-        policy_area_id = NULL, bill_title = NULL, bill_citation_extraction_id = NULL, bill_citation_start = NULL, bill_citation_length = NULL,
-        issue_revision_id = NULL, subjects_hash = NULL, issue_candidates_recorded = NULL, event_on = NULL, cosponsor_count = NULL
-        """;
-
     [Fact]
     public async Task ALegacyRevisionMovesToColumnsThatEqualItsJsonAndTheJsonStaysUntouchedBecauseOnlyTheColumnsAreNew()
     {
@@ -243,7 +233,7 @@ public sealed partial class PostgresBillStreamTests
             DELETE FROM action_revision_sponsorship_citations WHERE revision_number IN ({list});
             DELETE FROM action_revision_sponsorships WHERE revision_number IN ({list});
             DELETE FROM action_revision_issues WHERE revision_number IN ({list});
-            UPDATE action_revisions SET {NullRevisionColumns} WHERE revision_number IN ({list})
+            UPDATE action_revisions SET {LegacyActionRevisionInsert.NullColumns} WHERE revision_number IN ({list})
             """);
     }
 

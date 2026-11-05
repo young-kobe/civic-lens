@@ -4,6 +4,9 @@ namespace CivicLens.Application.Issues;
 
 public sealed record TrackedIssueConfiguration
 {
+    public const int MaximumDefinitionLength = 120;
+    public const int MaximumTermLength = 75;
+
     public required string Id { get; init; }
     public required string Name { get; init; }
     public required string Definition { get; init; }
@@ -19,6 +22,8 @@ public sealed record TrackedIssueConfiguration
         if (string.IsNullOrWhiteSpace(Name) || string.IsNullOrWhiteSpace(Definition))
             throw new ArgumentException($"Issue '{Id}' must have a nonblank name and definition.");
         IssueConfiguration.ValidateNameLength(Name, $"Issue '{Id}'");
+        if (Definition.Length > MaximumDefinitionLength)
+            throw new ArgumentException($"Issue '{Id}' definition must be at most {MaximumDefinitionLength} characters.");
         ValidatePolicyAreas(policyAreaIds);
         ValidateTerms(Includes, "includes");
         ValidateTerms(Excludes, "excludes");
@@ -47,6 +52,8 @@ public sealed record TrackedIssueConfiguration
         {
             if (string.IsNullOrWhiteSpace(term))
                 throw new ArgumentException($"Issue '{Id}' {listName} entries must be nonblank.");
+            if (term.Length > MaximumTermLength)
+                throw new ArgumentException($"Issue '{Id}' {listName} entry '{term}' must be at most {MaximumTermLength} characters.");
             if (!seen.Add(term))
                 throw new ArgumentException($"Issue '{Id}' repeats {listName} entry '{term}'.");
         }

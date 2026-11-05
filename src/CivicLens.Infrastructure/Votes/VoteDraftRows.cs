@@ -15,8 +15,8 @@ namespace CivicLens.Infrastructure.Votes;
 internal static class VoteDraftRows
 {
     internal static readonly ReviewRecords<VoteDraftRow, VoteRevisionRow, VoteReviewDecisionRow, VoteDraftRevision> Records =
-        new(PostgresAdvisoryLock.VoteReview, PublishedRecordKind.Vote, "Vote", nameof(VoteDraftRow.RecordId), Revised,
-            new(RequireNoRefusedUpdateAsync), VoteRevisionRows.ReadAsync);
+        new(PostgresAdvisoryLock.VoteReview, PublishedRecordKind.Vote, "Vote", nameof(VoteDraftRow.RecordId), VoteRevisionRows.ReadAsync,
+            Revised, new(RequireNoRefusedUpdateAsync));
 
     public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, VoteDraftRevision revision, string runId,
         CancellationToken cancellationToken)

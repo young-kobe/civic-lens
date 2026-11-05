@@ -14,8 +14,9 @@ namespace CivicLens.Infrastructure.Review;
 /// <summary>The shared store core. Reads hold one review cycle: the current revision, the last approved revision, and the
 /// decisions since that approval.</summary>
 internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevision>(string lockKey, PublishedRecordKind kind, string draftName,
-    string recordIdProperty, Action<TDraftRow, TRevision>? revised = null, PersonApprovalRules<TDraftRow>? personApproval = null,
-    Func<CollectionAttemptDbContext, IQueryable<TRevisionRow>, CancellationToken, Task<IReadOnlyList<StoredRevision<TRevisionRow, TRevision>>>>? readRevisions = null)
+    string recordIdProperty,
+    Func<CollectionAttemptDbContext, IQueryable<TRevisionRow>, CancellationToken, Task<IReadOnlyList<StoredRevision<TRevisionRow, TRevision>>>> readRevisions,
+    Action<TDraftRow, TRevision>? revised = null, PersonApprovalRules<TDraftRow>? personApproval = null)
     where TDraftRow : class, IReviewDraftRow
     where TRevisionRow : class, IReviewRevisionRow
     where TDecisionRow : class, IReviewDecisionRow, new()
@@ -379,7 +380,7 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         CollectionAttemptDbContext db, string[] recordIds, string[] approvalIds, CancellationToken cancellationToken)
     {
         if (recordIds.Length == 0) return [];
-        var rows = await ReadRevisionsAsync(db, db.Set<TRevisionRow>().AsNoTracking()
+        var rows = await readRevisions(db, db.Set<TRevisionRow>().AsNoTracking()
             .Where(row => recordIds.Contains(EF.Property<string>(row, recordIdProperty)) &&
                 (db.Set<TDraftRow>().Any(draft => EF.Property<string>(draft, recordIdProperty) == EF.Property<string>(row, recordIdProperty) &&
                         draft.CurrentRevisionNumber == row.RevisionNumber) ||
@@ -415,25 +416,15 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
 
     public async Task<Dictionary<string, (TRevisionRow Row, TRevision Revision)>> ReadFirstRevisionsAsync(CollectionAttemptDbContext db,
         string[] recordIds, CancellationToken cancellationToken) =>
-        (await ReadRevisionsAsync(db, db.Set<TRevisionRow>().AsNoTracking()
+        (await readRevisions(db, db.Set<TRevisionRow>().AsNoTracking()
             .Where(row => recordIds.Contains(EF.Property<string>(row, recordIdProperty)) && row.RevisionNumber == 1), cancellationToken))
         .ToDictionary(stored => stored.Row.RecordId, stored => (stored.Row, Resolve(stored)), StringComparer.Ordinal);
 
     public async Task<TRevision?> FindRevisionAsync(CollectionAttemptDbContext db, string recordId, int revisionNumber,
         CancellationToken cancellationToken) =>
-        (await ReadRevisionsAsync(db, db.Set<TRevisionRow>().AsNoTracking().Where(candidate =>
+        (await readRevisions(db, db.Set<TRevisionRow>().AsNoTracking().Where(candidate =>
             EF.Property<string>(candidate, recordIdProperty) == recordId && candidate.RevisionNumber == revisionNumber), cancellationToken))
         .SingleOrDefault() is { } stored ? Resolve(stored) : null;
-
-    /// <summary>Reads the rows of a query in a fixed number of queries. A kind with columns passes its own reader. Every other kind parses the JSON.</summary>
-    private Task<IReadOnlyList<StoredRevision<TRevisionRow, TRevision>>> ReadRevisionsAsync(CollectionAttemptDbContext db,
-        IQueryable<TRevisionRow> query, CancellationToken cancellationToken) =>
-        readRevisions is null ? ReadJsonRevisionsAsync(query, cancellationToken) : readRevisions(db, query, cancellationToken);
-
-    private static async Task<IReadOnlyList<StoredRevision<TRevisionRow, TRevision>>> ReadJsonRevisionsAsync(IQueryable<TRevisionRow> query,
-        CancellationToken cancellationToken) =>
-        [.. (await query.ToArrayAsync(cancellationToken)).Select(row =>
-            new StoredRevision<TRevisionRow, TRevision>(row, () => ReviewJson.Deserialize<TRevision>(row.RevisionJson, "revision")))];
 
     private static TRevision Resolve(StoredRevision<TRevisionRow, TRevision> stored)
     {

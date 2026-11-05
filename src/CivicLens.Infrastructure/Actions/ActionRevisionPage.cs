@@ -10,7 +10,8 @@ namespace CivicLens.Infrastructure.Actions;
 internal sealed record ActionRevisionPage(IReadOnlyList<ActionRevisionRow> Rows,
     ILookup<(string RecordId, int RevisionNumber), ActionRevisionIssueRow> Issues,
     ILookup<(string RecordId, int RevisionNumber), ActionRevisionSponsorshipRow> Sponsorships,
-    ILookup<(string RecordId, int RevisionNumber, short SponsorshipPosition), ActionRevisionSponsorshipCitationRow> Citations) : IRevisionRowPage<ActionRevisionRow>
+    ILookup<(string RecordId, int RevisionNumber, short SponsorshipPosition), ActionRevisionSponsorshipCitationRow> Citations,
+    ILookup<(string RecordId, int RevisionNumber), ActionRevisionTextCitationRow> TextCitations) : IRevisionRowPage<ActionRevisionRow>
 {
     /// <summary>Rebuilds the revision of a row. A row with null columns fails here, and the JSON is no fallback.</summary>
     public ActionDraftRevision Rebuild(ActionRevisionRow row)
@@ -28,8 +29,18 @@ internal sealed record ActionRevisionPage(IReadOnlyList<ActionRevisionRow> Rows,
             row.PolicyArea, SpanOf(row.PolicyAreaCitationExtractionId, row.PolicyAreaCitationStart, row.PolicyAreaCitationLength), row.PolicyAreaId,
             [.. tracked], recorded ? [.. issues.Select(issue => issue.IssueId)] : default,
             row.IssueRevisionId!, SponsorshipsOf(row), row.BillTitle!, row.SubjectsHash,
-            SpanOf(row.BillCitationExtractionId, row.BillCitationStart, row.BillCitationLength));
+            SpanOf(row.BillCitationExtractionId, row.BillCitationStart, row.BillCitationLength), row.TextPackageId, row.WhyItMatters,
+            TextCitationsOf(row));
     }
+
+    public IReadOnlyList<StoredRevision<ActionRevisionRow, ActionDraftRevision>> ToStoredRevisions() =>
+        [.. Rows.Select(row => new StoredRevision<ActionRevisionRow, ActionDraftRevision>(row, () => Rebuild(row)))];
+
+    /// <summary>A revision with no text citations keeps the default array, so its JSON leaves the field out.</summary>
+    private ImmutableArray<ActionTextCitation> TextCitationsOf(ActionRevisionRow row) =>
+        row.TextPackageId is null ? default
+            : [.. TextCitations[(row.RecordId, row.RevisionNumber)].OrderBy(citation => citation.Position)
+                .Select(citation => new ActionTextCitation(citation.Part, new SourceSpan(citation.CitationExtractionId, citation.CitationStart, citation.CitationLength), citation.Sentence))];
 
     private ImmutableArray<ActionSponsorship> SponsorshipsOf(ActionRevisionRow row) =>
         [.. Sponsorships[(row.RecordId, row.RevisionNumber)].OrderBy(item => item.Position).Select(item => new ActionSponsorship(item.PersonId, item.BioguideId,

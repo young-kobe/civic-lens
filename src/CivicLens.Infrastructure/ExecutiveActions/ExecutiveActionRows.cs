@@ -24,7 +24,7 @@ internal sealed class ExecutiveActionRows
     {
         this.codeVersion = codeVersion;
         Records = new(PostgresAdvisoryLock.ExecutiveActionReview, PublishedRecordKind.ExecutiveAction, "Executive action", nameof(ExecutiveActionDraftRow.RecordId),
-            Revised, new(Apply: ApplyWaitingNoticesAsync), ExecutiveActionRevisionRows.ReadAsync);
+            ExecutiveActionRevisionRows.ReadAsync, Revised, new(Apply: ApplyWaitingNoticesAsync));
     }
 
     internal ReviewRecords<ExecutiveActionDraftRow, ExecutiveActionRevisionRow, ExecutiveActionReviewDecisionRow, ExecutiveActionRevision> Records { get; }

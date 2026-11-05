@@ -108,12 +108,12 @@ internal static class ActionDraftRows
     public static async Task<ActionDraftRevision?> ReadCurrentAsync(CollectionAttemptDbContext db, string recordId,
         CancellationToken cancellationToken)
     {
-        var json = await (from draft in db.Set<ActionDraftRow>().AsNoTracking()
-                          join revision in db.Set<ActionRevisionRow>().AsNoTracking()
-                              on new { draft.RecordId, Number = draft.CurrentRevisionNumber } equals new { revision.RecordId, Number = revision.RevisionNumber }
-                          where draft.RecordId == recordId
-                          select revision.RevisionJson).SingleOrDefaultAsync(cancellationToken);
-        return json is null ? null : ReviewJson.Deserialize<ActionDraftRevision>(json, "action revision");
+        var current = from draft in db.Set<ActionDraftRow>().AsNoTracking()
+                      join revision in db.Set<ActionRevisionRow>().AsNoTracking()
+                          on new { draft.RecordId, Number = draft.CurrentRevisionNumber } equals new { revision.RecordId, Number = revision.RevisionNumber }
+                      where draft.RecordId == recordId
+                      select revision;
+        return (await ActionRevisionRows.ReadAsync(db, current, cancellationToken)).SingleOrDefault()?.Read();
     }
 
     public static void Revised(ActionDraftRow draft, ActionDraftRevision revision)
