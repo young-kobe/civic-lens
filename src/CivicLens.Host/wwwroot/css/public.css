@@ -44,6 +44,13 @@ table[data-paged]:focus { outline: none; }
 .home-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: var(--s6); align-items: center; padding-block: var(--s6) var(--s7); }
 .home-hero h1 { margin: 0; font-size: var(--t-display); line-height: 1; font-weight: 800; letter-spacing: -.03em; }
 .home-lead { max-width: 30em; margin: var(--s4) 0 var(--s5); color: var(--bar-muted); font-size: var(--t-lg); line-height: 1.5; }
+.zip-form { --ink: var(--bar-ink); --muted: var(--bar-muted); --control-line: var(--bar-control); --raised: var(--bar-field); --surface: var(--bar-thumb); --focus: var(--marigold); display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s3); margin: 0 0 var(--s4); }
+.zip-form .field { flex: 1 1 10rem; max-width: 16rem; }
+.zip-form .field input { background: var(--bar-field); color: var(--bar-ink); }
+.zip-seats { display: grid; gap: var(--s3); margin: 0; padding: 0; list-style: none; }
+.zip-seat { display: grid; gap: 2px; }
+.zip-seat a { font-weight: 600; }
+.zip-count { margin: 0 0 var(--s3); }
 .home-browse { margin: 0; color: var(--bar-muted); }
 .home-browse a { color: var(--bar-ink); }
 .home-browse a:hover { color: var(--marigold); }

@@ -172,6 +172,77 @@
         panel.hidden = false;
     };
 
+    const initZipLookup = form => {
+        const api = form.dataset.zipApi;
+        const states = JSON.parse(form.dataset.states);
+        const panel = document.querySelector("[data-zip-results]");
+        const body = panel.querySelector("[data-zip-body]");
+        const input = form.elements.namedItem("zip");
+        const stateName = code => states[code] ?? code;
+        const element = (tag, text, className) => {
+            const node = document.createElement(tag);
+            if (text !== undefined) node.textContent = text;
+            if (className) node.className = className;
+            return node;
+        };
+        const seatTitle = (district, isTerritory) => {
+            if (isTerritory) return `Delegate for ${stateName(district.state)}`;
+            return district.district === 0
+                ? `Representative for ${stateName(district.state)}, at large`
+                : `Representative for ${stateName(district.state)}, district ${district.district}`;
+        };
+        const seat = (title, holder) => {
+            const item = element("li", undefined, "zip-seat");
+            item.append(element("span", title, "muted small"));
+            if (holder === null) { item.append(element("span", "This seat is vacant.")); return item; }
+            const link = element("a", holder.name);
+            link.href = form.dataset.officialPage.replace("{id}", encodeURIComponent(holder.officialId));
+            const line = element("span");
+            line.append(link);
+            if (holder.party) line.append(`, ${holder.party}`);
+            item.append(line);
+            return item;
+        };
+        const show = nodes => { panel.hidden = false; body.replaceChildren(...nodes); };
+        const showAnswer = answer => {
+            const territories = new Set(answer.states.filter(state => state.senators.length === 0).map(state => state.state));
+            const list = element("ul", undefined, "zip-seats");
+            const nodes = [];
+            if (answer.districts.length > 1)
+                nodes.push(element("p", `Your ZIP area lies in ${answer.districts.length} districts. The district with the most land is first.`, "zip-count"));
+            for (const district of answer.districts)
+                list.append(seat(seatTitle(district, territories.has(district.state)), district.representative));
+            for (const state of answer.states) {
+                if (state.senators.length === 0) { list.append(element("li", `${stateName(state.state)} has no senators.`, "zip-seat")); continue; }
+                for (const senator of state.senators) list.append(seat(`Senator for ${stateName(state.state)}`, senator));
+            }
+            nodes.push(list);
+            show(nodes);
+        };
+        const failure = (zip, status) => ({
+            404: `No match for ${zip}. Check the 5 digits. Some ZIP codes, such as a PO box, are not in the Census data.`,
+            429: "Too many lookups. Wait one minute and try again."
+        })[status] ?? "The lookup failed. Try again, or browse all officials.";
+        let running = 0;
+        form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const zip = input.value.trim();
+            const mine = ++running;
+            if (!/^[0-9]{5}$/.test(zip)) { show([element("p", "Enter a ZIP code with 5 digits.")]); return; }
+            show([element("p", "Looking up your officials")]);
+            let answer;
+            try {
+                const response = await fetch(`${api}/v1/zip-districts/${zip}`);
+                if (mine !== running) return;
+                if (!response.ok) { show([element("p", failure(zip, response.status))]); return; }
+                answer = await response.json();
+            }
+            catch { if (mine === running) show([element("p", failure(zip, 0))]); return; }
+            if (mine === running) showAnswer(answer);
+        });
+        form.hidden = false;
+    };
+
     const initOfficialsFilter = controls => {
         const list = document.querySelector("[data-officials]");
         const cards = Array.from(list.children);
@@ -515,5 +586,6 @@
     document.querySelectorAll("[data-officials-filters]").forEach(initOfficialsFilter);
     document.querySelectorAll("[data-search-api]").forEach(initSearchService);
     document.querySelectorAll("[data-report-api]").forEach(initReportForm);
+    document.querySelectorAll("[data-zip-api]").forEach(initZipLookup);
     new Set(Array.from(document.querySelectorAll("th[data-sort]"), header => header.closest("table"))).forEach(initSortable);
 })();

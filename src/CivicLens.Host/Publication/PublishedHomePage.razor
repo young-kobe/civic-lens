@@ -1,3 +1,4 @@
+@using System.Text.Json
 @using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
 
@@ -7,12 +8,34 @@
             <div>
                 <h1>Who represents you?</h1>
                 <p class="home-lead">See how your representative and senators voted and which bills they introduced. Each fact links to its official source.</p>
+                @if (PublicApiUrl is not null)
+                {
+                    <noscript>
+                        <div class="notice notice-warn">
+                            <span>The ZIP lookup needs JavaScript. Without it, browse <a href="@PublicationProtocol.OfficialsPagePath">all officials</a>.</span>
+                        </div>
+                    </noscript>
+                    <form class="zip-form" hidden data-zip-api="@PublicApiUrl" data-official-page="@PublicationProtocol.OfficialPagePath("{id}")" data-states="@StateNames">
+                        <Field Label="Your ZIP code" For="zip-code">
+                            <input id="zip-code" name="zip" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="5" placeholder="5 digits" />
+                        </Field>
+                        <Button Type="submit">Find my officials</Button>
+                    </form>
+                }
                 <p class="home-browse">Or <a href="@PublicationProtocol.OfficialsPagePath">browse all @Highlights.OfficialCount officials</a></p>
             </div>
             <PublishedBreakCard Highlights="Highlights" PublishedAtUtc="Release.PublishedAtUtc" />
         </div>
     </Hero>
     <ChildContent>
+        @if (PublicApiUrl is not null)
+        {
+            <Panel Title="Your officials" Padded="true" hidden data-zip-results>
+                <div role="status" data-zip-body></div>
+                <p class="muted small">Source: U.S. Census Bureau</p>
+                <p class="muted small">A ZIP Code Tabulation Area is a Census Bureau area. It is not a USPS ZIP code. Near a border, check your address with your House office.</p>
+            </Panel>
+        }
         @if (Brief is not null)
         {
             <p class="muted small">Weekly brief</p>
@@ -32,6 +55,9 @@
     [Parameter] public PublishedBrief? Brief { get; set; }
     [Parameter, EditorRequired] public ReleaseFacets Facets { get; set; } = default!;
     [Parameter, EditorRequired] public HomeHighlights Highlights { get; set; } = default!;
+    [Parameter] public string? PublicApiUrl { get; set; }
+
+    private static readonly string StateNames = JsonSerializer.Serialize(UsStates.NameByCode);
 
     private string HomeDescription => Brief?.Headline
         ?? "Civic Lens collects what officials say and do, with the sources and the exact text that each record cites.";

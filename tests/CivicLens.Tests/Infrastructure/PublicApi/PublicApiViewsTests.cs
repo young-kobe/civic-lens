@@ -288,6 +288,15 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task TheZipViewNamesTheCongressOfTheDistrictFileSoARouteCanFilterByIt()
+    {
+        var steps = new ZipSnapshotSteps(this);
+        await steps.AdmitAsync('c', 0, 5);
+
+        Assert.Equal(["119"], await PublicAsync("SELECT DISTINCT congress FROM public_api.zip_districts"));
+    }
+
+    [Fact]
     public async Task VoteCountsEqualTheMemberRowsAndEveryAiOrCodeRowHasItsLabel()
     {
         await SeedAsync();

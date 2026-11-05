@@ -239,6 +239,69 @@ public sealed class PublishedHomePageTests
     private static async Task<AngleSharp.Dom.IElement> AllRecordsAsync(PublicationRelease release) =>
         new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAllRecordsAsync(release, 1, CancellationToken.None)).QuerySelector("main")!;
 
+    [Fact]
+    public async Task TheZipFormCallsTheServiceAtTheConfiguredAddressAndStaysHiddenUntilScriptRuns()
+    {
+        var html = await HomeHtmlAsync("https://api.example.test");
+        var document = new HtmlParser().ParseDocument(html);
+
+        var form = document.QuerySelector("form[data-zip-api]")!;
+        Assert.Equal("https://api.example.test", form.GetAttribute("data-zip-api"));
+        Assert.True(form.HasAttribute("hidden"));
+        Assert.Equal("officials/{id}.html", form.GetAttribute("data-official-page"));
+        Assert.Equal("District of Columbia", System.Text.Json.JsonDocument.Parse(form.GetAttribute("data-states")!).RootElement.GetProperty("DC").GetString());
+        var input = form.QuerySelector("input")!;
+        Assert.Equal(("zip", "5", "numeric"), (input.GetAttribute("name"), input.GetAttribute("maxlength"), input.GetAttribute("inputmode")));
+        Assert.Equal("Your ZIP code", form.QuerySelector("label[for='zip-code']")!.TextContent);
+        Assert.Equal("5 digits", input.GetAttribute("placeholder"));
+        Assert.Equal("Find my officials", form.QuerySelector("button[type=submit]")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheZipFormHasAJavaScriptNoticeBeforeItBecauseTheFormIsHiddenWithoutScript()
+    {
+        var html = await HomeHtmlAsync("https://api.example.test");
+
+        var noscriptStart = html.IndexOf("<noscript>", StringComparison.Ordinal);
+        var noscriptEnd = html.IndexOf("</noscript>", StringComparison.Ordinal);
+        var notice = html.IndexOf("The ZIP lookup needs JavaScript. Without it, browse ", StringComparison.Ordinal);
+        Assert.True(noscriptStart >= 0);
+        Assert.InRange(notice, noscriptStart, noscriptEnd);
+        Assert.True(noscriptEnd < html.IndexOf("<form class=\"zip-form\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task TheResultPanelIsHiddenUntilALookupAndCreditsTheCensusBureauAndSaysAZctaIsNotAZipCode()
+    {
+        var document = new HtmlParser().ParseDocument(await HomeHtmlAsync("https://api.example.test"));
+
+        var panel = document.QuerySelector("[data-zip-results]")!;
+        Assert.True(panel.HasAttribute("hidden"));
+        Assert.Equal("Your officials", panel.QuerySelector("h2")!.TextContent);
+        Assert.Equal("status", panel.QuerySelector("[data-zip-body]")!.GetAttribute("role"));
+        Assert.Equal(["Source: U.S. Census Bureau", "A ZIP Code Tabulation Area is a Census Bureau area. It is not a USPS ZIP code. Near a border, check your address with your House office."],
+            panel.QuerySelectorAll("p").Select(note => note.TextContent));
+    }
+
+    [Fact]
+    public async Task WithoutAServiceAddressTheHomePageHasNoZipFormNoResultPanelAndNoNotice()
+    {
+        var html = await HomeHtmlAsync(null);
+        var document = new HtmlParser().ParseDocument(html);
+
+        Assert.Null(document.QuerySelector("main form"));
+        Assert.Null(document.QuerySelector("[data-zip-results]"));
+        Assert.DoesNotContain("ZIP lookup", html, StringComparison.Ordinal);
+        Assert.NotNull(document.QuerySelector(".home-browse a"));
+    }
+
+    private static async Task<string> HomeHtmlAsync(string? publicApiUrl)
+    {
+        var release = ReleaseOf();
+        var highlights = HomeHighlights.From(release, [], 0);
+        return await new ReleaseRenderer(publicApiUrl, null).RenderHomeAsync(release, null, new ReleaseFacets([], []), highlights, CancellationToken.None);
+    }
+
     private static async Task<AngleSharp.Dom.IElement> HomeAsync(PublicationRelease release, BreakLeader[] leaders, int officialCount = 0, ReleaseFacets? facets = null)
     {
         var highlights = HomeHighlights.From(release, [], officialCount) with { BreakLeaders = [.. leaders] };

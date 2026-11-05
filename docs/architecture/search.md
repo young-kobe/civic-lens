@@ -155,6 +155,13 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - Every release holds `search.html`, written before the manifest. Enforced by `PublishRelease`. Test: `PublishReleaseTests.EveryReleaseHoldsASearchPageThatIsWrittenBeforeTheManifestAndListsTheReleaseRecords`.
 - The search page shows a notice in a `noscript` box before the form, because the form is hidden without script. Enforced by `PublishedSearchPage`. Test: `ReleaseRendererTests.SearchPageTellsTheReaderWhatToTypeAndShowsTheJavaScriptNoticeBeforeTheFormBecauseTheFormIsHiddenWithoutScript`. An empty form calls no service and shows a hint. A search with no match says "No records match." and gives next steps with links. A result shows issue names from the issue filter. Enforced by `public.js`. No test for script behavior.
 - The search page states the source text limit, and it says when search is not available. Enforced by `PublishedSearchPage`. Tests: `ReleaseRendererTests.SearchPageStatesTheSourceTextLimitSoReadersKnowWhatSearchReads` and `ReleaseRendererTests.SearchPageWithoutAServiceAddressSaysThatSearchIsNotAvailableAndShowsNoForm`.
+- A seat holder is a person whose term has begun and has not ended today. A term that ended, or that starts later, never fills a seat. Enforced by `ZipDistrictStore`. Tests: `ZipDistrictEndpointsTests.ASeatWithNoCurrentHolderIsNullBecauseAnEndedTermNeverFillsASeat`, `ZipDistrictEndpointsTests.AZctaInOneDistrictAnswersItsRepresentativeAndTheTwoSenatorsOfItsStateInTermOrderAndSkipsATermThatHasNotBegun`.
+- The districts come largest land first, then by state and district. The states follow the order of their first district, so a state with several districts shows its senators once. Enforced by `ZipDistrictStore`. Tests: `ZipDistrictEndpointsTests.ASplitZctaListsEveryDistrictLargestLandFirstWithTheSenatorsOfTheStateOnce`, `ZipDistrictEndpointsTests.DistrictsWithTheSameLandKeepTheOrderOfStateAndDistrict`.
+- A state has two senate seats, and DC and the five territories have none. A seat with no holder is null. Enforced by `ZipDistrictStore`. Tests: `ZipDistrictEndpointsTests.ATerritoryDelegateIsTheDistrictZeroSeatAndTheTerritoryHasNoSenateSeats`, `ZipDistrictEndpointsTests.ASeatWithNoCurrentHolderIsNullBecauseAnEndedTermNeverFillsASeat`.
+- The names come from the active release, and both reads of one lookup use one snapshot. Enforced by the name views and by the repeatable read transaction in `ZipDistrictStore.FindAsync`. Test: `ZipDistrictEndpointsTests.TheNamesFollowTheActiveReleaseSoANewReleaseShowsItsOwnSeatHolders`. The snapshot has no test.
+- An active release with no name rows answers 503, so no seat reads as vacant by mistake. Enforced by `ZipDistrictStore`. Test: `ZipDistrictEndpointsTests.AnActiveReleaseWithNoNameRowsAnswers503SoNoSeatReadsAsVacantByMistake`.
+- A bad ZCTA or Congress gets 400, and a ZCTA with no row gets 404. Only an answer carries `Cache-Control`. Enforced by `ZipDistrictRequest` and `ZipDistrictEndpoints`. Tests: `ZipDistrictEndpointsTests.ABadZctaOrCongressIsRefusedWith400AsProblemJson`, `ZipDistrictEndpointsTests.AZctaWithNoRowAnswers404AsProblemJson`, `ZipDistrictEndpointsTests.AnAnswerCanBeCachedForOneHourAndAnErrorCarriesNoCacheHeader`.
+- The ZIP route counts against the global rate limit. Enforced by `PublicApiApp`. Test: `RateLimitTests.TheZipRouteCountsAgainstTheGlobalLimitLikeTheVoteRoutes`.
 
 ## Behavior
 
@@ -191,6 +198,7 @@ The search routes are GET and read-only. The report routes are the only writes. 
 | `/v1/bills` | A page of bills with `release`, `bills`, and `nextCursor`. Parameters: `congress`, `billType` (any case), `billNumber`, `sponsor` (an official ID, matched on the role sponsor only, as the release files list it; a cosponsor does not match), `issue`, `policyArea`, `from`, `to` (event dates, and `from` must not be after `to`), `cursor`, and `limit` (default 20, at most 50). Newest event date first, then record ID. 409 when the cursor names another release than the active one. |
 | `/v1/bills/{recordId}` | `release`, `bill`, and `issueIds`, the tracked issues in position order. 404 when the active release holds no such bill. |
 | `/v1/bills/{recordId}/sponsorships` | A page of sponsorships with `release`, `sponsorships`, and `nextCursor`. Parameters: `role` (`sponsor` or `cosponsor`), `cursor`, and `limit` (default 20, at most 50). Position order. 404 when the active release holds no such bill. 409 when the cursor names another release than the active one. |
+| `/v1/zip-districts/{zcta}` | `release`, `congress`, `zcta`, `districts`, and `states`. A district holds `state`, `district` (0 for an at-large or delegate seat), and `representative`, which is null for a vacant seat. A state holds `state` and `senators`: two entries, null for a vacant seat, and none for DC and the territories. A holder has `officialId`, `name`, and `party`. Districts come largest land first. Parameter: `congress` (default is the newest Congress of the ZCTA). The answer has `Cache-Control: public, max-age=3600`. 404 when the ZCTA has no row for the Congress. |
 | `/v1/search` | A page of results with `release`, `hits`, and `nextCursor`. Parameters: `q`, `kind`, `official`, `issue`, `policyArea`, `source`, `from`, `to`, `sort`, `direction`, `release`, `cursor`, and `limit`. |
 | `/v1/records/{id}` | The index row of one record in the active release, or in the release of `release=N`. 404 when the release does not hold the record. |
 | `POST /v1/reports` | Stores one reader report. Form fields: `recordId`, `revision`, `category`, `text` (optional), and `cf-turnstile-response`. Categories: `wrong-quote`, `wrong-date`, `wrong-attribution`, `missing-context`, `broken-source-link`, and `other`. Text holds at most 2,000 characters and is required for `other`. Answer: 202, also for a duplicate. |
@@ -206,11 +214,11 @@ A result has the manifest entry fields, `firstRelease`, `lastRelease`, `pagePath
 |---|---|
 | 400 | A parameter or form field is not valid or exceeds its bound, or the Turnstile check failed. |
 | 401 | The pull token is missing or wrong. |
-| 404 | The release is not indexed, the release does not hold the record, the active release holds no such vote, the active release holds no such bill (on the bill route and on the sponsorships route), or no table row holds the reported record revision. |
+| 404 | The release is not indexed, the release does not hold the record, the active release holds no such vote, the active release holds no such bill (on the bill route and on the sponsorships route), no district row holds the ZCTA and Congress, or no table row holds the reported record revision. |
 | 409 | A vote, bill, or sponsorship cursor names another release than the active one. The answer holds the active release number. |
 | 413 | The report body is over 32 KB. |
 | 429 | The client passed the rate limit. |
-| 503 | One of these cases. No release is active yet. A search, a vote, or a bill read ran over the timeout. Reports are not available. The Turnstile check is not available. The daily report cap is reached. |
+| 503 | One of these cases. No release is active yet. A search, a vote, or a bill read ran over the timeout. Reports are not available. The Turnstile check is not available. The daily report cap is reached. The active release has no official names, as a release from before the name tables. |
 
 ### Configuration
 
@@ -266,6 +274,8 @@ The poll interval is 30 seconds and the statement timeout is 2 seconds. Both are
 | Active release | `src/CivicLens.PublicApi/ActiveRelease/ActiveReleaseReader.cs`, `src/CivicLens.PublicApi/ActiveRelease/ReleaseEndpoints.cs` |
 | Votes | `src/CivicLens.PublicApi/Votes/VoteEndpoints.cs`, `src/CivicLens.PublicApi/Votes/VoteRequest.cs`, `src/CivicLens.PublicApi/Votes/VoteCursor.cs`, `src/CivicLens.PublicApi/Votes/VoteStore.cs`, `src/CivicLens.PublicApi/Votes/VoteRow.cs`, `src/CivicLens.PublicApi/Votes/VotePage.cs`, `src/CivicLens.PublicApi/Votes/VoteDetail.cs`, `src/CivicLens.PublicApi/Votes/VoteMemberRequest.cs`, `src/CivicLens.PublicApi/Votes/VoteMemberCursor.cs`, `src/CivicLens.PublicApi/Votes/VoteMemberPage.cs`, `src/CivicLens.PublicApi/Votes/VoteMember.cs` |
 | Bills | `src/CivicLens.PublicApi/Bills/BillEndpoints.cs`, `src/CivicLens.PublicApi/Bills/BillRequest.cs`, `src/CivicLens.PublicApi/Bills/SponsorshipRequest.cs`, `src/CivicLens.PublicApi/Bills/BillCursor.cs`, `src/CivicLens.PublicApi/Bills/SponsorshipCursor.cs`, `src/CivicLens.PublicApi/Bills/BillStore.cs`, `src/CivicLens.PublicApi/Bills/BillRow.cs`, `src/CivicLens.PublicApi/Bills/BillPage.cs`, `src/CivicLens.PublicApi/Bills/BillDetail.cs`, `src/CivicLens.PublicApi/Bills/SponsorshipRow.cs`, `src/CivicLens.PublicApi/Bills/SponsorshipPage.cs` |
+| ZIP districts | `src/CivicLens.PublicApi/ZipDistricts/ZipDistrictEndpoints.cs`, `src/CivicLens.PublicApi/ZipDistricts/ZipDistrictRequest.cs`, `src/CivicLens.PublicApi/ZipDistricts/ZipDistrictStore.cs`, `src/CivicLens.PublicApi/ZipDistricts/ZipDistrictAnswer.cs`, `src/CivicLens.PublicApi/ZipDistricts/ZipLookup.cs` |
+| Home ZIP lookup | `src/CivicLens.Host/Publication/PublishedHomePage.razor`, `src/CivicLens.Host/Publication/UsStates.cs`, `src/CivicLens.Host/wwwroot/js/public.js` |
 | Shared readers | `src/CivicLens.PublicApi/Http/CursorFields.cs`, `src/CivicLens.PublicApi/Http/ViewColumns.cs` |
 | Rate limit | `src/CivicLens.PublicApi/Http/ClientAddress.cs` |
 | HTTP helpers | `src/CivicLens.PublicApi/Http/ApiResults.cs`, `src/CivicLens.PublicApi/Http/QueryValues.cs` |
@@ -280,6 +290,8 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 ## Limits and planned work
 
 - `/v1/release` reads `public_api.active_records`. An active release that holds no record reads as no release and answers 503.
+- `ZipDistrictStore` repeats the six codes of `StateFips` that are not states, because `PublicApi` cannot reference Application. A change to that list needs both places.
+- A release from before the name tables has no name rows. The ZIP route answers 503 until the next publish writes them.
 - The timeout answer of a vote or bill read says "the search took too long", because `ApiResults.GuardAsync` has one wording.
 - The `issue` and `sponsor` filters of the bill list match an ID as given. An ID that no bill carries gives an empty page, because `PublicApi` holds no issue or official catalog.
 - The release manifest stays the data path of the static pages until the pages read `PublicApi`.

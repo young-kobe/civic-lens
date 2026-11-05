@@ -62,5 +62,7 @@ internal static class UsStates
         ["MP"] = "Northern Mariana Islands"
     };
 
+    public static IReadOnlyDictionary<string, string> NameByCode => Names;
+
     public static string NameOf(string code) => Names.GetValueOrDefault(code, code);
 }
