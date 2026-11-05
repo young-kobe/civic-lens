@@ -14,12 +14,6 @@ namespace CivicLens.Infrastructure.Actions;
 
 internal static class ActionRevisionRows
 {
-    /// <summary>Reads the rows of a query and parses their JSON. Action revisions still keep it.</summary>
-    public static async Task<IReadOnlyList<StoredRevision<ActionRevisionRow, ActionDraftRevision>>> ReadJsonAsync(CollectionAttemptDbContext db,
-        IQueryable<ActionRevisionRow> query, CancellationToken cancellationToken) =>
-        [.. (await query.ToArrayAsync(cancellationToken)).Select(row =>
-            new StoredRevision<ActionRevisionRow, ActionDraftRevision>(row, () => ReviewJson.Deserialize<ActionDraftRevision>(row.RevisionJson, "revision")))];
-
     public static ActionRevisionRow Create(ActionDraftRevision revision, string? runId, CodeVersion codeVersion)
     {
         var authorKind = ReviewAuthor.KindOf(revision.AuthorSubject);

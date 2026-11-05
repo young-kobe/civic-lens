@@ -58,7 +58,8 @@ CREATE SCHEMA IF NOT EXISTS readonly_access;
 GRANT USAGE ON SCHEMA readonly_access TO civic_lens_readonly;
 
 -- The body is plain text to Postgres, so this function never blocks a migration that changes or drops a revision column.
-CREATE OR REPLACE FUNCTION readonly_access.revisions(table_name text)
+DROP FUNCTION IF EXISTS readonly_access.revisions(text);
+CREATE FUNCTION readonly_access.revisions(table_name text)
 RETURNS TABLE (row_data jsonb)
 LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = pg_catalog, pg_temp

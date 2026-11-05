@@ -41,8 +41,7 @@ public sealed class RevisionColumnsReadOnlyTests(PostgresCollection postgres) : 
     [Fact]
     public async Task TheRevisionFunctionReturnsTheRowWithoutTheAuthorForATableWithoutJsonAndForATableWithJsonAndTheOwnerReadsBoth()
     {
-        var script = string.Join('\n', File.ReadAllLines(Path.Combine(RepositoryRoot.FullName, "deploy", "scripts", "readonly-grants.sql"))
-            .Where(line => !line.StartsWith('\\')));
+        var script = GrantsScript();
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await ExecuteAsync(connection, $$"""
@@ -71,6 +70,36 @@ public sealed class RevisionColumnsReadOnlyTests(PostgresCollection postgres) : 
         await ExecuteAsync(connection, "RESET ROLE");
         Assert.Equal("true", await ScalarAsync(connection, "SELECT has_table_privilege('civic_lens_readonly_owner', 'vote_revisions', 'SELECT')::text"));
     }
+
+    // Production already holds the old function with two columns, and CREATE OR REPLACE cannot change a return type.
+    [Fact]
+    public async Task TheGrantsScriptReplacesAnOldRevisionFunctionThatReturnedTwoColumnsBecauseProductionAlreadyHoldsIt()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await ExecuteAsync(connection, $$"""
+            SET session_replication_role = replica;
+            CREATE SCHEMA IF NOT EXISTS readonly_access;
+            CREATE FUNCTION readonly_access.revisions(table_name text) RETURNS TABLE (row_data jsonb, revision jsonb)
+            LANGUAGE sql AS 'SELECT NULL::jsonb, NULL::jsonb WHERE false';
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, created_at_utc_ticks,
+                headline, summary, text_origin, source_id, vote_source, chamber, congress, session_number, roll_call_number, candidate_id,
+                candidate_update_utc_ticks, voted_on, voted_on_citation_extraction_id, voted_on_citation_start, voted_on_citation_length, kind,
+                member_list_id, issue_revision_id, issue_candidates_recorded, result)
+            VALUES ('{{new string('a', 64)}}', 1, 'auth0|vote-author', 'Person', NULL, 100,
+                'Vote headline', 'Summary', 'Person', 'voteview-senate', 'Voteview', 'Senate', 119, 1, 7, 'c1',
+                1, DATE '2026-01-02', 'e1', 0, 5, 'Passage', '{{new string('1', 64)}}', '{{new string('2', 64)}}', true, 'Passed');
+            {{GrantsScript()}}
+            SET ROLE civic_lens_readonly
+            """);
+
+        var vote = await ScalarAsync(connection, "SELECT row_data::text FROM readonly_access.revisions('vote_revisions')");
+
+        Assert.Contains("Vote headline", vote, StringComparison.Ordinal);
+    }
+
+    private static string GrantsScript() => string.Join('\n', File.ReadAllLines(Path.Combine(RepositoryRoot.FullName, "deploy", "scripts", "readonly-grants.sql"))
+        .Where(line => !line.StartsWith('\\')));
 
     private static async Task ExecuteAsync(NpgsqlConnection connection, string sql)
     {

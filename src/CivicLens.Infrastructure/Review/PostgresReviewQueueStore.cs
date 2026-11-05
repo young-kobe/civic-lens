@@ -117,7 +117,8 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
             .Take(limit + 1).ToArrayAsync(cancellationToken);
         var slice = KeysetSlice<ApprovedKey>.Create(fetched, limit, cursor, key => (key.LastRevisedAtUtcTicks, key.QueueId));
         return new([.. slice.Items.Select(key => new ApprovedRecordHit(KindsByCode[key.KindCode].Kind, key.RecordId,
-            key.Headline ?? throw KindsByCode[key.KindCode].Column!.NotBackfilled!(key.RecordId)))],
+            key.Headline ?? throw KindsByCode[key.KindCode].Column?.NotBackfilled?.Invoke(key.RecordId)
+                ?? new InvalidDataException($"Approved record {key.RecordId} has no headline.")))],
             slice.NewerCursor, slice.OlderCursor);
     }
 

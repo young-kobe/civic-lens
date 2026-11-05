@@ -8,7 +8,7 @@ namespace CivicLens.Infrastructure.Votes;
 /// <summary>Vote revision rows with their child rows, and the member lists that they name. A page costs a fixed number of queries.</summary>
 internal sealed record VoteRevisionPage(IReadOnlyList<VoteRevisionRow> Rows, ILookup<(string RecordId, int RevisionNumber), VoteRevisionFactRow> Facts,
     ILookup<(string RecordId, int RevisionNumber), VoteRevisionIssueRow> Issues, IReadOnlyDictionary<string, short> MemberCounts,
-    ILookup<string, VoteMemberListEntryRow> Entries) : IRevisionRowPage<VoteRevisionRow>
+    ILookup<string, VoteMemberListEntryRow> Entries)
 {
     public IEnumerable<VoteRevisionFactRow> FactsOf(VoteRevisionRow row) => Facts[(row.RecordId, row.RevisionNumber)];
 
