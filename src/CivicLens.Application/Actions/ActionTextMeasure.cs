@@ -18,8 +18,6 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         CancellationToken cancellationToken)
     {
         if (tokenCap < 1) throw new ArgumentOutOfRangeException(nameof(tokenCap), tokenCap, "The spend cap must be at least 1 token.");
-        if (await spending.GetPriceAsync(ActionDraftTask.Model, cancellationToken) is null) throw new InvalidOperationException(
-            $"The model {ActionDraftTask.Model} has no price. Save its price on /Review/Spending, then run the measure again.");
         var results = ImmutableArray.CreateBuilder<ActionTextMeasureBill>();
         ActionTextMeasureAttempt? unfinished = null;
         Exception? failure = null;
@@ -64,11 +62,11 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
 
     private async Task<Exception?> TryChargeMonthAsync(ActionTextMeasureReport report, ActionTextMeasureAttempt? unfinished)
     {
-        var usage = report.Totals.Usage + (unfinished?.Usage ?? AnalysisTokenUsage.None);
+        var calls = report.Bills.Select(bill => bill.Usage).Concat(unfinished is null ? [] : [unfinished.Usage]).ToArray();
         var chargedTokens = report.Totals.ChargedTokens + (unfinished is null ? 0 : unfinished.ChargedTokens + unfinished.InFlightTokens);
         try
         {
-            await spending.AddChargeAsync(ActionDraftTask.Model, usage, chargedTokens, CancellationToken.None);
+            await spending.AddChargeAsync(ActionDraftTask.Model, calls, chargedTokens, CancellationToken.None);
             return null;
         }
         catch (Exception exception)

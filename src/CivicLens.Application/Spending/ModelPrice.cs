@@ -2,20 +2,27 @@ using CivicLens.Core.Analysis;
 
 namespace CivicLens.Application.Spending;
 
-/// <summary>The price of one model. Each price is in micro-dollars for one million tokens.</summary>
-public sealed record ModelPrice(string Model, long InputMicros, long OutputMicros, long CacheReadMicros, long CacheWriteMicros)
+/// <summary>The price of one model, in tiers by prompt size. A call pays the prices of one tier for all of its tokens.</summary>
+public sealed record ModelPrice(string Model, IReadOnlyList<PriceTier> Tiers)
 {
-    public const long MaximumMicros = 1_000_000_000;
     private const long TokensPerPrice = 1_000_000;
 
-    private long HighestMicros => Math.Max(Math.Max(InputMicros, OutputMicros), Math.Max(CacheReadMicros, CacheWriteMicros));
+    private long HighestMicros => Tiers.Max(tier => tier.HighestMicros);
 
     public long WorstCaseMicros(long tokens) => Ceiling(checked(tokens * HighestMicros));
 
-    /// <summary>Prices the used tokens at their own price and the rest of the charged tokens at the highest price.</summary>
-    public long CostMicros(AnalysisTokenUsage usage, long chargedTokens) =>
-        Ceiling(checked(usage.InputTokens * InputMicros + usage.OutputTokens * OutputMicros + usage.CacheReadTokens * CacheReadMicros +
-            usage.CacheWriteTokens * CacheWriteMicros + (chargedTokens - usage.Total) * HighestMicros));
+    /// <summary>Prices each call at the tier of its prompt. It prices the rest of the charged tokens at the highest price of any tier.</summary>
+    public long CostMicros(IReadOnlyCollection<AnalysisTokenUsage> calls, long chargedTokens) =>
+        Ceiling(checked(calls.Sum(CallScaledMicros) + (chargedTokens - calls.Sum(call => call.Total)) * HighestMicros));
+
+    private long CallScaledMicros(AnalysisTokenUsage usage)
+    {
+        var tier = TierOf(usage.InputTokens + usage.CacheReadTokens + usage.CacheWriteTokens);
+        return usage.InputTokens * tier.InputMicros + usage.OutputTokens * tier.OutputMicros + usage.CacheReadTokens * tier.CacheReadMicros +
+            usage.CacheWriteTokens * tier.CacheWriteMicros;
+    }
+
+    private PriceTier TierOf(long promptTokens) => Tiers.First(tier => tier.PromptTokensUpTo is null || promptTokens <= tier.PromptTokensUpTo);
 
     private static long Ceiling(long scaled) => checked(scaled + TokensPerPrice - 1) / TokensPerPrice;
 }

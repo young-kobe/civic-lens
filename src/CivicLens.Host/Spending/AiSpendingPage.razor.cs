@@ -12,13 +12,12 @@ namespace CivicLens.Host.Spending;
 public sealed partial class AiSpendingPage
 {
     private const string CapForm = "cap";
-    private const string PriceForm = "price";
 
     private static readonly IReadOnlyList<Crumb> Crumbs = [new("Review", "/Review"), new("AI spending")];
 
     private static readonly ReviewFailureMessages Failures = new(
         "The change could not be saved. Reload the page and try again.",
-        "Check each value. A cap is 0 to 1,000,000 dollars. A price is 0 to 1,000 dollars. Use at most 6 decimals.",
+        "Check each value. A cap is 0 to 1,000,000 dollars. Use at most 6 decimals.",
         "The change could not be saved. Your values are kept. Try again.");
 
     private ReviewActor? actor;
@@ -29,7 +28,6 @@ public sealed partial class AiSpendingPage
     [Inject] private ILogger<AiSpendingPage> Logger { get; set; } = default!;
     [Inject] private GetAiSpending GetSpending { get; set; } = default!;
     [Inject] private SaveMonthlyCap SaveCap { get; set; } = default!;
-    [Inject] private SaveModelPrice SavePrice { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
 
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
@@ -38,25 +36,13 @@ public sealed partial class AiSpendingPage
     [SupplyParameterFromQuery(Name = "status")] private string? Status { get; set; }
 
     [SupplyParameterFromForm(FormName = CapForm)] private CapInput? Cap { get; set; }
-    [SupplyParameterFromForm(FormName = PriceForm)] private PriceInput? Price { get; set; }
 
-    private string? StatusMessage => HttpMethods.IsPost(HttpContext.Request.Method) ? null : Status switch
-    {
-        CapForm => "The cap is saved.",
-        PriceForm => "The price is saved.",
-        _ => null
-    };
+    private string? StatusMessage => !HttpMethods.IsPost(HttpContext.Request.Method) && Status == CapForm ? "The cap is saved." : null;
 
-    private IEnumerable<string> MissingPrices =>
-        AiSpendingPolicy.ModelsInUse.Where(model => view!.CurrentPrices.All(current => current.Price.Model != model));
+    private static readonly IReadOnlyList<PriceRow> PriceRows = [.. AiSpendingPolicy.ModelsInUse.Select(ModelPrices.For).SelectMany(PriceRowsOf)];
 
     private IReadOnlyList<ChangeLine> Changes => [.. view!.Caps
-        .Select(cap => new ChangeLine($"Monthly cap set to {Dollars(cap.CapMicros)}", cap.AuthorSubject, cap.RecordedAt))
-        .Concat(view.PriceChanges.Select(change => new ChangeLine(
-            $"{change.Price.Model} priced at {Dollars(change.Price.InputMicros)} input, {Dollars(change.Price.OutputMicros)} output, " +
-            $"{Dollars(change.Price.CacheReadMicros)} cache read, {Dollars(change.Price.CacheWriteMicros)} cache write",
-            change.AuthorSubject, change.RecordedAt)))
-        .OrderByDescending(line => line.RecordedAt).Take(GetAiSpending.ChangeLimit)];
+        .Select(cap => new ChangeLine($"Monthly cap set to {Dollars(cap.CapMicros)}", cap.AuthorSubject, cap.RecordedAt))];
 
     protected override async Task OnInitializedAsync()
     {
@@ -91,13 +77,12 @@ public sealed partial class AiSpendingPage
         return SpendingRoutes.Saved(CapForm);
     });
 
-    private Task SavePriceAsync() => RunAsync(async () =>
-    {
-        var input = Price ?? throw new ArgumentException("A price needs its values.");
-        await SavePrice.ExecuteAsync(actor!, new SaveModelPriceRequest(input.Model ?? "", ParseDollars(input.Input),
-            ParseDollars(input.Output), ParseDollars(input.CacheRead), ParseDollars(input.CacheWrite)), HttpContext.RequestAborted);
-        return SpendingRoutes.Saved(PriceForm);
-    });
+    private static IEnumerable<PriceRow> PriceRowsOf(ModelPrice price) => price.Tiers.Select((tier, index) =>
+        new PriceRow(price.Tiers.Count == 1 ? price.Model : $"{price.Model}, prompts {PromptRange(price.Tiers, index)}", tier));
+
+    private static string PromptRange(IReadOnlyList<PriceTier> tiers, int index) => tiers[index].PromptTokensUpTo is { } limit
+        ? $"up to {limit:N0} tokens"
+        : $"over {tiers[index - 1].PromptTokensUpTo:N0} tokens";
 
     private async Task RunAsync(Func<Task<string>> save)
     {
@@ -121,19 +106,12 @@ public sealed partial class AiSpendingPage
     private static string Dollars(long micros) =>
         "$" + AiSpendingPolicy.ToDollars(micros).ToString("0.00####", CultureInfo.InvariantCulture);
 
+    private sealed record PriceRow(string Name, PriceTier Tier);
+
     private sealed record ChangeLine(string Text, string AuthorSubject, DateTimeOffset RecordedAt);
 
     public sealed class CapInput
     {
         public string? Dollars { get; set; }
-    }
-
-    public sealed class PriceInput
-    {
-        public string? Model { get; set; }
-        public string? Input { get; set; }
-        public string? Output { get; set; }
-        public string? CacheRead { get; set; }
-        public string? CacheWrite { get; set; }
     }
 }

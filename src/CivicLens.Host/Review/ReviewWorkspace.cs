@@ -303,7 +303,6 @@ internal static class ReviewWorkspace
         services.AddSingleton<IAiSpendingStore>(new PostgresAiSpendingStore(contexts));
         services.AddScoped<GetAiSpending>();
         services.AddScoped<SaveMonthlyCap>();
-        services.AddScoped<SaveModelPrice>();
     }
 
     private static void ConfigureActionReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)

@@ -22,9 +22,7 @@ internal static class AiSpendLedger
             .FirstOrDefaultAsync(cancellationToken);
         if (cap is null) return new(0, AnalysisErrorCodes.MonthlyCapNotSet);
         if (cap.CapMicros == 0) return new(0, AnalysisErrorCodes.MonthlyDollarCap);
-        var price = await NewestPriceAsync(db, model, cancellationToken);
-        if (price is null) return new(0, AnalysisErrorCodes.ModelPriceMissing);
-        var worstCase = price.WorstCaseMicros(tokens);
+        var worstCase = ModelPrices.For(model).WorstCaseMicros(tokens);
         var month = await LockMonthAsync(db, day, cancellationToken);
         if (month.ChargedMicros + worstCase > cap.CapMicros) return new(0, AnalysisErrorCodes.MonthlyDollarCap);
         month.ChargedMicros += worstCase;
@@ -35,21 +33,16 @@ internal static class AiSpendLedger
     public static async Task SettleAsync(CollectionAttemptDbContext db, DateOnly budgetDay, AnalysisRun run, long reservedMicros,
         CancellationToken cancellationToken)
     {
-        await ChargeAsync(db, budgetDay, run.Model, run.Usage, run.ChargedTokens, reservedMicros, cancellationToken);
+        await ChargeAsync(db, budgetDay, run.Model, [run.Usage], run.ChargedTokens, reservedMicros, cancellationToken);
     }
 
-    /// <summary>Adds the cost of used tokens at the newest price of the model, less the micros that a reservation already holds.</summary>
-    public static async Task ChargeAsync(CollectionAttemptDbContext db, DateOnly day, string model, AnalysisTokenUsage usage, long chargedTokens,
-        long reservedMicros, CancellationToken cancellationToken)
+    /// <summary>Adds the cost of used tokens at the price of the model, less the micros that a reservation already holds.</summary>
+    public static async Task ChargeAsync(CollectionAttemptDbContext db, DateOnly day, string model, IReadOnlyCollection<AnalysisTokenUsage> calls,
+        long chargedTokens, long reservedMicros, CancellationToken cancellationToken)
     {
-        var price = await NewestPriceAsync(db, model, cancellationToken)
-            ?? throw new InvalidOperationException($"A charge needs the price of the model {model}.");
-        (await LockMonthAsync(db, day, cancellationToken)).ChargedMicros += price.CostMicros(usage, chargedTokens) - reservedMicros;
+        var cost = ModelPrices.For(model).CostMicros(calls, chargedTokens);
+        (await LockMonthAsync(db, day, cancellationToken)).ChargedMicros += cost - reservedMicros;
     }
-
-    public static async Task<ModelPrice?> NewestPriceAsync(CollectionAttemptDbContext db, string model, CancellationToken cancellationToken) =>
-        (await db.Set<AiModelPriceRevisionRow>().AsNoTracking().Where(row => row.Model == model)
-            .OrderByDescending(row => row.RevisionNumber).FirstOrDefaultAsync(cancellationToken))?.ToPrice();
 
     private static async Task<AiMonthSpendRow> LockMonthAsync(CollectionAttemptDbContext db, DateOnly day, CancellationToken cancellationToken)
     {

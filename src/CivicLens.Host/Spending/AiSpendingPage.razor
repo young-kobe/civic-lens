@@ -4,7 +4,7 @@
 <TopBarTitle Crumbs="Crumbs" />
 
 <div class="content">
-    <PageHeader Title="AI spending" Lede="Set the most that AI calls can cost in one UTC month. A call that could pass the cap waits. A call with no cap or no price retries every 5 minutes. A raised cap takes effect at the next UTC midnight, or when the worker restarts." />
+    <PageHeader Title="AI spending" Lede="Set the most that AI calls can cost in one UTC month. A call that could pass the cap waits. A call with no cap retries every 5 minutes. A raised cap takes effect at the next UTC midnight, or when the worker restarts." />
     @if (StatusMessage is not null)
     {
         <Notice Tone="Tone.Ok" Dismissible="true">@StatusMessage</Notice>
@@ -19,10 +19,6 @@
         @if (view.CurrentCap is null)
         {
             <Notice Tone="Tone.Warn">No cap is set. AI calls wait until you set one.</Notice>
-        }
-        @foreach (var model in MissingPrices)
-        {
-            <Notice Tone="Tone.Warn">No price is set for @model. Calls to this model wait until you set one.</Notice>
         }
 
         <Panel Title="This month" Id="month" Padded="true">
@@ -43,9 +39,9 @@
         </Panel>
 
         <Panel Title="Model prices" Id="prices">
-            <Aside>US dollars for one million tokens</Aside>
+            <Aside>US dollars for one million tokens. Prices are set in code from the Anthropic price list.</Aside>
             <ChildContent>
-                <DataTable Items="view.CurrentPrices" Caption="Model prices" Stack="true">
+                <DataTable Items="PriceRows" Caption="Model prices" Stack="true">
                     <Head>
                         <th>Model</th>
                         <th>Input</th>
@@ -54,40 +50,13 @@
                         <th>Cache write</th>
                     </Head>
                     <Row Context="item">
-                        <TableCell Label="Model" Main>@item.Price.Model</TableCell>
-                        <TableCell Label="Input">@Dollars(item.Price.InputMicros)</TableCell>
-                        <TableCell Label="Output">@Dollars(item.Price.OutputMicros)</TableCell>
-                        <TableCell Label="Cache read">@Dollars(item.Price.CacheReadMicros)</TableCell>
-                        <TableCell Label="Cache write">@Dollars(item.Price.CacheWriteMicros)</TableCell>
+                        <TableCell Label="Model" Main>@item.Name</TableCell>
+                        <TableCell Label="Input">@Dollars(item.Tier.InputMicros)</TableCell>
+                        <TableCell Label="Output">@Dollars(item.Tier.OutputMicros)</TableCell>
+                        <TableCell Label="Cache read">@Dollars(item.Tier.CacheReadMicros)</TableCell>
+                        <TableCell Label="Cache write">@Dollars(item.Tier.CacheWriteMicros)</TableCell>
                     </Row>
-                    <Empty>
-                        <EmptyState Title="No prices" Text="Save a price for each model below." />
-                    </Empty>
                 </DataTable>
-                <form id="price-form" class="form panel-padded" method="post" @formname="price" @onsubmit="SavePriceAsync">
-                    <AntiforgeryToken />
-                    <Field Label="Model" For="Price_Model">
-                        <select id="Price_Model" name="Price.Model">
-                            @foreach (var model in AiSpendingPolicy.ModelsInUse)
-                            {
-                                <option value="@model" selected="@(Price?.Model == model)">@model</option>
-                            }
-                        </select>
-                    </Field>
-                    <Field Label="Input price" For="Price_Input">
-                        <input id="Price_Input" name="Price.Input" type="text" inputmode="decimal" value="@Price?.Input" />
-                    </Field>
-                    <Field Label="Output price" For="Price_Output">
-                        <input id="Price_Output" name="Price.Output" type="text" inputmode="decimal" value="@Price?.Output" />
-                    </Field>
-                    <Field Label="Cache read price" For="Price_CacheRead">
-                        <input id="Price_CacheRead" name="Price.CacheRead" type="text" inputmode="decimal" value="@Price?.CacheRead" />
-                    </Field>
-                    <Field Label="Cache write price" For="Price_CacheWrite">
-                        <input id="Price_CacheWrite" name="Price.CacheWrite" type="text" inputmode="decimal" value="@Price?.CacheWrite" />
-                    </Field>
-                    <div class="actions"><Button Variant="ButtonVariant.Primary" Type="submit">Save price</Button></div>
-                </form>
             </ChildContent>
         </Panel>
 
@@ -105,7 +74,7 @@
                         <TableCell Label="When"><Timestamp Value="item.RecordedAt" /></TableCell>
                     </Row>
                     <Empty>
-                        <EmptyState Title="No changes yet" Text="A saved cap or price shows here." />
+                        <EmptyState Title="No changes yet" Text="A saved cap shows here." />
                     </Empty>
                 </DataTable>
             </ChildContent>

@@ -55,7 +55,7 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
     [Fact]
     public async Task AReservationThatWouldPassTheMonthlyCapWaitsAndOneThatFitsExactlyIsReserved()
     {
-        await spending.SaveCapAsync(Owner, 24_999, default);
+        await spending.SaveCapAsync(Owner, 12_499, default);
         var claim = await ClaimAsync();
 
         var over = await ReserveAsync(claim, Haiku, 5_000);
@@ -64,12 +64,12 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
         Assert.Equal(("monthlyDollarCap", 0L, 0L), await EntryAndSpendAsync(claim));
         Assert.True(await RetryDelayAsync() > TimeSpan.Zero);
         Assert.Equal(TimeSpan.Zero, await RetryAtMinusNextMidnightAsync());
-        await spending.SaveCapAsync(Owner, 25_000, default);
+        await spending.SaveCapAsync(Owner, 12_500, default);
         await analysis.ReleaseBudgetWaitsAsync(default);
         var again = await analysis.TryClaimAsync(claim.Record.SubjectId, Lease, default);
 
         Assert.Equal(AnalysisReservation.Reserved, await ReserveAsync(again!, Haiku, 5_000));
-        Assert.Equal(25_000, await MonthChargedAsync());
+        Assert.Equal(12_500, await MonthChargedAsync());
     }
 
     [Fact]
@@ -86,34 +86,22 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
     }
 
     [Fact]
-    public async Task AModelWithoutAPriceNeverRunsBecauseItsCostIsUnknown()
-    {
-        var claim = await ClaimAsync();
-
-        Assert.Equal(AnalysisReservation.WaitingForBudget, await ReserveAsync(claim, "claude-unpriced", 1_000));
-
-        Assert.Equal(("modelPriceMissing", 0L, 0L), await EntryAndSpendAsync(claim));
-        await AssertRetriesInAboutFiveMinutesAsync();
-        Assert.Equal(0, await ChargedTokensTodayAsync());
-    }
-
-    [Fact]
     public async Task ConcurrentReservationsNeverPassTheMonthlyCap()
     {
-        await spending.SaveCapAsync(Owner, 15_000, default);
+        await spending.SaveCapAsync(Owner, 7_500, default);
         var claims = new List<AnalysisClaim>();
         for (var index = 0; index < 6; index++) claims.Add(await ClaimAsync());
 
         var results = await Task.WhenAll(claims.Select(claim => ReserveAsync(claim, Haiku, 1_000)));
 
         Assert.Equal(3, results.Count(result => result == AnalysisReservation.Reserved));
-        Assert.Equal(15_000, await MonthChargedAsync());
+        Assert.Equal(7_500, await MonthChargedAsync());
     }
 
     [Fact]
     public async Task ReservationsOfDifferentStagesNeverPassTheMonthlyCapBecauseTheyShareOneMonthRow()
     {
-        await spending.SaveCapAsync(Owner, 10_000, default);
+        await spending.SaveCapAsync(Owner, 5_000, default);
         var first = await ClaimAsync();
         var second = await ClaimAsync();
         await relationshipSeeder.StatementAsync(Statement());
@@ -125,7 +113,7 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
             relationships.ReserveAsync(pairClaim, Guid.NewGuid().ToString("N"), new string('f', 64), Haiku, 1_000, 10_000_000, default));
 
         Assert.Equal(2, results.Count(result => result == AnalysisReservation.Reserved));
-        Assert.Equal(10_000, await MonthChargedAsync());
+        Assert.Equal(5_000, await MonthChargedAsync());
     }
 
     [Fact]
@@ -161,10 +149,9 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
     }
 
     [Fact]
-    public async Task ACapOfZeroStopsEveryCallEvenOfAModelWithAZeroPrice()
+    public async Task ACapOfZeroStopsEveryCall()
     {
         await spending.SaveCapAsync(Owner, 0, default);
-        await spending.SavePriceAsync(Owner, new ModelPrice(Haiku, 0, 0, 0, 0), default);
         var claim = await ClaimAsync();
 
         Assert.Equal(AnalysisReservation.WaitingForBudget, await ReserveAsync(claim, Haiku, 1_000));
@@ -178,13 +165,13 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
         var claim = await ClaimAsync();
         var runId = Guid.NewGuid().ToString("N");
         Assert.Equal(AnalysisReservation.Reserved, await ReserveAsync(claim, Haiku, 5_000, runId));
-        Assert.Equal(25_000, await MonthChargedAsync());
+        Assert.Equal(12_500, await MonthChargedAsync());
         var usage = new AnalysisTokenUsage(1_000, 500, 2_000, 100);
 
         Assert.True(await analysis.CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Failed, "refused"),
             Run(claim.Record.SubjectId, runId, usage, usage.Total), default));
 
-        Assert.Equal(3_825, await MonthChargedAsync());
+        Assert.Equal(383, await MonthChargedAsync());
         Assert.Equal(0, await ScalarAsync<long>("SELECT reserved_micros FROM document_change_analysis"));
     }
 
@@ -198,7 +185,7 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
         Assert.True(await analysis.CheckpointAsync(AnalysisCheckpoint.From(claim, AnalysisState.Failed, "refused"),
             Run(claim.Record.SubjectId, runId, AnalysisTokenUsage.None, 5_000), default));
 
-        Assert.Equal(25_000, await MonthChargedAsync());
+        Assert.Equal(12_500, await MonthChargedAsync());
     }
 
     [Fact]
@@ -210,35 +197,30 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
 
         Assert.NotNull(await analysis.TryClaimAsync(claim.Record.SubjectId, Lease, default));
 
-        Assert.Equal(25_000, await MonthChargedAsync());
+        Assert.Equal(12_500, await MonthChargedAsync());
         Assert.Equal(0, await ScalarAsync<long>("SELECT reserved_micros FROM document_change_analysis"));
     }
 
     [Fact]
-    public async Task AMeasureChargeAddsTheRealCostAtTheNewestPriceAndTheTokensBeyondTheUsageAtTheHighestPrice()
+    public async Task AMeasureChargeAddsTheRealCostAtThePriceOfTheModelAndTheTokensBeyondTheUsageAtTheHighestPrice()
     {
         var usage = new AnalysisTokenUsage(1_000, 500, 2_000, 100);
 
-        await spending.AddChargeAsync(Haiku, usage, usage.Total + 1_000, default);
+        await spending.AddChargeAsync(Haiku, [usage], usage.Total + 1_000, default);
 
-        Assert.Equal(3_825 + 5_000, await MonthChargedAsync());
+        Assert.Equal(2_883, await MonthChargedAsync());
     }
 
     [Fact]
-    public async Task EachSaveAddsARevisionAndTheNewestOneIsCurrent()
+    public async Task EachCapSaveAddsARevisionAndTheNewestOneIsCurrent()
     {
         await spending.SaveCapAsync(Owner, 5_000_000, default);
         await spending.SaveCapAsync("auth0|second", 7_000_000, default);
-        await spending.SavePriceAsync(Owner, new ModelPrice(Haiku, 2, 3, 4, 5), default);
-        await spending.SavePriceAsync(Owner, new ModelPrice(Haiku, 6, 7, 8, 9), default);
 
         var view = await spending.GetAsync(10, default);
 
         Assert.Equal([3, 2, 1], view.Caps.Select(cap => cap.RevisionNumber));
         Assert.Equal((7_000_000, "auth0|second"), (view.CurrentCap!.CapMicros, view.CurrentCap.AuthorSubject));
-        var current = view.CurrentPrices.Single(price => price.Price.Model == Haiku);
-        Assert.Equal((3, new ModelPrice(Haiku, 6, 7, 8, 9)), (current.RevisionNumber, current.Price));
-        Assert.Equal([3, 2], view.PriceChanges.Where(change => change.Price.Model == Haiku).Select(change => change.RevisionNumber).Take(2));
     }
 
     [Fact]
@@ -250,7 +232,7 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
         var view = await spending.GetAsync(10, default);
 
         var month = DateOnly.FromDateTime(await ScalarAsync<DateTime>("SELECT date_trunc('month', now() AT TIME ZONE 'UTC')"));
-        Assert.Equal((month, 25_000), (view.Month, view.ChargedMicros));
+        Assert.Equal((month, 12_500), (view.Month, view.ChargedMicros));
     }
 
     private async Task<AnalysisClaim> ClaimAsync()

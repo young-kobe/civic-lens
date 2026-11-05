@@ -268,7 +268,7 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
         row.RetryAt = update.Status switch
         {
             State.RetryWaiting => clock.Ticks + update.RetryDelay!.Value.Ticks,
-            State.WaitingForBudget when update.ErrorCode is AnalysisErrorCodes.MonthlyCapNotSet or AnalysisErrorCodes.ModelPriceMissing =>
+            State.WaitingForBudget when update.ErrorCode is AnalysisErrorCodes.MonthlyCapNotSet =>
                 clock.Ticks + AnalysisPolicy.InitialOutagePause.Ticks,
             State.WaitingForBudget => new DateTime(clock.Day.AddDays(1), TimeOnly.MinValue, DateTimeKind.Utc).Ticks,
             _ => null

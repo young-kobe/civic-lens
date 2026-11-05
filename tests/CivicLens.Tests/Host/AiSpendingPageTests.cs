@@ -13,7 +13,6 @@ public sealed class AiSpendingPageTests(PostgresCollection postgres) : IAsyncLif
     private const string Owner = "auth0|owner";
     private const string Reviewer = "auth0|friend";
     private const string Page = "/Review/Spending";
-    private const string Haiku = "claude-haiku-5-5";
     private readonly ReviewWorkspaceHost host = new(postgres);
     private PostgresAiSpendingStore spending = null!;
 
@@ -37,7 +36,7 @@ public sealed class AiSpendingPageTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
-    public async Task TheOwnerSeesTheCapTheMonthSpendAndThePriceOfEachModelThatAStageUses()
+    public async Task TheOwnerSeesTheCapTheMonthSpendAndEachPriceTierOfTheModelsThatAStageUses()
     {
         SignIn(Owner);
 
@@ -47,8 +46,11 @@ public sealed class AiSpendingPageTests(PostgresCollection postgres) : IAsyncLif
         Assert.Contains("$0.00 spent or reserved", text, StringComparison.Ordinal);
         Assert.Contains("$1000000.00", text, StringComparison.Ordinal);
         var prices = page.QuerySelectorAll("[aria-labelledby='prices'] tbody tr").Select(row => row.TextContent).ToArray();
-        Assert.Equal(2, prices.Length);
-        Assert.Contains(prices, price => price.Contains("claude-sonnet-5-5", StringComparison.Ordinal) && price.Contains("$15.00", StringComparison.Ordinal));
+        Assert.Equal(3, prices.Length);
+        Assert.Contains(prices, price => price.Contains("claude-sonnet-5-5", StringComparison.Ordinal) && price.Contains("$10.00", StringComparison.Ordinal));
+        Assert.Contains(prices, price => price.Contains("claude-haiku-5-5, prompts up to 100,000 tokens", StringComparison.Ordinal) && price.Contains("$0.125", StringComparison.Ordinal));
+        Assert.Contains(prices, price => price.Contains("claude-haiku-5-5, prompts over 100,000 tokens", StringComparison.Ordinal) && price.Contains("$2.50", StringComparison.Ordinal));
+        Assert.Empty(page.QuerySelectorAll("#price-form"));
         Assert.Empty(page.QuerySelectorAll(".notice"));
     }
 
@@ -98,46 +100,6 @@ public sealed class AiSpendingPageTests(PostgresCollection postgres) : IAsyncLif
 
         Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
         Assert.Equal(1, (await spending.GetAsync(10, default)).CurrentCap!.RevisionNumber);
-    }
-
-    [Fact]
-    public async Task ASavedPriceAddsARevisionForItsModelOnly()
-    {
-        SignIn(Owner);
-
-        using var saved = await host.Client.PostAsync(Page, await PriceFormAsync(Haiku, "2", "10", "0.2", "2.5"));
-
-        Assert.Equal(HttpStatusCode.Redirect, saved.StatusCode);
-        var view = await spending.GetAsync(10, default);
-        var haiku = view.CurrentPrices.Single(price => price.Price.Model == Haiku);
-        Assert.Equal((2, 2_000_000, 10_000_000, 200_000, 2_500_000),
-            (haiku.RevisionNumber, haiku.Price.InputMicros, haiku.Price.OutputMicros, haiku.Price.CacheReadMicros, haiku.Price.CacheWriteMicros));
-        Assert.Equal(1, view.CurrentPrices.Single(price => price.Price.Model == "claude-sonnet-5-5").RevisionNumber);
-    }
-
-    [Theory]
-    [InlineData("claude-not-used", "1")]
-    [InlineData(Haiku, "1001")]
-    [InlineData(Haiku, "x")]
-    public async Task APriceForAModelNoStageUsesOrOutsideTheRangeIsRefusedAndWritesNothing(string model, string input)
-    {
-        SignIn(Owner);
-
-        using var refused = await host.Client.PostAsync(Page, await PriceFormAsync(model, input, "1", "1", "1"));
-
-        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
-        Assert.All((await spending.GetAsync(10, default)).CurrentPrices, price => Assert.Equal(1, price.RevisionNumber));
-    }
-
-    private async Task<FormUrlEncodedContent> PriceFormAsync(string model, string input, string output, string cacheRead, string cacheWrite)
-    {
-        var fields = Fields((await host.GetDocumentAsync(Page)).QuerySelector("#price-form")!);
-        Set(fields, "Price.Model", model);
-        Set(fields, "Price.Input", input);
-        Set(fields, "Price.Output", output);
-        Set(fields, "Price.CacheRead", cacheRead);
-        Set(fields, "Price.CacheWrite", cacheWrite);
-        return new(fields);
     }
 
     private void SignIn(string subject) => host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie(subject));

@@ -111,6 +111,6 @@ public sealed class ActionTextMeasureCommandTests : IDisposable
         var world = ActionBillWorld.Create(summaries: []);
         var store = new FakeActionDraftStore(world.Evidence() with { BillText = Of() });
         return new(store, new ActionDraftStep(store, world.Reader(), model, new ActionDraftSettings(10_000_000, 1, true), BillGateFixtures.Revision()),
-            new FakeAiSpendingStore(new(ActionDraftTask.Model, 1, 1, 1, 1)));
+            new FakeAiSpendingStore(new(ActionDraftTask.Model, [new(null, 1, 1, 1, 1)])));
     }
 }

@@ -622,17 +622,14 @@ public sealed class PostgresCollection : IAsyncLifetime
     private string ConnectionString(string database) =>
         new NpgsqlConnectionStringBuilder(container.GetConnectionString()) { Database = database, Pooling = false }.ConnectionString;
 
-    // AI calls wait without a cap and a price, so every test database starts with a cap that no test reaches.
+    // AI calls wait without a cap, so every test database starts with a cap that no test reaches.
     private async Task SeedSpendingAsync()
     {
         await using var connection = new NpgsqlConnection(ConnectionString(TemplateDatabase));
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
             INSERT INTO ai_monthly_cap_revisions (revision_number, cap_micros, author_subject, created_at_utc_ticks)
-            VALUES (1, 1000000000000, 'auth0|owner', 0);
-            INSERT INTO ai_model_price_revisions (model, revision_number, input_micros, output_micros, cache_read_micros, cache_write_micros, author_subject, created_at_utc_ticks)
-            VALUES ('claude-haiku-5-5', 1, 1000000, 5000000, 100000, 1250000, 'auth0|owner', 0),
-                   ('claude-sonnet-5-5', 1, 3000000, 15000000, 300000, 3750000, 'auth0|owner', 0)
+            VALUES (1, 1000000000000, 'auth0|owner', 0)
             """, connection);
         await command.ExecuteNonQueryAsync();
     }

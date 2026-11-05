@@ -6752,57 +6752,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
-            modelBuilder.Entity("CivicLens.Infrastructure.Spending.Persistence.AiModelPriceRevisionRow", b =>
-                {
-                    b.Property<string>("Model")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("model");
-
-                    b.Property<int>("RevisionNumber")
-                        .HasColumnType("integer")
-                        .HasColumnName("revision_number");
-
-                    b.Property<string>("AuthorSubject")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("author_subject");
-
-                    b.Property<long>("CacheReadMicros")
-                        .HasColumnType("bigint")
-                        .HasColumnName("cache_read_micros");
-
-                    b.Property<long>("CacheWriteMicros")
-                        .HasColumnType("bigint")
-                        .HasColumnName("cache_write_micros");
-
-                    b.Property<long>("CreatedAtUtcTicks")
-                        .HasColumnType("bigint")
-                        .HasColumnName("created_at_utc_ticks");
-
-                    b.Property<long>("InputMicros")
-                        .HasColumnType("bigint")
-                        .HasColumnName("input_micros");
-
-                    b.Property<long>("OutputMicros")
-                        .HasColumnType("bigint")
-                        .HasColumnName("output_micros");
-
-                    b.HasKey("Model", "RevisionNumber");
-
-                    b.HasIndex("CreatedAtUtcTicks");
-
-                    b.ToTable("ai_model_price_revisions", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_ai_model_price_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
-
-                            t.HasCheckConstraint("ck_ai_model_price_revisions_number", "revision_number >= 1");
-
-                            t.HasCheckConstraint("ck_ai_model_price_revisions_prices", "input_micros BETWEEN 0 AND 1000000000 AND output_micros BETWEEN 0 AND 1000000000 AND cache_read_micros BETWEEN 0 AND 1000000000 AND cache_write_micros BETWEEN 0 AND 1000000000");
-                        });
-                });
-
             modelBuilder.Entity("CivicLens.Infrastructure.Spending.Persistence.AiMonthSpendRow", b =>
                 {
                     b.Property<DateOnly>("MonthStart")

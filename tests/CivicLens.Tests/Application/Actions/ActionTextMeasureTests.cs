@@ -15,7 +15,7 @@ public sealed class ActionTextMeasureTests
     private const long Cap = 10_000_000;
     private static readonly CongressBillListItem Bill = new(119, "hr", 1, default);
     private static readonly CongressBillListItem OtherBill = new(119, "s", 2, default);
-    private static readonly ModelPrice Price = new(ActionDraftTask.Model, 1_000_000, 5_000_000, 0, 0);
+    private static readonly ModelPrice Price = new(ActionDraftTask.Model, [new(null, 1_000_000, 5_000_000, 0, 0)]);
     private static readonly ActionDraftSettings On = new(10_000_000, concurrency: 1, draftsFromBillText: true);
 
     [Fact]
@@ -290,21 +290,6 @@ public sealed class ActionTextMeasureTests
 
         Assert.Equal(1_000L, report.Totals.Usage.Total);
         Assert.Equal([1_400L], Spending.Charges);
-    }
-
-    [Fact]
-    public async Task AModelWithoutAPriceStopsTheMeasureBeforeAnyCallBecauseItsCostWouldBeUnknown()
-    {
-        var model = new FakeHeadlineSummaryModel().Draft(Output());
-        var world = ActionBillWorld.Create(summaries: []);
-        var (store, step) = Parts(world, model, world.Evidence() with { BillText = Of() });
-        var unpriced = new FakeAiSpendingStore(null);
-
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => RunAsync(new ActionTextMeasure(store, step, unpriced), [Bill], Cap));
-
-        Assert.Contains("has no price", exception.Message, StringComparison.Ordinal);
-        Assert.Empty(model.Requests);
-        Assert.Empty(unpriced.Charges);
     }
 
     [Fact]
