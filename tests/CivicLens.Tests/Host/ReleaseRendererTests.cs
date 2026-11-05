@@ -823,7 +823,7 @@ public sealed class ReleaseRendererTests
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
         Assert.Equal("10 Apr 2025", facts["Voted on"]);
         Assert.Equal("Passage", facts["Kind"]);
-        Assert.Equal("On Passage", facts["Question"]);
+        Assert.Equal("Pass the bill (On Passage)", facts["Question"]);
         Assert.Equal("House", facts["Chamber"]);
         Assert.Equal("100, Congress 119, session 1", facts["Roll call"]);
         Assert.Equal("Housing costs", facts["Tracked issues"]);
@@ -988,6 +988,19 @@ public sealed class ReleaseRendererTests
         return document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent,
                 pair => pair.Second.QuerySelector("a.source-line") is { } link ? document.QuerySelector(link.GetAttribute("href")!)!.TextContent : null);
+    }
+
+    [Fact]
+    public async Task TheVoteResultRowShowsPlainWordsFirstAndTheSourceWordsInBracketsAndKeepsItsSourceLineLink()
+    {
+        var vote = VoteWithResult("Nomination Confirmed");
+
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var result = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd")).Single(pair => pair.First.TextContent == "Result").Second;
+        Assert.Equal("Nominee approved (Nomination Confirmed)", result.ShownText());
+        Assert.NotNull(result.QuerySelector("a.source-line"));
     }
 
     [Fact]
@@ -3262,9 +3275,11 @@ public sealed class ReleaseRendererTests
         };
     }
 
-    private static PublishedVote Vote(params string[] candidateTotalLines)
+    private static PublishedVote Vote(params string[] candidateTotalLines) => VoteWithResult("Passed <b>", candidateTotalLines);
+
+    private static PublishedVote VoteWithResult(string result, params string[] candidateTotalLines)
     {
-        var detail = "Started: 2025-04-10T11:08:00-04:00\nQuestion: On Passage\nResult: Passed <b>\n" + string.Concat(candidateTotalLines.Select(line => line + "\n"));
+        var detail = $"Started: 2025-04-10T11:08:00-04:00\nQuestion: On Passage\nResult: {result}\n" + string.Concat(candidateTotalLines.Select(line => line + "\n"));
         const string members = "Member: A000055, Jane Doe, R, AL, Yea\n";
         var detailId = new string('1', 64);
         var membersId = new string('2', 64);
@@ -3289,14 +3304,14 @@ public sealed class ReleaseRendererTests
             KindCitation = Cite(detailId, detail, "Question: On Passage"),
             VotedOn = new DateOnly(2025, 4, 10),
             VotedOnCitation = Cite(detailId, detail, "Started: 2025-04-10T11:08:00-04:00"),
-            Result = "Passed <b>",
+            Result = result,
             Totals = new() { Yea = 1, Nay = 0, Present = 0, NotVoting = 0 },
             PartyMajorities = [PublishedPartyMajority.Of("Republican", 1, 0)],
             Facts =
             [
                 new PublishedVoteFact { Text = "Started: 2025-04-10T11:08:00-04:00", Citation = Cite(detailId, detail, "Started: 2025-04-10T11:08:00-04:00") },
                 new PublishedVoteFact { Text = "Question: On Passage", Citation = Cite(detailId, detail, "Question: On Passage") },
-                new PublishedVoteFact { Text = "Result: Passed <b>", Citation = Cite(detailId, detail, "Result: Passed <b>") },
+                new PublishedVoteFact { Text = $"Result: {result}", Citation = Cite(detailId, detail, $"Result: {result}") },
                 .. candidateTotalLines.Select(line => new PublishedVoteFact { Text = line, Citation = Cite(detailId, detail, line) })
             ],
             Members =

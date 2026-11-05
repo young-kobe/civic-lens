@@ -1,4 +1,5 @@
 using CivicLens.Application.Publication;
+using CivicLens.Application.Votes;
 using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Publication.Contracts;
@@ -161,6 +162,41 @@ public static class PublishedRecordLabels
         PublishedVoteKind.Other => OtherQuestion,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Vote kind has no label.")
     };
+
+    /// <summary>The plain question for a kind. The kind Other has none, because its source words are the only honest label.</summary>
+    public static string? VoteQuestionWords(PublishedVoteKind kind) => kind switch
+    {
+        PublishedVoteKind.Rule => "Set the rules for debate",
+        PublishedVoteKind.PreviousQuestion => "End debate and vote now",
+        PublishedVoteKind.MotionToRecommit => "Send the bill back to committee",
+        PublishedVoteKind.Amendment => "Change the bill",
+        PublishedVoteKind.Suspension => "Pass the bill with limited debate",
+        PublishedVoteKind.Passage => "Pass the bill",
+        PublishedVoteKind.ConferenceReport => "Approve the final text from both chambers",
+        PublishedVoteKind.VetoOverride => "Override the President's veto",
+        PublishedVoteKind.Nomination => "Confirm the nominee",
+        PublishedVoteKind.Cloture => "End debate",
+        PublishedVoteKind.MotionToProceed => "Start debate",
+        PublishedVoteKind.Other => null,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Vote kind has no question words.")
+    };
+
+    public static string VoteQuestion(PublishedVoteKind kind, string source) => PlainWithSource(VoteQuestionWords(kind), source);
+
+    public static string VoteResult(string source) =>
+        PlainWithSource(VoteResultTable.OutcomeOf(source) switch
+        {
+            VoteOutcome.Passed => "Passed",
+            VoteOutcome.Failed => "Failed",
+            VoteOutcome.AgreedTo => "Approved",
+            VoteOutcome.Rejected => "Turned down",
+            VoteOutcome.Confirmed => "Nominee approved",
+            _ => null
+        }, source);
+
+    /// <summary>The one format of a plain word with its source words: plain first, source in brackets. Equal words show once. No plain word shows the source alone.</summary>
+    public static string PlainWithSource(string? plain, string source) =>
+        plain is null || plain.Equals(source, StringComparison.OrdinalIgnoreCase) ? source : $"{plain} ({source})";
 
     public static string? VoteKindTermKey(PublishedVoteKind kind) => kind switch
     {

@@ -52,6 +52,16 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task AVoteRowShowsThePlainResultFirstAndTheSourceWordsInBracketsSoTheReaderNeverSeesOnlyCongressWording()
+    {
+        var page = Current([], [Vote('3', new DateOnly(2026, 4, 1)) with { Result = "Cloture Motion Agreed to" }]);
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialRecordAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.Contains("Result of the vote: Approved (Cloture Motion Agreed to)", new HtmlParser().ParseDocument(html).Body!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ASponsoredBillRowShowsTheActionDateTheReadDateAndThePlainMeaningOfItsLatestAction()
     {
         var bill = Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1));

@@ -17,7 +17,7 @@ internal static class PublishedVoteView
         new Fact("Voted on", Moment.Day(vote.VotedOn)).CitedAt(Anchor(vote, vote.VotedOnCitation)),
         new Fact("Kind", KindValue(vote)) { TermKey = PublishedRecordLabels.VoteKindTermKey(vote.Kind) },
         .. Question(vote),
-        new Fact("Result", vote.Result).CitedAt(Anchor(vote, ResultFact(vote).Citation)),
+        new Fact("Result", PublishedRecordLabels.VoteResult(vote.Result)).CitedAt(Anchor(vote, ResultFact(vote).Citation)),
         .. Totals(vote),
         .. ResultFacts(vote).Select(fact => new Fact(PublishedRecordLabels.VoteResultLabel(fact, MemberNoun(vote) + "s"), PublishedRecordLabels.VoteFactValue(fact.Text)).CitedAt(Anchor(vote, fact.Citation))),
         new("Chamber", vote.Chamber.ToString()),
@@ -37,7 +37,7 @@ internal static class PublishedVoteView
             : PublishedRecordLabels.VoteKind(vote.Kind);
 
     private static IEnumerable<Fact> Question(PublishedVote vote) =>
-        vote.KindCitation is { } kind ? [new Fact("Question", PublishedRecordLabels.VoteFactValue(kind.Quote)).CitedAt(Anchor(vote, kind))] : [];
+        vote.KindCitation is { } kind ? [new Fact("Question", PublishedRecordLabels.VoteQuestion(vote.Kind, PublishedRecordLabels.VoteFactValue(kind.Quote))).CitedAt(Anchor(vote, kind))] : [];
 
     private static IEnumerable<Fact> Totals(PublishedVote vote) =>
         vote.Totals is { } totals

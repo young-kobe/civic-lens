@@ -12,5 +12,5 @@ public sealed record PublishedOfficialRow(PublishedRecordKind Kind, DateOnly Dat
         billStatus is null ? null : PublishedOfficialView.StatusLine(billStatus), null, entry.FirstPublishedAtUtc, false, null, entry.BillLine);
 
     public static PublishedOfficialRow Of(PublishedOfficialVote vote) => new(
-        PublishedRecordKind.Vote, vote.VotedOn, vote.RecordId, vote.Headline, PublishedRecordLabels.Kind(PublishedRecordKind.Vote), $"{PublishedOfficialView.RollCall(vote)}. Result of the vote: {vote.Result}", vote.Cast, DateTimeOffset.MinValue, VotesWithParty.IsBreak(vote));
+        PublishedRecordKind.Vote, vote.VotedOn, vote.RecordId, vote.Headline, PublishedRecordLabels.Kind(PublishedRecordKind.Vote), $"{PublishedOfficialView.RollCall(vote)}. Result of the vote: {PublishedRecordLabels.VoteResult(vote.Result)}", vote.Cast, DateTimeOffset.MinValue, VotesWithParty.IsBreak(vote));
 }
