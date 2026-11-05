@@ -155,7 +155,7 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     private Task DecideAsync(string candidate, ReviewDecisionKind kind, string key) =>
         new DecideStatementReview(new PostgresStatementReviewStore(factory),
             new StatementReviewContextReader(drafts, new StatementSelectionResolver(StatementGateFixtures.Configuration())))
-            .ExecuteAsync(Owner, new(candidate, 1, 0, kind, kind == ReviewDecisionKind.Reject ? "not accurate" : null, [], key,
+            .ExecuteAsync(Owner, new(candidate, 1, 0, kind, kind is ReviewDecisionKind.Reject or ReviewDecisionKind.RequestChanges ? "not accurate" : null, [], key,
                 ReasonCode: kind == ReviewDecisionKind.Reject ? ReviewReasonCode.InaccurateSummary : null));
 
     [Fact]
@@ -262,6 +262,28 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM statement_review_decisions WHERE candidate_id = '{candidate}'"));
         Assert.NotEqual("civic-lens:code", await TextAsync($"SELECT actor_subject FROM statement_review_decisions WHERE candidate_id = '{candidate}'"));
         Assert.Equal("Approved", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+    }
+
+    [Theory]
+    [InlineData(ReviewDecisionKind.Reject, "Rejected")]
+    [InlineData(ReviewDecisionKind.RequestChanges, "ChangesRequested")]
+    public async Task APersonDecisionDuringTheRedraftCallIsFinalAndAppendsNothing(ReviewDecisionKind kind, string status)
+    {
+        var candidate = await PassedCandidateAsync();
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+        await AgeRunsAsync(candidate);
+        Assert.Equal(1, await drafts.RequeueStaleAsync(default));
+        var model = new FakeStatementDraftModel().Reply(async _ =>
+        {
+            await DecideAsync(candidate, kind, "decide-during-redraft");
+            return new AnalysisModelResponse("end_turn", Output(quotes: ["a rent cap for tenants"]), new(900, 100, 0, 0), "req_fixture");
+        });
+
+        await DraftingWorker(model).ExecuteAsync(once: true);
+
+        Assert.Equal([(StatementDraftTask.Task, "Succeeded", "draftDiscarded")], await QueueAsync(candidate, StatementDraftTask.Task));
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM statement_revisions WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(status, await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
     }
 
     [Fact]

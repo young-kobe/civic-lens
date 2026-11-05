@@ -283,7 +283,7 @@ The [roadmap](../roadmap.md) holds the delivery order. These design rules apply 
 - The planned ladder is deterministic rules, then a cheap probability tier, then a stronger model, then a person. The model tiers depend on the R-13 measurement. A bake-off selects the models and thresholds for each tier.
 - Deterministic rules include learned churn regions. A two-state Markov chain (stable or churning) over check history models each page region. Recurring churn, such as timestamps or rotating widgets, then needs no hand-written profile for each source.
 - When the engine is unsure, the change goes to review. The engine never drops a change silently.
-- `analyses redraft --stale` covers action, vote, statement, and brief drafts. A document-change draft has one analysis revision, and a person owns every change after it. A redraft would find that draft and settle with no new text. A version bump therefore has no selective rerun for this stage. A rerun needs a new rule for an analysis revision on a draft that no person has touched.
+- `analyses redraft --stale` covers action, vote, statement, and brief drafts. Planned work R-39: redraft of document change drafts, by owner choice on 2026-11-05. Until it ships, a version bump has no selective rerun for this stage.
 - `statements regate` covers the statement gate, and `analyses requeue` moves Failed entries only.
 - The rubric asks narrow typed questions. Examples: navigation or boilerplate, date or timestamp only, a changed number, obligation, named person, or policy claim. Others: removed content and touched configured issues.
 - A label binds to the exact comparison, the rubric version, and the labeler. Model output, also agreement between models, is a prediction, never a label.

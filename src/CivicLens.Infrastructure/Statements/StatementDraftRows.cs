@@ -38,7 +38,7 @@ internal static class StatementDraftRows
     public static readonly Expression<Func<StatementReviewDecisionRow, bool>> IsPersonApproval = decision =>
         decision.Kind == ReviewDecisionKind.Approve && decision.ActorSubject != ReviewAuthor.CodeSubject;
 
-    public static Task<bool> HasPersonApprovalAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken) =>
+    private static Task<bool> HasPersonApprovalAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken) =>
         db.Set<StatementReviewDecisionRow>().Where(decision => decision.CandidateId == candidateId).AnyAsync(IsPersonApproval, cancellationToken);
 
     private static bool FollowsUntouchedDraft(StatementDraftRow? draft, StatementDraftRevision revision) =>
