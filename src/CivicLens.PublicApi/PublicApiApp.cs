@@ -8,6 +8,7 @@ using CivicLens.PublicApi.Reports;
 using CivicLens.PublicApi.Schema;
 using CivicLens.PublicApi.Search;
 using CivicLens.PublicApi.Votes;
+using CivicLens.PublicApi.ZipDistricts;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
@@ -44,6 +45,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new ActiveReleaseReader(views));
         builder.Services.AddSingleton(new VoteStore(views));
         builder.Services.AddSingleton(new BillStore(views));
+        builder.Services.AddSingleton(new ZipDistrictStore(views));
         builder.Services.AddSingleton(new ReportStore(writer, options));
         if (options.Turnstile is { } turnstile)
             builder.Services.AddSingleton(new TurnstileVerifier(
@@ -76,6 +78,7 @@ public static class PublicApiApp
         app.MapRelease();
         app.MapVotes();
         app.MapBills();
+        app.MapZipDistricts();
         app.MapSearch();
         app.MapReports(options);
         return app;

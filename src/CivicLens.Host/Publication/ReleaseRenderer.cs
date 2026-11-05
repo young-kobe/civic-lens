@@ -126,7 +126,8 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
             [nameof(PublishedHomePage.Release)] = release,
             [nameof(PublishedHomePage.Brief)] = brief,
             [nameof(PublishedHomePage.Facets)] = facets,
-            [nameof(PublishedHomePage.Highlights)] = highlights
+            [nameof(PublishedHomePage.Highlights)] = highlights,
+            [nameof(PublishedHomePage.PublicApiUrl)] = publicApiUrl
         });
     }
 

@@ -4,7 +4,7 @@
 
 The districts feature captures one public file of the U.S. Census Bureau and keeps it as tables. The file maps each 2020 ZIP Code Tabulation Area (ZCTA) to the districts of the 119th Congress. A ZCTA is a Census area that the Bureau builds from ZIP codes. A ZCTA is not a USPS ZIP code. Each row cites the capture it came from.
 
-The view `public_api.zip_districts` serves these tables to the public read path. No public page reads it yet.
+The view `public_api.zip_districts` serves these tables to the public read path. The route `/v1/zip-districts/{zcta}` joins it with the release names; see [search](search.md#api). The home page ZIP form calls that route.
 
 ## Decisions
 
@@ -15,6 +15,7 @@ The view `public_api.zip_districts` serves these tables to the public read path.
 - A snapshot is one header row in `roster_snapshots`, with the data rows below it. The header holds the attempt ID of the capture. Every row holds that attempt ID. A row is never updated. `RosterSnapshotRules` stays the one owner of the header and of the hash rule; see [roster](roster.md#decisions).
 - A capture whose hash matches any snapshot of the source adds only its attempt row. Preparation checks the hash before it parses.
 - The newest snapshot follows the rule of `RosterSnapshotRules.ReadLatestSnapshotAttemptIdAsync`. The newest captured attempt of the source names the body. The oldest snapshot of that body is the newest snapshot. A file that changes and changes back reads as the earlier snapshot. The view `public_api.zip_districts` repeats this rule in SQL for each source that owns ZCTA rows, so it needs no source ID.
+- The view shows `congress`, which is 119. The file holds the 119th Congress only, so the migration `ZipDistrictCongress` writes the number as a constant. A source for another Congress needs a new migration.
 - The view shows `land_share`, which is the land of the overlap divided by the land of the ZCTA in the snapshot. The tables do not store the ZCTA total, so the view sums it. The ZCTA total leaves out the dropped rows. A page lists the districts of a ZCTA by `land_share`, largest first.
 - A data row keeps the ZCTA with 5 digits, the state, the district, and `AREALAND_PART` as the land area of the overlap in square meters. The land area is a `bigint`.
 - The state is the two letter code that the roster uses. `StateFips` is the one owner of the map from the state FIPS code to this code. It covers the 50 states, DC, Puerto Rico, and the four island areas. An unknown FIPS code fails preparation.
@@ -42,6 +43,7 @@ Each line gives the rule, what enforces it, and the test that protects it.
 - A row has a header row. Enforced by the foreign key `FK_zcta_districts_roster_snapshots_attempt_id`. Test: `PostgresZctaDistrictStoreTests.ARowWithoutAHeaderIsRefusedSoNoSnapshotExistsWithoutIt`.
 - A ZCTA has 5 digits and the land area is positive. Enforced by `ck_zcta_districts_zcta` and `ck_zcta_districts_land`. Tests: `PostgresZctaDistrictStoreTests.AFailedInsertLeavesNoPartialSnapshot`, `PostgresZctaDistrictStoreTests.AZeroLandRowIsRefusedByTheDatabase`.
 - The view `zip_districts` shows the rows of the newest snapshot only, by the rule of `RosterSnapshotRules`. Enforced by the SQL of the migration `PublicApiZipDistricts`. Tests: `PublicApiViewsTests.TheZipViewFollowsTheRosterRuleForTheNewestSnapshotWhenTheFileChangesAndChangesBack`, `PublicApiViewsTests.TheZipViewReadsTheOldestSnapshotWhenTwoSnapshotsHoldOneBodyLikeTheRosterRule`, `PublicApiViewsTests.TheZipViewIgnoresSnapshotsOfOtherSourcesAndShowsOneRowForEachZctaStateAndDistrict`.
+- The view `zip_districts` names the Congress of its rows. Enforced by the SQL of the migration `ZipDistrictCongress`. Test: `PublicApiViewsTests.TheZipViewNamesTheCongressOfTheDistrictFileSoARouteCanFilterByIt`.
 - The view `zip_districts` shows no attempt ID and no hash. Enforced by the column list of the view. Test: `PublicApiViewsTests.TheZipViewShowsNoRowsBeforeTheFirstSnapshotAndHidesCaptureIdentifiers`.
 - The land shares of a ZCTA add up to 1. Enforced by the window sum `PARTITION BY attempt_id, zcta` in the SQL of the migration `PublicApiZipDistricts`. Test: `PublicApiViewsTests.TheZipViewGivesTheLandOfTheOverlapAndTheShareOfTheZctaLandSoALargestFirstPageNeedsNoMoreMath`.
 - A snapshot is complete or absent. Enforced by one `SaveChanges` in `PostgresZctaDistrictStore.AdmitAsync`. Test: `PostgresZctaDistrictStoreTests.AFailedInsertLeavesNoPartialSnapshot`.
@@ -64,7 +66,7 @@ Each weekly check downloads the whole file. An unchanged file adds an attempt ro
 - The generated [districts schema](schema/districts.md) lists the table, its columns, its key, and its checks.
 - `zcta_districts` has one row for each ZCTA, state, district, and snapshot. The key is the attempt ID, the ZCTA, the state, and the district. It holds the land area of the overlap in square meters.
 - `roster_snapshots` is the header table. See [roster](roster.md#storage-and-contracts).
-- The view `public_api.zip_districts` has one row for each ZCTA, state, and district of the newest snapshot. The columns are `zcta`, `state`, `district`, `land_area_square_meters`, and `land_share`. `PublicApiGrants` grants the view owner SELECT on the columns that the view reads in `zcta_districts`, `roster_snapshots`, and `collection_attempts`. See [publication](publication.md#public-api-views).
+- The view `public_api.zip_districts` has one row for each ZCTA, state, and district of the newest snapshot. The columns are `zcta`, `state`, `district`, `land_area_square_meters`, `land_share`, and `congress`. `PublicApiGrants` grants the view owner SELECT on the columns that the view reads in `zcta_districts`, `roster_snapshots`, and `collection_attempts`. See [publication](publication.md#public-api-views).
 - `IZctaDistrictStore` is the port. `PostgresZctaDistrictStore` implements it. It has `HasSnapshotOfCaptureAsync` and `AdmitAsync` only.
 
 ## Code map
@@ -76,12 +78,13 @@ Each weekly check downloads the whole file. An unchanged file adds an attempt ro
 | Preparation | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs` |
 | Eligibility and validation | `src/CivicLens.Application/Collection/CollectionConfiguration.cs` |
 | Store and rows | `src/CivicLens.Infrastructure/Districts/PostgresZctaDistrictStore.cs`, `src/CivicLens.Infrastructure/Districts/Persistence/ZctaDistrictRow.cs`, `src/CivicLens.Infrastructure/Districts/Persistence/ZctaDistrictRowConfiguration.cs`, `src/CivicLens.Infrastructure/Roster/RosterSnapshotRules.cs` |
-| Public view | `src/CivicLens.Infrastructure/Collection/Migrations/20261104013000_PublicApiZipDistricts.cs`, `src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs`, `docs/architecture/public-api-columns.txt`, `tests/CivicLens.Tests/Infrastructure/PublicApi/PublicApiViewsTests.cs` |
+| Public view | `src/CivicLens.Infrastructure/Collection/Migrations/20261104013000_PublicApiZipDistricts.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261105153622_ZipDistrictCongress.cs`, `src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs`, `docs/architecture/public-api-columns.txt`, `tests/CivicLens.Tests/Infrastructure/PublicApi/PublicApiViewsTests.cs` |
 | Sources | `config/federal-coverage.json` |
 
 ## Limits and planned work
 
 - The file has the districts of the 119th Congress. The 2025 and 2026 mid-decade maps can differ for the 120th Congress. The 120th Congress needs a new file URL and a new source then.
+- The House member of DC and of Guam, the U.S. Virgin Islands, American Samoa, and the Northern Mariana Islands is a Delegate. The House member of Puerto Rico is the Resident Commissioner. `NonStateSeats` in Publication.Contracts owns the six codes, their names, and this title. `UsStates`, `ZipDistrictStore`, and the home page ZIP form read it. `StateFips` keeps only the FIPS numbers. Tests: `NonStateSeatsTests.OnlyPuertoRicoHasAResidentCommissionerAndTheOtherFiveSendADelegate`, `NonStateSeatsTests.NoOtherSourceFileKeepsItsOwnListOfNonStateNamesOrOffices`, `PublishedHomePageTests.TheZipFormCallsTheServiceAtTheConfiguredAddressAndStaysHiddenUntilScriptRuns`.
 - A ZCTA is not a USPS ZIP code. A ZIP code can lie in no ZCTA, and a ZCTA can cover parts of several ZIP codes. A reader must say this to a citizen.
 - Rows with a blank ZCTA, zero land, or the district `ZZ` are not stored. Their land area is not counted.
 - The Census names the file for the 2020 ZCTAs. A change of the Census column list fails preparation until a person updates the header in `ZctaDistrictParser`.

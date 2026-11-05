@@ -1,3 +1,5 @@
+using CivicLens.Publication.Contracts;
+
 namespace CivicLens.Host.Publication;
 
 internal static class UsStates
@@ -53,14 +55,15 @@ internal static class UsStates
         ["WA"] = "Washington",
         ["WV"] = "West Virginia",
         ["WI"] = "Wisconsin",
-        ["WY"] = "Wyoming",
-        ["DC"] = "District of Columbia",
-        ["PR"] = "Puerto Rico",
-        ["GU"] = "Guam",
-        ["VI"] = "U.S. Virgin Islands",
-        ["AS"] = "American Samoa",
-        ["MP"] = "Northern Mariana Islands"
-    };
+        ["WY"] = "Wyoming"
+    }.Concat(NonStateSeats.All.Select(seat => KeyValuePair.Create(seat.Code, seat.Name))).ToDictionary();
+
+    private static readonly IReadOnlyDictionary<string, string> HouseOfficeOfNonStates =
+        NonStateSeats.All.ToDictionary(seat => seat.Code, seat => seat.HouseOffice);
+
+    public static IReadOnlyDictionary<string, string> NameByCode => Names;
+
+    public static IReadOnlyDictionary<string, string> HouseOfficeByNonStateCode => HouseOfficeOfNonStates;
 
     public static string NameOf(string code) => Names.GetValueOrDefault(code, code);
 }
