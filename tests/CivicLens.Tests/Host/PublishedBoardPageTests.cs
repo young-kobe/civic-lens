@@ -151,11 +151,12 @@ public sealed class PublishedBoardPageTests
 
         var panel = document.QuerySelector("[aria-labelledby='panel-when-both-parties-agreed-(119th-congress,-house)']")!;
         var text = panel.TextContent;
-        Assert.Contains("On 4 of the 6 substantive House roll call votes on this site, most Democrats and most Republicans voted the same way.", text);
+        Assert.Contains("On 4 of the 6 substantive House roll call votes on this site, most Democrats and most Republicans who cast Yes or No voted the same way.", text);
+        Assert.Contains("That the parties voted the same way is about the question of each vote. It does not show that they agree on an issue.", text);
         Assert.Contains("On 1 of the 6, the two parties took opposite sides.", text);
         Assert.Contains("On 1 of the 6, one party had no majority, as in a tie.", text);
         Assert.Equal(["Kind of vote", "Both parties agreed"], panel.QuerySelectorAll("thead th").Select(header => header.TextContent));
-        Assert.Equal([("Passage", "3 of 4"), ("Amendment", "1 of 2"), ("All substantive votes", "4 of 6")],
+        Assert.Equal([("Vote to pass or agree to", "3 of 4"), ("Vote to change the text", "1 of 2"), ("All substantive votes", "4 of 6")],
             panel.QuerySelectorAll("tbody tr").Select(row => (row.Children[0].TextContent.Trim(), row.Children[1].TextContent.Trim())));
         Assert.Equal("method.html#parties-agreed", panel.QuerySelector("a")!.GetAttribute("href"));
         Assert.True(document.QuerySelector("[aria-labelledby^='panel-closest-vote']")!.CompareDocumentPosition(panel).HasFlag(AngleSharp.Dom.DocumentPositions.Following));

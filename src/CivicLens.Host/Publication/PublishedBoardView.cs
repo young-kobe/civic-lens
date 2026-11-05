@@ -46,26 +46,26 @@ internal static class PublishedBoardView
 
     public const string AgreementKindHeader = "Kind of vote";
 
-    public const string AgreementCountHeader = "Both parties agreed";
-
     public const string AgreementTotalLabel = "All substantive votes";
 
     public const string AgreementCaution = "That the parties voted the same way is about the question of each vote. It does not show that they agree on an issue.";
 
     public const string AgreementLinkText = "How this count works";
 
-    public const string AgreementAnchor = "#parties-agreed";
+    public const string AgreementId = "parties-agreed";
+
+    public const string AgreementAnchor = "#" + AgreementId;
 
     public static string AgreementTitle(ChamberAgreement agreement) =>
-        $"When both parties agreed ({CongressCalendar.Ordinal(agreement.Congress)} Congress, {ChamberOf(agreement)})";
+        $"When both parties agreed ({CongressCalendar.Ordinal(agreement.Congress)} Congress, {agreement.Chamber})";
 
     public static string AgreementLead(ChamberAgreement agreement) => agreement.Total == 0
-        ? $"This site has no substantive {ChamberOf(agreement)} roll call vote with both parties in the {CongressCalendar.Ordinal(agreement.Congress)} Congress."
-        : $"On {agreement.Agreed} of the {agreement.Total} substantive {ChamberOf(agreement)} roll call {PublishedOfficialView.Noun(agreement.Total, "vote")} on this site, most Democrats and most Republicans voted the same way.";
+        ? $"This site has no substantive {agreement.Chamber} roll call vote with both parties in the {CongressCalendar.Ordinal(agreement.Congress)} Congress."
+        : $"On {agreement.Agreed} of the {agreement.Total} substantive {agreement.Chamber} roll call {PublishedOfficialView.Noun(agreement.Total, "vote")} on this site, {PublishedOfficialView.BothMajorities} voted the same way.";
 
     public static IReadOnlyList<AgreementRow> AgreementRows(ChamberAgreement agreement) =>
     [
-        .. agreement.Kinds.Select(kind => new AgreementRow(PublishedRecordLabels.VoteKind(kind.Kind), $"{kind.Agreed} of {kind.Total}")),
+        .. agreement.Kinds.Select(kind => new AgreementRow(PlainVoteWords.Kind(kind.Kind), $"{kind.Agreed} of {kind.Total}")),
         new(AgreementTotalLabel, $"{agreement.Agreed} of {agreement.Total}")
     ];
 
@@ -76,9 +76,7 @@ internal static class PublishedBoardView
     public static bool ShowsNominationNote(ChamberAgreement agreement) => agreement.Nominations * 2 > agreement.Total;
 
     public static string NominationNote(ChamberAgreement agreement) =>
-        $"Most {ChamberOf(agreement)} roll call votes are on nominations. Look at each kind of vote, not only the total.";
-
-    private static string ChamberOf(ChamberAgreement agreement) => agreement.Chamber == PublishedChamber.Senate ? "Senate" : "House";
+        $"Most {agreement.Chamber} roll call votes are on nominations. Look at each kind of vote, not only the total.";
 
     public static string PartyOf(OfficialBoard board) => PublishedOfficialView.PartyOf(board.Chamber, board.Party);
 

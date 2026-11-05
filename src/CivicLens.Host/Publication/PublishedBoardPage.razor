@@ -25,10 +25,10 @@
             @if (agreement.Total > 0)
             {
                 <DataTable Roles="true" Items="PublishedBoardView.AgreementRows(agreement)" Caption="@PublishedBoardView.AgreementCaption">
-                    <Head><TableCell Header>@PublishedBoardView.AgreementKindHeader</TableCell><TableCell Header>@PublishedBoardView.AgreementCountHeader</TableCell></Head>
+                    <Head><TableCell Header>@PublishedBoardView.AgreementKindHeader</TableCell><TableCell Header>@PublishedVoteView.PartiesAgreedText</TableCell></Head>
                     <Row Context="row">
                         <TableCell Main>@row.Label</TableCell>
-                        <TableCell Label="@PublishedBoardView.AgreementCountHeader">@row.Count</TableCell>
+                        <TableCell Label="@PublishedVoteView.PartiesAgreedText">@row.Count</TableCell>
                     </Row>
                 </DataTable>
                 <p>@PublishedBoardView.AgreementSplit(agreement)</p>
