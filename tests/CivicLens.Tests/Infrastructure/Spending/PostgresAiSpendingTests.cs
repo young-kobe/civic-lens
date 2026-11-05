@@ -215,6 +215,16 @@ public sealed class PostgresAiSpendingTests(PostgresCollection postgres) : IAsyn
     }
 
     [Fact]
+    public async Task AMeasureChargeAddsTheRealCostAtTheNewestPriceAndTheTokensBeyondTheUsageAtTheHighestPrice()
+    {
+        var usage = new AnalysisTokenUsage(1_000, 500, 2_000, 100);
+
+        await spending.AddChargeAsync(Haiku, usage, usage.Total + 1_000, default);
+
+        Assert.Equal(3_825 + 5_000, await MonthChargedAsync());
+    }
+
+    [Fact]
     public async Task EachSaveAddsARevisionAndTheNewestOneIsCurrent()
     {
         await spending.SaveCapAsync(Owner, 5_000_000, default);

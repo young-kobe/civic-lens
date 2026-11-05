@@ -45,9 +45,10 @@ internal static class ActionDraftComposition
         var reader = new ActionBillReader(PostgresCollectionJobStore.FromConnectionString(connectionString, codeVersion),
             new ApiResponseReader(PostgresCollectionAttemptStore.FromConnectionString(connectionString), new CaptureBodyReader()),
             new CaptureDocumentTextExtractor(), PublicationComposition.RequireArtifactRoot());
-        var store = new PostgresActionDraftStore(AnalysisDbContextFactory.Create(connectionString), codeVersion);
+        var contexts = AnalysisDbContextFactory.Create(connectionString);
+        var store = new PostgresActionDraftStore(contexts, codeVersion);
         var settings = new ActionDraftSettings(AnalysisSettings.DefaultCallTokenLimit, draftsFromBillText: true);
         return new(store, new ActionDraftStep(store, reader, new AnthropicActionDraftModel(apiKey), settings, issues),
-            new PostgresAiSpendingStore(AnalysisDbContextFactory.Create(connectionString)));
+            new PostgresAiSpendingStore(contexts));
     }
 }

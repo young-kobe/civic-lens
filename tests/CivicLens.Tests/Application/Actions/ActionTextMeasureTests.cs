@@ -178,14 +178,53 @@ public sealed class ActionTextMeasureTests
     }
 
     [Fact]
-    public async Task ACancelKeepsTheBillsThatFinishedInAReportAndStillThrowsTheCancel()
+    public async Task ACancelKeepsTheBillsThatFinishedInAReportAndChargesTheMonthOnceWithTheCallInFlightAtItsWholeReservation()
     {
         var model = new FakeHeadlineSummaryModel().Draft(Output()).Reply(_ => throw new OperationCanceledException());
 
         var thrown = await Assert.ThrowsAsync<ActionTextMeasureCanceledException>(() => MeasureAsync(Cap, model, bills: [Bill, Bill]));
 
-        var bill = Assert.Single(thrown.Report.Bills);
+        var bill = Assert.Single(kept!.Bills);
         Assert.Equal(ActionTextMeasureOutcome.Accepted, bill.Outcome);
+        Assert.Null(thrown.ChargeFailure);
+        Assert.Equal([1_400 + Price.WorstCaseMicros(model.Requests[1].ReservedTokens)], Spending.Charges);
+    }
+
+    [Fact]
+    public async Task ACancelDuringTheRetryOfABillChargesItsFinishedPassAndTheCallInFlight()
+    {
+        var invented = Output([(FirstPlain, FirstQuote), ("The bill will pay every landlord in the country.", "pay every landlord in the country")]);
+        var model = new FakeHeadlineSummaryModel().Draft(invented).Reply(_ => throw new OperationCanceledException());
+
+        await Assert.ThrowsAsync<ActionTextMeasureCanceledException>(() => MeasureAsync(Cap, model));
+
+        Assert.Empty(kept!.Bills);
+        Assert.Equal([1_400 + Price.WorstCaseMicros(model.Requests[1].ReservedTokens)], Spending.Charges);
+    }
+
+    [Fact]
+    public async Task AnUnexpectedFaultAfterSomePaidBillsStillWritesTheReportAndChargesTheMonthOnce()
+    {
+        var model = new FakeHeadlineSummaryModel().Draft(Output()).Reply(_ => throw new InvalidOperationException("fault"));
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => MeasureAsync(Cap, model, bills: [Bill, Bill]));
+
+        Assert.Equal("fault", thrown.Message);
+        Assert.Equal(ActionTextMeasureOutcome.Accepted, Assert.Single(kept!.Bills).Outcome);
+        Assert.Equal([1_400 + Price.WorstCaseMicros(model.Requests[1].ReservedTokens)], Spending.Charges);
+    }
+
+    [Fact]
+    public async Task AChargeThatFailsAfterACancelStillThrowsTheCancelWithTheFailureAttachedAndKeepsTheReport()
+    {
+        var chargeFailure = new InvalidOperationException("charge");
+        Spending = new FakeAiSpendingStore(Price) { ChargeFailure = chargeFailure };
+        var model = new FakeHeadlineSummaryModel().Draft(Output()).Reply(_ => throw new OperationCanceledException());
+
+        var thrown = await Assert.ThrowsAsync<ActionTextMeasureCanceledException>(() => MeasureAsync(Cap, model, bills: [Bill, Bill]));
+
+        Assert.Same(chargeFailure, thrown.ChargeFailure);
+        Assert.Single(kept!.Bills);
     }
 
     [Fact]
@@ -261,7 +300,7 @@ public sealed class ActionTextMeasureTests
         var (store, step) = Parts(world, model, world.Evidence() with { BillText = Of() });
         var unpriced = new FakeAiSpendingStore(null);
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => new ActionTextMeasure(store, step, unpriced).RunAsync([Bill], Cap, default));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => RunAsync(new ActionTextMeasure(store, step, unpriced), [Bill], Cap));
 
         Assert.Contains("has no price", exception.Message, StringComparison.Ordinal);
         Assert.Empty(model.Requests);
@@ -273,10 +312,12 @@ public sealed class ActionTextMeasureTests
     {
         var (store, step) = Parts(ActionBillWorld.Create(summaries: []), new FakeHeadlineSummaryModel());
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => new ActionTextMeasure(store, step, Spending).RunAsync([Bill], 0, default));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => RunAsync(new ActionTextMeasure(store, step, Spending), [Bill], 0));
     }
 
-    private FakeAiSpendingStore Spending { get; } = new(Price);
+    private ActionTextMeasureReport? kept;
+
+    private FakeAiSpendingStore Spending { get; set; } = new(Price);
 
     private async Task<(ActionTextMeasureReport Report, FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> MeasureAsync(long cap,
         FakeHeadlineSummaryModel model, bool withText = true, CongressBillListItem[]? bills = null)
@@ -284,15 +325,24 @@ public sealed class ActionTextMeasureTests
         var world = ActionBillWorld.Create(summaries: []);
         var evidence = world.Evidence() with { BillText = withText ? Of() : null };
         var (store, step) = Parts(world, model, evidence);
-        return (await new ActionTextMeasure(store, step, Spending).RunAsync(bills ?? [Bill], cap, default), store, model);
+        await RunAsync(new ActionTextMeasure(store, step, Spending), bills ?? [Bill], cap);
+        return (kept!, store, model);
     }
 
-    private Task<ActionTextMeasureReport> RunAsync(ActionBillWorld world, ActionDraftEvidence evidence, long cap, FakeHeadlineSummaryModel model,
+    private async Task<ActionTextMeasureReport> RunAsync(ActionBillWorld world, ActionDraftEvidence evidence, long cap, FakeHeadlineSummaryModel model,
         CongressBillListItem[] bills)
     {
         var (store, step) = Parts(world, model, evidence);
-        return new ActionTextMeasure(store, step, Spending).RunAsync(bills, cap, default);
+        await RunAsync(new ActionTextMeasure(store, step, Spending), bills, cap);
+        return kept!;
     }
+
+    private Task RunAsync(ActionTextMeasure measure, CongressBillListItem[] bills, long cap) =>
+        measure.RunAsync(bills, cap, report =>
+        {
+            kept = report;
+            return Task.CompletedTask;
+        }, default);
 
     private static (FakeActionDraftStore Store, ActionDraftStep Step) Parts(ActionBillWorld world, FakeHeadlineSummaryModel model,
         ActionDraftEvidence? evidence = null)

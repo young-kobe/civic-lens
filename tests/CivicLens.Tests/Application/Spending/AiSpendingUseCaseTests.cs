@@ -1,4 +1,5 @@
 using CivicLens.Application.Spending;
+using CivicLens.Core.Analysis;
 using CivicLens.Core.Review;
 
 namespace CivicLens.Tests.Application.Spending;
@@ -77,7 +78,7 @@ public sealed class AiSpendingUseCaseTests
 
         public Task<ModelPrice?> GetPriceAsync(string model, CancellationToken cancellationToken) => throw new InvalidOperationException();
 
-        public Task AddChargeAsync(long micros, CancellationToken cancellationToken) => throw new InvalidOperationException();
+        public Task AddChargeAsync(string model, AnalysisTokenUsage usage, long chargedTokens, CancellationToken cancellationToken) => throw new InvalidOperationException();
 
         public Task SaveCapAsync(string authorSubject, long capMicros, CancellationToken cancellationToken)
         {

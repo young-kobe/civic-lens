@@ -20,19 +20,12 @@ public static class ActionTextMeasureCommand
         {
             var (tokenCap, billsFile) = ReadArguments(args);
             var bills = ReadBills(billsFile);
-            try
+            await createMeasure().RunAsync(bills, tokenCap, async report =>
             {
-                var report = await createMeasure().RunAsync(bills, tokenCap, cancellationToken);
-                var reportFile = await WriteReportAsync(report, artifactDirectory, clock.GetUtcNow(), cancellationToken);
+                var reportFile = await WriteReportAsync(report, artifactDirectory, clock.GetUtcNow());
                 CommandOutput.Write(output, new { reportFile, report.Totals });
-                return 0;
-            }
-            catch (ActionTextMeasureCanceledException canceled)
-            {
-                var reportFile = await WriteReportAsync(canceled.Report, artifactDirectory, clock.GetUtcNow(), CancellationToken.None);
-                CommandOutput.Write(output, new { reportFile, canceled.Report.Totals });
-                throw;
-            }
+            }, cancellationToken);
+            return 0;
         });
 
     private static (long TokenCap, string BillsFile) ReadArguments(string[] args) =>
@@ -52,8 +45,7 @@ public static class ActionTextMeasureCommand
     private static CongressBillListItem ReadBill(string id) =>
         ActionTextMeasure.TryParseId(id) ?? throw new ArgumentException($"The bill ID {id} must look like 119-hr-1943.");
 
-    private static async Task<string> WriteReportAsync(ActionTextMeasureReport report, string artifactDirectory, DateTimeOffset now,
-        CancellationToken cancellationToken)
+    private static async Task<string> WriteReportAsync(ActionTextMeasureReport report, string artifactDirectory, DateTimeOffset now)
     {
         var directory = Path.Combine(artifactDirectory, ReportDirectory);
         Directory.CreateDirectory(directory);

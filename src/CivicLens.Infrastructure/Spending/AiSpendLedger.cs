@@ -35,13 +35,17 @@ internal static class AiSpendLedger
     public static async Task SettleAsync(CollectionAttemptDbContext db, DateOnly budgetDay, AnalysisRun run, long reservedMicros,
         CancellationToken cancellationToken)
     {
-        var price = await NewestPriceAsync(db, run.Model, cancellationToken)
-            ?? throw new InvalidOperationException("A run that settles a reservation needs the price of its model.");
-        await AddAsync(db, budgetDay, price.CostMicros(run.Usage, run.ChargedTokens) - reservedMicros, cancellationToken);
+        await ChargeAsync(db, budgetDay, run.Model, run.Usage, run.ChargedTokens, reservedMicros, cancellationToken);
     }
 
-    public static async Task AddAsync(CollectionAttemptDbContext db, DateOnly day, long micros, CancellationToken cancellationToken) =>
-        (await LockMonthAsync(db, day, cancellationToken)).ChargedMicros += micros;
+    /// <summary>Adds the cost of used tokens at the newest price of the model, less the micros that a reservation already holds.</summary>
+    public static async Task ChargeAsync(CollectionAttemptDbContext db, DateOnly day, string model, AnalysisTokenUsage usage, long chargedTokens,
+        long reservedMicros, CancellationToken cancellationToken)
+    {
+        var price = await NewestPriceAsync(db, model, cancellationToken)
+            ?? throw new InvalidOperationException($"A charge needs the price of the model {model}.");
+        (await LockMonthAsync(db, day, cancellationToken)).ChargedMicros += price.CostMicros(usage, chargedTokens) - reservedMicros;
+    }
 
     public static async Task<ModelPrice?> NewestPriceAsync(CollectionAttemptDbContext db, string model, CancellationToken cancellationToken) =>
         (await db.Set<AiModelPriceRevisionRow>().AsNoTracking().Where(row => row.Model == model)

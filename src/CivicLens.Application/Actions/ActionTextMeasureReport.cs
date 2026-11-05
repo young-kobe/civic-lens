@@ -34,8 +34,7 @@ public sealed record ActionTextMeasureReport(string PromptVersion, string Schema
 
     private int Count(ActionTextMeasureOutcome outcome) => Bills.Count(bill => bill.Outcome == outcome);
 
-    private AnalysisTokenUsage TotalUsage() => Bills.Aggregate(AnalysisTokenUsage.None, (sum, bill) => new(sum.InputTokens + bill.Usage.InputTokens,
-        sum.OutputTokens + bill.Usage.OutputTokens, sum.CacheReadTokens + bill.Usage.CacheReadTokens, sum.CacheWriteTokens + bill.Usage.CacheWriteTokens));
+    private AnalysisTokenUsage TotalUsage() => Bills.Aggregate(AnalysisTokenUsage.None, (sum, bill) => sum + bill.Usage);
 }
 
 public static class ActionTextMeasureReason

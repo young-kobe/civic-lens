@@ -1,4 +1,5 @@
 using CivicLens.Application.Spending;
+using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Spending.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -29,11 +30,11 @@ public sealed class PostgresAiSpendingStore(IDbContextFactory<CollectionAttemptD
         return await AiSpendLedger.NewestPriceAsync(db, model, cancellationToken);
     }
 
-    public async Task AddChargeAsync(long micros, CancellationToken cancellationToken)
+    public async Task AddChargeAsync(string model, AnalysisTokenUsage usage, long chargedTokens, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        await AiSpendLedger.AddAsync(db, (await DatabaseClock.ReadAsync(db, cancellationToken)).Day, micros, cancellationToken);
+        await AiSpendLedger.ChargeAsync(db, (await DatabaseClock.ReadAsync(db, cancellationToken)).Day, model, usage, chargedTokens, 0, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
