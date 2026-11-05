@@ -367,4 +367,4 @@ The outcome is `Accepted`, `Rejected`, `Failed`, `Skipped`, `StoppedByCap`, or `
 - Senate votes: [votes](votes.md) holds the implemented collection and drafting. They come from Voteview and match members by the bioguide ID that the [roster](roster.md) holds, because Congress.gov has no Senate vote data.
 - The congress.gov bill link follows the public page form `/bill/{ordinal}-congress/{type slug}/{number}`. No repository fixture or stored row shows that form. Check it against the live site once.
 - Bill lookup ignores the source of an action draft, because bills have one source and no code owns its ID. A second bill source needs a source filter in `FindRecordIdByBillAsync`.
-- The measure caps tokens, not dollars, because the code holds no price table. The owner turns tokens into dollars by hand with the current price of the model.
+- The measure caps tokens, not dollars. It adds its real cost to the month after the run, so the monthly dollar cap cannot stop it during the run.
