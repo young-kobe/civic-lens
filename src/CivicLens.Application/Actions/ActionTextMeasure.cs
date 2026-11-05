@@ -1,4 +1,6 @@
 using System.Collections.Immutable;
+using CivicLens.Application.Analysis;
+using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Core.Analysis;
 
@@ -8,21 +10,36 @@ namespace CivicLens.Application.Actions;
 /// It clears the draft history of each bill, so a bill with a current record is drafted again as a new bill.</summary>
 public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep step)
 {
+    private const string TitlePrefix = "Title: ";
+
     public async Task<ActionTextMeasureReport> RunAsync(IReadOnlyList<CongressBillListItem> bills, long tokenCap, CancellationToken cancellationToken)
     {
         if (tokenCap < 1) throw new ArgumentOutOfRangeException(nameof(tokenCap), tokenCap, "The spend cap must be at least 1 token.");
         var results = ImmutableArray.CreateBuilder<ActionTextMeasureBill>();
         var spent = 0L;
-        foreach (var bill in bills)
+        try
         {
-            var result = results.Any(item => item.Outcome == ActionTextMeasureOutcome.StoppedByCap)
-                ? ActionTextMeasureBill.NotRun(IdOf(bill))
-                : await MeasureAsync(bill, tokenCap, spent, cancellationToken);
-            spent += result.Usage.Total;
-            results.Add(result);
+            foreach (var bill in bills)
+            {
+                var result = results.Any(item => item.EndsRun) ? NotRun(bill, results) : await MeasureAsync(bill, tokenCap, spent, cancellationToken);
+                spent += result.ChargedTokens;
+                results.Add(result);
+            }
         }
-        return new(ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model, tokenCap, results.ToImmutable());
+        catch (OperationCanceledException exception)
+        {
+            throw new ActionTextMeasureCanceledException(ReportOf(tokenCap, results), exception);
+        }
+        return ReportOf(tokenCap, results);
     }
+
+    private static ActionTextMeasureReport ReportOf(long tokenCap, ImmutableArray<ActionTextMeasureBill>.Builder results) =>
+        new(ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model, tokenCap, results.ToImmutable());
+
+    private static ActionTextMeasureBill NotRun(CongressBillListItem bill, IEnumerable<ActionTextMeasureBill> earlier) =>
+        earlier.Any(item => item.Outcome == ActionTextMeasureOutcome.StoppedByModel)
+            ? ActionTextMeasureBill.WithoutCall(IdOf(bill), ActionTextMeasureOutcome.StoppedByModel, ActionTextMeasureReason.ModelFailure)
+            : ActionTextMeasureBill.WithoutCall(IdOf(bill), ActionTextMeasureOutcome.StoppedByCap, ActionTextMeasureReason.SpendCap);
 
     public static string IdOf(CongressBillListItem bill) => $"{bill.Congress}-{bill.Type}-{bill.Number}";
 
@@ -40,20 +57,26 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         if (evidence?.BillText is not { } billText) return ActionTextMeasureBill.Skipped(billId, ActionTextMeasureReason.NoBillText);
 
         var attempt = new ActionTextMeasureAttempt(candidateId, tokenCap, spent);
-        await step.DraftAsync(attempt, evidence with { Current = null, HasNewerCandidate = false, HasOlderPromptDraft = false, IsRejected = false },
+        await step.DraftAsync(attempt, evidence with { Current = null, HasOlderPromptDraft = false, IsRejected = false },
             cancellationToken);
-        return Summarize(billId, billText, attempt);
+        return Summarize(billId, evidence, billText, attempt);
     }
 
-    private static ActionTextMeasureBill Summarize(string billId, ActionDraftBillText billText, ActionTextMeasureAttempt attempt)
+    private static ActionTextMeasureBill Summarize(string billId, ActionDraftEvidence evidence, ActionDraftBillText billText,
+        ActionTextMeasureAttempt attempt)
     {
         var usage = attempt.Runs.Aggregate(AnalysisTokenUsage.None, (sum, run) => new(sum.InputTokens + run.Usage.InputTokens,
             sum.OutputTokens + run.Usage.OutputTokens, sum.CacheReadTokens + run.Usage.CacheReadTokens, sum.CacheWriteTokens + run.Usage.CacheWriteTokens));
         var rejections = attempt.Runs.SelectMany(run => run.ValidationErrors).ToImmutableArray();
         ActionTextMeasureBill With(ActionTextMeasureOutcome outcome, string? reason, ImmutableArray<ActionTextMeasureSentence> sentences = default) =>
-            new(billId, outcome, reason, billText.CharsRead, billText.CharsTotal, attempt.Calls, usage, sentences.IsDefault ? [] : sentences, rejections);
+            new(billId, TitleOf(evidence), outcome, reason, billText.CharsRead, billText.CharsTotal, attempt.Calls, usage,
+                attempt.Runs.Sum(run => run.ChargedTokens), sentences.IsDefault ? [] : sentences, rejections,
+                [.. attempt.Runs.Where(run => run.OutputJson is not null).Select(run => new ActionTextMeasurePass(run.Outcome, run.OutputJson))]);
 
         if (attempt.RefusedOtherPrompt) return With(ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.NotTextPrompt);
+        if (attempt.Failure is { } failure)
+            return With(AnalysisFailureRules.NeedsPerson(failure) ? ActionTextMeasureOutcome.StoppedByModel : ActionTextMeasureOutcome.Failed,
+                attempt.ErrorCode);
         if (attempt.StoppedByCap) return With(ActionTextMeasureOutcome.StoppedByCap, ActionTextMeasureReason.SpendCap);
         if (attempt.Revision is { TextPackageId: not null } revision)
             return With(ActionTextMeasureOutcome.Accepted, null,
@@ -62,4 +85,7 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         if (attempt.Revision is not null) return With(ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.WrittenByCode);
         return With(attempt.Calls == 0 ? ActionTextMeasureOutcome.Skipped : ActionTextMeasureOutcome.Rejected, attempt.ErrorCode);
     }
+
+    private static string? TitleOf(ActionDraftEvidence evidence) =>
+        evidence.Pages.Single(page => page.Resource == ApiResource.Bill).Text.Split('\n').FirstOrDefault(text => text.StartsWith(TitlePrefix, StringComparison.Ordinal))?[TitlePrefix.Length..];
 }

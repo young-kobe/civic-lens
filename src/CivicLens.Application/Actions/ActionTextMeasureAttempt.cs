@@ -22,6 +22,7 @@ internal sealed class ActionTextMeasureAttempt(string candidateId, long tokenCap
     public int Calls { get; private set; }
     public ActionDraftRevision? Revision { get; private set; }
     public string? ErrorCode { get; private set; }
+    public AnalysisModelFailure? Failure { get; private set; }
     public ImmutableArray<AnalysisRun> Runs => [.. runs];
 
     public async Task<AnalysisCall> CallModelAsync(AnalysisModelRequest modelRequest, string? previous,
@@ -39,13 +40,16 @@ internal sealed class ActionTextMeasureAttempt(string candidateId, long tokenCap
         }
         catch (AnalysisModelException exception)
         {
-            (Calls, ErrorCode) = (Calls + 1, AnalysisErrorCodes.ForOutcome(Enum.Parse<AnalysisRunOutcome>(exception.Kind.ToString())));
+            var outcome = Enum.Parse<AnalysisRunOutcome>(exception.Kind.ToString());
+            var charged = AnalysisFailureRules.ChargeFor(exception, modelRequest.ReservedTokens);
+            runs.Add(Run(outcome, exception.Usage ?? AnalysisTokenUsage.None, charged, null, null, null));
+            (Calls, SpentTokens, ErrorCode, Failure) = (Calls + 1, SpentTokens + charged, AnalysisErrorCodes.ForOutcome(outcome), exception.Kind);
             return new(null, false);
         }
     }
 
     public AnalysisRun ResponseRun(AnalysisRunOutcome outcome, AnalysisModelResponse response) =>
-        Run(outcome, response.Usage, response.StopReason, response.RequestId, response.OutputJson);
+        Run(outcome, response.Usage, response.Usage.Total, response.StopReason, response.RequestId, response.OutputJson);
 
     public AnalysisRun BypassRun(string model, string inputHash, string? previous) =>
         new(Guid.NewGuid().ToString("N"), candidateId, ActionDraftTask.Task, ActionDraftTask.TaskVersion, model, ActionDraftTask.PromptVersion,
@@ -73,8 +77,9 @@ internal sealed class ActionTextMeasureAttempt(string candidateId, long tokenCap
         return Task.FromResult(true);
     }
 
-    private AnalysisRun Run(AnalysisRunOutcome outcome, AnalysisTokenUsage usage, string stopReason, string? requestId, string? outputJson) =>
+    private AnalysisRun Run(AnalysisRunOutcome outcome, AnalysisTokenUsage usage, long charged, string? stopReason, string? requestId,
+        string? outputJson) =>
         new(RunId!, candidateId, ActionDraftTask.Task, ActionDraftTask.TaskVersion, request!.Model, request.PromptVersion!, request.SchemaVersion!,
-            request.InputHash, previousRunId, outcome, usage, usage.Total, stopReason, requestId, outputJson, [], ContextJson,
+            request.InputHash, previousRunId, outcome, usage, Math.Max(charged, usage.Total), stopReason, requestId, outputJson, [], ContextJson,
             DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
 }

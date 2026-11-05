@@ -1,5 +1,6 @@
 using CivicLens.Application;
 using CivicLens.Application.Actions;
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Review;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Review;
@@ -96,13 +97,26 @@ internal static class ActionDraftRows
             draft.Congress == candidate.Congress && draft.BillType == candidate.BillType && draft.BillNumber == candidate.BillNumber, cancellationToken);
     }
 
+    /// <summary>The newest candidate of a bill is one that no other candidate of its source supersedes. When several stand, the last one created wins.</summary>
+    public static async Task<string?> NewestCandidateIdAsync(CollectionAttemptDbContext db, CongressBillListItem bill, CancellationToken cancellationToken)
+    {
+        var rows = await db.Set<ActionCandidateRow>().AsNoTracking()
+            .Where(row => row.Congress == bill.Congress && row.BillType == bill.Type && row.BillNumber == bill.Number)
+            .OrderByDescending(row => row.CreatedAtUtcTicks).ToListAsync(cancellationToken);
+        foreach (var row in rows)
+            if (!await HasNewerCandidateAsync(db, ToCandidate(row), cancellationToken)) return row.CandidateId;
+        return null;
+    }
+
+    private static ActionDraftCandidate ToCandidate(ActionCandidateRow row) =>
+        new(row.CandidateId, string.Empty, row.SourceId, row.Congress, row.BillType, row.BillNumber,
+            new DateTimeOffset(row.UpdateDateUtcTicks, TimeSpan.Zero), row.IncludesSummaries, row.IncludesSubjects);
+
     private static async Task<bool> IsNewerAsync(CollectionAttemptDbContext db, string candidateId, string thanCandidateId, CancellationToken cancellationToken)
     {
         var than = await db.Set<ActionCandidateRow>().AsNoTracking().SingleOrDefaultAsync(row => row.CandidateId == thanCandidateId, cancellationToken);
         if (than is null) return false;
-        var candidate = new ActionDraftCandidate(than.CandidateId, string.Empty, than.SourceId, than.Congress, than.BillType, than.BillNumber,
-            new DateTimeOffset(than.UpdateDateUtcTicks, TimeSpan.Zero), than.IncludesSummaries, than.IncludesSubjects);
-        return await NewerCandidates(db, candidate).AnyAsync(row => row.CandidateId == candidateId, cancellationToken);
+        return await NewerCandidates(db, ToCandidate(than)).AnyAsync(row => row.CandidateId == candidateId, cancellationToken);
     }
 
     public static async Task<ActionDraftRevision?> ReadCurrentAsync(CollectionAttemptDbContext db, string recordId,

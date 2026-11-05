@@ -20,10 +20,19 @@ public static class ActionTextMeasureCommand
         {
             var (tokenCap, billsFile) = ReadArguments(args);
             var bills = ReadBills(billsFile);
-            var report = await createMeasure().RunAsync(bills, tokenCap, cancellationToken);
-            var reportFile = await WriteReportAsync(report, artifactDirectory, clock.GetUtcNow(), cancellationToken);
-            CommandOutput.Write(output, new { reportFile, report.Totals });
-            return 0;
+            try
+            {
+                var report = await createMeasure().RunAsync(bills, tokenCap, cancellationToken);
+                var reportFile = await WriteReportAsync(report, artifactDirectory, clock.GetUtcNow(), cancellationToken);
+                CommandOutput.Write(output, new { reportFile, report.Totals });
+                return 0;
+            }
+            catch (ActionTextMeasureCanceledException canceled)
+            {
+                var reportFile = await WriteReportAsync(canceled.Report, artifactDirectory, clock.GetUtcNow(), CancellationToken.None);
+                CommandOutput.Write(output, new { reportFile, canceled.Report.Totals });
+                throw;
+            }
         });
 
     private static (long TokenCap, string BillsFile) ReadArguments(string[] args) =>

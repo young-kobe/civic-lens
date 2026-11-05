@@ -69,10 +69,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
     public async Task<string?> NewestCandidateIdAsync(CongressBillListItem bill, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Set<ActionCandidateRow>().AsNoTracking()
-            .Where(row => row.Congress == bill.Congress && row.BillType == bill.Type && row.BillNumber == bill.Number)
-            .OrderByDescending(row => row.UpdateDateUtcTicks).ThenByDescending(row => row.CreatedAtUtcTicks)
-            .Select(row => row.CandidateId).FirstOrDefaultAsync(cancellationToken);
+        return await ActionDraftRows.NewestCandidateIdAsync(db, bill, cancellationToken);
     }
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>

@@ -2,6 +2,7 @@ using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Core.Actions;
+using CivicLens.Core.Analysis;
 using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.Fixtures.ActionBillTexts;
@@ -29,6 +30,8 @@ public sealed class ActionTextMeasureTests
                 (ActionTextPart.WhyItMatters, WhyPlain, WhyQuote)],
             bill.Sentences.Select(sentence => (sentence.Part, sentence.Sentence, sentence.Quote)));
         Assert.Empty(bill.Rejections);
+        Assert.False(string.IsNullOrWhiteSpace(bill.Title));
+        Assert.Equal(Output(), Assert.Single(bill.Passes).OutputJson);
         Assert.Equal((ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, 1, 1000L),
             (report.PromptVersion, report.SchemaVersion, report.Totals.Accepted, report.Totals.Usage.Total));
         Assert.Equal(ActionDraftTask.TextPromptVersion, Assert.Single(model.Requests).PromptVersion);
@@ -92,6 +95,84 @@ public sealed class ActionTextMeasureTests
         Assert.Contains(bill.Rejections, reason => reason.Contains("quote", StringComparison.OrdinalIgnoreCase));
         Assert.Empty(bill.Sentences);
         Assert.Equal(1800, bill.Usage.InputTokens);
+        Assert.Equal([AnalysisRunOutcome.OutputRejected, AnalysisRunOutcome.OutputRejected], bill.Passes.Select(pass => pass.Outcome));
+        Assert.All(bill.Passes, pass => Assert.Equal(invented, pass.OutputJson));
+    }
+
+    [Fact]
+    public async Task AConnectionFailureChargesTheWholeReservationAndTheNextBillStopsByTheCap()
+    {
+        var reservation = (await MeasureAsync(Cap, new FakeHeadlineSummaryModel().Draft(Output()))).Model.Requests[0].ReservedTokens;
+        var model = new FakeHeadlineSummaryModel().Reply(_ => throw new AnalysisModelException(AnalysisModelFailure.ConnectionFailed));
+
+        var (report, _, _) = await MeasureAsync(reservation + 1, model, bills: [Bill, Bill]);
+
+        Assert.Equal([ActionTextMeasureOutcome.Failed, ActionTextMeasureOutcome.StoppedByCap], report.Bills.Select(bill => bill.Outcome));
+        Assert.Equal((1, reservation, AnalysisErrorCodes.ForOutcome(AnalysisRunOutcome.ConnectionFailed)),
+            (report.Bills[0].Calls, report.Bills[0].ChargedTokens, report.Bills[0].Reason));
+        Assert.Equal(reservation, report.Totals.ChargedTokens);
+    }
+
+    [Fact]
+    public async Task AnInvalidResponseChargesItsUsageAndCountsInTheReport()
+    {
+        var model = new FakeHeadlineSummaryModel().Reply(_ => throw new AnalysisModelException(AnalysisModelFailure.InvalidResponse, null, new(300, 40, 0, 0)));
+
+        var (report, _, _) = await MeasureAsync(Cap, model);
+
+        var bill = Assert.Single(report.Bills);
+        Assert.Equal((ActionTextMeasureOutcome.Failed, 340L, 340L), (bill.Outcome, bill.ChargedTokens, bill.Usage.Total));
+    }
+
+    [Fact]
+    public async Task ARateLimitIsAFailureWithNoChargeAndTheNextBillStillRuns()
+    {
+        var model = new FakeHeadlineSummaryModel().Reply(_ => throw new AnalysisModelException(AnalysisModelFailure.RateLimited)).Draft(Output());
+
+        var (report, _, _) = await MeasureAsync(Cap, model, bills: [Bill, Bill]);
+
+        Assert.Equal([ActionTextMeasureOutcome.Failed, ActionTextMeasureOutcome.Accepted], report.Bills.Select(bill => bill.Outcome));
+        Assert.Equal(0, report.Bills[0].ChargedTokens);
+    }
+
+    [Theory]
+    [InlineData(AnalysisModelFailure.AuthenticationFailed)]
+    [InlineData(AnalysisModelFailure.BillingFailed)]
+    [InlineData(AnalysisModelFailure.ModelNotFound)]
+    public async Task AFailureThatNeedsAPersonStopsTheWholeRunLikeTheWorkerPause(AnalysisModelFailure kind)
+    {
+        var model = new FakeHeadlineSummaryModel().Reply(_ => throw new AnalysisModelException(kind)).Draft(Output());
+
+        var (report, _, fake) = await MeasureAsync(Cap, model, bills: [Bill, Bill]);
+
+        Assert.Equal([ActionTextMeasureOutcome.StoppedByModel, ActionTextMeasureOutcome.StoppedByModel], report.Bills.Select(bill => bill.Outcome));
+        Assert.Equal(ActionTextMeasureReason.ModelFailure, report.Bills[1].Reason);
+        Assert.Single(fake.Requests);
+    }
+
+    [Fact]
+    public async Task ACancelKeepsTheBillsThatFinishedInAReportAndStillThrowsTheCancel()
+    {
+        var model = new FakeHeadlineSummaryModel().Draft(Output()).Reply(_ => throw new OperationCanceledException());
+
+        var thrown = await Assert.ThrowsAsync<ActionTextMeasureCanceledException>(() => MeasureAsync(Cap, model, bills: [Bill, Bill]));
+
+        var bill = Assert.Single(thrown.Report.Bills);
+        Assert.Equal(ActionTextMeasureOutcome.Accepted, bill.Outcome);
+    }
+
+    [Fact]
+    public async Task ABillWithANewerCandidateIsNotHiddenAndIsSkippedWithTheStepReason()
+    {
+        var world = ActionBillWorld.Create(summaries: []);
+        var evidence = world.Evidence(hasNewerCandidate: true) with { BillText = Of() };
+        var model = new FakeHeadlineSummaryModel().Draft(Output());
+
+        var report = await RunAsync(world, evidence, Cap, model, [Bill]);
+
+        var bill = Assert.Single(report.Bills);
+        Assert.Equal((ActionTextMeasureOutcome.Skipped, ActionDraftErrorCodes.SupersededByNewerCandidate), (bill.Outcome, bill.Reason));
+        Assert.Empty(model.Requests);
     }
 
     [Fact]

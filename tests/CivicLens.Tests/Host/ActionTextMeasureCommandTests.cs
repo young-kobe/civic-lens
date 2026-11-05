@@ -48,6 +48,19 @@ public sealed class ActionTextMeasureCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task ACancelStillWritesTheReportThenThrowsTheCancel()
+    {
+        var path = Path.Combine(directory, "one-bill.json");
+        File.WriteAllText(path, "[\"119-hr-1\"]");
+
+        await Assert.ThrowsAsync<ActionTextMeasureCanceledException>(() =>
+            ExecuteAsync(["actions", "text", "measure", "10000000", path], () => Measure(new FakeHeadlineSummaryModel().Reply(_ => throw new OperationCanceledException()))));
+
+        var file = Assert.Single(Directory.GetFiles(Path.Combine(directory, ActionTextMeasureCommand.ReportDirectory)));
+        Assert.Equal(0, JsonDocument.Parse(File.ReadAllText(file)).RootElement.GetProperty("bills").GetArrayLength());
+    }
+
+    [Fact]
     public async Task TheFixedBillListHoldsTwentyDistinctValidBillIdsThatTheMeasureReadsBack()
     {
         var ids = JsonSerializer.Deserialize<string[]>(File.ReadAllText(BillsFile))!;
@@ -91,11 +104,12 @@ public sealed class ActionTextMeasureCommandTests : IDisposable
         }
     }
 
-    private static ActionTextMeasure Measure()
+    private static ActionTextMeasure Measure() => Measure(new FakeHeadlineSummaryModel().Draft(Output()));
+
+    private static ActionTextMeasure Measure(FakeHeadlineSummaryModel model)
     {
         var world = ActionBillWorld.Create(summaries: []);
         var store = new FakeActionDraftStore(world.Evidence() with { BillText = Of() });
-        var model = new FakeHeadlineSummaryModel().Draft(Output());
         return new(store, new ActionDraftStep(store, world.Reader(), model, new ActionDraftSettings(10_000_000, 1, true), BillGateFixtures.Revision()));
     }
 }
