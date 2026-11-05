@@ -7,4 +7,5 @@ public sealed record CongressBillAction(
     string? Type,
     string? ActionCode,
     int? SourceSystemCode,
-    string? SourceSystemName);
+    string? SourceSystemName,
+    IReadOnlyList<CongressBillRecordedVote> RecordedVotes);

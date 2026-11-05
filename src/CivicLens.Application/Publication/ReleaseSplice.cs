@@ -64,6 +64,8 @@ internal static class ReleaseSplice
             Alignment = fromFile.Alignment,
             BillLine = fromFile.BillLine is null ? null : facts.BillLine,
             Chamber = fromFile.Chamber,
+            VoteKind = fromFile.VoteKind,
+            Congress = fromFile.Congress,
             CosponsorIds = fromFile.CosponsorIds
         };
     }

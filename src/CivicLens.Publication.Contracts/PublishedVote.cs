@@ -98,7 +98,9 @@ public sealed record PublishedVote
         YeaCount = Totals?.Yea,
         NayCount = Totals?.Nay,
         Alignment = AlignmentOfParties(),
-        Chamber = Chamber
+        Chamber = Chamber,
+        VoteKind = Kind,
+        Congress = Congress
     };
 
     private PublishedVoteAlignment? AlignmentOfParties()
