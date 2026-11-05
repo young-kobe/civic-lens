@@ -37,6 +37,7 @@ public static class CongressBillActionsParser
     {
         if (vote is not { Chamber: not null, Congress: >= 1, SessionNumber: 1 or 2, RollNumber: >= 1 })
             throw new InvalidDataException("Recorded vote is incomplete.");
+        if (!Enum.IsDefined(vote.Chamber.Value)) throw new InvalidDataException("Recorded vote chamber is unknown.");
         var url = Optional(vote.Url);
         if (url is not null && !url.StartsWith(UrlPrefix, StringComparison.Ordinal))
             throw new InvalidDataException("Recorded vote URL must be an https URL.");

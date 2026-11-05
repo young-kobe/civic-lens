@@ -30,7 +30,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 {
                     table.PrimaryKey("PK_bill_actions", x => new { x.detail_job_id, x.position });
                     table.CheckConstraint("ck_bill_actions_position", "position >= 0");
-                    table.CheckConstraint("ck_bill_actions_text", "btrim(text) <> ''");
+                    table.CheckConstraint("ck_bill_actions_text", "text ~ '\\S'");
                     table.ForeignKey(
                         name: "FK_bill_actions_bill_gates_detail_job_id",
                         column: x => x.detail_job_id,

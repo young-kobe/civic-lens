@@ -2479,7 +2479,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_bill_actions_position", "position >= 0");
 
-                            t.HasCheckConstraint("ck_bill_actions_text", "btrim(text) <> ''");
+                            t.HasCheckConstraint("ck_bill_actions_text", "text ~ '\\S'");
                         });
                 });
 

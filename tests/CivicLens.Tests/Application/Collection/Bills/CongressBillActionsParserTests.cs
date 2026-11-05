@@ -112,6 +112,7 @@ public sealed class CongressBillActionsParserTests
     [InlineData("null")]
     [InlineData("""{"congress":119,"rollNumber":1,"sessionNumber":1}""")]
     [InlineData("""{"chamber":"Joint","congress":119,"rollNumber":1,"sessionNumber":1}""")]
+    [InlineData("""{"chamber":5,"congress":119,"rollNumber":1,"sessionNumber":1}""")]
     [InlineData("""{"chamber":"House","rollNumber":1,"sessionNumber":1}""")]
     [InlineData("""{"chamber":"House","congress":119,"sessionNumber":1}""")]
     [InlineData("""{"chamber":"House","congress":119,"rollNumber":0,"sessionNumber":1}""")]

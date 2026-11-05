@@ -39,11 +39,52 @@ public sealed partial class PostgresBillStreamTests
         var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
         var first = await AdmitActionsAsync(bill.Actions,
             new CongressBillActionsPage([HistoryAction("One."), HistoryAction("Two.")], ActionsNext(250)));
+        var secondPageJob = first.Jobs.Single().JobId;
 
-        await AdmitActionsAsync(first.Jobs.Single().JobId, new CongressBillActionsPage([HistoryAction("Three.", SenateRoll)], null));
+        await AdmitActionsAsync(secondPageJob, new CongressBillActionsPage([HistoryAction("Three.", SenateRoll)], null));
 
-        Assert.Equal([(0, "One."), (1, "Two."), (2, "Three.")], await ActionPositionsAsync());
+        Assert.Equal([(0, "One.", bill.Actions), (1, "Two.", bill.Actions), (2, "Three.", secondPageJob)], await ActionPositionsAsync());
         Assert.Equal(2, Assert.Single(await RecordedVoteRowsAsync()).ActionPosition);
+    }
+
+    [Fact]
+    public async Task AnActionPositionGivesItsLineOnTheRenderedPageOfItsJob()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        var firstPage = new CongressBillActionsPage([HistoryAction("One."), HistoryAction("Two.")], ActionsNext(250));
+        var secondPage = new CongressBillActionsPage([HistoryAction("Three."), HistoryAction("Four.")], null);
+        var first = await AdmitActionsAsync(bill.Actions, firstPage);
+        await AdmitActionsAsync(first.Jobs.Single().JobId, secondPage);
+        var item = new CongressBillListItem(119, "hr", 7, Backfill);
+        var rendered = new Dictionary<string, string[]>
+        {
+            [bill.Actions] = CongressBillRenderer.RenderActions(item, firstPage).Split('\n'),
+            [first.Jobs.Single().JobId] = CongressBillRenderer.RenderActions(item, secondPage).Split('\n')
+        };
+        var rows = await ActionPositionsAsync();
+
+        foreach (var (position, text, jobId) in rows)
+        {
+            var lowestOfJob = rows.Where(row => row.JobId == jobId).Min(row => row.Position);
+            Assert.Contains(text, rendered[jobId][1 + position - lowestOfJob]);
+        }
+    }
+
+    [Fact]
+    public async Task TwoVersionsOfOneBillKeepSeparateActionHistoriesThatBothStartAtPositionZero()
+    {
+        var first = await EnqueueDetailAsync("first");
+        var second = await EnqueueDetailAsync("second");
+        var firstJob = (await AdmitDetailAsync(first, DetailBill(UpdatedAt, cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor)))
+            .Jobs.Single(job => job.Url.Contains("/actions?")).JobId;
+        var secondJob = (await AdmitDetailAsync(second, DetailBill(UpdatedAt.AddSeconds(1), cosponsors: 0),
+            BillGateOutcome.Passed(BillGateReason.CoveredSponsor))).Jobs.Single(job => job.Url.Contains("/actions?")).JobId;
+
+        await AdmitActionsAsync(firstJob, new CongressBillActionsPage([HistoryAction("Old one."), HistoryAction("Old two.")], null));
+        await AdmitActionsAsync(secondJob, new CongressBillActionsPage([HistoryAction("New one.")], null));
+
+        Assert.Equal([(0, "Old one.", firstJob), (1, "Old two.", firstJob), (0, "New one.", secondJob)],
+            await ActionPositionsAsync("detail_job_id, position"));
     }
 
     [Fact]
@@ -98,11 +139,11 @@ public sealed partial class PostgresBillStreamTests
         return rows;
     }
 
-    private async Task<IReadOnlyList<(int Position, string Text)>> ActionPositionsAsync()
+    private async Task<IReadOnlyList<(int Position, string Text, string JobId)>> ActionPositionsAsync(string order = "position")
     {
-        await using var reader = await ReadAsync("SELECT position, text FROM bill_actions ORDER BY position");
-        var rows = new List<(int, string)>();
-        while (await reader.ReadAsync()) rows.Add((reader.GetInt32(0), reader.GetString(1)));
+        await using var reader = await ReadAsync($"SELECT position, text, job_id FROM bill_actions ORDER BY {order}");
+        var rows = new List<(int, string, string)>();
+        while (await reader.ReadAsync()) rows.Add((reader.GetInt32(0), reader.GetString(1), reader.GetString(2)));
         return rows;
     }
 

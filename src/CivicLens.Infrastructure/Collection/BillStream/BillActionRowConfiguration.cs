@@ -10,7 +10,7 @@ internal sealed class BillActionRowConfiguration : IEntityTypeConfiguration<Bill
         builder.ToTable("bill_actions", table =>
         {
             table.HasCheckConstraint("ck_bill_actions_position", "position >= 0");
-            table.HasCheckConstraint("ck_bill_actions_text", "btrim(text) <> ''");
+            table.HasCheckConstraint("ck_bill_actions_text", "text ~ '\\S'");
         });
         builder.Property(row => row.DetailJobId).HasColumnName("detail_job_id").HasMaxLength(128);
         builder.Property(row => row.Position).HasColumnName("position");
