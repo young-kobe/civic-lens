@@ -249,6 +249,7 @@ public sealed class PublishedHomePageTests
         Assert.Equal("https://api.example.test", form.GetAttribute("data-zip-api"));
         Assert.True(form.HasAttribute("hidden"));
         Assert.Equal("officials/{id}.html", form.GetAttribute("data-official-page"));
+        Assert.Equal("officials.html", form.GetAttribute("data-officials-page"));
         Assert.Equal("District of Columbia", System.Text.Json.JsonDocument.Parse(form.GetAttribute("data-states")!).RootElement.GetProperty("DC").GetString());
         var offices = System.Text.Json.JsonDocument.Parse(form.GetAttribute("data-house-offices")!).RootElement;
         Assert.Equal("Resident Commissioner", offices.GetProperty("PR").GetString());
@@ -283,8 +284,11 @@ public sealed class PublishedHomePageTests
         Assert.True(panel.HasAttribute("hidden"));
         Assert.Equal("Your officials", panel.QuerySelector("h2")!.TextContent);
         Assert.Equal("status", panel.QuerySelector("[data-zip-body]")!.GetAttribute("role"));
+        var notes = panel.QuerySelector("[data-zip-notes]")!;
+        Assert.True(notes.HasAttribute("hidden"));
         Assert.Equal(["Source: U.S. Census Bureau", "A ZIP Code Tabulation Area is a Census Bureau area. It is not a USPS ZIP code. Near a border, check your address with your House office."],
-            panel.QuerySelectorAll("p").Select(note => note.TextContent));
+            notes.QuerySelectorAll("p").Select(note => note.TextContent));
+        Assert.Single(panel.QuerySelectorAll("[data-zip-notes]"));
     }
 
     [Fact]

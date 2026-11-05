@@ -177,6 +177,7 @@
         const states = JSON.parse(form.dataset.states);
         const panel = document.querySelector("[data-zip-results]");
         const body = panel.querySelector("[data-zip-body]");
+        const notes = panel.querySelector("[data-zip-notes]");
         const input = form.elements.namedItem("zip");
         const houseOffices = JSON.parse(form.dataset.houseOffices);
         const stateName = code => states[code] ?? code;
@@ -204,7 +205,7 @@
             item.append(line);
             return item;
         };
-        const show = nodes => { panel.hidden = false; body.replaceChildren(...nodes); };
+        const show = (nodes, listed = false) => { panel.hidden = false; notes.hidden = !listed; body.replaceChildren(...nodes); };
         const showAnswer = answer => {
             const list = element("ul", undefined, "zip-seats");
             const nodes = [];
@@ -217,12 +218,20 @@
                 for (const senator of state.senators) list.append(seat(`Senator for ${stateName(state.state)}`, senator));
             }
             nodes.push(list);
-            show(nodes);
+            show(nodes, true);
         };
-        const failure = (zip, status) => ({
-            404: `No match for ${zip}. Check the 5 digits. Some ZIP codes, such as a PO box, are not in the Census data.`,
-            429: "Too many lookups. Wait one minute and try again."
-        })[status] ?? "The lookup failed. Try again, or browse all officials.";
+        const failure = (zip, status) => {
+            const texts = {
+                404: `No match for ${zip}. Check the 5 digits. Some ZIP codes, such as a PO box, are not in the Census data.`,
+                429: "Too many lookups. Wait one minute and try again."
+            };
+            if (status in texts) return element("p", texts[status]);
+            const message = element("p", "The lookup failed. Try again, or ");
+            const link = element("a", "browse all officials");
+            link.href = form.dataset.officialsPage;
+            message.append(link, ".");
+            return message;
+        };
         let running = 0;
         form.addEventListener("submit", async event => {
             event.preventDefault();
@@ -234,10 +243,10 @@
             try {
                 const response = await fetch(`${api}/v1/zip-districts/${zip}`);
                 if (mine !== running) return;
-                if (!response.ok) { show([element("p", failure(zip, response.status))]); return; }
+                if (!response.ok) { show([failure(zip, response.status)]); return; }
                 answer = await response.json();
             }
-            catch { if (mine === running) show([element("p", failure(zip, 0))]); return; }
+            catch { if (mine === running) show([failure(zip, 0)]); return; }
             if (mine === running) showAnswer(answer);
         });
         form.hidden = false;

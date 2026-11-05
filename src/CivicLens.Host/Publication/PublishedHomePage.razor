@@ -15,7 +15,7 @@
                             <span>The ZIP lookup needs JavaScript. Without it, browse <a href="@PublicationProtocol.OfficialsPagePath">all officials</a>.</span>
                         </div>
                     </noscript>
-                    <form class="zip-form" hidden data-zip-api="@PublicApiUrl" data-official-page="@PublicationProtocol.OfficialPagePath("{id}")" data-states="@StateNames" data-house-offices="@HouseOffices">
+                    <form class="zip-form" hidden data-zip-api="@PublicApiUrl" data-official-page="@PublicationProtocol.OfficialPagePath("{id}")" data-officials-page="@PublicationProtocol.OfficialsPagePath" data-states="@StateNames" data-house-offices="@HouseOffices">
                         <Field Label="Your ZIP code" For="zip-code">
                             <input id="zip-code" name="zip" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="5" placeholder="5 digits" />
                         </Field>
@@ -32,8 +32,10 @@
         {
             <Panel Title="Your officials" Padded="true" hidden data-zip-results>
                 <div role="status" data-zip-body></div>
-                <p class="muted small">Source: U.S. Census Bureau</p>
-                <p class="muted small">A ZIP Code Tabulation Area is a Census Bureau area. It is not a USPS ZIP code. Near a border, check your address with your House office.</p>
+                <div data-zip-notes hidden>
+                    <p class="muted small">Source: U.S. Census Bureau</p>
+                    <p class="muted small">A ZIP Code Tabulation Area is a Census Bureau area. It is not a USPS ZIP code. Near a border, check your address with your House office.</p>
+                </div>
             </Panel>
         }
         @if (Brief is not null)
