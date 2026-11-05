@@ -23,7 +23,7 @@ public sealed class PublishEntryRewriteTests
         Assert.Equal(before.Length, carried.Length);
         foreach (var old in before)
             Assert.Equal(Json(old), Json(carried.Single(entry => entry.RecordId == old.RecordId)));
-        Assert.All(carried, entry => Assert.Equal((null, null, null, null, null), (entry.YeaCount, entry.NayCount, entry.Alignment, entry.Chamber, entry.CosponsorIds)));
+        Assert.All(carried, entry => Assert.Equal((null, null, null, null, null, null, null), (entry.YeaCount, entry.NayCount, entry.Alignment, entry.Chamber, entry.VoteKind, entry.Congress, entry.CosponsorIds)));
     }
 
     [Fact]
@@ -70,6 +70,7 @@ public sealed class PublishEntryRewriteTests
         Assert.Equal(PublishedVoteAlignment.Split, vote.Alignment);
         Assert.Equal(voteRecord.Chamber, vote.Chamber);
         Assert.NotNull(vote.Chamber);
+        Assert.Equal((voteRecord.Kind, voteRecord.Congress), (vote.VoteKind, vote.Congress));
         var action = after.Single(entry => entry.Kind == PublishedRecordKind.Action);
         Assert.Equal(["chair"], action.CosponsorIds!);
         Assert.All(after.Where(entry => entry.Kind == PublishedRecordKind.Statement), entry => Assert.Null(entry.CosponsorIds));
@@ -93,6 +94,34 @@ public sealed class PublishEntryRewriteTests
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true });
 
         Assert.Equal("This bill funds rent aid.", Assert.Single(Manifest(scenario, second).Records).BillLine);
+    }
+
+    [Fact]
+    public async Task TheRewriteOptionHandsTheRewrittenCarriedActionsToTheCommitBecauseTheTableMustFillTheirRowsInTheSameTransaction()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('b', summaryText: "This bill funds rent aid.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true });
+
+        var rewritten = Assert.Single(scenario.Publications.LastCommit!.RewrittenEntries);
+        Assert.Equal((PublishedRecordKind.Action, "This bill funds rent aid."), (rewritten.Kind, rewritten.BillLine));
+    }
+
+    [Fact]
+    public async Task OnlyTheCarriedActionIsHandedToTheCommitAndAPlainPublishHandsNoneBecauseOnlyActionRowsHoldALine()
+    {
+        var scenario = new PublicationScenario();
+        await PublishFirstAsync(scenario);
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true });
+        Assert.Equal(PublishedRecordKind.Action, Assert.Single(scenario.Publications.LastCommit!.RewrittenEntries).Kind);
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k3", new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('d'))));
+        Assert.Empty(scenario.Publications.LastCommit!.RewrittenEntries);
     }
 
     [Fact]
@@ -357,7 +386,7 @@ public sealed class PublishEntryRewriteTests
     }
 
     private static PublishedRecordEntry WithoutNewFields(PublishedRecordEntry entry) =>
-        entry with { YeaCount = null, NayCount = null, Alignment = null, Chamber = null, CosponsorIds = null, BillLine = null };
+        entry with { YeaCount = null, NayCount = null, Alignment = null, Chamber = null, VoteKind = null, Congress = null, CosponsorIds = null, BillLine = null };
 
     private static PublicationRelease Manifest(PublicationScenario scenario, PublicationReleaseSummary release) =>
         JsonSerializer.Deserialize<PublicationRelease>(scenario.Releases.Directories[release.DirectoryName][PublicationProtocol.ManifestPath],

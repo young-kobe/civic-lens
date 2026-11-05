@@ -11,7 +11,7 @@ namespace CivicLens.Tests.Application.Publication;
 
 public sealed class PublishReleaseTests
 {
-    private const int SeededRoom = 800;
+    private const int SeededRoom = 1000;
 
     [Fact]
     public async Task ReviewerCannotPublishBecauseOnlyTheOwnerSpeaksForTheSite()

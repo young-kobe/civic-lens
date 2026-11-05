@@ -75,13 +75,17 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [ ] Run the subjects backfill and the redraft command
   - [x] Write action text in code when no summary text reaches the model, and move summary bills to the new prompt
   - [ ] Draft the action backlog, and spot check the issue tags after it
+  - [ ] Publish the bill text summary, after the owner reads the measured sample
+  - [ ] Turn the bill text setting on
+  - [ ] Backfill older bills with the bill text summary
 
 - R-66: Gate model output on confidence. Models give a confidence score. A low score sends the record to the one page review, where a person fixes it or tells the model what to fix. Set the threshold from measured data and a person-labeled set. Depends on: R-65. [Review](architecture/review.md#limits-and-planned-work)
   - [ ] Agree the design
   - [ ] Build the gate and the model fix
 - R-67: Measure each prompt. Each prompt version gets a live, budgeted, opt-in measure on fixed bills, and the numbers go on the PR. Use the cheapest setting that holds accuracy. The order is vote, statement draft and gate, document change, relationship, then brief. Depends on: none. [Analysis](architecture/analysis.md#limits-and-planned-work)
   - [x] Fix the vote prompt wording and measure it
-  - [ ] Agree one opt-in eval command, and build it. The `actions text measure` command is the base. Later prompt measures extend this one command.
+  - [x] Build the first opt-in measure, `actions text measure`, for the bill text prompt (#373)
+  - [ ] Agree one opt-in eval command. Later prompt measures extend `actions text measure` or replace it with one command
   - [ ] Measure the other prompts, one PR for each
 
 **Coverage**

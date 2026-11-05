@@ -109,6 +109,8 @@ if (args is [] or ["--help"] or ["help"])
           document-changes revisions verify
           bills subjects backfill [limit]
           bills status backfill [limit]
+          bills text backfill [limit]
+          bills text backfill --bills <bills-file>
           relationships draft status
           relationships draft list [drafted|unchanged|none|unmatched|pending|failed] [limit]
           relationships draft requeue <pair-id|--all>
@@ -140,6 +142,7 @@ if (args is [] or ["--help"] or ["help"])
         worker also drafts bill actions when CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
         actions text measure calls the paid model and needs CIVIC_LENS_DATABASE, CIVIC_LENS_REVIEW_OWNER, CIVIC_LENS_ARTIFACT_DIRECTORY, CIVIC_LENS_ISSUES_CONFIG, and ANTHROPIC_API_KEY.
         actions text measure stops before a call that could pass the token cap, writes a report under artifacts/action-text-measure, and writes no database row.
+        bills text backfill also needs CIVIC_LENS_COLLECTION_CONFIG with an enabled congress-bill-text source. It refuses while action draft jobs are pending.
         worker also drafts House and Senate votes when CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
         worker also drafts relationships when CIVIC_LENS_RELATIONSHIP_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also drafts weekly briefs when CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
@@ -407,13 +410,16 @@ try
 
     if (BillBackfillCommand.Matches(args))
     {
-        var (_, owner) = OwnerCommand.ReadEnvironment();
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var jobs = CreateJobs(codeVersion);
         var responses = new ApiResponseReader(CreateDatabase(), new CaptureBodyReader());
         var artifactRoot = PublicationComposition.RequireArtifactRoot();
         executing = true;
         return await new BillBackfillCommand(new BackfillBillSubjects(jobs, jobs, responses, artifactRoot),
-            new BackfillBillStatus(jobs, jobs, responses, artifactRoot), owner).ExecuteAsync(args, cancellation.Token);
+            new BackfillBillStatus(jobs, jobs, responses, artifactRoot), () => new BackfillBillText(jobs, new PostgresActionDraftStore(AnalysisDbContextFactory.Create(connectionString), codeVersion),
+                CollectionConfigurationRevision.Create(
+                ConfigurationFile.ReadCollectionFromEnvironment() ?? throw new ArgumentException("The text backfill requires CIVIC_LENS_COLLECTION_CONFIG."))),
+            owner).ExecuteAsync(args, cancellation.Token);
     }
 
     if (BriefCommand.Matches(args))

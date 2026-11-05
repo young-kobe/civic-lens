@@ -28,13 +28,30 @@ internal static class PublishedEntries
         WHERE s.first_release <= {0} AND (s.last_release IS NULL OR s.last_release >= {0})
         """;
 
+    private const string FillBillLines = """
+        WITH locked AS (
+            SELECT e.kind, e.record_id, e.revision_number, k.bill_line
+            FROM published_entries e
+            JOIN unnest({0}::text[], {1}::text[], {2}::int[], {3}::text[]) AS k(kind, record_id, revision_number, bill_line)
+                ON e.kind = k.kind AND e.record_id = k.record_id AND e.revision_number = k.revision_number
+            WHERE e.bill_line IS NULL
+            ORDER BY e.kind, e.record_id, e.revision_number
+            FOR UPDATE OF e)
+        UPDATE published_entries e SET bill_line = locked.bill_line
+        FROM locked
+        WHERE e.kind = locked.kind AND e.record_id = locked.record_id AND e.revision_number = locked.revision_number
+        """;
+
     private static readonly string InsertEntries = BuildInsertEntries();
 
     private const string ReadCandidates = """
         SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber", s.first_release AS "FirstRelease",
             s.last_release AS "LastRelease", EXISTS (
                 SELECT 1 FROM published_entries e
-                WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number) AS "HasEntry"
+                WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number) AS "HasEntry", EXISTS (
+                SELECT 1 FROM published_entries e
+                WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
+                    AND e.kind = 'action' AND e.bill_line IS NULL) AS "LacksBillLine"
         FROM publication_record_states s
         ORDER BY s.kind, s.record_id, s.revision_number
         """;
@@ -44,7 +61,7 @@ internal static class PublishedEntries
     {
         var rows = await db.Database.SqlQueryRaw<CandidateRow>(ReadCandidates).ToArrayAsync(cancellationToken);
         return [.. rows.Select(row => new PublishedEntryCandidate(KindOf(row.Kind), row.RecordId,
-            row.RevisionNumber, row.FirstRelease, row.LastRelease, row.HasEntry))];
+            row.RevisionNumber, row.FirstRelease, row.LastRelease, row.HasEntry, row.LacksBillLine))];
     }
 
     public static async Task<IReadOnlyList<StoredReleaseRecord>> ReadReleaseAsync(CollectionAttemptDbContext db, int releaseNumber,
@@ -68,8 +85,23 @@ internal static class PublishedEntries
         var created = rows.Select(row => (row.Kind, row.RecordId, row.RevisionNumber)).ToHashSet();
         var createdEntries = entries.Where(entry => created.Contains(KeyOf(entry))).ToList();
         await InsertChildrenAsync(db, createdEntries, cancellationToken);
-        await RequireSameAsync(db, [.. entries.Except(createdEntries)], conflictAdvice, cancellationToken);
+        await FillBillLinesAsync(db, [.. entries.Except(createdEntries)], conflictAdvice, cancellationToken);
         return createdEntries.Count;
+    }
+
+    /// <summary>
+    /// Writes the bill line of action rows that hold none. This is the only update of an entry row. A row that holds a line stays as it is, and
+    /// <see cref="RequireSameAsync"/> then refuses a line that differs. The insert calls it for the rows that already exist.
+    /// </summary>
+    public static async Task<int> FillBillLinesAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,
+        string conflictAdvice, CancellationToken cancellationToken)
+    {
+        if (entries.Count == 0) return 0;
+        var withLine = entries.Where(entry => entry.BillLine is not null).ToArray();
+        var filled = withLine.Length == 0 ? 0 : await db.Database.ExecuteSqlRawAsync(FillBillLines,
+            [.. KeyArrays(withLine.Select(KeyOf)), withLine.Select(entry => entry.BillLine).ToArray()], cancellationToken);
+        await RequireSameAsync(db, [.. entries], conflictAdvice, cancellationToken);
+        return filled;
     }
 
     private static string BuildInsertEntries()
@@ -80,13 +112,13 @@ internal static class PublishedEntries
         var values = kinds.SelectMany(kind => new[] { $"CASE WHEN k.kind = '{kind}' THEN k.record_id END", $"CASE WHEN k.kind = '{kind}' THEN k.revision_number END" });
         return $$"""
             INSERT INTO published_entries (kind, record_id, revision_number, {{string.Join(", ", columns)}}, headline, source_host, event_date, bill_title,
-                link_type, statement_record_id, target_kind, target_record_id, document_type)
+                link_type, statement_record_id, target_kind, target_record_id, document_type, bill_line)
             SELECT k.kind, k.record_id, k.revision_number, {{string.Join(", ", values)}}, k.headline, k.source_host, k.event_date, k.bill_title,
-                k.link_type, k.statement_record_id, k.target_kind, k.target_record_id, k.document_type
+                k.link_type, k.statement_record_id, k.target_kind, k.target_record_id, k.document_type, k.bill_line
             FROM unnest({0}::text[], {1}::text[], {2}::int[], {3}::text[], {4}::text[], {5}::date[], {6}::text[], {7}::text[], {8}::text[],
-                {9}::text[], {10}::text[], {11}::text[])
+                {9}::text[], {10}::text[], {11}::text[], {12}::text[])
                 AS k(kind, record_id, revision_number, headline, source_host, event_date, bill_title, link_type, statement_record_id, target_kind,
-                    target_record_id, document_type)
+                    target_record_id, document_type, bill_line)
             ON CONFLICT DO NOTHING
             RETURNING kind AS "Kind", record_id AS "RecordId", revision_number AS "RevisionNumber"
             """;
@@ -143,7 +175,7 @@ internal static class PublishedEntries
 
     private static PublishedEntryFacts FactsOf(PublishedRecordEntry entry) => new(entry.Headline, entry.SourceHost, entry.EventDate, entry.BillTitle, entry.LinkType,
         entry.StatementRecordId, entry.TargetKind, entry.TargetRecordId, entry.DocumentType,
-        [.. entry.Officials.Select(official => official.Id)], entry.MatchedOfficialId, entry.IssueIds, entry.PolicyAreaIds);
+        [.. entry.Officials.Select(official => official.Id)], entry.MatchedOfficialId, entry.IssueIds, entry.PolicyAreaIds, entry.BillLine);
 
     private static object[] KeyArrays(IEnumerable<(string Kind, string RecordId, int RevisionNumber)> keys)
     {
@@ -164,7 +196,7 @@ internal static class PublishedEntries
             return new PublishedEntryFacts(row.Headline, row.SourceHost, row.EventDate, row.BillTitle, row.LinkType, row.StatementRecordId,
                 row.TargetKind is null ? null : KindOf(row.TargetKind), row.TargetRecordId, row.DocumentType, [.. officials[key].Select(official => official.OfficialId)],
                 officials[key].SingleOrDefault(official => official.IsMatched)?.OfficialId,
-                [.. issues[key].Select(issue => issue.Value)], [.. policyAreas[key].Select(area => area.Value)]);
+                [.. issues[key].Select(issue => issue.Value)], [.. policyAreas[key].Select(area => area.Value)], row.BillLine);
         });
     }
 
@@ -188,7 +220,8 @@ internal static class PublishedEntries
         entries.Select(entry => entry.BillTitle).ToArray(), entries.Select(entry => entry.LinkType?.ToString()).ToArray(),
         entries.Select(entry => entry.StatementRecordId).ToArray(),
         entries.Select(entry => entry.TargetKind is { } target ? PublishedRecordReference.NameOf(target) : null).ToArray(),
-        entries.Select(entry => entry.TargetRecordId).ToArray(), entries.Select(entry => entry.DocumentType?.ToString()).ToArray()
+        entries.Select(entry => entry.TargetRecordId).ToArray(), entries.Select(entry => entry.DocumentType?.ToString()).ToArray(),
+        entries.Select(entry => entry.BillLine).ToArray()
     ];
 
     private static (string Kind, string RecordId, int RevisionNumber) KeyOf(PublishedRecordEntry entry) =>
@@ -220,6 +253,7 @@ internal static class PublishedEntries
         public int FirstRelease { get; set; }
         public int? LastRelease { get; set; }
         public bool HasEntry { get; set; }
+        public bool LacksBillLine { get; set; }
     }
 
     private sealed class EntryKeyRow

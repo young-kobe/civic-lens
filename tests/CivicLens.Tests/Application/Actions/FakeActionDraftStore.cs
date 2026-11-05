@@ -36,7 +36,12 @@ internal sealed class FakeActionDraftStore : FakeAnalysisQueue<ActionDraftRun>, 
         Task.FromResult<IReadOnlyList<ActionDraftListItem>>([]);
 
     public Task<IReadOnlyDictionary<ActionDraftView, int>> CountAsync(CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyDictionary<ActionDraftView, int>>(new Dictionary<ActionDraftView, int>());
+        Task.FromResult<IReadOnlyDictionary<ActionDraftView, int>>(new Dictionary<ActionDraftView, int>
+        {
+            [ActionDraftView.Pending] = Items.Count(entry => entry.Status == State.Pending)
+        });
+
+    public void Drain() => Items.Clear();
 
     protected override bool CanTransition(AnalysisRecord record, AnalysisCheckpoint checkpoint) =>
         ActionDraftLifecycle.CanTransition(record, checkpoint);
