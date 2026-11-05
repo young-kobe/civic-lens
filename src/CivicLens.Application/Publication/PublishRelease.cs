@@ -95,14 +95,15 @@ public sealed class PublishRelease
         RequireRoom(previous, carried.Count + additions.Count + withdrawals.Count, additions);
 
         var number = state.LatestReleaseNumber + 1;
-        var (directory, entries) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, released.BillLines, statuses, roster, photos, request.RewriteOfficials, request.RewriteEntries, request.RewritePages, cancellationToken);
+        var (directory, entries, names) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, released.BillLines, statuses, roster, photos, request.RewriteOfficials, request.RewriteEntries, request.RewritePages, cancellationToken);
         var commit = new PublicationCommit(number, state.Active?.ReleaseNumber, directory,
             [.. entries.Select(PublishedRevisionBinding.Of)],
             [.. additions.Select(addition => addition.Expectation)])
         {
             WithdrawnRecords = withdrawn,
             Withdrawals = [.. withdrawals],
-            AddedEntries = [.. additions.Select(addition => addition.Entry)]
+            AddedEntries = [.. additions.Select(addition => addition.Entry)],
+            Names = names
         };
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
         await ServeActiveReleaseAsync(cancellationToken);
@@ -176,7 +177,7 @@ public sealed class PublishRelease
     private static ImmutableArray<string> IdsOf(ImmutableArray<PublishedRecordReference> references, PublishedRecordKind kind) =>
         [.. references.Where(reference => reference.Kind == kind).Select(reference => reference.RecordId)];
 
-    private async Task<(string Directory, List<PublishedRecordEntry> Entries)> StageAsync(int number, DateTimeOffset now,
+    private async Task<(string Directory, List<PublishedRecordEntry> Entries, ReleaseNames Names)> StageAsync(int number, DateTimeOffset now,
         PreviousRelease previous, List<PublishedRecordEntry> carried, List<PendingRecord> additions,
         List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, StagedPage> pages, ReleaseBillLines billLines, IReadOnlyDictionary<string, ActionBillStatus> statuses, IReadOnlyList<RosterMember> roster,
         IReadOnlyList<OfficialPhoto> photos, bool rewriteOfficials, bool rewriteEntries, bool rewritePages, CancellationToken cancellationToken)
@@ -229,7 +230,7 @@ public sealed class PublishRelease
         await indexPages.WriteHomeAsync(staging, manifest, facets, HomeHighlights.From(manifest, boards, officials.Officials.Length) with { BillLines = billLines }, additions, previous, cancellationToken);
         await staging.WriteSiteFilesAsync(manifest, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
-        return (await staging.CompleteAsync(number, cancellationToken), entries);
+        return (await staging.CompleteAsync(number, cancellationToken), entries, new ReleaseNames([.. officials.Officials], facets));
     }
 
     private async Task WriteWithdrawalPagesAsync(IReleaseStaging staging, List<PublishedWithdrawal> withdrawals,

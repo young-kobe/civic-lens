@@ -13,4 +13,6 @@ public sealed record PublicationCommit(int ReleaseNumber, int? BaseReleaseNumber
 
 
     public ImmutableArray<PublishedRecordEntry> AddedEntries { get; init; } = [];
+
+    public required ReleaseNames Names { get; init; }
 }

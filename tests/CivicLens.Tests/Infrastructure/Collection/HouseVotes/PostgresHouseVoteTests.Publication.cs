@@ -273,7 +273,7 @@ public sealed partial class PostgresHouseVoteTests
     private static PublicationCommit VoteCommit(string recordId, int reviewStateVersion) =>
         new(1, null, $"000001-{Guid.NewGuid():N}", [new(PublishedRecordKind.Vote, recordId, 1)],
             [new(PublishedRecordKind.Vote, recordId, 1, reviewStateVersion)])
-        { Withdrawals = [] };
+        { Withdrawals = [], Names = ReleaseNameFixtures.None };
 
     private static string Hash(int seed) => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(BitConverter.GetBytes(seed)));
 }

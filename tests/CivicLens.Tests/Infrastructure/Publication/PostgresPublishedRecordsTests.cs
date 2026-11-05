@@ -122,7 +122,8 @@ public sealed class PostgresPublishedRecordsTests(PostgresCollection postgres) :
             [.. added.Select(record => new ReviewStateExpectation(PublishedRecordKind.Action, record.Id, 1, 1))])
         {
             Withdrawals = [],
-            AddedEntries = [.. added.Select(record => PublishedEntryFixtures.Action(record.Id, record.FirstPublishedAt))]
+            AddedEntries = [.. added.Select(record => PublishedEntryFixtures.Action(record.Id, record.FirstPublishedAt))],
+            Names = ReleaseNameFixtures.None
         }, $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
 
     private async Task SeedActionsAsync(params string[] ids)
