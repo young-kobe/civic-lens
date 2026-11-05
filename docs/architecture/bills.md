@@ -49,6 +49,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A bill version has at most three action candidates, one for each growing set of closed chains. Enforced by `ux_action_candidates_detail_job` and `ActionCandidateInputs`. Test: `PostgresBillStreamTests.SubjectsAndSummariesThatCloseLaterGiveAtMostThreeCandidatesWhicheverComesFirstAndReplayAddsNoMore`.
 - A candidate ID of an older input set never changes. Enforced by `PostgresCollectionJobStore.HashActionCandidate`. Test: `PostgresBillStreamTests.TheCandidateIdsOfTheOldInputCombinationsStayTheSameAndTheSubjectsSuffixComesLast`.
 - A candidate needs a Passed gate and closed chains. Enforced by `PostgresCollectionJobStore.RecordActionCandidateAsync`. Test: `PostgresBillStreamTests.NoCandidateIsWrittenForABillTheGateMarksNotRelevant`.
+- Each action of an admitted actions page has one `bill_actions` row, and each of its recorded votes has one `bill_action_recorded_votes` row. Both are written in the admission transaction of the page, once. A recorded vote needs a chamber, a Congress, a session of 1 or 2, and a roll number of 1 or more. Its URL is optional and must be https. The positions of two bill versions never mix. Enforced by `PostgresCollectionJobStore.RecordActionsAsync`, `CongressBillActionsParser`, the primary keys, and the checks `ck_bill_action_recorded_votes_chamber`, `ck_bill_action_recorded_votes_roll`, and `ck_bill_action_recorded_votes_url`. Tests: `PostgresBillStreamTests.AnActionsPageAdmissionWritesEachActionAndRecordedVoteAsColumns`, `PostgresBillStreamTests.ALaterActionsPageContinuesTheActionPositionsOfTheChain`, `PostgresBillStreamTests.TwoVersionsOfOneBillKeepSeparateActionHistoriesThatBothStartAtPositionZero`, `PostgresBillStreamTests.ReplayingAnActionsPageAdmissionWritesNoSecondRows`, `PostgresBillStreamTests.ARejectedActionsPageWritesNoActionRows`, `CongressBillActionsParserTests.AnIncompleteRecordedVoteIsInvalidDataBecauseAGuessedRollWouldBeFalseEvidence`.
 - Each chain position has one page row, and a Detail row is its own root. Enforced by `ux_bill_pages_chain_order` and `ck_bill_pages_detail`. Test: `PostgresBillStreamTests.TheDatabaseRefusesADetailRowWhoseJobIsNotTheRoot`.
 - A page extraction belongs to the attempt of its job. Enforced by `PostgresCollectionJobStore`. Test: `PostgresBillStreamTests.AnExtractionOfAnotherJobsAttemptIsInvalidDataAndWritesNoPageRowOrCandidate`.
 - Bill admission never defers a job; a deferral fails the transaction. Enforced by `PostgresCollectionJobStore.AdmitListPageAsync`. Test: `PostgresBillStreamTests.PilotSourceBudgetsAdmitAFullPageAndItsNextPage` covers the shipped budget only. No test covers the throw.
@@ -114,7 +115,7 @@ Each succeeded page job goes through [preparation](collection.md#preparation). T
 | `CongressBillListParser` | none, because a list has no extraction | One list page of at most 250 items |
 | `CongressBillParser` | `congress-bill-detail-v1` | One detail, including `summaries.count`, `subjects.count` (a missing object means 0), and the optional `latestAction` |
 | `CongressBillCosponsorsParser` | `congress-bill-cosponsors-v1` | One cosponsors page of at most 250 items |
-| `CongressBillActionsParser` | `congress-bill-actions-v1` | One actions page of at most 250 items |
+| `CongressBillActionsParser` | `congress-bill-actions-v1` | One actions page of at most 250 items, with the `recordedVotes` of each action |
 | `CongressBillSummariesParser` | `congress-bill-summaries-v1+html-text-v1` | One summaries page of at most 1 item |
 | `CongressBillSubjectsParser` | `congress-bill-subjects-v1` | One subjects page of at most 250 names |
 | `CongressBillTextVersionsParser` | none, because a versions page has no extraction | One text versions page of at most 250 versions |
@@ -248,6 +249,14 @@ The order of a page is the count of earlier rows of the same role, because only 
 
 A chain is closed when exactly one row closes it, that row has the highest order, and the orders have no gap.
 
+### Action history
+
+An actions page admission also writes the history of the bill version. It writes one `bill_actions` row for each action and one `bill_action_recorded_votes` row for each `recordedVotes` entry of an action. The writes use the transaction that writes the `bill_pages` row. A replayed admission finds the page row and writes nothing more.
+
+The position of an action is the count of earlier `bill_actions` rows of the same detail job. Only the parent page admits each next page, so the pages arrive in order. The position of a recorded vote is its place in its action. `RenderActions` writes a header line and then one line for each action in page order. So the page line of an action is 1 plus its position minus the lowest position of the same `job_id`. Test: `PostgresBillStreamTests.AnActionPositionGivesItsLineOnTheRenderedPageOfItsJob`.
+
+The text of an action is stored as received, because it is evidence. A recorded vote keeps the chamber, the Congress, the session, the roll number, the vote time, and the URL that Congress.gov gives. The parser keeps the extraction version `congress-bill-actions-v1`, because the extraction lines do not change. The history rows point to their page row, and so to the capture.
+
 ### Subjects backfill
 
 Bills that the gate saw before the subjects column existed have a null `subject_count` and no subjects chain. The owner command `bills subjects backfill [limit]` adds the chains. The limit is 100 when you give none. The command has the shape of the other owner commands. Its precedent is `relationships draft refresh`, which fills a feature from records that already exist.
@@ -297,6 +306,8 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 - `cosponsor_count` stores the detail cosponsor count, because the completeness check must know whether a cosponsor chain exists. Gates written before this column existed have 0 and no detail page row, so they never get a candidate.
 - The decision and reason are stored as PascalCase strings, like other enums.
 - A second detail job for a gated version records nothing, admits nothing, and counts as a duplicate.
+- `bill_actions` holds one row for each action of an admitted actions page, keyed by the detail job and the position. It holds the date, the time (null when not given), the verbatim text, and the nullable type, action code, and source system code and name. `job_id` names the `bill_pages` row of the page. Each bill version keeps its own rows. A corrected text in a later version never overwrites earlier evidence.
+- `bill_action_recorded_votes` holds one row for each recorded vote of an action, keyed by the detail job, the action position, and its own position. It holds the chamber (`House` or `Senate`), the Congress, the session, and the roll number. It also holds the vote time as UTC ticks and the URL. Both are null when Congress.gov gives none. The row has no foreign key to `vote_versions`.
 - `bill_follow_on_jobs` holds one row for each cosponsor, actions, summaries, subjects, or text versions page job, first or next, and for each bill text job. Its `detail_job_id` points to the root row in `bill_gates`.
 - The store writes the `bill_follow_on_jobs` row in the transaction that inserts the job. A page job without a row is invalid data.
 - `bill_pages` holds one row for the detail and one for each admitted follow-on page. Each row names its chain root, its role, its order, its extraction, and whether it closes the chain.
@@ -321,10 +332,12 @@ The write that creates a candidate also adds its `action_analysis` queue row in 
 | Preparation | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs`, `src/CivicLens.Application/Collection/Processing/ApiResponseReader.cs` |
 | Admission port | `src/CivicLens.Application/Collection/Bills/IBillStreamAdmissionStore.cs`, `src/CivicLens.Application/Collection/Bills/BillStreamAdmission.cs` |
 | Postgres admission, follow-ons, candidates | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.BillStream.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ApiJobs.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.BillFollowOns.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
+| Action history | `src/CivicLens.Application/Collection/Bills/CongressBillRecordedVote.cs`, `src/CivicLens.Infrastructure/Collection/BillStream/BillActionRow.cs`, `src/CivicLens.Infrastructure/Collection/BillStream/BillActionRecordedVoteRow.cs`, `PostgresCollectionJobStore.RecordActionsAsync` in `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.ActionCandidates.cs` |
 | Table rows | `src/CivicLens.Infrastructure/Collection/BillStream/` |
 
 ## Limits and planned work
 
+- Nothing reads the action history rows yet. Backfill, method rules, and publication are planned work.
 - The Sources page shows no check state for the bill source yet, because its jobs use windowed URLs.
 - A Blocked cosponsor or actions page leaves its chain open, so the bill gets no candidate. [Operations](../operations.md#congressgov-bill-stream) has queries that list these bills.
 - Planned: list bills for each Congress from `/v3/bill/{congress}`, for each Congress at or above the configured minimum. The date-window bill list pages through thousands of older bills.
