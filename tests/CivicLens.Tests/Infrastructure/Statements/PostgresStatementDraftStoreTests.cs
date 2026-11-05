@@ -190,6 +190,21 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task APersonApprovalOfAStaleModelDraftIsFinalSoItIsNotRequeuedAndItsEvidenceIsNotStale()
+    {
+        var candidate = await PassedCandidateAsync();
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+        var decide = new DecideStatementReview(new PostgresStatementReviewStore(factory),
+            new StatementReviewContextReader(drafts, new StatementSelectionResolver(StatementGateFixtures.Configuration())));
+        await decide.ExecuteAsync(Owner, new(candidate, 1, 0, ReviewDecisionKind.Approve, null, [], "person-approval"));
+        await AgeRunsAsync(candidate);
+
+        Assert.Equal("Approved", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(0, await drafts.RequeueStaleAsync(default));
+        Assert.False((await drafts.ReadEvidenceAsync(candidate, default))!.ExistingDraft!.IsStaleModelDraft);
+    }
+
+    [Fact]
     public async Task APersonRevisionBlocksTheRedraftBecauseTheRecordIsNoLongerAnUntouchedModelDraft()
     {
         var candidate = await PassedCandidateAsync(admittedBy: AdmittedDefinition(OwnOffice(Warren)));

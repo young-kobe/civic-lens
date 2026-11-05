@@ -75,7 +75,7 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
     }
 
     /// <summary>A stale candidate holds a draft whose current revision is a model revision that an older task, prompt, or schema made.
-    /// No person decision has set its status. A person revision becomes the current revision, and only a draft with a model revision on top takes a
+    /// No person decision has set its status, and no person has approved it. A person approval is final, so code never replaces that text. A person revision becomes the current revision, and only a draft with a model revision on top takes a
     /// model revision. So no person revision exists below a model revision, and the author kind of the current revision decides.</summary>
     private static async Task<HashSet<string>> StaleCandidateIdsAsync(CollectionAttemptDbContext db, string[] candidateIds,
         CancellationToken cancellationToken)
@@ -85,6 +85,8 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
                                  join revision in db.Set<StatementRevisionRow>().AsNoTracking()
                                      on new { draft.CandidateId, Number = draft.CurrentRevisionNumber } equals new { revision.CandidateId, Number = revision.RevisionNumber }
                                  where candidateIds.Contains(draft.CandidateId) && untouched.Contains(draft.ReviewStatus) &&
+                                     !db.Set<StatementReviewDecisionRow>().Any(decision => decision.CandidateId == draft.CandidateId &&
+                                         decision.Kind == ReviewDecisionKind.Approve && decision.ActorSubject != ReviewAuthor.CodeSubject) &&
                                      revision.AuthorKind == ReviewAuthorKind.Analysis && revision.RunId != null
                                  select new { draft.CandidateId, RunId = revision.RunId! }).ToArrayAsync(cancellationToken);
         var staleRunIds = await StaleAnalysisRuns.FindStaleRunIdsAsync<StatementAnalysisRunRow>(db,
