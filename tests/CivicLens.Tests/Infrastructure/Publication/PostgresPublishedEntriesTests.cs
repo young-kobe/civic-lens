@@ -75,6 +75,18 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         Assert.Equal(["4"], await ReadAsync("SELECT count(*) FROM published_entry_officials"));
     }
 
+    [Fact]
+    public async Task APublishOfAnOlderActionRevisionAgainWithABillLineSucceedsBecauseTheRowHoldsNoLine()
+    {
+        await SeedActionAsync(A);
+        await CommitAsync(1, null, PublishedEntryFixtures.Action(A, First));
+
+        await CommitAsync(2, 1, PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds rent aid." });
+
+        Assert.Equal(["1", "2"], await ReadAsync("SELECT release_number FROM publication_releases ORDER BY 1"));
+        Assert.Equal(["1"], await ReadAsync("SELECT count(*) FROM published_entries"));
+    }
+
     [Theory]
     [InlineData("headline")]
     [InlineData("officials")]

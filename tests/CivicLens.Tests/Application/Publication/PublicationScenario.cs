@@ -263,14 +263,17 @@ internal sealed class PublicationScenario
 
     // The sponsor cites the detail page and the cosponsor cites a second API page, so the record has two sources.
     public string AddAction(char id, ImmutableArray<ReviewDecision>? decisions = null, string sponsorId = "mayor",
-        string? policyAreaId = "housing-development", bool personText = false, bool cosponsorWithdrawn = true, bool chairSponsors = false)
+        string? policyAreaId = "housing-development", bool personText = false, bool cosponsorWithdrawn = true, bool chairSponsors = false,
+        string? summaryText = null)
     {
         var recordId = new string(id, 64);
-        var detail = Extraction(ActionDetail, $"action-detail-{id}", "https://api.congress.gov/v3/bill/119/hr/7");
+        var detailText = summaryText is null ? ActionDetail : ActionDetail + SummaryBlock(summaryText);
+        var detail = Extraction(detailText, $"action-detail-{id}", "https://api.congress.gov/v3/bill/119/hr/7");
         var cosponsors = Extraction(ActionCosponsors, $"action-cosponsors-{id}", "https://api.congress.gov/v3/bill/119/hr/7/cosponsors");
         SourceSpan DetailLine(string line) => new(detail.ExtractionId, ActionDetail.IndexOf(line, StringComparison.Ordinal), line.Length);
+        SourceSpan? summarySpan = summaryText is null ? null : new(detail.ExtractionId, ActionDetail.Length, SummaryBlock(summaryText).Length);
         var revision = new ActionDraftRevision(recordId, 1, personText ? "auth0|editor" : "civic-lens:analysis", ApprovedAt, $"Action {id}",
-            "The mayor sponsored a housing bill.", personText ? ReviewTextOrigin.Person : ReviewTextOrigin.Model, null, "congress-bills", 119, "hr", 7, new string('b', 64), ApprovedAt, false, false, new string('d', 64), null, null,
+            "The mayor sponsored a housing bill.", personText ? ReviewTextOrigin.Person : ReviewTextOrigin.Model, null, "congress-bills", 119, "hr", 7, new string('b', 64), ApprovedAt, false, false, new string('d', 64), summaryText is null ? null : "00", summarySpan,
             "Housing and Community Development", DetailLine("Policy area: Housing and Community Development"), policyAreaId, ["housing"], ["housing"], new string('e', 64),
             [
                 new(sponsorId, "M000001", ActionSponsorshipRole.Sponsor, false, new DateOnly(2026, 1, 3), null,
@@ -286,6 +289,9 @@ internal sealed class PublicationScenario
             [KeyValuePair.Create(detail.ExtractionId, detail), KeyValuePair.Create(cosponsors.ExtractionId, cosponsors)]));
         return recordId;
     }
+
+    private static string SummaryBlock(string text) =>
+        $"Summary version: 00\nAction date: 2026-01-03\nAction: Introduced in House\nUpdated: 2026-01-05T08:00:00Z\nText:\n{text}";
 
     /// <summary>Turns an approved action into a text draft: its summary comes from bill text and it cites that text.</summary>
     public void DraftActionFromBillText(string recordId)

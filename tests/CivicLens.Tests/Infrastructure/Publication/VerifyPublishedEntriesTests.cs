@@ -63,6 +63,21 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
     }
 
     [Fact]
+    public async Task AnActionEntryWithABillLineRebuildsByteForByteBecauseTheSpliceTakesTheLineFromTheFile()
+    {
+        var action = await SeedActionAsync('a');
+        await AddReleasesAsync(1);
+        await AddRangeAsync(action, 1, null);
+        Keep(1, [new SampleRecord(action.ToEntry() with { BillLine = "This bill funds rent aid." }, action)], []);
+        await FillRowsAsync();
+
+        var (exit, json) = await RunCommandAsync();
+
+        Assert.Equal(0, exit);
+        Assert.Equal(0, json.GetProperty("failedReleases").GetArrayLength());
+    }
+
+    [Fact]
     public async Task AnEntryValueThatChangedInTheRowFailsTheReleaseBecauseTheFileNoLongerMatchesTheTablesAndNamesTheRecord()
     {
         var action = await SeedActionAsync('a');

@@ -184,6 +184,46 @@ public sealed class PublicationReleaseTests
         (Entry(PublishedRecordKind.Vote, StatementId) with { YeaCount = 0, NayCount = 0 }).Validate();
     }
 
+    [Fact]
+    public void AnActionEntryWithoutABillLineStillReadsAndKeepsItEmptySoNoReaderGuessesALine()
+    {
+        var oldJson = JsonSerializer.Serialize(Entry(PublishedRecordKind.Action, new string('7', 64)), PublicationProtocol.JsonOptions);
+        var node = JsonNode.Parse(oldJson)!.AsObject();
+        node.Remove("billLine");
+
+        var read = JsonSerializer.Deserialize<PublishedRecordEntry>(node.ToJsonString(), PublicationProtocol.JsonOptions)!;
+        read.Validate();
+
+        Assert.Null(read.BillLine);
+    }
+
+    [Fact]
+    public void ABillLineRoundTripsAndFillsTheCapExactly()
+    {
+        var entry = Entry(PublishedRecordKind.Action, new string('7', 64)) with { BillLine = new string('x', PublishedRecordEntry.MaximumBillLineLength) };
+        var json = JsonSerializer.Serialize(entry, PublicationProtocol.JsonOptions);
+
+        var read = JsonSerializer.Deserialize<PublishedRecordEntry>(json, PublicationProtocol.JsonOptions)!;
+        read.Validate();
+
+        Assert.Contains("\"billLine\":", json, StringComparison.Ordinal);
+        Assert.Equal(entry.BillLine, read.BillLine);
+    }
+
+    public static TheoryData<PublishedRecordEntry> InvalidBillLines() => new()
+    {
+        Entry(PublishedRecordKind.Vote, StatementId) with { BillLine = "A line." },
+        Entry(PublishedRecordKind.Action, new string('7', 64)) with { BillLine = " " },
+        Entry(PublishedRecordKind.Action, new string('7', 64)) with { BillLine = new string('x', PublishedRecordEntry.MaximumBillLineLength + 1) }
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidBillLines))]
+    public void ABillLineBelongsToAnActionEntryAndIsBoundedSoNoOtherKindCarriesOne(PublishedRecordEntry entry)
+    {
+        Assert.Throws<InvalidDataException>(entry.Validate);
+    }
+
     public static TheoryData<PublishedRecordEntry> InvalidChambers() => new()
     {
         Entry(PublishedRecordKind.Statement, StatementId) with { Chamber = PublishedChamber.House },
@@ -247,6 +287,7 @@ public sealed class PublicationReleaseTests
             PolicyAreaIds = ["housing-and-community-development"],
             SourceHost = "api.congress.gov",
             BillTitle = "A bill to provide grants to States and local governments for housing and transit projects, and for other purposes",
+            BillLine = new string('x', PublishedRecordEntry.MaximumBillLineLength),
             EventDate = new DateOnly(2026, 1, 20),
             CosponsorIds = [.. Enumerable.Range(0, 15).Select(cosponsor => $"cosponsor-{cosponsor:D2}-of-a-long-name")]
         }).ToArray();
