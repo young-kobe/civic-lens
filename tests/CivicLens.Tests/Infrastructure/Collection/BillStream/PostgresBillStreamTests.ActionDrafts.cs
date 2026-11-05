@@ -75,6 +75,22 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal((newer.CandidateId, "action-draft", "Pending", null, 0), queue.Single(row => row.CandidateId == newer.CandidateId));
     }
 
+    [Fact]
+    public async Task TheNewestCandidateOfABillIsTheOneNoOtherSupersedesEvenWhenAnOlderOneWasCreatedLater()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 1);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+        await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], null));
+        var candidates = await CandidatesAsync();
+        var withSummaries = candidates.Single(candidate => candidate.IncludesSummaries);
+        var without = candidates.Single(candidate => !candidate.IncludesSummaries);
+        await ExecuteAsync(connectionString, $"UPDATE action_candidates SET created_at_utc_ticks = {withSummaries.CreatedTicks + 1} WHERE candidate_id = '{without.CandidateId}'");
+
+        var newest = await ActionStore().NewestCandidateIdAsync(new(withSummaries.Congress, withSummaries.BillType, withSummaries.BillNumber, default), default);
+
+        Assert.Equal(withSummaries.CandidateId, newest);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

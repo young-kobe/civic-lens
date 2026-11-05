@@ -396,6 +396,7 @@ This is the only navigation index.
 | Action revisions and the person edit rule | [Actions](architecture/actions.md#revision-and-append) | `src/CivicLens.Core/Actions/ActionDraftRevision.cs` |
 | Action review pages | [Actions](architecture/actions.md#action-review) | `src/CivicLens.Host/Actions/ActionEditor.razor` |
 | Action commands | [Actions](architecture/actions.md#commands) | `src/CivicLens.Host/Actions/ActionCommand.cs` |
+| Action text measure | [Actions](architecture/actions.md#text-measure) | `src/CivicLens.Application/Actions/ActionTextMeasure.cs` |
 | Action queue outcomes and codes | [Actions](architecture/actions.md#outcomes) | `src/CivicLens.Application/Actions/ActionDraftErrorCodes.cs` |
 | Bill stream tables: cursors, gates, pages, candidates | [Bills](architecture/bills.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/BillStream/` |
 | Action tables: queue, runs, budget, drafts, revisions, decisions | [Actions](architecture/actions.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Actions/` |

@@ -66,6 +66,12 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
             withBillText ? await ReadBillTextAsync(db, row.DetailJobId, cancellationToken) : null);
     }
 
+    public async Task<string?> NewestCandidateIdAsync(CongressBillListItem bill, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await ActionDraftRows.NewestCandidateIdAsync(db, bill, cancellationToken);
+    }
+
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Blocked, errorCode, null, null, cancellationToken);
 

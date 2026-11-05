@@ -25,7 +25,14 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
     public async Task<bool> RunAsync(IAnalysisAttempt<ActionDraftRun> attempt, CancellationToken cancellationToken)
     {
         var evidence = await store.ReadEvidenceAsync(attempt.Claim.Record.SubjectId, settings.DraftsFromBillText, cancellationToken);
-        if (evidence is null) return await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.EvidenceUnavailable, cancellationToken);
+        return evidence is null
+            ? await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.EvidenceUnavailable, cancellationToken)
+            : await DraftAsync(attempt, evidence, cancellationToken);
+    }
+
+    /// <summary>Runs the step on evidence that the caller read. The text measure calls this with the history of the bill cleared.</summary>
+    public async Task<bool> DraftAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftEvidence evidence, CancellationToken cancellationToken)
+    {
         if (evidence.HasNewerCandidate)
             return await attempt.CompleteAsync(State.Succeeded, ActionDraftErrorCodes.SupersededByNewerCandidate, cancellationToken);
         if (evidence.SummaryPageCount > ActionDraftTask.MaximumSummaryPages) evidence = evidence with { Pages = [.. evidence.Pages.Where(page => page.Resource != ApiResource.BillSummaries)] };

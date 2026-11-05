@@ -82,7 +82,7 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [ ] Build the gate and the model fix
 - R-67: Measure each prompt. Each prompt version gets a live, budgeted, opt-in measure on fixed bills, and the numbers go on the PR. Use the cheapest setting that holds accuracy. The order is vote, statement draft and gate, document change, relationship, then brief. Depends on: none. [Analysis](architecture/analysis.md#limits-and-planned-work)
   - [x] Fix the vote prompt wording and measure it
-  - [ ] Agree one opt-in eval command, and build it
+  - [ ] Agree one opt-in eval command, and build it. The `actions text measure` command is the base. Later prompt measures extend this one command.
   - [ ] Measure the other prompts, one PR for each
 
 **Coverage**

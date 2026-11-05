@@ -144,7 +144,7 @@ A change date must also appear in its cited quote, in one of these forms: `2026-
 2. Before a call, the executor reserves its tokens under a row lock on that day. If they do not fit, the entry waits as WaitingForBudget until the next UTC midnight, and the pass stops.
 3. After the call, settlement changes the reservation to the actual charge: input, output, cache read, and cache write tokens.
 
-A rate limit, a provider error, or a rejected request charges nothing. A connection failure, a crash, or a shutdown during a call keeps the full reservation charged. Worker startup returns budget waits to Pending, so a raised limit takes effect on restart.
+`AnalysisFailureRules` owns the charge rule. A rate limit, a provider error, or a rejected request charges nothing. A connection failure, a crash, or a shutdown during a call keeps the full reservation charged. Worker startup returns budget waits to Pending, so a raised limit takes effect on restart.
 
 ### Retries and pauses
 
@@ -245,7 +245,7 @@ Ordinary tests use a fake model at the port. One live smoke test runs only with 
 |---|---|
 | Run and outcomes | `src/CivicLens.Core/Analysis/AnalysisRun.cs`, `src/CivicLens.Core/Analysis/AnalysisRunOutcome.cs`, `src/CivicLens.Core/Analysis/AnalysisRunInput.cs` |
 | Run input storage | `src/CivicLens.Infrastructure/Analysis/AnalysisPromptTexts.cs`, `src/CivicLens.Infrastructure/Analysis/AnalysisRunRows.cs`, `src/CivicLens.Infrastructure/Analysis/Persistence/AnalysisTableConfiguration.cs`, `src/CivicLens.Application/Analysis/AnalysisEffort.cs`, `src/CivicLens.Application/Analysis/AnalysisModelRequest.cs` |
-| Shared queue rules | `src/CivicLens.Application/Analysis/AnalysisWorker.cs`, `src/CivicLens.Application/Analysis/AnalysisLifecycle.cs`, `src/CivicLens.Application/Analysis/AnalysisValidationLoop.cs`, `src/CivicLens.Application/Analysis/AnalysisStatus.cs`, `src/CivicLens.Application/Analysis/AnalysisPolicy.cs` |
+| Shared queue rules | `src/CivicLens.Application/Analysis/AnalysisWorker.cs`, `src/CivicLens.Application/Analysis/AnalysisLifecycle.cs`, `src/CivicLens.Application/Analysis/AnalysisValidationLoop.cs`, `src/CivicLens.Application/Analysis/AnalysisStatus.cs`, `src/CivicLens.Application/Analysis/AnalysisPolicy.cs`, `src/CivicLens.Application/Analysis/AnalysisFailureRules.cs` |
 | Shared answer and schema rules | `src/CivicLens.Application/Analysis/AnalysisAnswerRules.cs`, `src/CivicLens.Application/Analysis/AnalysisSchema.cs` |
 | Ports | `src/CivicLens.Application/Analysis/IAnalysisQueue.cs`, `src/CivicLens.Application/Analysis/IAnalysisQueueStore.cs`, `src/CivicLens.Application/Analysis/IAnalysisTaskStep.cs`, `src/CivicLens.Application/Analysis/IAnalysisAttempt.cs`, `src/CivicLens.Application/Analysis/IAnalysisStatusStore.cs` |
 | Document-change drafting | `src/CivicLens.Application/Analysis/DocumentChangeDraftStep.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftPrompt.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftResolver.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftLifecycle.cs` |
