@@ -6,6 +6,7 @@ namespace CivicLens.Application.Collection.Bills;
 public static class CongressBillRenderer
 {
     public const int TextWindowLength = 60_000;
+    private const string TextLabel = "Text:";
     private const string TimeFormat = "HH:mm:ss";
     internal const string UpdateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
 
@@ -69,10 +70,19 @@ public static class CongressBillRenderer
             Line("Version date", version.Date is { } date ? Date(BillGate.DayOf(date)) : "not given"),
             Line("Package", version.PackageId),
             Line("Characters read", $"{Count(window.Length)} of {Count(text.Length)}"),
-            "Text:",
+            TextLabel,
             window
         };
         return new CongressBillTextReading(string.Join('\n', lines), window.Length, text.Length);
+    }
+
+    /// <summary>The offset where the bill text starts in a rendered text extraction, or -1 when the header has no text label.</summary>
+    public static int TextBodyStart(string renderedText)
+    {
+        ArgumentNullException.ThrowIfNull(renderedText);
+        var label = $"\n{TextLabel}\n";
+        var index = renderedText.IndexOf(label, StringComparison.Ordinal);
+        return index < 0 ? -1 : index + label.Length;
     }
 
     private static string TextWindow(string text)

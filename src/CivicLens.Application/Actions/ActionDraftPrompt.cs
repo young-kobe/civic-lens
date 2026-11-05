@@ -34,7 +34,7 @@ public static class ActionDraftPrompt
         ArgumentNullException.ThrowIfNull(issues);
         var issueSchema = issues.AnswerSchema();
         var system = issueSchema is null ? SystemInstructions : SystemInstructions + issues.Instructions("the title or the summary of the bill");
-        var user = UserPrompt(snapshot, issues, previousErrors, withSummary: true);
+        var user = UserPrompt(snapshot, issues, previousErrors, withSummary: true, billText: null);
         var schema = AnalysisSchema.HeadlineAndSummary(issueSchema);
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
@@ -52,7 +52,7 @@ public static class ActionDraftPrompt
         }, AnalysisPromptText.CompactJson);
 
     internal static string UserPrompt(ActionBillSnapshot snapshot, BillIssueChoice issues,
-        ImmutableArray<string> previousErrors, bool withSummary)
+        ImmutableArray<string> previousErrors, bool withSummary, ActionDraftBillText? billText)
     {
         var bill = snapshot.Bill;
         var document = new
@@ -70,7 +70,15 @@ public static class ActionDraftPrompt
             subjects = issues.SubjectsSection(),
             sponsors = snapshot.Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor)
                 .Select(item => snapshot.OfficialNames[item.PersonId]),
-            summary = !withSummary || snapshot.NewestSummary is not { } newest ? null : new { text = newest.Text }
+            summary = !withSummary || snapshot.NewestSummary is not { } newest ? null : new { text = newest.Text },
+            billText = billText is null ? null : new
+            {
+                version = billText.VersionType,
+                versionDate = billText.VersionDate is { } date ? Date(date) : null,
+                charactersRead = billText.CharsRead,
+                charactersTotal = billText.CharsTotal,
+                text = billText.Body
+            }
         };
         var builder = new StringBuilder("Facts:\n").Append(JsonSerializer.Serialize(document, AnalysisPromptText.EvidenceJson));
         return AnalysisPromptText.WithRejectionReasons(builder, previousErrors);

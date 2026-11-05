@@ -57,12 +57,15 @@ internal static class ActionRevisionRows
         row.BillCitationExtractionId = revision.BillCitation?.ExtractionId;
         row.BillCitationStart = revision.BillCitation?.Start;
         row.BillCitationLength = revision.BillCitation?.Length;
+        row.TextPackageId = revision.TextPackageId;
+        row.WhyItMatters = revision.WhyItMatters;
         row.IssueRevisionId = revision.IssueRevisionId;
         row.SubjectsHash = revision.SubjectsHash;
         row.IssueCandidatesRecorded = !revision.IssueCandidateIds.IsDefault;
         row.EventOn = revision.EventOn();
         row.CosponsorCount = revision.CosponsorCount();
         row.Issues = [.. IssueIds(revision).Select((issueId, position) => IssueRow(revision, issueId, position))];
+        row.TextCitations = [.. revision.TextCitations.IsDefault ? [] : revision.TextCitations.Select((citation, position) => TextCitationRow(revision, citation, position))];
         row.Sponsorships = [.. revision.Sponsorships.Select((sponsorship, position) => SponsorshipRow(revision, sponsorship, position))];
     }
 
@@ -80,7 +83,9 @@ internal static class ActionRevisionRows
             .AsNoTracking().ToListAsync(cancellationToken)).ToLookup(item => (item.RecordId, item.RevisionNumber));
         var citations = (await db.Set<ActionRevisionSponsorshipCitationRow>().FromSqlRaw(ReviewQueries.RevisionChildren("action_revision_sponsorship_citations"), recordIds, numbers)
             .AsNoTracking().ToListAsync(cancellationToken)).ToLookup(citation => (citation.RecordId, citation.RevisionNumber, citation.SponsorshipPosition));
-        return new(rows, issues, sponsorships, citations);
+        var textCitations = (await db.Set<ActionRevisionTextCitationRow>().FromSqlRaw(ReviewQueries.RevisionChildren("action_revision_text_citations"), recordIds, numbers)
+            .AsNoTracking().ToListAsync(cancellationToken)).ToLookup(citation => (citation.RecordId, citation.RevisionNumber));
+        return new(rows, issues, sponsorships, citations, textCitations);
     }
 
     /// <summary>The failure of a reader that meets an action revision row with null columns. Only the backfill fixes such a row.</summary>
@@ -135,6 +140,17 @@ internal static class ActionRevisionRows
         SponsoredOn = sponsorship.SponsoredOn,
         WithdrawnOn = sponsorship.WithdrawnOn,
         Citations = [.. sponsorship.Citations.Select((citation, citationPosition) => CitationRow(revision, (short)position, citation, citationPosition))]
+    };
+
+    private static ActionRevisionTextCitationRow TextCitationRow(ActionDraftRevision revision, ActionTextCitation citation, int position) => new()
+    {
+        RecordId = revision.RecordId,
+        RevisionNumber = revision.RevisionNumber,
+        Position = (short)position,
+        Part = citation.Part,
+        CitationExtractionId = citation.Span.ExtractionId,
+        CitationStart = citation.Span.Start,
+        CitationLength = citation.Span.Length
     };
 
     private static ActionRevisionSponsorshipCitationRow CitationRow(ActionDraftRevision revision, short sponsorshipPosition, SourceSpan citation, int position) => new()

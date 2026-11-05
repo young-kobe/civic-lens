@@ -28,7 +28,8 @@ public sealed record ActionDraftContext(ActionDraftEvidence Evidence, ActionBill
     {
         if (!SummaryIsUnreadable && previous.SummaryVersion != Snapshot.SummaryVersion || previous.PolicyArea != Snapshot.Bill.PolicyArea ||
             previous.PolicyAreaId != PolicyAreaId || previous.BillTitle != Snapshot.Bill.Title || previous.IssueCandidateIds.IsDefault ||
-            !previous.IssueCandidateIds.SequenceEqual(Issues.CandidateIds) || previous.IssueRevisionId != IssueRevisionId ||
+            previous.TextPackageId != Evidence.BillText?.PackageId || !previous.IssueCandidateIds.SequenceEqual(Issues.CandidateIds) ||
+            previous.IssueRevisionId != IssueRevisionId ||
             Evidence.Candidate.IncludesSubjects && previous.SubjectsHash != Issues.SubjectsHash)
             return ActionChange.Other;
         if (previous.Fingerprint != Snapshot.Fingerprint)

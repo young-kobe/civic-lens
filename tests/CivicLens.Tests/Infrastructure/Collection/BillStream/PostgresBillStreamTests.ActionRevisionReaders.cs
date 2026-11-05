@@ -26,7 +26,7 @@ public sealed partial class PostgresBillStreamTests
 
         var found = await reviews.GetRevisionAsync(RecordId, 1, default);
         var review = await reviews.GetAsync(RecordId, default);
-        var evidence = await ActionStore().ReadEvidenceAsync(written.CandidateId, default);
+        var evidence = await ActionStore().ReadEvidenceAsync(written.CandidateId, false, default);
         var publishable = await reviews.GetForPublicationAsync([RecordId], default);
         var unpublished = Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, [], default));
 
@@ -46,7 +46,7 @@ public sealed partial class PostgresBillStreamTests
 
         var found = await reviews.GetRevisionAsync(RecordId, 1, default);
         var review = await reviews.GetAsync(RecordId, default);
-        var evidence = await ActionStore().ReadEvidenceAsync(written.CandidateId, default);
+        var evidence = await ActionStore().ReadEvidenceAsync(written.CandidateId, false, default);
 
         Assert.True(JsonNode.DeepEquals(expected, JsonSerializer.SerializeToNode(found, ActionReaderJson)));
         Assert.True(JsonNode.DeepEquals(expected, JsonSerializer.SerializeToNode(review!.Review.CurrentRevision, ActionReaderJson)));
@@ -66,7 +66,7 @@ public sealed partial class PostgresBillStreamTests
 
         await Assert.ThrowsAsync<InvalidDataException>(() => reviews.GetRevisionAsync(RecordId, 1, default));
         await Assert.ThrowsAsync<InvalidDataException>(() => reviews.GetAsync(RecordId, default));
-        await Assert.ThrowsAsync<InvalidDataException>(() => ActionStore().ReadEvidenceAsync(written.CandidateId, default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => ActionStore().ReadEvidenceAsync(written.CandidateId, false, default));
         await Assert.ThrowsAsync<InvalidDataException>(() => reviews.GetForPublicationAsync([RecordId], default));
         await Assert.ThrowsAsync<InvalidDataException>(() => reviews.ListUnpublishedApprovedAsync(10, [], default));
         await Assert.ThrowsAsync<InvalidDataException>(() => new PostgresReviewQueueStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
