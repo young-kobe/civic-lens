@@ -3,6 +3,7 @@ using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis.Persistence;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Spending;
 using Microsoft.EntityFrameworkCore;
 using State = CivicLens.Application.Analysis.AnalysisState;
 
@@ -129,8 +130,8 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
         return true;
     }
 
-    public async Task<AnalysisReservation> ReserveAsync(AnalysisClaim claim, string runId, string inputHash, long tokens,
-        long dailyTokenLimit, CancellationToken cancellationToken)
+    public async Task<AnalysisReservation> ReserveAsync(AnalysisClaim claim, string runId, string inputHash, string model,
+        long tokens, long dailyTokenLimit, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(claim);
         if (tokens < 1 || dailyTokenLimit < tokens) throw new ArgumentOutOfRangeException(nameof(tokens));
@@ -142,11 +143,15 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
         var clock = await DatabaseClock.ReadAsync(db, cancellationToken);
         var day = await LockDayAsync(db, clock.Day, cancellationToken);
         var result = AnalysisReservation.WaitingForBudget;
-        if (day.ChargedTokens + tokens > dailyTokenLimit) _ = Transition(row, wait, clock);
+        var spend = day.ChargedTokens + tokens > dailyTokenLimit
+            ? new SpendReservation(0, AnalysisErrorCodes.DailyTokenLimit)
+            : await AiSpendLedger.ReserveAsync(db, model, tokens, clock.Day, cancellationToken);
+        if (spend.WaitCode is { } waitCode) _ = Transition(row, AnalysisCheckpoint.From(claim, State.WaitingForBudget, waitCode), clock);
         else
         {
             day.ChargedTokens += tokens;
             row.ReservedTokens = tokens;
+            row.ReservedMicros = spend.Micros;
             row.BudgetDay = clock.Day;
             row.ReservedAtUtcTicks = clock.Ticks;
             row.PendingRunId = runId;
@@ -238,6 +243,7 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
                 throw new InvalidOperationException("An analysis run must settle the reservation that it was made under.");
             var day = await LockDayAsync(db, row.BudgetDay!.Value, cancellationToken);
             day.ChargedTokens += run.ChargedTokens - row.ReservedTokens;
+            await AiSpendLedger.SettleAsync(db, row.BudgetDay!.Value, run, row.ReservedMicros, cancellationToken);
             ClearReservation(row);
         }
         if (run.Input is not null) await AnalysisPromptTexts.EnsureAsync(db, run.Input, nowTicks, cancellationToken);
@@ -285,6 +291,7 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
     private static void ClearReservation(TRow row)
     {
         row.ReservedTokens = 0;
+        row.ReservedMicros = 0;
         row.BudgetDay = null;
         row.ReservedAtUtcTicks = null;
         row.PendingRunId = null;

@@ -20,9 +20,10 @@ internal static class AnalysisTableConfiguration
             constraints.HasCheckConstraint($"ck_{table}_retry_of", "retry_of_run_id IS NULL OR retry_of_run_id ~ '^[0-9a-f]{32}$'");
             constraints.HasCheckConstraint($"ck_{table}_priority",
                 $"priority BETWEEN {ReviewPriority.Highest} AND {ReviewPriority.Lowest}");
-            constraints.HasCheckConstraint($"ck_{table}_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0");
+            constraints.HasCheckConstraint($"ck_{table}_counts", "fence >= 0 AND attempts >= 0 AND reserved_tokens >= 0 AND reserved_micros >= 0");
             constraints.HasCheckConstraint($"ck_{table}_reservation",
                 "(reserved_tokens = 0) = (budget_day IS NULL AND reserved_at_utc_ticks IS NULL AND pending_run_id IS NULL AND pending_input_hash IS NULL)");
+            constraints.HasCheckConstraint($"ck_{table}_reserved_micros", "reserved_tokens > 0 OR reserved_micros = 0");
         });
         builder.HasKey(keyProperty, nameof(IAnalysisRow.Task));
         builder.Property<string>(keyProperty).HasColumnName(keyColumn).HasMaxLength(64);
@@ -35,6 +36,7 @@ internal static class AnalysisTableConfiguration
         builder.Property<int>(nameof(IAnalysisRow.Attempts)).HasColumnName("attempts");
         builder.Property<long?>(nameof(IAnalysisRow.RetryAt)).HasColumnName("retry_at");
         builder.Property<long>(nameof(IAnalysisRow.ReservedTokens)).HasColumnName("reserved_tokens");
+        builder.Property<long>(nameof(IAnalysisRow.ReservedMicros)).HasColumnName("reserved_micros");
         builder.Property<DateOnly?>(nameof(IAnalysisRow.BudgetDay)).HasColumnName("budget_day");
         builder.Property<long?>(nameof(IAnalysisRow.ReservedAtUtcTicks)).HasColumnName("reserved_at_utc_ticks");
         builder.Property<string>(nameof(IAnalysisRow.PendingRunId)).HasColumnName("pending_run_id").HasMaxLength(32);

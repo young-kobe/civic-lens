@@ -15,6 +15,7 @@ internal sealed class BriefAnalysisRow : IAnalysisRow
     public int Attempts { get; set; }
     public long? RetryAt { get; set; }
     public long ReservedTokens { get; set; }
+    public long ReservedMicros { get; set; }
     public DateOnly? BudgetDay { get; set; }
     public long? ReservedAtUtcTicks { get; set; }
     public string? PendingRunId { get; set; }

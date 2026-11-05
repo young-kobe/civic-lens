@@ -18,6 +18,7 @@ internal static class PostgresAdvisoryLock
     internal const string BriefReview = "civic-lens-brief-review";
     // No transaction holds this with another key.
     internal const string CollectionImport = "civic-lens-collection-import";
+    internal const string AiSpending = "civic-lens-ai-spending";
 
     private const string AcquireSql = "SELECT pg_advisory_xact_lock(hashtextextended(@key, 0))";
 

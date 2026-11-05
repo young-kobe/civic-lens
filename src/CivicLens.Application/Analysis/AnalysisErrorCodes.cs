@@ -5,6 +5,9 @@ namespace CivicLens.Application.Analysis;
 public static class AnalysisErrorCodes
 {
     public const string DailyTokenLimit = "dailyTokenLimit";
+    public const string MonthlyDollarCap = "monthlyDollarCap";
+    public const string MonthlyCapNotSet = "monthlyCapNotSet";
+    public const string ModelPriceMissing = "modelPriceMissing";
     public const string AttemptsExhausted = "attemptsExhausted";
     public const string ProviderOutage = "providerOutage";
     public const string InvalidRunInput = "invalidRunInput";

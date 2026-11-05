@@ -166,8 +166,8 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
             try { InputOf(modelRequest).Validate(); }
             catch (ArgumentException) { return new(null, await CompleteAsync(State.Blocked, Codes.InvalidRunInput, cancellationToken)); }
             var runId = Guid.NewGuid().ToString("N");
-            var reservation = await worker.queue.ReserveAsync(Claim, runId, modelRequest.InputHash, modelRequest.ReservedTokens,
-                worker.settings.DailyTokenLimit, cancellationToken);
+            var reservation = await worker.queue.ReserveAsync(Claim, runId, modelRequest.InputHash, modelRequest.Model,
+                modelRequest.ReservedTokens, worker.settings.DailyTokenLimit, cancellationToken);
             if (reservation == AnalysisReservation.WaitingForBudget) return new(null, MarkBudgetExhausted());
             if (reservation == AnalysisReservation.LeaseLost) return new(null, false);
             (RunId, previousRunId, request, started) = (runId, previous, modelRequest, worker.clock.GetUtcNow());

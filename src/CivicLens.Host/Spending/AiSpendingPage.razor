@@ -1,0 +1,114 @@
+@page "/Review/Spending"
+@using CivicLens.Application.Spending
+
+<TopBarTitle Crumbs="Crumbs" />
+
+<div class="content">
+    <PageHeader Title="AI spending" Lede="Set the most that AI calls can cost in one UTC month. A call that could pass the cap waits. A raised cap or a new price takes effect at the next UTC midnight, or when the worker restarts." />
+    @if (StatusMessage is not null)
+    {
+        <Notice Tone="Tone.Ok" Dismissible="true">@StatusMessage</Notice>
+    }
+    @if (error is not null)
+    {
+        <Notice Tone="Tone.Bad">@error</Notice>
+    }
+
+    @if (view is not null)
+    {
+        @if (view.CurrentCap is null)
+        {
+            <Notice Tone="Tone.Warn">No cap is set. AI calls wait until you set one.</Notice>
+        }
+        @foreach (var model in MissingPrices)
+        {
+            <Notice Tone="Tone.Warn">No price is set for @model. Calls to this model wait until you set one.</Notice>
+        }
+
+        <Panel Title="This month" Id="month" Padded="true">
+            <p>
+                <strong>@Dollars(view.ChargedMicros)</strong> spent or reserved since @Moment.Day(view.Month).
+                @if (view.CurrentCap is { } cap)
+                {
+                    <text>The cap is <strong>@Dollars(cap.CapMicros)</strong>.</text>
+                }
+            </p>
+            <form id="cap-form" class="form" method="post" @formname="cap" @onsubmit="SaveCapAsync">
+                <AntiforgeryToken />
+                <Field Label="Monthly cap in US dollars" For="Cap_Dollars" Hint="The cap counts from the first day of each UTC month. Enter 0 to stop all AI calls.">
+                    <input id="Cap_Dollars" name="Cap.Dollars" type="text" inputmode="decimal" value="@Cap?.Dollars" aria-describedby="Cap_Dollars-hint" />
+                </Field>
+                <div class="actions"><Button Variant="ButtonVariant.Primary" Type="submit">Save cap</Button></div>
+            </form>
+        </Panel>
+
+        <Panel Title="Model prices" Id="prices">
+            <Aside>US dollars for one million tokens</Aside>
+            <ChildContent>
+                <DataTable Items="view.CurrentPrices" Caption="Model prices">
+                    <Head>
+                        <th>Model</th>
+                        <th>Input</th>
+                        <th>Output</th>
+                        <th>Cache read</th>
+                        <th>Cache write</th>
+                    </Head>
+                    <Row Context="item">
+                        <td>@item.Price.Model</td>
+                        <td>@Dollars(item.Price.InputMicros)</td>
+                        <td>@Dollars(item.Price.OutputMicros)</td>
+                        <td>@Dollars(item.Price.CacheReadMicros)</td>
+                        <td>@Dollars(item.Price.CacheWriteMicros)</td>
+                    </Row>
+                    <Empty>
+                        <EmptyState Title="No prices" Text="Save a price for each model below." />
+                    </Empty>
+                </DataTable>
+                <form id="price-form" class="form panel-padded" method="post" @formname="price" @onsubmit="SavePriceAsync">
+                    <AntiforgeryToken />
+                    <Field Label="Model" For="Price_Model">
+                        <select id="Price_Model" name="Price.Model">
+                            @foreach (var model in AiSpendingPolicy.ModelsInUse)
+                            {
+                                <option value="@model" selected="@(Price?.Model == model)">@model</option>
+                            }
+                        </select>
+                    </Field>
+                    <Field Label="Input price" For="Price_Input">
+                        <input id="Price_Input" name="Price.Input" type="text" inputmode="decimal" value="@Price?.Input" />
+                    </Field>
+                    <Field Label="Output price" For="Price_Output">
+                        <input id="Price_Output" name="Price.Output" type="text" inputmode="decimal" value="@Price?.Output" />
+                    </Field>
+                    <Field Label="Cache read price" For="Price_CacheRead">
+                        <input id="Price_CacheRead" name="Price.CacheRead" type="text" inputmode="decimal" value="@Price?.CacheRead" />
+                    </Field>
+                    <Field Label="Cache write price" For="Price_CacheWrite">
+                        <input id="Price_CacheWrite" name="Price.CacheWrite" type="text" inputmode="decimal" value="@Price?.CacheWrite" />
+                    </Field>
+                    <div class="actions"><Button Variant="ButtonVariant.Primary" Type="submit">Save price</Button></div>
+                </form>
+            </ChildContent>
+        </Panel>
+
+        <Panel Title="Last changes" Id="changes">
+            <ChildContent>
+                <DataTable Items="Changes" Caption="Last changes">
+                    <Head>
+                        <th>Change</th>
+                        <th>Saved by</th>
+                        <th>When</th>
+                    </Head>
+                    <Row Context="item">
+                        <td>@item.Text</td>
+                        <td>@item.AuthorSubject</td>
+                        <td><Timestamp Value="item.RecordedAt" /></td>
+                    </Row>
+                    <Empty>
+                        <EmptyState Title="No changes yet" Text="A saved cap or price shows here." />
+                    </Empty>
+                </DataTable>
+            </ChildContent>
+        </Panel>
+    }
+</div>

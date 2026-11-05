@@ -16,6 +16,10 @@ The analysis feature runs model tasks over retained evidence through durable, bu
 - The token reservation is the prompt byte count plus the output allowance. A byte-level tokenizer gives at most one token for each byte, so this is an upper bound.
 - The byte bound also keeps each prompt in the lower Haiku 5.5 price tier.
 - A call that may have been billed stays fully charged. A crash or a lost connection therefore never hides spend.
+- One monthly dollar cap covers all stages. The owner sets it on a page, not in the environment. The daily token limits stay in the environment for now.
+- Money is a whole number of micro-dollars, and a price is micro-dollars for one million tokens. A call cost rounds up, so the cap never hides spend.
+- The cap fails closed. With no cap, or with no price for the model, a call waits and never runs.
+- A cap and a price are revisions. Each save adds a row with its author and time. No row changes or goes away.
 - A run stores the exact system prompt, user message, output schema, effort, and output token limit of its model call. Runs repeat the system prompt and the schema, so two shared tables hold those texts once. The user message belongs to one run and stays in the run row.
 - A content hash over one row gets a database CHECK. A content hash over child rows gets a verify recompute, as `vote_member_lists` does. A CHECK cannot see child rows, and the repository limits triggers.
 - AI drafts use the reserved author subject `civic-lens:analysis`. That subject can never decide, so an AI author can never approve its own draft.
@@ -36,6 +40,13 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - An entry has tier 1 if its record would pair with a statement. It has tier 2 if the record has a tracked issue, else tier 3. Enforced by `ReviewPriority.Of`. The bill number match is in `RelationshipPairRule`. `PairPriority` applies the pair rule to saved drafts. Tests: `ReviewPriorityTests.AWouldPairRecordOutranksATrackedIssueAndATrackedIssueOutranksTheRest`, `PostgresBillStreamTests.TheExactTierLowersAnEarlyTierOneWhenNoStatementOfASponsorPairs`, and `PostgresHouseVoteTests.TheExactTierLowersAnEarlyTierOneWhenNoMemberOfTheVoteIsTheSpeaker`.
 - A running entry keeps its priority. Enforced by `AnalysisPriority`, which skips Running entries. Test: `PostgresBillStreamTests.ARunningRowKeepsItsPriorityWhenANewStatementNamesItsBill`.
 - A reservation is set or cleared as a whole. Enforced by `ck_<table>_reservation` on every queue table. No test.
+- A reservation holds dollars only with tokens. Enforced by `ck_<table>_reserved_micros` on every queue table. No test.
+- Charged dollars never pass the monthly cap. Enforced by `AiSpendLedger`, which locks the `ai_month_spend` row inside the reservation transaction and prices the reservation at the highest price of the model. Test: `PostgresAiSpendingTests.ConcurrentReservationsNeverPassTheMonthlyCap`. The exact fit is in `PostgresAiSpendingTests.AReservationThatWouldPassTheMonthlyCapWaitsAndOneThatFitsExactlyIsReserved`.
+- With no cap, or with no price for the model, a call never runs. Enforced by `AiSpendLedger.ReserveAsync`. Tests: `PostgresAiSpendingTests.WithoutACapEveryCallWaitsBecauseTheSpendingFailsClosed` and `PostgresAiSpendingTests.AModelWithoutAPriceNeverRunsBecauseItsCostIsUnknown`.
+- A settled run charges its real cost, and its worst case reservation goes away. Enforced by `AiSpendLedger.SettleAsync` in the settlement transaction of `PostgresAnalysisQueue`. Tests: `PostgresAiSpendingTests.ASettledRunChargesItsRealCostAndGivesBackTheWorstCaseReservation` and `PostgresAiSpendingTests.ACallWithNoCountedUsageStaysChargedAtTheWorstCaseBecauseItMayHaveBeenBilled`.
+- An interrupted run keeps its worst case charge in the month. Enforced by `PostgresAnalysisQueue`, which leaves the month row alone when it clears a reservation. Test: `PostgresAiSpendingTests.AnInterruptedRunKeepsItsWorstCaseChargeInTheMonth`.
+- Only the owner reads or changes the cap and the prices. Enforced by `GetAiSpending`, `SaveMonthlyCap`, and `SaveModelPrice`. Tests: `AiSpendingUseCaseTests.AReviewerCannotReadOrChangeTheSpendingSettingsBecauseOnlyTheOwnerSpendsTheMoney` and `AiSpendingPageTests.ReviewersAreSentToAccessDeniedSoOnlyTheOwnerSetsTheCap`.
+- A cap or a price revision never changes. Each save inserts one row with the next revision number, under the advisory lock `civic-lens-ai-spending`. Enforced by `PostgresAiSpendingStore`, which only inserts. Test: `PostgresAiSpendingTests.EachSaveAddsARevisionAndTheNewestOneIsCurrent`.
 - A retry link points to a run that exists. Enforced by a foreign key on the `retry_of_run_id` column of every queue table. `PostgresAnalysisQueue` writes the run row in the same save as the link. Tests: `PostgresDocumentChangeAnalysisStoreTests.AValidationRetryResumesAfterABudgetWaitWithThePreviousErrors` and `TickBoundsAndKeysMigrationTests.AKeyedColumnRefusesAValueThatNoParentRowHoldsAndNeverDeletesAParentWithChildren`.
 - `pending_run_id` has no key. `ReserveAsync` names the run before the run row exists, and `SettleRunAsync` or `Interrupt` writes the row later. Enforced by the absence of a key. Test: `TickBoundsAndKeysMigrationTests.ThePendingRunOfAReservationHasNoKeyBecauseItsRunRowIsWrittenLater`.
 - A run charges at least the tokens it used. Enforced by `ck_document_change_analysis_runs_tokens` and `AnalysisRun`. Test: `AnalysisRunTests.ARunCannotChargeLessThanTheTokensItUsed`.
@@ -146,6 +157,19 @@ A change date must also appear in its cited quote, in one of these forms: `2026-
 
 `AnalysisFailureRules` owns the charge rule. A rate limit, a provider error, or a rejected request charges nothing. A connection failure, a crash, or a shutdown during a call keeps the full reservation charged. Worker startup returns budget waits to Pending, so a raised limit takes effect on restart.
 
+### Monthly dollar cap
+
+One cap covers every stage and every worker for each UTC month of database time. `ai_month_spend` holds the charged micro-dollars of a month. The reservation of a call runs under the existing daily token check, in the same transaction:
+
+1. `AiSpendLedger.ReserveAsync` reads the newest cap and the newest price of the model of the request. With no cap, the entry waits with the code `monthlyCapNotSet`. With no price, it waits with `modelPriceMissing`.
+2. It prices the reserved tokens at the highest of the four prices of the model. It locks the month row and adds that worst case. If the sum passes the cap, the entry waits with `monthlyDollarCap`. The row keeps the reserved micro-dollars in `reserved_micros`.
+3. Settlement prices the four token counts of the run at the newest price of the model. It prices charged tokens beyond the counted tokens at the highest price. It adds the difference between that cost and `reserved_micros` to the month of the reservation.
+4. An interrupted run keeps its worst case in the month, as its tokens stay charged.
+
+A wait for the cap uses the same wake as the daily limit. The entry returns to Pending at the next UTC midnight, or when the worker restarts. A raised cap or a new price therefore takes effect at the next UTC midnight or at a restart. The page says so. The month row is the last lock of both transactions, after the queue row and the day row. No lock cycle exists. The spending page saves revisions under the key `civic-lens-ai-spending`. No other key joins it.
+
+Prices use the newest revision at settlement, so a price change while a call runs shifts the cost of that call by the change. The model names come from the `Model` constants of the tasks, in `AiSpendingPolicy.ModelsInUse`.
+
 ### Retries and pauses
 
 A rate limit or a single provider or connection failure retries durably. The delay starts at 30 seconds, doubles, and stops at 30 minutes. The SDK exceptions do not expose the `retry-after` header, so a 429 also uses this backoff. A 408 or 409 counts as a provider failure. Other 4xx responses fail the entry at once.
@@ -194,6 +218,17 @@ Human paths, the review store, the publication store, and collection workspace a
 
 A person can approve revision 1 unchanged, unless it holds an AI-proposed change date. The editor shows a Date checked box for that date. A save without the tick removes the date and its evidence. The review store applies this rule inside its locked save, so a request that skips the box cannot keep the date. Approval rejects an AI revision with a change date.
 
+### AI spending page
+
+`/Review/Spending` is for the owner only. A reviewer goes to the access-denied page. The rail shows it as "AI spending". It shows these parts:
+
+- The dollars charged and reserved this UTC month.
+- The current cap, with a form to save a new cap.
+- A price table with one row for each model in use, with a form to save one model price.
+- The last 10 changes.
+
+It warns when no cap or no price exists. A save adds a revision and opens the page again. Values are dollars with at most 6 decimals. A cap is 0 to 1,000,000 dollars. A price is 0 to 1,000 dollars for one million tokens. A cap of 0 stops all AI calls.
+
 ### Review UI
 
 Each new change shows its drafting state:
@@ -235,6 +270,10 @@ Ordinary tests use a fake model at the port. One live smoke test runs only with 
 - `output_json` holds the answer text of every stop that has text. A refusal or a truncated answer keeps its text.
 - A run recovered after a crash or shutdown is `Interrupted`. It keeps its real start time, has no context copy and no input, and uses the current task constants as its versions.
 - `document_change_analysis_budget` holds charged tokens for each UTC day.
+- `ai_monthly_cap_revisions` holds one row for each saved cap: the revision number, `cap_micros`, the author subject, and the time.
+- `ai_model_price_revisions` holds one row for each saved price of a model. Its key is the model and the revision number. It holds the four prices in micro-dollars for one million tokens, the author subject, and the time.
+- `ai_month_spend` holds the charged micro-dollars for each UTC month.
+- Each queue table also holds `reserved_micros`, the worst case dollars of its open reservation.
 - `document_change_analysis_status` holds one row for each task with its limit, time, and pause state. The statement tasks also use this table.
 - The code of a run outcome is its name in camel case.
 - Version constants are listed in [Behavior versions](../architecture.md#behavior-versions).
@@ -250,6 +289,9 @@ Ordinary tests use a fake model at the port. One live smoke test runs only with 
 | Ports | `src/CivicLens.Application/Analysis/IAnalysisQueue.cs`, `src/CivicLens.Application/Analysis/IAnalysisQueueStore.cs`, `src/CivicLens.Application/Analysis/IAnalysisTaskStep.cs`, `src/CivicLens.Application/Analysis/IAnalysisAttempt.cs`, `src/CivicLens.Application/Analysis/IAnalysisStatusStore.cs` |
 | Document-change drafting | `src/CivicLens.Application/Analysis/DocumentChangeDraftStep.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftPrompt.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftResolver.cs`, `src/CivicLens.Application/Analysis/DocumentChangeDraftLifecycle.cs` |
 | Owner queue handlers | `src/CivicLens.Application/Analysis/GetAnalysisStatus.cs`, `src/CivicLens.Application/Analysis/ListAnalyses.cs`, `src/CivicLens.Application/Analysis/GetAnalysisRun.cs`, `src/CivicLens.Application/Analysis/RequeueAnalyses.cs`, `src/CivicLens.Host/Analysis/AnalysisQueueCommands.cs` |
+| Spending use cases | `src/CivicLens.Application/Spending/GetAiSpending.cs`, `src/CivicLens.Application/Spending/SaveMonthlyCap.cs`, `src/CivicLens.Application/Spending/SaveModelPrice.cs`, `src/CivicLens.Application/Spending/AiSpendingPolicy.cs`, `src/CivicLens.Application/Spending/ModelPrice.cs`, `src/CivicLens.Application/Spending/IAiSpendingStore.cs` |
+| Spending storage | `src/CivicLens.Infrastructure/Spending/AiSpendLedger.cs`, `src/CivicLens.Infrastructure/Spending/PostgresAiSpendingStore.cs`, `src/CivicLens.Infrastructure/Spending/Persistence/` |
+| Spending page | `src/CivicLens.Host/Spending/AiSpendingPage.razor`, `src/CivicLens.Host/Spending/AiSpendingPage.razor.cs` |
 | Postgres queue | `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisQueue.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisStore.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisStatusStore.cs`, `src/CivicLens.Infrastructure/Analysis/PostgresAnalysisWakeup.cs`, `src/CivicLens.Infrastructure/Analysis/Persistence/AnalysisTableConfiguration.cs`, `src/CivicLens.Infrastructure/Analysis/AnalysisRunRows.cs` |
 | Document-change store and model | `src/CivicLens.Infrastructure/Analysis/PostgresDocumentChangeAnalysisStore.cs`, `src/CivicLens.Infrastructure/Analysis/DocumentChangeAnalysisQueueMapping.cs`, `src/CivicLens.Infrastructure/Analysis/AnthropicDocumentChangeDraftModel.cs`, `src/CivicLens.Infrastructure/Analysis/AnthropicStructuredCall.cs` |
 | Other shared types | `AnalysisState`, `AnalysisRecord`, `AnalysisClaim`, `AnalysisCheckpoint`, `AnalysisSettings`, `AnalysisErrorCodes`, `AnalysisTaskIdentity`, `AnalysisPromptHash`, `AnalysisModelRequest`, `AnalysisModelResponse`, and `AnalysisModelException`, each in its own file in `src/CivicLens.Application/Analysis/` |

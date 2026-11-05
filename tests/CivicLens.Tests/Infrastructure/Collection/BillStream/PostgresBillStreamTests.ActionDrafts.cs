@@ -1062,7 +1062,7 @@ public sealed partial class PostgresBillStreamTests
     private static async Task<string> ReserveAsync(PostgresActionDraftStore store, AnalysisClaim claim)
     {
         var runId = Guid.NewGuid().ToString("N");
-        Assert.Equal(AnalysisReservation.Reserved, await store.ReserveAsync(claim, runId, new string('1', 64), 5_000, 1_000_000, default));
+        Assert.Equal(AnalysisReservation.Reserved, await store.ReserveAsync(claim, runId, new string('1', 64), "claude-haiku-5-5", 5_000, 1_000_000, default));
         return runId;
     }
 

@@ -401,7 +401,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         }
 
         var results = await Task.WhenAll(claims.Select(claim =>
-            analysis.ReserveAsync(claim, Guid.NewGuid().ToString("N"), new string('f', 64), 1_000, 3_500, default)));
+            analysis.ReserveAsync(claim, Guid.NewGuid().ToString("N"), new string('f', 64), "claude-haiku-5-5", 1_000, 3_500, default)));
 
         Assert.Equal(3, results.Count(result => result == AnalysisReservation.Reserved));
         Assert.Equal(3, results.Count(result => result == AnalysisReservation.WaitingForBudget));
@@ -415,7 +415,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         var stale = (await analysis.TryClaimAsync(comparison.ComparisonId, TimeSpan.FromMinutes(1), default))!;
         var runId = Guid.NewGuid().ToString("N");
         Assert.Equal(AnalysisReservation.Reserved,
-            await analysis.ReserveAsync(stale, runId, new string('e', 64), 5_000, 100_000, default));
+            await analysis.ReserveAsync(stale, runId, new string('e', 64), "claude-haiku-5-5", 5_000, 100_000, default));
         await ExecuteAsync(connectionString, $"UPDATE document_change_analysis SET lease_expires_at = 0 WHERE comparison_id = '{comparison.ComparisonId}'");
 
         var current = await analysis.TryClaimAsync(comparison.ComparisonId, TimeSpan.FromMinutes(1), default);
@@ -430,7 +430,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         Assert.False(await analysis.CheckpointAsync(AnalysisCheckpoint.From(stale, AnalysisState.RetryWaiting,
             "rateLimited", TimeSpan.FromSeconds(30)), late, default));
         Assert.Equal(AnalysisReservation.LeaseLost,
-            await analysis.ReserveAsync(stale, Guid.NewGuid().ToString("N"), new string('e', 64), 5_000, 100_000, default));
+            await analysis.ReserveAsync(stale, Guid.NewGuid().ToString("N"), new string('e', 64), "claude-haiku-5-5", 5_000, 100_000, default));
         Assert.Single(await RunOutcomesAsync(comparison));
     }
 
@@ -492,7 +492,7 @@ public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection 
         var comparison = await seeder.SaveAsync("Text A.\n", "Text B.\n");
         var claim = (await analysis.TryClaimAsync(comparison.ComparisonId, TimeSpan.FromMinutes(1), default))!;
         var runId = Guid.NewGuid().ToString("N");
-        await analysis.ReserveAsync(claim, runId, new string('e', 64), 5_000, 100_000, default);
+        await analysis.ReserveAsync(claim, runId, new string('e', 64), "claude-haiku-5-5", 5_000, 100_000, default);
         var run = Run(comparison.ComparisonId, runId, AnalysisRunOutcome.Refused);
 
         var fail = AnalysisCheckpoint.From(claim, AnalysisState.Failed, "refused");

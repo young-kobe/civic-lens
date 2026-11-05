@@ -2,6 +2,7 @@
 @using CivicLens.Core.Review
 @using CivicLens.Host.Reports
 @using CivicLens.Host.Review
+@using CivicLens.Host.Spending
 @inject ReviewActorAccessor Actors
 
 <a class="skip" href="#main">Skip to content</a>
@@ -16,6 +17,7 @@
             {
                 <RailLink Href="/Review/Sources" Text="Sources" Icon="IconName.Sources" />
                 <RailLink Href="/Review/GateLabels" Text="Gate labels" Icon="IconName.Labels" />
+                <RailLink Href="@SpendingRoutes.Page" Text="AI spending" Icon="IconName.Spending" />
             }
         </nav>
         <div class="rail-foot">
@@ -42,7 +44,7 @@
     public const string CrumbsSection = "topbar-crumbs";
 
     private static readonly IReadOnlyList<string> ReviewSections = ["/Documents"];
-    private static readonly IReadOnlyList<string> ReviewExclusions = ["/Review/Sources", "/Review/Statements", "/Review/GateLabels", ReportRoutes.List];
+    private static readonly IReadOnlyList<string> ReviewExclusions = ["/Review/Sources", "/Review/Statements", "/Review/GateLabels", SpendingRoutes.Page, ReportRoutes.List];
     private ReviewRole role;
 
     [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }

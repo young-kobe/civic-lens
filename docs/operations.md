@@ -529,13 +529,21 @@ Without the collection configuration, the Sources page reports that source check
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- review 5081
 ```
 
-Open `/Review` through the configured HTTPS origin. Keep the separate `worker` running, because it collects, extracts, and compares automatically. `/Review/Sources` is the owner Sources page. `/Review/GateLabels` is the owner page for gate labels. `/Review/Statements` lists statements, and `/Review/Statements/{candidate-id}` shows one statement for editing and decisions. `/Review/Actions/{record-id}` and `/Review/Votes/{record-id}` show one action or vote. The Review home page links to the records that need action.
+Open `/Review` through the configured HTTPS origin. Keep the separate `worker` running, because it collects, extracts, and compares automatically. `/Review/Sources` is the owner Sources page. `/Review/GateLabels` is the owner page for gate labels. `/Review/Spending` is the owner page for the [AI spending cap](#ai-spending-cap). `/Review/Statements` lists statements, and `/Review/Statements/{candidate-id}` shows one statement for editing and decisions. `/Review/Actions/{record-id}` and `/Review/Votes/{record-id}` show one action or vote. The Review home page links to the records that need action.
 
 A record allows at most 64 open concerns. An approval resolves them and starts a new cycle. When a limit rejects a write, do not discard history to continue. Browsing comparisons may return an empty batch with a continuation when the batch holds only unchanged, incompatible, or limited results. Use the continuation; the empty batch does not prove that no changes exist.
 
 An AI draft is revision 1 by the AI drafter. Check every sentence and citation against the evidence. If the editor flags an unverified change date, check it, tick Date checked, and press Save and approve. The press saves your revision and approves it. Approved accounts publish about 1 minute after the approval, and at least 10 minutes after the last release, when the stage `publishing` runs. A lost notification delays the publish to the next full hour. A failed tick or a tick that ends on a conflict delays it for at least 10 minutes, to the next approval or the next full hour.
 
 Code approves a worker revision of an action or a vote after it checks the citations. The decision history shows the actor "Code check". A record shows as Needs action only if code did not approve it. A concern is open, a person wrote the text, or an approval check failed. A person can edit or withdraw any record.
+
+## AI spending cap
+
+Every AI call needs a monthly dollar cap and a price for its model. With no cap, or with no price for a model, AI calls wait with the code `monthlyCapNotSet` or `modelPriceMissing`, and no paid call runs. Set the cap and the prices before you deploy, or AI stops. The per-stage `CIVIC_LENS_*_DAILY_TOKENS` limits stay and work with the cap.
+
+Open `/Review/Spending` as the owner. Type the cap in US dollars, and press Save cap. For each model in the price table, choose the model, type the four prices in US dollars for one million tokens, and press Save price. The prices are the input, output, cache read, and cache write prices of the provider. Each save adds a revision with your subject and the time. The page shows the last 10 changes. [Analysis](architecture/analysis.md#monthly-dollar-cap) holds the rules.
+
+The cap counts each UTC month. A call that could pass it waits with the code `monthlyDollarCap`. The check prices each call at the highest of the four prices of the model before it runs. The reservation can therefore be higher than the real cost, until the call settles. A waiting entry returns to Pending at the next UTC midnight, or when the worker restarts. After you raise the cap or save a price, restart the worker to resume at once. A cap of 0 stops all AI calls.
 
 ## AI drafting of document-change accounts
 
