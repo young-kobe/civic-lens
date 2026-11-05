@@ -52,7 +52,7 @@ public sealed record PublishedRecordEntry
         if (!HasValidChamber)
             throw new InvalidDataException("A vote manifest entry may name its chamber. Other entries name none.");
         if (!HasValidVoteIdentity)
-            throw new InvalidDataException("A vote manifest entry may name its vote kind and its Congress. Other entries name none.");
+            throw new InvalidDataException("A vote manifest entry names its vote kind and its Congress together, or neither. Other entries name none.");
         if (!HasValidBillLine)
             throw new InvalidDataException($"An action manifest entry may hold a bill line of 1 to {MaximumBillLineLength} characters. Other entries hold none.");
         if (!HasValidCosponsors)
@@ -70,7 +70,7 @@ public sealed record PublishedRecordEntry
 
     private bool HasValidVoteIdentity =>
         VoteKind is null && Congress is null ||
-        Kind == PublishedRecordKind.Vote && (VoteKind is null || Enum.IsDefined(VoteKind.Value)) && (Congress is null || Congress >= 1);
+        Kind == PublishedRecordKind.Vote && VoteKind is { } voteKind && Enum.IsDefined(voteKind) && Congress is >= 1;
 
     private bool HasValidBillLine =>
         BillLine is null || Kind == PublishedRecordKind.Action && !string.IsNullOrWhiteSpace(BillLine) && BillLine.Length <= MaximumBillLineLength;

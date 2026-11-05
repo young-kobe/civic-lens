@@ -252,7 +252,9 @@ public sealed class PublicationReleaseTests
         Entry(PublishedRecordKind.Statement, StatementId) with { VoteKind = PublishedVoteKind.Passage },
         Entry(PublishedRecordKind.Action, new string('7', 64)) with { Congress = 119 },
         Entry(PublishedRecordKind.Vote, StatementId) with { VoteKind = (PublishedVoteKind)99 },
-        Entry(PublishedRecordKind.Vote, StatementId) with { Congress = 0 }
+        Entry(PublishedRecordKind.Vote, StatementId) with { Congress = 0 },
+        Entry(PublishedRecordKind.Vote, StatementId) with { VoteKind = PublishedVoteKind.Passage },
+        Entry(PublishedRecordKind.Vote, StatementId) with { Congress = 119 }
     };
 
     [Theory]
