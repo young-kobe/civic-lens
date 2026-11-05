@@ -303,15 +303,6 @@ public sealed class PostgresDocumentChangeRevisionColumnsTests(PostgresCollectio
         Assert.Equal("Zebra change", records.Single().GetType().GetProperty("Headline")!.GetValue(records.Single()));
     }
 
-    [Fact]
-    public async Task ReadRevisionJsonRefusesTheDocumentChangeKindBecauseItIsReadFromItsColumns()
-    {
-        await using var db = await factory.CreateDbContextAsync();
-
-        await Assert.ThrowsAsync<ArgumentException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Review.CitedRevisions", "ReadRevisionJsonAsync",
-            db, PublishedRecordKind.DocumentChange, new[] { new PublishedRevisionBinding(PublishedRecordKind.DocumentChange, "any", 1) }, CancellationToken.None));
-    }
-
     [Theory]
     [InlineData("UPDATE document_change_revisions SET author_kind = 'Robot'", "ck_document_change_revisions_author_kind")]
     [InlineData("UPDATE document_change_revisions SET comparison_id = 'NOT-HEX'", "ck_document_change_revisions_comparison")]

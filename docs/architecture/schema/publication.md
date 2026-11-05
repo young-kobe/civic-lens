@@ -125,3 +125,56 @@ END
 - check ck_published_records_first_published_at_utc_ticks: first_published_at_utc_ticks >= 0 AND first_published_at_utc_ticks <= '3155378975999999999'
 - check ck_published_records_kind: kind in ('documentChange', 'statement', 'action', 'brief', 'vote', 'relationship', 'executiveAction')
 - check ck_published_records_record_id: record_id ~ '^([0-9a-f]{32}|[0-9a-f]{64})$'
+
+## release_issue_excludes
+
+- pk (release_number, issue_id, "position")
+- fk (release_number, issue_id) -> release_issues (release_number, issue_id) on delete restrict
+- cols release_number integer, issue_id varchar(256), position smallint, text text
+- check ck_release_issue_excludes_position: "position" >= 0
+- check ck_release_issue_excludes_text: length(btrim(text)) > 0
+- unique AK_release_issue_excludes_release_number_issue_id_text (release_number, issue_id, text)
+
+## release_issue_includes
+
+- pk (release_number, issue_id, "position")
+- fk (release_number, issue_id) -> release_issues (release_number, issue_id) on delete restrict
+- cols release_number integer, issue_id varchar(256), position smallint, text text
+- check ck_release_issue_includes_position: "position" >= 0
+- check ck_release_issue_includes_text: length(btrim(text)) > 0
+- unique AK_release_issue_includes_release_number_issue_id_text (release_number, issue_id, text)
+
+## release_issues
+
+- pk (release_number, issue_id)
+- fk (release_number) -> publication_releases (release_number) on delete restrict
+- cols release_number integer, issue_id varchar(256), name varchar(256), definition text null
+- check ck_release_issues_issue_id: length(btrim(issue_id)) > 0
+- check ck_release_issues_name: length(btrim(name)) > 0
+
+## release_official_terms
+
+- pk (release_number, official_id, "position")
+- fk (release_number, official_id) -> release_officials (release_number, official_id) on delete restrict
+- cols release_number integer, official_id varchar(256), position smallint, office varchar(256), kind varchar(32), state varchar(256) null, district integer null, party varchar(256) null, caucus varchar(256) null, start_on date, end_on date null
+- check ck_release_official_terms_dates: end_on IS NULL OR end_on >= start_on
+- check ck_release_official_terms_district: district IS NULL OR district >= 0
+- check ck_release_official_terms_kind: kind in ('Senator', 'Representative', 'Executive', 'Judicial', 'Other')
+- check ck_release_official_terms_office: length(btrim(office)) > 0
+- check ck_release_official_terms_position: "position" >= 0
+
+## release_officials
+
+- pk (release_number, official_id)
+- fk (release_number) -> publication_releases (release_number) on delete restrict
+- cols release_number integer, official_id varchar(256), name varchar(256), wikidata_id varchar(256) null, website text null
+- check ck_release_officials_name: length(btrim(name)) > 0
+- check ck_release_officials_official_id: length(btrim(official_id)) > 0
+
+## release_policy_areas
+
+- pk (release_number, policy_area_id)
+- fk (release_number) -> publication_releases (release_number) on delete restrict
+- cols release_number integer, policy_area_id varchar(256), name varchar(256)
+- check ck_release_policy_areas_name: length(btrim(name)) > 0
+- check ck_release_policy_areas_policy_area_id: length(btrim(policy_area_id)) > 0

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using CivicLens.Application.Votes;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Votes;
 using Npgsql;
@@ -18,7 +19,7 @@ public sealed partial class PostgresHouseVoteTests
         {
             Kind = VoteKind.Passage,
             KindCitation = span,
-            Facts = [basis.Facts[0], new("Second fact", span)],
+            Facts = [basis.Facts[0], new("Question: On Passage", span), new("Second fact", span)],
             Members = [basis.Members[0], new("with-id-b", "B000002", "Nay", memberSpan), new("with-id-c", "C000003", "Not Voting", span)],
             IssueCandidateIds = ["issue-a", "issue-b", "issue-c"],
             TrackedIssueIds = ["issue-b"],
@@ -28,6 +29,20 @@ public sealed partial class PostgresHouseVoteTests
         await SettleAsync(candidate, full);
 
         await AssertColumnsEqualAsync(full);
+    }
+
+    [Fact]
+    public async Task ARevisionWithoutAResultLineIsRefusedAndWritesNoRowBecauseTheResultColumnIsRequired()
+    {
+        var candidate = await PendingCandidateAsync();
+        var store = VoteStore();
+        var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
+        var runId = await ReserveAsync(store, claim);
+        var withoutResult = (await RevisionAsync(candidate, 1)) with { Facts = [new("Question: On Passage", (await RevisionAsync(candidate, 1)).Facts[0].Citation)] };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CheckpointAsync(VoteDraftCheckpoint.From(claim, withoutResult), DraftedRun(runId, candidate), default));
+
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM vote_revisions"));
     }
 
     [Fact]
@@ -228,10 +243,12 @@ public sealed partial class PostgresHouseVoteTests
             ["kind_citation_length"] = revision.KindCitation?.Length,
             ["issue_revision_id"] = revision.IssueRevisionId,
             ["subjects_hash"] = revision.SubjectsHash,
-            ["issue_candidates_recorded"] = !revision.IssueCandidateIds.IsDefault
+            ["issue_candidates_recorded"] = !revision.IssueCandidateIds.IsDefault,
+            ["question"] = revision.Facts.FirstOrDefault(fact => fact.Text.StartsWith("Question: ", StringComparison.Ordinal))?.Text["Question: ".Length..],
+            ["result"] = revision.Facts.First(fact => fact.Text.StartsWith("Result: ", StringComparison.Ordinal)).Text["Result: ".Length..]
         };
         foreach (var (column, value) in expected)
-            Assert.True((value?.ToJsonString() ?? "null") == (actual[column]?.ToJsonString() ?? "null"), $"Column {column} differs from the JSON.");
+            Assert.True((value?.ToJsonString() ?? "null") == (actual[column]?.ToJsonString() ?? "null"), $"Column {column} differs from the revision.");
 
         Assert.Equal(revision.Facts.Select((fact, position) => Line(position, fact.Text, fact.Citation)),
             await LinesAsync($"SELECT position || '|' || fact_text || '|' || citation_extraction_id || '|' || citation_start || '|' || citation_length FROM vote_revision_facts WHERE {key} ORDER BY position"));

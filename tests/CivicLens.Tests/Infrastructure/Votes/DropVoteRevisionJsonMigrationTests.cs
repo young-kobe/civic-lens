@@ -11,7 +11,7 @@ namespace CivicLens.Tests.Infrastructure.Votes;
 [Trait("Category", "Postgres")]
 public sealed class DropVoteRevisionJsonMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private const string Migration = "20261104213058_DropVoteRevisionJson";
+    private const string Migration = "20261105161253_DropVoteRevisionJson";
     private static readonly string RecordId = new('a', 64);
     private const string RevisionColumnCount = "SELECT count(*) FROM information_schema.columns WHERE table_name = 'vote_revisions' AND column_name = 'revision_json'";
 
@@ -63,8 +63,8 @@ public sealed class DropVoteRevisionJsonMigrationTests(PostgresCollection postgr
         await InsertRevisionWithColumnsAsync(RecordId, 1);
         await ExecuteAsync($$"""
             SET session_replication_role = replica;
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-            VALUES ('{{RecordId}}', 2, 'auth0|editor', 'Person', NULL, '{"a":1}', 100)
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks, result)
+            VALUES ('{{RecordId}}', 2, 'auth0|editor', 'Person', NULL, '{"a":1}', 100, 'Passed')
             """);
 
         var failure = await Assert.ThrowsAsync<PostgresException>(() => MigrateToAsync(Migration));
@@ -119,11 +119,11 @@ public sealed class DropVoteRevisionJsonMigrationTests(PostgresCollection postgr
         INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks,
             headline, summary, text_origin, source_id, vote_source, chamber, congress, session_number, roll_call_number, candidate_id,
             candidate_update_utc_ticks, voted_on, voted_on_citation_extraction_id, voted_on_citation_start, voted_on_citation_length, kind,
-            member_list_id, issue_revision_id, issue_candidates_recorded)
+            member_list_id, issue_revision_id, issue_candidates_recorded, result)
         VALUES ('{recordId}', {number}, 'auth0|editor', 'Person', NULL, 'x', 100,
             'Headline', 'Summary', 'Person', 'voteview-senate', 'Voteview', 'Senate', 119, 1, 7, 'c1',
             1, DATE '2026-01-02', 'e1', 0, 5, 'Passage',
-            '{new string('1', 64)}', '{new string('2', 64)}', true)
+            '{new string('1', 64)}', '{new string('2', 64)}', true, 'Passed')
         """);
 
     private string PreviousMigration()

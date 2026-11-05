@@ -36,7 +36,9 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         await StatementRevisionSeeder.AddAsync(connectionString, statement.Revision);
     }
 
-    public Task ActionAsync(ActionDraftRevision action, string reviewStatus = "Approved", long revisedAtTicks = 1) => ExecuteAsync("""
+    public async Task ActionAsync(ActionDraftRevision action, string reviewStatus = "Approved", long revisedAtTicks = 1)
+    {
+        await ExecuteAsync("""
         SET session_replication_role = replica;
         INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
         VALUES (@extraction, 'attempt', 'extraction', 'action', @hash) ON CONFLICT DO NOTHING;
@@ -48,14 +50,13 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
                                    review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id, event_on, issue_ids, official_ids)
         VALUES (@id, @source, @congress, @type, @bill, @number, 0, @status, 1, @revised, @candidate, @eventOn, @issues, @officials)
         ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number, review_status = @status, candidate_id = @candidate,
-                                              last_revised_at_utc_ticks = @revised, event_on = @eventOn, issue_ids = @issues, official_ids = @officials;
-        INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-        VALUES (@id, @number, 'auth0|editor', 'Person', NULL, @json, 1)
-        ON CONFLICT (record_id, revision_number) DO UPDATE SET revision_json = EXCLUDED.revision_json
+                                              last_revised_at_utc_ticks = @revised, event_on = @eventOn, issue_ids = @issues, official_ids = @officials
         """, ("id", action.RecordId), ("source", action.SourceId), ("congress", action.Congress), ("type", action.BillType),
-        ("bill", action.BillNumber), ("number", action.RevisionNumber), ("status", reviewStatus), ("json", JsonSerializer.Serialize(action, Web)),
-        ("candidate", action.CandidateId), ("revised", revisedAtTicks), ("eventOn", action.EventOn()), ("issues", action.TrackedIssueIds.ToArray()),
-        ("officials", action.OfficialIds().ToArray()), ("extraction", RelationshipFixtures.ExtractionId), ("hash", new string('f', 64)));
+            ("bill", action.BillNumber), ("number", action.RevisionNumber), ("status", reviewStatus),
+            ("candidate", action.CandidateId), ("revised", revisedAtTicks), ("eventOn", action.EventOn()), ("issues", action.TrackedIssueIds.ToArray()),
+            ("officials", action.OfficialIds().ToArray()), ("extraction", RelationshipFixtures.ExtractionId), ("hash", new string('f', 64)));
+        await ActionRevisionSeeder.AddAsync(connectionString, action);
+    }
 
     public Task VoteAsync(VoteDraftRevision vote, string reviewStatus = "Approved", long revisedAtTicks = 1) => ExecuteAsync($"""
         SET session_replication_role = replica;

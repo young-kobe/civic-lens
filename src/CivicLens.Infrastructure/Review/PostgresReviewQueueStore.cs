@@ -22,21 +22,22 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
 
     private static readonly QueueKind[] Kinds =
     [
-        new(PublishedRecordKind.DocumentChange, "dc", "document_change_drafts", "headline",
+        new(PublishedRecordKind.DocumentChange, "dc", "document_change_drafts",
             (db, ids, ct) => PostgresDocumentChangeReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct),
             Column: new("headline", recordId => DocumentChangeRevisionRows.NotBackfilled($"The current revision of document change {recordId}"))),
-        new(PublishedRecordKind.Statement, "st", "statement_drafts", "headline",
+        new(PublishedRecordKind.Statement, "st", "statement_drafts",
             (db, ids, ct) => PostgresStatementReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct),
             Column: new("headline", recordId => StatementRevisionRows.NotBackfilled($"The current revision of statement {recordId}"))),
-        new(PublishedRecordKind.Action, "ac", "action_drafts", "headline",
-            (db, ids, ct) => PostgresActionReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct)),
-        new(PublishedRecordKind.Vote, "vo", "vote_drafts", "headline",
+        new(PublishedRecordKind.Action, "ac", "action_drafts",
+            (db, ids, ct) => PostgresActionReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct),
+            Column: new("headline", recordId => ActionRevisionRows.NotBackfilled($"The current revision of action {recordId}"))),
+        new(PublishedRecordKind.Vote, "vo", "vote_drafts",
             (db, ids, ct) => VoteDraftRows.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct), Column: new("headline")),
-        new(PublishedRecordKind.Brief, "br", "brief_drafts", "headline",
+        new(PublishedRecordKind.Brief, "br", "brief_drafts",
             (db, ids, ct) => PostgresBriefReviewStore.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Headline, ct), Column: new("headline", recordId => BriefRevisionRows.NotBackfilled($"The current revision of brief {recordId}"))),
-        new(PublishedRecordKind.Relationship, "re", "relationship_drafts", null,
+        new(PublishedRecordKind.Relationship, "re", "relationship_drafts",
             ReadRelationshipsAsync),
-        new(PublishedRecordKind.ExecutiveAction, "ea", "executive_action_drafts", "title",
+        new(PublishedRecordKind.ExecutiveAction, "ea", "executive_action_drafts",
             (db, ids, ct) => ExecutiveActionRows.ForReading.Records.ReadQueueDraftsAsync(db, ids, revision => revision.Title, ct), Column: new("title", recordId => ExecutiveActionRevisionRows.NotBackfilled($"The current revision of executive action {recordId}")))
     ];
 
@@ -60,7 +61,7 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
         WHERE review_status = 'Approved' AND no_longer_matches AND NOT (record_id = ANY({0}))
         """;
 
-    private static readonly string ApprovedHeadlineMatches = string.Join("\nUNION ALL\n", Kinds.Where(kind => kind.HeadlineProperty is not null)
+    private static readonly string ApprovedHeadlineMatches = string.Join("\nUNION ALL\n", Kinds.Where(kind => kind.Column is not null)
         .Select(kind => $"""
         SELECT '{kind.Code}' AS "KindCode", draft.{kind.IdColumn} AS "RecordId", '{kind.Code}-' || draft.{kind.IdColumn} AS "QueueId",
                draft.last_revised_at_utc_ticks AS "LastRevisedAtUtcTicks", {kind.HeadlineSql} AS "Headline"
@@ -161,12 +162,11 @@ public sealed class PostgresReviewQueueStore(IDbContextFactory<CollectionAttempt
     }
 
     private sealed record QueueKind(PublishedRecordKind Kind, string Code, string Table,
-        string? HeadlineProperty,
         Func<CollectionAttemptDbContext, string[], CancellationToken, Task<Dictionary<string, QueueDraft>>> Read, HeadlineColumn? Column = null)
     {
         public string IdColumn => ReviewTables.For(Kind).IdColumn;
 
-        public string HeadlineSql => Column is not null ? $"revision.{Column.Name}" : $"revision.revision_json::jsonb ->> '{HeadlineProperty}'";
+        public string HeadlineSql => $"revision.{Column!.Name}";
 
         /// <summary>A kind with a nullable headline column returns a row with a null headline, so that the read fails and the search does not skip the row.</summary>
         public string NullHeadlineMatch => Column?.NotBackfilled is not null ? $"{HeadlineSql} IS NULL OR " : "";

@@ -53,10 +53,10 @@ internal static class ViewsSeed
             INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, created_at_utc_ticks,
                 headline, summary, text_origin, source_id, vote_source, chamber, congress, session_number, roll_call_number, candidate_id,
                 candidate_update_utc_ticks, voted_on, voted_on_citation_extraction_id, voted_on_citation_start, voted_on_citation_length,
-                kind, member_list_id, issue_revision_id, issue_candidates_recorded, bill_type, bill_number)
+                kind, member_list_id, issue_revision_id, issue_candidates_recorded, bill_type, bill_number, question, result)
             VALUES ('{vote.RecordId}', 1, 'test', 'Person', 1, 'Headline {vote.Id}', 'Summary {vote.Id}', '{vote.TextOrigin}', 'src', '{source}',
                 '{vote.Chamber}', {vote.Congress}, {vote.Session}, {vote.RollCall}, 'cand', 1, '{vote.VotedOn}', 'ext', 0, 1,
-                '{vote.Kind}', '{list}', '{new string('a', 64)}', true, {bill});
+                '{vote.Kind}', '{list}', '{new string('a', 64)}', true, {bill}, 'On {vote.Id}', 'Passed {vote.Id}');
             INSERT INTO vote_revision_facts (record_id, revision_number, "position", fact_text, citation_extraction_id, citation_start, citation_length)
               VALUES ('{vote.RecordId}', 1, 0, 'Question: On {vote.Id}', 'ext', 0, 1), ('{vote.RecordId}', 1, 1, 'Result: Passed {vote.Id}', 'ext', 0, 1);
             {string.Join('\n', vote.Casts.Select((cast, index) => $"""

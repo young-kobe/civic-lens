@@ -7,6 +7,7 @@ using CivicLens.Infrastructure.Votes.Persistence;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Core.Votes;
+using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Review;
@@ -22,7 +23,7 @@ namespace CivicLens.Infrastructure.Relationships;
 internal static class RelationshipEvidenceReader
 {
     private const string ActionsOfOfficials = """
-        SELECT r.revision_json AS "Value" FROM action_drafts d
+        SELECT r.* FROM action_drafts d
         JOIN action_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
         WHERE @@scope
           AND d.official_ids && {0}
@@ -43,7 +44,7 @@ internal static class RelationshipEvidenceReader
         """;
 
     private const string ActionById = """
-        SELECT r.revision_json AS "Value" FROM action_drafts d
+        SELECT r.* FROM action_drafts d
         JOIN action_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
         WHERE @@scope AND d.record_id = {0}
         """;
@@ -107,13 +108,13 @@ internal static class RelationshipEvidenceReader
 
     public static async Task<ImmutableArray<ActionDraftRevision>> ReadActionsSponsoredByAsync(CollectionAttemptDbContext db,
         string[] officialIds, RelationshipRevisionScope scope, CancellationToken cancellationToken) =>
-        Parse<ActionDraftRevision>(await db.Database.SqlQueryRaw<string>(Scoped(ActionsOfOfficials, scope), (object)officialIds)
-            .ToArrayAsync(cancellationToken), "action revision");
+        await ActionRevisionRows.ReadDraftRevisionsAsync(db, db.Set<ActionRevisionRow>().FromSqlRaw(Scoped(ActionsOfOfficials, scope), (object)officialIds)
+            .AsNoTracking(), cancellationToken);
 
     public static async Task<ActionDraftRevision?> ReadActionAsync(CollectionAttemptDbContext db, string recordId,
         RelationshipRevisionScope scope, CancellationToken cancellationToken) =>
-        Parse<ActionDraftRevision>(await db.Database.SqlQueryRaw<string>(Scoped(ActionById, scope), recordId).ToArrayAsync(cancellationToken),
-            "action revision").SingleOrDefault();
+        (await ActionRevisionRows.ReadDraftRevisionsAsync(db, db.Set<ActionRevisionRow>().FromSqlRaw(Scoped(ActionById, scope), recordId).AsNoTracking(),
+            cancellationToken)).SingleOrDefault();
 
     public static async Task<ImmutableArray<VoteDraftRevision>> ReadVotesOnAsync(CollectionAttemptDbContext db,
         ImmutableArray<(int Congress, string BillType, int Number)> bills, RelationshipRevisionScope scope, CancellationToken cancellationToken) =>
@@ -131,6 +132,4 @@ internal static class RelationshipEvidenceReader
 
     private static string Scoped(string sql, RelationshipRevisionScope scope) =>
         sql.Replace("@@scope", scope == RelationshipRevisionScope.Approved ? "d.review_status = 'Approved'" : "TRUE", StringComparison.Ordinal);
-
-    private static ImmutableArray<T> Parse<T>(string[] json, string kind) => [.. json.Select(item => ReviewJson.Deserialize<T>(item, kind))];
 }

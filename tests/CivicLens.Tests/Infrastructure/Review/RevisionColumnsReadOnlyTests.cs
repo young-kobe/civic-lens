@@ -50,10 +50,10 @@ public sealed class RevisionColumnsReadOnlyTests(PostgresCollection postgres) : 
             INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, created_at_utc_ticks,
                 headline, summary, text_origin, source_id, vote_source, chamber, congress, session_number, roll_call_number, candidate_id,
                 candidate_update_utc_ticks, voted_on, voted_on_citation_extraction_id, voted_on_citation_start, voted_on_citation_length, kind,
-                member_list_id, issue_revision_id, issue_candidates_recorded)
+                member_list_id, issue_revision_id, issue_candidates_recorded, result)
             VALUES ('{{new string('a', 64)}}', 1, 'auth0|vote-author', 'Person', NULL, 100,
                 'Vote headline', 'Summary', 'Person', 'voteview-senate', 'Voteview', 'Senate', 119, 1, 7, 'c1',
-                1, DATE '2026-01-02', 'e1', 0, 5, 'Passage', '{{new string('1', 64)}}', '{{new string('2', 64)}}', true);
+                1, DATE '2026-01-02', 'e1', 0, 5, 'Passage', '{{new string('1', 64)}}', '{{new string('2', 64)}}', true, 'Passed');
             INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
             VALUES ('{{new string('b', 64)}}', 1, 'auth0|action-author', 'Person', '{"authorSubject":"auth0|action-author","title":"Kept"}', 100);
             {{script}}

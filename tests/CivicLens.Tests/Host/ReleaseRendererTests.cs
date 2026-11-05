@@ -1658,6 +1658,51 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task AnIssuePageShowsItsDefinitionAndBothListsAndAPolicyAreaPageShowsNoneSoOnlyIssuesExplainThemselves()
+    {
+        var release = ReleaseOf(1) with { Records = [.. ReleaseOf(1).Records.Select(entry => entry with { IssueIds = ["housing"], PolicyAreaIds = ["land-use"] })] };
+        var facets = ReleaseFacets.From(release, DefinedHousingCatalog(excludes: ["Zoning votes"]));
+        var renderer = new ReleaseRenderer(null, null);
+
+        var issue = new HtmlParser().ParseDocument(await renderer.RenderFacetPageAsync(facets.Issues.Single(), 1, CancellationToken.None));
+        var area = new HtmlParser().ParseDocument(await renderer.RenderFacetPageAsync(facets.PolicyAreas.Single(), 1, CancellationToken.None));
+
+        var panel = PanelOf(issue);
+        Assert.Equal("Rent and home prices.", panel.QuerySelector("p")!.TextContent);
+        Assert.Equal([PublishedFacetSummaryView.IncludesLabel, PublishedFacetSummaryView.ExcludesLabel], panel.QuerySelectorAll("h3").Select(label => label.TextContent));
+        Assert.Equal(panel.QuerySelectorAll("h3").Select(label => label.Id), panel.QuerySelectorAll("ul").Select(list => list.GetAttribute("aria-labelledby")));
+        Assert.Equal(["Rent caps", "Eviction rules"], panel.QuerySelectorAll("ul")[0].QuerySelectorAll("li").Select(item => item.TextContent));
+        Assert.Equal(["Zoning votes"], panel.QuerySelectorAll("ul")[1].QuerySelectorAll("li").Select(item => item.TextContent));
+        Assert.DoesNotContain(PublishedFacetSummaryView.DefinitionTitle, area.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnIssueWithNoExcludesShowsNoDoesNotIncludeListSoNoEmptyListMisleadsTheReader()
+    {
+        var release = ReleaseOf(1) with { Records = [.. ReleaseOf(1).Records.Select(entry => entry with { IssueIds = ["housing"] })] };
+        var facet = ReleaseFacets.From(release, DefinedHousingCatalog(excludes: null)).Issues.Single();
+
+        var panel = PanelOf(new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 1, CancellationToken.None)));
+
+        Assert.Equal([PublishedFacetSummaryView.IncludesLabel], panel.QuerySelectorAll("h3").Select(label => label.TextContent));
+        Assert.Single(panel.QuerySelectorAll("ul"));
+    }
+
+    [Fact]
+    public async Task TheDefinitionPanelShowsOnPageOneOfAnIssueAndNotOnPageTwoSoItDoesNotRepeatDownTheList()
+    {
+        var release = ReleaseOf(51) with { Records = [.. ReleaseOf(51).Records.Select(entry => entry with { IssueIds = ["housing"] })] };
+        var facet = ReleaseFacets.From(release, DefinedHousingCatalog(excludes: null)).Issues.Single();
+        var renderer = new ReleaseRenderer(null, null);
+
+        var first = new HtmlParser().ParseDocument(await renderer.RenderFacetPageAsync(facet, 1, CancellationToken.None));
+        var second = new HtmlParser().ParseDocument(await renderer.RenderFacetPageAsync(facet, 2, CancellationToken.None));
+
+        Assert.NotNull(first.QuerySelectorAll("main section h2").SingleOrDefault(heading => heading.TextContent == PublishedFacetSummaryView.DefinitionTitle));
+        Assert.DoesNotContain(PublishedFacetSummaryView.DefinitionTitle, second.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AllRecordsPageLinksEachKindToASearchAddressSoTheServiceAcceptsTheLink()
     {
         var release = ReleaseOf(3);
@@ -1995,7 +2040,7 @@ public sealed class ReleaseRendererTests
     public async Task HomeHoldsTheHeroWithItsHeadingAndLedeThenTheSectionsThatTheHeaderLinksToByAnchor()
     {
         var release = ReleaseOf(1);
-        var facets = new ReleaseFacets([new ReleaseFacet(FacetKind.Issue, "housing", "Housing costs", [], "bolt")], []);
+        var facets = new ReleaseFacets([new ReleaseFacet(FacetKind.Issue, "housing", "Housing costs", [], "bolt", null)], []);
         var highlights = HomeHighlights.From(release, [], 541);
 
         var html = await new ReleaseRenderer(null, null).RenderHomeAsync(release, null, facets, highlights, CancellationToken.None);
@@ -2961,6 +3006,15 @@ public sealed class ReleaseRendererTests
     private static HomeHighlights NoHighlights(PublicationRelease release) => HomeHighlights.From(release, [], 0);
 
     private static PublicationCatalog HousingCatalog { get; } = new(new Dictionary<string, string>(), IssuesNamed("housing", "Housing costs"), IssueIconConfiguration.None);
+
+    private static IElement PanelOf(IDocument page) =>
+        page.QuerySelectorAll("main section").Single(section => section.QuerySelector("h2")?.TextContent == PublishedFacetSummaryView.DefinitionTitle);
+
+    private static PublicationCatalog DefinedHousingCatalog(string[]? excludes) => new(new Dictionary<string, string>(), new IssueConfiguration
+    {
+        PolicyAreas = [new() { Id = "land-use", Name = "Land use" }],
+        Issues = [new() { Id = "housing", Name = "Housing costs", Definition = "Rent and home prices.", Includes = ["Rent caps", "Eviction rules"], Excludes = excludes, PolicyAreaIds = ["land-use"] }]
+    }, IssueIconConfiguration.None);
 
     private static IssueConfiguration IssuesNamed(string id, string name) => new()
     {

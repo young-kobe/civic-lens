@@ -266,15 +266,6 @@ public sealed class PostgresBriefRevisionColumnsTests(PostgresCollection postgre
         Assert.Equal(queriesForOne, counter.Count);
     }
 
-    [Fact]
-    public async Task ReadRevisionJsonRefusesTheBriefKindBecauseItIsReadFromItsColumns()
-    {
-        await using var db = await ContextFactory().CreateDbContextAsync();
-
-        await Assert.ThrowsAsync<ArgumentException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Review.CitedRevisions", "ReadRevisionJsonAsync",
-            db, PublishedRecordKind.Brief, new[] { new PublishedRevisionBinding(PublishedRecordKind.Brief, "any", 1) }, CancellationToken.None));
-    }
-
     [Theory]
     [InlineData("UPDATE brief_revisions SET fingerprint = 'not-hex'", "ck_brief_revisions_fingerprint")]
     [InlineData("UPDATE brief_revisions SET headline = ' '", "ck_brief_revisions_headline")]

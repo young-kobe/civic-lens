@@ -178,7 +178,7 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
         var candidateId = new string('b', 64);
         var revision = new VoteDraftRevision(recordId, 1, "auth0|editor", DateTimeOffset.UtcNow, "The House passed a measure",
             "The House voted on passage.", ReviewTextOrigin.Person, null, HouseVoteFixtures.SourceId, chamber == Chamber.Senate ? VoteSource.Voteview : VoteSource.CongressGov, chamber, 119, session, roll, billNumber is null ? null : "hr", billNumber, candidateId,
-            HouseVoteFixtures.Updated, [new(question, new SourceSpan(extraction.ExtractionId, 0, question.Length))],
+            HouseVoteFixtures.Updated, [new(question, new SourceSpan(extraction.ExtractionId, 0, question.Length)), new("Result: Passed", new SourceSpan(extraction.ExtractionId, 0, question.Length))],
             new DateOnly(2025, 4, 10), new SourceSpan(extraction.ExtractionId, 0, question.Length), kind,
             new SourceSpan(extraction.ExtractionId, 0, question.Length),
             [new("with-id-a", "A000001", "Yea", new SourceSpan(extraction.ExtractionId, question.Length + 1, member.Length))], [], [], new string('e', 64));

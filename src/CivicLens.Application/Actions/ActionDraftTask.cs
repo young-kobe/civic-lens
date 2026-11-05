@@ -11,6 +11,8 @@ public static class ActionDraftTask
     public const string SchemaVersion = "action-draft-schema-v2";
     public const string IssuePromptVersion = "action-issue-prompt-v3";
     public const string IssueSchemaVersion = "action-issue-schema-v1";
+    public const string TextPromptVersion = "action-text-prompt-v1";
+    public const string TextSchemaVersion = "action-text-schema-v1";
     public const string Model = "claude-haiku-5-5";
     public const int MaximumOutputTokens = 4_000;
     public const int MaximumIssueOutputTokens = 3_000;
@@ -18,7 +20,7 @@ public static class ActionDraftTask
     public const int MaximumValidationPasses = 2;
     public const int MaximumSummaryPages = 20;
 
-    public static readonly string[] CurrentPromptVersions = [PromptVersion, IssuePromptVersion];
+    public static readonly string[] CurrentPromptVersions = [PromptVersion, IssuePromptVersion, TextPromptVersion];
 
     public static readonly AnalysisTaskIdentity Identity = new(Task, TaskVersion, Model, PromptVersion, SchemaVersion);
 }

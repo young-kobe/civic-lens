@@ -198,7 +198,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
 
         var withOneUnreadable = await counted.ListAsync(null, 10, default);
         var queriesForOne = counter.QueryCount;
-        await seeder.ExecuteAsync("UPDATE action_revisions SET revision_json = '{broken' WHERE record_id = @id", ("id", ActionId));
+        await seeder.ExecuteAsync($"UPDATE action_revisions SET {LegacyActionRevisionInsert.NullColumns} WHERE record_id = @id", ("id", ActionId));
         await seeder.ExecuteAsync("UPDATE statement_revisions SET headline = NULL, summary = NULL WHERE candidate_id = @id", ("id", StatementId));
         counter.QueryCount = 0;
         var withThreeUnreadable = await counted.ListAsync(null, 10, default);
@@ -257,7 +257,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
         var approvedIds = await SeedApprovedRecordsOfSixKindsAsync();
         await seeder.ExecuteAsync("""
             UPDATE statement_revisions SET headline = 'Zebra statement';
-            UPDATE action_revisions SET revision_json = jsonb_set(revision_json::jsonb, '{headline}', '"Zebra action"')::text;
+            UPDATE action_revisions SET headline = 'Zebra action';
             UPDATE vote_revisions SET headline = 'Zebra vote';
             UPDATE brief_revisions SET headline = 'Zebra brief';
             UPDATE executive_action_revisions SET title = 'Zebra order';
@@ -282,8 +282,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
         await seeder.StatementAsync(RelationshipFixtures.Statement(dated: false), "Approved");
         var action = RelationshipFixtures.Action(5) with { RecordId = new('d', 64), CandidateId = new('d', 64) };
         await seeder.ActionAsync(action, "Approved", revisedAtTicks: 900);
-        await seeder.ExecuteAsync("UPDATE action_revisions SET revision_json = replace(revision_json, @old, 'Warren on rent') WHERE record_id = @id",
-            ("old", action.Headline), ("id", action.RecordId));
+        await seeder.ExecuteAsync("UPDATE action_revisions SET headline = 'Warren on rent' WHERE record_id = @id", ("id", action.RecordId));
 
         var first = await store.SearchApprovedAsync("rent", null, 1, default);
         var second = await store.SearchApprovedAsync("rent", PageCursor.Parse(first.OlderCursor), 1, default);

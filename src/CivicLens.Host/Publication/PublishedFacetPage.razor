@@ -5,6 +5,26 @@
     <PageHeader Title="@Facet.Name" Lede="@($"{KindLabel}. {Facet.Records.Length} published records, newest event date first. A record with no event date uses its first publication day.")" Portrait="IssueMark" />
     @if (Page == 1)
     {
+        @if (Facet.Definition is not null)
+        {
+            <Panel Title="@PublishedFacetSummaryView.DefinitionTitle" Padded="true">
+                <p>@Facet.Definition.Text</p>
+                @if (Facet.Definition.Includes.Length > 0)
+                {
+                    <section class="member-group">
+                        <h3 id="includes-title">@PublishedFacetSummaryView.IncludesLabel</h3>
+                        <ul aria-labelledby="includes-title">@foreach (var term in Facet.Definition.Includes) {<li>@term</li>}</ul>
+                    </section>
+                }
+                @if (Facet.Definition.Excludes.Length > 0)
+                {
+                    <section class="member-group">
+                        <h3 id="excludes-title">@PublishedFacetSummaryView.ExcludesLabel</h3>
+                        <ul aria-labelledby="excludes-title">@foreach (var term in Facet.Definition.Excludes) {<li>@term</li>}</ul>
+                    </section>
+                }
+            </Panel>
+        }
         <Panel Title="@PublishedFacetSummaryView.Title(Facet.Kind)" Padded="true">
             <p class="muted small">@PublishedFacetSummaryView.Lede(Facet.Kind)</p>
             @if (IsIssue)
