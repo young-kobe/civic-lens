@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
@@ -34,12 +33,14 @@ internal static class StatementDraftRows
     /// <summary>The statuses that no person decision has set. A rejection, a request for changes, and a withdrawal are decisions of a person.</summary>
     public static readonly ReviewStatus[] UntouchedStatuses = [ReviewStatus.AwaitingReview, ReviewStatus.Approved];
 
-    /// <summary>The approval decisions of a person. A code approval is not one, so code may replace a draft that code approved.</summary>
-    public static readonly Expression<Func<StatementReviewDecisionRow, bool>> IsPersonApproval = decision =>
-        decision.Kind == ReviewDecisionKind.Approve && decision.ActorSubject != ReviewAuthor.CodeSubject;
+    /// <summary>The approval decisions of a person. <see cref="PersonFinalDecisions"/> owns the author rule, so a code approval is not one and
+    /// code may replace a draft that code approved. The status guard already keeps out a person rejection and a person request for changes.</summary>
+    public static IQueryable<StatementReviewDecisionRow> PersonApprovals(CollectionAttemptDbContext db) =>
+        db.Set<StatementReviewDecisionRow>().Where(PersonFinalDecisions.Match<StatementReviewDecisionRow>())
+            .Where(decision => decision.Kind == ReviewDecisionKind.Approve);
 
     private static Task<bool> HasPersonApprovalAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken) =>
-        db.Set<StatementReviewDecisionRow>().Where(decision => decision.CandidateId == candidateId).AnyAsync(IsPersonApproval, cancellationToken);
+        PersonApprovals(db).AnyAsync(decision => decision.CandidateId == candidateId, cancellationToken);
 
     private static bool FollowsUntouchedDraft(StatementDraftRow? draft, StatementDraftRevision revision) =>
         draft is null ? revision.RevisionNumber == 1

@@ -81,12 +81,12 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
         CancellationToken cancellationToken)
     {
         var untouched = StatementDraftRows.UntouchedStatuses;
+        var personApprovals = StatementDraftRows.PersonApprovals(db).AsNoTracking();
         var modelDrafts = await (from draft in db.Set<StatementDraftRow>().AsNoTracking()
                                  join revision in db.Set<StatementRevisionRow>().AsNoTracking()
                                      on new { draft.CandidateId, Number = draft.CurrentRevisionNumber } equals new { revision.CandidateId, Number = revision.RevisionNumber }
                                  where candidateIds.Contains(draft.CandidateId) && untouched.Contains(draft.ReviewStatus) &&
-                                     !db.Set<StatementReviewDecisionRow>().Where(decision => decision.CandidateId == draft.CandidateId)
-                                         .Any(StatementDraftRows.IsPersonApproval) &&
+                                     !personApprovals.Any(decision => decision.CandidateId == draft.CandidateId) &&
                                      revision.AuthorKind == ReviewAuthorKind.Analysis && revision.RunId != null
                                  select new { draft.CandidateId, RunId = revision.RunId! }).ToArrayAsync(cancellationToken);
         var staleRunIds = await StaleAnalysisRuns.FindStaleRunIdsAsync<StatementAnalysisRunRow>(db,
