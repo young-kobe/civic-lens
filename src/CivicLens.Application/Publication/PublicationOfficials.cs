@@ -49,7 +49,7 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
     }
 
     private static Dictionary<string, MemberFacts> MemberFactsOf(IReadOnlyList<RosterMember> rosterMembers) =>
-        rosterMembers.ToDictionary(member => member.BioguideId, member => new MemberFacts([.. member.Terms.Select(ToTerm)], member.PublishableWebsite), StringComparer.Ordinal);
+        rosterMembers.ToDictionary(member => member.BioguideId, member => new MemberFacts([.. member.Terms.Select(ToTerm)], member), StringComparer.Ordinal);
 
     private async Task<Dictionary<string, PublishedOfficeTerm[]>> ReadExecutiveTermsAsync(bool needed, CancellationToken cancellationToken)
     {
@@ -129,10 +129,10 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
         person.BioguideId is not null && memberFacts.TryGetValue(person.BioguideId, out var facts) ? facts.Terms : NoTerms;
 
     private static string? WebsiteOf(PersonConfiguration person, Dictionary<string, MemberFacts> memberFacts, PersonSetting setting) =>
-        person.BioguideId is not null && memberFacts.TryGetValue(person.BioguideId, out var facts) && facts.Website is { } website ? website : setting.Website;
+        person.BioguideId is not null && memberFacts.TryGetValue(person.BioguideId, out var facts) ? facts.Member.WebsiteOver(setting.Website) : setting.Website;
 
     private static PersonSetting SettingOf(IReadOnlyDictionary<string, PersonSetting> settings, string personId) =>
         settings.GetValueOrDefault(personId, PersonSetting.None);
 
-    private sealed record MemberFacts(PublishedOfficeTerm[] Terms, string? Website);
+    private sealed record MemberFacts(PublishedOfficeTerm[] Terms, RosterMember Member);
 }

@@ -121,6 +121,43 @@ public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Fact]
+    public async Task AWebsiteForAFormerMemberWhoIsNotInTheLatestRosterIsSavedWithNoWarning()
+    {
+        await SeedRosterAsync(member => member);
+
+        var result = await SetWebsiteAsync("former-member");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("", result.Error);
+        Assert.Single(await ReadSettingsAsync());
+    }
+
+    [Fact]
+    public async Task AWebsiteThatEqualsTheRosterUrlIsSavedWithNoWarningBecauseTheSavedWebsiteIsTheOneThatPublishes()
+    {
+        await SeedRosterAsync(member => member);
+
+        var result = await SetWebsiteAsync("maria-cantwell", "https://www.cantwell.senate.gov");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("", result.Error);
+        Assert.Single(await ReadSettingsAsync());
+    }
+
+    [Fact]
+    public async Task APhotoCommandDoesNotReadTheCollectionConfigurationSoABadPathDoesNotFailIt()
+    {
+        await ImportAsync();
+
+        var result = await HostProcess.RunWithEnvironmentAsync(connectionString, null,
+            new Dictionary<string, string>(Owner) { ["CIVIC_LENS_COLLECTION_CONFIG"] = Path.Combine(Path.GetTempPath(), "missing-collection.json") },
+            "people", "photo", "withhold", "donald-trump");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Single(await ReadSettingsAsync());
+    }
+
+    [Fact]
     public async Task AWebsiteWithNoCollectionConfigurationIsSavedWithNoWarning()
     {
         await SeedRosterAsync(member => member);
@@ -136,7 +173,8 @@ public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLife
     {
         File.WriteAllText(configurationPath, JsonSerializer.Serialize(RosterFixtures.Configuration(
             RosterFixtures.Person("maria-cantwell", "Maria Cantwell", "C000127"),
-            RosterFixtures.Person("no-bioguide", "No Bioguide", null)), ConfigurationJson.Options));
+            RosterFixtures.Person("no-bioguide", "No Bioguide", null),
+            RosterFixtures.Person("former-member", "Former Member", "F000001")), ConfigurationJson.Options));
         var imported = await HostProcess.RunWithEnvironmentAsync(connectionString, null, Owner, "people", "import", configurationPath);
         Assert.Equal(0, imported.ExitCode);
         var attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
@@ -145,10 +183,10 @@ public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLife
             .AdmitAsync(attemptId, [.. RosterFixtures.Members().Select(change)], null, default);
     }
 
-    private Task<(int ExitCode, string Output, string Error)> SetWebsiteAsync(string personId) =>
+    private Task<(int ExitCode, string Output, string Error)> SetWebsiteAsync(string personId, string url = "https://example.gov/") =>
         HostProcess.RunWithEnvironmentAsync(connectionString, null,
             new Dictionary<string, string>(Owner) { ["CIVIC_LENS_COLLECTION_CONFIG"] = configurationPath },
-            "people", "website", "set", personId, "https://example.gov/");
+            "people", "website", "set", personId, url);
 
     [Theory]
     [InlineData("people", "photo", "withhold", "no-such-person")]

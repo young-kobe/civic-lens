@@ -10,12 +10,12 @@ public sealed class MemberRoster(CollectionConfiguration configuration, IMemberR
             ? await members.ReadLatestAsync(source.Id, cancellationToken)
             : [];
 
-    /// <summary>Returns the roster website that publishes for a configured person, or null when the person is not a member or the roster URL is not valid.</summary>
-    public async Task<string?> PublishedWebsiteOfAsync(string personId, CancellationToken cancellationToken)
+    /// <summary>Returns the website that publishes for a configured person. A person who is not in the latest roster keeps the saved website.</summary>
+    public async Task<string?> PublishedWebsiteOfAsync(string personId, string? savedWebsite, CancellationToken cancellationToken)
     {
         var bioguideId = configuration.People.FirstOrDefault(person => person.Id == personId)?.BioguideId;
-        if (bioguideId is null) return null;
+        if (bioguideId is null) return savedWebsite;
         var roster = await ReadAsync(cancellationToken);
-        return roster.FirstOrDefault(member => member.BioguideId == bioguideId)?.PublishableWebsite;
+        return roster.FirstOrDefault(member => member.BioguideId == bioguideId)?.WebsiteOver(savedWebsite) ?? savedWebsite;
     }
 }

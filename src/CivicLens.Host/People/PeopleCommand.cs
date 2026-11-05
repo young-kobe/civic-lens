@@ -51,8 +51,10 @@ internal static class PeopleCommand
         string id, string url, string note, CancellationToken cancellationToken)
     {
         var revision = await settings.SetWebsiteAsync(owner, id, url, note, cancellationToken);
-        if (roster is not null && await roster.PublishedWebsiteOfAsync(id, cancellationToken) is { } rosterUrl)
-            Console.Error.WriteLine($"Warning: {id} has a roster website, {rosterUrl}. The roster website publishes, not this one.");
+        if (roster is null) return revision;
+        var published = await roster.PublishedWebsiteOfAsync(id, url, cancellationToken);
+        if (published != url)
+            Console.Error.WriteLine($"Warning: {id} has a roster website, {published}. The roster website publishes, not this one.");
         return revision;
     }
 

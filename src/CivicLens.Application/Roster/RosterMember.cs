@@ -5,6 +5,6 @@ namespace CivicLens.Application.Roster;
 public sealed record RosterMember(string BioguideId, string FullName, string? Office, string? Phone,
     string? Url, RosterTerm[] Terms)
 {
-    /// <summary>The roster URL when it follows the website rule, else null. A valid roster URL wins over the website setting of the person.</summary>
-    public string? PublishableWebsite => PublishedWebsite.IsValid(Url) ? Url : null;
+    /// <summary>The one owner of the website precedence. A roster URL that follows the website rule wins over the saved website. Else the saved website publishes.</summary>
+    public string? WebsiteOver(string? savedWebsite) => PublishedWebsite.IsValid(Url) ? Url : savedWebsite;
 }
