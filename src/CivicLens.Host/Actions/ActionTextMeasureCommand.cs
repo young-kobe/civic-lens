@@ -1,7 +1,6 @@
 using System.Globalization;
-using System.Text.Json;
 using CivicLens.Application.Actions;
-using CivicLens.Application.Collection.Bills;
+using CivicLens.Host.Collection;
 
 namespace CivicLens.Host.Actions;
 
@@ -19,7 +18,7 @@ public static class ActionTextMeasureCommand
         OwnerCommand.RunAsync(async () =>
         {
             var (tokenCap, billsFile) = ReadArguments(args);
-            var bills = ReadBills(billsFile);
+            var bills = BillIdsFile.Read(billsFile);
             await createMeasure().RunAsync(bills, tokenCap, async report =>
             {
                 var reportFile = await WriteReportAsync(report, artifactDirectory, clock.GetUtcNow());
@@ -33,17 +32,6 @@ public static class ActionTextMeasureCommand
         long.TryParse(cap, NumberStyles.None, CultureInfo.InvariantCulture, out var tokenCap) && tokenCap > 0
             ? (tokenCap, billsFile)
             : throw new ArgumentException(Usage);
-
-    private static List<CongressBillListItem> ReadBills(string billsFile)
-    {
-        var ids = JsonSerializer.Deserialize<string[]>(File.ReadAllText(billsFile)) ?? throw new ArgumentException(Usage);
-        if (ids.Length == 0 || ids.Distinct(StringComparer.Ordinal).Count() != ids.Length)
-            throw new ArgumentException("The bills file must list each bill once, and it must list at least one bill.");
-        return [.. ids.Select(ReadBill)];
-    }
-
-    private static CongressBillListItem ReadBill(string id) =>
-        ActionTextMeasure.TryParseId(id) ?? throw new ArgumentException($"The bill ID {id} must look like 119-hr-1943.");
 
     private static async Task<string> WriteReportAsync(ActionTextMeasureReport report, string artifactDirectory, DateTimeOffset now)
     {

@@ -29,6 +29,9 @@ internal sealed class PublishedEntryRowConfiguration : IEntityTypeConfiguration<
             table.HasCheckConstraint("ck_published_entries_source_host", "source_host IS NULL OR length(btrim(source_host)) > 0");
             table.HasCheckConstraint("ck_published_entries_bill_title",
                 $"(kind = '{Name(PublishedRecordKind.Action)}') = (bill_title IS NOT NULL) AND (bill_title IS NULL OR length(btrim(bill_title)) > 0)");
+            table.HasCheckConstraint("ck_published_entries_bill_line",
+                $"bill_line IS NULL OR (kind = '{Name(PublishedRecordKind.Action)}' AND length(btrim(bill_line)) >= 1 AND " +
+                $"length(bill_line) <= {PublishedRecordEntry.MaximumBillLineLength})");
             table.HasCheckConstraint("ck_published_entries_document_type",
                 $"(kind = '{Name(PublishedRecordKind.ExecutiveAction)}') = (document_type IS NOT NULL) AND " +
                 $"(document_type IS NULL OR {EnumChecks.InList("document_type", Enum.GetNames<PublishedExecutiveActionKind>())})");
@@ -55,6 +58,7 @@ internal sealed class PublishedEntryRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.TargetKind).HasColumnName("target_kind").HasMaxLength(32);
         builder.Property(row => row.TargetRecordId).HasColumnName("target_record_id").HasMaxLength(64);
         builder.Property(row => row.DocumentType).HasColumnName("document_type").HasConversion<string>().HasMaxLength(32);
+        builder.Property(row => row.BillLine).HasColumnName("bill_line");
 
         ConfigureRevisionColumns(builder);
         builder.HasOne<PublishedRecordRow>().WithMany().HasForeignKey(row => new { row.Kind, row.RecordId }).OnDelete(DeleteBehavior.Restrict);

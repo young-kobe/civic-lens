@@ -28,6 +28,9 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
         return await inner.AddEntriesAsync(entries, cancellationToken);
     }
 
+    public Task<int> FillBillLinesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
+        inner.FillBillLinesAsync(entries, cancellationToken);
+
     public Task<StoredRelease> ReadReleaseAsync(int releaseNumber, CancellationToken cancellationToken) => inner.ReadReleaseAsync(releaseNumber, cancellationToken);
 
     public Task<PublicationState> GetStateAsync(CancellationToken cancellationToken) => inner.GetStateAsync(cancellationToken);
