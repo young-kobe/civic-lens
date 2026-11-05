@@ -219,7 +219,7 @@ internal static class PublishedOfficialView
 
     public const string NoStatementDate = "No date";
 
-    public static string TheirVote(LinkedPair pair) => pair.TargetKind == PublishedRecordKind.Vote ? pair.Cast ?? NoVoteOnRecord : NotAVote;
+    public static string TheirVote(LinkedPair pair) => pair.TargetKind == PublishedRecordKind.Vote ? pair.Cast is { } cast ? PlainVoteWords.Cast(cast) : NoVoteOnRecord : NotAVote;
 
     public static string StatementDay(LinkedPair pair) => pair.StatementDay is { } day ? Moment.Day(day) : NoStatementDate;
 

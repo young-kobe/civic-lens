@@ -217,10 +217,10 @@ public sealed class PublishedHomePageTests
 
         var row = main.QuerySelector("tbody tr")!;
         Assert.Equal([badge], row.QuerySelectorAll(".badge").Select(item => item.TextContent));
-        Assert.Equal("Vote, Yea 216, Nay 214", row.QuerySelector(".cell-note")!.TextContent);
+        Assert.Equal("Vote, Yes 216, No 214", row.QuerySelector(".cell-note")!.TextContent);
         Assert.DoesNotContain(meaning, row.TextContent, StringComparison.Ordinal);
         Assert.Equal(1, main.TextContent.Split(meaning).Length - 1);
-        Assert.Contains("Yea and Nay counts are casts of all members of the chamber who voted Yea or Nay.", main.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Yes and No counts are casts of all members of the chamber who voted Yes or No.", main.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

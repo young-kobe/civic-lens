@@ -69,5 +69,5 @@
 @code {
 
     private static string SubstantiveKinds => string.Join(", ", Enum.GetValues<PublishedVoteKind>()
-        .Where(kind => kind.IsSubstantive()).Select(PublishedRecordLabels.VoteKind));
+        .Where(kind => kind.IsSubstantive()).Select(kind => $"\"{PlainVoteWords.Kind(kind)}\""));
 }

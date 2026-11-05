@@ -34,13 +34,13 @@ internal static class PublishedBoardView
 
     public static string VoteGap(ClosestVote closest) => closest.Gap switch
     {
-        0 => $"Roll call on {Moment.Day(ReleaseRecordOrder.Day(closest.Entry))}. The Yea and Nay counts are equal.",
-        var gap => $"Roll call on {Moment.Day(ReleaseRecordOrder.Day(closest.Entry))}. The Yea and Nay counts differ by {gap} {PublishedOfficialView.Noun(gap, "vote")}."
+        0 => $"Roll call on {Moment.Day(ReleaseRecordOrder.Day(closest.Entry))}. The Yes and No counts are equal.",
+        var gap => $"Roll call on {Moment.Day(ReleaseRecordOrder.Day(closest.Entry))}. The Yes and No counts differ by {gap} {PublishedOfficialView.Noun(gap, "vote")}."
     };
 
     public static string VotePool(ClosestVote closest) => closest.VotesInWindow == 1
         ? "This is the only substantive roll call vote with counts in these dates."
-        : $"The pick is the closest of {closest.VotesInWindow} substantive roll call votes with counts in these dates. The gap is the difference between the Yea count and the Nay count.";
+        : $"The pick is the closest of {closest.VotesInWindow} substantive roll call votes with counts in these dates. The gap is the difference between the Yes count and the No count.";
 
     public static string PartyOf(OfficialBoard board) => PublishedOfficialView.PartyOf(board.Chamber, board.Party);
 
