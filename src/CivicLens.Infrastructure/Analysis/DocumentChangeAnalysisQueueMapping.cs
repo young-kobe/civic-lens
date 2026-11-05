@@ -3,6 +3,8 @@ using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis.Persistence;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Infrastructure.Review.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Analysis;
 
@@ -27,7 +29,9 @@ internal sealed class DocumentChangeAnalysisQueueMapping : IAnalysisQueueMapping
 
     public AnalysisRun WrapInterrupted(AnalysisRun run) => run;
 
-    public void AddRun(CollectionAttemptDbContext db, DocumentChangeAnalysisRow row, AnalysisRun run) => db.Add(ToRow(run, row.DraftId));
+    /// <summary>An analysis run links to the revision that this settlement added. A run that added none links to no revision.</summary>
+    public void AddRun(CollectionAttemptDbContext db, DocumentChangeAnalysisRow row, AnalysisRun run) =>
+        db.Add(ToRow(run, db.ChangeTracker.Entries<DocumentChangeRevisionRow>().SingleOrDefault(entry => entry.State == EntityState.Added)?.Entity));
 
     public async Task<AnalysisSettlement<AnalysisRun>> PrepareSettlementAsync(CollectionAttemptDbContext db,
         DocumentChangeAnalysisRow row, AnalysisSettlement<AnalysisRun> settlement, CancellationToken cancellationToken)
@@ -35,20 +39,30 @@ internal sealed class DocumentChangeAnalysisQueueMapping : IAnalysisQueueMapping
         if (settlement.Checkpoint is not DocumentChangeDraftCheckpoint { Revision: { } revision } checkpoint) return settlement;
         if (settlement.Run?.Outcome != AnalysisRunOutcome.Drafted)
             throw new ArgumentException("A draft needs its drafted run.", nameof(settlement));
-        if (await PostgresDocumentChangeReviewStore.TryAddAnalysisDraftAsync(db, revision, cancellationToken))
+        var refusal = await PostgresDocumentChangeReviewStore.AppendAnalysisRevisionAsync(db, revision, cancellationToken);
+        if (refusal is null)
         {
             row.DraftId = revision.DraftId;
             return settlement;
         }
-        return new(checkpoint with { Revision = null, ErrorCode = DocumentChangeDraftErrorCodes.DraftDiscarded },
-            settlement.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded });
+        var discarded = settlement.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded };
+        if (refusal == DocumentChangeDraftErrorCodes.DraftDiscarded)
+            return new(checkpoint with { Revision = null, ErrorCode = refusal }, discarded);
+        row.RetryOfRunId = null;
+        return new(checkpoint with
+        {
+            Status = AnalysisState.RetryWaiting,
+            ErrorCode = refusal,
+            RetryDelay = AnalysisPolicy.RetryDelay(row.Attempts),
+            Revision = null
+        }, discarded);
     }
 
-    public static DocumentChangeAnalysisRunRow ToRow(AnalysisRun run, string? draftId)
+    private static DocumentChangeAnalysisRunRow ToRow(AnalysisRun run, DocumentChangeRevisionRow? revision)
     {
         var row = AnalysisRunRows.Create<DocumentChangeAnalysisRunRow>(run);
-        row.DraftId = draftId;
-        row.RevisionNumber = draftId is null ? null : 1;
+        row.DraftId = revision?.DraftId;
+        row.RevisionNumber = revision?.RevisionNumber;
         return row;
     }
 }

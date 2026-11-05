@@ -11,7 +11,7 @@ namespace CivicLens.Application.Analysis;
 public static class DocumentChangeDraftResolver
 {
     public static DocumentChangeDraftResolution Resolve(string outputJson, DocumentChangeDraftEvidence evidence, DocumentChangeDraftCatalog catalog,
-        string draftId, DateTimeOffset createdAtUtc)
+        string draftId, int revisionNumber, DateTimeOffset createdAtUtc)
     {
         ArgumentNullException.ThrowIfNull(evidence);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -30,7 +30,7 @@ public static class DocumentChangeDraftResolver
         var citations = ResolveCitations(output.Citations, evidence, errors, citationErrors);
         var changeDate = ResolveChangeDate(output.ChangeDate, output.Citations, citations, errors, citationErrors);
         if (errors.Count > 0 || citations.IsDefault) return Rejected(errors, citationErrors.Count > 0);
-        var revision = new DocumentChangeDraftRevision(draftId, 1, evidence.Comparison.Comparison.ComparisonId,
+        var revision = new DocumentChangeDraftRevision(draftId, revisionNumber, evidence.Comparison.Comparison.ComparisonId,
             ReviewAuthor.AnalysisSubject, createdAtUtc, output.Headline, output.Summary, Normalize(output.Significance),
             output.Limits, output.Institution, changeDate?.Date, changeDate?.Evidence, Ids(output.OfficialIds), Ids(output.IssueIds), citations);
         return new(revision, [], false);

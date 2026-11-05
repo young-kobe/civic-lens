@@ -1372,7 +1372,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("document_change_analysis_runs", null, t =>
                         {
-                            t.HasCheckConstraint("ck_document_change_analysis_runs_draft", "(draft_id IS NULL AND revision_number IS NULL) OR (draft_id IS NOT NULL AND revision_number = 1)");
+                            t.HasCheckConstraint("ck_document_change_analysis_runs_draft", "(draft_id IS NULL AND revision_number IS NULL) OR (draft_id IS NOT NULL AND revision_number >= 1)");
 
                             t.HasCheckConstraint("ck_document_change_analysis_runs_finished_at_utc_ticks", "finished_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
