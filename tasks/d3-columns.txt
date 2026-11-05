@@ -7,6 +7,7 @@ Scope:
 - Do not change the published contract (Publication.Contracts) or the release files. The facts rows stay.
 - Tests: the row builder writes the columns; the migration fill gives the same values as the old prefix match (seed facts, run Up, compare); the views read the columns (a test that fails if a view goes back to the facts).
 Update docs/architecture/votes.md and the public API doc that owns the views (find it in docs/architecture.md lookup table), docs/roadmap.md if D3 or the prefix match is listed, and regenerate the schema docs.
+ANSWER TO THE FIRST RUN'S QUESTION (owner side, checked on production 2026-11-05): all 1,883 production vote revisions have their columns written (member_list_id and kind are never null), so there is no legacy row, and every written revision has its "Result: " fact. Keep result NOT NULL. Do not wait for vote-revision-json-drop and do not stack on it; branch from origin/main. Follow the guard of migration DropVoteRevisionJson on branch origin/vote-revision-json-drop (git show origin/vote-revision-json-drop -- one file at a time): before the fill, the migration stops with a clear error that names one revision when any vote revision has no "Result: " fact, or more than one, and changes nothing. A test proves the guard. Dev databases with old rows get reset, so no other handling.
 Branch name: vote-question-result-columns.
 Setup, each step its own Bash call. Do not assign shell variables from command output.
 1. git fetch origin
