@@ -11,10 +11,16 @@ public sealed class PlainVoteWordsTests
     [InlineData("No", "No")]
     [InlineData("Present", "Present")]
     [InlineData("Not Voting", "Not voting")]
-    [InlineData("Not voting", "Not voting")]
     [InlineData("Sen. Smith", "Sen. Smith")]
     public void ACastShowsThePlainWordFirstWithTheSourceWordInBracketsAndNoBracketsWhenBothWordsMatchIgnoringCase(string cast, string expected) =>
         Assert.Equal(expected, PlainVoteWords.Cast(cast));
+
+    [Fact]
+    public void TheSourceCastNotVotingHasThePlainWordAndAnyOtherSpellingHasNone()
+    {
+        Assert.Equal(PlainVoteWords.NotVoting, PlainVoteWords.CastWord("Not Voting"));
+        Assert.Null(PlainVoteWords.CastWord("Not voting"));
+    }
 
     [Fact]
     public void EachVoteKindHasOneDistinctPlainNameSoNoNameReadsLikeAnother()
@@ -56,6 +62,8 @@ public sealed class PlainVoteWordsTests
     [InlineData("Nomination Not Confirmed", "Not confirmed (Nomination Not Confirmed)")]
     [InlineData("Not Agreed to", "Failed (Not Agreed to)")]
     [InlineData("Rejected", "Failed (Rejected)")]
+    [InlineData("Amendment Rejected", "Failed (Amendment Rejected)")]
+    [InlineData("Cloture Motion Rejected", "Failed (Cloture Motion Rejected)")]
     [InlineData("  Passed ", "Passed")]
     public void AResultShowsThePlainWordsFirstAndTheSourceWordsInBrackets(string source, string expected) =>
         Assert.Equal(expected, PlainVoteWords.Result(source));
