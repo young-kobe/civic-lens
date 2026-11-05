@@ -162,8 +162,8 @@ public sealed partial class PostgresHouseVoteTests
             INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version,
                 review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)
             VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 'House', 119, 1, 100, 1, 0, 'AwaitingReview', 0, 0, '{candidate}');
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-            VALUES ('{recordId}', 1, 'auth0|editor', 'Person', NULL, 'x', 0)
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks, result)
+            VALUES ('{recordId}', 1, 'auth0|editor', 'Person', NULL, 'x', 0, '')
             """);
 
         Assert.True(await store.CheckpointAsync(VoteDraftCheckpoint.From(claim, revision), DraftedRun(runId, candidate), default));
@@ -218,12 +218,12 @@ public sealed partial class PostgresHouseVoteTests
             """);
 
         var withoutRun = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"""
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-            VALUES ('{recordId}', 1, 'civic-lens:analysis', 'Analysis', NULL, 'x', 0)
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks, result)
+            VALUES ('{recordId}', 1, 'civic-lens:analysis', 'Analysis', NULL, 'x', 0, '')
             """));
         var personWithRun = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"""
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-            VALUES ('{recordId}', 1, 'auth0|editor', 'Person', '{new string('1', 32)}', 'x', 0)
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks, result)
+            VALUES ('{recordId}', 1, 'auth0|editor', 'Person', '{new string('1', 32)}', 'x', 0, '')
             """));
 
         Assert.Equal([PostgresErrorCodes.CheckViolation, PostgresErrorCodes.CheckViolation], [withoutRun.SqlState, personWithRun.SqlState]);

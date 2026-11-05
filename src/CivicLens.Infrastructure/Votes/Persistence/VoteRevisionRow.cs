@@ -5,7 +5,7 @@ using CivicLens.Infrastructure.Review.Persistence;
 namespace CivicLens.Infrastructure.Votes.Persistence;
 
 /// <summary>The columns after <see cref="CreatedAtUtcTicks"/> copy <see cref="RevisionJson"/>. They stay null on a row that
-/// older code wrote.</summary>
+/// older code wrote, except <see cref="Result"/>, which every row needs.</summary>
 internal sealed class VoteRevisionRow : IReviewRevisionRow, IReviewTextRow
 {
     public string RecordId { get; set; } = string.Empty;
@@ -44,6 +44,8 @@ internal sealed class VoteRevisionRow : IReviewRevisionRow, IReviewTextRow
     public string? IssueRevisionId { get; set; }
     public string? SubjectsHash { get; set; }
     public bool? IssueCandidatesRecorded { get; set; }
+    public string? Question { get; set; }
+    public string Result { get; set; } = string.Empty;
     public List<VoteRevisionFactRow> Facts { get; set; } = [];
     public List<VoteRevisionIssueRow> Issues { get; set; } = [];
 }

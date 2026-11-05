@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CivicLens.Infrastructure.Collection.Migrations
 {
     [DbContext(typeof(CollectionAttemptDbContext))]
-    [Migration("20261105142023_PublishedEntryBillLine")]
-    partial class PublishedEntryBillLine
+    [Migration("20261105005544_VoteQuestionResultColumns")]
+    partial class VoteQuestionResultColumns
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -4520,11 +4520,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("action_revision_number");
 
-                    b.Property<string>("BillLine")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("bill_line");
-
                     b.Property<string>("BillTitle")
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)")
@@ -4652,8 +4647,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("published_entries", null, t =>
                         {
-                            t.HasCheckConstraint("ck_published_entries_bill_line", "bill_line IS NULL OR (kind = 'action' AND length(btrim(bill_line)) > 0 AND length(bill_line) <= 200)");
-
                             t.HasCheckConstraint("ck_published_entries_bill_title", "(kind = 'action') = (bill_title IS NOT NULL) AND (bill_title IS NULL OR length(btrim(bill_title)) > 0)");
 
                             t.HasCheckConstraint("ck_published_entries_document_type", "(kind = 'executiveAction') = (document_type IS NOT NULL) AND (document_type IS NULL OR document_type IN ('ExecutiveOrder', 'Proclamation', 'Notice', 'Memorandum'))");
@@ -7904,6 +7897,17 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("member_list_id");
+
+                    b.Property<string>("Question")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("question");
+
+                    b.Property<string>("Result")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("result");
 
                     b.Property<string>("RevisionJson")
                         .IsRequired()

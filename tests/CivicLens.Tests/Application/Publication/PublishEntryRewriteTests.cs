@@ -81,18 +81,31 @@ public sealed class PublishEntryRewriteTests
     }
 
     [Fact]
-    public async Task TheRewriteOptionLeavesTheBillLineOfACarriedEntryAsItWasBecauseTheEntryRowsHoldTheLine()
+    public async Task TheRewriteOptionFillsTheBillLineOfAnOldActionEntryBecauseTheRecordFileOwnsTheLine()
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('b', summaryText: "This bill funds rent aid.");
         var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
-        Assert.Equal("This bill funds rent aid.", Assert.Single(Manifest(scenario, first).Records).BillLine);
         AsReleaseFromBeforeTheNewFields(scenario, first);
+        Assert.Null(Assert.Single(Manifest(scenario, first).Records).BillLine);
 
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true });
 
-        Assert.Null(Assert.Single(Manifest(scenario, second).Records).BillLine);
+        Assert.Equal("This bill funds rent aid.", Assert.Single(Manifest(scenario, second).Records).BillLine);
+    }
+
+    [Fact]
+    public async Task TheRewriteOptionKeepsTheSameBillLineOfACarriedEntryThatHoldsOne()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('b', summaryText: "This bill funds rent aid.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true });
+
+        Assert.Equal("This bill funds rent aid.", Assert.Single(Manifest(scenario, second).Records).BillLine);
     }
 
     [Fact]

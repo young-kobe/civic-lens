@@ -75,6 +75,18 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         Assert.Equal(["4"], await ReadAsync("SELECT count(*) FROM published_entry_officials"));
     }
 
+    [Fact]
+    public async Task APublishOfAnOlderActionRevisionAgainWithABillLineSucceedsBecauseTheRowHoldsNoLine()
+    {
+        await SeedActionAsync(A);
+        await CommitAsync(1, null, PublishedEntryFixtures.Action(A, First));
+
+        await CommitAsync(2, 1, PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds rent aid." });
+
+        Assert.Equal(["1", "2"], await ReadAsync("SELECT release_number FROM publication_releases ORDER BY 1"));
+        Assert.Equal(["1"], await ReadAsync("SELECT count(*) FROM published_entries"));
+    }
+
     [Theory]
     [InlineData("headline")]
     [InlineData("officials")]
@@ -207,8 +219,6 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         { "ck_published_entries_source_host", ["source_host", "'  '"] },
         { "ck_published_entries_bill_title", ["bill_title", "NULL"] },
         { "ck_published_entries_bill_title", [.. AsVote, "bill_title", "'A title'"] },
-        { "ck_published_entries_bill_line", ["bill_line", "'  '"] },
-        { "ck_published_entries_bill_line", [.. AsVote, "bill_line", "'A line.'"] },
         { "ck_published_entries_document_type", ["document_type", "'Notice'"] },
         { "ck_published_entries_document_type", [.. AsExecutiveAction, "document_type", "NULL"] },
         { "ck_published_entries_document_type", [.. AsExecutiveAction, "document_type", "'Order'"] },
@@ -375,8 +385,8 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version,
             review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
         VALUES ('{{id}}', 'congress-house-votes', 'House', 119, 1, {{rollCall}}, 1, 1, 'Approved', 0, 0);
-        INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-        VALUES ('{{id}}', 1, 'owner', 'Person', NULL, '{}', 0)
+        INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks, result)
+        VALUES ('{{id}}', 1, 'owner', 'Person', NULL, '{}', 0, '')
         """);
 
     private async Task SeedExecutiveActionAsync(string id) => await ExecuteAsync($$"""
