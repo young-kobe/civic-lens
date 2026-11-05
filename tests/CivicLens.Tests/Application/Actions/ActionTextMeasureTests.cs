@@ -125,6 +125,31 @@ public sealed class ActionTextMeasureTests
     }
 
     [Fact]
+    public async Task AStopAtTheOutputLimitIsAFailureNotARejectionOfTheOutput()
+    {
+        var model = new FakeHeadlineSummaryModel().Reply(_ =>
+            Task.FromResult(new AnalysisModelResponse("max_tokens", null, new(900, 100, 0, 0), "req_fixture")));
+
+        var (report, _, _) = await MeasureAsync(Cap, model);
+
+        var bill = Assert.Single(report.Bills);
+        Assert.Equal((ActionTextMeasureOutcome.Failed, 1), (bill.Outcome, bill.Calls));
+        Assert.Equal(AnalysisErrorCodes.ForOutcome(AnalysisRunOutcome.OutputLimitReached), bill.Reason);
+    }
+
+    [Fact]
+    public async Task AFailureThatReportsMoreUsageThanItsChargeCountsTheRecordedChargeTowardTheCap()
+    {
+        var reservation = (await MeasureAsync(Cap, new FakeHeadlineSummaryModel().Draft(Output()))).Model.Requests[0].ReservedTokens;
+        var model = new FakeHeadlineSummaryModel().Reply(_ => throw new AnalysisModelException(AnalysisModelFailure.RateLimited, null, new(300, 40, 0, 0)));
+
+        var (report, _, _) = await MeasureAsync(reservation + 339, model, bills: [Bill, Bill]);
+
+        Assert.Equal([ActionTextMeasureOutcome.Failed, ActionTextMeasureOutcome.StoppedByCap], report.Bills.Select(bill => bill.Outcome));
+        Assert.Equal(340L, report.Totals.ChargedTokens);
+    }
+
+    [Fact]
     public async Task ARateLimitIsAFailureWithNoChargeAndTheNextBillStillRuns()
     {
         var model = new FakeHeadlineSummaryModel().Reply(_ => throw new AnalysisModelException(AnalysisModelFailure.RateLimited)).Draft(Output());

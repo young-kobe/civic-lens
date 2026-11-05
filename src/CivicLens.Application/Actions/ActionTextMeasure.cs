@@ -10,8 +10,6 @@ namespace CivicLens.Application.Actions;
 /// It clears the draft history of each bill, so a bill with a current record is drafted again as a new bill.</summary>
 public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep step)
 {
-    private const string TitlePrefix = "Title: ";
-
     public async Task<ActionTextMeasureReport> RunAsync(IReadOnlyList<CongressBillListItem> bills, long tokenCap, CancellationToken cancellationToken)
     {
         if (tokenCap < 1) throw new ArgumentOutOfRangeException(nameof(tokenCap), tokenCap, "The spend cap must be at least 1 token.");
@@ -83,9 +81,13 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
                 [.. revision.TextCitations.Select(citation => new ActionTextMeasureSentence(citation.Part, citation.Sentence,
                     billText.Text.Substring(citation.Span.Start, citation.Span.Length)))]);
         if (attempt.Revision is not null) return With(ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.WrittenByCode);
-        return With(attempt.Calls == 0 ? ActionTextMeasureOutcome.Skipped : ActionTextMeasureOutcome.Rejected, attempt.ErrorCode);
+        if (attempt.Calls == 0) return With(ActionTextMeasureOutcome.Skipped, attempt.ErrorCode);
+        return With(IsResolverRefusal(attempt.Runs[^1].Outcome) ? ActionTextMeasureOutcome.Rejected : ActionTextMeasureOutcome.Failed, attempt.ErrorCode);
     }
 
+    private static bool IsResolverRefusal(AnalysisRunOutcome outcome) =>
+        outcome is AnalysisRunOutcome.Drafted or AnalysisRunOutcome.OutputRejected or AnalysisRunOutcome.CitationRejected;
+
     private static string? TitleOf(ActionDraftEvidence evidence) =>
-        evidence.Pages.Single(page => page.Resource == ApiResource.Bill).Text.Split('\n').FirstOrDefault(text => text.StartsWith(TitlePrefix, StringComparison.Ordinal))?[TitlePrefix.Length..];
+        evidence.Pages.Single(page => page.Resource == ApiResource.Bill).Text.Split('\n').FirstOrDefault(text => text.StartsWith(ActionCitations.TitlePrefix, StringComparison.Ordinal))?[ActionCitations.TitlePrefix.Length..];
 }

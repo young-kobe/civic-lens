@@ -77,9 +77,7 @@ internal static class ActionDraftRows
     internal static async Task<bool> IsSupersededAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken)
     {
         var candidate = await db.Set<ActionCandidateRow>().AsNoTracking().SingleOrDefaultAsync(row => row.CandidateId == candidateId, cancellationToken);
-        return candidate is not null && await HasNewerCandidateAsync(db, new ActionDraftCandidate(candidate.CandidateId, string.Empty, candidate.SourceId,
-            candidate.Congress, candidate.BillType, candidate.BillNumber, new DateTimeOffset(candidate.UpdateDateUtcTicks, TimeSpan.Zero),
-            candidate.IncludesSummaries, candidate.IncludesSubjects), cancellationToken);
+        return candidate is not null && await HasNewerCandidateAsync(db, ToCandidate(candidate), cancellationToken);
     }
 
     internal static async Task<bool> IsRejectedOrBlockedAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken)

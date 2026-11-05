@@ -42,8 +42,9 @@ internal sealed class ActionTextMeasureAttempt(string candidateId, long tokenCap
         {
             var outcome = Enum.Parse<AnalysisRunOutcome>(exception.Kind.ToString());
             var charged = AnalysisFailureRules.ChargeFor(exception, modelRequest.ReservedTokens);
-            runs.Add(Run(outcome, exception.Usage ?? AnalysisTokenUsage.None, charged, null, null, null));
-            (Calls, SpentTokens, ErrorCode, Failure) = (Calls + 1, SpentTokens + charged, AnalysisErrorCodes.ForOutcome(outcome), exception.Kind);
+            var run = Run(outcome, exception.Usage ?? AnalysisTokenUsage.None, charged, null, null, null);
+            runs.Add(run);
+            (Calls, SpentTokens, ErrorCode, Failure) = (Calls + 1, SpentTokens + run.ChargedTokens, AnalysisErrorCodes.ForOutcome(outcome), exception.Kind);
             return new(null, false);
         }
     }

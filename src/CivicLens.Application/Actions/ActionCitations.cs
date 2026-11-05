@@ -7,9 +7,11 @@ namespace CivicLens.Application.Actions;
 
 internal static class ActionCitations
 {
+    public const string TitlePrefix = "Title: ";
+
     public static SourceSpan TitleAndIntroduced(string extractionId, ImmutableArray<DocumentLine> detailLines)
     {
-        var title = LineCitations.Line(extractionId, detailLines, "Title: ")!;
+        var title = LineCitations.Line(extractionId, detailLines, TitlePrefix)!;
         var introduced = LineCitations.Line(extractionId, detailLines, "Introduced: ")!;
         return new(extractionId, title.Start, introduced.Start + introduced.Length - title.Start);
     }
