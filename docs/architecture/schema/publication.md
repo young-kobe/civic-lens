@@ -159,6 +159,7 @@ END
 - cols release_number integer, official_id varchar(256), position smallint, office varchar(256), kind varchar(32), state varchar(256) null, district integer null, party varchar(256) null, caucus varchar(256) null, start_on date, end_on date null
 - check ck_release_official_terms_dates: end_on IS NULL OR end_on >= start_on
 - check ck_release_official_terms_district: district IS NULL OR district >= 0
+- check ck_release_official_terms_kind: kind in ('Senator', 'Representative', 'Executive', 'Judicial', 'Other')
 - check ck_release_official_terms_office: length(btrim(office)) > 0
 - check ck_release_official_terms_position: "position" >= 0
 

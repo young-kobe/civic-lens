@@ -63,11 +63,20 @@ public sealed class PostgresReleaseNamesTests(PostgresCollection postgres) : IAs
     [Fact]
     public async Task ARefusedCommitLeavesNoNameRowBecauseTheRowsShareTheTransactionOfTheRelease()
     {
-        await CommitAsync(1, null, Names("Definition.", [], []));
+        var stored = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        await publications.AddFirstPublishedAsync([new(PublishedRecordKind.Action, new string('a', 64), stored)], default);
+        var refused = new PublicationCommit(1, null, $"000001-{Guid.NewGuid():N}", [], [])
+        {
+            Withdrawals = [],
+            AddedEntries = [PublishedEntryFixtures.Action(new string('a', 64), stored.AddDays(3))],
+            Names = Names("Definition.", [], [])
+        };
 
-        await Assert.ThrowsAnyAsync<Exception>(() => CommitAsync(3, 1, Names("Definition.", [], [])));
+        await Assert.ThrowsAsync<PublicationConflictException>(() =>
+            publications.CommitAsync("auth0|owner", refused, "key-refused", new string('0', 64), default));
 
-        Assert.Equal(["1"], await ReadAsync("SELECT DISTINCT release_number::text FROM release_issues"));
+        Assert.Empty(await ReadAsync("SELECT release_number::text FROM release_issues"));
+        Assert.Empty(await ReadAsync("SELECT release_number::text FROM release_officials"));
     }
 
     private async Task<string[]> ReadReleaseAsync(int release) => await ReadAsync($"""

@@ -189,6 +189,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     table.PrimaryKey("PK_release_official_terms", x => new { x.release_number, x.official_id, x.position });
                     table.CheckConstraint("ck_release_official_terms_dates", "end_on IS NULL OR end_on >= start_on");
                     table.CheckConstraint("ck_release_official_terms_district", "district IS NULL OR district >= 0");
+                    table.CheckConstraint("ck_release_official_terms_kind", "kind IN ('Senator', 'Representative', 'Executive', 'Judicial', 'Other')");
                     table.CheckConstraint("ck_release_official_terms_office", "length(btrim(office)) > 0");
                     table.CheckConstraint("ck_release_official_terms_position", "position >= 0");
                     table.ForeignKey(

@@ -4958,6 +4958,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_release_official_terms_district", "district IS NULL OR district >= 0");
 
+                            t.HasCheckConstraint("ck_release_official_terms_kind", "kind IN ('Senator', 'Representative', 'Executive', 'Judicial', 'Other')");
+
                             t.HasCheckConstraint("ck_release_official_terms_office", "length(btrim(office)) > 0");
 
                             t.HasCheckConstraint("ck_release_official_terms_position", "position >= 0");
