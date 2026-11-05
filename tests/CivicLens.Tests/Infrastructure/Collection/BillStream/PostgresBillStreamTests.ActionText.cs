@@ -70,6 +70,40 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, missing.SqlState);
     }
 
+    [Fact]
+    public async Task ACodeApprovalIsNeverGivenToATextDraftSoItWaitsForAPersonWithTheReasonKeptBecauseThePublishStepOwnsItsCitations()
+    {
+        var candidate = await ReadableCandidateAsync("A000001", withSummary: false);
+        var stored = await StoreBillTextAsync(candidate, ActionBillTexts.Body);
+
+        await SettleTextRevisionAsync(candidate, TextRevision(candidate, stored));
+
+        Assert.Equal("AwaitingReview", await ScalarAsync("SELECT review_status FROM action_drafts"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_review_decisions"));
+        Assert.Contains("waits for the publish step", (string)(await ScalarAsync("SELECT held_reason FROM action_drafts"))!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ATextRevisionMovesToColumnsWithItsTextCitationsAndVerifyFindsNoMismatchBecauseTheBackfillRebuildsThemFromTheJson()
+    {
+        var candidate = await ReadableCandidateAsync("A000001", withSummary: false);
+        var stored = await StoreBillTextAsync(candidate, ActionBillTexts.Body);
+        var revision = TextRevision(candidate, stored);
+        await SettleTextRevisionAsync(candidate, revision);
+        await MakeActionRevisionsLegacyAsync(1);
+        await ExecuteAsync(connectionString, "DELETE FROM action_revision_text_citations; UPDATE action_revisions SET text_package_id = NULL, why_it_matters = NULL");
+
+        var result = await BackfillActionRevisionsAsync(10);
+
+        Assert.Equal((1, 1, 0), (result.Examined, result.Moved, result.Skipped));
+        Assert.Equal($"BILLS-119hr7ih|{revision.WhyItMatters}",
+            await ScalarAsync("SELECT text_package_id || '|' || why_it_matters FROM action_revisions"));
+        Assert.Equal(revision.TextCitations.Select(citation => citation.Sentence),
+            await LinesAsync("SELECT sentence FROM action_revision_text_citations ORDER BY position"));
+        var verification = await VerifyActionRevisionsAsync();
+        Assert.Equal((1, 0, 0), (verification.Checked, verification.Legacy, verification.Mismatched));
+    }
+
     private async Task<(string ExtractionId, CongressBillTextReading Reading)> StoreBillTextAsync(string candidate, string text)
     {
         var detail = (await CandidatesAsync()).Single(item => item.CandidateId == candidate).DetailJobId;

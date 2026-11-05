@@ -66,8 +66,8 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
             return change == ActionChange.OlderPromptOnly
                 ? await SettleWithoutCallAsync(attempt, context.Snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken)
                 : await SettleRevisionWithoutCallAsync(attempt, context, ActionDraftErrorCodes.TextKept, ActionDraftResolver.CopyText, cancellationToken);
-        if (context.Evidence.BillText is { } billText)
-            return await RunLoopAsync(attempt, BillTextLoop(attempt, context, billText), cancellationToken);
+        if (context.Evidence.BillText is { } billText && BuildBillTextRequest(context, billText, default) is { } billTextRequest)
+            return await RunLoopAsync(attempt, BillTextLoop(attempt, context, billText, billTextRequest), cancellationToken);
         return context.Issues.CandidateIds.IsEmpty
             ? await SettleRevisionWithoutCallAsync(attempt, context, ActionDraftErrorCodes.CodeWritten,
                 (draft, createdAtUtc) => ActionDraftResolver.WriteByCode(draft, createdAtUtc), cancellationToken)
@@ -92,11 +92,14 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
             errors => errors.IsDefaultOrEmpty ? firstRequest : BuildTextRequest(context, errors), model.DraftAsync,
             (json, run) => ActionDraftResolver.Resolve(json, context, run.RunId, run.FinishedAtUtc), ReadRunAsync);
 
+    private AnalysisModelRequest? BuildBillTextRequest(ActionDraftContext context, ActionDraftBillText billText, ImmutableArray<string> errors) =>
+        context.Issues.BuildDroppingSubjectsWhenOverTheCap(
+            choice => ActionTextPrompt.Build(context.Snapshot, billText, choice, settings.PromptByteCap, errors));
+
     private AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision> BillTextLoop(IAnalysisAttempt<ActionDraftRun> attempt,
-        ActionDraftContext context, ActionDraftBillText billText) =>
+        ActionDraftContext context, ActionDraftBillText billText, AnalysisModelRequest firstRequest) =>
         new(Wrap, attempt, AnalysisRunOutcome.Drafted, ActionDraftTask.MaximumValidationPasses,
-            errors => context.Issues.BuildDroppingSubjectsWhenOverTheCap(
-                choice => ActionTextPrompt.Build(context.Snapshot, billText, choice, settings.PromptByteCap, errors)), model.DraftAsync,
+            errors => errors.IsDefaultOrEmpty ? firstRequest : BuildBillTextRequest(context, billText, errors), model.DraftAsync,
             (json, run) => ActionDraftResolver.ResolveBillText(json, context, run.RunId, run.FinishedAtUtc), ReadRunAsync);
 
     private AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision> IssueLoop(IAnalysisAttempt<ActionDraftRun> attempt,

@@ -287,6 +287,32 @@ internal sealed class PublicationScenario
         return recordId;
     }
 
+    /// <summary>Turns an approved action into a text draft: its summary comes from bill text and it cites that text.</summary>
+    public void DraftActionFromBillText(string recordId)
+    {
+        var publishable = Actions.Publishable[recordId];
+        var text = Extraction("Package: BILLS-119hr7ih\nText:\nThe program ends on December 31, 2030.", "action-bill-text", "https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm");
+        ActionTextCitation Cite(ActionTextPart part, int start, int length, string sentence) => new(part, new(text.ExtractionId, start, length), sentence);
+        var start = text.Text.IndexOf("The program ends", StringComparison.Ordinal);
+        var revision = publishable.Review.CurrentRevision with
+        {
+            Summary = "One. Two.",
+            TextPackageId = "BILLS-119hr7ih",
+            WhyItMatters = "Three.",
+            TextCitations =
+            [
+                Cite(ActionTextPart.Summary, start, 16, "One."),
+                Cite(ActionTextPart.Summary, start, 16, "Two."),
+                Cite(ActionTextPart.WhyItMatters, start, 16, "Three.")
+            ]
+        };
+        Actions.Publishable[recordId] = publishable with
+        {
+            Review = publishable.Review with { CurrentRevision = revision, Revisions = [revision] },
+            Extractions = publishable.Extractions.SetItem(text.ExtractionId, text)
+        };
+    }
+
     public void ReviseAction(string recordId, int revisionNumber, string? approverSubject = null, string? correctionNote = PersonNote)
     {
         var publishable = Actions.Publishable[recordId];

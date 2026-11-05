@@ -59,6 +59,23 @@ public sealed class ActionBillTextDraftTests
     }
 
     [Fact]
+    public async Task ATextCitationMustLieInTheBodyOfOneExtractionSoAHeaderSpanOrASpanOfAnotherExtractionFailsTheCheck()
+    {
+        var (store, _) = await RunAsync(ActionBillWorld.Create(summaries: []), new FakeHeadlineSummaryModel().Draft(Output()), On);
+        var revision = Assert.Single(store.Revisions);
+        var other = new string('f', 64);
+        var extractions = revision.Citations.Select(span => span.ExtractionId).Append(other).Distinct().ToDictionary(id => id, _ => Extraction(Of()));
+        ActionDraftRevision With(SourceSpan span) => revision with { TextCitations = revision.TextCitations.SetItem(0, revision.TextCitations[0] with { Span = span }) };
+
+        revision.ValidateAgainst(extractions);
+
+        var header = Assert.Throws<ArgumentException>(() => With(new(ExtractionId, 0, 20)).ValidateAgainst(extractions));
+        var foreign = Assert.Throws<ArgumentException>(() => With(revision.TextCitations[0].Span with { ExtractionId = other }).ValidateAgainst(extractions));
+        Assert.Contains("body", header.Message, StringComparison.Ordinal);
+        Assert.Contains("body", foreign.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheApprovalCheckRefusesAQuoteOfThreeWordsAndAcceptsOneOfFour()
     {
         var context = await ContextAsync();
@@ -228,6 +245,35 @@ public sealed class ActionBillTextDraftTests
         Assert.Empty(same.Requests);
         Assert.Single(other.Requests);
         Assert.Equal(PackageId, Assert.Single(second.Revisions).TextPackageId);
+    }
+
+    [Fact]
+    public async Task TurningTheSettingOffReplacesNoTextDraftBecauseThePackageIsComparedOnlyWhileTheSettingIsOn()
+    {
+        var world = ActionBillWorld.Create(summaries: []);
+        var (first, _) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output()), On);
+        var drafted = Assert.Single(first.Revisions);
+        var off = new ActionDraftSettings(10_000_000, concurrency: 1);
+
+        var (second, model) = await RunAsync(world, new FakeHeadlineSummaryModel(), off, current: drafted, withText: false);
+
+        Assert.Empty(second.Revisions);
+        Assert.Empty(model.Requests);
+        Assert.Equal((State.Succeeded, ActionDraftErrorCodes.Unchanged), (second.Entries[0].Status, second.Entries[0].ErrorCode));
+    }
+
+    [Fact]
+    public async Task ATextPromptOverTheByteCapFallsBackToTheCodeWriteLikeTheSummaryPathInsteadOfBlockingTheEntry()
+    {
+        var tight = new ActionDraftSettings(ActionDraftPrompt.MinimumReservation, concurrency: 1, draftsFromBillText: true);
+
+        var (store, model) = await RunAsync(ActionBillWorld.Create(summaries: [], policyArea: BillGateFixtures.UntrackedPolicyArea),
+            new FakeHeadlineSummaryModel(), tight);
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal((ReviewTextOrigin.Code, null), (revision.TextOrigin, revision.TextPackageId));
+        Assert.Equal((State.Succeeded, null), (store.Entries[0].Status, store.Entries[0].ErrorCode));
+        Assert.Empty(model.Requests);
     }
 
     private static async Task<ActionDraftContext> ContextAsync()

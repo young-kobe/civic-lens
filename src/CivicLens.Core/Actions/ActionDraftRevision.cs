@@ -43,7 +43,6 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     public const int MaximumTextQuoteLength = 300;
     public const int MinimumTextQuoteWords = 4;
     public const int MaximumTextSentenceLength = 400;
-    public const string SentenceSeparator = " ";
 
     private ImmutableArray<ActionTextCitation> TextCitationList => TextCitations.IsDefault ? [] : TextCitations;
 
@@ -162,7 +161,12 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         ReviewTextRules.RequireSuggestionKeptOrCleared(this, previous);
     }
 
-    public void ValidateForApproval() => ValidateShape();
+    public void ValidateForApproval()
+    {
+        ValidateShape();
+        if (TextPackageId is not null)
+            throw new ArgumentException("A draft from the bill text waits for the publish step. That step adds the text citations and the label.");
+    }
 
     public void ValidateForApproval(IReadOnlyDictionary<string, DocumentExtraction> extractions)
     {
@@ -175,15 +179,26 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         foreach (var span in Citations)
             _ = new DocumentTextSpan(extractions.GetValueOrDefault(span.ExtractionId)
                 ?? throw new ArgumentException("An action citation names a missing extraction."), span.Start, span.Length);
-        if (TextPackageId is not null && TextOrigin == ReviewTextOrigin.Model)
-            RequireTextToQuoteItsCitations(extractions);
+        if (TextPackageId is null) return;
+        RequireTextSpansInTheBody(extractions);
+        if (TextOrigin == ReviewTextOrigin.Model) RequireTextToQuoteItsCitations(extractions);
+    }
+
+    private void RequireTextSpansInTheBody(IReadOnlyDictionary<string, DocumentExtraction> extractions)
+    {
+        var extractionId = TextCitationList[0].Span.ExtractionId;
+        foreach (var citation in TextCitationList)
+        {
+            var bodyStart = BillTextBody.Start(extractions[citation.Span.ExtractionId].Text);
+            if (citation.Span.ExtractionId != extractionId || bodyStart < 0 || citation.Span.Start < bodyStart)
+                throw new ArgumentException("Each text citation lies in the body of one bill text extraction.");
+        }
     }
 
     private void RequireTextToQuoteItsCitations(IReadOnlyDictionary<string, DocumentExtraction> extractions)
     {
-        string SentencesOf(ActionTextPart part) => string.Join(SentenceSeparator,
-            TextCitationList.Where(citation => citation.Part == part).Select(citation => citation.Sentence));
-        if (Summary != SentencesOf(ActionTextPart.Summary) || WhyItMatters != SentencesOf(ActionTextPart.WhyItMatters))
+        ActionTextCitation[] Of(ActionTextPart part) => [.. TextCitationList.Where(citation => citation.Part == part)];
+        if (Summary != ActionTextCitation.Join(Of(ActionTextPart.Summary)) || WhyItMatters != ActionTextCitation.Join(Of(ActionTextPart.WhyItMatters)))
             throw new ArgumentException("Model text drawn from the bill text is the join of its sentences.");
         foreach (var citation in TextCitationList)
         {

@@ -58,9 +58,9 @@ public static class ActionDraftResolver
         var issueIds = context.Issues.Check(output.IssueIds, errors);
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
         var citations = summary.Concat(why).ToImmutableArray();
-        var source = new TextSource(billText.PackageId, JoinSentences(why), citations);
+        var source = new TextSource(billText.PackageId, ActionTextCitation.Join(why), citations);
         return AnalysisResolution<ActionDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current,
-            output.Headline.Text, JoinSentences(summary), runId, context.Snapshot.Fingerprint), issueIds, context.Issues.SubjectsHash, null, null, source));
+            output.Headline.Text, ActionTextCitation.Join(summary), runId, context.Snapshot.Fingerprint), issueIds, context.Issues.SubjectsHash, null, null, source));
     }
 
     public static AnalysisResolution<ActionDraftRevision> ResolveIssueChoice(string outputJson, ActionDraftContext context,
@@ -89,9 +89,6 @@ public static class ActionDraftResolver
     public static ActionDraftRevision WriteByCode(ActionDraftContext context, DateTimeOffset createdAtUtc, ImmutableArray<string> trackedIssueIds = default) =>
         Assemble(context, createdAtUtc, ActionCodeText.Of(context.Snapshot), trackedIssueIds.IsDefault ? [] : trackedIssueIds,
             context.Issues.SubjectsHash, context.Snapshot.SummaryVersion, context.Snapshot.SummaryCitation, default);
-
-    private static string JoinSentences(IEnumerable<ActionTextCitation> citations) =>
-        string.Join(ActionDraftRevision.SentenceSeparator, citations.Select(citation => citation.Sentence));
 
     private static List<ActionTextCitation> QuotedSentences(AnalysisOutputSentence?[] items, ActionTextPart part, string field,
         ActionDraftBillText billText, List<string> errors)
@@ -128,7 +125,7 @@ public static class ActionDraftResolver
 
     private static void CheckSentences(List<ActionTextCitation> citations, string field, ActionBillSnapshot snapshot, List<string> errors)
     {
-        var text = JoinSentences(citations);
+        var text = ActionTextCitation.Join(citations);
         CheckNames(text, field, snapshot, errors);
         CheckNoSummarySentence(text, field, errors);
     }

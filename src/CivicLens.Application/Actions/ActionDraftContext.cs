@@ -24,11 +24,12 @@ public sealed record ActionDraftContext(ActionDraftEvidence Evidence, ActionBill
     private bool SaysNoSummaryFalsely(ActionDraftRevision revision) => Snapshot.Bill.SummaryCount > 0 &&
         revision.TextOrigin != ReviewTextOrigin.Person && revision.Summary.Contains(ActionCodeText.NoSummarySentence, StringComparison.Ordinal);
 
+    /// <summary>The bill text package is a compared value only while the bill text setting is on, so turning it off replaces no text draft.</summary>
     private ActionChange ChangeFrom(ActionDraftRevision previous)
     {
         if (!SummaryIsUnreadable && previous.SummaryVersion != Snapshot.SummaryVersion || previous.PolicyArea != Snapshot.Bill.PolicyArea ||
             previous.PolicyAreaId != PolicyAreaId || previous.BillTitle != Snapshot.Bill.Title || previous.IssueCandidateIds.IsDefault ||
-            previous.TextPackageId != Evidence.BillText?.PackageId || !previous.IssueCandidateIds.SequenceEqual(Issues.CandidateIds) ||
+            Evidence.BillText is { } billText && previous.TextPackageId != billText.PackageId || !previous.IssueCandidateIds.SequenceEqual(Issues.CandidateIds) ||
             previous.IssueRevisionId != IssueRevisionId ||
             Evidence.Candidate.IncludesSubjects && previous.SubjectsHash != Issues.SubjectsHash)
             return ActionChange.Other;
