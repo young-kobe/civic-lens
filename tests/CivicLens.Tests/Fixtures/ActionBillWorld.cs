@@ -88,7 +88,7 @@ internal sealed class ActionBillWorld
         new(new ActionDraftCandidate(ActionRevisionFixtures.CandidateId, ActionRevisionFixtures.RecordId, SourceId, 119, "hr", 1,
             updatedAt ?? UpdatedAt, pages.Any(page => page.Resource == ApiResource.BillSummaries),
             pages.Any(page => page.Resource == ApiResource.BillSubjects)),
-            Revision, [.. pages.Select(page => new ActionDraftPage(page.Resource, page.JobId, ExtractionIdOf(page.JobId), versionOverrides.GetValueOrDefault(page.JobId) ?? ExtractionVersionOf(page.Resource), page.Text))], current, hasNewerCandidate, hasStaleDraft, IsRejected: false);
+            Revision, [.. pages.Select(page => new ActionDraftPage(page.Resource, page.JobId, ExtractionIdOf(page.JobId), versionOverrides.GetValueOrDefault(page.JobId) ?? ExtractionVersionOf(page.Resource), page.Text))], current, hasNewerCandidate, hasStaleDraft, IsRejected: false, ReviewStateVersion: 0);
 
     public static string ExtractionVersionOf(ApiResource resource) => resource switch
     {
