@@ -1,4 +1,5 @@
 using System.Globalization;
+using CivicLens.Core.Actions;
 using static CivicLens.Application.Collection.RenderedText;
 
 namespace CivicLens.Application.Collection.Bills;
@@ -69,7 +70,7 @@ public static class CongressBillRenderer
             Line("Version date", version.Date is { } date ? Date(BillGate.DayOf(date)) : "not given"),
             Line("Package", version.PackageId),
             Line("Characters read", $"{Count(window.Length)} of {Count(text.Length)}"),
-            "Text:",
+            BillTextBody.Label,
             window
         };
         return new CongressBillTextReading(string.Join('\n', lines), window.Length, text.Length);

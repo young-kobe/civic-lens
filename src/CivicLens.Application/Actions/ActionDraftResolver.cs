@@ -9,6 +9,11 @@ namespace CivicLens.Application.Actions;
 
 public static class ActionDraftResolver
 {
+    private readonly record struct TextSource(string? PackageId, string? WhyItMatters, ImmutableArray<ActionTextCitation> Citations)
+    {
+        public static TextSource Of(ActionDraftRevision revision) => new(revision.TextPackageId, revision.WhyItMatters, revision.TextCitations);
+    }
+
     public static AnalysisResolution<ActionDraftRevision> Resolve(string outputJson, ActionDraftContext context, string runId,
         DateTimeOffset createdAtUtc)
     {
@@ -29,7 +34,33 @@ public static class ActionDraftResolver
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
         return AnalysisResolution<ActionDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current,
             output.Headline.Text, output.Summary.Text, runId, snapshot.Fingerprint), issueIds, context.Issues.SubjectsHash,
-            snapshot.SummaryVersion, snapshot.SummaryCitation));
+            snapshot.SummaryVersion, snapshot.SummaryCitation, default));
+    }
+
+    public static AnalysisResolution<ActionDraftRevision> ResolveBillText(string outputJson, ActionDraftContext context, string runId,
+        DateTimeOffset createdAtUtc)
+    {
+        var billText = context.Evidence.BillText ?? throw new ArgumentException("Bill text drafting needs the bill text.", nameof(context));
+        var output = ActionTextOutput.Parse(outputJson);
+        if (output is null)
+            return AnalysisResolution<ActionDraftRevision>.Reject(["The output is not valid JSON for the bill text schema."], false);
+        var errors = new List<string>();
+        CheckText(output.Headline.Text, ActionDraftRevision.MaximumHeadlineLength, "headline", required: true, errors);
+        CheckConfidence(output.Headline.Confidence, "headline confidence", errors);
+        CheckConfidence(output.Summary.Confidence, "summary confidence", errors);
+        CheckConfidence(output.WhyItMatters.Confidence, "whyItMatters confidence", errors);
+        CheckNames(output.Headline.Text, "headline", context.Snapshot, errors);
+        CheckNoSummarySentence(output.Headline.Text, "headline", errors);
+        var summary = QuotedSentences(output.Summary.Sentences, ActionTextPart.Summary, "summary", billText, errors);
+        var why = QuotedSentences(output.WhyItMatters.Sentences, ActionTextPart.WhyItMatters, "whyItMatters", billText, errors);
+        CheckSentences(summary, "summary", context.Snapshot, errors);
+        CheckSentences(why, "whyItMatters", context.Snapshot, errors);
+        var issueIds = context.Issues.Check(output.IssueIds, errors);
+        if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
+        var citations = summary.Concat(why).ToImmutableArray();
+        var source = new TextSource(billText.PackageId, ActionTextCitation.Join(why), citations);
+        return AnalysisResolution<ActionDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current,
+            output.Headline.Text, ActionTextCitation.Join(summary), runId, context.Snapshot.Fingerprint), issueIds, context.Issues.SubjectsHash, null, null, source));
     }
 
     public static AnalysisResolution<ActionDraftRevision> ResolveIssueChoice(string outputJson, ActionDraftContext context,
@@ -52,12 +83,52 @@ public static class ActionDraftResolver
         var current = context.Evidence.Current ?? throw new ArgumentException("Copied text needs a current revision.", nameof(context));
         var subjectsHash = context.Evidence.Candidate.IncludesSubjects ? context.Issues.SubjectsHash : current.SubjectsHash;
         return Assemble(context, createdAtUtc, ReviewText.CopyOf(current), [.. current.TrackedIssueIds.Where(context.Issues.CandidateIds.Contains)],
-            subjectsHash, current.SummaryVersion, current.SummaryCitation);
+            subjectsHash, current.SummaryVersion, current.SummaryCitation, TextSource.Of(current));
     }
 
     public static ActionDraftRevision WriteByCode(ActionDraftContext context, DateTimeOffset createdAtUtc, ImmutableArray<string> trackedIssueIds = default) =>
         Assemble(context, createdAtUtc, ActionCodeText.Of(context.Snapshot), trackedIssueIds.IsDefault ? [] : trackedIssueIds,
-            context.Issues.SubjectsHash, context.Snapshot.SummaryVersion, context.Snapshot.SummaryCitation);
+            context.Issues.SubjectsHash, context.Snapshot.SummaryVersion, context.Snapshot.SummaryCitation, default);
+
+    private static List<ActionTextCitation> QuotedSentences(AnalysisOutputSentence?[] items, ActionTextPart part, string field,
+        ActionDraftBillText billText, List<string> errors)
+    {
+        var (minimum, maximum) = part == ActionTextPart.Summary
+            ? (ActionDraftRevision.MinimumSummarySentences, ActionDraftRevision.MaximumSummarySentences)
+            : (1, ActionDraftRevision.MaximumWhyItMattersSentences);
+        var citations = new List<ActionTextCitation>();
+        if (items.Length < minimum || items.Length > maximum)
+            errors.Add($"The {field} has {items.Length} sentences. Write {minimum} to {maximum}.");
+        foreach (var item in items.Take(maximum))
+            if (QuotedSentence(item, part, field, billText, errors) is { } citation) citations.Add(citation);
+        return citations;
+    }
+
+    private static ActionTextCitation? QuotedSentence(AnalysisOutputSentence? item, ActionTextPart part, string field, ActionDraftBillText billText,
+        List<string> errors)
+    {
+        var sentence = item?.Sentence?.Trim() ?? string.Empty;
+        var quote = item?.Quote ?? string.Empty;
+        if (sentence.Length == 0 || sentence.Length > ActionDraftRevision.MaximumTextSentenceLength)
+            errors.Add($"A {field} sentence has {sentence.Length} characters. Write 1 to {ActionDraftRevision.MaximumTextSentenceLength}.");
+        else if (quote.Length > ActionDraftRevision.MaximumTextQuoteLength)
+            errors.Add($"A {field} quote has {quote.Length} characters. Quote at most {ActionDraftRevision.MaximumTextQuoteLength}.");
+        else if (ActionTextCitation.WordCount(quote) < ActionDraftRevision.MinimumTextQuoteWords)
+            errors.Add($"The {field} quote \"{Shorten(quote)}\" has fewer than {ActionDraftRevision.MinimumTextQuoteWords} words. Quote at least {ActionDraftRevision.MinimumTextQuoteWords}.");
+        else if (!sentence.Contains(quote, StringComparison.Ordinal))
+            errors.Add($"The {field} sentence \"{Shorten(sentence)}\" does not contain its quote \"{Shorten(quote)}\" exactly. Put the quote in the sentence unchanged.");
+        else if (ActionCitations.BillTextQuote(billText, quote) is not { } span)
+            errors.Add($"The {field} quote \"{Shorten(quote)}\" is not an exact quote of the bill text that was sent. Copy it exactly.");
+        else return new(part, span, sentence);
+        return null;
+    }
+
+    private static void CheckSentences(List<ActionTextCitation> citations, string field, ActionBillSnapshot snapshot, List<string> errors)
+    {
+        var text = ActionTextCitation.Join(citations);
+        CheckNames(text, field, snapshot, errors);
+        CheckNoSummarySentence(text, field, errors);
+    }
 
     private static void CheckNoSummarySentence(string text, string field, List<string> errors)
     {
@@ -66,7 +137,7 @@ public static class ActionDraftResolver
     }
 
     private static ActionDraftRevision Assemble(ActionDraftContext context, DateTimeOffset createdAtUtc, ReviewText text,
-        ImmutableArray<string> trackedIssueIds, string? subjectsHash, string? summaryVersion, SourceSpan? summaryCitation)
+        ImmutableArray<string> trackedIssueIds, string? subjectsHash, string? summaryVersion, SourceSpan? summaryCitation, TextSource textSource)
     {
         var (evidence, snapshot, issues, policyAreaId, issueRevisionId) = context;
         var current = evidence.Current;
@@ -78,7 +149,7 @@ public static class ActionDraftResolver
             candidate.IncludesSummaries, candidate.IncludesSubjects,
             snapshot.Fingerprint, summaryVersion, summaryCitation, snapshot.Bill.PolicyArea, snapshot.PolicyAreaCitation,
             policyAreaId, trackedIssueIds, issues.CandidateIds, issueRevisionId, snapshot.Sponsorships, snapshot.Bill.Title, subjectsHash,
-            text.Origin == ReviewTextOrigin.Code ? snapshot.BillCitation : null);
+            text.Origin == ReviewTextOrigin.Code ? snapshot.BillCitation : null, textSource.PackageId, textSource.WhyItMatters, textSource.Citations);
         revision.ValidateAsWorkerRevision(current);
         return revision;
     }

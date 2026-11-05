@@ -647,6 +647,9 @@ The `worker` command drafts one action record for each bill that has a candidate
 | `CIVIC_LENS_ISSUES_CONFIG` | Absolute path of the issue configuration, shared with the Congress.gov bill stream |
 | `CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS` | Daily token limit for action drafting calls, per UTC day (about 2,000,000 is a good start). It is separate from the other limits. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
+| `CIVIC_LENS_ACTION_DRAFTING_BILL_TEXT` | Optional. Set to `1` to draft a bill with no CRS summary from its official bill text. Unset means off. Any other value stops the worker with exit code 2. |
+
+Leave `CIVIC_LENS_ACTION_DRAFTING_BILL_TEXT` unset. The setting stays off until the owner reads the measured sample and the publish pull request merges. With the setting on, each text draft waits for a person, and code does not approve it. A person cannot approve it either, until the publish pull request merges. That pull request adds the text citations, the label, and code approval. With the setting off, the step writes the text by code, as before.
 
 Drafting uses Claude Haiku 5.5. The first run can spend up to the daily limit on queued candidates. Start with a low limit. A bill version whose summaries or subjects have closed has up to three queued candidates. Each older one settles as `supersededByNewerCandidate` with no call, also when the newest candidate blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
 

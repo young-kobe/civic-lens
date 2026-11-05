@@ -19,7 +19,7 @@ public static class ActionIssuePrompt
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(issues);
-        var user = ActionDraftPrompt.UserPrompt(snapshot, issues, previousErrors, withSummary: false);
+        var user = ActionDraftPrompt.UserPrompt(snapshot, issues, previousErrors, withSummary: false, billText: null);
         var schema = AnalysisSchema.IssueChoice(issues.AnswerSchema()!);
         var bytes = Encoding.UTF8.GetByteCount(SystemInstructions) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;

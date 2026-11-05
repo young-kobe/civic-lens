@@ -47,7 +47,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         return row is null ? null : new(AnalysisRunRows.ToRun(row), row.Reason);
     }
 
-    public async Task<ActionDraftEvidence?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken)
+    public async Task<ActionDraftEvidence?> ReadEvidenceAsync(string candidateId, bool withBillText, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(candidateId);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -62,7 +62,8 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         var hasOlderPromptDraft = current is not null && !hasNewerCandidate &&
             (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId);
         return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId), await ReadPagesAsync(db, row.DetailJobId, row.IncludesSummaries, row.IncludesSubjects, cancellationToken),
-            current, hasNewerCandidate, hasOlderPromptDraft, await ActionDraftRows.IsRejectedAsync(db, recordId, cancellationToken));
+            current, hasNewerCandidate, hasOlderPromptDraft, await ActionDraftRows.IsRejectedAsync(db, recordId, cancellationToken),
+            withBillText ? await ReadBillTextAsync(db, row.DetailJobId, cancellationToken) : null);
     }
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
@@ -144,6 +145,15 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         return [.. pages.OrderBy(page => ResourceOf(page.Role)).ThenBy(page => page.PageOrder)
             .Select(page => new ActionDraftPage(ResourceOf(page.Role), page.JobId, page.ExtractionId, page.ExtractionVersion, page.Text))];
     }
+
+    /// <summary>Reads the text that the gate of the candidate names. A gate holds text only when the bill has no Congress.gov summary.</summary>
+    private static Task<ActionDraftBillText?> ReadBillTextAsync(CollectionAttemptDbContext db, string detailJobId, CancellationToken cancellationToken) =>
+        (from gate in db.Set<BillGateRow>().AsNoTracking()
+         join text in db.Set<BillTextVersionRow>().AsNoTracking() on gate.TextPackageId equals text.PackageId
+         join extraction in db.Set<DocumentExtractionRow>().AsNoTracking() on text.ExtractionId equals extraction.ExtractionId
+         where gate.DetailJobId == detailJobId && text.Congress == gate.Congress && text.BillType == gate.BillType && text.BillNumber == gate.BillNumber
+         select new ActionDraftBillText(text.PackageId, text.VersionType, text.VersionDate, text.ExtractionId, extraction.ExtractionVersion,
+             extraction.Text, text.CharsRead, text.CharsTotal)).SingleOrDefaultAsync(cancellationToken);
 
     private static ApiResource ResourceOf(BillPageRole role) => role switch
     {
