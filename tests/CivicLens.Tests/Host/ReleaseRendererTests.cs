@@ -1591,6 +1591,21 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task AllRecordsPageShowsTheBillLineAndItsSourceMarkOnlyOnAnActionThatHoldsOne()
+    {
+        var withLine = FacetEntry(PublishedRecordKind.Action, 1, null, DateTimeOffset.UnixEpoch, [], []) with { BillLine = "This bill funds rent aid." };
+        var withoutLine = FacetEntry(PublishedRecordKind.Action, 2, null, DateTimeOffset.UnixEpoch, [], []);
+        var release = ReleaseOf(0) with { Records = [withLine, withoutLine] };
+
+        var html = await new ReleaseRenderer(null, null).RenderAllRecordsAsync(release, 1, CancellationToken.None);
+
+        var rows = new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody tr").ToList();
+        Assert.Equal(["This bill funds rent aid. From the Congressional Research Service summary."], rows.SelectMany(row => row.QuerySelectorAll(".bill-line")).Select(line => line.TextContent));
+        Assert.Single(rows, row => row.QuerySelector(".bill-line") is not null);
+        Assert.Equal(1, html.Split("From the Congressional Research Service summary.").Length - 1);
+    }
+
+    [Fact]
     public async Task AllRecordsPageDefinesTheVoteBadgesAndTheCountsOnceSoNoRowRepeatsAParagraph()
     {
         var votes = Enumerable.Range(0, 3).Select(index => FacetEntry(PublishedRecordKind.Vote, index, PublishedVoteAlignment.Split, DateTimeOffset.UnixEpoch, [], []) with { YeaCount = 200 + index, NayCount = 210 }).ToArray();

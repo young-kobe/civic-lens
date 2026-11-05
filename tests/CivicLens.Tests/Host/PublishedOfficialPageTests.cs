@@ -11,6 +11,19 @@ namespace CivicLens.Tests.Host;
 public sealed class PublishedOfficialPageTests
 {
     [Fact]
+    public async Task AnActionRowShowsTheBillLineWithItsSourceMarkAndOtherRowsShowNone()
+    {
+        var page = Current(
+            [Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)), Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1)) with { BillLine = "This bill funds rent aid." }],
+            [Vote('3', new DateOnly(2026, 4, 1))]);
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialRecordAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var lines = new HtmlParser().ParseDocument(html).QuerySelectorAll(".bill-line").Select(line => line.TextContent);
+        Assert.Equal(["This bill funds rent aid. From the Congressional Research Service summary."], lines);
+    }
+
+    [Fact]
     public async Task TheCurrentPageListsStatementsActionsAndVotesNewestFirstWithTheirOwnDates()
     {
         var page = Current(

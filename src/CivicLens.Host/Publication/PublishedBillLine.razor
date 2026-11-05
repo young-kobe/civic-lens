@@ -1,0 +1,8 @@
+@if (!string.IsNullOrWhiteSpace(Line))
+{
+    <span class="bill-line">@Line <span class="bill-line-source">@PublishedRecordLabels.BillLineSource</span></span>
+}
+
+@code {
+    [Parameter] public string? Line { get; set; }
+}

@@ -6,6 +6,7 @@
             <span class="record-text">
                 <PublishedRecordTitle RecordId="@row.RecordId" RootPath="@RootPath">@row.Headline</PublishedRecordTitle>
                 <span class="record-kind">@row.Badge, @Moment.Day(row.Date)</span>
+                <PublishedBillLine Line="@row.BillLine" />
                 @if (row.Detail is not null)
                 {
                     <span class="record-detail">@row.Detail</span>

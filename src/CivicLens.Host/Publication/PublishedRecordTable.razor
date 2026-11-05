@@ -37,6 +37,7 @@
                 <span class="record-row-text">
                     <PublishedRecordTitle RecordId="@entry.RecordId" RootPath="@RootPath">@entry.Headline</PublishedRecordTitle>
                     @if (Columns != RecordTableColumns.Week) {<span class="cell-note">@KindLine(entry)</span>}
+                    <PublishedBillLine Line="@entry.BillLine" />
                 </span>
                 @if (PublishedVoteView.ListBadge(entry) is { } badge) {<StatusBadge Text="@badge.Text" />}
             </span>
