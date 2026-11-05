@@ -10,4 +10,5 @@ public sealed record ZipDistrict(string State, int District, SeatHolder? Represe
 /// <summary>The Senate seats of one state or territory. A null entry is a vacant seat. A territory has no entry.</summary>
 public sealed record ZipState(string State, SeatHolder?[] Senators);
 
-public sealed record SeatHolder(string OfficialId, string Name, string? Party);
+/// <summary>The person who holds a seat. <c>TermEndsOn</c> is the end date of the current term, or null when the release has no end date.</summary>
+public sealed record SeatHolder(string OfficialId, string Name, string? Party, DateOnly? TermEndsOn);

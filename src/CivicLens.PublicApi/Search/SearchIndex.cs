@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Text.Json;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicApi.Http;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -154,7 +155,7 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         IssueIds = reader.GetFieldValue<string[]>(6),
         PolicyAreaIds = reader.GetFieldValue<string[]>(7),
         SourceHost = reader.IsDBNull(8) ? null : reader.GetString(8),
-        EventDate = reader.IsDBNull(9) ? null : reader.GetFieldValue<DateOnly>(9),
+        EventDate = ViewColumns.Date(reader, 9),
         FirstRelease = reader.GetInt32(10),
         LastRelease = reader.IsDBNull(11) ? null : reader.GetInt32(11),
         BillLine = reader.IsDBNull(12) ? null : reader.GetString(12),
