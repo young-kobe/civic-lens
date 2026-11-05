@@ -1,0 +1,26 @@
+TASK: deploy documentation gaps found in the 2026-11-04 production deploy. Docs and one example file only; do not change C# code or scripts.
+1. deploy/env/search.secret.env.example: CIVIC_LENS_PUBLIC_VIEWS_DATABASE uses Port=5432, but the operational database is on 5433 (see host.secret.env.example and the compose file). Fix the port, and fix any doc that repeats 5432 for that database.
+2. `releases entries verify` re-serializes each stored manifest. A release written before a manifest field was added (for example the entry chamber field) fails with manifestNotReproducible, although its entries are correct. Document this in the Limits section of the doc that owns published entries, and in the operations.md text for that command: what an operator sees and that the newest release is the one to check. Do not change the code.
+3. docs/operations.md has no single runbook for a deploy that also needs backfills. Add one short ordered section that links to the existing sections instead of repeating them: backup first; deploy the SHA; stop the worker before backfills (update.sh starts it again, check deploy/scripts/update.sh and say exactly what it does); reinstall operator access when operator-command.sh gained commands; each revisions backfill then its verify; first-published and entries backfills; a rewrite publish when the release format changed; entries verify on the newest release; start the worker; live checks. Say which steps need the owner, because the listed operator commands cannot stop or start the worker (confirm in operator-command.sh). No host names, IP addresses, user names, or secrets.
+4. For each of the migrations ModelRunInput, JobAttemptColumns, AttemptElapsed and CodeVersionColumns, read the migration. If it can stop with an error, needs a precondition, or rewrites existing rows, add a short operator note in docs/operations.md beside the existing migration notes (for example the "Vote revision JSON drop" note). Skip a migration that needs nothing, and list the skipped ones in your final message.
+5. docs/architecture/review.md lines near 88 and 267 name test methods that do not exist. Find the real tests that protect each statement and fix the names. If no test protects a statement, write "No test".
+Branch name: deploy-docs-gaps.
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b deploy-docs-gaps origin/main
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+6. curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+7. bash /tmp/dotnet-install.sh --version 10.0.403 --install-dir /root/.dotnet
+8. docker info  (if it fails: run sudo dockerd > /tmp/dockerd.log 2>&1 & in the background, then check docker info again after 10 seconds)
+9. export PATH=/root/.dotnet:$PATH && dotnet restore tests/CivicLens.Tests --locked-mode
+Prefix every later dotnet call with export PATH=/root/.dotnet:$PATH &&. If a Testcontainers pull fails with HTTP 429, wait 60 seconds and retry. Run test classes one filter at a time with --filter FullyQualifiedName~<Class> (no | in filters). Run at most one PublishReleaseTests class.
+
+Rules: read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Each rule has one owner; reuse the existing shared owners before adding any. Every added member needs a production caller. Delete code the change makes unused. No backward compatibility shims, dual reads or legacy fallbacks beyond what the named precedent already does. Comments only when absolutely necessary; intent goes in names. Tests encode why the rule matters and must fail if the rule breaks. EF migrations: generate with the repo EF tool manifest (dotnet tool restore, then dotnet ef migrations add), strip the UTF-8 BOM from generated files, and make the Designer match the model at the migration's position. Regenerate schema docs with CIVIC_LENS_WRITE_SCHEMA_DOCS=1 and the SchemaReferenceTests class. Prose (docs, commit messages): ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes. Update the owning feature docs in place (template headings Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, Limits and planned work); each invariant names its rule, enforcer and test. Do not write session reports or changelogs. If you hit a design choice the brief does not settle, choose nothing: stop, commit what is done, and list the question with options in your final message.
+
+Checks before the last commit: dotnet build tests/CivicLens.Tests -c Release (0 errors), the changed and related test classes, dotnet format CivicLens.slnx --verify-no-changes --no-restore, python3 tools/check-docs.py --check, python3 tools/render-architecture.py --check.
+
+Finish, each its own Bash call: git add -A; git commit -m "<one plain sentence>"; git push origin deploy-docs-gaps. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only deploy-docs-gaps.
+
+Final message under 1,800 characters: the pushed SHA, what changed, test classes run with counts, new visible strings, and every open question with options.

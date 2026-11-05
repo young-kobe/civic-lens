@@ -1,0 +1,29 @@
+TASK: schema D3, vote revision question and result columns. Owner decision (accepted): vote revisions get a question column and a result column. The public_api vote views must read these columns instead of matching the "Question: " and "Result: " prefixes of vote_revision_facts rows (see migrations PublicApiVoteFacts and PublicApiReleaseTime, and VoteFactPrefixes.cs).
+Scope:
+- Add the two columns to vote_revisions. result is NOT NULL. question is nullable, because a vote can have no question in its source (PublishedVoteView shows "The source gives no question" for that case). Check this against the code before you choose; if a production row could lack a result, stop and ask.
+- The vote revision row builder writes both columns from the same parsed values that it writes into the facts today. One owner for each value: do not parse the fact text twice.
+- The EF migration fills existing rows once from vote_revision_facts with the prefix match, then sets NOT NULL on result. Find a precedent migration that fills new revision columns from existing rows and follow it; name it in the commit message.
+- Recreate the public_api vote views on the columns, following the view migration precedent (drop and create in order, keep grants). Remove the prefix match from the views.
+- Do not change the published contract (Publication.Contracts) or the release files. The facts rows stay.
+- Tests: the row builder writes the columns; the migration fill gives the same values as the old prefix match (seed facts, run Up, compare); the views read the columns (a test that fails if a view goes back to the facts).
+Update docs/architecture/votes.md and the public API doc that owns the views (find it in docs/architecture.md lookup table), docs/roadmap.md if D3 or the prefix match is listed, and regenerate the schema docs.
+Branch name: vote-question-result-columns.
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b vote-question-result-columns origin/main
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+6. curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+7. bash /tmp/dotnet-install.sh --version 10.0.403 --install-dir /root/.dotnet
+8. docker info  (if it fails: run sudo dockerd > /tmp/dockerd.log 2>&1 & in the background, then check docker info again after 10 seconds)
+9. export PATH=/root/.dotnet:$PATH && dotnet restore tests/CivicLens.Tests --locked-mode
+Prefix every later dotnet call with export PATH=/root/.dotnet:$PATH &&. If a Testcontainers pull fails with HTTP 429, wait 60 seconds and retry. Run test classes one filter at a time with --filter FullyQualifiedName~<Class> (no | in filters). Run at most one PublishReleaseTests class.
+
+Rules: read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Each rule has one owner; reuse the existing shared owners before adding any. Every added member needs a production caller. Delete code the change makes unused. No backward compatibility shims, dual reads or legacy fallbacks beyond what the named precedent already does. Comments only when absolutely necessary; intent goes in names. Tests encode why the rule matters and must fail if the rule breaks. EF migrations: generate with the repo EF tool manifest (dotnet tool restore, then dotnet ef migrations add), strip the UTF-8 BOM from generated files, and make the Designer match the model at the migration's position. Regenerate schema docs with CIVIC_LENS_WRITE_SCHEMA_DOCS=1 and the SchemaReferenceTests class. Prose (docs, commit messages): ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes. Update the owning feature docs in place (template headings Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, Limits and planned work); each invariant names its rule, enforcer and test. Do not write session reports or changelogs. If you hit a design choice the brief does not settle, choose nothing: stop, commit what is done, and list the question with options in your final message.
+
+Checks before the last commit: dotnet build tests/CivicLens.Tests -c Release (0 errors), the changed and related test classes, dotnet format CivicLens.slnx --verify-no-changes --no-restore, python3 tools/check-docs.py --check, python3 tools/render-architecture.py --check.
+
+Finish, each its own Bash call: git add -A; git commit -m "<one plain sentence>"; git push origin vote-question-result-columns. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only vote-question-result-columns.
+
+Final message under 1,800 characters: the pushed SHA, what changed, test classes run with counts, new visible strings, and every open question with options.
