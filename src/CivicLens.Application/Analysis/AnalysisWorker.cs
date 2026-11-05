@@ -223,19 +223,12 @@ public sealed class AnalysisWorker<TRun>(IAnalysisTaskStep<TRun> step, IAnalysis
         private async Task<bool> FailCallAsync(AnalysisModelException exception, CancellationToken cancellationToken)
         {
             var outcome = Enum.Parse<AnalysisRunOutcome>(exception.Kind.ToString());
-            var charged = exception.Kind switch
-            {
-                Failure.ConnectionFailed => ReservedTokens,
-                Failure.InvalidResponse => exception.Usage?.Total ?? ReservedTokens,
-                Failure.RateLimited or Failure.ProviderUnavailable or Failure.AuthenticationFailed or Failure.BillingFailed or
-                    Failure.ModelNotFound or Failure.ProviderRejected => 0,
-                _ => throw new ArgumentOutOfRangeException(nameof(exception), exception.Kind, "Model failure has no token charge.")
-            };
+            var charged = AnalysisFailureRules.ChargeFor(exception, ReservedTokens);
             var run = worker.step.Wrap(Run(outcome, exception.Usage ?? AnalysisTokenUsage.None, charged, null, null, null));
             var code = Codes.ForOutcome(outcome);
             switch (exception.Kind)
             {
-                case Failure.AuthenticationFailed or Failure.BillingFailed or Failure.ModelNotFound:
+                case var kind when AnalysisFailureRules.NeedsPerson(kind):
                     return await PauseAsync(run, code, null, cancellationToken);
                 case Failure.ProviderUnavailable or Failure.ConnectionFailed when worker.pause.OutageBoundReached():
                     return await PauseAsync(run, Codes.ProviderOutage, worker.pause.NextOutagePause(), cancellationToken);

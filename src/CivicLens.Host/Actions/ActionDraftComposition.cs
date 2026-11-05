@@ -6,9 +6,13 @@ using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Documents;
 using CivicLens.Application.Issues;
 using CivicLens.Host.Analysis;
+using CivicLens.Host.Publication;
+using CivicLens.Host.Statements;
 using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Infrastructure.Documents;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -29,5 +33,19 @@ internal static class ActionDraftComposition
         var step = new ActionDraftStep(new PostgresActionDraftStore(contexts, codeVersion), reader,
             new AnthropicActionDraftModel(configuration.ApiKey), configuration.Settings, issues);
         return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<ActionDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<ActionDraftRun>>(), beat, wakeup), wakeup);
+    }
+
+    public static ActionTextMeasure CreateMeasure(CodeVersion codeVersion)
+    {
+        var (connectionString, _) = OwnerCommand.ReadEnvironment();
+        var apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+        if (string.IsNullOrWhiteSpace(apiKey)) throw new ArgumentException("The text measure needs ANTHROPIC_API_KEY.");
+        var issues = StatementIssueRubric.FromEnvironment() ?? throw new ArgumentException("The text measure needs CIVIC_LENS_ISSUES_CONFIG.");
+        var reader = new ActionBillReader(PostgresCollectionJobStore.FromConnectionString(connectionString, codeVersion),
+            new ApiResponseReader(PostgresCollectionAttemptStore.FromConnectionString(connectionString), new CaptureBodyReader()),
+            new CaptureDocumentTextExtractor(), PublicationComposition.RequireArtifactRoot());
+        var store = new PostgresActionDraftStore(AnalysisDbContextFactory.Create(connectionString), codeVersion);
+        var settings = new ActionDraftSettings(AnalysisSettings.DefaultCallTokenLimit, draftsFromBillText: true);
+        return new(store, new ActionDraftStep(store, reader, new AnthropicActionDraftModel(apiKey), settings, issues));
     }
 }
