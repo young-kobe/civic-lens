@@ -58,6 +58,14 @@ public static class AnalysisSchema
         return schema.ToJsonString(AnalysisPromptText.CompactJson);
     }
 
+    private static JsonObject QuotedSentence() => new()
+    {
+        ["type"] = "object",
+        ["additionalProperties"] = false,
+        ["required"] = new JsonArray("sentence", "quote"),
+        ["properties"] = new JsonObject { ["sentence"] = new JsonObject { ["type"] = "string" }, ["quote"] = new JsonObject { ["type"] = "string" } }
+    };
+
     private static JsonObject SentencesWithConfidence() => new()
     {
         ["type"] = "object",
@@ -65,7 +73,7 @@ public static class AnalysisSchema
         ["required"] = new JsonArray("sentences", "confidence"),
         ["properties"] = new JsonObject
         {
-            ["sentences"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } },
+            ["sentences"] = new JsonObject { ["type"] = "array", ["items"] = QuotedSentence() },
             ["confidence"] = Number()
         }
     };

@@ -53,12 +53,14 @@ public static class ActionDraftResolver
         CheckNoSummarySentence(output.Headline.Text, "headline", errors);
         var summary = QuotedSentences(output.Summary.Sentences, ActionTextPart.Summary, "summary", billText, errors);
         var why = QuotedSentences(output.WhyItMatters.Sentences, ActionTextPart.WhyItMatters, "whyItMatters", billText, errors);
+        CheckSentences(summary, "summary", context.Snapshot, errors);
+        CheckSentences(why, "whyItMatters", context.Snapshot, errors);
         var issueIds = context.Issues.Check(output.IssueIds, errors);
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
         var citations = summary.Concat(why).ToImmutableArray();
-        var source = new TextSource(billText.PackageId, Join(output.WhyItMatters.Sentences), citations);
+        var source = new TextSource(billText.PackageId, JoinSentences(why), citations);
         return AnalysisResolution<ActionDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current,
-            output.Headline.Text, Join(output.Summary.Sentences), runId, context.Snapshot.Fingerprint), issueIds, context.Issues.SubjectsHash, null, null, source));
+            output.Headline.Text, JoinSentences(summary), runId, context.Snapshot.Fingerprint), issueIds, context.Issues.SubjectsHash, null, null, source));
     }
 
     public static AnalysisResolution<ActionDraftRevision> ResolveIssueChoice(string outputJson, ActionDraftContext context,
@@ -88,25 +90,47 @@ public static class ActionDraftResolver
         Assemble(context, createdAtUtc, ActionCodeText.Of(context.Snapshot), trackedIssueIds.IsDefault ? [] : trackedIssueIds,
             context.Issues.SubjectsHash, context.Snapshot.SummaryVersion, context.Snapshot.SummaryCitation, default);
 
-    private static string Join(string[] sentences) => string.Join(ActionDraftRevision.SentenceSeparator, sentences);
+    private static string JoinSentences(IEnumerable<ActionTextCitation> citations) =>
+        string.Join(ActionDraftRevision.SentenceSeparator, citations.Select(citation => citation.Sentence));
 
-    private static List<ActionTextCitation> QuotedSentences(string[] sentences, ActionTextPart part, string field, ActionDraftBillText billText,
-        List<string> errors)
+    private static List<ActionTextCitation> QuotedSentences(AnalysisOutputSentence?[] items, ActionTextPart part, string field,
+        ActionDraftBillText billText, List<string> errors)
     {
         var (minimum, maximum) = part == ActionTextPart.Summary
             ? (ActionDraftRevision.MinimumSummarySentences, ActionDraftRevision.MaximumSummarySentences)
             : (1, ActionDraftRevision.MaximumWhyItMattersSentences);
         var citations = new List<ActionTextCitation>();
-        if (sentences.Length < minimum || sentences.Length > maximum)
-            errors.Add($"The {field} has {sentences.Length} sentences. Write {minimum} to {maximum}.");
-        foreach (var sentence in sentences.Take(maximum))
-        {
-            if (sentence.Length > ActionDraftRevision.MaximumTextQuoteLength)
-                errors.Add($"A {field} sentence has {sentence.Length} characters. Quote at most {ActionDraftRevision.MaximumTextQuoteLength}.");
-            else if (ActionCitations.BillTextQuote(billText, sentence) is { } span) citations.Add(new(part, span));
-            else errors.Add($"The {field} sentence \"{Shorten(sentence)}\" is not an exact quote of the bill text. Copy a sentence exactly as the bill text has it.");
-        }
+        if (items.Length < minimum || items.Length > maximum)
+            errors.Add($"The {field} has {items.Length} sentences. Write {minimum} to {maximum}.");
+        foreach (var item in items.Take(maximum))
+            if (QuotedSentence(item, part, field, billText, errors) is { } citation) citations.Add(citation);
         return citations;
+    }
+
+    private static ActionTextCitation? QuotedSentence(AnalysisOutputSentence? item, ActionTextPart part, string field, ActionDraftBillText billText,
+        List<string> errors)
+    {
+        var sentence = item?.Sentence?.Trim() ?? string.Empty;
+        var quote = item?.Quote ?? string.Empty;
+        if (sentence.Length == 0 || sentence.Length > ActionDraftRevision.MaximumTextSentenceLength)
+            errors.Add($"A {field} sentence has {sentence.Length} characters. Write 1 to {ActionDraftRevision.MaximumTextSentenceLength}.");
+        else if (quote.Length > ActionDraftRevision.MaximumTextQuoteLength)
+            errors.Add($"A {field} quote has {quote.Length} characters. Quote at most {ActionDraftRevision.MaximumTextQuoteLength}.");
+        else if (ActionTextCitation.WordCount(quote) < ActionDraftRevision.MinimumTextQuoteWords)
+            errors.Add($"The {field} quote \"{Shorten(quote)}\" has fewer than {ActionDraftRevision.MinimumTextQuoteWords} words. Quote at least {ActionDraftRevision.MinimumTextQuoteWords}.");
+        else if (!sentence.Contains(quote, StringComparison.Ordinal))
+            errors.Add($"The {field} sentence \"{Shorten(sentence)}\" does not contain its quote \"{Shorten(quote)}\" exactly. Put the quote in the sentence unchanged.");
+        else if (ActionCitations.BillTextQuote(billText, quote) is not { } span)
+            errors.Add($"The {field} quote \"{Shorten(quote)}\" is not an exact quote of the bill text that was sent. Copy it exactly.");
+        else return new(part, span, sentence);
+        return null;
+    }
+
+    private static void CheckSentences(List<ActionTextCitation> citations, string field, ActionBillSnapshot snapshot, List<string> errors)
+    {
+        var text = JoinSentences(citations);
+        CheckNames(text, field, snapshot, errors);
+        CheckNoSummarySentence(text, field, errors);
     }
 
     private static void CheckNoSummarySentence(string text, string field, List<string> errors)

@@ -34,7 +34,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     part = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
                     citation_extraction_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     citation_start = table.Column<int>(type: "integer", nullable: false),
-                    citation_length = table.Column<int>(type: "integer", nullable: false)
+                    citation_length = table.Column<int>(type: "integer", nullable: false),
+                    sentence = table.Column<string>(type: "character varying(400)", maxLength: 400, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -42,7 +43,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     table.CheckConstraint("ck_action_revision_text_citations_citation", "citation_start >= 0 AND citation_length > 0");
                     table.CheckConstraint("ck_action_revision_text_citations_part", "part IN ('Summary', 'WhyItMatters')");
                     table.CheckConstraint("ck_action_revision_text_citations_position", "position BETWEEN 0 AND 5");
-                    table.CheckConstraint("ck_action_revision_text_citations_quote", "citation_length <= 1000");
+                    table.CheckConstraint("ck_action_revision_text_citations_quote", "citation_length <= 300");
                     table.ForeignKey(
                         name: "FK_action_revision_text_citations_action_revisions_record_id_r~",
                         columns: x => new { x.record_id, x.revision_number },

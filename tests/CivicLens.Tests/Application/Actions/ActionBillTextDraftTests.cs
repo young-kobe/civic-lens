@@ -4,6 +4,7 @@ using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Analysis;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
@@ -18,17 +19,18 @@ public sealed class ActionBillTextDraftTests
     private static readonly ActionDraftSettings On = new(10_000_000, concurrency: 1, draftsFromBillText: true);
 
     [Fact]
-    public async Task ABillWithNoSummaryDraftsFromItsTextAndEverySentenceIsACitedQuoteOfThatText()
+    public async Task ABillWithNoSummaryDraftsFromItsTextAndEverySentenceCitesItsQuoteOfThatText()
     {
         var (store, model) = await RunAsync(ActionBillWorld.Create(summaries: []), new FakeHeadlineSummaryModel().Draft(Output()), On);
 
         var revision = Assert.Single(store.Revisions);
         Assert.Equal((PackageId, ReviewTextOrigin.Model, null), (revision.TextPackageId, revision.TextOrigin, revision.SummaryCitation));
-        Assert.Equal($"{FirstSummary} {SecondSummary}", revision.Summary);
-        Assert.Equal(WhyItMatters, revision.WhyItMatters);
+        Assert.Equal($"{FirstPlain} {SecondPlain}", revision.Summary);
+        Assert.Equal(WhyPlain, revision.WhyItMatters);
         var text = Of();
-        Assert.Equal([FirstSummary, SecondSummary, WhyItMatters],
+        Assert.Equal([FirstQuote, SecondQuote, WhyQuote],
             revision.TextCitations.Select(citation => text.Text.Substring(citation.Span.Start, citation.Span.Length)));
+        Assert.Equal([FirstPlain, SecondPlain, WhyPlain], revision.TextCitations.Select(citation => citation.Sentence));
         Assert.Equal([ActionTextPart.Summary, ActionTextPart.Summary, ActionTextPart.WhyItMatters], revision.TextCitations.Select(citation => citation.Part));
         Assert.All(revision.TextCitations, citation => Assert.Equal(ExtractionId, citation.Span.ExtractionId));
         var run = Assert.Single(model.Requests);
@@ -37,23 +39,52 @@ public sealed class ActionBillTextDraftTests
     }
 
     [Fact]
-    public async Task ARevisionThatQuotesItsTextPassesTheApprovalCheckAndModelTextThatDoesNotQuoteItsCitationsFailsIt()
+    public async Task ARevisionWhoseSentencesContainTheirQuotesPassesTheApprovalCheckAndTextThatBreaksThatRuleFailsIt()
     {
         var (store, _) = await RunAsync(ActionBillWorld.Create(summaries: []), new FakeHeadlineSummaryModel().Draft(Output()), On);
         var revision = Assert.Single(store.Revisions);
         var extractions = revision.Citations.Select(span => span.ExtractionId).Distinct().ToDictionary(id => id, _ => Extraction(Of()));
+        ActionDraftRevision WithSentence(string sentence) => revision with
+        {
+            Summary = $"{sentence} {SecondPlain}",
+            TextCitations = revision.TextCitations.SetItem(0, revision.TextCitations[0] with { Sentence = sentence })
+        };
 
         revision.ValidateAgainst(extractions);
 
         Assert.Throws<ArgumentException>(() => (revision with { Summary = "Rent aid is paid to landlords." }).ValidateAgainst(extractions));
         Assert.Throws<ArgumentException>(() => (revision with { WhyItMatters = "The program is bad." }).ValidateAgainst(extractions));
+        Assert.Throws<ArgumentException>(() => WithSentence("The bill pays landlords for tenants.").ValidateAgainst(extractions));
+        WithSentence("Landlords are paid: pay landlords on behalf of tenants with low income.").ValidateAgainst(extractions);
     }
 
     [Fact]
-    public async Task TheResolverRefusesASentenceWhoseQuoteIsNotInTheTextSoNoInventedSentenceReachesAReader()
+    public async Task TheApprovalCheckRefusesAQuoteOfThreeWordsAndAcceptsOneOfFour()
     {
         var context = await ContextAsync();
-        var invented = Output(summary: [FirstSummary, "The Secretary shall pay every landlord in the country."]);
+        var fourWords = "This Act may be";
+        var drafted = ActionDraftResolver.ResolveBillText(Output([(FirstPlain, FirstQuote), (SecondPlain, SecondQuote)], [($"It starts: {fourWords}.", fourWords)]),
+            context, "run", DateTimeOffset.UnixEpoch).Accepted!;
+        var last = drafted.TextCitations[^1];
+        var threeWords = drafted with
+        {
+            WhyItMatters = "It starts: This Act may.",
+            TextCitations = drafted.TextCitations.SetItem(drafted.TextCitations.Length - 1,
+                last with { Span = last.Span with { Length = "This Act may".Length }, Sentence = "It starts: This Act may." })
+        };
+
+        var extractions = drafted.Citations.Select(span => span.ExtractionId).Distinct().ToDictionary(id => id, _ => Extraction(Of()));
+
+        drafted.ValidateAgainst(extractions);
+
+        Assert.Throws<ArgumentException>(() => threeWords.ValidateAgainst(extractions));
+    }
+
+    [Fact]
+    public async Task TheResolverRefusesAQuoteThatIsNotInTheTextSoNoInventedQuoteReachesAReader()
+    {
+        var context = await ContextAsync();
+        var invented = Output([(FirstPlain, FirstQuote), ("The bill will pay every landlord in the country.", "pay every landlord in the country")]);
 
         var refused = ActionDraftResolver.ResolveBillText(invented, context, "run", DateTimeOffset.UnixEpoch);
         var accepted = ActionDraftResolver.ResolveBillText(Output(), context, "run", DateTimeOffset.UnixEpoch);
@@ -63,6 +94,45 @@ public sealed class ActionBillTextDraftTests
         Assert.True(accepted.IsAccepted);
     }
 
+    [Fact]
+    public async Task TheResolverRefusesASentenceThatDoesNotContainItsQuote()
+    {
+        var context = await ContextAsync();
+        var apart = Output([(FirstPlain, FirstQuote), ("A tenant can get help from the bill.", SecondQuote)]);
+
+        var refused = ActionDraftResolver.ResolveBillText(apart, context, "run", DateTimeOffset.UnixEpoch);
+
+        Assert.False(refused.IsAccepted);
+        Assert.Contains(refused.Errors, error => error.Contains("does not contain its quote", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("This Act may", false)]
+    [InlineData("This Act may be", true)]
+    public async Task TheResolverRefusesAQuoteOfThreeWordsAndAcceptsOneOfFour(string quote, bool accepted)
+    {
+        var output = Output([(FirstPlain, FirstQuote), ($"The bill says {quote}.", quote)]);
+
+        var result = ActionDraftResolver.ResolveBillText(output, await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+
+        Assert.Equal(accepted, result.IsAccepted);
+        if (!accepted) Assert.Contains(result.Errors, error => error.Contains("fewer than 4 words", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task TheResolverRefusesAQuoteThatLiesPastTheCharactersTheModelRead()
+    {
+        var text = Of();
+        var cut = text with { CharsRead = text.Body.IndexOf(SecondQuote, StringComparison.Ordinal) };
+        var whole = await ContextAsync();
+        var context = whole with { Evidence = whole.Evidence with { BillText = cut } };
+
+        var result = ActionDraftResolver.ResolveBillText(Output(), context, "run", DateTimeOffset.UnixEpoch);
+
+        Assert.False(result.IsAccepted);
+        Assert.Contains(result.Errors, error => error.Contains(SecondQuote[..20], StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData(1, 1)]
     [InlineData(4, 1)]
@@ -70,8 +140,8 @@ public sealed class ActionBillTextDraftTests
     [InlineData(2, 4)]
     public async Task TheResolverRefusesTooFewOrTooManySentencesInEitherPart(int summaryCount, int whyCount)
     {
-        var summary = new[] { FirstSummary, SecondSummary, WhyItMatters, "Section 1." }.Take(summaryCount).ToArray();
-        var why = new[] { WhyItMatters, FirstSummary, SecondSummary, "Section 1." }.Take(whyCount).ToArray();
+        var summary = new[] { (FirstPlain, FirstQuote), (SecondPlain, SecondQuote), (WhyPlain, WhyQuote), (FirstPlain, FirstQuote) }.Take(summaryCount).ToArray();
+        var why = new[] { (WhyPlain, WhyQuote), (FirstPlain, FirstQuote), (SecondPlain, SecondQuote), (FirstPlain, FirstQuote) }.Take(whyCount).ToArray();
 
         var result = ActionDraftResolver.ResolveBillText(Output(summary, why), await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
 

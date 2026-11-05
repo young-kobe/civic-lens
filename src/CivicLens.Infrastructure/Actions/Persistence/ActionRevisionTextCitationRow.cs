@@ -11,4 +11,5 @@ internal sealed class ActionRevisionTextCitationRow
     public string CitationExtractionId { get; set; } = string.Empty;
     public int CitationStart { get; set; }
     public int CitationLength { get; set; }
+    public string Sentence { get; set; } = string.Empty;
 }

@@ -3,7 +3,6 @@ using System.Text.Json.Nodes;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Core.Actions;
-using CivicLens.Core.Documents;
 using CivicLens.Tests.Fixtures;
 using Npgsql;
 
@@ -56,8 +55,8 @@ public sealed partial class PostgresBillStreamTests
         Assert.True(JsonNode.DeepEquals(expected, JsonSerializer.SerializeToNode(found, ActionReaderJson)), "The review store changed the revision.");
         Assert.True(JsonNode.DeepEquals(expected, JsonSerializer.SerializeToNode(current, ActionReaderJson)), "The draft store changed the revision.");
         Assert.Equal(revision.TextCitations.Select((citation, position) =>
-                $"{position}|{citation.Part}|{citation.Span.ExtractionId}|{citation.Span.Start}|{citation.Span.Length}"),
-            await LinesAsync("SELECT position || '|' || part || '|' || citation_extraction_id || '|' || citation_start || '|' || citation_length " +
+                $"{position}|{citation.Part}|{citation.Span.ExtractionId}|{citation.Span.Start}|{citation.Span.Length}|{citation.Sentence}"),
+            await LinesAsync("SELECT position || '|' || part || '|' || citation_extraction_id || '|' || citation_start || '|' || citation_length || '|' || sentence " +
                 $"FROM action_revision_text_citations WHERE record_id = '{RecordId}' AND revision_number = 1 ORDER BY position"));
         Assert.Equal($"BILLS-119hr7ih|{revision.WhyItMatters}",
             await ScalarAsync($"SELECT text_package_id || '|' || why_it_matters FROM action_revisions WHERE record_id = '{RecordId}'"));
@@ -87,18 +86,19 @@ public sealed partial class PostgresBillStreamTests
 
     private static ActionDraftRevision TextRevision(string candidate, (string ExtractionId, CongressBillTextReading Reading) stored)
     {
-        SourceSpan Quote(string quote) => new(stored.ExtractionId, stored.Reading.Text.IndexOf(quote, StringComparison.Ordinal), quote.Length);
+        ActionTextCitation Cite(ActionTextPart part, string quote, string sentence) =>
+            new(part, new(stored.ExtractionId, stored.Reading.Text.IndexOf(quote, StringComparison.Ordinal), quote.Length), sentence);
         var basis = Revision(candidate, 1);
         return basis with
         {
-            Summary = $"{ActionBillTexts.FirstSummary} {ActionBillTexts.SecondSummary}",
+            Summary = $"{ActionBillTexts.FirstPlain} {ActionBillTexts.SecondPlain}",
             TextPackageId = "BILLS-119hr7ih",
-            WhyItMatters = ActionBillTexts.WhyItMatters,
+            WhyItMatters = ActionBillTexts.WhyPlain,
             TextCitations =
             [
-                new(ActionTextPart.Summary, Quote(ActionBillTexts.FirstSummary)),
-                new(ActionTextPart.Summary, Quote(ActionBillTexts.SecondSummary)),
-                new(ActionTextPart.WhyItMatters, Quote(ActionBillTexts.WhyItMatters))
+                Cite(ActionTextPart.Summary, ActionBillTexts.FirstQuote, ActionBillTexts.FirstPlain),
+                Cite(ActionTextPart.Summary, ActionBillTexts.SecondQuote, ActionBillTexts.SecondPlain),
+                Cite(ActionTextPart.WhyItMatters, ActionBillTexts.WhyQuote, ActionBillTexts.WhyPlain)
             ],
             Sponsorships = [.. basis.Sponsorships.Select(item => item with { Citations = [new(stored.ExtractionId, 0, 5)] })]
         };

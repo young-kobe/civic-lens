@@ -17,4 +17,6 @@ internal sealed record ActionTextOutput(AnalysisOutputText Headline, AnalysisOut
     }
 }
 
-internal sealed record AnalysisOutputSentences(string[] Sentences, double Confidence);
+internal sealed record AnalysisOutputSentences(AnalysisOutputSentence?[] Sentences, double Confidence);
+
+internal sealed record AnalysisOutputSentence(string? Sentence, string? Quote);

@@ -14,6 +14,12 @@ internal static class ActionBillTexts
     public const string FirstSummary = "The Secretary shall pay landlords on behalf of tenants with low income.";
     public const string SecondSummary = "A tenant is eligible when the household income is under 50 percent of the area median.";
     public const string WhyItMatters = "The program ends on December 31, 2030.";
+    public const string FirstQuote = "pay landlords on behalf of tenants with low income";
+    public const string SecondQuote = "when the household income is under 50 percent of the area median";
+    public const string WhyQuote = "program ends on December 31, 2030";
+    public const string FirstPlain = "The bill lets the Secretary pay landlords on behalf of tenants with low income.";
+    public const string SecondPlain = "A tenant can get help when the household income is under 50 percent of the area median.";
+    public const string WhyPlain = "Aid under the bill stops when the program ends on December 31, 2030.";
     public const string ExtractionVersion = "congress-bill-text-v1+fake-extraction";
 
     private static readonly CapturedAttemptResult Attempt = new(new string('7', 32), "congress-bill-text",
@@ -34,11 +40,14 @@ internal static class ActionBillTexts
 
     public static DocumentExtraction Extraction(ActionDraftBillText text) => new(Attempt, ExtractionVersion, text.Text);
 
-    public static string Output(string[]? summary = null, string[]? whyItMatters = null, string[]? issueIds = null) => JsonSerializer.Serialize(new
-    {
-        headline = new { text = "H.R. 1 pays landlords for tenants with low income.", confidence = 0.8 },
-        summary = new { sentences = summary ?? [FirstSummary, SecondSummary], confidence = 0.7 },
-        whyItMatters = new { sentences = whyItMatters ?? [WhyItMatters], confidence = 0.6 },
-        issueIds = issueIds ?? ["rent"]
-    });
+    public static string Output((string Sentence, string Quote)[]? summary = null, (string Sentence, string Quote)[]? whyItMatters = null,
+        string[]? issueIds = null) => JsonSerializer.Serialize(new
+        {
+            headline = new { text = "H.R. 1 pays landlords for tenants with low income.", confidence = 0.8 },
+            summary = new { sentences = (summary ?? [(FirstPlain, FirstQuote), (SecondPlain, SecondQuote)]).Select(Item), confidence = 0.7 },
+            whyItMatters = new { sentences = (whyItMatters ?? [(WhyPlain, WhyQuote)]).Select(Item), confidence = 0.6 },
+            issueIds = issueIds ?? ["rent"]
+        });
+
+    private static object Item((string Sentence, string Quote) item) => new { sentence = item.Sentence, quote = item.Quote };
 }

@@ -150,7 +150,8 @@ internal static class ActionRevisionRows
         Part = citation.Part,
         CitationExtractionId = citation.Span.ExtractionId,
         CitationStart = citation.Span.Start,
-        CitationLength = citation.Span.Length
+        CitationLength = citation.Span.Length,
+        Sentence = citation.Sentence
     };
 
     private static ActionRevisionSponsorshipCitationRow CitationRow(ActionDraftRevision revision, short sponsorshipPosition, SourceSpan citation, int position) => new()

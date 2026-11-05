@@ -40,7 +40,7 @@ internal sealed record ActionRevisionPage(IReadOnlyList<ActionRevisionRow> Rows,
     private ImmutableArray<ActionTextCitation> TextCitationsOf(ActionRevisionRow row) =>
         row.TextPackageId is null ? default
             : [.. TextCitations[(row.RecordId, row.RevisionNumber)].OrderBy(citation => citation.Position)
-                .Select(citation => new ActionTextCitation(citation.Part, new SourceSpan(citation.CitationExtractionId, citation.CitationStart, citation.CitationLength)))];
+                .Select(citation => new ActionTextCitation(citation.Part, new SourceSpan(citation.CitationExtractionId, citation.CitationStart, citation.CitationLength), citation.Sentence))];
 
     private ImmutableArray<ActionSponsorship> SponsorshipsOf(ActionRevisionRow row) =>
         [.. Sponsorships[(row.RecordId, row.RevisionNumber)].OrderBy(item => item.Position).Select(item => new ActionSponsorship(item.PersonId, item.BioguideId,

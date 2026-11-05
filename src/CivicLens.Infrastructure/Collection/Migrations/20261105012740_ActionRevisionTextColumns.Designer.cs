@@ -1003,6 +1003,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("part");
 
+                    b.Property<string>("Sentence")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)")
+                        .HasColumnName("sentence");
+
                     b.HasKey("RecordId", "RevisionNumber", "Position");
 
                     b.HasIndex("CitationExtractionId");
@@ -1015,7 +1021,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_action_revision_text_citations_position", "position BETWEEN 0 AND 5");
 
-                            t.HasCheckConstraint("ck_action_revision_text_citations_quote", "citation_length <= 1000");
+                            t.HasCheckConstraint("ck_action_revision_text_citations_quote", "citation_length <= 300");
                         });
                 });
 

@@ -14,12 +14,13 @@ internal static class ActionCitations
         return new(extractionId, title.Start, introduced.Start + introduced.Length - title.Start);
     }
 
-    /// <summary>The span of an exact quote in the body of the bill text. It is null when the body does not hold the quote.</summary>
+    /// <summary>The span of an exact quote in the characters read of the bill text. It is null when they do not hold the quote.</summary>
     public static SourceSpan? BillTextQuote(ActionDraftBillText billText, string quote)
     {
         if (quote.Length == 0) return null;
         var start = billText.Text.IndexOf(quote, billText.BodyStart, StringComparison.Ordinal);
-        return start < 0 || SplitsSurrogatePair(billText.Text, start) || SplitsSurrogatePair(billText.Text, start + quote.Length)
+        var readEnd = billText.BodyStart + billText.CharsRead;
+        return start < 0 || start + quote.Length > readEnd || SplitsSurrogatePair(billText.Text, start) || SplitsSurrogatePair(billText.Text, start + quote.Length)
             ? null : new(billText.ExtractionId, start, quote.Length);
     }
 

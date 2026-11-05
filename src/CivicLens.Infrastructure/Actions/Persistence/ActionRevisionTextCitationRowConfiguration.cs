@@ -20,6 +20,7 @@ internal sealed class ActionRevisionTextCitationRowConfiguration : IEntityTypeCo
         builder.Property(row => row.RevisionNumber).HasColumnName("revision_number");
         builder.Property(row => row.Position).HasColumnName("position");
         builder.Property(row => row.Part).HasColumnName("part").HasConversion<string>().HasMaxLength(16);
+        builder.Property(row => row.Sentence).HasColumnName("sentence").HasMaxLength(ActionDraftRevision.MaximumTextSentenceLength);
         SourceSpanColumns.Configure(builder, "action_revision_text_citations", "Citation", "citation", optional: false);
     }
 }

@@ -44,8 +44,8 @@ public sealed class ActionDraftRevisionTextTests
     [InlineData(2, 4)]
     public void TheSentenceCountsOfBothPartsAreBounded(int summary, int why)
     {
-        var citations = Enumerable.Range(0, summary).Select(index => new ActionTextCitation(ActionTextPart.Summary, new(ExtractionId, index * 10, 5)))
-            .Concat(Enumerable.Range(0, why).Select(index => new ActionTextCitation(ActionTextPart.WhyItMatters, new(ExtractionId, 100 + index * 10, 5))));
+        var citations = Enumerable.Range(0, summary).Select(index => new ActionTextCitation(ActionTextPart.Summary, new(ExtractionId, index * 10, 5), "A sentence."))
+            .Concat(Enumerable.Range(0, why).Select(index => new ActionTextCitation(ActionTextPart.WhyItMatters, new(ExtractionId, 100 + index * 10, 5), "A sentence.")));
 
         Assert.Throws<ArgumentException>(() => (TextModel() with { TextCitations = [.. citations] }).ValidateShape());
     }
@@ -61,9 +61,19 @@ public sealed class ActionDraftRevisionTextTests
     [Fact]
     public void AQuoteLongerThanTheCapIsRefused()
     {
-        var long_ = TextModel().TextCitations.SetItem(0, new(ActionTextPart.Summary, new(ExtractionId, 0, ActionDraftRevision.MaximumTextQuoteLength + 1)));
+        var long_ = TextModel().TextCitations.SetItem(0, new(ActionTextPart.Summary, new(ExtractionId, 0, ActionDraftRevision.MaximumTextQuoteLength + 1), "First sentence."));
 
         Assert.Throws<ArgumentException>(() => (TextModel() with { TextCitations = long_ }).ValidateShape());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ASentenceMustHaveTextAndStayUnderItsCap(string sentence)
+    {
+        Assert.Throws<ArgumentException>(() => (TextModel() with { TextCitations = TextModel().TextCitations.SetItem(0, TextModel().TextCitations[0] with { Sentence = sentence }) }).ValidateShape());
+        var long_ = new string('a', ActionDraftRevision.MaximumTextSentenceLength + 1);
+        Assert.Throws<ArgumentException>(() => (TextModel() with { TextCitations = TextModel().TextCitations.SetItem(0, TextModel().TextCitations[0] with { Sentence = long_ }) }).ValidateShape());
     }
 
     [Fact]

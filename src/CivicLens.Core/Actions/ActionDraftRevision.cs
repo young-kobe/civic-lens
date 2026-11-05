@@ -40,7 +40,9 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     public const int MaximumSummarySentences = 3;
     public const int MaximumWhyItMattersSentences = 3;
     public const int MaximumTextCitations = MaximumSummarySentences + MaximumWhyItMattersSentences;
-    public const int MaximumTextQuoteLength = 1_000;
+    public const int MaximumTextQuoteLength = 300;
+    public const int MinimumTextQuoteWords = 4;
+    public const int MaximumTextSentenceLength = 400;
     public const string SentenceSeparator = " ";
 
     private ImmutableArray<ActionTextCitation> TextCitationList => TextCitations.IsDefault ? [] : TextCitations;
@@ -128,7 +130,9 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         if (summary is < MinimumSummarySentences or > MaximumSummarySentences || why is < 1 or > MaximumWhyItMattersSentences || !summaryComesFirst)
             throw new ArgumentException("Bill text gives 2 or 3 summary sentences, then 1 to 3 why it matters sentences.");
         if (citations.Any(citation => !IsBounded(citation.Span) || citation.Span.Length > MaximumTextQuoteLength))
-            throw new ArgumentException("Each text citation is a bounded span of one sentence.");
+            throw new ArgumentException("Each text citation is a bounded span of one quote.");
+        if (citations.Any(citation => string.IsNullOrWhiteSpace(citation.Sentence) || citation.Sentence.Length > MaximumTextSentenceLength))
+            throw new ArgumentException("Each text sentence has text and at most the maximum length.");
     }
 
     private static void ValidateIssueIds(ImmutableArray<string> ids, string name)
@@ -177,10 +181,16 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
 
     private void RequireTextToQuoteItsCitations(IReadOnlyDictionary<string, DocumentExtraction> extractions)
     {
-        string QuotesOf(ActionTextPart part) => string.Join(SentenceSeparator,
-            TextCitationList.Where(citation => citation.Part == part).Select(citation => citation.Span.QuoteIn(extractions)));
-        if (Summary != QuotesOf(ActionTextPart.Summary) || WhyItMatters != QuotesOf(ActionTextPart.WhyItMatters))
-            throw new ArgumentException("Model text drawn from the bill text quotes its citations, sentence by sentence.");
+        string SentencesOf(ActionTextPart part) => string.Join(SentenceSeparator,
+            TextCitationList.Where(citation => citation.Part == part).Select(citation => citation.Sentence));
+        if (Summary != SentencesOf(ActionTextPart.Summary) || WhyItMatters != SentencesOf(ActionTextPart.WhyItMatters))
+            throw new ArgumentException("Model text drawn from the bill text is the join of its sentences.");
+        foreach (var citation in TextCitationList)
+        {
+            var quote = citation.Span.QuoteIn(extractions);
+            if (!citation.Sentence.Contains(quote, StringComparison.Ordinal) || ActionTextCitation.WordCount(quote) < MinimumTextQuoteWords)
+                throw new ArgumentException($"Each text sentence contains its quote of at least {MinimumTextQuoteWords} words.");
+        }
     }
 
     public bool HasSameSponsorsAs(IEnumerable<ActionSponsorship> other) => SponsorsOf(Sponsorships).SequenceEqual(SponsorsOf(other));

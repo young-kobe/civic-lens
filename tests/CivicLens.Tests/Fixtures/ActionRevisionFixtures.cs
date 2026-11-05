@@ -30,9 +30,9 @@ internal static class ActionRevisionFixtures
         WhyItMatters = "Third sentence.",
         TextCitations =
         [
-            new(ActionTextPart.Summary, new(ExtractionId, 0, 15)),
-            new(ActionTextPart.Summary, new(ExtractionId, 16, 16)),
-            new(ActionTextPart.WhyItMatters, new(ExtractionId, 33, 15))
+            new(ActionTextPart.Summary, new(ExtractionId, 0, 15), "First sentence."),
+            new(ActionTextPart.Summary, new(ExtractionId, 16, 16), "Second sentence."),
+            new(ActionTextPart.WhyItMatters, new(ExtractionId, 33, 15), "Third sentence.")
         ]
     };
 
