@@ -181,7 +181,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
                 ?? throw new ArgumentException("An action citation names a missing extraction."), span.Start, span.Length);
         if (TextPackageId is null) return;
         RequireTextSpansInTheBody(extractions);
-        if (TextOrigin == ReviewTextOrigin.Model) RequireTextToQuoteItsCitations(extractions);
+        if (TextOrigin == ReviewTextOrigin.Model) RequireQuotesOfEnoughWords(extractions);
     }
 
     private void RequireTextSpansInTheBody(IReadOnlyDictionary<string, DocumentExtraction> extractions)
@@ -192,16 +192,15 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
             throw new ArgumentException("Each text citation lies in the body of one bill text extraction.");
     }
 
-    private void RequireTextToQuoteItsCitations(IReadOnlyDictionary<string, DocumentExtraction> extractions)
+    private void RequireQuotesOfEnoughWords(IReadOnlyDictionary<string, DocumentExtraction> extractions)
     {
         ActionTextCitation[] Of(ActionTextPart part) => [.. TextCitationList.Where(citation => citation.Part == part)];
         if (Summary != ActionTextCitation.Join(Of(ActionTextPart.Summary)) || WhyItMatters != ActionTextCitation.Join(Of(ActionTextPart.WhyItMatters)))
             throw new ArgumentException("Model text drawn from the bill text is the join of its sentences.");
         foreach (var citation in TextCitationList)
         {
-            var quote = citation.Span.QuoteIn(extractions);
-            if (!citation.Sentence.Contains(quote, StringComparison.Ordinal) || ActionTextCitation.WordCount(quote) < MinimumTextQuoteWords)
-                throw new ArgumentException($"Each text sentence contains its quote of at least {MinimumTextQuoteWords} words.");
+            if (ActionTextCitation.WordCount(citation.Span.QuoteIn(extractions)) < MinimumTextQuoteWords)
+                throw new ArgumentException($"Each text quote has at least {MinimumTextQuoteWords} words.");
         }
     }
 

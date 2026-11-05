@@ -2,7 +2,7 @@ using CivicLens.Core.Documents;
 
 namespace CivicLens.Core.Actions;
 
-/// <summary>One plain sentence of an action revision. The span holds the exact quote of the bill text that the sentence contains.</summary>
+/// <summary>One plain sentence of an action revision. The span holds the exact quote of the bill text that supports the sentence.</summary>
 public sealed record ActionTextCitation(ActionTextPart Part, SourceSpan Span, string Sentence)
 {
     private const string SentenceSeparator = " ";

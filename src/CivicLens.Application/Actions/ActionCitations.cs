@@ -16,19 +16,6 @@ internal static class ActionCitations
         return new(extractionId, title.Start, introduced.Start + introduced.Length - title.Start);
     }
 
-    /// <summary>The span of an exact quote in the characters read of the bill text. It is null when they do not hold the quote.</summary>
-    public static SourceSpan? BillTextQuote(ActionDraftBillText billText, string quote)
-    {
-        if (quote.Length == 0) return null;
-        var start = billText.Text.IndexOf(quote, billText.BodyStart, StringComparison.Ordinal);
-        var readEnd = billText.BodyStart + billText.CharsRead;
-        return start < 0 || start + quote.Length > readEnd || SplitsSurrogatePair(billText.Text, start) || SplitsSurrogatePair(billText.Text, start + quote.Length)
-            ? null : new(billText.ExtractionId, start, quote.Length);
-    }
-
-    private static bool SplitsSurrogatePair(string text, int boundary) => boundary > 0 && boundary < text.Length &&
-        char.IsHighSurrogate(text[boundary - 1]) && char.IsLowSurrogate(text[boundary]);
-
     public static SourceSpan? SummaryBlock(ActionDraftPage page, CongressBillSummary summary)
     {
         var version = CongressBillRenderer.SummaryVersionLine(summary);

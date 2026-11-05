@@ -7,9 +7,9 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionTextPromptGoldenTests
 {
-    private const string SystemSha256 = "510f744e27265dec57021c9da43fe913097b7c132b7af4cb596559e125f6ba93";
+    private const string SystemSha256 = "8aef78ca24072f663194e5866ec7699be587865df91690211b173a681d5dfc1d";
     private const string SchemaSha256 = "1842aea9479adba4bd6244a32833f17e655bb8083b18fb5c87380619258bc9e8";
-    private const string InputHash = "b101751aa7e7c624d2fa244c6348ea032b21c844c22034965bc369d06e660b46";
+    private const string InputHash = "32c99727c2757706ef78c8c483885878b8b7ba682450ca0582195a7f0da05e9f";
 
     [Fact]
     public async Task TheTextPromptAndSchemaMatchTheirPinnedVersions()
@@ -21,7 +21,7 @@ public sealed class ActionTextPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(ActionDraftTask.TextPromptVersion)} ({ActionDraftTask.TextPromptVersion}) or " +
             $"{nameof(ActionDraftTask.TextSchemaVersion)} ({ActionDraftTask.TextSchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("action-text-prompt-v1", "action-text-schema-v1", "claude-haiku-5-5"),
+        Assert.Equal(("action-text-prompt-v2", "action-text-schema-v1", "claude-haiku-5-5"),
             (ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model));
         Assert.Equal((ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion), (request.PromptVersion, request.SchemaVersion));
         Assert.Contains(ActionDraftTask.TextPromptVersion, ActionDraftTask.CurrentPromptVersions);
@@ -30,6 +30,24 @@ public sealed class ActionTextPromptGoldenTests
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");
         Assert.True(request.InputHash == InputHash, $"{bump} Input hash: {request.InputHash}");
+    }
+
+    [Fact]
+    public async Task TheTextCallReservesItsInputPlusTheLargerOutputLimitAndTheByteCapKeepsTheReservationInsideTheCallLimit()
+    {
+        var world = ActionBillWorld.Create(summaries: []);
+        var snapshot = (await world.Reader().ReadAsync(world.Evidence() with { BillText = ActionBillTexts.Of() }, default)).Snapshot!;
+        var request = ActionTextPrompt.Build(snapshot, ActionBillTexts.Of(), BillGateFixtures.HousingChoice(), ActionDraftTask.MaximumPromptBytes)!;
+        var settings = new ActionDraftSettings(120_000);
+
+        Assert.Equal(16_000, request.MaximumOutputTokens);
+        Assert.Equal(Encoding.UTF8.GetByteCount(request.SystemPrompt) + Encoding.UTF8.GetByteCount(request.UserPrompt) +
+            Encoding.UTF8.GetByteCount(request.SchemaJson) + 16_000, request.ReservedTokens);
+        var small = new ActionDraftSettings(40_000);
+        Assert.Equal(ActionDraftTask.MaximumPromptBytes, settings.TextPromptByteCap);
+        Assert.Equal(small.CallTokenLimit - ActionDraftTask.MaximumTextOutputTokens, small.TextPromptByteCap);
+        Assert.True(settings.TextPromptByteCap + ActionDraftTask.MaximumTextOutputTokens <= settings.CallTokenLimit);
+        Assert.True(small.TextPromptByteCap + ActionDraftTask.MaximumTextOutputTokens <= small.CallTokenLimit);
     }
 
     [Fact]

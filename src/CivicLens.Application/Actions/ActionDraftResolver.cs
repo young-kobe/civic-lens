@@ -51,8 +51,9 @@ public static class ActionDraftResolver
         CheckConfidence(output.WhyItMatters.Confidence, "whyItMatters confidence", errors);
         CheckNames(output.Headline.Text, "headline", context.Snapshot, errors);
         CheckNoSummarySentence(output.Headline.Text, "headline", errors);
-        var summary = QuotedSentences(output.Summary.Sentences, ActionTextPart.Summary, "summary", billText, errors);
-        var why = QuotedSentences(output.WhyItMatters.Sentences, ActionTextPart.WhyItMatters, "whyItMatters", billText, errors);
+        var quotes = new BillTextQuotes(billText);
+        var summary = QuotedSentences(output.Summary.Sentences, ActionTextPart.Summary, "summary", quotes, errors);
+        var why = QuotedSentences(output.WhyItMatters.Sentences, ActionTextPart.WhyItMatters, "whyItMatters", quotes, errors);
         CheckSentences(summary, "summary", context.Snapshot, errors);
         CheckSentences(why, "whyItMatters", context.Snapshot, errors);
         var issueIds = context.Issues.Check(output.IssueIds, errors);
@@ -91,7 +92,7 @@ public static class ActionDraftResolver
             context.Issues.SubjectsHash, context.Snapshot.SummaryVersion, context.Snapshot.SummaryCitation, default);
 
     private static List<ActionTextCitation> QuotedSentences(AnalysisOutputSentence?[] items, ActionTextPart part, string field,
-        ActionDraftBillText billText, List<string> errors)
+        BillTextQuotes quotes, List<string> errors)
     {
         var (minimum, maximum) = part == ActionTextPart.Summary
             ? (ActionDraftRevision.MinimumSummarySentences, ActionDraftRevision.MaximumSummarySentences)
@@ -100,11 +101,11 @@ public static class ActionDraftResolver
         if (items.Length < minimum || items.Length > maximum)
             errors.Add($"The {field} has {items.Length} sentences. Write {minimum} to {maximum}.");
         foreach (var item in items.Take(maximum))
-            if (QuotedSentence(item, part, field, billText, errors) is { } citation) citations.Add(citation);
+            if (QuotedSentence(item, part, field, quotes, errors) is { } citation) citations.Add(citation);
         return citations;
     }
 
-    private static ActionTextCitation? QuotedSentence(AnalysisOutputSentence? item, ActionTextPart part, string field, ActionDraftBillText billText,
+    private static ActionTextCitation? QuotedSentence(AnalysisOutputSentence? item, ActionTextPart part, string field, BillTextQuotes quotes,
         List<string> errors)
     {
         var sentence = item?.Sentence?.Trim() ?? string.Empty;
@@ -115,10 +116,12 @@ public static class ActionDraftResolver
             errors.Add($"A {field} quote has {quote.Length} characters. Quote at most {ActionDraftRevision.MaximumTextQuoteLength}.");
         else if (ActionTextCitation.WordCount(quote) < ActionDraftRevision.MinimumTextQuoteWords)
             errors.Add($"The {field} quote \"{Shorten(quote)}\" has fewer than {ActionDraftRevision.MinimumTextQuoteWords} words. Quote at least {ActionDraftRevision.MinimumTextQuoteWords}.");
-        else if (!sentence.Contains(quote, StringComparison.Ordinal))
-            errors.Add($"The {field} sentence \"{Shorten(sentence)}\" does not contain its quote \"{Shorten(quote)}\" exactly. Put the quote in the sentence unchanged.");
-        else if (ActionCitations.BillTextQuote(billText, quote) is not { } span)
+        else if (quotes.Find(quote) is not { } span)
             errors.Add($"The {field} quote \"{Shorten(quote)}\" is not an exact quote of the bill text that was sent. Copy it exactly.");
+        else if (span.Length > ActionDraftRevision.MaximumTextQuoteLength)
+            errors.Add($"A {field} quote spans {span.Length} characters of the stored text. Quote at most {ActionDraftRevision.MaximumTextQuoteLength}.");
+        else if (ReadingGrade.Of(sentence) is var grade && grade > ReadingGrade.MaximumSentenceGrade)
+            errors.Add($"The {field} sentence \"{Shorten(sentence)}\" reads at grade {ReadingGrade.Format(grade)}. Write at grade {ReadingGrade.MaximumSentenceGrade} or below. Use shorter words and shorter sentences.");
         else return new(part, span, sentence);
         return null;
     }

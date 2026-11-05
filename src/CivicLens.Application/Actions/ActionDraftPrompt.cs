@@ -77,7 +77,7 @@ public static class ActionDraftPrompt
                 versionDate = billText.VersionDate is { } date ? Date(date) : null,
                 charactersRead = billText.CharsRead,
                 charactersTotal = billText.CharsTotal,
-                text = billText.Body
+                text = BillTextQuotes.Normalize(billText.Body)
             }
         };
         var builder = new StringBuilder("Facts:\n").Append(JsonSerializer.Serialize(document, AnalysisPromptText.EvidenceJson));

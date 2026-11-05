@@ -79,7 +79,7 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         if (attempt.Revision is { TextPackageId: not null } revision)
             return With(ActionTextMeasureOutcome.Accepted, null,
                 [.. revision.TextCitations.Select(citation => new ActionTextMeasureSentence(citation.Part, citation.Sentence,
-                    billText.Text.Substring(citation.Span.Start, citation.Span.Length)))]);
+                    billText.Text.Substring(citation.Span.Start, citation.Span.Length), Math.Round(ReadingGrade.Of(citation.Sentence), 1)))]);
         if (attempt.Revision is not null) return With(ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.WrittenByCode);
         if (attempt.Calls == 0) return With(ActionTextMeasureOutcome.Skipped, attempt.ErrorCode);
         return With(IsResolverRefusal(attempt.Runs[^1].Outcome) ? ActionTextMeasureOutcome.Rejected : ActionTextMeasureOutcome.Failed, attempt.ErrorCode);

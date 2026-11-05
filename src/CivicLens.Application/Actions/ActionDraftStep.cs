@@ -101,7 +101,7 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
 
     private AnalysisModelRequest? BuildBillTextRequest(ActionDraftContext context, ActionDraftBillText billText, ImmutableArray<string> errors) =>
         context.Issues.BuildDroppingSubjectsWhenOverTheCap(
-            choice => ActionTextPrompt.Build(context.Snapshot, billText, choice, settings.PromptByteCap, errors));
+            choice => ActionTextPrompt.Build(context.Snapshot, billText, choice, settings.TextPromptByteCap, errors));
 
     private AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision> BillTextLoop(IAnalysisAttempt<ActionDraftRun> attempt,
         ActionDraftContext context, ActionDraftBillText billText, AnalysisModelRequest firstRequest) =>

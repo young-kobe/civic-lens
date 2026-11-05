@@ -39,7 +39,7 @@ public sealed class ActionBillTextDraftTests
     }
 
     [Fact]
-    public async Task ARevisionWhoseSentencesContainTheirQuotesPassesTheApprovalCheckAndTextThatBreaksThatRuleFailsIt()
+    public async Task ARevisionWhoseTextIsTheJoinOfItsSentencesPassesTheApprovalCheckAndTextThatBreaksThatRuleFailsIt()
     {
         var (store, _) = await RunAsync(ActionBillWorld.Create(summaries: []), new FakeHeadlineSummaryModel().Draft(Output()), On);
         var revision = Assert.Single(store.Revisions);
@@ -54,8 +54,7 @@ public sealed class ActionBillTextDraftTests
 
         Assert.Throws<ArgumentException>(() => (revision with { Summary = "Rent aid is paid to landlords." }).ValidateAgainst(extractions));
         Assert.Throws<ArgumentException>(() => (revision with { WhyItMatters = "The program is bad." }).ValidateAgainst(extractions));
-        Assert.Throws<ArgumentException>(() => WithSentence("The bill pays landlords for tenants.").ValidateAgainst(extractions));
-        WithSentence("Landlords are paid: pay landlords on behalf of tenants with low income.").ValidateAgainst(extractions);
+        WithSentence("The bill pays landlords for tenants.").ValidateAgainst(extractions);
     }
 
     [Fact]
@@ -112,15 +111,76 @@ public sealed class ActionBillTextDraftTests
     }
 
     [Fact]
-    public async Task TheResolverRefusesASentenceThatDoesNotContainItsQuote()
+    public async Task ASentenceNeedNotContainItsQuoteBecauseTheQuoteIsOnlyTheEvidence()
     {
         var context = await ContextAsync();
         var apart = Output([(FirstPlain, FirstQuote), ("A tenant can get help from the bill.", SecondQuote)]);
 
-        var refused = ActionDraftResolver.ResolveBillText(apart, context, "run", DateTimeOffset.UnixEpoch);
+        var result = ActionDraftResolver.ResolveBillText(apart, context, "run", DateTimeOffset.UnixEpoch);
 
+        Assert.True(result.IsAccepted);
+        Assert.Equal("A tenant can get help from the bill.", result.Accepted!.TextCitations[1].Sentence);
+    }
+
+    [Fact]
+    public async Task TheResolverRefusesASentenceAboveTheGradeLimitWithAMessageThatNamesTheGradeAndAcceptsAPlainOne()
+    {
+        var context = await ContextAsync();
+        var legal = "Notwithstanding the aforementioned administrative requirements, eligible beneficiaries receive compensatory disbursements.";
+        var refused = ActionDraftResolver.ResolveBillText(Output([(FirstPlain, FirstQuote), (legal, SecondQuote)]), context, "run", DateTimeOffset.UnixEpoch);
+
+        var error = Assert.Single(refused.Errors);
         Assert.False(refused.IsAccepted);
-        Assert.Contains(refused.Errors, error => error.Contains("does not contain its quote", StringComparison.Ordinal));
+        Assert.Contains($"reads at grade {ReadingGrade.Format(ReadingGrade.Of(legal))}", error, StringComparison.Ordinal);
+        Assert.Contains("grade 8 or below", error, StringComparison.Ordinal);
+        Assert.Contains("shorter words and shorter sentences", error, StringComparison.Ordinal);
+        Assert.True(ActionDraftResolver.ResolveBillText(Output(), context, "run", DateTimeOffset.UnixEpoch).IsAccepted);
+    }
+
+    [Fact]
+    public async Task AGpoQuoteMarkReachesTheModelAsAPlainQuoteAndAQuoteOfThatMarkCitesTheStoredCharacters()
+    {
+        const string stored = "The term ``eligible tenant'' means a tenant with low income who rents a home.";
+        const string plain = "The term \"eligible tenant\" means a tenant with low income who rents a home.";
+        var text = Of($"Section 1. {stored} {SecondSummary} {WhyItMatters}");
+        var world = ActionBillWorld.Create(summaries: []);
+        var snapshot = (await world.Reader().ReadAsync(world.Evidence() with { BillText = text }, default)).Snapshot!;
+        var whole = await ContextAsync();
+        var context = whole with { Evidence = whole.Evidence with { BillText = text } };
+
+        var request = ActionTextPrompt.Build(snapshot, text, BillGateFixtures.HousingChoice(), ActionDraftTask.MaximumPromptBytes)!;
+        var resolved = ActionDraftResolver.ResolveBillText(Output([(FirstPlain, plain), (SecondPlain, SecondQuote)]), context, "run", DateTimeOffset.UnixEpoch);
+
+        Assert.DoesNotContain("``", request.UserPrompt, StringComparison.Ordinal);
+        Assert.Contains("eligible tenant\\\" means", request.UserPrompt, StringComparison.Ordinal);
+        var citation = resolved.Accepted!.TextCitations[0];
+        Assert.Equal(stored, text.Text.Substring(citation.Span.Start, citation.Span.Length));
+        var later = resolved.Accepted.TextCitations[1];
+        Assert.Equal(SecondQuote, text.Text.Substring(later.Span.Start, later.Span.Length));
+    }
+
+    [Theory]
+    [InlineData("``a'' and ``b''", "\"a\" and \"b\"")]
+    [InlineData("it's ''quoted''", "it's \"quoted\"")]
+    [InlineData("`one' 'two`", "`one' 'two`")]
+    [InlineData("```x", "\"`x")]
+    public void TheMarkRuleTurnsEachPairIntoOnePlainQuoteAndLeavesSingleMarksAlone(string text, string expected) =>
+        Assert.Equal(expected, BillTextQuotes.Normalize(text));
+
+    [Fact]
+    public async Task AQuoteThatLiesInTheStoredTextWithManyMarksNeverPassesTheQuoteLength()
+    {
+        var marks = string.Concat(Enumerable.Repeat("``a'' ", 60));
+        var text = Of($"Section 1. {marks}{SecondSummary} {WhyItMatters}");
+        var whole = await ContextAsync();
+        var context = whole with { Evidence = whole.Evidence with { BillText = text } };
+        var quote = BillTextQuotes.Normalize(marks.TrimEnd());
+
+        var result = ActionDraftResolver.ResolveBillText(Output([(FirstPlain, FirstQuote), (SecondPlain, quote)]), context, "run", DateTimeOffset.UnixEpoch);
+
+        Assert.True(quote.Length <= ActionDraftRevision.MaximumTextQuoteLength);
+        Assert.False(result.IsAccepted);
+        Assert.Contains(result.Errors, error => error.Contains("characters of the stored text", StringComparison.Ordinal));
     }
 
     [Theory]
