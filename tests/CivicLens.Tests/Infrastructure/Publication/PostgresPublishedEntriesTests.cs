@@ -386,8 +386,8 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version,
             review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
         VALUES ('{{id}}', 'congress-house-votes', 'House', 119, 1, {{rollCall}}, 1, 1, 'Approved', 0, 0);
-        INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks, result)
-        VALUES ('{{id}}', 1, 'owner', 'Person', NULL, '{}', 0, '')
+        INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, created_at_utc_ticks, {{VoteRevisionColumnsSeed.RequiredColumns}})
+        VALUES ('{{id}}', 1, 'owner', 'Person', NULL, 0, {{VoteRevisionColumnsSeed.PlaceholderValues}})
         """);
 
     private async Task SeedExecutiveActionAsync(string id) => await ExecuteAsync($$"""

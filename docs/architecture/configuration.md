@@ -157,7 +157,7 @@ The file has a `version` (only 1 is supported) and `icons`, a map from issue ID 
 ## Limits and planned work
 
 - Offices and dated terms are facts, not our choices. The [roster](roster.md) captures them. The configuration keeps the tracked people and their bioguide IDs. `roster propose` lists members to add and people to review.
-- The configuration stays in version-controlled files until automatic source discovery ([R-27](../roadmap.md#later)) needs runtime writes. Then people, sources, and coverage move to tables, and immutable revisions keep binding jobs as they do now.
+- The configuration stays in version-controlled files until automatic source discovery ([R-27](../roadmap.md#accepted-plans)) needs runtime writes. The people tables and their one-time import exist; see [roster](roster.md#officials-in-tables). Sources and coverage then move to tables too, and immutable revisions keep binding jobs as they do now.
 - The roster lists current members only. A member who leaves stays covered until a person edits the configuration.
 - Agencies and committees will get an institution owner in the schema, not a synthetic person.
 - The first tracked-issue list in `config/issues.json` is a proposal for the owner to edit before use.

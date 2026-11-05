@@ -113,10 +113,16 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [x] Vote pilot 1: write both, so every vote revision writes columns and child rows beside its JSON
   - [x] Vote pilot 2: backfill old vote revisions and verify them with a C# command that compares each revision to its JSON
   - [x] Vote pilot 3: move the vote readers to the columns
-  - [ ] Vote pilot 4: drop the vote revision JSON, after the read-only function stops reading it
+  - [x] Vote pilot 4: drop the JSON column and the `votes revisions` commands, and make the core columns `NOT NULL`
   - [ ] Move the other revision kinds, one PR for each. Executive action, document change, relationship, statement, brief, and action revisions are done in code through step 3. The production backfills and the JSON drops stay open
   - [ ] Move release entries to a table: one immutable row for each record revision, with a foreign key to that revision. `publication_record_states` gives the release membership. The code of `releases entries backfill <limit>` and `releases entries verify` is done. Open: the production runs, the foreign key from `publication_record_states`, and the move of the publish path off the manifest.
   - [ ] Write `release.json` from the tables, and stop reading the previous manifest in a publish
+- R-27: Officials, sources, and discovery in tables. People data lives in tables, not in the configuration file. Sources and coverage move to tables too, and the owner commands and the worker write them. Check cadence then follows measured change rates, and discovery finds official sources. Plans: the git branches `survey-officials-in-tables` and `survey-source-discovery`. Depends on: none stated. [Roster](architecture/roster.md#officials-in-tables), [Configuration](architecture/configuration.md#limits-and-planned-work)
+  - [ ] Officials in tables, PR 1: the people tables and the one-time import
+  - [ ] Officials in tables, PRs 2 to 8: owner settings, minting members, bindings, pinned readers, live readers, coverage from `officeOf`, justices and gaps
+  - [ ] Sources and coverage in tables
+  - [ ] Check cadence from measured change rates
+  - [ ] Discovery of official sources
 
 **Operations**
 
@@ -147,7 +153,6 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [ ] Write `release.json` only as a public download on a schedule, or remove it
 - R-24: The long-term cloud move to a Hetzner CPX21 with containers, Terraform, CI, and live Auth0 verification. A Jetson runs temporary production with Docker Compose, and it serves releases through Caddy and a Cloudflare tunnel. Terraform state never goes to R2. The open host checklist items are its exit checks. Also stop the worker during a job and show that the deployed container recovers it. The search service runs as its own container on the same box. The deploy must set no provider-specific `Logging` levels for the search service, because such a rule overrides its request log filter. R-24 also holds a monthly restore test, worker service management, and the documented spending total. The owner withdraws with Take off site on the record editor, and the CLI stays. The runbook still holds a tested `releases publish --withdraw` command that runs on the cloud host. The coverage file is 814 KB of the 1 MB limit of the shared configuration loader. Raise the limit before R-24 only if the file would pass 1 MB before the deploy. Depends on: the exit criteria of the first deploy. [Host](architecture/host.md#limits-and-planned-work)
 - R-26: Read-only local MCP inspection. Depends on: none stated. [Review](architecture/review.md#limits-and-planned-work)
-- R-27: Automatic discovery of official sources, and check cadence from measured change rates. It needs runtime writes, so people, sources, and coverage then move to tables. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 - R-28: Datasets and fine-tuning from labels and review history. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-31: Remove the redundant hunk and context copy in saved comparisons. Depends on: none stated. [Documents](architecture/documents.md#limits-and-planned-work)
 

@@ -1,4 +1,5 @@
 using CivicLens.Infrastructure.Collection.Persistence;
+using CivicLens.Infrastructure.People.Persistence;
 using CivicLens.Infrastructure.Review.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,6 +15,7 @@ public sealed class CollectionAttemptDbContext(DbContextOptions<CollectionAttemp
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CollectionAttemptDbContext).Assembly);
         ReviewDecisionTableConfiguration.ConfigureAllResolutions(modelBuilder);
+        PersonRegistrySequence.Configure(modelBuilder);
         TimestampTickChecks.Apply(modelBuilder);
     }
 }

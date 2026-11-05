@@ -9,13 +9,6 @@ namespace CivicLens.Infrastructure.Votes.Persistence;
 
 internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<VoteRevisionRow>
 {
-    private static readonly string[] WrittenTogether =
-    [
-        "headline", "summary", "text_origin", "source_id", "vote_source", "chamber", "congress", "session_number", "roll_call_number", "candidate_id",
-        "candidate_update_utc_ticks", "voted_on", "voted_on_citation_extraction_id", "voted_on_citation_start", "voted_on_citation_length", "kind",
-        "member_list_id", "issue_revision_id", "issue_candidates_recorded"
-    ];
-
     public void Configure(EntityTypeBuilder<VoteRevisionRow> builder)
     {
         builder.ToTable("vote_revisions", table =>
@@ -31,7 +24,6 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
             table.HasCheckConstraint("ck_vote_revisions_kind", EnumChecks.InList("kind", Enum.GetNames<VoteKind>()));
             table.HasCheckConstraint("ck_vote_revisions_issue_revision", "issue_revision_id ~ '^[0-9a-f]{64}$'");
             table.HasCheckConstraint("ck_vote_revisions_subjects_hash", "subjects_hash ~ '^[0-9a-f]{64}$'");
-            table.HasCheckConstraint("ck_vote_revisions_columns_written", $"num_nulls({string.Join(", ", WrittenTogether)}) IN (0, {WrittenTogether.Length})");
         });
         builder.HasKey(row => new { row.RecordId, row.RevisionNumber });
         builder.Property(row => row.RecordId).HasColumnName("record_id").HasMaxLength(64);
@@ -39,7 +31,6 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
         builder.Property(row => row.AuthorSubject).HasColumnName("author_subject").HasMaxLength(256).IsRequired();
         builder.Property(row => row.AuthorKind).HasColumnName("author_kind").HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(row => row.RunId).HasColumnName("run_id").HasMaxLength(32);
-        builder.Property(row => row.RevisionJson).HasColumnName("revision_json").IsRequired();
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
         builder.Property(row => row.SourceId).HasColumnName("source_id").HasMaxLength(128);
         builder.Property(row => row.VoteSource).HasColumnName("vote_source").HasConversion<string>().HasMaxLength(16);
@@ -60,6 +51,9 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
         builder.Property(row => row.Question).HasColumnName("question").HasMaxLength(VoteDraftRevision.MaximumFactLength);
         builder.Property(row => row.Result).HasColumnName("result").HasMaxLength(VoteDraftRevision.MaximumFactLength).IsRequired();
         ReviewTextColumns.Configure(builder, "vote_revisions", VoteDraftRevision.MaximumHeadlineLength, VoteDraftRevision.MaximumSummaryLength);
+        builder.Property(row => row.Headline).IsRequired();
+        builder.Property(row => row.Summary).IsRequired();
+        builder.Property(row => row.TextOrigin).IsRequired();
         SourceSpanColumns.Configure(builder, "vote_revisions", "VotedOnCitation", "voted_on_citation", optional: false);
         SourceSpanColumns.Configure(builder, "vote_revisions", "KindCitation", "kind_citation", optional: true);
         builder.HasIndex(row => row.RunId).IsUnique();
