@@ -8518,11 +8518,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("RecordId", "Chamber", "Congress", "SessionNumber", "RollCallNumber");
 
-                    b.HasIndex("VotedOn", "Chamber", "SessionNumber", "RollCallNumber", "RecordId")
-                        .IsDescending(true, false, true, true, false)
-                        .HasDatabaseName("ix_vote_revisions_recent")
-                        .HasFilter("member_list_id IS NOT NULL");
-
                     b.ToTable("vote_revisions", null, t =>
                         {
                             t.HasCheckConstraint("ck_vote_revisions_author_kind", "author_kind IN ('Person','Analysis')");

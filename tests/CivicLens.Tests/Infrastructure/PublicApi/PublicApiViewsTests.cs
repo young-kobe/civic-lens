@@ -67,7 +67,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
-        foreach (var view in new[] { "active_records", "votes", "vote_members", "vote_issues", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas" })
+        foreach (var view in new[] { "active_records", "votes", "vote_members", "member_votes", "vote_issues", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas" })
         {
             // A view with a join or a group cannot take a write at all, so Postgres refuses with 55000 before it checks a privilege.
             await AssertDeniedAsync(connection, $"DELETE FROM public_api.{view}", "55000");
@@ -102,6 +102,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"bill_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_sponsorships v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bills v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"member_votes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issue_excludes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issue_includes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
@@ -194,12 +195,14 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Equal(["a 2 2", "c 1 2", "d 1 2"], await PublicAsync("SELECT record_id || ' ' || revision_number || ' ' || release_number FROM public_api.votes ORDER BY 1"));
         Assert.Equal(["2"], await PublicAsync("SELECT DISTINCT release_number FROM public_api.active_records"));
         Assert.Equal(["a", "c"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.vote_members ORDER BY 1"));
+        Assert.Equal(["a", "c"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.member_votes ORDER BY 1"));
         Assert.Equal(["d"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.vote_issues"));
 
         await ExecuteAsync("UPDATE publication_releases SET is_active = false; UPDATE publication_releases SET is_active = true WHERE release_number = 1");
 
         Assert.Equal(["a 1 1", "b 1 1", "d 1 1"], await PublicAsync("SELECT record_id || ' ' || revision_number || ' ' || release_number FROM public_api.votes ORDER BY 1"));
         Assert.Equal(["a", "b"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.vote_members ORDER BY 1"));
+        Assert.Equal(["a", "b"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.member_votes ORDER BY 1"));
 
         await ExecuteAsync("UPDATE publication_releases SET is_active = false");
         Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.votes"));
@@ -310,6 +313,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         [
             $"a Code {PublishedRecordLabels.CodeWording}", $"c Person none", $"d Model {PublishedRecordLabels.ModelWording}"
         ], await PublicAsync("SELECT record_id || ' ' || text_origin || ' ' || coalesce(label, 'none') FROM public_api.votes ORDER BY 1"));
+        Assert.Equal([$"a Code {PublishedRecordLabels.CodeWording}", "c Person none"],
+            await PublicAsync("SELECT DISTINCT m.record_id || ' ' || v.text_origin || ' ' || coalesce(m.label, 'none') FROM public_api.member_votes m JOIN public_api.votes v ON v.record_id = m.record_id ORDER BY 1"));
         Assert.Equal(["0 0 0 0"], await PublicAsync("SELECT yea || ' ' || nay || ' ' || present || ' ' || not_voting FROM public_api.votes WHERE record_id = 'd'"));
     }
 
@@ -347,6 +352,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Equal(["p0"], await PublicAsync("SELECT official_id FROM public_api.vote_members WHERE record_id = 'c'"));
         await using var connection = await OpenPublicAsync();
         await AssertDeniedAsync(connection, "SELECT bioguide_id FROM public_api.vote_members", "42703");
+        Assert.Equal(["p0"], await PublicAsync("SELECT official_id FROM public_api.member_votes WHERE record_id = 'c'"));
+        await AssertDeniedAsync(connection, "SELECT bioguide_id FROM public_api.member_votes", "42703");
     }
 
     [Fact]

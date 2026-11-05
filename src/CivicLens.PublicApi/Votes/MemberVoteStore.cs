@@ -4,7 +4,7 @@ using Npgsql;
 
 namespace CivicLens.PublicApi.Votes;
 
-/// <summary>Reads the views <c>public_api.votes</c> and <c>public_api.vote_members</c> for the votes of one official. The kind rule is <see cref="PublishedVoteKindExtensions.IsSubstantive"/>.</summary>
+/// <summary>Reads the view <c>public_api.member_votes</c> for the votes of one official, and <c>public_api.active_records</c> for the release. The kind rule is <see cref="PublishedVoteKindExtensions.IsSubstantive"/>.</summary>
 public sealed class MemberVoteStore(NpgsqlDataSource views)
 {
     /// <summary>The most votes in one answer. The list is a short recent view, not a history. The vote list route pages through all votes.</summary>
@@ -17,9 +17,8 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
                v.bill_type, v.bill_number, v.headline, v.label, v.result, v.vote_cast
           FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
           LEFT JOIN LATERAL (
-               SELECT v.*, m.vote_cast FROM public_api.vote_members m
-                 JOIN public_api.votes v ON v.record_id = m.record_id AND v.revision_number = m.revision_number
-                WHERE m.official_id = @official AND v.kind = ANY(@kinds)
+               SELECT v.* FROM public_api.member_votes v
+                WHERE v.official_id = @official AND v.kind = ANY(@kinds)
                 ORDER BY {VoteStore.Order} LIMIT @take) v
             ON TRUE
          ORDER BY {VoteStore.Order}

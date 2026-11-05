@@ -51,7 +51,7 @@ internal static class PublicApiGrants
         GRANT SELECT (attempt_id, source_id, capture_sha256, observed_at_utc_ticks) ON collection_attempts TO civic_lens_public_owner;
 
         GRANT USAGE ON SCHEMA public_api TO civic_lens_public;
-        GRANT SELECT ON public_api.active_records, public_api.votes, public_api.vote_members, public_api.vote_issues,
+        GRANT SELECT ON public_api.active_records, public_api.votes, public_api.vote_members, public_api.member_votes, public_api.vote_issues,
             public_api.bills, public_api.bill_sponsorships, public_api.bill_issues, public_api.zip_districts,
             public_api.release_officials, public_api.release_official_terms, public_api.release_issues, public_api.release_issue_includes,
             public_api.release_issue_excludes, public_api.release_policy_areas TO civic_lens_public;

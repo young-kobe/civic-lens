@@ -99,12 +99,11 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
             vote.GetProperty("result").GetString(), vote.GetProperty("resultWords").GetString(),
             vote.GetProperty("cast").GetString(), vote.GetProperty("castWords").GetString()));
         Assert.Equal(
-            [("passage", PlainVoteWords.Kind(PublishedVoteKind.Passage), "Point of Order Sustained", "Point of Order Sustained", "Yea", PlainVoteWords.Cast("Yea")),
-             ("nomination", PlainVoteWords.Kind(PublishedVoteKind.Nomination), "Nomination Rejected", PlainVoteWords.Result("Nomination Rejected"), "Yea", PlainVoteWords.Cast("Yea")),
-             ("passage", PlainVoteWords.Kind(PublishedVoteKind.Passage), "Agreed to", PlainVoteWords.Result("Agreed to"), "Yea", PlainVoteWords.Cast("Yea")),
-             ("suspension", PlainVoteWords.Kind(PublishedVoteKind.Suspension), "Failed", PlainVoteWords.Result("Failed"), "Yea", PlainVoteWords.Cast("Yea"))],
+            [("passage", "Vote to pass or agree to", "Point of Order Sustained", "Point of Order Sustained", "Yea", "Yes (Yea)"),
+             ("nomination", "Vote to confirm", "Nomination Rejected", "Not confirmed (Nomination Rejected)", "Yea", "Yes (Yea)"),
+             ("passage", "Vote to pass or agree to", "Agreed to", "Passed (Agreed to)", "Yea", "Yes (Yea)"),
+             ("suspension", "Vote to pass with limited debate", "Failed", "Failed", "Yea", "Yes (Yea)")],
             rows);
-        Assert.Equal("Passed (Agreed to)", PlainVoteWords.Result("Agreed to"));
     }
 
     private static (string, string)[] Casts(JsonElement answer) =>
@@ -123,13 +122,29 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheAnswerNamesTheReleaseAndIsCachedForOneHour()
+    public async Task AVoteWhereTheOfficialHasNoCastIsNotListedWhileAnotherVoteWithTheOfficialIs()
+    {
+        var votes = new[]
+        {
+            new SeededVote('a', "2026-03-02") { RollCall = 2, Casts = ["Yea"] },
+            new SeededVote('b', "2026-03-01") { RollCall = 1, Casts = ["Yea", "Nay", "Present"] }
+        };
+        await using var host = await StartWithVotesAsync(votes);
+
+        var answer = await GetAsync(host, "/v1/member-votes?official=p2");
+
+        Assert.Equal([votes[1].RecordId], Ids(answer));
+        Assert.Equal([("Present", "Present")], Casts(answer));
+    }
+
+    [Fact]
+    public async Task TheAnswerNamesItsReleaseAndSendsNoCacheHeaderLikeTheOtherVoteRoutes()
     {
         await using var host = await StartWithVotesAsync(new SeededVote('a', "2026-03-01"));
 
         using var response = await host.Client.GetAsync("/v1/member-votes?official=p0");
 
-        Assert.Equal("public, max-age=3600", response.Headers.CacheControl?.ToString());
+        Assert.Null(response.Headers.CacheControl);
         Assert.Equal(1, JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("release").GetInt32());
     }
 
@@ -137,11 +152,14 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
     [InlineData("/v1/member-votes")]
     [InlineData("/v1/member-votes?official=")]
     [InlineData("/v1/member-votes?official=p0&official=p1")]
-    public async Task AMissingBlankOrRepeatedOfficialIsRefused(string path)
+    public async Task AMissingBlankOrRepeatedOfficialIsRefusedWithNoCacheHeader(string path)
     {
         await using var host = await StartWithVotesAsync();
 
-        await GetAsync(host, path, HttpStatusCode.BadRequest);
+        using var response = await host.Client.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(response.Headers.CacheControl);
     }
 
     [Fact]

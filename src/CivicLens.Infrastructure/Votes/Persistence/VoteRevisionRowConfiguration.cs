@@ -57,9 +57,6 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
         SourceSpanColumns.Configure(builder, "vote_revisions", "VotedOnCitation", "voted_on_citation", optional: false);
         SourceSpanColumns.Configure(builder, "vote_revisions", "KindCitation", "kind_citation", optional: true);
         builder.HasIndex(row => row.RunId).IsUnique();
-        // The key order is the order of the public vote lists, so a list with a limit reads the newest rows and stops (VoteStore.Order).
-        builder.HasIndex(row => new { row.VotedOn, row.Chamber, row.SessionNumber, row.RollCallNumber, row.RecordId })
-            .IsDescending(true, false, true, true, false).HasFilter("member_list_id IS NOT NULL").HasDatabaseName("ix_vote_revisions_recent");
         builder.HasOne<VoteDraftRow>().WithMany().HasForeignKey(row => row.RecordId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<VoteAnalysisRunRow>().WithMany().HasForeignKey(row => row.RunId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<VoteAnalysisRunRow>().WithMany().HasForeignKey(row => row.SuggestionRunId).OnDelete(DeleteBehavior.Restrict);
