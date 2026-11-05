@@ -26,7 +26,7 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
 {
     internal static readonly ReviewRecords<DocumentChangeDraftRow, DocumentChangeRevisionRow, ReviewDecisionRow, DocumentChangeDraftRevision>
         Records = new(PostgresAdvisoryLock.DocumentChangeReview, PublishedRecordKind.DocumentChange, "Document-change", nameof(DocumentChangeDraftRow.DraftId),
-            readRevisions: DocumentChangeRevisionRows.ReadAsync);
+            DocumentChangeRevisionRows.ReadAsync);
 
     private const string CreateOperation = "create";
     private const string SaveOperation = "save";

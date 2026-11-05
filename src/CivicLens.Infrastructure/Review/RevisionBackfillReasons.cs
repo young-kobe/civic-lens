@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -9,11 +8,8 @@ internal static class RevisionBackfillReasons
 {
     public const string UnreadableJson = "UnreadableJson";
     public const string InvalidShape = "InvalidShape";
-    public const string DuplicateIssueId = "DuplicateIssueId";
     public const string RebuildMismatch = "RebuildMismatch";
     public const string DatabasePrefix = "database:";
-
-    public static bool HasDuplicates(ImmutableArray<string> ids) => ids.Distinct(StringComparer.Ordinal).Count() != ids.Length;
 
     public static string? RefusalOf(Exception exception)
     {

@@ -118,19 +118,6 @@ public sealed class VoteMembersEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task AVoteRevisionWithNoMemberListAnswers404OnBothRoutesBecauseTheViewsHoldNoMemberOfIt()
-    {
-        var unwritten = new SeededVote('8', "2026-03-05") { HasMemberList = false };
-        await using var host = await StartWithVotesAsync(Senate, unwritten);
-
-        using var members = await host.Client.GetAsync($"/v1/votes/{unwritten.RecordId}/members");
-        using var vote = await host.Client.GetAsync($"/v1/votes/{unwritten.RecordId}");
-
-        Assert.Equal(HttpStatusCode.NotFound, members.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, vote.StatusCode);
-    }
-
-    [Fact]
     public async Task TheCastFilterStaysOnEveryPageOfACursorWalkBecauseALaterPageMustNotShowOtherCasts()
     {
         await using var host = await StartWithVotesAsync(House);

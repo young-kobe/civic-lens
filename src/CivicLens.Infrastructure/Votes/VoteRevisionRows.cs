@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Votes;
 
-/// <summary>Owns the mapping between a vote revision and its row, fact rows, and issue rows, in both directions. The row also keeps the JSON, but readers use the columns.</summary>
+/// <summary>Owns the mapping between a vote revision and its row, fact rows, and issue rows, in both directions.</summary>
 internal static class VoteRevisionRows
 {
     public static VoteRevisionRow Create(VoteDraftRevision revision, string? runId)
@@ -24,16 +24,8 @@ internal static class VoteRevisionRows
             AuthorSubject = revision.AuthorSubject,
             AuthorKind = ReviewAuthor.KindOf(revision.AuthorSubject),
             RunId = runId,
-            RevisionJson = ReviewJson.Serialize(revision),
             CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
         };
-        FillColumns(row, revision);
-        return row;
-    }
-
-    /// <summary>Sets every column and child row of the revision. It leaves the key, the author, the run, and the JSON as they are.</summary>
-    public static void FillColumns(VoteRevisionRow row, VoteDraftRevision revision)
-    {
         ReviewTextRows.Fill(row, revision);
         row.SourceId = revision.SourceId;
         row.VoteSource = revision.Source;
@@ -61,6 +53,7 @@ internal static class VoteRevisionRows
         row.Result = VoteFacts.ResultOf(revision.RecordId, revision.Facts);
         row.Facts = [.. revision.Facts.Select((fact, position) => FactRow(revision, fact, position))];
         row.Issues = [.. IssueIds(revision).Select((issueId, position) => IssueRow(revision, issueId, position))];
+        return row;
     }
 
     /// <summary>Reads the rows of a query, then their facts, issues, and member lists, in a fixed number of queries. The child rows come
@@ -82,10 +75,6 @@ internal static class VoteRevisionRows
             .OrderBy(entry => entry.ListId).ThenBy(entry => entry.Position).ToListAsync(cancellationToken)).ToLookup(entry => entry.ListId, StringComparer.Ordinal);
         return new(rows, facts, issues, lists, entries);
     }
-
-    /// <summary>The failure of a reader that meets a vote revision row with null columns. Only the backfill fixes such a row.</summary>
-    public static InvalidDataException NotBackfilled(string revision) =>
-        new($"{revision} has null columns. Run the vote revision backfill.");
 
     /// <summary>The reader that the shared review code uses for votes.</summary>
     public static async Task<IReadOnlyList<StoredRevision<VoteRevisionRow, VoteDraftRevision>>> ReadAsync(CollectionAttemptDbContext db,
@@ -115,17 +104,17 @@ internal static class VoteRevisionRows
         IEnumerable<VoteRevisionIssueRow> issueRows)
     {
         var issues = issueRows.OrderBy(issue => issue.Position).ToArray();
-        var recorded = row.IssueCandidatesRecorded!.Value;
+        var recorded = row.IssueCandidatesRecorded;
         var tracked = issues.Where(issue => issue.IsTracked).Select(issue => issue.IssueId);
         return new(row.RecordId, row.RevisionNumber, row.AuthorSubject, new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero),
             row.Headline!, row.Summary!, row.TextOrigin!.Value, ReviewTextRows.SuggestionOf(row),
-            row.SourceId!, row.VoteSource!.Value, row.Chamber!.Value, row.Congress!.Value, row.SessionNumber!.Value, row.RollCallNumber!.Value,
-            row.BillType, row.BillNumber, row.CandidateId!, new DateTimeOffset(row.CandidateUpdateUtcTicks!.Value, TimeSpan.Zero),
+            row.SourceId, row.VoteSource, row.Chamber, row.Congress, row.SessionNumber, row.RollCallNumber,
+            row.BillType, row.BillNumber, row.CandidateId, new DateTimeOffset(row.CandidateUpdateUtcTicks, TimeSpan.Zero),
             [.. factRows.OrderBy(fact => fact.Position).Select(fact => new VoteFact(fact.FactText, new(fact.CitationExtractionId, fact.CitationStart, fact.CitationLength)))],
-            row.VotedOn!.Value, new(row.VotedOnCitationExtractionId!, row.VotedOnCitationStart!.Value, row.VotedOnCitationLength!.Value), row.Kind!.Value,
+            row.VotedOn, new(row.VotedOnCitationExtractionId, row.VotedOnCitationStart, row.VotedOnCitationLength), row.Kind,
             row.KindCitationExtractionId is null ? null : new(row.KindCitationExtractionId, row.KindCitationStart!.Value, row.KindCitationLength!.Value), members,
             [.. recorded ? tracked.Order(StringComparer.Ordinal) : tracked],
-            recorded ? [.. issues.Select(issue => issue.IssueId)] : default, row.IssueRevisionId!, row.SubjectsHash);
+            recorded ? [.. issues.Select(issue => issue.IssueId)] : default, row.IssueRevisionId, row.SubjectsHash);
     }
 
     private static VoteRevisionFactRow FactRow(VoteDraftRevision revision, VoteFact fact, int position) => new()
