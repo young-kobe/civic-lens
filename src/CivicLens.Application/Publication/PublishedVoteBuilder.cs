@@ -14,8 +14,6 @@ internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
     {
         var tally = VoteTally.Read(revision.RecordId, revision.Chamber, revision.Facts, extractions[revision.Members[0].Citation.ExtractionId].Text,
             revision.VotedOn, parties);
-        var result = VoteFacts.Find(revision.Facts, VoteFactPrefixes.Result)
-            ?? throw new ArgumentException($"Vote {revision.RecordId} has no result line.");
 
         PublishedCitation Cite(SourceSpan span) => PublishedRecordRules.Cite(span, extractions[span.ExtractionId]);
         PublishedMemberVote Member(MemberVote member)
@@ -46,7 +44,7 @@ internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
             KindCitation = revision.KindCitation is { } kind ? Cite(kind) : null,
             VotedOn = revision.VotedOn,
             VotedOnCitation = Cite(revision.VotedOnCitation),
-            Result = result.Text[VoteFactPrefixes.Result.Length..],
+            Result = VoteFacts.ResultOf(revision.Facts),
             Totals = tally.Totals,
             PartyMajorities = tally.PartyMajorities,
             Facts = [.. revision.Facts.Select(fact => new PublishedVoteFact { Text = fact.Text, Citation = Cite(fact.Citation) })],

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Publication;
+using CivicLens.Application.Votes;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
@@ -56,6 +57,8 @@ internal static class VoteRevisionRows
         row.IssueRevisionId = revision.IssueRevisionId;
         row.SubjectsHash = revision.SubjectsHash;
         row.IssueCandidatesRecorded = !revision.IssueCandidateIds.IsDefault;
+        row.Question = VoteFacts.QuestionOf(revision.Facts);
+        row.Result = VoteFacts.ResultOf(revision.Facts);
         row.Facts = [.. revision.Facts.Select((fact, position) => FactRow(revision, fact, position))];
         row.Issues = [.. IssueIds(revision).Select((issueId, position) => IssueRow(revision, issueId, position))];
     }

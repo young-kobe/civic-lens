@@ -68,8 +68,8 @@ internal sealed class RelationshipWorldSeeder(string connectionString)
         VALUES (@id, @source, @chamber, @congress, @session, @roll, @number, 0, @status, 1, @revised, @candidate, @eventOn, @issues, @officials)
         ON CONFLICT (record_id) DO UPDATE SET current_revision_number = @number, review_status = @status, candidate_id = @candidate,
                                               last_revised_at_utc_ticks = @revised, event_on = @eventOn, issue_ids = @issues, official_ids = @officials;
-        INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks)
-        VALUES (@id, @number, 'auth0|editor', 'Person', NULL, @json, 1)
+        INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks, result)
+        VALUES (@id, @number, 'auth0|editor', 'Person', NULL, @json, 1, '')
         ON CONFLICT (record_id, revision_number) DO UPDATE SET revision_json = EXCLUDED.revision_json
         """ + VoteRevisionColumnsSeed.Sql, [.. VoteRevisionColumnsSeed.Parameters(vote), ("id", vote.RecordId), ("candidate", vote.CandidateId), ("revised", revisedAtTicks), ("source", vote.SourceId), ("chamber", vote.Chamber.ToString()),
         ("congress", vote.Congress),

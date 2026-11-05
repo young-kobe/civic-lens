@@ -57,6 +57,8 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
         builder.Property(row => row.IssueRevisionId).HasColumnName("issue_revision_id").HasMaxLength(64);
         builder.Property(row => row.SubjectsHash).HasColumnName("subjects_hash").HasMaxLength(64);
         builder.Property(row => row.IssueCandidatesRecorded).HasColumnName("issue_candidates_recorded");
+        builder.Property(row => row.Question).HasColumnName("question").HasMaxLength(VoteDraftRevision.MaximumFactLength);
+        builder.Property(row => row.Result).HasColumnName("result").HasMaxLength(VoteDraftRevision.MaximumFactLength).IsRequired();
         ReviewTextColumns.Configure(builder, "vote_revisions", VoteDraftRevision.MaximumHeadlineLength, VoteDraftRevision.MaximumSummaryLength);
         SourceSpanColumns.Configure(builder, "vote_revisions", "VotedOnCitation", "voted_on_citation", optional: false);
         SourceSpanColumns.Configure(builder, "vote_revisions", "KindCitation", "kind_citation", optional: true);

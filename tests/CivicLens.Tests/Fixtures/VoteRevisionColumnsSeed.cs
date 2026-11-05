@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using CivicLens.Application.Votes;
 using CivicLens.Core.Votes;
 
 namespace CivicLens.Tests.Fixtures;
@@ -34,7 +35,7 @@ internal static class VoteRevisionColumnsSeed
             voted_on_citation_extraction_id = @seed_voted_on_extraction, voted_on_citation_start = @seed_voted_on_start, voted_on_citation_length = @seed_voted_on_length,
             kind = @seed_kind, kind_citation_extraction_id = @seed_kind_extraction, kind_citation_start = @seed_kind_start, kind_citation_length = @seed_kind_length,
             member_list_id = @seed_list, issue_revision_id = @seed_issue_revision, subjects_hash = @seed_subjects_hash,
-            issue_candidates_recorded = @seed_issue_candidates_recorded
+            issue_candidates_recorded = @seed_issue_candidates_recorded, question = @seed_question, result = @seed_result
         WHERE record_id = @seed_record AND revision_number = @seed_number;
         DELETE FROM vote_revision_facts WHERE record_id = @seed_record AND revision_number = @seed_number;
         INSERT INTO vote_revision_facts (record_id, revision_number, position, fact_text, citation_extraction_id, citation_start, citation_length)
@@ -90,6 +91,8 @@ internal static class VoteRevisionColumnsSeed
             ("seed_issue_revision", vote.IssueRevisionId),
             ("seed_subjects_hash", Db(vote.SubjectsHash)),
             ("seed_issue_candidates_recorded", !vote.IssueCandidateIds.IsDefault),
+            ("seed_question", Db(VoteFacts.QuestionOf(vote.Facts))),
+            ("seed_result", VoteFacts.ResultOf(vote.Facts)),
             ("seed_record", vote.RecordId),
             ("seed_number", vote.RevisionNumber),
             ("seed_fact_positions", Enumerable.Range(0, vote.Facts.Length).Select(position => (short)position).ToArray()),
