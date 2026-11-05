@@ -195,7 +195,7 @@
         const seat = (title, holder) => {
             const item = element("li", undefined, "zip-seat");
             item.append(element("span", title, "muted small"));
-            if (holder === null) { item.append(element("span", "This seat is vacant.")); return item; }
+            if (holder === null) { item.append(element("span", "No current member is in our records.")); return item; }
             const link = element("a", holder.name);
             link.href = form.dataset.officialPage.replace("{id}", encodeURIComponent(holder.officialId));
             const line = element("span");
@@ -229,7 +229,7 @@
             const zip = input.value.trim();
             const mine = ++running;
             if (!/^[0-9]{5}$/.test(zip)) { show([element("p", "Enter a ZIP code with 5 digits.")]); return; }
-            show([element("p", "Looking up your officials")]);
+            show([element("p", "Looking up your officials.")]);
             let answer;
             try {
                 const response = await fetch(`${api}/v1/zip-districts/${zip}`);

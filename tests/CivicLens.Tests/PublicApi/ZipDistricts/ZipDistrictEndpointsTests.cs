@@ -16,11 +16,11 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
     private static readonly SeededSeat[] Seats =
     [
         new("al2", "Alice Two", Representative, "AL", 2),
-        new("al1-old", "Olive Old", Representative, "AL", 1, "2023-01-03", "2025-01-02"),
+        new("al1-old", "Olive Old", Representative, "AL", 1, "2023-01-03", "2024-01-02"),
         new("al-sen", "Sam Senator", Senator, "AL", null, Party: "Republican"),
-        new("al-sen-old", "Sara Former", Senator, "AL", null, "2019-01-03", "2025-01-02"),
+        new("al-sen-old", "Sara Former", Senator, "AL", null, "2019-01-03", "2020-01-02"),
         new("ak0", "Ann Large", Representative, "AK", 0),
-        new("ak-sen-b", "Bea Second", Senator, "AK", null, "2027-01-03", Party: null),
+        new("ak-sen-b", "Bea Second", Senator, "AK", null, "2999-01-03", Party: null),
         new("ak-sen-a", "Al First", Senator, "AK", null, "2021-01-03"),
         new("ak-sen-c", "Cy Third", Senator, "AK", null, "2025-01-03"),
         new("dc0", "Dee Delegate", Representative, "DC", 0)
@@ -99,6 +99,24 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
         Assert.Equal(JsonValueKind.Null, noRepresentative.GetProperty("districts")[0].GetProperty("representative").ValueKind);
         Assert.Equal(["Sam Senator", Vacant], Names(split.GetProperty("states")[0].GetProperty("senators")));
         Assert.Equal([Vacant, Vacant], Names(noRepresentative.GetProperty("states")[0].GetProperty("senators")));
+    }
+
+    [Fact]
+    public async Task OnTheDayATermEndsTheNextTermHasStartedSoTheNewSenatorTakesTheSeatAndAReelectedSenatorHoldsOneSeat()
+    {
+        await using var host = await StartAsync();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 0, 0, 0, TimeSpan.Zero));
+        await ZipSeed.AddRecordAsync(host.OperationalDatabase, 2);
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2,
+            new SeededSeat("a-departing", "Dana Departing", Senator, "AL", null, "2019-01-03", today),
+            new SeededSeat("b-new", "Nia New", Senator, "AL", null, today),
+            new SeededSeat("c-reelected", "Rae Reelected", Senator, "AL", null, "2019-01-03", today));
+        await ZipSeed.AddTermAsync(host.OperationalDatabase, 2, new SeededSeat("c-reelected", "Rae Reelected", Senator, "AL", null, today));
+
+        var answer = await GetAsync(host, "/v1/zip-districts/36009");
+
+        Assert.Equal(["Nia New", "Rae Reelected"], Names(answer.GetProperty("states")[0].GetProperty("senators")));
     }
 
     [Fact]

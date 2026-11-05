@@ -84,7 +84,7 @@ Each weekly check downloads the whole file. An unchanged file adds an attempt ro
 ## Limits and planned work
 
 - The file has the districts of the 119th Congress. The 2025 and 2026 mid-decade maps can differ for the 120th Congress. The 120th Congress needs a new file URL and a new source then.
-- The House member of DC and of Guam, the U.S. Virgin Islands, American Samoa, and the Northern Mariana Islands is a Delegate. The House member of Puerto Rico is the Resident Commissioner. `UsStates` in the Host owns this title, and the home page ZIP form shows it. Test: `PublishedHomePageTests.TheZipFormCallsTheServiceAtTheConfiguredAddressAndStaysHiddenUntilScriptRuns`.
+- The House member of DC and of Guam, the U.S. Virgin Islands, American Samoa, and the Northern Mariana Islands is a Delegate. The House member of Puerto Rico is the Resident Commissioner. `NonStateSeats` in Publication.Contracts owns the six codes, their names, and this title. `UsStates`, `ZipDistrictStore`, and the home page ZIP form read it. `StateFips` keeps only the FIPS numbers. Tests: `NonStateSeatsTests.OnlyPuertoRicoHasAResidentCommissionerAndTheOtherFiveSendADelegate`, `NonStateSeatsTests.NoOtherSourceFileKeepsItsOwnListOfNonStateNamesOrOffices`, `PublishedHomePageTests.TheZipFormCallsTheServiceAtTheConfiguredAddressAndStaysHiddenUntilScriptRuns`.
 - A ZCTA is not a USPS ZIP code. A ZIP code can lie in no ZCTA, and a ZCTA can cover parts of several ZIP codes. A reader must say this to a citizen.
 - Rows with a blank ZCTA, zero land, or the district `ZZ` are not stored. Their land area is not counted.
 - The Census names the file for the 2020 ZCTAs. A change of the Census column list fails preparation until a person updates the header in `ZctaDistrictParser`.

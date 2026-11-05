@@ -46,6 +46,13 @@ internal static class ZipSeed
                 """);
     }
 
+    /// <summary>Adds a second term to an official that <see cref="AddNamesAsync"/> already wrote.</summary>
+    public static Task AddTermAsync(string database, int release, SeededSeat term) => ViewsSeed.ExecuteAsync(database, $"""
+        INSERT INTO release_official_terms (release_number, official_id, "position", office, kind, state, district, party, start_on, end_on)
+        VALUES ({release.ToString(CultureInfo.InvariantCulture)}, '{term.Id}', 1, '{term.Kind}', '{term.Kind}', '{term.State}', NULL,
+                {(term.Party is null ? "NULL" : $"'{term.Party}'")}, '{term.Start}', {(term.End is null ? "NULL" : $"'{term.End}'")});
+        """);
+
     /// <summary>Gives the active release one record, because the views read the release from its records.</summary>
     public static Task AddRecordAsync(string database, int release) => ViewsSeed.ExecuteAsync(database, $"""
         SET session_replication_role = replica;
