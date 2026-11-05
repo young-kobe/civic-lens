@@ -2,7 +2,7 @@ using CivicLens.Application.Publication;
 
 namespace CivicLens.Host.Publication;
 
-internal static class PublishedFacetSummaryView
+public static class PublishedFacetSummaryView
 {
     public static string Title(FacetKind kind) => kind == FacetKind.Issue
         ? "Votes and bills tagged with this issue"
@@ -11,6 +11,12 @@ internal static class PublishedFacetSummaryView
     public static string Lede(FacetKind kind) => kind == FacetKind.Issue
         ? "Code counts the votes, bills, and resolutions on this site that are tagged with this issue. A tag says that a record is about the issue. It does not say if the record supports or opposes it. An AI model picks the issue tag of a bill or vote, and no person checks it, so a tag can be wrong. Some older records list every issue that could fit. The counts cover every page of the list below."
         : "Code counts the bills and resolutions on this site that are tagged with this policy area. A tag says that a record is about the policy area. It does not say if the record supports or opposes it. The counts cover every page of the list below.";
+
+    public const string DefinitionTitle = "What this issue covers";
+
+    public const string IncludesLabel = "Includes";
+
+    public const string ExcludesLabel = "Does not include";
 
     public const string IssueTagsLinkText = "Where the issue tags come from";
 
