@@ -1667,12 +1667,13 @@ public sealed class ReleaseRendererTests
         var issue = new HtmlParser().ParseDocument(await renderer.RenderFacetPageAsync(facets.Issues.Single(), 1, CancellationToken.None));
         var area = new HtmlParser().ParseDocument(await renderer.RenderFacetPageAsync(facets.PolicyAreas.Single(), 1, CancellationToken.None));
 
-        var panel = issue.QuerySelectorAll("main section").Single(section => section.QuerySelector("h2")?.TextContent == "What this issue covers");
+        var panel = PanelOf(issue);
         Assert.Equal("Rent and home prices.", panel.QuerySelector("p")!.TextContent);
-        Assert.Equal(["Includes", "Does not include"], panel.QuerySelectorAll("p strong").Select(label => label.TextContent));
+        Assert.Equal([PublishedFacetSummaryView.IncludesLabel, PublishedFacetSummaryView.ExcludesLabel], panel.QuerySelectorAll("h3").Select(label => label.TextContent));
+        Assert.Equal(panel.QuerySelectorAll("h3").Select(label => label.Id), panel.QuerySelectorAll("ul").Select(list => list.GetAttribute("aria-labelledby")));
         Assert.Equal(["Rent caps", "Eviction rules"], panel.QuerySelectorAll("ul")[0].QuerySelectorAll("li").Select(item => item.TextContent));
         Assert.Equal(["Zoning votes"], panel.QuerySelectorAll("ul")[1].QuerySelectorAll("li").Select(item => item.TextContent));
-        Assert.DoesNotContain("What this issue covers", area.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain(PublishedFacetSummaryView.DefinitionTitle, area.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1681,10 +1682,24 @@ public sealed class ReleaseRendererTests
         var release = ReleaseOf(1) with { Records = [.. ReleaseOf(1).Records.Select(entry => entry with { IssueIds = ["housing"] })] };
         var facet = ReleaseFacets.From(release, DefinedHousingCatalog(excludes: null)).Issues.Single();
 
-        var main = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 1, CancellationToken.None)).QuerySelector("main")!;
+        var panel = PanelOf(new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 1, CancellationToken.None)));
 
-        Assert.Contains("Includes", main.TextContent, StringComparison.Ordinal);
-        Assert.DoesNotContain("Does not include", main.TextContent, StringComparison.Ordinal);
+        Assert.Equal([PublishedFacetSummaryView.IncludesLabel], panel.QuerySelectorAll("h3").Select(label => label.TextContent));
+        Assert.Single(panel.QuerySelectorAll("ul"));
+    }
+
+    [Fact]
+    public async Task TheDefinitionPanelShowsOnPageOneOfAnIssueAndNotOnPageTwoSoItDoesNotRepeatDownTheList()
+    {
+        var release = ReleaseOf(51) with { Records = [.. ReleaseOf(51).Records.Select(entry => entry with { IssueIds = ["housing"] })] };
+        var facet = ReleaseFacets.From(release, DefinedHousingCatalog(excludes: null)).Issues.Single();
+        var renderer = new ReleaseRenderer(null, null);
+
+        var first = new HtmlParser().ParseDocument(await renderer.RenderFacetPageAsync(facet, 1, CancellationToken.None));
+        var second = new HtmlParser().ParseDocument(await renderer.RenderFacetPageAsync(facet, 2, CancellationToken.None));
+
+        Assert.NotNull(first.QuerySelectorAll("main section h2").SingleOrDefault(heading => heading.TextContent == PublishedFacetSummaryView.DefinitionTitle));
+        Assert.DoesNotContain(PublishedFacetSummaryView.DefinitionTitle, second.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2991,6 +3006,9 @@ public sealed class ReleaseRendererTests
     private static HomeHighlights NoHighlights(PublicationRelease release) => HomeHighlights.From(release, [], 0);
 
     private static PublicationCatalog HousingCatalog { get; } = new(new Dictionary<string, string>(), IssuesNamed("housing", "Housing costs"), IssueIconConfiguration.None);
+
+    private static IElement PanelOf(IDocument page) =>
+        page.QuerySelectorAll("main section").Single(section => section.QuerySelector("h2")?.TextContent == PublishedFacetSummaryView.DefinitionTitle);
 
     private static PublicationCatalog DefinedHousingCatalog(string[]? excludes) => new(new Dictionary<string, string>(), new IssueConfiguration
     {

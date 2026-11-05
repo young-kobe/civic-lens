@@ -8,7 +8,7 @@ public sealed record ReleaseFacets(ImmutableArray<ReleaseFacet> Issues, Immutabl
     public IEnumerable<ReleaseFacet> All => Issues.Concat(PolicyAreas);
 
     public static ReleaseFacets From(PublicationRelease release, PublicationCatalog catalog) => new(
-        Group(release, FacetKind.Issue, entry => entry.IssueIds, catalog.IssueName, catalog.IssueIcon, catalog.IssueDefinition),
+        Group(release, FacetKind.Issue, entry => entry.IssueIds, catalog.IssueName, catalog.IssueIcon, catalog.DefinitionOf),
         Group(release, FacetKind.PolicyArea, entry => entry.PolicyAreaIds, catalog.PolicyAreaName, _ => null, _ => null));
 
     private static ImmutableArray<ReleaseFacet> Group(PublicationRelease release, FacetKind kind,

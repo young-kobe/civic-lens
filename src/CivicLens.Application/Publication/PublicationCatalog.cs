@@ -22,7 +22,7 @@ public sealed class PublicationCatalog(IReadOnlyDictionary<string, string> offic
 
     public string? IssueIcon(string id) => icons.Icons.GetValueOrDefault(id);
 
-    public IssueDefinition? IssueDefinition(string id) => issueDefinitions.GetValueOrDefault(id);
+    public IssueDefinition? DefinitionOf(string id) => issueDefinitions.GetValueOrDefault(id);
 
     public bool HasPolicyArea(string id) => policyAreaNames.ContainsKey(id);
 

@@ -7,17 +7,21 @@
     {
         @if (Facet.Definition is not null)
         {
-            <Panel Title="What this issue covers" Padded="true">
+            <Panel Title="@PublishedFacetSummaryView.DefinitionTitle" Padded="true">
                 <p>@Facet.Definition.Text</p>
                 @if (Facet.Definition.Includes.Length > 0)
                 {
-                    <p><strong>Includes</strong></p>
-                    <ul>@foreach (var term in Facet.Definition.Includes) {<li>@term</li>}</ul>
+                    <section class="member-group">
+                        <h3 id="includes-title">@PublishedFacetSummaryView.IncludesLabel</h3>
+                        <ul aria-labelledby="includes-title">@foreach (var term in Facet.Definition.Includes) {<li>@term</li>}</ul>
+                    </section>
                 }
                 @if (Facet.Definition.Excludes.Length > 0)
                 {
-                    <p><strong>Does not include</strong></p>
-                    <ul>@foreach (var term in Facet.Definition.Excludes) {<li>@term</li>}</ul>
+                    <section class="member-group">
+                        <h3 id="excludes-title">@PublishedFacetSummaryView.ExcludesLabel</h3>
+                        <ul aria-labelledby="excludes-title">@foreach (var term in Facet.Definition.Excludes) {<li>@term</li>}</ul>
+                    </section>
                 }
             </Panel>
         }
