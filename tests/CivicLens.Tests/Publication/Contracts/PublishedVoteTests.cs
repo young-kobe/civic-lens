@@ -33,6 +33,17 @@ public sealed class PublishedVoteTests
     }
 
     [Fact]
+    public void ToEntryNamesTheKindAndTheCongressOfTheVote()
+    {
+        var vote = Vote() with { Kind = PublishedVoteKind.Rule, Congress = 118 };
+
+        var entry = vote.ToEntry();
+
+        Assert.Equal((PublishedVoteKind.Rule, 118), (entry.VoteKind, entry.Congress));
+        entry.Validate();
+    }
+
+    [Fact]
     public void TheEntryHoldsTheWholeChamberCountsSoAListCanShowThemWithoutReadingTheVoteFile()
     {
         var entry = Vote().ToEntry();

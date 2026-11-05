@@ -129,7 +129,7 @@ public sealed class PublicationReleaseTests
     {
         var oldJson = JsonSerializer.Serialize(Entry(PublishedRecordKind.Vote, StatementId), PublicationProtocol.JsonOptions);
         var node = JsonNode.Parse(oldJson)!.AsObject();
-        foreach (var field in new[] { "yeaCount", "nayCount", "alignment", "chamber", "cosponsorIds" }) node.Remove(field);
+        foreach (var field in new[] { "yeaCount", "nayCount", "alignment", "chamber", "voteKind", "congress", "cosponsorIds" }) node.Remove(field);
 
         var read = JsonSerializer.Deserialize<PublishedRecordEntry>(node.ToJsonString(), PublicationProtocol.JsonOptions)!;
         read.Validate();
@@ -138,6 +138,8 @@ public sealed class PublicationReleaseTests
         Assert.Null(read.NayCount);
         Assert.Null(read.Alignment);
         Assert.Null(read.Chamber);
+        Assert.Null(read.VoteKind);
+        Assert.Null(read.Congress);
         Assert.Null(read.CosponsorIds);
     }
 
@@ -243,6 +245,36 @@ public sealed class PublicationReleaseTests
     {
         Entry(PublishedRecordKind.Vote, StatementId).Validate();
         (Entry(PublishedRecordKind.Vote, StatementId) with { Chamber = PublishedChamber.Senate }).Validate();
+    }
+
+    public static TheoryData<PublishedRecordEntry> InvalidVoteIdentities() => new()
+    {
+        Entry(PublishedRecordKind.Statement, StatementId) with { VoteKind = PublishedVoteKind.Passage },
+        Entry(PublishedRecordKind.Action, new string('7', 64)) with { Congress = 119 },
+        Entry(PublishedRecordKind.Vote, StatementId) with { VoteKind = (PublishedVoteKind)99 },
+        Entry(PublishedRecordKind.Vote, StatementId) with { Congress = 0 }
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidVoteIdentities))]
+    public void OnlyAVoteEntryMayNameAKnownVoteKindAndACongressFromOneSoNoOtherKindCarriesAFalseIdentity(PublishedRecordEntry entry)
+    {
+        Assert.Throws<InvalidDataException>(entry.Validate);
+    }
+
+    [Fact]
+    public void AVoteEntryWithNoKindAndNoCongressStaysValidAndTheKindIsAWordSoAReleaseFromBeforeTheFieldsStillReads()
+    {
+        var entry = Entry(PublishedRecordKind.Vote, StatementId);
+        entry.Validate();
+        var named = entry with { VoteKind = PublishedVoteKind.ConferenceReport, Congress = 119 };
+        named.Validate();
+
+        var json = JsonSerializer.Serialize(named, PublicationProtocol.JsonOptions);
+        var read = JsonSerializer.Deserialize<PublishedRecordEntry>(json, PublicationProtocol.JsonOptions)!;
+
+        Assert.Contains("\"voteKind\":\"conferenceReport\"", json, StringComparison.Ordinal);
+        Assert.Equal((PublishedVoteKind.ConferenceReport, 119), (read.VoteKind, read.Congress));
     }
 
     public static TheoryData<PublishedRecordEntry> InvalidCosponsors()

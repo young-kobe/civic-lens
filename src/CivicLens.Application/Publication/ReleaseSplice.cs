@@ -63,6 +63,8 @@ internal static class ReleaseSplice
             Alignment = fromFile.Alignment,
             BillLine = fromFile.BillLine,
             Chamber = fromFile.Chamber,
+            VoteKind = fromFile.VoteKind,
+            Congress = fromFile.Congress,
             CosponsorIds = fromFile.CosponsorIds
         };
     }
