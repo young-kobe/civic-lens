@@ -121,6 +121,17 @@ public sealed class PostgresPublicationStore : IPublicationStore
         return created;
     }
 
+    public async Task<int> FillBillLinesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var filled = await PublishedEntries.FillBillLinesAsync(db, entries,
+            "A commit or another run wrote this row with another bill line or other facts than the kept folder. Compare the row with the kept folders before you run the backfill again.",
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return filled;
+    }
+
     public async Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, Func<string, CancellationToken, Task> requireFiles,
         CancellationToken cancellationToken)
     {
@@ -231,6 +242,8 @@ public sealed class PostgresPublicationStore : IPublicationStore
         await PublishedRecords.InsertAsync(db, firstPublications, cancellationToken);
         await PublishedRecords.RequireStoredTimesAsync(db, firstPublications, cancellationToken);
         await PublishedEntries.InsertAsync(db, commit.AddedEntries, "Rebuild the release.", cancellationToken);
+        await PublishedEntries.FillBillLinesAsync(db, commit.RewrittenEntries,
+            "A carried action has no entry row or holds another bill line. Run releases entries backfill, then publish again.", cancellationToken);
         await PublicationWithdrawalRows.RecordAsync(db, commit, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return summary;
@@ -489,7 +502,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         ReleasePaths.RequireDirectoryName(commit.DirectoryName);
         if (!commit.DirectoryName.StartsWith($"{commit.ReleaseNumber:D6}-", StringComparison.Ordinal))
             throw new ArgumentException("Release directory name does not match the release number.", nameof(commit));
-        if (commit.Records.IsDefault || commit.AddedRecords.IsDefault || commit.WithdrawnRecords.IsDefault || commit.Withdrawals.IsDefault || commit.AddedEntries.IsDefault)
+        if (commit.Records.IsDefault || commit.AddedRecords.IsDefault || commit.WithdrawnRecords.IsDefault || commit.Withdrawals.IsDefault || commit.AddedEntries.IsDefault || commit.RewrittenEntries.IsDefault)
             throw new ArgumentException("Release records are required.", nameof(commit));
     }
 }
