@@ -187,12 +187,9 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     private void RequireTextSpansInTheBody(IReadOnlyDictionary<string, DocumentExtraction> extractions)
     {
         var extractionId = TextCitationList[0].Span.ExtractionId;
-        foreach (var citation in TextCitationList)
-        {
-            var bodyStart = BillTextBody.Start(extractions[citation.Span.ExtractionId].Text);
-            if (citation.Span.ExtractionId != extractionId || bodyStart < 0 || citation.Span.Start < bodyStart)
-                throw new ArgumentException("Each text citation lies in the body of one bill text extraction.");
-        }
+        var bodyStart = BillTextBody.Start(extractions[extractionId].Text);
+        if (bodyStart < 0 || TextCitationList.Any(citation => citation.Span.ExtractionId != extractionId || citation.Span.Start < bodyStart))
+            throw new ArgumentException("Each text citation lies in the body of one bill text extraction.");
     }
 
     private void RequireTextToQuoteItsCitations(IReadOnlyDictionary<string, DocumentExtraction> extractions)
