@@ -1,0 +1,48 @@
+TASK: research report, written to survey/representation-data.md. The owner's core question: how well can Civic Lens audit whether elected federal officials (House members, senators, and the executive) faithfully represent the interests of their constituents? Find every pathway, hidden data layer, and data source that could help. Do not change code.
+
+Context: read README.md, docs/architecture.md, and the feature docs that the lookup table names for votes, bills, statements, actions, districts, and publication. Civic Lens today holds House and Senate roll call votes with each member's cast, bills and sponsors, CRS summaries, press statements, executive actions, the Congressional Record, and ZIP to district data. It pairs a member's statements with their own votes on the same issue. It has no measure of what constituents want.
+
+Research these areas on the web. Also find any others that would help.
+1. Constituent preference: district or state opinion estimates (Cooperative Election Study, MRP estimates, other surveys), presidential vote share by district, ballot measure results, and constituent contact data.
+2. Hidden legislative layers that roll calls miss: committee votes and markups, amendments, unanimous consent, discharge petitions, cosponsorship timing, bills that die in committee, and voice votes.
+3. Influence and interest: campaign finance (FEC API, donors by district compared with outside money), lobbying disclosures (LDA), member financial disclosures and stock trades, PAC and outside spending, and earmarks or community project funding.
+4. Promises and positions: campaign websites, candidate questionnaires, and position archives.
+5. District outcomes: federal spending by district (USAspending), Census and ACS data, and grants. Could an audit compare votes with measured district need?
+6. Existing scores and methods: ideal points (Voteview NOMINATE), interest group scorecards, and academic measures of representation such as dyadic representation, congruence, and responsiveness. Include what academics say about how valid each one is.
+
+For each source, report:
+- What it holds.
+- Coverage: offices, years, and geographic grain.
+- Access: API or bulk file, and whether a key is needed.
+- License and terms of use, quoted with the URL. Say whether reuse on a public CC BY 4.0 site is allowed.
+- Update frequency.
+- Error margins or known biases.
+- How it would join our data (bioguide ID, district, bill ID).
+- Size: small, medium, or large effort.
+- Risk of misleading readers.
+
+Rules:
+- Read only official APIs and pages that allow automated access. Respect robots.txt and terms. Use no browser spoofing.
+- If a site blocks you, record that and move on.
+- Send no email address in any request. Use the User-Agent "CivicLens/0.1 (civic-lens.info)" where you can set one.
+- Mark each claim as verified, with a URL, or unverified.
+- Separate what measures an official against their own words from what claims to know what constituents want.
+
+Report, in this order:
+1. A short answer to the owner's question.
+2. A table of sources, ranked by value divided by effort.
+3. Hidden layers that the current data could expose with no new source.
+4. Three to five candidate features, each with its data, its method, an honest limit that a reader would see, and a size.
+5. Open decisions for the owner, each with options and a recommendation.
+6. Sources that were ruled out, and why.
+
+Keep the file under 3,500 words. Prose: ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes.
+
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b survey-representation-data origin/main
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+Finish, each its own Bash call: git add survey/representation-data.md; git commit -m "<one plain sentence>"; git push origin survey-representation-data. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only survey-representation-data.
+Final message under 1,800 characters: the pushed SHA, the short answer, the top five sources with one line each, and the decision list.
