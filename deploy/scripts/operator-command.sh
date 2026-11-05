@@ -136,6 +136,8 @@ case "$*" in
     number "$4"
     "$compose" run --rm cli releases entries backfill "$4"
     ;;
+  # usage: releases entries verify
+  "releases entries verify") "$compose" run --rm cli releases entries verify ;;
   # usage: releases publish <key> [--rewrite-entries] [--rewrite-officials] [--rewrite-pages]
   "releases publish "*) shift 2; publish "$@" ;;
   *) refuse ;;

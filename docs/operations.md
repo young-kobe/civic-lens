@@ -970,6 +970,25 @@ The command prints JSON with these keys:
 
 The exit code is 0 only when `skipped`, `openRangesWithoutRow`, and `readyRangesWithoutRow` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
 
+### Entries verify
+
+This command proves that the entry, state, first publication, and withdrawal tables hold what each kept `release.json` holds. Run it after `releases entries backfill` exits with 0. It writes nothing and takes no lock, so it is safe beside the worker. It needs the same three variables as the backfill.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases entries verify
+```
+
+The command reads each kept manifest once. It writes the file again with no change, and it checks the bytes. Then it checks the records of the state table against the entries of the file. Last, it rebuilds the manifest from the tables and compares the bytes with the file. The rebuild takes only the official names, the five optional entry fields, `publishedAtUtc`, and some withdrawals from the file.
+
+The command prints JSON with these keys:
+
+- `passed`: the kept releases that the tables rebuild byte for byte.
+- `legacy`: the kept releases that pass but list withdrawals that no withdrawal row covers, and that are older than the first release with a withdrawal row. Withdrawals made before the migration `PublicationWithdrawals` have no rows. A newer release with such withdrawals fails. Legacy releases do not change the exit code.
+- `failed`, `failedByReason`, and `failedReleases`: the failed releases, a count for each reason, and each release with its number, folder, reason, and first record. The reasons are `manifestInvalid`, `manifestNotReproducible`, `entryRowMissing`, `firstPublishedMissing`, `stateRowNotListed`, `entryOutsideRange`, and `bytesDiffer`.
+- `retired`: the release rows whose folder holds no manifest.
+
+The exit code is 0 only when `failed` is 0. The command never fixes a value. An `entryRowMissing` failure means that the backfill must run again. A `firstPublishedMissing` failure means that `releases first-published backfill` must run first. A `bytesDiffer` failure names the first record whose entry differs, or no record when the order, the withdrawals, or the top-level fields differ. A person must compare the folder with the tables.
+
 ### Take a record off the site
 
 Only the owner sees Take off site. It is on the editor of every record kind that releases publish, below the decision panel. The button shows only while the active release holds the record. Type a reason of 1 to 500 characters and press the button. The page then does these steps:
@@ -1321,7 +1340,7 @@ The installer refuses a checkout that anyone other than root can write, because 
 
 Every result that an agent reads goes to its model vendor, so add a column to the hidden list before it holds private text.
 
-**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `actions revisions backfill`, `actions revisions verify`, `executive-actions revisions backfill`, `executive-actions revisions verify`, `relationships revisions backfill`, `relationships revisions verify`, `statements revisions backfill`, `statements revisions verify`, `brief revisions backfill`, `brief revisions verify`, `document-changes revisions backfill`, `document-changes revisions verify`, `releases first-published backfill`, `releases entries backfill` with a count, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
+**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, the two redraft commands, `bills subjects backfill`, `bills status backfill`, `actions revisions backfill`, `actions revisions verify`, `executive-actions revisions backfill`, `executive-actions revisions verify`, `relationships revisions backfill`, `relationships revisions verify`, `statements revisions backfill`, `statements revisions verify`, `brief revisions backfill`, `brief revisions verify`, `document-changes revisions backfill`, `document-changes revisions verify`, `releases first-published backfill`, `releases entries backfill` with a count, `releases entries verify`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
 
 `deploy` takes a full commit SHA on `origin/main` that is the checkout or newer. The scripts of that commit run as root, and a migration has no undo, so a rollback stays with the owner. It checks out the commit, runs `update.sh`, and runs `check-live.sh`. A merge to `main` is therefore the real approval. GitHub does not stop the agent from merging, because it uses the owner's token. Only the agent rules and the Claude Code permissions stop it.
 

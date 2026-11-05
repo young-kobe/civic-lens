@@ -15,7 +15,7 @@
 @code {
     [Parameter, EditorRequired] public HomeHighlights Highlights { get; set; } = default!;
 
-    private static RenderFragment LatestColumn(string title, IconName icon, IReadOnlyList<PublishedRecordEntry> rows) => @<div>
+    private static RenderFragment LatestColumn(string title, IconName icon, IReadOnlyList<PublishedRecordEntry> rows) => rows.Count == 0 ? _ => { } : @<div>
         <h3 class="latest-title"><Icon Name="icon" />@title</h3>
         <ul class="latest-rows" role="list">
             @foreach (var row in rows)
@@ -23,10 +23,17 @@
                 <li>
                     <a href="@PublicationProtocol.RecordPagePath(row.RecordId)">
                         <span>@row.Headline</span>
-                        <span class="muted small">@Moment.Day(ReleaseRecordOrder.Day(row))</span>
+                        <span class="muted small">@RowDate(row)</span>
                     </a>
                 </li>
             }
         </ul>
     </div>;
+
+    private static string RowDate(PublishedRecordEntry row) => row.Chamber switch
+    {
+        PublishedChamber.House => $"House, {Moment.Day(ReleaseRecordOrder.Day(row))}",
+        PublishedChamber.Senate => $"Senate, {Moment.Day(ReleaseRecordOrder.Day(row))}",
+        _ => Moment.Day(ReleaseRecordOrder.Day(row))
+    };
 }

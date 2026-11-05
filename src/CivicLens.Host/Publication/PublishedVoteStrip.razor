@@ -17,6 +17,11 @@
             <li><span class="vote-mark vote-mark-yes"></span>Yes</li>
             <li><span class="vote-mark vote-mark-no"></span>No</li>
             <li><span class="vote-mark vote-mark-against"></span>Against most of their party</li>
+            @if (ordered.Any(vote => vote.IsCandidateCast))
+            {
+                <li><span class="vote-mark vote-mark-candidate"></span>Voted for a candidate</li>
+            }
+            <li><span class="vote-mark vote-mark-other"></span>Did not vote Yes or No</li>
         </ul>
     </section>
 }

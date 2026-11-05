@@ -33,6 +33,7 @@ internal static class PublishedVoteStripView
         {
             PublishedPartyMajority.Yea => "vote-mark vote-mark-yes",
             PublishedPartyMajority.Nay => "vote-mark vote-mark-no",
+            _ when vote.IsCandidateCast => "vote-mark vote-mark-candidate",
             _ => "vote-mark vote-mark-other"
         };
         return VotesWithParty.IsBreak(vote) ? $"{cast} vote-mark-against" : cast;

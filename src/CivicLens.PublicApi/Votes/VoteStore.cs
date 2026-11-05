@@ -1,5 +1,6 @@
 using System.Data.Common;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicApi.Http;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -143,34 +144,23 @@ public sealed class VoteStore(NpgsqlDataSource views)
     {
         RecordId = reader.GetString(1),
         RevisionNumber = reader.GetInt32(2),
-        Chamber = ReadEnum<PublishedChamber>(reader, 3),
+        Chamber = ViewColumns.Enum<PublishedChamber>(reader, 3),
         Congress = reader.GetInt32(4),
         Session = reader.GetInt32(5),
         RollCall = reader.GetInt32(6),
         VotedOn = reader.GetFieldValue<DateOnly>(7),
-        Kind = ReadEnum<PublishedVoteKind>(reader, 8),
-        BillType = ReadText(reader, 9),
-        BillNumber = ReadNumber(reader, 10),
+        Kind = ViewColumns.Enum<PublishedVoteKind>(reader, 8),
+        BillType = ViewColumns.Text(reader, 9),
+        BillNumber = ViewColumns.Number(reader, 10),
         Headline = reader.GetString(11),
         Summary = reader.GetString(12),
-        TextOrigin = ReadEnum<PublishedTextOrigin>(reader, 13),
-        Label = ReadText(reader, 14),
-        Question = ReadText(reader, 15),
+        TextOrigin = ViewColumns.Enum<PublishedTextOrigin>(reader, 13),
+        Label = ViewColumns.Text(reader, 14),
+        Question = ViewColumns.Text(reader, 15),
         Result = reader.GetString(16),
-        Yea = ReadNumber(reader, 17),
-        Nay = ReadNumber(reader, 18),
-        Present = ReadNumber(reader, 19),
-        NotVoting = ReadNumber(reader, 20)
+        Yea = ViewColumns.Number(reader, 17),
+        Nay = ViewColumns.Number(reader, 18),
+        Present = ViewColumns.Number(reader, 19),
+        NotVoting = ViewColumns.Number(reader, 20)
     };
-
-    private static string? ReadText(DbDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
-
-    // The counts are bigint in the view.
-    private static int? ReadNumber(DbDataReader reader, int ordinal) =>
-        reader.IsDBNull(ordinal) ? null : Convert.ToInt32(reader.GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
-
-    private static T ReadEnum<T>(DbDataReader reader, int ordinal) where T : struct, Enum =>
-        Enum.TryParse<T>(reader.GetString(ordinal), out var value) && Enum.IsDefined(value)
-            ? value
-            : throw new InvalidDataException($"The view holds an unknown {typeof(T).Name}.");
 }

@@ -632,6 +632,8 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Task<IReadOnlyList<PublishedEntryCandidate>> ReadEntryCandidatesAsync(CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
+    public Task<StoredRelease> ReadReleaseAsync(int releaseNumber, CancellationToken cancellationToken) => throw new NotSupportedException();
+
     public Task<int> AddEntriesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
