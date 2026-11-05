@@ -76,8 +76,9 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [ ] Run the subjects backfill and the redraft commands
   - [x] Write action text in code when no summary text reaches the model, and move summary bills to the new prompt
   - [ ] Draft the action backlog, and spot check the issue tags after it
-  - [ ] Backfill older bills with the bill text summary, after the owner reads the measured sample
-  - [ ] Publish the bill text summary, and then turn the bill text setting on
+  - [ ] Publish the bill text summary, after the owner reads the measured sample
+  - [ ] Turn the bill text setting on
+  - [ ] Backfill older bills with the bill text summary
 
 - R-66: Gate model output on confidence. Models give a confidence score. A low score sends the record to the one page review, where a person fixes it or tells the model what to fix. Set the threshold from measured data and a person-labeled set. Depends on: R-65. [Review](architecture/review.md#limits-and-planned-work)
   - [ ] Agree the design
