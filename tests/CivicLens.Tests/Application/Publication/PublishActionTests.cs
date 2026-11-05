@@ -24,51 +24,67 @@ public sealed class PublishActionTests
         Assert.Equal(new DateOnly(2026, 1, 20), entry.EventDate);
     }
 
-    [Fact]
-    public async Task TheEntryLineIsTheFirstSentenceOfTheCrsSummaryBecauseOneRowNeedsOneShortLine()
+    [Theory]
+    [InlineData("This bill funds rent aid for veterans. It also sets a cap on fees.", "This bill funds rent aid for veterans.")]
+    [InlineData("This bill amends 5 U.S.C. to fund aid. It adds a cap.", "This bill amends 5 U.S.C. to fund aid.")]
+    [InlineData("This bill requires the U.S. Department of Agriculture to fund aid. It adds a cap.",
+        "This bill requires the U.S. Department of Agriculture to fund aid.")]
+    [InlineData("The D.C. Council may act. It adds a cap.", "The D.C. Council may act.")]
+    [InlineData("This bill names H.R. Smith as chair. It adds a cap.", "This bill names H.R. Smith as chair.")]
+    [InlineData("This bill moves the office to St. Louis. It adds a cap.", "This bill moves the office to St. Louis.")]
+    [InlineData("Dr. Smith and Mr. Jones lead the board. It adds a cap.", "Dr. Smith and Mr. Jones lead the board.")]
+    [InlineData("This bill amends Pub. L. 117-58 to fund aid. It adds a cap.", "This bill amends Pub. L. 117-58 to fund aid.")]
+    [InlineData("This bill funds aid. \"It adds a cap.\" It adds more.", "This bill funds aid.")]
+    [InlineData("This bill funds aid. (It adds a cap.) It adds more.", "This bill funds aid.")]
+    [InlineData("This bill funds aid? It adds a cap.", "This bill funds aid?")]
+    [InlineData("Veterans Rent Aid Act\nThis bill funds rent aid.", "This bill funds rent aid.")]
+    public async Task TheEntryLineIsTheFirstSentenceOfTheCrsSummaryBecauseOneRowNeedsOneShortLine(string summaryText, string expected)
     {
-        var scenario = new PublicationScenario();
-        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid for veterans. It also sets a cap on fees.");
+        Assert.Equal(expected, await PublishedLineAsync(summaryText));
+    }
 
-        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
-
-        Assert.Equal("This bill funds rent aid for veterans.", Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine);
+    [Theory]
+    [InlineData("This bill:\nAmends tax law.\nFunds aid.")]
+    [InlineData("Veterans Rent Aid Act\nThis bill:\nAmends tax law.")]
+    [InlineData("")]
+    [InlineData("Veterans Rent Aid Act")]
+    public async Task ASummaryWithNoSentenceOrAListIntroHasNoLineBecauseAListItemIsNotTheSummary(string summaryText)
+    {
+        Assert.Null(await PublishedLineAsync(summaryText));
     }
 
     [Fact]
-    public async Task AnAbbreviationInTheSummaryDoesNotEndTheLineBecauseTheNextWordIsNotACapital()
+    public async Task ALongFirstSentenceIsCutAtAWordBoundaryAndEndsWithTheCutMarkerWithinTheCap()
     {
-        var scenario = new PublicationScenario();
-        var action = scenario.AddAction('c', summaryText: "This bill amends 5 U.S.C. to fund aid. It adds a cap.");
+        var line = await PublishedLineAsync(string.Join(' ', Enumerable.Repeat("grants", 60)) + ".");
 
-        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
+        Assert.Equal(string.Join(' ', Enumerable.Repeat("grants", 28)) + "…", line);
+        Assert.True(line!.Length <= PublishedRecordEntry.MaximumBillLineLength);
+    }
 
-        Assert.Equal("This bill amends 5 U.S.C. to fund aid.", Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine);
+    [Theory]
+    [InlineData(",")]
+    [InlineData(";")]
+    [InlineData(":")]
+    public async Task ACutDropsATrailingCommaSemicolonOrColonBeforeTheCutMarker(string mark)
+    {
+        var text = string.Join(' ', Enumerable.Repeat("grants", 27)) + " aid" + mark + " grants grants.";
+
+        Assert.Equal(string.Join(' ', Enumerable.Repeat("grants", 27)) + " aid…", await PublishedLineAsync(text));
     }
 
     [Fact]
-    public async Task ATitleLineWithNoFinalPunctuationIsSkippedBecauseItIsNotASentence()
+    public async Task ANonBreakingSpaceIsAWordBoundaryForTheCut()
     {
-        var scenario = new PublicationScenario();
-        var action = scenario.AddAction('c', summaryText: "Veterans Rent Aid Act\nThis bill funds rent aid.");
+        var text = string.Join('\u00A0', Enumerable.Repeat("grants", 60)) + ".";
 
-        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
-
-        Assert.Equal("This bill funds rent aid.", Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine);
+        Assert.Equal(string.Join('\u00A0', Enumerable.Repeat("grants", 28)) + "…", await PublishedLineAsync(text));
     }
 
     [Fact]
-    public async Task ALongFirstSentenceIsCutAtAWordBoundaryWithinTheCap()
+    public async Task ASentenceWithNoWhitespaceInsideTheCapHasNoLine()
     {
-        var scenario = new PublicationScenario();
-        var action = scenario.AddAction('c', summaryText: string.Join(' ', Enumerable.Repeat("housing", 60)) + ".");
-
-        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
-
-        var line = Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine!;
-        Assert.InRange(line.Length, 1, PublishedRecordEntry.MaximumBillLineLength);
-        Assert.Equal(string.Join(' ', Enumerable.Repeat("housing", line.Split(' ').Length)), line);
-        Assert.True(line.Length > PublishedRecordEntry.MaximumBillLineLength - "housing".Length - 1);
+        Assert.Null(await PublishedLineAsync(new string('x', PublishedRecordEntry.MaximumBillLineLength + 50) + ". It adds a cap."));
     }
 
     [Fact]
@@ -82,17 +98,6 @@ public sealed class PublishActionTests
         var record = JsonSerializer.Deserialize<PublishedAction>(
             scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(action)], PublicationProtocol.JsonOptions)!;
         Assert.NotEmpty(record.Summary);
-        Assert.Null(Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine);
-    }
-
-    [Fact]
-    public async Task ASummaryWithNoSentenceHasNoLine()
-    {
-        var scenario = new PublicationScenario();
-        var action = scenario.AddAction('c', summaryText: "");
-
-        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
-
         Assert.Null(Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine);
     }
 
@@ -237,6 +242,14 @@ public sealed class PublishActionTests
 
     private static PublishReleaseRequest Request(string key, string actionId) =>
         PublicationScenario.Request(key, new PublishedRecordReference(PublishedRecordKind.Action, actionId));
+
+    private static async Task<string?> PublishedLineAsync(string summaryText)
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c', summaryText: summaryText);
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
+        return Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine;
+    }
 
     private static PublicationRelease ReadManifest(PublicationScenario scenario, string directory) =>
         JsonSerializer.Deserialize<PublicationRelease>(

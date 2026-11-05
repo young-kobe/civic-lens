@@ -63,7 +63,7 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
     }
 
     [Fact]
-    public async Task AnActionEntryWithABillLineRebuildsByteForByteFromItsRowSoTheLineLivesInOneColumn()
+    public async Task AnActionEntryWithABillLineRebuildsByteForByteBecauseTheSpliceTakesTheLineFromTheFile()
     {
         var action = await SeedActionAsync('a');
         await AddReleasesAsync(1);
@@ -75,24 +75,6 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
 
         Assert.Equal(0, exit);
         Assert.Equal(0, json.GetProperty("failedReleases").GetArrayLength());
-        Assert.Equal("This bill funds rent aid.", Assert.Single(await ReadAsync("SELECT bill_line FROM published_entries")));
-    }
-
-    [Fact]
-    public async Task AFileLineThatTheRowDoesNotHoldFailsTheReleaseBecauseTheFileNoLongerMatchesTheTables()
-    {
-        var action = await SeedActionAsync('a');
-        await AddReleasesAsync(1);
-        await AddRangeAsync(action, 1, null);
-        Keep(1, [new SampleRecord(action.ToEntry() with { BillLine = "This bill funds rent aid." }, action)], []);
-        await FillRowsAsync();
-        Keep(1, [new SampleRecord(action.ToEntry() with { BillLine = "This bill funds something else." }, action)], []);
-
-        var (exit, json) = await RunCommandAsync();
-
-        Assert.Equal(1, exit);
-        var failed = Assert.Single(json.GetProperty("failedReleases").EnumerateArray());
-        Assert.Equal(("bytesDiffer", $"action:{action.RecordId}"), (failed.GetProperty("reason").GetString(), failed.GetProperty("record").GetString()));
     }
 
     [Fact]

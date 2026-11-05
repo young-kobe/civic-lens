@@ -95,11 +95,13 @@ public static class CongressBillRenderer
             Line("Action date", Date(summary.ActionDate)),
             Line("Action", summary.ActionDescription),
             SummaryUpdatedLine(summary),
-            "Text:"
+            SummaryTextLabel
         };
         if (item.Text.Length > 0) lines.Add(item.Text);
         return string.Join('\n', lines);
     }
+
+    internal const string SummaryTextLabel = "Text:";
 
     internal static string SummaryVersionLine(CongressBillSummary summary) => Line("Summary version", summary.VersionCode);
 
