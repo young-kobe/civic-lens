@@ -28,7 +28,9 @@ using CivicLens.Host;
 using CivicLens.Host.Actions;
 using CivicLens.Host.Briefs;
 using CivicLens.Host.Relationships;
+using CivicLens.Host.People;
 using CivicLens.Host.Roster;
+using CivicLens.Infrastructure.People;
 using CivicLens.Application.Roster;
 using CivicLens.Infrastructure.Roster;
 using CivicLens.Host.Votes;
@@ -118,6 +120,7 @@ if (args is [] or ["--help"] or ["help"])
           brief revisions backfill <limit>
           brief revisions verify
           roster propose <config.json>
+          people import <config.json>
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
           releases activate <release-number>
@@ -194,7 +197,7 @@ if (args is not (["db", "migrate"] or ["validate", _] or ["collect", _, _, _, _]
     or ["discovery", "get", _] or ["discovery", "admit", _, _, _, _]
     or ["receipts", "list", _] or ["receipts", "replay", _, _]) && !CollectionJobCommand.Matches(args) &&
     !CollectionWorkerCommand.Matches(args) && !WorkerHealthCommand.Matches(args) && !DocumentCommand.Matches(args) && !ReleaseCommand.Matches(args) &&
-    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !ExecutiveActionCommand.Matches(args) && !DocumentChangeCommand.Matches(args) && !RelationshipCommand.Matches(args) && !BillBackfillCommand.Matches(args) && !BriefCommand.Matches(args) && !RosterCommand.Matches(args))
+    !AnalysisCommand.Matches(args) && !StatementCommand.Matches(args) && !ActionCommand.Matches(args) && !VoteCommand.Matches(args) && !ExecutiveActionCommand.Matches(args) && !DocumentChangeCommand.Matches(args) && !RelationshipCommand.Matches(args) && !BillBackfillCommand.Matches(args) && !BriefCommand.Matches(args) && !RosterCommand.Matches(args) && !PeopleCommand.Matches(args))
 {
     Console.Error.WriteLine("Unknown command. Use --help.");
     return 2;
@@ -357,12 +360,10 @@ try
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var draftStore = new PostgresVoteDraftStore(contexts);
-        var backfillStore = new PostgresVoteRevisionBackfillStore(contexts);
         var draftCommands = new AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, VoteDraftTask.Task));
         var votes = new VoteCommand(draftCommands, new GetVoteDraftStatus(draftCommands.Status, draftStore),
-            new RequeueBlockedVoteDrafts(draftStore), new RequeueRefusedVoteDrafts(draftStore), new RedraftVoteDrafts(draftStore),
-            new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
+            new RequeueBlockedVoteDrafts(draftStore), new RequeueRefusedVoteDrafts(draftStore), new RedraftVoteDrafts(draftStore), owner);
         executing = true;
         return await votes.ExecuteAsync(args, cancellation.Token);
     }
@@ -427,6 +428,14 @@ try
         var roster = PostgresMemberRosterStore.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!);
         executing = true;
         return await RosterCommand.ExecuteAsync(args, rosterConfiguration, new ProposeRosterChanges(roster), cancellation.Token);
+    }
+
+    if (PeopleCommand.Matches(args))
+    {
+        var (connectionString, owner) = OwnerCommand.ReadEnvironment();
+        var people = PostgresPersonRegistryStore.FromConnectionString(connectionString);
+        executing = true;
+        return await PeopleCommand.ExecuteAsync(args, people, owner.Subject, cancellation.Token);
     }
 
     if (ReleaseCommand.Matches(args))

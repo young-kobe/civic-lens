@@ -41,9 +41,7 @@ BEGIN
     WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
   LOOP
     EXECUTE format('REVOKE ALL ON public.%I FROM civic_lens_readonly, civic_lens_readonly_owner', listed.relname);
-    IF listed.relname ~ '_revisions$' AND EXISTS (
-      SELECT 1 FROM pg_attribute a
-       WHERE a.attrelid = listed.oid AND a.attname = 'revision_json' AND NOT a.attisdropped) THEN
+    IF listed.relname ~ '_revisions$' THEN
       EXECUTE format('GRANT SELECT ON public.%I TO civic_lens_readonly_owner', listed.relname);
     END IF;
     CONTINUE WHEN listed.relname = ANY (hidden_table);
@@ -60,8 +58,10 @@ CREATE SCHEMA IF NOT EXISTS readonly_access;
 GRANT USAGE ON SCHEMA readonly_access TO civic_lens_readonly;
 
 -- The body is plain text to Postgres, so this function never blocks a migration that changes or drops a revision column.
-CREATE OR REPLACE FUNCTION readonly_access.revisions(table_name text)
-RETURNS TABLE (row_data jsonb, revision jsonb)
+BEGIN;
+DROP FUNCTION IF EXISTS readonly_access.revisions(text);
+CREATE FUNCTION readonly_access.revisions(table_name text)
+RETURNS TABLE (row_data jsonb)
 LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = pg_catalog, pg_temp
 AS $$
@@ -70,11 +70,13 @@ BEGIN
     RAISE EXCEPTION 'Name a table in public that ends in _revisions.';
   END IF;
   RETURN QUERY EXECUTE format(
-    'SELECT to_jsonb(t) - ''author_subject'' - ''revision_json'',
-            t.revision_json::jsonb - ''authorSubject'' - ''AuthorSubject''
-       FROM public.%I t', table_name);
+    'SELECT CASE WHEN j ->> ''revision_json'' IS NOT NULL
+                 THEN jsonb_set(j, ''{revision_json}'', (j ->> ''revision_json'')::jsonb - ''authorSubject'' - ''AuthorSubject'')
+                 ELSE j END
+       FROM (SELECT to_jsonb(t) - ''author_subject'' AS j FROM public.%I t) s', table_name);
 END $$;
 
 ALTER FUNCTION readonly_access.revisions(text) OWNER TO civic_lens_readonly_owner;
 REVOKE ALL ON FUNCTION readonly_access.revisions(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION readonly_access.revisions(text) TO civic_lens_readonly;
+COMMIT;

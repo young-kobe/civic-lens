@@ -21,7 +21,7 @@ public sealed class PostgresBriefReviewStore(IDbContextFactory<CollectionAttempt
     private readonly PostgresAnalysisQueue<BriefAnalysisRow, BriefAnalysisBudgetRow, BriefCheckRun> checkQueue = BriefCheckQueue.Create(contextFactory);
 
     internal static readonly ReviewRecords<BriefDraftRow, BriefRevisionRow, BriefReviewDecisionRow, BriefRevision> Records =
-        new(PostgresAdvisoryLock.BriefReview, PublishedRecordKind.Brief, "Brief", nameof(BriefDraftRow.RecordId), readRevisions: BriefRevisionRows.ReadAsync);
+        new(PostgresAdvisoryLock.BriefReview, PublishedRecordKind.Brief, "Brief", nameof(BriefDraftRow.RecordId), BriefRevisionRows.ReadAsync);
 
     private const string SaveOperation = "brief-save";
     private const string DecideOperation = "brief-decide";
