@@ -33,11 +33,11 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
     private const string SenatorsSql = $"""
         SELECT state, official_id, name, party FROM (
             SELECT l.state, l.official_id, o.name, l.party, l.start_on,
-                   row_number() OVER (PARTITION BY l.state ORDER BY l.start_on DESC, l.official_id) AS newest
-              FROM (SELECT DISTINCT ON (t.state, t.official_id) t.release_number, t.state, t.official_id, t.party, t.start_on
+                   row_number() OVER (PARTITION BY l.state ORDER BY (l.end_on IS NULL OR l.end_on > current_date) DESC, l.start_on DESC, l.official_id) AS newest
+              FROM (SELECT DISTINCT ON (t.state, t.official_id) t.release_number, t.state, t.official_id, t.party, t.start_on, t.end_on
                       FROM public_api.release_official_terms t
                      WHERE t.kind = 'Senator' AND t.state = ANY(@states) AND {CurrentTerm}
-                     ORDER BY t.state, t.official_id, t.start_on DESC) l
+                     ORDER BY t.state, t.official_id, t.start_on DESC, t."position" DESC) l
               JOIN public_api.release_officials o ON o.release_number = l.release_number AND o.official_id = l.official_id) ranked
          WHERE newest <= @seats
          ORDER BY state, start_on, official_id

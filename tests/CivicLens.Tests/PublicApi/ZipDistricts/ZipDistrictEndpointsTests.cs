@@ -105,7 +105,7 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
     public async Task OnTheDayATermEndsTheNextTermHasStartedSoTheNewSenatorTakesTheSeatAndAReelectedSenatorHoldsOneSeat()
     {
         await using var host = await StartAsync();
-        var today = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var today = await ZipSeed.TodayAsync(host.OperationalDatabase);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 0, 0, 0, TimeSpan.Zero));
         await ZipSeed.AddRecordAsync(host.OperationalDatabase, 2);
         await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2,
@@ -117,6 +117,23 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
         var answer = await GetAsync(host, "/v1/zip-districts/36009");
 
         Assert.Equal(["Nia New", "Rae Reelected"], Names(answer.GetProperty("states")[0].GetProperty("senators")));
+    }
+
+    [Fact]
+    public async Task AnAppointeeWhoStartedLaterButEndsTodayDoesNotTakeTheSeatOfTheSittingSenatorFromTheWinnerOfTheSpecialElection()
+    {
+        await using var host = await StartAsync();
+        var today = await ZipSeed.TodayAsync(host.OperationalDatabase);
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 0, 0, 0, TimeSpan.Zero));
+        await ZipSeed.AddRecordAsync(host.OperationalDatabase, 2);
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2,
+            new SeededSeat("a-sitting", "Sid Sitting", Senator, "AL", null, "2025-01-03"),
+            new SeededSeat("b-appointee", "Ari Appointee", Senator, "AL", null, "2025-01-21", today),
+            new SeededSeat("c-winner", "Wes Winner", Senator, "AL", null, today));
+
+        var answer = await GetAsync(host, "/v1/zip-districts/36009");
+
+        Assert.Equal(["Sid Sitting", "Wes Winner"], Names(answer.GetProperty("states")[0].GetProperty("senators")));
     }
 
     [Fact]

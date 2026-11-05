@@ -17,11 +17,14 @@ public sealed class NonStateSeatsTests
     [Fact]
     public void NoOtherSourceFileKeepsItsOwnListOfNonStateNamesOrOffices()
     {
-        var owners = new[] { "NonStateSeats.cs" };
+        var source = Path.Combine(RepositoryRoot.FullName, "src");
+        var owner = Path.Combine(source, "CivicLens.Publication.Contracts", "NonStateSeats.cs");
         var pattern = new Regex("\"Resident Commissioner\"|\"Northern Mariana Islands\"|\"Guam\"");
+        string[] extensions = [".cs", ".razor", ".js"];
 
-        var copies = Directory.EnumerateFiles(Path.Combine(RepositoryRoot.FullName, "src"), "*.cs", SearchOption.AllDirectories)
-            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") && !owners.Contains(Path.GetFileName(file)))
+        var copies = Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories)
+            .Where(file => extensions.Contains(Path.GetExtension(file)) && file != owner)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
             .Where(file => pattern.IsMatch(File.ReadAllText(file)));
 
         Assert.Empty(copies);

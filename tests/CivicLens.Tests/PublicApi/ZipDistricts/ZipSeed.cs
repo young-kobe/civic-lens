@@ -4,6 +4,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Districts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.PublicApi.Votes;
+using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.ZipDistricts;
 
@@ -44,6 +45,15 @@ internal static class ZipSeed
                 VALUES ({number}, '{seat.Id}', 0, '{seat.Kind}', '{seat.Kind}', '{seat.State}', {seat.District?.ToString(CultureInfo.InvariantCulture) ?? "NULL"},
                         {(seat.Party is null ? "NULL" : $"'{seat.Party}'")}, '{seat.Start}', {(seat.End is null ? "NULL" : $"'{seat.End}'")});
                 """);
+    }
+
+    /// <summary>Reads the date that the store reads, so a seeded term ends on the day the store counts as today.</summary>
+    public static async Task<string> TodayAsync(string database)
+    {
+        await using var connection = new NpgsqlConnection(database);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("SELECT to_char(current_date, 'YYYY-MM-DD')", connection);
+        return (string)(await command.ExecuteScalarAsync())!;
     }
 
     /// <summary>Adds a second term to an official that <see cref="AddNamesAsync"/> already wrote.</summary>
