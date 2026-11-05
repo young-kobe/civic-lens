@@ -17,6 +17,8 @@ internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset
     public IReadOnlyDictionary<string, ImmutableArray<string>> VoteBillActions { get; private init; } =
         ImmutableDictionary<string, ImmutableArray<string>>.Empty;
 
+    public ReleaseBillLines BillLines { get; private init; } = ReleaseBillLines.None;
+
     public ImmutableArray<PublishedRecordReference> Removed { get; private init; } = [];
 
     public ImmutableArray<PublishedRecordReference> Returned { get; private init; } = [];
@@ -26,8 +28,14 @@ internal sealed record PublicationBuild(PreviousRelease Previous, DateTimeOffset
 
     public PublicationBuild WithBillStatuses(IReadOnlyDictionary<string, ActionBillStatus> statuses) => this with { BillStatuses = statuses };
 
-    public PublicationBuild WithVoteBillActions(IReadOnlyDictionary<string, ImmutableArray<string>> voteBillActions) =>
-        this with { VoteBillActions = voteBillActions };
+    public PublicationBuild WithVoteBills(IEnumerable<PublishedRecordEntry> releaseEntries, IReadOnlyDictionary<string, ImmutableArray<string>> voteBillActions) =>
+        this with { VoteBillActions = voteBillActions, BillLines = ReleaseBillLines.From(releaseEntries, voteBillActions) };
+
+    public IReadOnlySet<string> VotesOnBillsOf(IEnumerable<string> actionRecordIds)
+    {
+        var actionIds = actionRecordIds.ToHashSet(StringComparer.Ordinal);
+        return VoteBillActions.Where(vote => vote.Value.Any(actionIds.Contains)).Select(vote => vote.Key).ToHashSet(StringComparer.Ordinal);
+    }
 
     public PublicationBuild WithReturned(ImmutableArray<PublishedRecordReference> returned) => this with { Returned = returned };
 

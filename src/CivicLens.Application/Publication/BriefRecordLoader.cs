@@ -35,7 +35,7 @@ internal sealed class BriefRecordLoader(IBriefReviewStore briefs)
                 $"Brief {recordId} cites a record that the new release does not hold at the cited revision, or that is not approved.");
         var record = PublishedBriefBuilder.Build(addition, build.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions), build.Now);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
-            (_, cancellationToken) => build.Renderer.RenderBriefAsync(record, cancellationToken));
+            (_, _, cancellationToken) => build.Renderer.RenderBriefAsync(record, cancellationToken));
     }
 
     public override Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,

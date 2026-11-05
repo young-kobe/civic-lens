@@ -960,6 +960,14 @@ Every publish writes `officials-summary.json`, the roll-up of the figures that r
 sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --rewrite-entries --rewrite-officials
 ```
 
+The bill line needs one rollout command, because carried vote pages and official record pages are not written again otherwise:
+
+```sh
+sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --rewrite-entries --rewrite-officials --rewrite-pages
+```
+
+Every publish now reads all release vote revisions. Before the deploy, run `votes revisions verify` and expect exit code 0. One vote revision that is not stored or not backfilled stops every publish.
+
 ### First publication backfill
 
 The table `published_records` stores the first publication time of each record. A publish writes a row for each record that it adds. Run the backfill once after the migration `PublishedRecords`. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`.

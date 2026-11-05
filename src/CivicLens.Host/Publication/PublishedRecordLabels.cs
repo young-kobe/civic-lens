@@ -32,6 +32,7 @@ public static class PublishedRecordLabels
     };
 
     public const string NewestFirst = "Newest first";
+    public const string BillLineSource = "From the Congressional Research Service summary.";
 
     public const string DefaultOrder = "Default order";
 

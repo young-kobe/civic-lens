@@ -114,6 +114,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - Every kind is found by the text of its source. Enforced by `RecordReader`. Test: `SearchIndexTests.EveryKindIsFoundByTheTextOfItsSource`.
 - A snippet is plain text with match markers, never HTML. Enforced by `SearchIndex` and the page script. Test: `SearchIndexTests.TheSnippetShowsTheMatchBetweenMarkersAndLeavesSourceMarkupAsPlainText`.
 - Filters narrow the result by the manifest entry fields, and a date filter never matches a record without an event date. Enforced by `SearchIndex.Filters`. Tests: `SearchIndexTests.FiltersNarrowTheResultAndEachOneUsesTheManifestEntryField` and `SearchIndexTests.AFilterThatNeedsAnEventDateNeverMatchesARecordWithoutOne`.
+- A hit of an action holds the bill line of its manifest entry, so a sorted table in the browser keeps the line. The record file holds no line, so `RecordReader.Read` takes it from the manifest entry. A returning revision copies the line with its stored row. Enforced by `RecordReader.Read`, `IndexTransaction.InsertAsync`, and `IndexTransaction.ReturnAsync`. Tests: `RecordReaderTests.AnActionKeepsTheBillLineOfItsManifestEntryBecauseTheRecordFileHoldsNoSuchField`, `ReleaseIngestTests.AReturningRevisionKeepsTheBillLineOfItsStoredRow`, and `SearchEndpointsTests.AnActionHitCarriesTheBillLineOfItsManifestEntryInASearchAndInASortedRequestAndAnotherKindHoldsNone`.
 - Without text, results follow the event day, else the UTC day of the first publication, newest first. This is the facet rule of `ReleaseRecordOrder`. `SearchIndex.SortDate` is its SQL copy in this service, because the service cannot reference the Application project. Records of one day follow the first publication time, newest first, then the record ID. Enforced by `SearchIndex`. Test: `SearchIndexTests.WithoutTextTheResultsFollowTheFacetRuleOfEventDayElseTheUtcFirstPublicationDayNewestFirst`.
 - Cursor paging walks every record once, in order, with and without text. Enforced by `SearchCursor` and `SearchIndex`. Tests: `SearchIndexTests.CursorPagingWalksEveryRecordOnceInOrderWithNoRepeatAndNoGap` and `SearchRequestTests.TheCursorRoundTripsTheRankExactlyBecauseTheKeysetCompareUsesEquality`.
 - A sorted walk visits every record once, in the order of the key, with ties broken by record ID, for each key and direction. Enforced by `SearchIndex.SortedSql`. Test: `SearchIndexTests.ASortedKeysetWalkVisitsEveryRecordOnceInTheOrderOfTheKeyWithTiesBrokenByRecordId`. A headline sort ignores case and the database locale, and an accented capital ties with its lower-case form. Test: `SearchIndexTests.AHeadlineSortLowercasesThenUsesCodeOrderSoCaseDoesNotMatterAndTheOrderDoesNotDependOnTheDatabaseLocale`.
@@ -200,7 +201,7 @@ A vote row has `recordId`, `revisionNumber`, `chamber`, `congress`, `session`, `
 
 A bill row has `recordId`, `revisionNumber`, `congress`, `billType`, `billNumber`, `billTitle`, `headline`, `summary`, `textOrigin`, `label`, `policyArea`, `policyAreaId`, `eventDate`, `sponsorCount`, and `cosponsorCount`. `label`, `policyArea`, and `policyAreaId` can be null. The event date is the newest sponsored or withdrawn date. A sponsorship row has `position`, `officialId`, `role`, `isOriginal`, `sponsoredOn`, and `withdrawnOn`. `withdrawnOn` can be null.
 
-A result has the manifest entry fields, `firstRelease`, `lastRelease`, `pagePath`, `dataPath`, and the snippet. The paths are relative to the release root. The API does not serve record bodies.
+A result has the manifest entry fields, including `billLine` of an action, `firstRelease`, `lastRelease`, `pagePath`, `dataPath`, and the snippet. The paths are relative to the release root. The API does not serve record bodies.
 
 | Status | Cause |
 |---|---|
@@ -247,9 +248,9 @@ The poll interval is 30 seconds and the statement timeout is 2 seconds. Both are
 
 ## Storage and contracts
 
-- The generated schema reference does not cover this database. The tables are `releases`, `records`, and `schema_migrations`, in `src/CivicLens.PublicApi/Schema/001_search_index.sql`. The tables `reader_reports` and `report_pull_state` are in `002_reader_reports.sql`. File `003_drop_report_release_number.sql` drops the unused release number column of `reader_reports`.
+- The generated schema reference does not cover this database. The tables are `releases`, `records`, and `schema_migrations`, in `src/CivicLens.PublicApi/Schema/001_search_index.sql`. The tables `reader_reports` and `report_pull_state` are in `002_reader_reports.sql`. File `003_drop_report_release_number.sql` drops the unused release number column of `reader_reports`. File `004_record_bill_line.sql` adds the column `bill_line` to `records`.
 - `releases` holds each ingested release number and its publication time.
-- `records` holds one row for each record revision: the manifest entry fields, the body text, the weighted `search` vector, `first_release`, and `last_release`. GIN indexes cover the vector and the three ID arrays.
+- `records` holds one row for each record revision. A row holds the manifest entry fields, the bill line of an action, the body text, the weighted `search` vector, `first_release`, and `last_release`. GIN indexes cover the vector and the three ID arrays.
 - `reader_reports` holds `sequence` (identity), `report_id`, `record_id`, `revision_number`, `kind`, `category`, `body`, `payload_hash`, and `received_at`. CHECK constraints bound the numbers. A unique index covers record ID, revision, and payload hash.
 - `report_pull_state` holds one row: the `epoch` uuid, created once, and the `acked_sequence`.
 - `PulledReport`, `PulledReportBatch`, and `ReaderReportProtocol` define the pull wire format. `ReaderReportProtocol` also owns the retention days that publish shows on `about.html`.
@@ -260,7 +261,7 @@ The poll interval is 30 seconds and the statement timeout is 2 seconds. Both are
 | Concern | Files |
 |---|---|
 | Startup and options | `src/CivicLens.PublicApi/Program.cs`, `src/CivicLens.PublicApi/PublicApiApp.cs`, `src/CivicLens.PublicApi/PublicApiOptions.cs`, `src/CivicLens.PublicApi/RecordKinds.cs`, `src/CivicLens.PublicApi/SearchLocks.cs` |
-| Schema | `src/CivicLens.PublicApi/Schema/SchemaMigrator.cs`, `src/CivicLens.PublicApi/Schema/SchemaStartup.cs`, `src/CivicLens.PublicApi/Schema/001_search_index.sql`, `src/CivicLens.PublicApi/Schema/003_drop_report_release_number.sql` |
+| Schema | `src/CivicLens.PublicApi/Schema/SchemaMigrator.cs`, `src/CivicLens.PublicApi/Schema/SchemaStartup.cs`, `src/CivicLens.PublicApi/Schema/001_search_index.sql`, `src/CivicLens.PublicApi/Schema/003_drop_report_release_number.sql`, `src/CivicLens.PublicApi/Schema/004_record_bill_line.sql` |
 | Ingest | `src/CivicLens.PublicApi/Ingest/IngestWorker.cs`, `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs`, `src/CivicLens.PublicApi/Ingest/ReleaseFeed.cs`, `src/CivicLens.PublicApi/Ingest/RecordReader.cs`, `src/CivicLens.PublicApi/Ingest/IndexedRecord.cs`, `src/CivicLens.PublicApi/Ingest/IndexTransaction.cs`, `src/CivicLens.PublicApi/Ingest/IngestResult.cs` |
 | Search and API | `src/CivicLens.PublicApi/Search/SearchEndpoints.cs`, `src/CivicLens.PublicApi/Search/SearchRequest.cs`, `src/CivicLens.PublicApi/Search/SearchIndex.cs`, `src/CivicLens.PublicApi/Search/SearchCursor.cs`, `src/CivicLens.PublicApi/Search/SearchSortKey.cs`, `src/CivicLens.PublicApi/Search/RecordHit.cs`, `src/CivicLens.PublicApi/Search/SearchPage.cs`, `src/CivicLens.PublicApi/Search/ReleaseInfo.cs` |
 | Active release | `src/CivicLens.PublicApi/ActiveRelease/ActiveReleaseReader.cs`, `src/CivicLens.PublicApi/ActiveRelease/ReleaseEndpoints.cs` |
@@ -306,3 +307,4 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 - A snippet scans the first 50,000 characters of the record body. A match later in the body gives a snippet from the start of the body.
 - The `Dockerfile` target `search` builds the service image. [Container images](../operations.md#container-images) describes it. [R-24](../roadmap.md#later) adds the cloud deployment.
 - After the first deploy, public MCP ([R-25](../roadmap.md#later)) will use this API and the same release pinning.
+- A row that was indexed before `004_record_bill_line.sql` holds no bill line, and no code fills it. A new revision gets its line when the ingest stores it. A vote hit holds no line, because the line of a vote comes from the action of its bill in the release build.

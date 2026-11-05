@@ -17,7 +17,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
 {
     public async Task<ImmutableArray<OfficialBoardPage>> WriteAsync(IReleaseStaging staging, PublicationRelease manifest, PublishedOfficials published,
         IReadOnlyList<PendingRecord> additions, IReadOnlyList<PublishedRecordEntry> removed, PreviousRelease previous,
-        IReadOnlyDictionary<string, ActionBillStatus> statuses, bool rewriteAll, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, ActionBillStatus> statuses, ReleaseBillLines billLines, bool rewriteAll, CancellationToken cancellationToken)
     {
         var release = manifest.Records.ToDictionary(entry => (entry.Kind, entry.RecordId));
         var changes = await votes.ChangesAsync(additions, removed, previous, cancellationToken);
@@ -49,7 +49,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         }
         await ReleaseOfficialSummaries.WriteAsync(staging, summaries, cancellationToken);
         var boards = OfficialBoardPage.All(listings, summaries);
-        var closestVote = ClosestVote.From(manifest);
+        var closestVote = ClosestVote.From(manifest) is { } closest ? closest with { BillLine = billLines.Of(closest.Entry) } : null;
         foreach (var board in boards)
             await WriteAsync(staging, board.Board.PagePath, await renderer.RenderBoardAsync(board, closestVote, cancellationToken), cancellationToken);
         await WriteAsync(staging, PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync(listings, manifest.PublishedAtUtc, cancellationToken),

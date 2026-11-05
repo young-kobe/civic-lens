@@ -107,12 +107,13 @@ internal static class PublishedVoteView
     public static string? ListCounts(PublishedRecordEntry entry) =>
         ListYeaNay(entry) is { } counts ? $"Casts {CountsWho}: {counts}." : null;
 
-    public static IEnumerable<string> ListNotes(IEnumerable<PublishedRecordEntry> entries, bool defineBadges)
+    public static IEnumerable<string> ListNotes(IEnumerable<PublishedRecordEntry> entries, bool defineBadges, ReleaseBillLines billLines)
     {
         var votes = entries.Where(entry => entry.Kind == PublishedRecordKind.Vote).ToArray();
         if (defineBadges && votes.Any(entry => entry.Alignment == PublishedVoteAlignment.Split)) yield return PublishedOfficialView.SplitVoteMeaning;
         if (defineBadges && votes.Any(entry => entry.Alignment == PublishedVoteAlignment.PartiesAgree)) yield return PublishedOfficialView.PartiesAgreedMeaning;
         if (votes.Any(entry => ListYeaNay(entry) is not null)) yield return $"Yea and Nay counts are casts {CountsWho}.";
+        if (billLines.AnyOf(entries)) yield return PublishedRecordLabels.BillLineSource;
     }
 
     public static VoteBadge? Badge(PublishedVote vote)

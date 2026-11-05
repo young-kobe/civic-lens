@@ -23,7 +23,7 @@ public static class RecordReader
         if (indexed.Entry.RecordId != listed.RecordId || indexed.Entry.RevisionNumber != listed.RevisionNumber)
             throw new InvalidDataException("The record file does not match its manifest entry.");
         RequireNoNul(indexed);
-        return indexed;
+        return indexed with { Entry = indexed.Entry with { BillLine = listed.BillLine } };
     }
 
     // Postgres cannot store a NUL character in text or jsonb.

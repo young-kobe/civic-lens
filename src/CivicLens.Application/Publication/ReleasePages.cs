@@ -10,17 +10,14 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
     public async Task<IReadOnlyDictionary<string, StagedPage>> PlanAsync(PublicationBuild build, IReadOnlyList<PendingRecord> additions,
         bool rewriteAll, CancellationToken cancellationToken)
     {
-        var changedWithoutLinks = await CarriedWithChangedFactsAsync(build, additions, rewriteAll, cancellationToken);
+        var changedWithoutLinks = CarriedWithChangedFacts(build, additions, rewriteAll);
         var links = await ReleaseLinks.LoadAsync(releases, build, loaders.Relationships, additions, changedWithoutLinks, cancellationToken);
         var carriedPages = CarriedToRender(links, changedWithoutLinks, build, additions).ToList();
-        var carriedVotes = carriedPages.Where(carried => carried.Kind == PublishedRecordKind.Vote).Select(carried => carried.RecordId).ToHashSet(StringComparer.Ordinal);
-        var withBills = build.WithVoteBillActions(await loaders.Votes.BillActionRecordIdsAsync(
-            [.. build.ReleaseRecords.Where(record => record.Kind == PublishedRecordKind.Vote && carriedVotes.Contains(record.RecordId))], cancellationToken));
         var pages = new Dictionary<string, StagedPage>(StringComparer.Ordinal);
         foreach (var addition in additions)
-            pages[addition.RecordId] = token => addition.RenderPage(links.Citing(addition.Entry.Kind, addition.RecordId), token);
+            pages[addition.RecordId] = token => addition.RenderPage(links.Citing(addition.Entry.Kind, addition.RecordId), build.BillLines, token);
         foreach (var carried in carriedPages)
-            pages[carried.RecordId] = token => RenderCarriedAsync(carried, links, withBills, token);
+            pages[carried.RecordId] = token => RenderCarriedAsync(carried, links, build, token);
         return pages;
     }
 
@@ -40,15 +37,15 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
     }
 
     // A carried page changes when a link of its related panel changes, when its bill link points at an action that this publish withdraws or returns,
-    // or when its bill status changed. The links of these pages must load too, so the Related panel stays.
-    private async Task<IReadOnlyList<PublishedRecordReference>> CarriedWithChangedFactsAsync(PublicationBuild build,
-        IReadOnlyList<PendingRecord> additions, bool rewriteAll, CancellationToken cancellationToken)
+    // when the bill line of that action changed, or when its bill status changed. The links of these pages must load too, so the Related panel stays.
+    private static IReadOnlyList<PublishedRecordReference> CarriedWithChangedFacts(PublicationBuild build,
+        IReadOnlyList<PendingRecord> additions, bool rewriteAll)
     {
         if (rewriteAll) return AllCarried(build, additions);
         var returnedActions = build.Returned.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId);
-        var votesOnChangedBills = await loaders.Votes.FindOnBillsOfActionsAsync(
-            build.Removed.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId).Concat(returnedActions),
-            build.ReleaseRecords, cancellationToken);
+        var votesOnChangedBills = build.VotesOnBillsOf(
+            build.Removed.Where(record => record.Kind == PublishedRecordKind.Action).Select(record => record.RecordId).Concat(returnedActions)
+                .Concat(ActionsWithChangedLine(build, additions)));
         var changedStatuses = ReleaseBillStatuses.ChangedActionIds(
             ReleaseBillStatuses.ActionIdsOf(build.ReleaseRecords), build.Previous, build.BillStatuses);
         var skipped = SkippedRecords(build, additions);
@@ -57,6 +54,11 @@ internal sealed class ReleasePages(IReleaseDirectory releases, PublishedRecordLo
                 .Select(record => new PublishedRecordReference(record.Kind, record.RecordId)))
             .Where(record => !skipped.Contains((record.Kind, record.RecordId))).Distinct()];
     }
+
+    private static IEnumerable<string> ActionsWithChangedLine(PublicationBuild build, IReadOnlyList<PendingRecord> additions) =>
+        additions.Where(addition => addition.Entry.Kind == PublishedRecordKind.Action
+                && (build.Previous.Find(PublishedRecordKind.Action, addition.RecordId) is not { } old || old.BillLine != addition.Entry.BillLine))
+            .Select(addition => addition.RecordId);
 
     private static IReadOnlyList<PublishedRecordReference> AllCarried(PublicationBuild build, IReadOnlyList<PendingRecord> additions)
     {

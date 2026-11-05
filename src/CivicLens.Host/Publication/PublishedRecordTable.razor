@@ -2,7 +2,7 @@
 @using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
 
-@if (PublishedVoteView.ListNotes(Records, DefineVoteBadges).ToArray() is { Length: > 0 } notes)
+@if (PublishedVoteView.ListNotes(Records, DefineVoteBadges, BillLines).ToArray() is { Length: > 0 } notes)
 {
     <div class="records-lead">
         @foreach (var note in notes)
@@ -37,6 +37,7 @@
                 <span class="record-row-text">
                     <PublishedRecordTitle RecordId="@entry.RecordId" RootPath="@RootPath">@entry.Headline</PublishedRecordTitle>
                     @if (Columns != RecordTableColumns.Week) {<span class="cell-note">@KindLine(entry)</span>}
+                    <PublishedBillLine Line="@BillLines.Of(entry)" />
                 </span>
                 @if (PublishedVoteView.ListBadge(entry) is { } badge) {<StatusBadge Text="@badge.Text" />}
             </span>
@@ -67,6 +68,7 @@
     [Parameter] public RecordTableColumns Columns { get; set; }
     [Parameter] public RecordSort? Sort { get; set; }
     [Parameter] public bool DefineVoteBadges { get; set; } = true;
+    [Parameter] public ReleaseBillLines BillLines { get; set; } = ReleaseBillLines.None;
 
     private static string KindLine(PublishedRecordEntry entry) =>
         PublishedVoteView.ListYeaNay(entry) is { } counts ? $"{PublishedRecordLabels.Kind(entry.Kind)}, {counts}" : PublishedRecordLabels.Kind(entry.Kind);
@@ -83,6 +85,7 @@
         root = RootPath,
         pageSize = PublicationProtocol.PageSize,
         columns = Columns.ForSort(),
-        kinds = PublishedRecordLabels.KindLabels
+        kinds = PublishedRecordLabels.KindLabels,
+        billLineNote = PublishedRecordLabels.BillLineSource
     }, PublicationProtocol.JsonOptions);
 }

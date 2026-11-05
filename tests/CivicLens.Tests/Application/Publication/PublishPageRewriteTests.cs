@@ -45,7 +45,7 @@ public sealed class PublishPageRewriteTests
     }
 
     [Fact]
-    public async Task TheRewriteAsksTheDatabaseForTheBillActionsOfAllCarriedVotesOnceBecauseOneQueryForEachVoteWouldCostTooMuch()
+    public async Task EveryPublishAsksTheDatabaseForTheBillActionsOfAllReleaseVotesOnceBecauseOneQueryForEachVoteWouldCostTooMuch()
     {
         var scenario = new PublicationScenario();
         var records = await PublishEveryKindAsync(scenario);
@@ -53,9 +53,11 @@ public sealed class PublishPageRewriteTests
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", new PublishedRecordReference(PublishedRecordKind.Vote, new string('7', 64))));
         var before = scenario.Votes.BillLookups;
 
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Rewrite("k3"));
-
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('b'))));
         Assert.Equal(before + 1, scenario.Votes.BillLookups);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Rewrite("k4"));
+
+        Assert.Equal(before + 2, scenario.Votes.BillLookups);
     }
 
     [Fact]

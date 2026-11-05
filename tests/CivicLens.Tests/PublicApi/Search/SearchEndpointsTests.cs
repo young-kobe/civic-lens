@@ -43,6 +43,25 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AnActionHitCarriesTheBillLineOfItsManifestEntryInASearchAndInASortedRequestAndAnotherKindHoldsNone()
+    {
+        var action = PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001");
+        var site = new FakeReleaseSite();
+        site.Publish(1, action with { Entry = action.Entry with { BillLine = "This bill funds housing." } }, PublishedSamples.Statement('a', "Rent cap"));
+        await using var host = await ApiHost.StartAsync(postgres, site);
+        await host.WaitForReleaseAsync();
+
+        using var found = JsonDocument.Parse(await host.Client.GetStringAsync("/v1/search?q=sponsored"));
+        using var sorted = JsonDocument.Parse(await host.Client.GetStringAsync("/v1/search?sort=headline&direction=asc"));
+
+        Assert.Equal("This bill funds housing.", found.RootElement.GetProperty("hits")[0].GetProperty("billLine").GetString());
+        var lines = sorted.RootElement.GetProperty("hits").EnumerateArray()
+            .ToDictionary(hit => hit.GetProperty("kind").GetString()!, hit => hit.TryGetProperty("billLine", out var line) ? line.GetString() : null);
+        Assert.Equal("This bill funds housing.", lines["action"]);
+        Assert.Null(lines["statement"]);
+    }
+
+    [Fact]
     public async Task ASortedRequestAnswersWithHitsInTheOrderOfTheKeyAndACursorThatContinuesIt()
     {
         var site = new FakeReleaseSite();

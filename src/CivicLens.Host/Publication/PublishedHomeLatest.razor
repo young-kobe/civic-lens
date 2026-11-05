@@ -5,9 +5,13 @@
 {
     <section class="home-section" id="latest" aria-labelledby="home-latest-title">
         <h2 id="home-latest-title">Latest from the record</h2>
+        @if (Highlights.BillLines.AnyOf(Highlights.Votes))
+        {
+            <PublishedBillLineNote />
+        }
         <div class="latest-columns">
-            @LatestColumn("Votes", IconName.Vote, Highlights.Votes)
-            @LatestColumn("Executive actions", IconName.ExecutiveAction, Highlights.ExecutiveActions)
+            @LatestColumn("Votes", IconName.Vote, Highlights.Votes, Highlights.BillLines)
+            @LatestColumn("Executive actions", IconName.ExecutiveAction, Highlights.ExecutiveActions, ReleaseBillLines.None)
         </div>
     </section>
 }
@@ -15,7 +19,7 @@
 @code {
     [Parameter, EditorRequired] public HomeHighlights Highlights { get; set; } = default!;
 
-    private static RenderFragment LatestColumn(string title, IconName icon, IReadOnlyList<PublishedRecordEntry> rows) => rows.Count == 0 ? _ => { } : @<div>
+    private static RenderFragment LatestColumn(string title, IconName icon, IReadOnlyList<PublishedRecordEntry> rows, ReleaseBillLines billLines) => rows.Count == 0 ? _ => { } : @<div>
         <h3 class="latest-title"><Icon Name="icon" />@title</h3>
         <ul class="latest-rows" role="list">
             @foreach (var row in rows)
@@ -25,6 +29,7 @@
                         <span>@row.Headline</span>
                         <span class="muted small">@RowDate(row)</span>
                     </a>
+                    <PublishedBillLine Line="@billLines.Of(row)" />
                 </li>
             }
         </ul>

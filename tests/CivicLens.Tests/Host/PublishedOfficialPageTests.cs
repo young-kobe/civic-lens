@@ -11,6 +11,30 @@ namespace CivicLens.Tests.Host;
 public sealed class PublishedOfficialPageTests
 {
     [Fact]
+    public async Task AnActionRowShowsTheBillLineAndTheTableSaysItsSourceOnceWhileOtherRowsShowNone()
+    {
+        var page = Current(
+            [Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)), Entry('2', PublishedRecordKind.Action, new DateOnly(2026, 5, 1)) with { BillLine = "This bill funds rent aid." }],
+            [Vote('3', new DateOnly(2026, 4, 1))]);
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialRecordAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.Equal(["This bill funds rent aid."], document.QuerySelectorAll(".bill-line").Select(line => line.TextContent));
+        Assert.Equal(1, html.Split("From the Congressional Research Service summary.").Length - 1);
+    }
+
+    [Fact]
+    public async Task AnOfficialRecordPageWithNoBillLineShowsNoSourceNote()
+    {
+        var page = Current([Entry('1', PublishedRecordKind.Action, new DateOnly(2026, 5, 1))], [Vote('3', new DateOnly(2026, 4, 1))]);
+
+        var html = await new ReleaseRenderer(null, null).RenderOfficialRecordAsync(page, PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.DoesNotContain("From the Congressional Research Service summary.", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheCurrentPageListsStatementsActionsAndVotesNewestFirstWithTheirOwnDates()
     {
         var page = Current(
@@ -112,7 +136,7 @@ public sealed class PublishedOfficialPageTests
         }, PublicationCatalogs.None).Issues.Single();
 
         var official = await new ReleaseRenderer(null, null).RenderOfficialRecordAsync(Current(entries, []), PublicationCatalogs.None, CancellationToken.None);
-        var facetHtml = await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 1, CancellationToken.None);
+        var facetHtml = await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 1, ReleaseBillLines.None, CancellationToken.None);
 
         string[] Order(string html) => [.. new HtmlParser().ParseDocument(html).QuerySelectorAll("tbody a.cell-title")
             .Select(link => link.GetAttribute("href")!.Replace("../", "").Replace("records/", "").Replace(".html", ""))];

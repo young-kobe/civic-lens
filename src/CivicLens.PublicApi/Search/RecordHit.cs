@@ -21,6 +21,7 @@ public sealed record RecordHit
     public DateOnly? EventDate { get; init; }
     public required int FirstRelease { get; init; }
     public int? LastRelease { get; init; }
+    public string? BillLine { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Snippet { get; init; }
 

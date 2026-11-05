@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Publication;
@@ -236,8 +237,25 @@ public sealed class PublishedHomePageTests
         Assert.DoesNotContain("A split vote is", main.TextContent, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task TheLatestVotesShowTheBillLineOfTheirActionWithTheSourceNoteOnceAndShowNoNoteWhenNoVoteHoldsALine()
+    {
+        var action = Entry(PublishedRecordKind.Action, 'b') with { BillLine = "This bill funds rent aid." };
+        var votes = new[] { Vote('a', 216, 214, PublishedVoteAlignment.Split), Vote('c', 300, 100, PublishedVoteAlignment.PartiesAgree) };
+        var release = ReleaseOf([action, .. votes]);
+        var lines = ReleaseBillLines.From(release.Records, new Dictionary<string, ImmutableArray<string>> { [Id('a')] = [action.RecordId] });
+        var withLine = HomeHighlights.From(release, [], 0) with { BillLines = lines };
+
+        var shown = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderHomeAsync(release, null, new ReleaseFacets([], []), withLine, CancellationToken.None)).Body!;
+        var bare = await HomeAsync(release, []);
+
+        Assert.Equal(["This bill funds rent aid."], shown.QuerySelectorAll("#latest .bill-line").Select(line => line.TextContent));
+        Assert.Equal(1, shown.TextContent.Split("From the Congressional Research Service summary.").Length - 1);
+        Assert.DoesNotContain("From the Congressional Research Service summary.", bare.TextContent, StringComparison.Ordinal);
+    }
+
     private static async Task<AngleSharp.Dom.IElement> AllRecordsAsync(PublicationRelease release) =>
-        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAllRecordsAsync(release, 1, CancellationToken.None)).QuerySelector("main")!;
+        new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAllRecordsAsync(release, 1, ReleaseBillLines.None, CancellationToken.None)).QuerySelector("main")!;
 
     private static async Task<AngleSharp.Dom.IElement> HomeAsync(PublicationRelease release, BreakLeader[] leaders, int officialCount = 0, ReleaseFacets? facets = null)
     {

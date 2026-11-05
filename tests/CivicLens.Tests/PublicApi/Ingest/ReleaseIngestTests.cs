@@ -139,6 +139,20 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Fact]
+    public async Task AReturningRevisionKeepsTheBillLineOfItsStoredRow()
+    {
+        var action = PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001");
+        var withLine = action with { Entry = action.Entry with { BillLine = "This bill funds housing." } };
+        var other = PublishedSamples.Statement('b', "Zoning");
+        await world.PublishAndIngestAsync(5, withLine);
+        await world.PublishAndIngestAsync(6, other);
+
+        await world.PublishAndIngestAsync(7, withLine, other);
+
+        Assert.Equal(2L, await CountAsync("SELECT count(*) FROM records WHERE bill_line = 'This bill funds housing.'"));
+    }
+
+    [Fact]
     public async Task AWithdrawnRecordClosesItsRangeLikeADroppedOneAndAPinnedEarlierSearchStillFindsIt()
     {
         var withdrawn = PublishedSamples.Statement('a', "Rent cap");

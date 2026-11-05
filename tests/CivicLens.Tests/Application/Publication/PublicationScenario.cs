@@ -401,8 +401,7 @@ internal sealed class PublicationScenario
         var review = new VoteReview(recordId, revision, null, [revision], all.Length, ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
         if (billType is not null) Votes.BillActions[(congress, billType, 7)] = billActionRecordIds ?? [];
         Votes.Publishable[recordId] = new(review, ImmutableDictionary.CreateRange(StringComparer.Ordinal,
-            [KeyValuePair.Create(detail.ExtractionId, detail), KeyValuePair.Create(members.ExtractionId, members)]),
-            billActionRecordIds ?? []);
+            [KeyValuePair.Create(detail.ExtractionId, detail), KeyValuePair.Create(members.ExtractionId, members)]));
         return recordId;
     }
 
@@ -505,9 +504,9 @@ internal sealed class FakeRenderer : IReleaseRenderer
         PublicationCatalog catalog, CancellationToken cancellationToken) =>
         Logged($"render {record.RecordId[..1]}", $"<html>action {record.RecordId}{Related(related)}{Corrections(record.Corrections)}{StatusText(billStatus)}{Layout}</html>");
     private static string StatusText(PublishedBillStatus? status) => status is null ? "" : $" status {status.Text} {status.Date:yyyy-MM-dd}";
-    public Task<string> RenderVoteAsync(PublishedVote record, string? billActionRecordId, ImmutableArray<PublishedRelationship> related,
+    public Task<string> RenderVoteAsync(PublishedVote record, VoteBillLink? bill, ImmutableArray<PublishedRelationship> related,
         PublicationCatalog catalog, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>vote {record.RecordId} bill {billActionRecordId}{Related(related)}{Layout}</html>");
+        Task.FromResult($"<html>vote {record.RecordId} bill {bill?.ActionRecordId}{(bill?.Line is { } line ? $" line {line}" : "")}{Related(related)}{Layout}</html>");
     public Task<string> RenderExecutiveActionAsync(PublishedExecutiveAction record, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>executive action {record.RecordId}{Layout}</html>");
     public Task<string> RenderRelationshipAsync(PublishedRelationship record, PublicationCatalog catalog, CancellationToken cancellationToken) =>
@@ -523,13 +522,16 @@ internal sealed class FakeRenderer : IReleaseRenderer
         HomeSeen?.Invoke(highlights);
         return Task.FromResult($"<html>home {release.Records.Length} brief {brief?.RecordId}</html>");
     }
-    public Task<string> RenderAllRecordsAsync(PublicationRelease release, int page, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>index {page} {release.Records.Length}</html>");
+    public Task<string> RenderAllRecordsAsync(PublicationRelease release, int page, ReleaseBillLines billLines, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>index {page} {release.Records.Length}{LinesOf(release.Records, billLines)}</html>");
+    private static string LinesOf(IEnumerable<PublishedRecordEntry> entries, ReleaseBillLines billLines) =>
+        entries.Select(entry => (entry.RecordId, Line: billLines.Of(entry))).Where(pair => pair.Line is not null).ToArray() is { Length: > 0 } shown
+            ? $" lines [{string.Join(',', shown.Select(pair => $"{pair.RecordId[0]}:{pair.Line}"))}]" : "";
     public Task<string> RenderBriefsAsync(PublicationRelease release, PublishedRecordEntry[] briefs, int page,
         CancellationToken cancellationToken) =>
         Task.FromResult($"<html>briefs {page} {string.Join(',', briefs.Select(entry => entry.RecordId))}</html>");
-    public Task<string> RenderFacetPageAsync(ReleaseFacet facet, int page, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>facet {facet.Name} {page} {string.Join(',', facet.RecordsOnPage(page).Select(entry => entry.RecordId))}</html>");
+    public Task<string> RenderFacetPageAsync(ReleaseFacet facet, int page, ReleaseBillLines billLines, CancellationToken cancellationToken) =>
+        Task.FromResult($"<html>facet {facet.Name} {page} {string.Join(',', facet.RecordsOnPage(page).Select(entry => entry.RecordId))}{LinesOf(facet.RecordsOnPage(page), billLines)}</html>");
     public Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken) =>
         Task.FromResult($"<html>facets {facets.Issues.Length} {facets.PolicyAreas.Length}</html>");
     public Task<string> RenderOfficialAsync(ReleaseOfficialPage page, PublicationCatalog catalog, CancellationToken cancellationToken)

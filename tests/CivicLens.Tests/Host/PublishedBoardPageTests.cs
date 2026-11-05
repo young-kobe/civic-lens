@@ -117,6 +117,20 @@ public sealed class PublishedBoardPageTests
     }
 
     [Fact]
+    public async Task TheClosestVoteCardShowsTheBillLineOfItsVoteWithTheSourceNoteAndNoneWhenTheVoteHoldsNoLine()
+    {
+        var closest = ClosestVote.From(ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split)))!;
+
+        var shown = await RenderAsync(Page(), closest with { BillLine = "This bill funds rent aid." });
+        var bare = await RenderAsync(Page(), closest);
+
+        Assert.Equal(["This bill funds rent aid."], shown.QuerySelectorAll(".bill-line").Select(line => line.TextContent));
+        Assert.Contains("From the Congressional Research Service summary.", shown.Body!.TextContent, StringComparison.Ordinal);
+        Assert.Empty(bare.QuerySelectorAll(".bill-line"));
+        Assert.DoesNotContain("From the Congressional Research Service summary.", bare.Body!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ATiedClosestVoteSaysTheCountsAreEqualAndNoVoteInTheWindowHidesTheCard()
     {
         var tied = ClosestVote.From(ReleaseOf(Vote('a', 50, 50, PublishedVoteAlignment.Mixed)))!;
