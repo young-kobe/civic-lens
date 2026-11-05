@@ -260,6 +260,18 @@ public sealed class ReleaseRendererTests
         Assert.Contains("For the other statements, an AI model finds the issues and quotes the article. Code checks that the quote is in the article. No person checks that pick.", text, StringComparison.Ordinal);
     }
 
+    // The record words show once, in brackets after the plain word. Everywhere else the method page says Yes or No.
+    [Fact]
+    public async Task TheMethodPageNamesTheRecordWordsYeaAyeAndNayOnlyOnceInBracketsAfterThePlainWords()
+    {
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None)).QuerySelector("main")!.ShownText();
+
+        var withoutBrackets = text.Replace("Yes (Yea or Aye) or No (Nay)", "", StringComparison.Ordinal);
+
+        Assert.Contains("Yes (Yea or Aye) or No (Nay)", text, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"\b(Yea|Nay|Aye)\b", withoutBrackets);
+    }
+
     [Fact]
     public async Task TheMethodPageGivesAWorkedExampleOfTheVotesWithTheirPartyCountAndEveryPageLinksItByItsTitle()
     {
@@ -269,7 +281,7 @@ public sealed class ReleaseRendererTests
 
         Assert.Contains("votes with most of their party on 45. The page shows 45 of 48.", method.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
         Assert.Equal("How the counts work", method.QuerySelector("h1")!.TextContent);
-        Assert.Equal("Yea", method.QuerySelectorAll("main section").Single(panel => panel.QuerySelector("h2")!.TextContent == "Votes with their party")
+        Assert.Equal("Yes", method.QuerySelectorAll("main section").Single(panel => panel.QuerySelector("h2")!.TextContent == "Votes with their party")
             .QuerySelectorAll("p")[1].QuerySelector("button.term")!.TextContent);
         Assert.Equal("statement", about.QuerySelectorAll("main section").Single(panel => panel.QuerySelector("h2")!.TextContent == "Who approves a record")
             .QuerySelector("button.term")!.TextContent);
@@ -284,7 +296,7 @@ public sealed class ReleaseRendererTests
 
         var document = new HtmlParser().ParseDocument(html);
         var text = document.QuerySelector("main")!.ShownText();
-        Assert.Contains("Amendment, Suspension of the rules, Passage, Conference report, Veto override, Nomination.", text, StringComparison.Ordinal);
+        Assert.Contains("\"Vote to change the text\", \"Vote to pass with limited debate\", \"Vote to pass or agree to\", \"Vote to accept the final text from both chambers\", \"Vote to override the veto\", \"Vote to confirm\".", text, StringComparison.Ordinal);
         Assert.Contains("A vote is substantive when its kind is one of these:", text, StringComparison.Ordinal);
         Assert.Contains("Votes they cast: the substantive roll call votes on the issue", text, StringComparison.Ordinal);
         Assert.Contains("Their statements: ", text, StringComparison.Ordinal);
@@ -293,7 +305,7 @@ public sealed class ReleaseRendererTests
         Assert.Contains("A missed vote means the official did not vote on it. The count includes procedural votes. It counts only the roll calls on this site, which can be fewer than the chamber held.", text, StringComparison.Ordinal);
         Assert.DoesNotContain("all roll calls of the current Congress", text, StringComparison.Ordinal);
         Assert.Contains("A roll call that is not on this site is in neither number.", text, StringComparison.Ordinal);
-        Assert.Contains("A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted on opposite sides.", text, StringComparison.Ordinal);
+        Assert.Contains("A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yes or No voted on opposite sides.", text, StringComparison.Ordinal);
         Assert.Contains($"on at least {TalkAndActionProfile.MinimumRecordsForShare} split votes", text, StringComparison.Ordinal);
         Assert.Contains("An independent who caucuses with the Democrats or the Republicans, which means they work with that party in Congress, counts with that party.", text, StringComparison.Ordinal);
         Assert.Contains("The page leaves out votes that the official cast while in another party and not caucusing with either.", text, StringComparison.Ordinal);
@@ -835,8 +847,8 @@ public sealed class ReleaseRendererTests
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
         Assert.Equal("10 Apr 2025", facts["Voted on"]);
-        Assert.Equal("Passage", facts["Kind"]);
-        Assert.Equal("On Passage", facts["Question"]);
+        Assert.Equal("Vote to pass or agree to", facts["Kind"]);
+        Assert.Equal("Vote to pass or agree to (On Passage)", facts["Question"]);
         Assert.Equal("House", facts["Chamber"]);
         Assert.Equal("100, Congress 119, session 1", facts["Roll call"]);
         Assert.Equal("Housing costs", facts["Tracked issues"]);
@@ -844,7 +856,7 @@ public sealed class ReleaseRendererTests
         Assert.Null(document.QuerySelector("[aria-labelledby='result-title']"));
         Assert.Empty(document.QuerySelectorAll("blockquote"));
         var members = document.QuerySelector("[aria-labelledby='members-title']")!;
-        Assert.Equal(["Voted Yea (1 tracked House member)"], members.QuerySelectorAll("h3").Select(heading => heading.ShownText()));
+        Assert.Equal(["Voted Yes (Yea) (1 tracked House member)"], members.QuerySelectorAll("h3").Select(heading => heading.ShownText()));
         Assert.Equal(["Jane <Doe>"], members.QuerySelectorAll("li a:first-child").Select(link => link.TextContent));
         Assert.Empty(members.QuerySelectorAll("blockquote"));
         var sources = document.QuerySelector("[aria-labelledby='sources-title']")!;
@@ -855,8 +867,8 @@ public sealed class ReleaseRendererTests
 
     // A bare count could mean the tracked members or all members who voted Yea, so each total names the whole body and what it counts.
     [Theory]
-    [InlineData(PublishedChamber.House, "Casts of all House members: Yea 218, Nay 210, Present 1, Not voting 5")]
-    [InlineData(PublishedChamber.Senate, "Casts of all senators: Yea 218, Nay 210, Present 1, Not voting 5")]
+    [InlineData(PublishedChamber.House, "Casts of all House members: Yes 218, No 210, Present 1, Not voting 5")]
+    [InlineData(PublishedChamber.Senate, "Casts of all senators: Yes 218, No 210, Present 1, Not voting 5")]
     public async Task TheVoteTotalsNameTheWholeBodyThatTheyCount(PublishedChamber chamber, string expected)
     {
         var vote = Vote() with
@@ -924,7 +936,7 @@ public sealed class ReleaseRendererTests
 
         var caveat = new HtmlParser().ParseDocument(html).QuerySelector(".caveat")!.TextContent;
         Assert.Contains("does not list a Vice President tie-break vote", caveat, StringComparison.Ordinal);
-        Assert.Contains("Civic Lens shows that code as a word such as Yea or Nay. The Senate roll call may use other words", caveat, StringComparison.Ordinal);
+        Assert.Contains("Civic Lens shows that code as a word such as Yes (Yea) or No (Nay). The Senate roll call may use other words", caveat, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -938,9 +950,9 @@ public sealed class ReleaseRendererTests
     }
 
     [Theory]
-    [InlineData(PublishedVoteKind.Nomination, "Nomination")]
-    [InlineData(PublishedVoteKind.Cloture, "Cloture")]
-    [InlineData(PublishedVoteKind.MotionToProceed, "Motion to proceed")]
+    [InlineData(PublishedVoteKind.Nomination, "Vote to confirm")]
+    [InlineData(PublishedVoteKind.Cloture, "Vote to end debate")]
+    [InlineData(PublishedVoteKind.MotionToProceed, "Vote to start debate")]
     public async Task ASenateVoteKindHasItsPublicLabelOnThePage(PublishedVoteKind kind, string label)
     {
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Kind = kind }, null, [], PublicationCatalogs.None, CancellationToken.None);
@@ -1001,6 +1013,23 @@ public sealed class ReleaseRendererTests
         return document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent,
                 pair => pair.Second.QuerySelector("a.source-line") is { } link ? document.QuerySelector(link.GetAttribute("href")!)!.TextContent : null);
+    }
+
+    [Theory]
+    [InlineData("Nomination Confirmed", "Confirmed (Nomination Confirmed)")]
+    [InlineData("Nomination Rejected", "Not confirmed (Nomination Rejected)")]
+    [InlineData("Agreed to", "Passed (Agreed to)")]
+    [InlineData("Point of Order Sustained", "Point of Order Sustained")]
+    public async Task TheVoteResultRowShowsPlainWordsFirstAndTheSourceWordsInBracketsAndKeepsItsSourceLineLink(string source, string expected)
+    {
+        var vote = VoteWithResult(source);
+
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var result = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd")).Single(pair => pair.First.TextContent == "Result").Second;
+        Assert.Equal(expected, result.ShownText());
+        Assert.NotNull(result.QuerySelector("a.source-line"));
     }
 
     [Fact]
@@ -1134,7 +1163,7 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
 
         var members = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title']")!;
-        Assert.Equal(["Voted Yea (2 tracked House members)", "Voted Nay (1 tracked House member)", "Voted for Jeffries (2 tracked House members)", "Voted for Emmer (1 tracked House member)", "Voted Present (1 tracked House member)", "Did not vote (1 tracked House member)"],
+        Assert.Equal(["Voted Yes (Yea) (2 tracked House members)", "Voted No (Nay) (1 tracked House member)", "Voted for Jeffries (2 tracked House members)", "Voted for Emmer (1 tracked House member)", "Voted Present (1 tracked House member)", "Did not vote (1 tracked House member)"],
             members.QuerySelectorAll("h3").Select(heading => heading.ShownText()));
         Assert.Equal(["Amy", "Carl"], members.QuerySelectorAll(".member-group:first-of-type li a:first-child").Select(link => link.TextContent));
     }
@@ -1150,8 +1179,8 @@ public sealed class ReleaseRendererTests
 
         var parties = page.QuerySelector("[aria-labelledby='parties-title']")!;
         Assert.Equal("Split vote", parties.QuerySelector(".badge")!.TextContent);
-        Assert.Contains("Split vote: most House Democrats who cast Yea or Nay voted Yea, and most House Republicans who cast Yea or Nay voted Nay.", parties.TextContent);
-        Assert.Contains("House Democrats: 2 Yea, 1 Nay. House Republicans: 1 Yea, 3 Nay. These counts include every member of the party, tracked or not. An independent counts with the party they caucus with, so these counts can differ from the source totals. Aye counts as Yea and No counts as Nay.", parties.TextContent);
+        Assert.Contains("Split vote: most House Democrats who cast Yes or No voted Yes, and most House Republicans who cast Yes or No voted No.", parties.TextContent);
+        Assert.Contains("House Democrats: 2 Yes, 1 No. House Republicans: 1 Yes, 3 No. These counts include every member of the party, tracked or not. An independent counts with the party they caucus with, so these counts can differ from the source totals. Yes here means Yea or Aye in the record. No means Nay.", parties.TextContent);
         var breakers = page.QuerySelector("[aria-labelledby='breakers-title']")!;
         Assert.Equal(["House Democrats: 1 tracked member voted against most of the party", "House Republicans: 1 tracked member voted against most of the party"], breakers.QuerySelectorAll("h3").Select(heading => heading.TextContent));
         Assert.Equal(["Dora", "Ruth"], breakers.QuerySelectorAll("li a:first-child").Select(link => link.TextContent));
@@ -1181,8 +1210,8 @@ public sealed class ReleaseRendererTests
         var page = await RenderedAsync(vote);
 
         var parties = page.QuerySelector("[aria-labelledby='parties-title']")!.TextContent;
-        Assert.Contains("most Senate Democrats who cast Yea or Nay voted Yea, and most Senate Republicans who cast Yea or Nay voted Nay.", parties);
-        Assert.Contains("Senate Democrats: 2 Yea, 1 Nay. Senate Republicans: 1 Yea, 3 Nay.", parties);
+        Assert.Contains("most Senate Democrats who cast Yes or No voted Yes, and most Senate Republicans who cast Yes or No voted No.", parties);
+        Assert.Contains("Senate Democrats: 2 Yes, 1 No. Senate Republicans: 1 Yes, 3 No.", parties);
         var breakers = page.QuerySelector("[aria-labelledby='breakers-title']")!.TextContent;
         Assert.Contains("Senate Democrats: 1 tracked member voted against most of the party", breakers);
         Assert.Contains("No tracked Senate Republican voted against most Senate Republicans.", breakers);
@@ -1196,7 +1225,7 @@ public sealed class ReleaseRendererTests
         var breakers = (await RenderedAsync(vote)).QuerySelector("[aria-labelledby='breakers-title']")!;
 
         Assert.Equal(["Dora", "Ruth"], breakers.QuerySelectorAll("li a:first-child").Select(link => link.TextContent));
-        Assert.Equal(["Dora voted No", "Ruth voted Aye"], breakers.QuerySelectorAll("li").Select(row => Regex.Replace(row.ShownText(), @"\s+", " ").Trim()));
+        Assert.Equal(["Dora voted No", "Ruth voted Yes (Aye)"], breakers.QuerySelectorAll("li").Select(row => Regex.Replace(row.ShownText(), @"\s+", " ").Trim()));
         Assert.Empty(breakers.QuerySelectorAll("li a:not(:first-child)"));
     }
 
@@ -1209,7 +1238,7 @@ public sealed class ReleaseRendererTests
         var page = await RenderedAsync(vote);
 
         var parties = page.QuerySelector("[aria-labelledby='parties-title']")!.TextContent;
-        Assert.Contains("House Democrats: 2 Yea, 1 Nay. House Republicans: 1 Yea, 3 Nay.", parties);
+        Assert.Contains("House Democrats: 2 Yes, 1 No. House Republicans: 1 Yes, 3 No.", parties);
         Assert.DoesNotContain("Independent", parties);
         var breakers = page.QuerySelector("[aria-labelledby='breakers-title']")!;
         Assert.Equal(["Dora"], breakers.QuerySelectorAll("li a:first-child").Select(link => link.TextContent));
@@ -1217,13 +1246,13 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task ASplitVoteSaysWhoCastYeaOrNayBecausePresentMembersDoNotSetTheMajority()
+    public async Task ASplitVoteSaysWhoCastYesOrNoBecausePresentMembersDoNotSetTheMajority()
     {
         var vote = VoteWithParties(DemocratsYeaRepublicansNay, ("Dana", "Democrat", "Present"), ("Dora", "Democrat", "Present"), ("Rex", "Republican", "Present"));
 
         var page = await RenderedAsync(vote);
 
-        Assert.Contains("who cast Yea or Nay", page.QuerySelector("[aria-labelledby='parties-title']")!.TextContent);
+        Assert.Contains("who cast Yes or No", page.QuerySelector("[aria-labelledby='parties-title']")!.TextContent);
         Assert.Empty(page.QuerySelectorAll("[aria-labelledby='breakers-title'] li"));
         Assert.Contains("Present and Not voting never count as a break.", page.QuerySelector("[aria-labelledby='breakers-title']")!.TextContent);
     }
@@ -1238,8 +1267,8 @@ public sealed class ReleaseRendererTests
 
         var parties = page.QuerySelector("[aria-labelledby='parties-title']")!;
         Assert.Equal("Both parties agreed", parties.QuerySelector(".badge")!.TextContent);
-        Assert.Contains("Both parties agreed: most House Democrats and most House Republicans who cast Yea or Nay voted Yea.", parties.TextContent);
-        Assert.Contains("House Democrats: 2 Yea, 1 Nay. House Republicans: 2 Yea, 1 Nay. These counts include every member of the party, tracked or not.", parties.TextContent);
+        Assert.Contains("Both parties agreed: most House Democrats and most House Republicans who cast Yes or No voted Yes.", parties.TextContent);
+        Assert.Contains("House Democrats: 2 Yes, 1 No. House Republicans: 2 Yes, 1 No. These counts include every member of the party, tracked or not.", parties.TextContent);
         Assert.Null(page.QuerySelector("[aria-labelledby='breakers-title']"));
     }
 
@@ -1275,7 +1304,7 @@ public sealed class ReleaseRendererTests
 
         var members = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title']")!;
         var terms = members.QuerySelectorAll("h3 button.term").Select(button => (button.TextContent, button.GetAttribute("popovertarget"))).ToArray();
-        Assert.Equal([("Yea", "term-yea"), ("Nay", "term-nay"), ("Present", "term-present"), ("Did not vote", "term-not-voting")], terms);
+        Assert.Equal([("Yes (Yea)", "term-yea"), ("No (Nay)", "term-nay"), ("Present", "term-present"), ("Did not vote", "term-not-voting")], terms);
         Assert.Contains(Glossary.Term("present").Means, members.QuerySelector("#term-present")!.TextContent);
     }
 
@@ -1292,7 +1321,7 @@ public sealed class ReleaseRendererTests
 
         var button = new HtmlParser().ParseDocument(html).QuerySelector(".facts button.term")!;
         Assert.Equal(popover, button.GetAttribute("popovertarget"));
-        Assert.Equal(PublishedRecordLabels.VoteKind(kind), button.TextContent);
+        Assert.Equal(PlainVoteWords.Kind(kind), button.TextContent);
     }
 
     [Fact]
@@ -1452,7 +1481,7 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
 
         var members = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='members-title']")!;
-        Assert.Equal(["Voted Yea (2 tracked senators)"], members.QuerySelectorAll("h3").Select(heading => heading.ShownText()));
+        Assert.Equal(["Voted Yes (Yea) (2 tracked senators)"], members.QuerySelectorAll("h3").Select(heading => heading.ShownText()));
         Assert.Equal(["Source line: Amy, member line", "Source line: Bo, member line"], members.QuerySelectorAll("li a.small").Select(link => link.TextContent));
     }
 
@@ -1675,10 +1704,10 @@ public sealed class ReleaseRendererTests
 
         var main = new HtmlParser().ParseDocument(html).QuerySelector("main")!;
         Assert.Equal(1, main.TextContent.Split("A split vote is a substantive roll call vote").Length - 1);
-        Assert.Equal(1, main.TextContent.Split("Yea and Nay counts are casts of all members of the chamber who voted Yea or Nay.").Length - 1);
+        Assert.Equal(1, main.TextContent.Split("Yes and No counts are casts of all members of the chamber who voted Yes or No.").Length - 1);
         var rows = main.QuerySelectorAll("tbody tr").ToList();
         Assert.Equal(["Split vote", "Split vote", "Split vote"], rows.Select(row => row.QuerySelector(".badge")!.TextContent));
-        Assert.Equal(["Vote, Yea 200, Nay 210", "Vote, Yea 201, Nay 210", "Vote, Yea 202, Nay 210"], rows.Select(row => row.QuerySelector(".cell-note")!.TextContent));
+        Assert.Equal(["Vote, Yes 200, No 210", "Vote, Yes 201, No 210", "Vote, Yes 202, No 210"], rows.Select(row => row.QuerySelector(".cell-note")!.TextContent));
     }
 
     [Fact]
@@ -1693,7 +1722,7 @@ public sealed class ReleaseRendererTests
             var text = (await FacetMainAsync(release, FacetKind.Issue, page)).TextContent;
 
             Assert.Equal(1, text.Split("A split vote is a substantive roll call vote").Length - 1);
-            Assert.Equal(1, text.Split("Yea and Nay counts are casts of all members of the chamber who voted Yea or Nay.").Length - 1);
+            Assert.Equal(1, text.Split("Yes and No counts are casts of all members of the chamber who voted Yes or No.").Length - 1);
         }
     }
 
@@ -1940,8 +1969,8 @@ public sealed class ReleaseRendererTests
         Assert.DoesNotContain("Vote headline", text);
         Assert.Contains("Votes and bills tagged with this issue", text);
         Assert.Contains("5 roll call votes on this site are tagged with this issue.", text);
-        Assert.Contains("2 of them were split votes. A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted on opposite sides.", text);
-        Assert.Contains("1 of them was a vote where both parties agreed. A vote where both parties agreed is a substantive roll call vote where most Democrats and most Republicans who cast Yea or Nay voted the same way.", text);
+        Assert.Contains("2 of them were split votes. A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yes or No voted on opposite sides.", text);
+        Assert.Contains("1 of them was a vote where both parties agreed. A vote where both parties agreed is a substantive roll call vote where most Democrats and most Republicans who cast Yes or No voted the same way.", text);
         Assert.Contains("2 of them are in neither group.", text);
         Assert.Contains("60 bills and resolutions on this site are tagged with this issue.", text);
         Assert.Contains("An AI model picks the issue tag of a bill or vote, and no person checks it", text);
@@ -3275,9 +3304,11 @@ public sealed class ReleaseRendererTests
         };
     }
 
-    private static PublishedVote Vote(params string[] candidateTotalLines)
+    private static PublishedVote Vote(params string[] candidateTotalLines) => VoteWithResult("Passed <b>", candidateTotalLines);
+
+    private static PublishedVote VoteWithResult(string result, params string[] candidateTotalLines)
     {
-        var detail = "Started: 2025-04-10T11:08:00-04:00\nQuestion: On Passage\nResult: Passed <b>\n" + string.Concat(candidateTotalLines.Select(line => line + "\n"));
+        var detail = $"Started: 2025-04-10T11:08:00-04:00\nQuestion: On Passage\nResult: {result}\n" + string.Concat(candidateTotalLines.Select(line => line + "\n"));
         const string members = "Member: A000055, Jane Doe, R, AL, Yea\n";
         var detailId = new string('1', 64);
         var membersId = new string('2', 64);
@@ -3302,14 +3333,14 @@ public sealed class ReleaseRendererTests
             KindCitation = Cite(detailId, detail, "Question: On Passage"),
             VotedOn = new DateOnly(2025, 4, 10),
             VotedOnCitation = Cite(detailId, detail, "Started: 2025-04-10T11:08:00-04:00"),
-            Result = "Passed <b>",
+            Result = result,
             Totals = new() { Yea = 1, Nay = 0, Present = 0, NotVoting = 0 },
             PartyMajorities = [PublishedPartyMajority.Of("Republican", 1, 0)],
             Facts =
             [
                 new PublishedVoteFact { Text = "Started: 2025-04-10T11:08:00-04:00", Citation = Cite(detailId, detail, "Started: 2025-04-10T11:08:00-04:00") },
                 new PublishedVoteFact { Text = "Question: On Passage", Citation = Cite(detailId, detail, "Question: On Passage") },
-                new PublishedVoteFact { Text = "Result: Passed <b>", Citation = Cite(detailId, detail, "Result: Passed <b>") },
+                new PublishedVoteFact { Text = $"Result: {result}", Citation = Cite(detailId, detail, $"Result: {result}") },
                 .. candidateTotalLines.Select(line => new PublishedVoteFact { Text = line, Citation = Cite(detailId, detail, line) })
             ],
             Members =

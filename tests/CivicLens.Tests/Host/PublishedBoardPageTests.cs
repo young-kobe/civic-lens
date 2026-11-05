@@ -111,7 +111,7 @@ public sealed class PublishedBoardPageTests
         var document = await RenderAsync(Page(), closest);
 
         Assert.Contains("Closest vote, 5 May 2026 to 11 May 2026", document.QuerySelectorAll("h2").Select(heading => heading.TextContent));
-        Assert.Contains("The Yea and Nay counts differ by 2 votes.", document.Body!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("The Yes and No counts differ by 2 votes.", document.Body!.TextContent, StringComparison.Ordinal);
         Assert.Contains("closest of 2 substantive roll call votes with counts", document.Body.TextContent, StringComparison.Ordinal);
         Assert.NotNull(document.QuerySelector($"a[href='records/{new string('a', 64)}.html']"));
     }
@@ -136,7 +136,7 @@ public sealed class PublishedBoardPageTests
         var tied = ClosestVote.From(ReleaseOf(Vote('a', 50, 50, PublishedVoteAlignment.Mixed)))!;
         var stale = ClosestVote.From(ReleaseOf(Vote('a', 216, 214, PublishedVoteAlignment.Split) with { EventDate = new DateOnly(2026, 1, 1) }));
 
-        Assert.Contains("The Yea and Nay counts are equal.", (await RenderAsync(Page(), tied)).Body!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("The Yes and No counts are equal.", (await RenderAsync(Page(), tied)).Body!.TextContent, StringComparison.Ordinal);
         Assert.Null(stale);
         Assert.DoesNotContain("Closest vote", (await RenderAsync(Page(), stale)).Body!.TextContent, StringComparison.Ordinal);
     }

@@ -34,13 +34,13 @@ internal static class PublishedBoardView
 
     public static string VoteGap(ClosestVote closest) => closest.Gap switch
     {
-        0 => $"Roll call on {Moment.Day(ReleaseRecordOrder.Day(closest.Entry))}. The Yea and Nay counts are equal.",
-        var gap => $"Roll call on {Moment.Day(ReleaseRecordOrder.Day(closest.Entry))}. The Yea and Nay counts differ by {gap} {PublishedOfficialView.Noun(gap, "vote")}."
+        0 => $"Roll call on {Moment.Day(ReleaseRecordOrder.Day(closest.Entry))}. The Yes and No counts are equal.",
+        var gap => $"Roll call on {Moment.Day(ReleaseRecordOrder.Day(closest.Entry))}. The Yes and No counts differ by {gap} {PublishedOfficialView.Noun(gap, "vote")}."
     };
 
     public static string VotePool(ClosestVote closest) => closest.VotesInWindow == 1
         ? "This is the only substantive roll call vote with counts in these dates."
-        : $"The pick is the closest of {closest.VotesInWindow} substantive roll call votes with counts in these dates. The gap is the difference between the Yea count and the Nay count.";
+        : $"The pick is the closest of {closest.VotesInWindow} substantive roll call votes with counts in these dates. The gap is the difference between the Yes count and the No count.";
 
     public const string AgreementCaption = "Votes where both parties agreed, by kind of vote";
 
@@ -105,7 +105,7 @@ internal static class PublishedBoardView
     public static string MissedTitle(OfficialBoard board) => $"Missed votes of the {PartyOf(board)}";
 
     public static string RankingRule(OfficialBoard board) =>
-        $"The list has only members of the {PartyOf(board)} with at least {OfficialBoardPage.MinimumSplitVotes} split votes cast with Yea or Nay. A shorter record could put a member first by chance.";
+        $"The list has only members of the {PartyOf(board)} with at least {OfficialBoardPage.MinimumSplitVotes} split votes cast as Yes or No. A shorter record could put a member first by chance.";
 
     public static string NoRankedMembers(OfficialBoard board, int congress) =>
         $"No member of the {PartyOf(board)} has {OfficialBoardPage.MinimumSplitVotes} split votes cast in the {CongressCalendar.Ordinal(congress)} Congress.";
@@ -119,7 +119,7 @@ internal static class PublishedBoardView
         $"The {CongressCalendar.Ordinal(newer)} Congress has no member with {OfficialBoardPage.MinimumSplitVotes} split votes yet, so this page keeps the {CongressCalendar.Ordinal(kept)} Congress.";
 
     public static string TooFew(int count) =>
-        $"{count} {PublishedOfficialView.Noun(count, "member")} cast Yea or Nay on fewer than {OfficialBoardPage.MinimumSplitVotes} split votes. The lists do not rank {(count == 1 ? "this member" : "these members")}.";
+        $"{count} {PublishedOfficialView.Noun(count, "member")} cast Yes or No on fewer than {OfficialBoardPage.MinimumSplitVotes} split votes. The lists do not rank {(count == 1 ? "this member" : "these members")}.";
 
     public static string SortShare(double share) => share.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture);
 
@@ -132,7 +132,7 @@ internal static class PublishedBoardView
         if (page.WithoutMajorParty > 0)
             yield return $"{page.WithoutMajorParty} {PublishedOfficialView.Noun(page.WithoutMajorParty, "official")} with vote figures in this Congress but no {PublishedPartyMajority.Democrat} or {PublishedPartyMajority.Republican} party on their votes, so no party majority applies.";
         yield return "Members of the other party. They are on the other page for this chamber.";
-        yield return "Roll calls that are not on this site, and casts of Present or Not Voting. The split vote counts hold only Yea and Nay casts.";
+        yield return "Roll calls that are not on this site, and casts of Present or Not Voting. The split vote counts hold only Yes and No casts.";
     }
 }
 
