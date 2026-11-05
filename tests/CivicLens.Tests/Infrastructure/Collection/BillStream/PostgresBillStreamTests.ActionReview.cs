@@ -83,7 +83,7 @@ public sealed partial class PostgresBillStreamTests
     public async Task ARevisionStoredBeforeTheModelChoiceHasNoCandidateSetAndStillPublishesOpensAndTakesAPersonEdit()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
-        await ExecuteAsync(connectionString, "UPDATE action_revisions SET revision_json = (revision_json::jsonb - 'issueCandidateIds')::text");
+        await ExecuteAsync(connectionString, "UPDATE action_revisions SET issue_candidates_recorded = false; DELETE FROM action_revision_issues WHERE NOT is_tracked");
         var reviews = ActionReviews();
 
         var unpublished = Assert.Single(await reviews.ListUnpublishedApprovedAsync(10, [], default));

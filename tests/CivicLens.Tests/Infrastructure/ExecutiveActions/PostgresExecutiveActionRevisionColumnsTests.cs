@@ -269,15 +269,6 @@ public sealed class PostgresExecutiveActionRevisionColumnsTests(PostgresCollecti
         Assert.Equal(queriesForOne, counter.Count);
     }
 
-    [Fact]
-    public async Task ReadRevisionJsonRefusesTheExecutiveActionKindBecauseItIsReadFromItsColumns()
-    {
-        await using var db = await ContextFactory().CreateDbContextAsync();
-
-        await Assert.ThrowsAsync<ArgumentException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Review.CitedRevisions", "ReadRevisionJsonAsync",
-            db, PublishedRecordKind.ExecutiveAction, new[] { new PublishedRevisionBinding(PublishedRecordKind.ExecutiveAction, "any", 1) }, CancellationToken.None));
-    }
-
     [Theory]
     [InlineData("UPDATE executive_action_revisions SET author_kind = 'Person'", "ck_executive_action_revisions_author")]
     [InlineData("UPDATE executive_action_revisions SET author_subject = 'auth0|person'", "ck_executive_action_revisions_author")]

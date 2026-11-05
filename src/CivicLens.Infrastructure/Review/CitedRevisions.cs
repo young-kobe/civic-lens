@@ -25,30 +25,6 @@ internal static class CitedRevisions
         return notCurrent;
     }
 
-    public static async Task<string[]> ReadRevisionJsonAsync(CollectionAttemptDbContext db, PublishedRecordKind kind,
-        IEnumerable<PublishedRevisionBinding> named, CancellationToken cancellationToken)
-    {
-        if (kind is PublishedRecordKind.Vote or PublishedRecordKind.ExecutiveAction or PublishedRecordKind.DocumentChange or PublishedRecordKind.Relationship
-            or PublishedRecordKind.Statement or PublishedRecordKind.Brief)
-            throw new ArgumentException($"A {kind} revision is read from its columns, not from its JSON.", nameof(kind));
-        var requested = named.Distinct().ToArray();
-        var stored = await ReadStoredRevisionsAsync(db, kind, requested, cancellationToken);
-        if (stored.Length != requested.Length) throw NotStored(kind);
-        return [.. stored.Select(row => row.RevisionJson)];
-    }
-
-    /// <summary>Reads the named revisions that are stored. A revision that is not stored is absent from the result.</summary>
-    private static async Task<StoredRevisionRow[]> ReadStoredRevisionsAsync(CollectionAttemptDbContext db, PublishedRecordKind kind,
-        PublishedRevisionBinding[] requested, CancellationToken cancellationToken)
-    {
-        if (requested.Length == 0) return [];
-        RequireKind(kind, requested, nameof(requested));
-        var (table, _, idColumn) = ReviewTables.For(kind);
-        var sql = $"SELECT r.{idColumn} AS \"RecordId\", r.revision_number AS \"RevisionNumber\", r.revision_json AS \"RevisionJson\" FROM {table} r JOIN unnest({{0}}, {{1}}) AS k(id, number) ON r.{idColumn} = k.id AND r.revision_number = k.number";
-        return await db.Database.SqlQueryRaw<StoredRevisionRow>(sql, requested.Select(binding => binding.RecordId).ToArray(),
-            requested.Select(binding => binding.RevisionNumber).ToArray()).ToArrayAsync(cancellationToken);
-    }
-
     public static async Task<PublishedRevisionBinding[]> FindNotApprovedAsync(CollectionAttemptDbContext db, PublishedRecordKind kind,
         PublishedRevisionBinding[] requested, CancellationToken cancellationToken)
     {
@@ -71,13 +47,6 @@ internal static class CitedRevisions
     {
         if (bindings.Any(binding => binding.Kind != kind))
             throw new ArgumentException($"Every named revision must be a {kind} revision.", parameterName);
-    }
-
-    public sealed class StoredRevisionRow
-    {
-        public string RecordId { get; set; } = "";
-        public int RevisionNumber { get; set; }
-        public string RevisionJson { get; set; } = "";
     }
 
     private sealed class NotApprovedRow

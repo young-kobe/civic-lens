@@ -105,7 +105,7 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [x] Vote pilot 2: backfill old vote revisions and verify them with a C# command that compares each revision to its JSON
   - [x] Vote pilot 3: move the vote readers to the columns
   - [ ] Vote pilot 4: drop the vote revision JSON, after the read-only function stops reading it
-  - [ ] Move the other revision kinds, one PR for each. Executive action, document change, relationship, statement, and brief revisions are done in code through step 3. Action revisions are done in code through step 2, the backfill and verify commands. The production backfills and the JSON drops stay open
+  - [ ] Move the other revision kinds, one PR for each. Executive action, document change, relationship, statement, brief, and action revisions are done in code through step 3. The production backfills and the JSON drops stay open
   - [ ] Move release entries to a table: one immutable row for each record revision, with a foreign key to that revision. `publication_record_states` gives the release membership. The code of `releases entries backfill <limit>` and `releases entries verify` is done. Open: the production runs, the foreign key from `publication_record_states`, and the move of the publish path off the manifest.
   - [ ] Write `release.json` from the tables, and stop reading the previous manifest in a publish
 

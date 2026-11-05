@@ -309,15 +309,6 @@ public sealed class PostgresStatementRevisionColumnsTests(PostgresCollection pos
         Assert.Contains("Run the statement revision backfill", thrown.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task ReadRevisionJsonRefusesTheStatementKindBecauseItIsReadFromItsColumns()
-    {
-        await using var db = await factory.CreateDbContextAsync();
-
-        await Assert.ThrowsAsync<ArgumentException>(() => InternalMethods.InvokeAsync("CivicLens.Infrastructure.Review.CitedRevisions", "ReadRevisionJsonAsync",
-            db, PublishedRecordKind.Statement, new[] { new PublishedRevisionBinding(PublishedRecordKind.Statement, "any", 1) }, CancellationToken.None));
-    }
-
     [Theory]
     [InlineData("UPDATE statement_revisions SET summary = repeat('s', 8001)", "ck_statement_revisions_summary")]
     [InlineData("UPDATE statement_revisions SET headline = NULL", "ck_statement_revisions_columns_written")]

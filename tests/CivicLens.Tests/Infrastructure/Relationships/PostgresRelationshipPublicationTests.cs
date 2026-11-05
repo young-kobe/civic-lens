@@ -96,7 +96,7 @@ public sealed class PostgresRelationshipPublicationTests(PostgresCollection post
     public async Task TheReadReturnsTheCitedRevisionsAndNotTheNewerOnesBecauseThePublishedLinkNamesTheRevisionThatAPersonApproved()
     {
         await ApproveAsync();
-        await seeder.ActionAsync(Action() with { TrackedIssueIds = ["housing"], PolicyAreaId = "housing-development" });
+        await seeder.ActionAsync(Action() with { TrackedIssueIds = ["housing"], IssueCandidateIds = ["housing"], PolicyArea = "Housing", PolicyAreaCitation = Span("Lower Rent"), PolicyAreaId = "housing-development" });
         await seeder.StatementAsync(Statement(revision: 2) with { Revision = Statement(revision: 2).Revision with { Headline = "Warren changed" } });
         await seeder.ActionAsync(Action(revision: 2) with { Headline = "A newer action headline" });
 

@@ -1,10 +1,13 @@
+using System.Collections.Immutable;
 using CivicLens.Application;
+using CivicLens.Application.Publication;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Actions;
@@ -80,8 +83,33 @@ internal static class ActionRevisionRows
         return new(rows, issues, sponsorships, citations);
     }
 
+    /// <summary>The failure of a reader that meets an action revision row with null columns. Only the backfill fixes such a row.</summary>
     public static InvalidDataException NotBackfilled(string revision) =>
         new($"{revision} has null columns. Run the action revision backfill.");
+
+    /// <summary>The reader that the shared review code uses for actions.</summary>
+    public static async Task<IReadOnlyList<StoredRevision<ActionRevisionRow, ActionDraftRevision>>> ReadAsync(CollectionAttemptDbContext db,
+        IQueryable<ActionRevisionRow> query, CancellationToken cancellationToken) =>
+        (await ReadPageAsync(db, query, cancellationToken)).ToStoredRevisions();
+
+    /// <summary>Reads the revisions of a query and builds each one. A row with null columns fails the read.</summary>
+    public static async Task<ImmutableArray<ActionDraftRevision>> ReadDraftRevisionsAsync(CollectionAttemptDbContext db,
+        IQueryable<ActionRevisionRow> query, CancellationToken cancellationToken) =>
+        [.. (await ReadAsync(db, query, cancellationToken)).Select(stored => stored.Read())];
+
+    /// <summary>Reads the named revisions. It fails when one is not stored.</summary>
+    public static async Task<IReadOnlyList<ActionDraftRevision>> ReadNamedAsync(CollectionAttemptDbContext db,
+        IReadOnlyCollection<PublishedRevisionBinding> named, CancellationToken cancellationToken)
+    {
+        var requested = named.Distinct().ToArray();
+        if (requested.Length == 0) return [];
+        CitedRevisions.RequireKind(PublishedRecordKind.Action, requested, nameof(named));
+        var rows = db.Set<ActionRevisionRow>().FromSqlRaw("""
+            SELECT r.* FROM action_revisions r JOIN unnest({0}, {1}) AS k(id, number) ON r.record_id = k.id AND r.revision_number = k.number
+            """, requested.Select(binding => binding.RecordId).ToArray(), requested.Select(binding => binding.RevisionNumber).ToArray()).AsNoTracking();
+        var revisions = await ReadDraftRevisionsAsync(db, rows, cancellationToken);
+        return revisions.Length == requested.Length ? revisions : throw CitedRevisions.NotStored(PublishedRecordKind.Action);
+    }
 
     private static IEnumerable<string> IssueIds(ActionDraftRevision revision) =>
         revision.IssueCandidateIds.IsDefault ? revision.TrackedIssueIds : revision.IssueCandidateIds;
