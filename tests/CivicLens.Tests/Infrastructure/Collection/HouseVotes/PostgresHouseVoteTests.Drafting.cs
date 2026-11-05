@@ -362,12 +362,12 @@ public sealed partial class PostgresHouseVoteTests
     [Theory]
     [InlineData("vote-draft-prompt-v1", true)]
     [InlineData(VoteDraftTask.PromptVersion, false)]
-    public async Task TheEvidenceNamesAnStaleOnlyWhenTheNewestDraftRunUsedOneSoARerunSpendsNothingAfterTheRedraft(string prompt, bool older)
+    public async Task TheEvidenceFlagsAStaleDraftOnlyWhenTheNewestDraftRunUsedOneSoARerunSpendsNothingAfterTheRedraft(string prompt, bool stale)
     {
         var candidate = await PendingCandidateAsync();
         await InsertRunAsync(candidate, prompt, 1);
 
-        Assert.Equal(older, (await VoteStore().ReadEvidenceAsync(candidate, default))!.HasStaleDraft);
+        Assert.Equal(stale, (await VoteStore().ReadEvidenceAsync(candidate, default))!.HasStaleDraft);
     }
 
     [Fact]

@@ -280,6 +280,20 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
         Assert.Equal(("Succeeded", null), await StatusAsync(Week));
     }
 
+    [Theory]
+    [InlineData("Approved")]
+    [InlineData("Rejected")]
+    public async Task TheEvidenceOfAStaleWeekWhoseBriefIsApprovedOrRejectedFlagsNoStaleDraftSoTheWorkerSpendsNoCallThatWouldBeRefused(string reviewStatus)
+    {
+        await SeedWeekAsync();
+        await DraftAsync(new FakeBriefDraftModel().Draft(BriefFixtures.Output(paragraphs: [("Text.", ["R1"])])));
+        await seeder.ExecuteAsync("UPDATE brief_analysis_runs SET prompt_version = 'brief-draft-prompt-v0'");
+        Assert.True((await store.ReadEvidenceAsync(BriefWeek.RecordIdOf(Week), default))!.HasStaleDraft);
+        await seeder.ExecuteAsync($"UPDATE brief_drafts SET review_status = '{reviewStatus}'");
+
+        Assert.False((await store.ReadEvidenceAsync(BriefWeek.RecordIdOf(Week), default))!.HasStaleDraft);
+    }
+
     [Fact]
     public async Task RequeueStaleLeavesARunningWeekAloneEvenWhenItsLastRunIsStaleSoItNeverStealsALeaseFromAWorker()
     {

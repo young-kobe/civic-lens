@@ -127,12 +127,8 @@ public sealed class PostgresBriefDraftStore : PostgresAnalysisStore<BriefDraftRu
     public Task<int> RequeueStaleAsync(CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
         {
-            var recordIds = settled.Select(row => row.RecordId).ToArray();
-            var stale = await StaleRecordIdsAsync(db, recordIds, token);
-            var closed = await db.Set<BriefDraftRow>().AsNoTracking()
-                .Where(draft => recordIds.Contains(draft.RecordId) && (draft.ReviewStatus == ReviewStatus.Approved || draft.ReviewStatus == ReviewStatus.Rejected))
-                .Select(draft => draft.RecordId).ToArrayAsync(token);
-            return settled.Where(row => stale.Contains(row.RecordId) && !closed.Contains(row.RecordId));
+            var stale = await StaleRecordIdsAsync(db, settled.Select(row => row.RecordId).ToArray(), token);
+            return settled.Where(row => stale.Contains(row.RecordId));
         }, cancellationToken);
 
     private static async Task<HashSet<string>> StaleRecordIdsAsync(CollectionAttemptDbContext db, string[] recordIds,
@@ -142,7 +138,11 @@ public sealed class PostgresBriefDraftStore : PostgresAnalysisStore<BriefDraftRu
             recordIds, AnalysisRunOutcome.Drafted).Select(run => new { run.RecordId, run.RunId }).ToArrayAsync(cancellationToken);
         var staleRunIds = await StaleAnalysisRuns.FindStaleRunIdsAsync<BriefAnalysisRunRow>(db,
             [.. newest.Select(run => run.RunId)], BriefDraftTask.CurrentVersions, cancellationToken);
-        return newest.Where(run => staleRunIds.Contains(run.RunId)).Select(run => run.RecordId).ToHashSet(StringComparer.Ordinal);
+        var staleIds = newest.Where(run => staleRunIds.Contains(run.RunId)).Select(run => run.RecordId).ToArray();
+        var closed = await db.Set<BriefDraftRow>().AsNoTracking()
+            .Where(draft => staleIds.Contains(draft.RecordId) && (draft.ReviewStatus == ReviewStatus.Approved || draft.ReviewStatus == ReviewStatus.Rejected))
+            .Select(draft => draft.RecordId).ToArrayAsync(cancellationToken);
+        return staleIds.Except(closed, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
     }
 
     private static async Task<ImmutableArray<PublishedRevisionBinding>> ReadNewRecordsAsync(CollectionAttemptDbContext db, WindowRow bounds,
