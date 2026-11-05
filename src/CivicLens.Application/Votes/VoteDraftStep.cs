@@ -40,6 +40,8 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.FactTooLong, cancellationToken);
         if (HasTooLongField(evidence, snapshot))
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.FieldTooLong, cancellationToken);
+        if (!VoteFacts.HasResult(snapshot.Facts))
+            return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.NoResult, cancellationToken);
         var context = new VoteDraftContext(evidence, snapshot, choice, issues.Id);
         var change = context.ChangeSinceCurrent();
         if (evidence.IsRejected)

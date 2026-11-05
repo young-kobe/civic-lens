@@ -307,6 +307,7 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
         var kind = PublishedRecordReference.NameOf(entry.Kind);
         var revisions = kind + "_revisions";
         var idColumn = entry.Kind == PublishedRecordKind.Statement ? "candidate_id" : "record_id";
+        var (resultColumn, resultValue) = entry.Kind == PublishedRecordKind.Vote ? (", result", ", 'Passed'") : ("", "");
         var linked = string.Concat(PublishedRecordReference.LinkedBy(entry).Select(reference => $$"""
             INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks)
             VALUES ('{{PublishedRecordReference.NameOf(reference.Kind)}}', '{{reference.RecordId}}', 1) ON CONFLICT DO NOTHING;
@@ -314,8 +315,8 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
         await ExecuteAsync($$"""
             SET session_replication_role = replica;
             {{linked}}
-            INSERT INTO {{revisions}} ({{idColumn}}, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
-            VALUES ('{{entry.RecordId}}', {{entry.RevisionNumber}}, 'owner', 'Person', '{}', 0);
+            INSERT INTO {{revisions}} ({{idColumn}}, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks{{resultColumn}})
+            VALUES ('{{entry.RecordId}}', {{entry.RevisionNumber}}, 'owner', 'Person', '{}', 0{{resultValue}});
             INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks)
             VALUES ('{{kind}}', '{{entry.RecordId}}', {{entry.FirstPublishedAtUtc.UtcTicks}});
             INSERT INTO publication_record_states (kind, record_id, revision_number, first_release, last_release)

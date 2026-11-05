@@ -39,9 +39,8 @@ public static class VoteKindTable
 
     private static bool ProvidesForConsideration(ImmutableArray<VoteFact> facts)
     {
-        var isHouseResolution = VoteFacts.Find(facts, VoteFactPrefixes.Legislation)?.Text[VoteFactPrefixes.Legislation.Length..]
-            .StartsWith("HRES ", StringComparison.OrdinalIgnoreCase) == true;
-        var title = VoteFacts.Find(facts, VoteFactPrefixes.Title)?.Text[VoteFactPrefixes.Title.Length..];
+        var isHouseResolution = VoteFacts.ValueOf(facts, VoteFactPrefixes.Legislation)?.StartsWith("HRES ", StringComparison.OrdinalIgnoreCase) == true;
+        var title = VoteFacts.ValueOf(facts, VoteFactPrefixes.Title);
         return isHouseResolution && title?.Contains("consideration of", StringComparison.OrdinalIgnoreCase) == true;
     }
 }

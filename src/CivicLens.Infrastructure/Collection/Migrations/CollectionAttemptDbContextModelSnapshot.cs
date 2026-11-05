@@ -7968,6 +7968,17 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("member_list_id");
 
+                    b.Property<string>("Question")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("question");
+
+                    b.Property<string>("Result")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("result");
+
                     b.Property<string>("RevisionJson")
                         .IsRequired()
                         .HasColumnType("text")
