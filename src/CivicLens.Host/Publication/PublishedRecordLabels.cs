@@ -195,7 +195,7 @@ public static class PublishedRecordLabels
 
     private static string CandidateTotal(string name, string members) => name switch
     {
-        PublishedOfficialVote.NotVoting => $"Not voting, all {members}",
+        PublishedOfficialVote.NotVoting => $"{PlainVoteWords.NotVoting}, all {members}",
         PublishedOfficialVote.Present => $"{PublishedOfficialVote.Present}, all {members}",
         _ => $"Votes for {name}, all {members}"
     };
