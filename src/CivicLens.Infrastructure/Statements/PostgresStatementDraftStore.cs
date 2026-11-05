@@ -75,18 +75,18 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
     }
 
     /// <summary>A stale candidate holds a draft whose current revision is a model revision that an older task, prompt, or schema made.
-    /// No person decision has set its status, and no person has approved it. A person approval is final, so code never replaces that text.
+    /// No person decision has set its status, and no person has a final decision on it. A person decision is final, so code never replaces that text.
     /// A person revision becomes the current revision, so the author kind of the current revision shows that no person revision is on top.</summary>
     private static async Task<HashSet<string>> StaleCandidateIdsAsync(CollectionAttemptDbContext db, string[] candidateIds,
         CancellationToken cancellationToken)
     {
         var untouched = StatementDraftRows.UntouchedStatuses;
-        var personApprovals = StatementDraftRows.PersonApprovals(db).AsNoTracking();
+        var personDecisions = StatementDraftRows.PersonDecisions(db).AsNoTracking();
         var modelDrafts = await (from draft in db.Set<StatementDraftRow>().AsNoTracking()
                                  join revision in db.Set<StatementRevisionRow>().AsNoTracking()
                                      on new { draft.CandidateId, Number = draft.CurrentRevisionNumber } equals new { revision.CandidateId, Number = revision.RevisionNumber }
                                  where candidateIds.Contains(draft.CandidateId) && untouched.Contains(draft.ReviewStatus) &&
-                                     !personApprovals.Any(decision => decision.CandidateId == draft.CandidateId) &&
+                                     !personDecisions.Any(decision => decision.CandidateId == draft.CandidateId) &&
                                      revision.AuthorKind == ReviewAuthorKind.Analysis && revision.RunId != null
                                  select new { draft.CandidateId, RunId = revision.RunId! }).ToArrayAsync(cancellationToken);
         var staleRunIds = await StaleAnalysisRuns.FindStaleRunIdsAsync<StatementAnalysisRunRow>(db,

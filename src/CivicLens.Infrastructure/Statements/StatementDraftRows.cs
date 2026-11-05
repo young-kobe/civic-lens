@@ -11,7 +11,7 @@ namespace CivicLens.Infrastructure.Statements;
 internal static class StatementDraftRows
 {
     /// <summary>Appends the revision of the worker under the review lock. The revision must follow the current revision of the draft, so a
-    /// person save that came first makes the append fail and write nothing. A draft that a person decided on or approved takes no revision.</summary>
+    /// person save that came first makes the append fail and write nothing. A draft with a final decision of a person takes no revision.</summary>
     public static async Task<bool> TryAppendAnalysisRevisionAsync(CollectionAttemptDbContext db, StatementDraftRevision revision, string runId,
         ApprovalCheck codeApproval, CancellationToken cancellationToken)
     {
@@ -19,7 +19,7 @@ internal static class StatementDraftRows
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.StatementReview, cancellationToken);
         var draft = await db.Set<StatementDraftRow>().SingleOrDefaultAsync(row => row.CandidateId == revision.CandidateId, cancellationToken);
         if (!FollowsUntouchedDraft(draft, revision)) return false;
-        if (draft is not null && await HasPersonApprovalAsync(db, revision.CandidateId, cancellationToken)) return false;
+        if (draft is not null && await HasPersonDecisionAsync(db, revision.CandidateId, cancellationToken)) return false;
         var capturedOn = await RequireCandidateExtractionAsync(db, revision, cancellationToken);
         var records = PostgresStatementReviewStore.Records;
         var cycle = draft is null ? [] : await records.ReadCycleAsync(db, draft, cancellationToken);
@@ -33,14 +33,13 @@ internal static class StatementDraftRows
     /// <summary>The statuses that no person decision has set. A rejection, a request for changes, and a withdrawal are decisions of a person.</summary>
     public static readonly ReviewStatus[] UntouchedStatuses = [ReviewStatus.AwaitingReview, ReviewStatus.Approved];
 
-    /// <summary>The approval decisions of a person. <see cref="PersonFinalDecisions"/> owns the author rule, so a code approval is not one and
-    /// code may replace a draft that code approved. The status guard already keeps out a person rejection and a person request for changes.</summary>
-    public static IQueryable<StatementReviewDecisionRow> PersonApprovals(CollectionAttemptDbContext db) =>
-        db.Set<StatementReviewDecisionRow>().Where(PersonFinalDecisions.Match<StatementReviewDecisionRow>())
-            .Where(decision => decision.Kind == ReviewDecisionKind.Approve);
+    /// <summary>The final decisions of a person. <see cref="PersonFinalDecisions"/> owns the kind and author rule, so a code approval is not
+    /// one and code may replace a draft that code approved.</summary>
+    public static IQueryable<StatementReviewDecisionRow> PersonDecisions(CollectionAttemptDbContext db) =>
+        db.Set<StatementReviewDecisionRow>().Where(PersonFinalDecisions.Match<StatementReviewDecisionRow>());
 
-    private static Task<bool> HasPersonApprovalAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken) =>
-        PersonApprovals(db).AnyAsync(decision => decision.CandidateId == candidateId, cancellationToken);
+    private static Task<bool> HasPersonDecisionAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken) =>
+        PersonDecisions(db).AnyAsync(decision => decision.CandidateId == candidateId, cancellationToken);
 
     private static bool FollowsUntouchedDraft(StatementDraftRow? draft, StatementDraftRevision revision) =>
         draft is null ? revision.RevisionNumber == 1

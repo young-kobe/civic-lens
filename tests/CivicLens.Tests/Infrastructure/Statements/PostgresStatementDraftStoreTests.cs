@@ -230,16 +230,18 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
         Assert.False((await drafts.ReadEvidenceAsync(candidate, default))!.ExistingDraft!.IsStaleModelDraft);
     }
 
-    [Fact]
-    public async Task ARejectedStaleDraftIsNotRedraftedBecauseTheRejectionIsAPersonDecision()
+    [Theory]
+    [InlineData(ReviewDecisionKind.Reject)]
+    [InlineData(ReviewDecisionKind.RequestChanges)]
+    public async Task AStaleDraftWithAPersonRejectOrRequestChangesIsNotRedraftedAndItsEvidenceIsNotStale(ReviewDecisionKind kind)
     {
         var candidate = await PassedCandidateAsync();
         await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
         await AgeRunsAsync(candidate);
-        await DecideAsync(candidate, ReviewDecisionKind.Reject, "reject-before-redraft");
+        await DecideAsync(candidate, kind, "decide-before-redraft");
 
-        Assert.Equal("Rejected", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
         Assert.Equal(0, await drafts.RequeueStaleAsync(default));
+        Assert.False((await drafts.ReadEvidenceAsync(candidate, default))!.ExistingDraft!.IsStaleModelDraft);
     }
 
     [Fact]
