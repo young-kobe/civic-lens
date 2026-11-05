@@ -27,11 +27,31 @@ public sealed class BillFigureSetTests
     public void AFigureThatTheTextLacksIsNamed(string claim, string figure) => Assert.Equal([figure], new BillFigureSet(Text).Missing(claim, "1"));
 
     [Fact]
-    public void AYearThatIsTheBillNumberIsNotAYear()
+    public void AFullAmountOfManyDigitsKeepsEveryDigitSoATrillionIsNotAHundredBillion()
+    {
+        var figures = new BillFigureSet("The fund holds $1,000,000,000,000 in all.");
+
+        Assert.Empty(figures.Missing("The fund holds $1 trillion.", "1"));
+        Assert.Equal(["$100 billion"], figures.Missing("The fund holds $100 billion.", "1"));
+    }
+
+    [Theory]
+    [InlineData("H.R. 2025 ends the program.")]
+    [InlineData("S. 2025 ends the program.")]
+    [InlineData("H.J. Res. 2025 ends the program.")]
+    public void TheCitationOfTheBillIsNotAYear(string claim)
     {
         var figures = new BillFigureSet("The program ends on December 31, 2030.");
 
-        Assert.Empty(figures.Missing("H.R. 2025 ends the program.", "2025"));
-        Assert.Equal(["2025"], figures.Missing("H.R. 2025 ends the program.", "1"));
+        Assert.Empty(figures.Missing(claim, "2025"));
+        Assert.Equal(["2025"], figures.Missing(claim, "1"));
+    }
+
+    [Fact]
+    public void AYearEqualToTheBillNumberStillNeedsTheTextWhenItIsNotTheCitation()
+    {
+        var figures = new BillFigureSet("The program ends on December 31, 2030.");
+
+        Assert.Equal(["2027"], figures.Missing("H.R. 2027 starts in 2027.", "2027"));
     }
 }

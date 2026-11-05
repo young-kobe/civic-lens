@@ -7,8 +7,9 @@ namespace CivicLens.Application.Actions;
 /// 0.39 * (words / sentences) + 11.8 * (syllables / words) - 15.59. <see cref="SentenceEnds"/> owns where a sentence ends, so a full stop in
 /// "H.R." or "U.S." does not end one. A word is a run of characters between spaces. A number is one syllable. A word of letters has its groups of
 /// vowels (a, e, i, o, u, y), less one for a final silent e (a final "le" keeps it), for a final "es" and for a final "ed". A final "es" is silent
-/// unless the letter before it is s, x, z, c or g, or the word ends in "ches" or "shes". A final "ed" is silent unless the letter before it is t or d.
-/// A word has at least one syllable.</summary>
+/// unless the letter before it is s, x, z, c or g, or the word ends in "ches" or "shes". A final "ed" is silent unless the letter before it is t, d or
+/// a vowel (a vowel before "ed" already sits in a vowel group, as in "agreed"), or the "ed" follows an "l" that a consonant other than "l" precedes. That
+/// "led" is its own syllable, as in "settled", while "called" keeps a silent "ed". A word has at least one syllable.</summary>
 public static class ReadingGrade
 {
     /// <summary>Text above this grade goes back to the model.</summary>
@@ -52,7 +53,10 @@ public static class ReadingGrade
         letters.EndsWith("es", StringComparison.Ordinal) && letters[^3] is not ('s' or 'x' or 'z' or 'c' or 'g')
         && !letters.EndsWith("ches", StringComparison.Ordinal) && !letters.EndsWith("shes", StringComparison.Ordinal);
 
-    private static bool SilentEd(string letters) => letters.EndsWith("ed", StringComparison.Ordinal) && letters[^3] is not ('t' or 'd');
+    private static bool SilentEd(string letters) =>
+        letters.EndsWith("ed", StringComparison.Ordinal) && letters[^3] is not ('t' or 'd') && !IsVowel(letters[^3]) && !IsSyllabicLed(letters);
+
+    private static bool IsSyllabicLed(string letters) => letters.Length > 3 && letters[^3] == 'l' && !IsVowel(letters[^4]) && letters[^4] != 'l';
 
     private static bool IsVowel(char letter) => letter is 'a' or 'e' or 'i' or 'o' or 'u' or 'y';
 }

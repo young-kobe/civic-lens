@@ -11,6 +11,8 @@ public sealed class BillFiguresTests
     [InlineData("It pays 5 million dollars.", 1)]
     [InlineData("It pays 400 dollars.", 1)]
     [InlineData("It pays a fee.", 0)]
+    [InlineData("It pays $1,000,000,000,000 over ten years.", 1)]
+    [InlineData("It pays $1 trillion.", 1)]
     [InlineData("It has 2 billion people and 50 percent.", 0)]
     public void ADollarAmountIsADollarSignWithDigitsOrDigitsBeforeDollars(string text, int amounts) =>
         Assert.Equal(amounts, BillFigures.Count(text).Amounts);
@@ -19,6 +21,7 @@ public sealed class BillFiguresTests
     [InlineData("It starts on January 1, 2027.", 1)]
     [InlineData("It starts in January 2027.", 1)]
     [InlineData("It covers fiscal year 2026.", 1)]
+    [InlineData("It covers fiscal years 2026 through 2030.", 1)]
     [InlineData("It runs from March 5, 2026 to June 30, 2031.", 2)]
     [InlineData("It starts by 1999 and ends before 2099.", 2)]
     [InlineData("It starts not later than 2027.", 1)]

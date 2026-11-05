@@ -213,7 +213,9 @@ public sealed class ActionBillTextDraftTests
         Assert.Contains("eligible tenant\\\" means", request.UserPrompt, StringComparison.Ordinal);
         Assert.True(text.CharsRead > BillTextQuotes.Normalize(text.Body).Length);
         using var facts = JsonDocument.Parse(request.UserPrompt["Facts:\n".Length..]);
-        Assert.Equal(BillTextQuotes.Normalize(text.Body).Length, facts.RootElement.GetProperty("billText").GetProperty("charactersRead").GetInt32());
+        var counts = facts.RootElement.GetProperty("billText");
+        Assert.Equal(BillTextQuotes.Normalize(text.Body).Length, counts.GetProperty("charactersRead").GetInt32());
+        Assert.Equal(counts.GetProperty("charactersRead").GetInt32(), counts.GetProperty("charactersTotal").GetInt32());
         var citation = resolved.Accepted!.TextCitations[0];
         Assert.Equal(stored, text.Text.Substring(citation.Span.Start, citation.Span.Length));
         var later = resolved.Accepted.TextCitations[1];

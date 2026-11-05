@@ -29,7 +29,7 @@ public sealed class ActionTextMeasureTests
         Assert.Equal([(ActionTextPart.Summary, FirstPlain, FirstQuote), (ActionTextPart.Summary, SecondPlain, SecondQuote),
                 (ActionTextPart.WhyItMatters, WhyPlain, WhyQuote)],
             bill.Sentences.Select(sentence => (sentence.Part, sentence.Sentence, sentence.Quote)));
-        var grades = new[] { FirstPlain, SecondPlain, WhyPlain }.Select(sentence => Math.Round(ReadingGrade.Of(sentence), 1)).ToArray();
+        var grades = new[] { FirstPlain, SecondPlain, WhyPlain }.Select(ReadingGrade.Rounded).ToArray();
         Assert.Equal(grades, bill.Sentences.Select(sentence => sentence.Grade));
         Assert.Equal(Math.Round(grades.Average(), 1), bill.MeanGrade);
         Assert.Equal(bill.MeanGrade, report.Totals.MeanGrade);

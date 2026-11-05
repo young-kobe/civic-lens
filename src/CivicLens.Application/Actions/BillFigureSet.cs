@@ -14,15 +14,16 @@ public sealed class BillFigureSet
         years = [.. BillFigures.Years(text)];
     }
 
-    /// <summary>The amounts and years of the claim that the bill text lacks, as the claim writes them. A year equal to <paramref name="billNumber"/>
-    /// is a bill number, such as "H.R. 2025", and never counts as a year.</summary>
+    /// <summary>The amounts and years of the claim that the bill text lacks, as the claim writes them. The citation of the bill, such as "H.R. 2025",
+    /// is no year. Only that token is skipped, so a year equal to <paramref name="billNumber"/> elsewhere must still be in the text.</summary>
     public IReadOnlyList<string> Missing(string claim, string billNumber)
     {
         ArgumentNullException.ThrowIfNull(claim);
+        var claimYears = BillFigures.Years(BillFigures.WithoutBillCitation(claim, billNumber));
         return
         [
             .. BillFigures.Amounts(claim).Where(amount => !amounts.Contains(amount.Value)).Select(amount => amount.Written),
-            .. BillFigures.Years(claim).Where(year => year != billNumber && !years.Contains(year))
+            .. claimYears.Where(year => !years.Contains(year))
         ];
     }
 }

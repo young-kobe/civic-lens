@@ -31,6 +31,11 @@ public sealed class ReadingGradeTests
     [InlineData("wished", 1)]
     [InlineData("wishes", 2)]
     [InlineData("wanted", 2)]
+    [InlineData("agreed", 2)]
+    [InlineData("settled", 2)]
+    [InlineData("handled", 2)]
+    [InlineData("called", 1)]
+    [InlineData("filled", 1)]
     public void ASyllableIsAGroupOfVowelsLessAFinalSilentEndingEAnEsOrAnEd(string word, int syllables) =>
         Assert.Equal(0.39 + 11.8 * syllables - 15.59, ReadingGrade.Of(word), 5);
 
@@ -41,6 +46,14 @@ public sealed class ReadingGradeTests
     [InlineData("See Pub. L. Number 5 for rent.", "See Pub L Number 5 for rent.")]
     public void AFullStopInAnAbbreviationDoesNotSplitTheSentence(string abbreviated, string plain) =>
         Assert.Equal(ReadingGrade.Of(plain), ReadingGrade.Of(abbreviated), 5);
+
+    [Theory]
+    [InlineData("Rep. Jane Doe pays rent.", "Rep Jane Doe pays rent.")]
+    [InlineData("Sen. Jane Doe pays rent.", "Sen Jane Doe pays rent.")]
+    [InlineData("Ms. Jane Doe pays rent.", "Ms Jane Doe pays rent.")]
+    [InlineData("Dr. Jane Doe pays rent.", "Dr Jane Doe pays rent.")]
+    public void ATitleBeforeANameDoesNotSplitTheSentence(string titled, string plain) =>
+        Assert.Equal(ReadingGrade.Of(plain), ReadingGrade.Of(titled), 5);
 
     [Fact]
     public void TwoShortSentencesInOneItemGradeAsTwoSentences()
