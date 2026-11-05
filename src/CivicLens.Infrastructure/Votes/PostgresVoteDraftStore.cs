@@ -170,12 +170,10 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
 
     private static bool IsClosedToNewText(DraftTextState row)
     {
-        if (row.TextOrigin is null)
-            throw new InvalidDataException($"The current vote revision of candidate {row.CandidateId} has null columns. Run the vote revision backfill.");
         return row.ReviewStatus is "AwaitingReviewWithConcerns" or "ChangesRequested" or "ApprovalWithdrawn" or "Rejected" || row.TextOrigin == nameof(ReviewTextOrigin.Person);
     }
 
-    private sealed record DraftTextState(string CandidateId, string ReviewStatus, string? TextOrigin);
+    private sealed record DraftTextState(string CandidateId, string ReviewStatus, string TextOrigin);
 
     private static async Task<VoteDraftPage?> ReadBillDetailAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate,
         CancellationToken cancellationToken)

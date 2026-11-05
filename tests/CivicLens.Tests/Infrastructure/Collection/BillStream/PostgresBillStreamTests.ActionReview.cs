@@ -372,7 +372,7 @@ public sealed partial class PostgresBillStreamTests
         var newer = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
         var model = new FakeHeadlineSummaryModel().Reply(async _ =>
         {
-            await ExecuteAsync(connectionString, $"UPDATE action_drafts SET review_status = 'Rejected' WHERE record_id = '{RecordId}'");
+            await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
             return new("end_turn", DraftableOutput, new(900, 100, 0, 0), "req_fixture");
         });
 
@@ -382,6 +382,75 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal(1, await ScalarAsync("SELECT current_revision_number FROM action_drafts"));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE outcome = 'DraftDiscarded'"));
         await AssertBlockAsync(newer);
+    }
+
+    [Theory]
+    [InlineData(ReviewDecisionKind.Approve, null)]
+    [InlineData(ReviewDecisionKind.RequestChanges, "Name the bill.")]
+    public async Task AnApproveOrRequestChangesDuringTheCallOfABillUpdateDoesNotStopTheAppendBecauseTheNewFactsSupersedeIt(ReviewDecisionKind kind, string? note)
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
+        var model = new FakeHeadlineSummaryModel().Reply(async _ =>
+        {
+            await DecideAsync(1, 0, kind, note);
+            return new("end_turn", DraftableOutput, new(900, 100, 0, 0), "req_fixture");
+        });
+
+        Assert.Single((await RunActionWorkerAsync(model)).Requests);
+
+        Assert.Equal(2, await ScalarAsync("SELECT current_revision_number FROM action_drafts"));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE outcome = 'DraftDiscarded'"));
+        Assert.Equal(kind, (await ActionDecisionsAsync()).First().Kind);
+        await AssertBlockAsync(null);
+    }
+
+    [Fact]
+    public async Task AWithdrawalDuringTheCallAfterAnEarlierApprovalStillAppendsBecauseOnlyAFinalDecisionAfterTheReadStopsTheRedraft()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        var candidate = (string)(await ScalarAsync("SELECT candidate_id FROM action_drafts"))!;
+        await DecideAsync(1, 0, ReviewDecisionKind.Approve);
+        await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = 'Pending' WHERE candidate_id = '{candidate}'");
+        var store = ActionStore();
+        var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
+        var runId = await ReserveAsync(store, claim);
+        var first = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
+        await DecideAsync(1, 1, ReviewDecisionKind.WithdrawApproval, "The sponsor list is wrong.");
+
+        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, first with { RevisionNumber = 2, CreatedAtUtc = first.CreatedAtUtc.AddMinutes(1) }, 1),
+            DraftedRun(runId, candidate), default));
+
+        Assert.Equal(2, await ScalarAsync("SELECT current_revision_number FROM action_drafts"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE outcome = 'DraftDiscarded'"));
+    }
+
+    [Fact]
+    public async Task ASaveAndApproveDuringTheCallTakesTheRevisionConflictPathAndTheRetryEndsUnchanged()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await ExecuteAsync(connectionString, "UPDATE action_analysis_runs SET prompt_version = 'action-draft-prompt-v1'");
+        Assert.Equal(1, await ActionStore().RequeueStaleAsync(default));
+        var model = new FakeHeadlineSummaryModel().Reply(async _ =>
+        {
+            var before = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
+            await new SaveActionDraft(ActionReviews()).ExecuteAsync(Reviewer, new(RecordId, 1, before.Headline + " edited",
+                before.Summary, SuggestionChoice.Keep, "edit", new ApprovalWithSave(0, null, [], null)));
+            return new("end_turn", DraftableOutput, new(900, 100, 0, 0), "req_fixture");
+        });
+
+        Assert.Single((await RunActionWorkerAsync(model)).Requests);
+
+        Assert.Equal(2, await ScalarAsync("SELECT current_revision_number FROM action_drafts"));
+        Assert.Equal("RetryWaiting", await ScalarAsync("SELECT status FROM action_analysis"));
+        Assert.Equal(ActionDraftErrorCodes.RevisionConflict, await ScalarAsync("SELECT error_code FROM action_analysis"));
+        await ExecuteAsync(connectionString, "UPDATE action_analysis SET status = 'Pending', retry_at = NULL");
+
+        Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
+
+        Assert.Equal(2, await ScalarAsync("SELECT current_revision_number FROM action_drafts"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM action_analysis_runs WHERE reason = '{ActionDraftErrorCodes.Unchanged}'"));
     }
 
     private async Task<string> RejectAndRefuseANewerUpdateAsync()
@@ -408,6 +477,42 @@ public sealed partial class PostgresBillStreamTests
         await Assert.ThrowsAsync<StaleApprovalException>(() => new DecideActionReview(ActionReviews()).ExecuteAsync(Reviewer,
             new(RecordId, 1, 2, ReviewDecisionKind.Approve, "Looked again.", [changes.DecisionId], Guid.NewGuid().ToString("N"))));
 
+    [Theory]
+    [InlineData(ReviewDecisionKind.Approve, "Approved", null)]
+    [InlineData(ReviewDecisionKind.RequestChanges, "ChangesRequested", "Name the bill.")]
+    public async Task APersonDecisionDuringTheRedraftCallIsFinalSoTheAppendIsRefusedAndTheDecisionIsKept(ReviewDecisionKind kind, string status, string? note)
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await ExecuteAsync(connectionString, "UPDATE action_analysis_runs SET prompt_version = 'action-draft-prompt-v1'");
+        Assert.Equal(1, await ActionStore().RequeueStaleAsync(default));
+        var model = new FakeHeadlineSummaryModel().Reply(async _ =>
+        {
+            await DecideAsync(1, 0, kind, note);
+            return new("end_turn", DraftableOutput, new(900, 100, 0, 0), "req_fixture");
+        });
+
+        Assert.Single((await RunActionWorkerAsync(model)).Requests);
+
+        Assert.Equal(status, await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal(1, await ScalarAsync("SELECT current_revision_number FROM action_drafts"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE outcome = 'DraftDiscarded' AND reason = 'recordRejected'"));
+        Assert.Equal(kind, Assert.Single(await ActionDecisionsAsync()).Kind);
+    }
+
+    [Theory]
+    [InlineData(ReviewDecisionKind.Approve, null)]
+    [InlineData(ReviewDecisionKind.RequestChanges, "Name the bill.")]
+    [InlineData(ReviewDecisionKind.Reject, null)]
+    public async Task APersonDecisionOnTheCurrentRevisionBlocksTheRequeueOfAStaleDraft(ReviewDecisionKind kind, string? note)
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await ExecuteAsync(connectionString, "UPDATE action_analysis_runs SET prompt_version = 'action-draft-prompt-v1'");
+        await DecideAsync(1, 0, kind, note, kind == ReviewDecisionKind.Reject ? ReviewReasonCode.Duplicate : null);
+
+        Assert.Equal(0, await ActionStore().RequeueStaleAsync(default));
+    }
+
     [Fact]
     public async Task AConflictRetryKeepsTheBlockEvenAfterTheRetryFailsBecauseOnlyANewDraftMayEndIt()
     {
@@ -415,7 +520,7 @@ public sealed partial class PostgresBillStreamTests
         var changes = await DecideAsync(1, 1, ReviewDecisionKind.RequestChanges, "Look again.");
         var claim = await ClaimAfterRequeueAsync(newer);
         var runId = await ReserveAsync(ActionStore(), claim);
-        Assert.True(await ActionStore().CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(newer, 5)), DraftedRun(runId, newer), default));
+        Assert.True(await ActionStore().CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(newer, 5), 0), DraftedRun(runId, newer), default));
         await AssertBlockAsync(newer);
         await AssertApprovalStillRefusedAsync(changes);
 
@@ -435,7 +540,7 @@ public sealed partial class PostgresBillStreamTests
         var bypassed = DraftedRun(Guid.NewGuid().ToString("N"), newer);
         bypassed = bypassed with { Run = bypassed.Run with { Outcome = AnalysisRunOutcome.Bypassed, ChargedTokens = 0, Usage = AnalysisTokenUsage.None, Input = null } };
 
-        Assert.True(await ActionStore().CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(newer, 5)), bypassed, default));
+        Assert.True(await ActionStore().CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(newer, 5), 0), bypassed, default));
 
         await AssertBlockAsync(newer);
     }
