@@ -60,7 +60,7 @@ public sealed partial class PostgresBillStreamTests
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
         var runId = await ReserveAsync(store, claim);
 
-        var failure = await Assert.ThrowsAsync<DbUpdateException>(() => store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1)),
+        var failure = await Assert.ThrowsAsync<DbUpdateException>(() => store.CheckpointAsync(ActionDraftCheckpoint.From(claim, Revision(candidate, 1), 0),
             DraftedRun(runId, candidate), default));
 
         Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, Assert.IsType<PostgresException>(failure.InnerException).SqlState);

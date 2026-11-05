@@ -24,11 +24,13 @@ internal static class ActionDraftRows
         if (await HasNewerCandidateAsync(db, candidate, cancellationToken)) return ActionDraftErrorCodes.SupersededByNewerCandidate;
         var draft = await db.Set<ActionDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return ActionDraftErrorCodes.RevisionConflict;
-        if (draft is not null && draft.ReviewStateVersion != readStateVersion && await HasPersonDecisionAsync(db, draft, cancellationToken))
+        if (draft?.ReviewStatus == ReviewStatus.Rejected)
         {
             if (revision.CandidateId != draft.CandidateId) draft.RefusedCandidateId = revision.CandidateId;
             return ActionDraftErrorCodes.RecordRejected;
         }
+        if (draft is not null && revision.CandidateId == draft.CandidateId && await HasPersonDecisionAfterAsync(db, draft, readStateVersion, cancellationToken))
+            return ActionDraftErrorCodes.RecordRejected;
         if (draft is null) db.Add(draft = NewDraft(revision));
         var records = PostgresActionReviewStore.Records;
         await records.AppendCodeApprovedAsync(db, draft, revision, ActionRevisionRows.Create(revision, runId, codeVersion), await records.ReadCycleAsync(db, draft, cancellationToken),
@@ -36,18 +38,24 @@ internal static class ActionDraftRows
         return null;
     }
 
-    /// <summary>The decisions of a person that end a model revision: Approve, Request changes, and Reject. A withdrawal and a code approval are not among them.</summary>
-    private static readonly ReviewDecisionKind[] FinalKinds = [ReviewDecisionKind.Approve, ReviewDecisionKind.RequestChanges, ReviewDecisionKind.Reject];
+    /// <summary>The drafts with a person final decision on the current revision. A later revision supersedes the decision, so the draft is not listed then.
+    /// The stale query reads this rule.</summary>
+    internal static IQueryable<ActionDraftRow> DraftsWithPersonDecision(CollectionAttemptDbContext db)
+    {
+        var decisions = PersonDecisionsAsNoTracking(db);
+        return db.Set<ActionDraftRow>().AsNoTracking().Where(draft => decisions.Any(decision =>
+            decision.RecordId == draft.RecordId && decision.RevisionNumber == draft.CurrentRevisionNumber));
+    }
 
-    /// <summary>The drafts with a final decision of a person on the current revision. A later revision supersedes the decision, so the draft is not listed then.
-    /// The stale query and the settlement both read this one rule.</summary>
-    internal static IQueryable<ActionDraftRow> DraftsWithPersonDecision(CollectionAttemptDbContext db) =>
-        db.Set<ActionDraftRow>().AsNoTracking().Where(draft => db.Set<ActionReviewDecisionRow>().Any(decision =>
-            decision.RecordId == draft.RecordId && decision.RevisionNumber == draft.CurrentRevisionNumber &&
-            FinalKinds.Contains(decision.Kind) && decision.ActorSubject != ReviewAuthor.CodeSubject));
+    /// <summary>True when a person final decision on the current revision came after the step read the draft. Decision rows hold the state version
+    /// that the decision made, so a later version means the person decided after the read. A withdrawal does not count.</summary>
+    private static Task<bool> HasPersonDecisionAfterAsync(CollectionAttemptDbContext db, ActionDraftRow draft, int readStateVersion,
+        CancellationToken cancellationToken) =>
+        PersonDecisionsAsNoTracking(db).AnyAsync(decision => decision.RecordId == draft.RecordId &&
+            decision.RevisionNumber == draft.CurrentRevisionNumber && decision.ReviewStateVersion > readStateVersion, cancellationToken);
 
-    private static Task<bool> HasPersonDecisionAsync(CollectionAttemptDbContext db, ActionDraftRow draft, CancellationToken cancellationToken) =>
-        DraftsWithPersonDecision(db).AnyAsync(decided => decided.RecordId == draft.RecordId, cancellationToken);
+    private static IQueryable<ActionReviewDecisionRow> PersonDecisionsAsNoTracking(CollectionAttemptDbContext db) =>
+        db.Set<ActionReviewDecisionRow>().AsNoTracking().Where(PersonFinalDecisions.Match<ActionReviewDecisionRow>());
 
     public static Task<int> ReadStateVersionAsync(CollectionAttemptDbContext db, string recordId, CancellationToken cancellationToken) =>
         db.Set<ActionDraftRow>().AsNoTracking().Where(draft => draft.RecordId == recordId).Select(draft => draft.ReviewStateVersion)

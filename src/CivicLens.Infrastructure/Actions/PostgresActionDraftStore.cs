@@ -57,14 +57,15 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         var revisions = await StoredJobDefinition.LoadRevisionsAsync(db, [row.ConfigurationRevisionId], cancellationToken);
         var candidate = new ActionDraftCandidate(row.CandidateId, recordId, row.SourceId, row.Congress, row.BillType, row.BillNumber,
             new DateTimeOffset(row.UpdateDateUtcTicks, TimeSpan.Zero), row.IncludesSummaries, row.IncludesSubjects);
+        // The version is read first. A decision that lands after this read has a higher version, so the append refuses a stale-only redraft over it.
+        var readStateVersion = await ActionDraftRows.ReadStateVersionAsync(db, recordId, cancellationToken);
         var current = await ActionDraftRows.ReadCurrentAsync(db, recordId, cancellationToken);
         var hasNewerCandidate = await ActionDraftRows.HasNewerCandidateAsync(db, candidate, cancellationToken);
         var hasStaleDraft = current is not null && !hasNewerCandidate &&
             (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId);
         return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId), await ReadPagesAsync(db, row.DetailJobId, row.IncludesSummaries, row.IncludesSubjects, cancellationToken),
-            current, hasNewerCandidate, hasStaleDraft, await ActionDraftRows.IsRejectedAsync(db, recordId, cancellationToken),
-            withBillText ? await ReadBillTextAsync(db, row.DetailJobId, cancellationToken) : null,
-            await ActionDraftRows.ReadStateVersionAsync(db, recordId, cancellationToken));
+            current, hasNewerCandidate, hasStaleDraft, await ActionDraftRows.IsRejectedAsync(db, recordId, cancellationToken), readStateVersion,
+            withBillText ? await ReadBillTextAsync(db, row.DetailJobId, cancellationToken) : null);
     }
 
     public async Task<string?> NewestCandidateIdAsync(CongressBillListItem bill, CancellationToken cancellationToken)
