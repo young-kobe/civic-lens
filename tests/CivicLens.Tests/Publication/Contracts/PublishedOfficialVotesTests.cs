@@ -103,6 +103,19 @@ public sealed class PublishedOfficialVotesTests
         Assert.Equal(side, PublishedOfficialVote.SideOf(cast));
     }
 
+    [Theory]
+    [InlineData("Yea", "Yes (Yea)")]
+    [InlineData("Aye", "Yes (Aye)")]
+    [InlineData("Nay", "No (Nay)")]
+    [InlineData("No", "No")]
+    [InlineData("Present", "Present")]
+    [InlineData("Not Voting", "Not Voting")]
+    [InlineData("Pelosi", "Pelosi")]
+    public void ACastReadsPlainFirstWithTheSourceWordInBracketsAndEveryOtherCastKeepsTheSourceWord(string cast, string word)
+    {
+        Assert.Equal(word, PublishedOfficialVote.CastWord(cast));
+    }
+
     [Fact]
     public void AnUndefinedKindIsRefused()
     {

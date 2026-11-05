@@ -44,6 +44,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new SearchIndex(reader));
         builder.Services.AddSingleton(new ActiveReleaseReader(views));
         builder.Services.AddSingleton(new VoteStore(views));
+        builder.Services.AddSingleton(new MemberVoteStore(views));
         builder.Services.AddSingleton(new BillStore(views));
         builder.Services.AddSingleton(new ZipDistrictStore(views));
         builder.Services.AddSingleton(new ReportStore(writer, options));
@@ -77,6 +78,7 @@ public static class PublicApiApp
         app.UseRateLimiter();
         app.MapRelease();
         app.MapVotes();
+        app.MapMemberVotes();
         app.MapBills();
         app.MapZipDistricts();
         app.MapSearch();

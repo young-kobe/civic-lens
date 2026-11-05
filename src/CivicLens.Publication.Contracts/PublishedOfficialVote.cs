@@ -41,6 +41,17 @@ public sealed record PublishedOfficialVote
         _ => null
     };
 
+    /// <summary>The cast for a reader: the plain word first, then the source word in brackets, as in "Yes (Aye)". A source word that is the plain word shows once.
+    /// Any other cast stays as the source gives it.</summary>
+    public static string CastWord(string cast) => SideOf(cast) switch
+    {
+        PublishedPartyMajority.Yea => WithSource("Yes", cast),
+        PublishedPartyMajority.Nay => WithSource(No, cast),
+        _ => cast
+    };
+
+    private static string WithSource(string plain, string source) => plain == source ? plain : $"{plain} ({source})";
+
     public static bool IsCandidate(string cast) => SideOf(cast) is null && cast is not (Present or NotVoting);
 
     public static PublishedOfficialVote Of(PublishedVote vote, PublishedMemberVote member) => new()
