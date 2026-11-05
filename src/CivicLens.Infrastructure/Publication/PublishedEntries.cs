@@ -77,20 +77,21 @@ internal static class PublishedEntries
         var created = rows.Select(row => (row.Kind, row.RecordId, row.RevisionNumber)).ToHashSet();
         var createdEntries = entries.Where(entry => created.Contains(KeyOf(entry))).ToList();
         await InsertChildrenAsync(db, createdEntries, cancellationToken);
-        await RequireSameAsync(db, [.. entries.Except(createdEntries)], conflictAdvice, cancellationToken);
+        await FillBillLinesAsync(db, [.. entries.Except(createdEntries)], conflictAdvice, cancellationToken);
         return createdEntries.Count;
     }
 
     /// <summary>
     /// Writes the bill line of action rows that hold none. This is the only update of an entry row. A row that holds a line stays as it is, and
-    /// <see cref="RequireSameAsync"/> then refuses a line that differs.
+    /// <see cref="RequireSameAsync"/> then refuses a line that differs. The insert calls it for the rows that already exist.
     /// </summary>
     public static async Task<int> FillBillLinesAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,
         string conflictAdvice, CancellationToken cancellationToken)
     {
         if (entries.Count == 0) return 0;
-        var filled = await db.Database.ExecuteSqlRawAsync(FillBillLines, [.. KeyArrays(entries.Select(KeyOf)), entries.Select(entry => entry.BillLine).ToArray()],
-            cancellationToken);
+        var withLine = entries.Where(entry => entry.BillLine is not null).ToArray();
+        var filled = withLine.Length == 0 ? 0 : await db.Database.ExecuteSqlRawAsync(FillBillLines,
+            [.. KeyArrays(withLine.Select(KeyOf)), withLine.Select(entry => entry.BillLine).ToArray()], cancellationToken);
         await RequireSameAsync(db, [.. entries], conflictAdvice, cancellationToken);
         return filled;
     }

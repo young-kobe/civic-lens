@@ -242,6 +242,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         await PublishedRecords.InsertAsync(db, firstPublications, cancellationToken);
         await PublishedRecords.RequireStoredTimesAsync(db, firstPublications, cancellationToken);
         await PublishedEntries.InsertAsync(db, commit.AddedEntries, "Rebuild the release.", cancellationToken);
+        await PublishedEntries.FillBillLinesAsync(db, commit.RewrittenEntries, "Rebuild the release.", cancellationToken);
         await PublicationWithdrawalRows.RecordAsync(db, commit, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return summary;

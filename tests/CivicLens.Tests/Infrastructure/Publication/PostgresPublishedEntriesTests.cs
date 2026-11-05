@@ -101,6 +101,61 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task APublishOfAnOlderActionRevisionAgainWithABillLineSucceedsAndFillsTheRowBecauseTheRowHoldsNoLine()
+    {
+        await SeedActionAsync(A);
+        await CommitAsync(1, null, PublishedEntryFixtures.Action(A, First));
+
+        await CommitAsync(2, 1, PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds rent aid." });
+
+        Assert.Equal(["1", "2"], await ReadAsync("SELECT release_number FROM publication_releases ORDER BY 1"));
+        Assert.Equal(["This bill funds rent aid."], await ReadAsync("SELECT bill_line FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task AReturnedActionWhoseRowHoldsNoLineIsPublishedAgainAndFillsTheRowBecauseAWithdrawalKeepsTheRow()
+    {
+        await SeedActionAsync(A);
+        await CommitAsync(1, null, PublishedEntryFixtures.Action(A, First));
+        await ExecuteAsync($"UPDATE action_drafts SET review_status = 'ApprovalWithdrawn' WHERE record_id = '{A}'");
+        await publications.CommitAsync("auth0|owner", new PublicationCommit(2, 1, $"000002-{Guid.NewGuid():N}", [], [])
+        {
+            Withdrawals = [],
+            WithdrawnRecords = [new PublishedRecordReference(PublishedRecordKind.Action, A)],
+            Names = ReleaseNameFixtures.None
+        }, "key-withdraw", new string('1', 64), default);
+        await ExecuteAsync($"UPDATE action_drafts SET review_status = 'Approved' WHERE record_id = '{A}'");
+
+        await CommitAsync(3, 2, PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds rent aid." });
+
+        Assert.Equal(["1", "2", "3"], await ReadAsync("SELECT release_number FROM publication_releases ORDER BY 1"));
+        Assert.Equal(["This bill funds rent aid."], await ReadAsync("SELECT bill_line FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task ARewrittenCarriedActionFillsAnEmptyRowInTheCommitBecauseTheRewriteGivesActionsTheirLine()
+    {
+        await SeedActionAsync(A);
+        await CommitAsync(1, null, PublishedEntryFixtures.Action(A, First));
+
+        await CommitRewrittenAsync(2, 1, PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds rent aid." });
+
+        Assert.Equal(["This bill funds rent aid."], await ReadAsync("SELECT bill_line FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task ARewrittenCarriedActionWithAnotherLineThanTheRowConflictsAndWritesNoReleaseBecauseTheLineIsWrittenOnce()
+    {
+        await SeedActionAsync(A);
+        await CommitAsync(1, null, PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds rent aid." });
+
+        await Assert.ThrowsAsync<PublicationConflictException>(() =>
+            CommitRewrittenAsync(2, 1, PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds school meals." }));
+
+        Assert.Equal(["1"], await ReadAsync("SELECT release_number FROM publication_releases ORDER BY 1"));
+    }
+
+    [Fact]
     public async Task TheFillWritesTheBillLineOfARowThatHoldsNoneAndLeavesTheOtherFactsAsTheyAre()
     {
         await SeedActionAsync(A);
@@ -420,6 +475,15 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
             Names = ReleaseNameFixtures.None
         },
             $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
+
+    private Task CommitRewrittenAsync(int number, int baseNumber, PublishedRecordEntry entry) =>
+        publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
+            [PublishedRevisionBinding.Of(entry)], [])
+        {
+            Withdrawals = [],
+            RewrittenEntries = [entry],
+            Names = ReleaseNameFixtures.None
+        }, $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
 
     private async Task SeedActionAsync(params string[] ids)
     {

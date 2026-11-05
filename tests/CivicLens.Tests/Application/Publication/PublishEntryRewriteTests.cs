@@ -96,6 +96,20 @@ public sealed class PublishEntryRewriteTests
     }
 
     [Fact]
+    public async Task TheRewriteOptionHandsTheRewrittenCarriedActionsToTheCommitBecauseTheTableMustFillTheirRowsInTheSameTransaction()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('b', summaryText: "This bill funds rent aid.");
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true });
+
+        var rewritten = Assert.Single(scenario.Publications.LastCommit!.RewrittenEntries);
+        Assert.Equal((PublishedRecordKind.Action, "This bill funds rent aid."), (rewritten.Kind, rewritten.BillLine));
+    }
+
+    [Fact]
     public async Task TheRewriteOptionKeepsTheSameBillLineOfACarriedEntryThatHoldsOne()
     {
         var scenario = new PublicationScenario();

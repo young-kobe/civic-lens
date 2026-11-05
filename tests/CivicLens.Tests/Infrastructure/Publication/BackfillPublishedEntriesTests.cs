@@ -148,6 +148,22 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task TheBillLineFillWritesEveryRowOfMoreThanOneBatchBecauseEachBatchOf25IsItsOwnTransaction()
+    {
+        var actions = await SeedActionsAsync(26);
+        await AddReleasesAsync(2);
+        foreach (var action in actions) await AddRangeAsync(action, 1, null);
+        Keep(1, [.. actions.Select(action => Listed(action))]);
+        await RunAsync(100);
+        Keep(2, [.. actions.Select(action => Listed(action, action.ToEntry() with { BillLine = Line }))]);
+
+        var result = await RunAsync(100);
+
+        Assert.Equal((0, 26, 0), (result.Added, result.BillLinesFilled, result.Skipped));
+        Assert.Equal(["26"], await ReadAsync($"SELECT count(*) FROM published_entries WHERE bill_line = '{Line}'"));
+    }
+
+    [Fact]
     public async Task ARowThatHoldsABillLineIsNeverChangedAndNoManifestIsReadForItBecauseTheLineIsWrittenOnce()
     {
         var action = await SeedActionAsync('a');
