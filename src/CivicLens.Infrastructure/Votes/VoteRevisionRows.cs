@@ -58,7 +58,7 @@ internal static class VoteRevisionRows
         row.SubjectsHash = revision.SubjectsHash;
         row.IssueCandidatesRecorded = !revision.IssueCandidateIds.IsDefault;
         row.Question = VoteFacts.QuestionOf(revision.Facts);
-        row.Result = VoteFacts.ResultOf(revision.Facts);
+        row.Result = VoteFacts.ResultOf(revision.RecordId, revision.Facts);
         row.Facts = [.. revision.Facts.Select((fact, position) => FactRow(revision, fact, position))];
         row.Issues = [.. IssueIds(revision).Select((issueId, position) => IssueRow(revision, issueId, position))];
     }

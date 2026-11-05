@@ -17,7 +17,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         WHERE f.record_id = r.record_id AND f.revision_number = r.revision_number AND starts_with(f.fact_text, 'Result: ')) <> 1
                 ORDER BY r.record_id, r.revision_number LIMIT 1;
                 IF bad IS NOT NULL THEN
-                    RAISE EXCEPTION 'Cannot fill result: vote revision % needs exactly one Result fact', bad;
+                    RAISE EXCEPTION 'Cannot fill result: vote revision % needs exactly one Result fact. Run votes revisions backfill and votes revisions verify with the previous build first', bad;
                 END IF;
             END
             $check$
@@ -112,6 +112,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql("LOCK TABLE vote_revisions, vote_revision_facts IN ACCESS EXCLUSIVE MODE");
+            migrationBuilder.Sql(CheckSql);
 
             migrationBuilder.AddColumn<string>(
                 name: "question",
@@ -128,7 +129,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 nullable: false,
                 defaultValue: "");
 
-            migrationBuilder.Sql(CheckSql);
             migrationBuilder.Sql(FillSql);
             migrationBuilder.Sql("ALTER TABLE vote_revisions ALTER COLUMN result DROP DEFAULT");
             migrationBuilder.Sql(UpViewSql);

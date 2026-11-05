@@ -38,6 +38,8 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.TooManyMembers, cancellationToken);
         if (snapshot.Facts.Length > VoteDraftRevision.MaximumFacts || snapshot.Facts.Any(fact => fact.Text.Length > VoteDraftRevision.MaximumFactLength))
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.FactTooLong, cancellationToken);
+        if (VoteFacts.Find(snapshot.Facts, VoteFactPrefixes.Result) is null)
+            return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.NoResult, cancellationToken);
         if (HasTooLongField(evidence, snapshot))
             return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.FieldTooLong, cancellationToken);
         var context = new VoteDraftContext(evidence, snapshot, choice, issues.Id);

@@ -44,7 +44,7 @@ internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
             KindCitation = revision.KindCitation is { } kind ? Cite(kind) : null,
             VotedOn = revision.VotedOn,
             VotedOnCitation = Cite(revision.VotedOnCitation),
-            Result = VoteFacts.ResultOf(revision.Facts),
+            Result = VoteFacts.ResultOf(revision.RecordId, revision.Facts),
             Totals = tally.Totals,
             PartyMajorities = tally.PartyMajorities,
             Facts = [.. revision.Facts.Select(fact => new PublishedVoteFact { Text = fact.Text, Citation = Cite(fact.Citation) })],

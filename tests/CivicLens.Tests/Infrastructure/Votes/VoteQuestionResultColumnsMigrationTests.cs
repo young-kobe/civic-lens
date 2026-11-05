@@ -30,7 +30,7 @@ public sealed class VoteQuestionResultColumnsMigrationTests(PostgresCollection p
     public async Task TheFillGivesWhatTheOldPrefixMatchGaveBecauseThePublicValuesMustNotChange()
     {
         await InsertDraftAsync();
-        await InsertRevisionAsync(1, "Started: 2025-04-10", "Vote title: Question: not the question", "Question: First", "Question: Second", "Result: Passed");
+        await InsertRevisionAsync(1, "Started: 2025-04-10", "Vote title: Question: not the question", "Question: First", "Question: Second", "result: lower", " Result: spaced", "Result: Passed");
         await InsertRevisionAsync(2, "Result: Failed", "Count: Yea 1");
         await InsertRevisionAsync(3, "Result: Agreed to: by voice", "Question: On the Motion");
 

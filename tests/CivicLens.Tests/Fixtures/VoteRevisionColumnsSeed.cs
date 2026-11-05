@@ -92,7 +92,7 @@ internal static class VoteRevisionColumnsSeed
             ("seed_subjects_hash", Db(vote.SubjectsHash)),
             ("seed_issue_candidates_recorded", !vote.IssueCandidateIds.IsDefault),
             ("seed_question", Db(VoteFacts.QuestionOf(vote.Facts))),
-            ("seed_result", VoteFacts.ResultOf(vote.Facts)),
+            ("seed_result", VoteFacts.ResultOf(vote.RecordId, vote.Facts)),
             ("seed_record", vote.RecordId),
             ("seed_number", vote.RevisionNumber),
             ("seed_fact_positions", Enumerable.Range(0, vote.Facts.Length).Select(position => (short)position).ToArray()),

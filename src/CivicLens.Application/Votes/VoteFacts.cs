@@ -14,6 +14,6 @@ public static class VoteFacts
 
     public static string? QuestionOf(ImmutableArray<VoteFact> facts) => ValueOf(facts, VoteFactPrefixes.Question);
 
-    public static string ResultOf(ImmutableArray<VoteFact> facts) =>
-        ValueOf(facts, VoteFactPrefixes.Result) ?? throw new ArgumentException("A vote needs a result line.", nameof(facts));
+    public static string ResultOf(string recordId, ImmutableArray<VoteFact> facts) =>
+        ValueOf(facts, VoteFactPrefixes.Result) ?? throw new ArgumentException($"Vote {recordId} has no result line.", nameof(facts));
 }

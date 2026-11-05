@@ -15,7 +15,7 @@ public sealed class VoteFactsTests
         var facts = Facts("Started: 2025-04-10", "Vote title: Question: not the question", "Question: First", "Question: Second", "Result: Passed", "Result: Later");
 
         Assert.Equal("First", VoteFacts.QuestionOf(facts));
-        Assert.Equal("Passed", VoteFacts.ResultOf(facts));
+        Assert.Equal("Passed", VoteFacts.ResultOf("record-1", facts));
     }
 
     [Fact]
@@ -27,6 +27,16 @@ public sealed class VoteFactsTests
     [Fact]
     public void AVoteWithNoResultLineIsRefusedBecauseEveryPublishedVoteNeedsOne()
     {
-        Assert.Throws<ArgumentException>(() => VoteFacts.ResultOf(Facts("Question: On Passage")));
+        var failure = Assert.Throws<ArgumentException>(() => VoteFacts.ResultOf("record-1", Facts("Question: On Passage")));
+
+        Assert.Contains("record-1", failure.Message);
+    }
+
+    [Theory]
+    [InlineData("result: Passed")]
+    [InlineData(" Result: Passed")]
+    public void APrefixInOtherCaseOrAfterASpaceIsNoMatchBecauseTheSavedLinesStartExactlyWithThePrefix(string text)
+    {
+        Assert.Null(VoteFacts.ValueOf(Facts(text), VoteFactPrefixes.Result));
     }
 }

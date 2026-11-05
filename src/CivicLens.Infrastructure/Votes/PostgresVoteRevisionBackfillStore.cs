@@ -1,4 +1,5 @@
 using CivicLens.Application.Review;
+using CivicLens.Application.Votes;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
@@ -53,6 +54,7 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
         {
             return (null, RevisionBackfillReasons.InvalidShape);
         }
+        if (VoteFacts.Find(revision.Facts, VoteFactPrefixes.Result) is null) return (null, RevisionBackfillReasons.InvalidShape);
         if (RevisionBackfillReasons.HasDuplicates(revision.TrackedIssueIds) || !revision.IssueCandidateIds.IsDefault && RevisionBackfillReasons.HasDuplicates(revision.IssueCandidateIds))
             return (null, RevisionBackfillReasons.DuplicateIssueId);
         return (revision, null);
