@@ -616,11 +616,11 @@ public sealed partial class PostgresBillStreamTests
         var candidate = await CandidateWithoutSummariesAsync();
         await SettleAsync(candidate, Revision(candidate, 1));
         _ = await InsertRunAsync(candidate, ActionDraftTask.PromptVersion, DateTimeOffset.UnixEpoch.UtcTicks + 1);
-        Assert.False((await ActionStore().ReadEvidenceAsync(candidate, false, default))!.HasOlderPromptDraft);
+        Assert.False((await ActionStore().ReadEvidenceAsync(candidate, false, default))!.HasStaleDraft);
 
         _ = await InsertRunAsync(candidate, "action-draft-prompt-v1", DateTimeOffset.UnixEpoch.UtcTicks + 2);
 
-        Assert.True((await ActionStore().ReadEvidenceAsync(candidate, false, default))!.HasOlderPromptDraft);
+        Assert.True((await ActionStore().ReadEvidenceAsync(candidate, false, default))!.HasStaleDraft);
     }
 
     [Theory]

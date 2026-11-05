@@ -162,8 +162,9 @@ public sealed partial class PostgresHouseVoteTests
             INSERT INTO vote_drafts (record_id, source_id, chamber, congress, session_number, roll_call_number, current_revision_number, review_state_version,
                 review_status, created_at_utc_ticks, last_revised_at_utc_ticks, candidate_id)
             VALUES ('{recordId}', '{HouseVoteFixtures.SourceId}', 'House', 119, 1, 100, 1, 0, 'AwaitingReview', 0, 0, '{candidate}');
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks, result)
-            VALUES ('{recordId}', 1, 'auth0|editor', 'Person', NULL, 'x', 0, '')
+            SET session_replication_role = replica;
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, created_at_utc_ticks, {VoteRevisionColumnsSeed.RequiredColumns})
+            VALUES ('{recordId}', 1, 'auth0|editor', 'Person', NULL, 0, {VoteRevisionColumnsSeed.PlaceholderValues})
             """);
 
         Assert.True(await store.CheckpointAsync(VoteDraftCheckpoint.From(claim, revision), DraftedRun(runId, candidate), default));
@@ -218,12 +219,14 @@ public sealed partial class PostgresHouseVoteTests
             """);
 
         var withoutRun = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"""
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks, result)
-            VALUES ('{recordId}', 1, 'civic-lens:analysis', 'Analysis', NULL, 'x', 0, '')
+            SET session_replication_role = replica;
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, created_at_utc_ticks, {VoteRevisionColumnsSeed.RequiredColumns})
+            VALUES ('{recordId}', 1, 'civic-lens:analysis', 'Analysis', NULL, 0, {VoteRevisionColumnsSeed.PlaceholderValues})
             """));
         var personWithRun = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"""
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks, result)
-            VALUES ('{recordId}', 1, 'auth0|editor', 'Person', '{new string('1', 32)}', 'x', 0, '')
+            SET session_replication_role = replica;
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, created_at_utc_ticks, {VoteRevisionColumnsSeed.RequiredColumns})
+            VALUES ('{recordId}', 1, 'auth0|editor', 'Person', '{new string('1', 32)}', 0, {VoteRevisionColumnsSeed.PlaceholderValues})
             """));
 
         Assert.Equal([PostgresErrorCodes.CheckViolation, PostgresErrorCodes.CheckViolation], [withoutRun.SqlState, personWithRun.SqlState]);
@@ -359,12 +362,12 @@ public sealed partial class PostgresHouseVoteTests
     [Theory]
     [InlineData("vote-draft-prompt-v1", true)]
     [InlineData(VoteDraftTask.PromptVersion, false)]
-    public async Task TheEvidenceNamesAnOlderPromptOnlyWhenTheNewestDraftRunUsedOneSoARerunSpendsNothingAfterTheRedraft(string prompt, bool older)
+    public async Task TheEvidenceFlagsAStaleDraftOnlyWhenTheNewestDraftRunUsedOneSoARerunSpendsNothingAfterTheRedraft(string prompt, bool stale)
     {
         var candidate = await PendingCandidateAsync();
         await InsertRunAsync(candidate, prompt, 1);
 
-        Assert.Equal(older, (await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
+        Assert.Equal(stale, (await VoteStore().ReadEvidenceAsync(candidate, default))!.HasStaleDraft);
     }
 
     [Fact]
@@ -373,7 +376,7 @@ public sealed partial class PostgresHouseVoteTests
         var candidate = await PendingCandidateAsync();
         await SettleAsync(candidate, await RevisionAsync(candidate, 1));
 
-        Assert.False((await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
+        Assert.False((await VoteStore().ReadEvidenceAsync(candidate, default))!.HasStaleDraft);
         Assert.Equal(0, await VoteStore().RequeueStaleAsync(default));
     }
 
@@ -394,7 +397,7 @@ public sealed partial class PostgresHouseVoteTests
         else if (change != "none")
             await ExecuteAsync($"UPDATE vote_drafts SET review_status = '{change}'");
 
-        Assert.Equal(requeued == 1, (await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
+        Assert.Equal(requeued == 1, (await VoteStore().ReadEvidenceAsync(candidate, default))!.HasStaleDraft);
         Assert.Equal(requeued, await VoteStore().RequeueStaleAsync(default));
     }
 
@@ -405,7 +408,7 @@ public sealed partial class PostgresHouseVoteTests
         await InsertRunAsync(older, "vote-draft-prompt-v1", 1);
         await PendingCandidateAsync(Updated.AddDays(1));
 
-        Assert.False((await VoteStore().ReadEvidenceAsync(older, default))!.DraftedUnderOlderPrompt);
+        Assert.False((await VoteStore().ReadEvidenceAsync(older, default))!.HasStaleDraft);
     }
 
     [Fact]

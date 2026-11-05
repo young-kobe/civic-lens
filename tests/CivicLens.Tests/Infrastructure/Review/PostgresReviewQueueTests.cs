@@ -137,7 +137,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
     public async Task OneRecordWhoseStoredRevisionCannotBeReadIsMarkedUnreadableAndTheOtherRowsStillLoad()
     {
         await SeedThreeKindsAsync();
-        await seeder.ExecuteAsync($"UPDATE vote_revisions SET {VoteRevisionColumnsSeed.NullColumns} WHERE record_id = @id", ("id", VoteId));
+        await seeder.ExecuteAsync(VoteRevisionColumnsSeed.RemoveMemberEntries, ("id", VoteId));
 
         var page = await store.ListAsync(null, 10, default);
 
@@ -176,7 +176,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
     public async Task ADatabaseFailureWhileReadingTheRevisionRowsReachesTheCallerEvenWhenItsTypeIsOneOfTheUnreadableDataTypes()
     {
         await SeedThreeKindsAsync();
-        await seeder.ExecuteAsync($"UPDATE vote_revisions SET {VoteRevisionColumnsSeed.NullColumns} WHERE record_id = @id", ("id", VoteId));
+        await seeder.ExecuteAsync(VoteRevisionColumnsSeed.RemoveMemberEntries, ("id", VoteId));
         var failure = new InvalidOperationException("The database failed.");
         var counter = new RevisionQueryInterceptor("vote_revisions", failure);
         var counted = CountedStore(counter);
@@ -192,7 +192,7 @@ public sealed class PostgresReviewQueueTests(PostgresCollection postgres) : IAsy
         await SeedThreeKindsAsync();
         var counter = new RevisionQueryInterceptor("no_such_table", null);
         var counted = CountedStore(counter);
-        await seeder.ExecuteAsync($"UPDATE vote_revisions SET {VoteRevisionColumnsSeed.NullColumns} WHERE record_id = @id", ("id", VoteId));
+        await seeder.ExecuteAsync(VoteRevisionColumnsSeed.RemoveMemberEntries, ("id", VoteId));
         await counted.ListAsync(null, 10, default);
         counter.QueryCount = 0;
 

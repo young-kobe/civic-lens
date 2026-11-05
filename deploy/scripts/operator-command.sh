@@ -96,14 +96,6 @@ case "$*" in
     ;;
   # usage: relationships revisions verify
   "relationships revisions verify") "$compose" run --rm cli relationships revisions verify ;;
-  # usage: votes revisions backfill <count>
-  "votes revisions backfill "*)
-    [[ $# -eq 4 ]] || refuse
-    number "$4"
-    "$compose" run --rm cli votes revisions backfill "$4"
-    ;;
-  # usage: votes revisions verify
-  "votes revisions verify") "$compose" run --rm cli votes revisions verify ;;
   # usage: statements revisions backfill <count>
   "statements revisions backfill "*)
     [[ $# -eq 4 ]] || refuse

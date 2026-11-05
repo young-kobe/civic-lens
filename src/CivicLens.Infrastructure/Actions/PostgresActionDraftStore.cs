@@ -59,10 +59,10 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
             new DateTimeOffset(row.UpdateDateUtcTicks, TimeSpan.Zero), row.IncludesSummaries, row.IncludesSubjects);
         var current = await ActionDraftRows.ReadCurrentAsync(db, recordId, cancellationToken);
         var hasNewerCandidate = await ActionDraftRows.HasNewerCandidateAsync(db, candidate, cancellationToken);
-        var hasOlderPromptDraft = current is not null && !hasNewerCandidate &&
+        var hasStaleDraft = current is not null && !hasNewerCandidate &&
             (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId);
         return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId), await ReadPagesAsync(db, row.DetailJobId, row.IncludesSummaries, row.IncludesSubjects, cancellationToken),
-            current, hasNewerCandidate, hasOlderPromptDraft, await ActionDraftRows.IsRejectedAsync(db, recordId, cancellationToken),
+            current, hasNewerCandidate, hasStaleDraft, await ActionDraftRows.IsRejectedAsync(db, recordId, cancellationToken),
             withBillText ? await ReadBillTextAsync(db, row.DetailJobId, cancellationToken) : null);
     }
 
