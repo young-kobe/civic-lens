@@ -12,6 +12,8 @@ public static class VoteFacts
     public static string? ValueOf(ImmutableArray<VoteFact> facts, string prefix) =>
         Find(facts, prefix)?.Text[prefix.Length..];
 
+    public static bool HasResult(ImmutableArray<VoteFact> facts) => Find(facts, VoteFactPrefixes.Result) is not null;
+
     public static string? QuestionOf(ImmutableArray<VoteFact> facts) => ValueOf(facts, VoteFactPrefixes.Question);
 
     public static string ResultOf(string recordId, ImmutableArray<VoteFact> facts) =>

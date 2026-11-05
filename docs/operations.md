@@ -704,7 +704,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- vo
 
 `verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. It prints `checked`, `legacy`, `mismatched`, and the first 20 mismatches as record ID, revision number, and JSON key names. It never prints text. The exit code is 1 while `legacy` or `mismatched` is above 0. One absence passes: a missing `source` key on a revision of the source `congress-house-votes`. Any other difference fails.
 
-Run order: `backfill`, then `verify`. Run the new code only when `verify` exits 0, so `legacy` and `mismatched` are both 0. Every reader fails on a row with null columns. `verify` must exit 0 before the release that adds the `question` and `result` columns migrates. That migration stops when any revision lacks exactly one Result fact row.
+Run order: `backfill`, then `verify`. Run the new code only when `verify` exits 0, so `legacy` and `mismatched` are both 0. Every reader fails on a row with null columns. `verify` must exit 0 before the release that adds the `question` and `result` columns migrates. That migration stops when any revision lacks exactly one Result fact row. No command repairs such a row. The backfill skips a revision with no Result fact, and a revision with two Result facts passes `verify`. If the migration names a revision, stop and give its ID to the owner.
 
 ### Action revision backfill
 

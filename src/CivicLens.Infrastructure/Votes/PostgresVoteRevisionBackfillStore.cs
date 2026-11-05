@@ -54,7 +54,7 @@ public sealed class PostgresVoteRevisionBackfillStore(IDbContextFactory<Collecti
         {
             return (null, RevisionBackfillReasons.InvalidShape);
         }
-        if (VoteFacts.Find(revision.Facts, VoteFactPrefixes.Result) is null) return (null, RevisionBackfillReasons.InvalidShape);
+        if (!VoteFacts.HasResult(revision.Facts)) return (null, RevisionBackfillReasons.InvalidShape);
         if (RevisionBackfillReasons.HasDuplicates(revision.TrackedIssueIds) || !revision.IssueCandidateIds.IsDefault && RevisionBackfillReasons.HasDuplicates(revision.IssueCandidateIds))
             return (null, RevisionBackfillReasons.DuplicateIssueId);
         return (revision, null);
