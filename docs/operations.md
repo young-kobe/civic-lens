@@ -177,6 +177,15 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- bi
 
 The limit is 100 when you give none. The command prints `examined`, `recorded`, and `failed`. A bill whose saved detail capture is missing or unreadable counts as failed and stays unread, so it is listed again each run. Run it until `examined` is 0 or equals `failed`. If `failed` reaches the limit, raise the limit, because failed bills stay ahead of the later bills. A capture that has no usable `latestAction` is recorded with no status. After the backfill, the worker publishes the status release on its next tick. You can also run `releases publish <idempotency-key>` with no record. The publish writes `bill-status.json` and every action page that now has a status. The [bill status line](architecture/publication.md#bill-status-line) holds the rules. The first status release writes again one page for each action that has a status, and it holds them all in memory until staging. Count the actions with a status and check the free memory of the worker box first.
 
+After the bill text source exists, bills that the gate saw earlier have no text read. The owner command below adds a text versions job for the newest version of each bill that has no Congress.gov summary and no text read. It needs the three variables of the subjects command. It also needs `CIVIC_LENS_COLLECTION_CONFIG` for a configuration where `congress-bill-text` has `enabled` set to `true`. The new jobs use that configuration, not the configuration of the old detail jobs.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- bills text backfill 100
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- bills text backfill --bills config/action-text-measure-bills.json
+```
+
+The limit is 100 when you give none. The second form handles only the bills of the file, for example the 20 bills of `actions text measure`. The IDs follow the rules of that command. A bad or repeated ID stops the run before any job is admitted. The command prints `pendingActionDrafts`, `examined`, and `admitted`. If an action draft job is queued or leased, `pendingActionDrafts` is above 0, the command admits nothing, and it exits with code 1. Check `actions draft status`, wait until the drafts end, and run the command again. A rerun admits no second job for a bill. A bill whose job has not run yet is examined again and not counted as admitted. The worker fetches the text. Run the command again after it has finished, to admit the next bills. A failed versions job stays in the list and holds a place before the later bills. [Bills](architecture/bills.md#text-backfill) holds the rules.
+
 ### Federal Register stream
 
 The source `federal-register-documents` in `config/federal-coverage.json` follows the presidential documents of the Federal Register. It ships with `enabled: false`. It needs no key and no roster. [Executive actions](architecture/executive-actions.md) holds the design. To enable it:
