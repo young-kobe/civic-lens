@@ -8,7 +8,8 @@ using Microsoft.EntityFrameworkCore;
 namespace CivicLens.Infrastructure.Analysis;
 
 /// <summary>Finds the document change drafts that a model redraft may replace. The rule has three parts. The current revision
-/// is a model revision. No person has written a revision or decided on the draft. The run of the current revision used an old version.</summary>
+/// is a model revision. No person has decided on the draft. The run of the current revision used an old version. A model revision goes only on
+/// a model revision, so a current model revision means that no person wrote a revision.</summary>
 internal static class StaleDocumentChangeDrafts
 {
     public static async Task<Dictionary<string, DocumentChangeModelDraft>> FindAsync(CollectionAttemptDbContext db, string[] comparisonIds,
@@ -18,8 +19,7 @@ internal static class StaleDocumentChangeDrafts
                                join revision in db.Set<DocumentChangeRevisionRow>().AsNoTracking()
                                    on new { draft.DraftId, Number = draft.CurrentRevisionNumber } equals new { revision.DraftId, Number = revision.RevisionNumber }
                                where comparisonIds.Contains(draft.ComparisonId) && draft.ReviewStateVersion == 0 &&
-                                   draft.ReviewStatus == ReviewStatus.AwaitingReview && revision.AuthorKind == ReviewAuthorKind.Analysis &&
-                                   !db.Set<DocumentChangeRevisionRow>().Any(other => other.DraftId == draft.DraftId && other.AuthorKind == ReviewAuthorKind.Person)
+                                   revision.AuthorKind == ReviewAuthorKind.Analysis
                                select new { draft.ComparisonId, draft.DraftId, draft.CurrentRevisionNumber }).ToArrayAsync(cancellationToken);
         var draftIds = untouched.Select(draft => draft.DraftId).ToArray();
         var runs = await db.Set<DocumentChangeAnalysisRunRow>().AsNoTracking().Where(run => draftIds.Contains(run.DraftId!))

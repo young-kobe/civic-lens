@@ -36,7 +36,7 @@ public sealed partial class PostgresDocumentChangeAnalysisStoreTests
     [InlineData("schema_version", "document-change-draft-schema-v0", 1)]
     [InlineData("task_version", "document-change-draft-v0", 1)]
     [InlineData("prompt_version", DocumentChangeDraftTask.PromptVersion, 0)]
-    public async Task ADraftWhoseRunUsesTheCurrentVersionsIsNotRedrafted(string column, string value, int requeued)
+    public async Task OnlyADraftWhoseRunUsesAnOldVersionIsRequeued(string column, string value, int requeued)
     {
         var (comparison, _) = await DraftWithOldRunAsync(column, value);
 
@@ -100,6 +100,14 @@ public sealed partial class PostgresDocumentChangeAnalysisStoreTests
         Assert.Equal((2, Owner.Subject), (current.RevisionNumber, current.AuthorSubject));
         Assert.Equal(2L, await ScalarAsync<long>("SELECT count(*) FROM document_change_revisions"));
         Assert.Equal("DraftDiscarded", (await RunOutcomesAsync(comparison))[^1]);
+
+        await ExecuteAsync(connectionString, "UPDATE document_change_analysis SET status = 'Pending', error_code = NULL");
+        var retryModel = new FakeDocumentChangeDraftModel();
+        await Worker(retryModel).ExecuteAsync(once: true);
+
+        Assert.Empty(retryModel.Requests);
+        Assert.Equal((AnalysisState.Succeeded, DocumentChangeDraftErrorCodes.HumanDraftExists), ((await EntryAsync(comparison)).Status, (await EntryAsync(comparison)).ErrorCode));
+        Assert.Equal(2L, await ScalarAsync<long>("SELECT count(*) FROM document_change_revisions"));
     }
 
     [Fact]

@@ -65,7 +65,7 @@ case "$*" in
   # usage: worker health
   "worker health") "$compose" run --rm cli worker health ;;
   # usage: analyses redraft --stale [actions|votes|document-changes|briefs]
-  "analyses redraft --stale"|"analyses redraft --stale actions"|"analyses redraft --stale votes"|"analyses redraft --stale briefs")
+  "analyses redraft --stale"|"analyses redraft --stale actions"|"analyses redraft --stale votes"|"analyses redraft --stale document-changes"|"analyses redraft --stale briefs")
     "$compose" run --rm cli analyses redraft --stale "${@:4}"
     ;;
   # usage: bills subjects backfill <count>

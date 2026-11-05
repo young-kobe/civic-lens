@@ -3,8 +3,6 @@ using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis.Persistence;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Review;
-using CivicLens.Infrastructure.Review.Persistence;
-using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Analysis;
 
@@ -30,8 +28,7 @@ internal sealed class DocumentChangeAnalysisQueueMapping : IAnalysisQueueMapping
     public AnalysisRun WrapInterrupted(AnalysisRun run) => run;
 
     /// <summary>An analysis run links to the revision that this settlement added. A run that added none links to no revision.</summary>
-    public void AddRun(CollectionAttemptDbContext db, DocumentChangeAnalysisRow row, AnalysisRun run) =>
-        db.Add(ToRow(run, db.ChangeTracker.Entries<DocumentChangeRevisionRow>().SingleOrDefault(entry => entry.State == EntityState.Added)?.Entity));
+    public void AddRun(CollectionAttemptDbContext db, DocumentChangeAnalysisRow row, AnalysisRun run) => db.Add(ToRow(run, row.AppendedRevision));
 
     public async Task<AnalysisSettlement<AnalysisRun>> PrepareSettlementAsync(CollectionAttemptDbContext db,
         DocumentChangeAnalysisRow row, AnalysisSettlement<AnalysisRun> settlement, CancellationToken cancellationToken)
@@ -43,6 +40,7 @@ internal sealed class DocumentChangeAnalysisQueueMapping : IAnalysisQueueMapping
         if (refusal is null)
         {
             row.DraftId = revision.DraftId;
+            row.AppendedRevision = (revision.DraftId, revision.RevisionNumber);
             return settlement;
         }
         var discarded = settlement.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded };
@@ -58,7 +56,7 @@ internal sealed class DocumentChangeAnalysisQueueMapping : IAnalysisQueueMapping
         }, discarded);
     }
 
-    private static DocumentChangeAnalysisRunRow ToRow(AnalysisRun run, DocumentChangeRevisionRow? revision)
+    private static DocumentChangeAnalysisRunRow ToRow(AnalysisRun run, (string DraftId, int RevisionNumber)? revision)
     {
         var row = AnalysisRunRows.Create<DocumentChangeAnalysisRunRow>(run);
         row.DraftId = revision?.DraftId;

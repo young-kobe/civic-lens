@@ -305,7 +305,8 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
     {
         if (!ReviewAuthor.IsAnalysis(revision.AuthorSubject)) throw new InvalidOperationException("An analysis revision needs the analysis author.");
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.DocumentChangeReview, cancellationToken);
-        var draft = await db.Set<DocumentChangeDraftRow>().SingleOrDefaultAsync(row => row.ComparisonId == revision.ComparisonId, cancellationToken);
+        var draftId = await ReadDraftIdForComparisonAsync(db, revision.ComparisonId, cancellationToken);
+        var draft = draftId is null ? null : await db.Set<DocumentChangeDraftRow>().SingleAsync(row => row.DraftId == draftId, cancellationToken);
         if (revision.RevisionNumber == 1)
         {
             if (draft is not null) return DocumentChangeDraftErrorCodes.DraftDiscarded;
