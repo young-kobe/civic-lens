@@ -53,7 +53,7 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         var change = context.ChangeSinceCurrent();
         if (evidence.IsRejected)
             return await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken,
-                change is ActionChange.None or ActionChange.OlderPromptOnly ? null : ActionDraftErrorCodes.RecordRejected);
+                change is ActionChange.None or ActionChange.StaleOnly ? null : ActionDraftErrorCodes.RecordRejected);
         return change switch
         {
             ActionChange.None =>
@@ -70,7 +70,7 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         var request = context.Snapshot.NewestSummary is null ? null : BuildTextRequest(context, default);
         if (request is not null) return await RunLoopAsync(attempt, TextLoop(attempt, context, request), cancellationToken);
         if (context.KeepsCurrentText)
-            return change == ActionChange.OlderPromptOnly
+            return change == ActionChange.StaleOnly
                 ? await SettleWithoutCallAsync(attempt, context.Snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken)
                 : await SettleRevisionWithoutCallAsync(attempt, context, ActionDraftErrorCodes.TextKept, ActionDraftResolver.CopyText, cancellationToken);
         if (context.Evidence.BillText is { } billText && BuildBillTextRequest(context, billText, default) is { } billTextRequest)

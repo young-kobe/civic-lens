@@ -30,7 +30,7 @@ public sealed class BriefDraftStep(IBriefDraftStore store, IBriefDraftModel mode
             return await SettleWithoutCallAsync(attempt, context.Fingerprint, BriefDraftErrorCodes.NoNewRecords, cancellationToken);
         if (selection.Sent.IsEmpty)
             return await attempt.CompleteAsync(State.Blocked, BriefDraftErrorCodes.OverByteCap, cancellationToken);
-        if (evidence.Current?.Fingerprint == context.Fingerprint)
+        if (!evidence.HasStaleDraft && evidence.Current?.Fingerprint == context.Fingerprint)
             return await SettleWithoutCallAsync(attempt, context.Fingerprint, BriefDraftErrorCodes.Unchanged, cancellationToken);
         return await DraftAsync(attempt, context, cancellationToken);
     }

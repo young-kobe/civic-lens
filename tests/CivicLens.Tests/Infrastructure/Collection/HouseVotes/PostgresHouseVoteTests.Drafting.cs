@@ -362,12 +362,12 @@ public sealed partial class PostgresHouseVoteTests
     [Theory]
     [InlineData("vote-draft-prompt-v1", true)]
     [InlineData(VoteDraftTask.PromptVersion, false)]
-    public async Task TheEvidenceNamesAnOlderPromptOnlyWhenTheNewestDraftRunUsedOneSoARerunSpendsNothingAfterTheRedraft(string prompt, bool older)
+    public async Task TheEvidenceNamesAnStaleOnlyWhenTheNewestDraftRunUsedOneSoARerunSpendsNothingAfterTheRedraft(string prompt, bool older)
     {
         var candidate = await PendingCandidateAsync();
         await InsertRunAsync(candidate, prompt, 1);
 
-        Assert.Equal(older, (await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
+        Assert.Equal(older, (await VoteStore().ReadEvidenceAsync(candidate, default))!.HasStaleDraft);
     }
 
     [Fact]
@@ -376,7 +376,7 @@ public sealed partial class PostgresHouseVoteTests
         var candidate = await PendingCandidateAsync();
         await SettleAsync(candidate, await RevisionAsync(candidate, 1));
 
-        Assert.False((await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
+        Assert.False((await VoteStore().ReadEvidenceAsync(candidate, default))!.HasStaleDraft);
         Assert.Equal(0, await VoteStore().RequeueStaleAsync(default));
     }
 
@@ -397,7 +397,7 @@ public sealed partial class PostgresHouseVoteTests
         else if (change != "none")
             await ExecuteAsync($"UPDATE vote_drafts SET review_status = '{change}'");
 
-        Assert.Equal(requeued == 1, (await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
+        Assert.Equal(requeued == 1, (await VoteStore().ReadEvidenceAsync(candidate, default))!.HasStaleDraft);
         Assert.Equal(requeued, await VoteStore().RequeueStaleAsync(default));
     }
 
@@ -408,7 +408,7 @@ public sealed partial class PostgresHouseVoteTests
         await InsertRunAsync(older, "vote-draft-prompt-v1", 1);
         await PendingCandidateAsync(Updated.AddDays(1));
 
-        Assert.False((await VoteStore().ReadEvidenceAsync(older, default))!.DraftedUnderOlderPrompt);
+        Assert.False((await VoteStore().ReadEvidenceAsync(older, default))!.HasStaleDraft);
     }
 
     [Fact]
