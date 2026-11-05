@@ -25,7 +25,11 @@ table[data-paged]:focus { outline: none; }
 .record-list .cell-icon { align-items: flex-start; }
 .record-list .cell-icon .icon { margin-top: 2px; }
 .kind-search { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); margin-bottom: var(--s5); }
-@media (min-width: 761px) { .record-list .officials-col { width: 12rem; } }
+@media (min-width: 761px) {
+    .record-list .officials-col { width: 12rem; }
+    .public-main .record-list .cell-main { flex: 1; min-width: 0; }
+    .public-main .record-list .fit { flex: none; width: auto; }
+}
 .record-row-text { flex: 1; min-width: 0; }
 .record-list .badge { align-self: center; }
 .badge:has(.icon)::before { display: none; }
