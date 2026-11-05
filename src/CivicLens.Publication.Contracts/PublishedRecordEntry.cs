@@ -28,6 +28,8 @@ public sealed record PublishedRecordEntry
     public int? NayCount { get; init; }
     public PublishedVoteAlignment? Alignment { get; init; }
     public PublishedChamber? Chamber { get; init; }
+    public PublishedVoteKind? VoteKind { get; init; }
+    public int? Congress { get; init; }
     public string[]? CosponsorIds { get; init; }
 
     public void Validate()
@@ -49,6 +51,8 @@ public sealed record PublishedRecordEntry
             throw new InvalidDataException("A vote manifest entry holds both Yea and Nay counts or none, and an alignment only with them. Other entries hold none.");
         if (!HasValidChamber)
             throw new InvalidDataException("A vote manifest entry may name its chamber. Other entries name none.");
+        if (!HasValidVoteIdentity)
+            throw new InvalidDataException("A vote manifest entry names its vote kind and its Congress together, or neither. Other entries name none.");
         if (!HasValidBillLine)
             throw new InvalidDataException($"An action manifest entry may hold a bill line of 1 to {MaximumBillLineLength} characters. Other entries hold none.");
         if (!HasValidCosponsors)
@@ -63,6 +67,10 @@ public sealed record PublishedRecordEntry
 
     private bool HasValidChamber =>
         Chamber is null || Kind == PublishedRecordKind.Vote && Enum.IsDefined(Chamber.Value);
+
+    private bool HasValidVoteIdentity =>
+        VoteKind is null && Congress is null ||
+        Kind == PublishedRecordKind.Vote && VoteKind is { } voteKind && Enum.IsDefined(voteKind) && Congress is >= 1;
 
     private bool HasValidBillLine =>
         BillLine is null || Kind == PublishedRecordKind.Action && !string.IsNullOrWhiteSpace(BillLine) && BillLine.Length <= MaximumBillLineLength;

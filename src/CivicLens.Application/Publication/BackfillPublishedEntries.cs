@@ -9,6 +9,8 @@ namespace CivicLens.Application.Publication;
 /// Fills the entry rows of revisions that a commit never wrote. The oldest kept folder of a range supplies the entry. The record file must agree
 /// with it, and so must the entry in every later kept folder of the range. A kept folder of the range that omits the revision fails the check too.
 /// A range that fails a check gets a skip reason and no row.
+/// It also fills the bill line of action rows that hold none. The line is the one that the kept folders of the range hold. Folders from before the
+/// line hold none, and two folders that hold different lines fail the check. A row that holds a line is never changed.
 /// The release list is read before the candidates, so a commit between the two reads leaves a range that no listed folder covers.
 /// Each kept manifest is read once, from the oldest folder to the newest. Rows go in only through the store insert.
 /// </summary>
@@ -28,11 +30,12 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         var keptReleases = await publications.ListAllAsync(cancellationToken);
         var candidates = await publications.ReadEntryCandidatesAsync(cancellationToken);
-        var pending = candidates.Where(candidate => !candidate.HasEntry).Select(candidate => new PendingPublishedEntry(candidate)).ToList();
+        var pending = candidates.Where(candidate => candidate.NeedsBackfill).Select(candidate => new PendingPublishedEntry(candidate)).ToList();
         foreach (var release in keptReleases)
             await ReadFolderAsync(release, [.. pending.Where(entry => entry.Candidate.Covers(release.ReleaseNumber))], cancellationToken);
-        var (added, racedIn) = await WriteAsync(pending, limit, cancellationToken);
-        return Report(added, candidates.Count(candidate => candidate.HasEntry) + racedIn, pending);
+        var (added, racedIn) = await WriteRowsAsync([.. pending.Where(entry => entry.WritesRow)], limit, cancellationToken);
+        var filled = await FillBillLinesAsync([.. pending.Where(entry => !entry.WritesRow)], cancellationToken);
+        return Report(added, filled, candidates.Count(candidate => candidate.HasEntry) + racedIn, pending);
     }
 
     private async Task ReadFolderAsync(PublicationReleaseSummary release, List<PendingPublishedEntry> covered, CancellationToken cancellationToken)
@@ -63,6 +66,8 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
         var candidate = pending.Candidate;
         if (!listed.TryGetValue(new(candidate.Kind, candidate.RecordId), out var entry) || entry.RevisionNumber != candidate.RevisionNumber)
             pending.Block(FoldersDiffer);
+        else if (!pending.TryAddBillLine(entry.BillLine))
+            pending.Block(FoldersDiffer);
         else if (pending.Entry is null)
             await ReadFirstEntryAsync(release, entry, pending, cancellationToken);
         else if (!ReleaseEntryComparison.SameOutsideNewFields(pending.Entry, entry))
@@ -72,6 +77,11 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
     private async Task ReadFirstEntryAsync(PublicationReleaseSummary release, PublishedRecordEntry entry, PendingPublishedEntry pending,
         CancellationToken cancellationToken)
     {
+        if (pending.Candidate.HasEntry)
+        {
+            pending.Entry = entry;
+            return;
+        }
         PublishedRecordEntry fromFile;
         try
         {
@@ -87,7 +97,16 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
         else pending.Block(RecordFileDiffers);
     }
 
-    private async Task<(int Added, int RacedIn)> WriteAsync(List<PendingPublishedEntry> pending, int limit, CancellationToken cancellationToken)
+    private async Task<int> FillBillLinesAsync(List<PendingPublishedEntry> pending, CancellationToken cancellationToken)
+    {
+        var ready = pending.Where(entry => entry.IsReady && entry.BillLine is not null).ToList();
+        var filled = 0;
+        foreach (var batch in ready.Chunk(BatchSize))
+            filled += await publications.FillBillLinesAsync([.. batch.Select(entry => entry.EntryToInsert!)], cancellationToken);
+        return filled;
+    }
+
+    private async Task<(int Added, int RacedIn)> WriteRowsAsync(List<PendingPublishedEntry> pending, int limit, CancellationToken cancellationToken)
     {
         var ready = pending.Where(entry => entry.IsReady).ToList();
         int added = 0, racedIn = 0, next = 0;
@@ -96,7 +115,7 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
             var batch = ready.Skip(next).Take(Math.Min(BatchSize, limit - added)).ToList();
             next += batch.Count;
             var writable = await WithoutMissingFirstPublicationsAsync(batch, cancellationToken);
-            var created = await publications.AddEntriesAsync([.. writable.Select(entry => entry.Entry!)], cancellationToken);
+            var created = await publications.AddEntriesAsync([.. writable.Select(entry => entry.EntryToInsert!)], cancellationToken);
             writable.ForEach(entry => entry.HasRow = true);
             added += created;
             racedIn += writable.Count - created;
@@ -117,13 +136,14 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
     private static IEnumerable<PublishedRecordReference> FirstPublicationsNeededBy(PublishedRecordEntry entry) =>
         PublishedRecordReference.LinkedBy(entry).Prepend(new(entry.Kind, entry.RecordId));
 
-    private static PublishedEntriesBackfillResult Report(int added, int alreadyPresent, List<PendingPublishedEntry> pending)
+    private static PublishedEntriesBackfillResult Report(int added, int filled, int alreadyPresent, List<PendingPublishedEntry> all)
     {
-        var skipped = pending.Where(entry => entry.IsBlocked).ToList();
+        var pending = all.Where(entry => entry.WritesRow).ToList();
+        var skipped = all.Where(entry => entry.IsBlocked).ToList();
         var byReason = skipped.GroupBy(entry => entry.SkipReason!).ToDictionary(group => group.Key, group => group.Count());
         var first = skipped.Take(ReportedSkips).Select(entry => new SkippedPublishedEntry(PublishedRecordReference.NameOf(entry.Candidate.Kind),
             entry.Candidate.RecordId, entry.Candidate.RevisionNumber, entry.SkipReason!)).ToList();
-        return new(pending.Count, added, alreadyPresent, skipped.Count, byReason, first,
+        return new(pending.Count, added, filled, alreadyPresent, skipped.Count, byReason, first,
             pending.Count(entry => entry.Candidate.IsOpen && !entry.HasRow),
             pending.Count(entry => !entry.Candidate.IsOpen && entry.Entry is null && !entry.IsBlocked),
             pending.Count(entry => entry.IsReady && !entry.HasRow));
