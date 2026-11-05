@@ -36,7 +36,7 @@
     {
         <section aria-labelledby="issues-title" data-issues-pane="@PublishedOfficialView.IssuesPane">
             <h3 id="issues-title">@PublishedOfficialView.IssuesTabLabel</h3>
-            <DataTable Roles="true" Items="profile.IssueIds" Caption="@($"Statements, sponsored bills, and votes of {Page.Profile.Name} on each tracked issue in Congress {Page.Congress}")" DefaultOrder="@PublishedRecordLabels.DefaultOrder">
+            <DataTable Stack="true" Roles="true" Items="profile.IssueIds" Caption="@($"Statements, sponsored bills, and votes of {Page.Profile.Name} on each tracked issue in Congress {Page.Congress}")" DefaultOrder="@PublishedRecordLabels.DefaultOrder">
                 <Head><TableCell Header Sort="SortKind.Text">Issue</TableCell><TableCell Header Class="num" Sort="SortKind.Number">@PublicColumn.TheirStatements</TableCell><TableCell Header Sort="SortKind.Number">@PublicColumn.BillsTheySponsored</TableCell><TableCell Header Class="num" Sort="SortKind.Number">@PublicColumn.VotesTheyCast</TableCell></Head>
                 <Row Context="issueId">
                     @{

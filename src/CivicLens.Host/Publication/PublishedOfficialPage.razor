@@ -47,7 +47,7 @@
                 }
                 else
                 {
-                    <DataTable Roles="true" PagedRows="links" Items="Page.Pairs" Caption="@($"Reviewed links between statements of {Page.Profile.Name} and their bills or votes")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
+                    <DataTable Stack="true" Roles="true" PagedRows="links" Items="Page.Pairs" Caption="@($"Reviewed links between statements of {Page.Profile.Name} and their bills or votes")" DefaultOrder="@PublishedRecordLabels.NewestFirst">
                         <Head><TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.StatementDate</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.WhatTheySaid</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.Link</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.WhatTheyDid</TableCell><TableCell Header Sort="SortKind.Text">@PublicColumn.TheirVote</TableCell></Head>
                         <Row Context="pair">
                             <TableCell Class="fit num" Label="@PublicColumn.StatementDate" SortValue="@(pair.StatementDay is { } day ? Moment.Iso(day) : "")">@PublishedOfficialView.StatementDay(pair)</TableCell>
@@ -63,7 +63,7 @@
         @if (Page.IsCurrent)
         {
             <Panel Title="Offices">
-                <DataTable Roles="true" Items="OfficeStretches" Caption="@($"Offices of {Page.Profile.Name}")" DefaultOrder="@PublishedRecordLabels.DefaultOrder">
+                <DataTable Stack="true" Roles="true" Items="OfficeStretches" Caption="@($"Offices of {Page.Profile.Name}")" DefaultOrder="@PublishedRecordLabels.DefaultOrder">
                     <Head><TableCell Header Sort="SortKind.Text">Office</TableCell>@if (HasParty){<TableCell Header Sort="SortKind.Text">@PublicColumn.Party</TableCell>}<TableCell Header Class="fit num" Sort="SortKind.Date">@PublicColumn.From</TableCell><TableCell Header Class="fit num">@PublicColumn.To</TableCell></Head>
                     <Row Context="stretch">
                         <TableCell Main>@PublishedOfficialView.Office(stretch.Latest)</TableCell>

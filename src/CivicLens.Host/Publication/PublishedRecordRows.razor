@@ -2,7 +2,7 @@
 {
     <div class="records-lead"><PublishedBillLineNote /></div>
 }
-<DataTable Roles="true" PagedRows="@(Paged ? "records" : null)" Items="Rows" RowClass="PublishedOfficialView.RowClass" RowFilterKeys="FilterKeys" Caption="@Caption" DefaultOrder="@PublishedRecordLabels.NewestFirst" class="table record-list">
+<DataTable Stack="true" Roles="true" PagedRows="@(Paged ? "records" : null)" Items="Rows" RowClass="PublishedOfficialView.RowClass" RowFilterKeys="FilterKeys" Caption="@Caption" DefaultOrder="@PublishedRecordLabels.NewestFirst" class="table table-stack record-list">
     <Head><TableCell Header>Record</TableCell>@if (HasCast){<TableCell Header>@PublicColumn.Cast</TableCell>}</Head>
     <Row Context="row">
         <TableCell Main Class="record-main">

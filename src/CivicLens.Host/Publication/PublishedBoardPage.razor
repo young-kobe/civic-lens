@@ -40,7 +40,7 @@
         <Panel Title="@PublishedBoardView.MissedTitle(Board)" Padded="true">
             <p>@PublishedOfficialView.MissedVoteMeaning</p>
             <p class="muted small">@PublishedBoardView.Cause</p>
-            <DataTable Roles="true" PagedRows="officials" Items="Page.MostMissed" Caption="@PublishedBoardView.MissedTitle(Board)" DefaultOrder="@PublishedBoardView.MostMissedOrder">
+            <DataTable Stack="true" Roles="true" PagedRows="officials" Items="Page.MostMissed" Caption="@PublishedBoardView.MissedTitle(Board)" DefaultOrder="@PublishedBoardView.MostMissedOrder">
                 <Head><TableCell Header Sort="SortKind.Text">Official</TableCell><TableCell Header Sort="SortKind.Number" DefaultSort="true">Missed votes</TableCell></Head>
                 <Row Context="member">
                     <TableCell Main><CellTitle Href="@member.PagePath">@member.Official.Profile.Name</CellTitle></TableCell>
@@ -80,7 +80,7 @@
     private OfficialBoard Board => Page.Board;
 
     private RenderFragment Split(IReadOnlyList<BoardMember> members, string caption, string header, Func<BoardMember, int> counted, Func<BoardMember, double> share, int congress) => @<text>
-        <DataTable Roles="true" PagedRows="officials" Items="members" Caption="@caption" DefaultOrder="@PublishedBoardView.ShareOrder">
+        <DataTable Stack="true" Roles="true" PagedRows="officials" Items="members" Caption="@caption" DefaultOrder="@PublishedBoardView.ShareOrder">
             <Head><TableCell Header Sort="SortKind.Text">Official</TableCell><TableCell Header Sort="SortKind.Number" SortLabel="@PublishedBoardView.ShareSortName" DefaultSort="true">@header</TableCell></Head>
             <Row Context="member">
                 <TableCell Main><CellTitle Href="@member.PagePath">@member.Official.Profile.Name</CellTitle></TableCell>
