@@ -38,6 +38,19 @@ public sealed class PublishActionTests
     [InlineData("This bill funds aid. (It adds a cap.) It adds more.", "This bill funds aid.")]
     [InlineData("This bill funds aid? It adds a cap.", "This bill funds aid?")]
     [InlineData("Veterans Rent Aid Act\nThis bill funds rent aid.", "This bill funds rent aid.")]
+    [InlineData("This bill names the \"John Doe Post Office.\"", "This bill names the \"John Doe Post Office.\"")]
+    [InlineData("This bill names the \"John Doe Post Office.\" It adds a cap.", "This bill names the \"John Doe Post Office.\"")]
+    [InlineData("This bill names the “John Doe Post Office.”", "This bill names the “John Doe Post Office.”")]
+    [InlineData("This bill names the “John Doe Post Office.” It adds a cap.", "This bill names the “John Doe Post Office.”")]
+    [InlineData("This bill funds aid (as defined in law.)", "This bill funds aid (as defined in law.)")]
+    [InlineData("This bill funds aid (as defined in law.) It adds a cap.", "This bill funds aid (as defined in law.)")]
+    [InlineData("Rent Relief Act (RRA)\nThis bill funds rent aid.", "This bill funds rent aid.")]
+    [InlineData("This bill honors Mr. Jones. It adds a cap.", "This bill honors Mr. Jones.")]
+    [InlineData("This bill honors Mrs. Jones. It adds a cap.", "This bill honors Mrs. Jones.")]
+    [InlineData("This bill amends Sec. A to fund aid. It adds a cap.", "This bill amends Sec. A to fund aid.")]
+    [InlineData("This bill amends No. A to fund aid. It adds a cap.", "This bill amends No. A to fund aid.")]
+    [InlineData("This bill amends Pub. A to fund aid. It adds a cap.", "This bill amends Pub. A to fund aid.")]
+    [InlineData("This bill honors Smith, e.g. Jones. It adds a cap.", "This bill honors Smith, e.g. Jones.")]
     public async Task TheEntryLineIsTheFirstSentenceOfTheCrsSummaryBecauseOneRowNeedsOneShortLine(string summaryText, string expected)
     {
         Assert.Equal(expected, await PublishedLineAsync(summaryText));

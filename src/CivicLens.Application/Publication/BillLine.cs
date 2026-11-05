@@ -12,6 +12,7 @@ namespace CivicLens.Application.Publication;
 internal static partial class BillLine
 {
     private const string CutMarker = "…";
+    private const string ClosingCharacters = "\"”’)";
 
     // "L." in "Pub. L." is a single letter token, so the single letter rule covers it.
     private static readonly string[] Abbreviations = ["St.", "Mr.", "Mrs.", "Dr.", "No.", "Sec.", "Pub."];
@@ -37,16 +38,16 @@ internal static partial class BillLine
         return null;
     }
 
-    private static bool EndsSentence(string paragraph) => paragraph[^1] is '.' or '!' or '?';
+    private static bool EndsSentence(string paragraph) => FinalMark().IsMatch(paragraph);
 
     private static bool IsTitle(string paragraph) =>
-        paragraph.Length <= PublishedRecordEntry.MaximumBillLineLength && char.IsLetterOrDigit(paragraph[^1]);
+        paragraph.Length <= PublishedRecordEntry.MaximumBillLineLength && (char.IsLetterOrDigit(paragraph[^1]) || paragraph[^1] == ')');
 
     private static string FirstSentence(string paragraph)
     {
         foreach (Match mark in SentenceEnd().Matches(paragraph))
         {
-            var sentence = paragraph[..(mark.Index + 1)];
+            var sentence = paragraph[..(mark.Index + mark.Length)];
             if (!EndsAbbreviation(sentence)) return sentence;
         }
         return paragraph;
@@ -73,8 +74,11 @@ internal static partial class BillLine
         return 0;
     }
 
-    [GeneratedRegex(@"[.!?](?=\s+[\p{Lu}""“(]|$)")]
+    [GeneratedRegex("[.!?][" + ClosingCharacters + @"]*(?=\s+[\p{Lu}""“(]|$)")]
     private static partial Regex SentenceEnd();
+
+    [GeneratedRegex("[.!?][" + ClosingCharacters + "]*$")]
+    private static partial Regex FinalMark();
 
     [GeneratedRegex(@"^(\p{L}\.)+$")]
     private static partial Regex InitialsToken();
