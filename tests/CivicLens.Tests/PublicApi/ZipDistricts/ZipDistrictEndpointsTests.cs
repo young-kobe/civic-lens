@@ -131,13 +131,45 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
         await ZipSeed.AddRecordAsync(host.OperationalDatabase, 2);
         await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2,
             new SeededSeat("a-departing", "Dana Departing", Senator, "AL", null, "2019-01-03", today),
-            new SeededSeat("b-new", "Nia New", Senator, "AL", null, today),
+            new SeededSeat("b-new", "Nia New", Senator, "AL", null, today, "2998-01-03"),
             new SeededSeat("c-reelected", "Rae Reelected", Senator, "AL", null, "2019-01-03", today));
-        await ZipSeed.AddTermAsync(host.OperationalDatabase, 2, new SeededSeat("c-reelected", "Rae Reelected", Senator, "AL", null, today));
+        await ZipSeed.AddTermAsync(host.OperationalDatabase, 2, new SeededSeat("c-reelected", "Rae Reelected", Senator, "AL", null, today, "2999-01-03"));
 
         var answer = await GetAsync(host, "/v1/zip-districts/36009");
 
-        Assert.Equal(["Nia New", "Rae Reelected"], Names(answer.GetProperty("states")[0].GetProperty("senators")));
+        var senators = answer.GetProperty("states")[0].GetProperty("senators");
+        Assert.Equal(["Nia New", "Rae Reelected"], Names(senators));
+        Assert.Equal(["2998-01-03", "2999-01-03"], senators.EnumerateArray().Select(senator => senator.GetProperty("termEndsOn").GetString()));
+    }
+
+    [Fact]
+    public async Task ARepresentativeWhoWasReelectedShowsTheEndDateOfTheNewTermAndNeverReadsATermThatHasNotBegun()
+    {
+        await using var host = await StartAsync();
+        var today = await ZipSeed.TodayAsync(host.OperationalDatabase);
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 0, 0, 0, TimeSpan.Zero));
+        await ZipSeed.AddRecordAsync(host.OperationalDatabase, 2);
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2, new SeededSeat("al2", "Alice Two", Representative, "AL", 2, "2019-01-03", today));
+        await ZipSeed.AddTermAsync(host.OperationalDatabase, 2, new SeededSeat("al2", "Alice Two", Representative, "AL", 2, today, "2999-01-03"));
+        await ZipSeed.AddTermAsync(host.OperationalDatabase, 2, new SeededSeat("al2", "Alice Two", Representative, "AL", 2, "2998-01-03", "2999-12-31"));
+
+        var answer = await GetAsync(host, "/v1/zip-districts/36009");
+
+        Assert.Equal("2999-01-03", answer.GetProperty("districts")[0].GetProperty("representative").GetProperty("termEndsOn").GetString());
+    }
+
+    [Fact]
+    public async Task ASenatorWhoHasATermThatHasNotBegunShowsTheEndDateOfTheCurrentTerm()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 0, 0, 0, TimeSpan.Zero));
+        await ZipSeed.AddRecordAsync(host.OperationalDatabase, 2);
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2, new SeededSeat("sen", "Sue Senator", Senator, "AL", null, "2021-01-03", "2999-01-03"));
+        await ZipSeed.AddTermAsync(host.OperationalDatabase, 2, new SeededSeat("sen", "Sue Senator", Senator, "AL", null, "2998-01-03", "2999-12-31"));
+
+        var answer = await GetAsync(host, "/v1/zip-districts/36009");
+
+        Assert.Equal("2999-01-03", answer.GetProperty("states")[0].GetProperty("senators")[0].GetProperty("termEndsOn").GetString());
     }
 
     [Fact]
