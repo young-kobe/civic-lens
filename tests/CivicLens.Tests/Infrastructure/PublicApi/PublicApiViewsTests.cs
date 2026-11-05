@@ -319,25 +319,14 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Equal(["none none none none"], await ViewCountsAsync("speaker", speaker));
     }
 
+    // The fact rows hold other text than the columns. A view that reads the fact rows again shows the wrong value, or fails because the view owner has no grant on them.
     [Fact]
-    public async Task QuestionAndResultEqualTheCSharpOwnersBecauseTheViewMustShowWhatTheReleaseFileShows()
+    public async Task QuestionAndResultComeFromTheRevisionColumnsAndNotFromTheFactRowsBecauseTheColumnsOwnTheTwoValues()
     {
-        var scenario = new PublicationScenario();
-        var vote = scenario.AddVote('d', result: "Agreed to");
-        var published = await PublishedVoteAsync(scenario, vote);
-        var scenarioFacts = scenario.Votes.Publishable[vote].Review.CurrentRevision.Facts;
-        string[] repeated = ["Started: 2025-04-10", "Vote title: Question: not the question", "Question: First", "Question: Second", "Result: Passed", "Result: Later"];
+        await InsertActiveVoteAsync("columns", ["Yea"], ["Question: Fact question", "Result: Fact result"], question: "Column question", result: "Column result");
+        await InsertActiveVoteAsync("unasked", ["Yea"], question: null, result: "Failed");
 
-        await InsertActiveVoteAsync("scenario", ["Yea"], [.. scenarioFacts.Select(fact => fact.Text)]);
-        await InsertActiveVoteAsync("repeated", ["Yea"], repeated);
-        await InsertActiveVoteAsync("unasked", ["Yea"], ["Result: Failed"]);
-
-        Assert.Equal([$"{FactValue(scenarioFacts, VoteFactPrefixes.Question)}|{published.Result}"],
-            await PublicAsync("SELECT question || '|' || result FROM public_api.votes WHERE record_id = 'scenario'"));
-        var repeatedFacts = repeated.Select(text => new VoteFact(text, new SourceSpan("ext", 0, 1))).ToImmutableArray();
-        Assert.Equal("First|Passed", $"{FactValue(repeatedFacts, VoteFactPrefixes.Question)}|{FactValue(repeatedFacts, VoteFactPrefixes.Result)}");
-        Assert.Equal(["First|Passed"], await PublicAsync("SELECT question || '|' || result FROM public_api.votes WHERE record_id = 'repeated'"));
-        Assert.Null(VoteFacts.Find([new VoteFact("Result: Failed", new SourceSpan("ext", 0, 1))], VoteFactPrefixes.Question));
+        Assert.Equal(["Column question|Column result"], await PublicAsync("SELECT question || '|' || result FROM public_api.votes WHERE record_id = 'columns'"));
         Assert.Equal(["none|Failed"], await PublicAsync("SELECT coalesce(question, 'none') || '|' || result FROM public_api.votes WHERE record_id = 'unasked'"));
     }
 
@@ -371,8 +360,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
               VALUES (1, '000001-00000000000000000000000000000001', 'test', 1, 1, true);
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('vote', 'old', 1, 1, NULL);
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
-              VALUES ('old', 1, 'test', 'Person', 'x', 1);
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks, result)
+              VALUES ('old', 1, 'test', 'Person', 'x', 1, '');
             INSERT INTO vote_revision_issues (record_id, revision_number, issue_id, position, is_tracked) VALUES ('old', 1, 'health', 0, true);
             """);
         Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.votes"));
@@ -743,8 +732,6 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             PublicationProtocol.JsonOptions)!;
     }
 
-    private static string FactValue(ImmutableArray<VoteFact> facts, string prefix) => VoteFacts.Find(facts, prefix)!.Text[prefix.Length..];
-
     private async Task<string[]> ViewCountsAsync(string record, string[] casts)
     {
         await InsertActiveVoteAsync(record, casts);
@@ -752,7 +739,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     // The fact rows go in last position first, so only the position column can give the order.
-    private async Task InsertActiveVoteAsync(string record, string[] casts, string[]? facts = null)
+    private async Task InsertActiveVoteAsync(string record, string[] casts, string[]? facts = null, string? question = null, string result = "Passed")
     {
         var list = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(record)));
         await ExecuteAsync($"""
@@ -761,19 +748,19 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
               VALUES (1, '000001-00000000000000000000000000000001', 'test', 1, 1, true) ON CONFLICT DO NOTHING;
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('vote', '{record}', 1, 1, NULL);
             INSERT INTO vote_member_lists (list_id, member_count, created_at_utc_ticks) VALUES ('{list}', {casts.Length}, 1);
-            {Revision(record, 1, "Person", list)}
+            {Revision(record, 1, "Person", list, question, result)}
             {string.Join('\n', casts.Select((cast, index) => Entry(list, index, cast)))}
             {string.Join('\n', (facts ?? []).Select((text, position) => Fact(record, position, text)).Reverse())}
             """);
     }
 
-    private static string Revision(string record, int revision, string origin, string list) => $"""
+    private static string Revision(string record, int revision, string origin, string list, string? question = null, string result = "Passed") => $"""
         INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks,
             headline, summary, text_origin, source_id, vote_source, chamber, congress, session_number, roll_call_number, candidate_id,
             candidate_update_utc_ticks, voted_on, voted_on_citation_extraction_id, voted_on_citation_start, voted_on_citation_length,
-            kind, member_list_id, issue_revision_id, issue_candidates_recorded, bill_type, bill_number)
+            kind, member_list_id, issue_revision_id, issue_candidates_recorded, bill_type, bill_number, question, result)
         VALUES ('{record}', {revision}, 'test', 'Person', 'x', 1, 'Headline {record}', 'Summary {record}', '{origin}', 'src', 'CongressGov', 'House', 119, 1, 7,
-            'cand', 1, '2026-01-02', 'ext', 0, 1, 'Passage', '{list}', '{new string('a', 64)}', true, 'HR', 1);
+            'cand', 1, '2026-01-02', 'ext', 0, 1, 'Passage', '{list}', '{new string('a', 64)}', true, 'HR', 1, {(question is null ? "NULL" : $"'{question}'")}, '{result}');
         """;
 
     private static string Fact(string record, int position, string text) => $"""
