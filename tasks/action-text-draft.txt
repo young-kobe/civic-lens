@@ -1,0 +1,33 @@
+TASK: the action draft step drafts an AI summary from the official bill text, behind a setting that is off by default. This one PR covers PRs 1, 2 and 3 of survey/explain-legislation.md on branch origin/survey-explain-legislation (read it first with git show origin/survey-explain-legislation:survey/explain-legislation.md). They ship together because a text read or citation table with no production caller is not allowed.
+
+Owner decisions (accepted, do not reopen):
+- One writer chooses the source, in this order: the CRS summary, then the bill text, then the code-written text (ActionCodeText). No second drafting path. The text branch goes between the summary test and the code write in ActionDraftStep.DraftOrWriteAsync.
+- Read the gate text through text_package_id from bill_text_versions and its extraction (see docs/architecture/bills.md, ActionBillReader for the summary read precedent). A bill with a CRS summary never gets text.
+- The model is the existing action draft model constant. It writes 2 or 3 summary sentences and a "why it matters" part. Why it matters covers only what the text states: who it affects and what it changes. No judgment. Every sentence of both parts must quote the text exactly; code checks each quote as a citation span inside the stored extraction, like ActionCitations and ActionDraftRevision.ValidateAgainst do today. A draft with a sentence that has no valid quote fails its checks.
+- The prompt sends only the first 60,000 characters of the text (the chars_read cap). Store characters read and characters total where the publish PR can read them later (bill_text_versions already holds chars_total and chars_read; reuse them, do not copy them).
+- D1: a child table action_revision_text_citations keyed on (record_id, revision_number, position), with a part column (summary or why it matters) and the span columns. Add text_package_id and why_it_matters columns to action_revisions. A revision cites the CRS summary or the text, never both: enforce it in Core (ActionDraftRevision.ValidateShape) and with a check constraint. Precedent: action_revision_sponsorship_citations in migration 20261103165049_ActionRevisionColumns.
+- D2: a separate prompt version action-text-prompt-v1 and schema version action-text-schema-v1, added to ActionDraftTask.CurrentPromptVersions, beside the existing IssuePromptVersion precedent. Do not bump action-draft-prompt-v5.
+- D3: the text branch is off unless the environment variable CIVIC_LENS_ACTION_DRAFTING_BILL_TEXT is 1. Read it in ActionDraftConfiguration beside the other CIVIC_LENS_ACTION_DRAFTING_ variables; any value other than unset or 1 is an error. Off: the step behaves exactly as today. On: the text draft runs and code approves after its checks. Document in docs/operations.md and docs/architecture/actions.md that the setting stays off until the owner reads the measured sample and the publish PR merges.
+- No public page, contract (Publication.Contracts) or public_api change in this PR. The publish PR follows later.
+
+Tests (each must fail if its rule breaks): the resolver refuses a sentence whose quote is not in the text; source order (summary wins over text, text over code write); with the setting off a summary-less bill still gets the code write; the 60,000 character cut is what the prompt sends; Core refuses a revision with both a CRS and a text citation; a row round trip of the text citations; the database check refuses both. Update docs/architecture/actions.md and bills.md in place, and regenerate schema docs.
+
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b action-text-draft origin/main
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+6. curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+7. bash /tmp/dotnet-install.sh --version 10.0.403 --install-dir /root/.dotnet
+8. docker info  (if it fails: run sudo dockerd > /tmp/dockerd.log 2>&1 & in the background, then check docker info again after 10 seconds)
+9. export PATH=/root/.dotnet:$PATH && dotnet restore tests/CivicLens.Tests --locked-mode
+Prefix every later dotnet call with export PATH=/root/.dotnet:$PATH &&. If a Testcontainers pull fails with HTTP 429, wait 60 seconds and retry. Run test classes one filter at a time with --filter FullyQualifiedName~<Class> (no | in filters). Run at most one PublishReleaseTests class.
+
+Rules: read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Each rule has one owner; reuse the existing shared owners before adding any. Every added member needs a production caller. Delete code the change makes unused. No backward compatibility shims, dual reads or legacy fallbacks beyond what the named precedent already does. Comments only when absolutely necessary; intent goes in names. Tests encode why the rule matters and must fail if the rule breaks. EF migrations: generate with the repo EF tool manifest (dotnet tool restore, then dotnet ef migrations add), strip the UTF-8 BOM from generated files, and make the Designer match the model at the migration's position. Regenerate schema docs with CIVIC_LENS_WRITE_SCHEMA_DOCS=1 and the SchemaReferenceTests class. Prose (docs, commit messages): ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes. Update the owning feature docs in place (template headings Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, Limits and planned work); each invariant names its rule, enforcer and test. Do not write session reports or changelogs. If you hit a design choice the brief does not settle, choose nothing: stop, commit what is done, and list the question with options in your final message.
+
+Checks before the last commit: dotnet build tests/CivicLens.Tests -c Release (0 errors), the changed and related test classes, dotnet format CivicLens.slnx --verify-no-changes --no-restore, python3 tools/check-docs.py --check, python3 tools/render-architecture.py --check.
+
+Finish, each its own Bash call: git add -A; git commit -m "<one plain sentence>"; git push origin action-text-draft. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only action-text-draft.
+
+Final message under 1,800 characters: the pushed SHA, what changed, test classes run with counts, new visible strings, and every open question with options.

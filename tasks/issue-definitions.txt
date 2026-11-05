@@ -1,0 +1,30 @@
+TASK: show each tracked issue's definition, includes and excludes from config/issues.json on its public issue page. This is PR 7 of survey/explain-legislation.md on branch origin/survey-explain-legislation (read it first with git show origin/survey-explain-legislation:survey/explain-legislation.md).
+
+Owner decisions (accepted, do not reopen):
+- D6: config owns the text. PublicationCatalog reads it once and publish passes it to ReleaseFacet and the facet page (src/CivicLens.Host/Publication/PublishedFacetPage.razor). catalog.json and PublishedCatalogEntry do not change. Follow the issue icon path as the precedent (git show 0fb99d10).
+- Only issue pages show the block. Policy area pages do not.
+- Approved strings, exactly: heading "What this issue covers", list labels "Includes" and "Does not include". The definition is the paragraph under the heading. Omit the "Does not include" list when an issue has no excludes.
+- Add length caps for the definition and each include and exclude term in TrackedIssueConfiguration, sized just above the longest current value in config/issues.json, with clear validation messages. Report the caps you chose.
+- Reuse the existing shared UI components (Panel and the list styles already in the site CSS). Add no new CSS unless no existing class fits; if you add any, say why.
+
+Tests (each must fail if its rule breaks): config validation refuses an over-cap definition and term; the issue page renders the definition and both lists; a policy area page renders no block; an issue with no excludes renders no "Does not include" list. Update docs/architecture/publication.md (and configuration.md if it owns the issue config rules) in place.
+
+Setup, each step its own Bash call. Do not assign shell variables from command output.
+1. git fetch origin
+2. git checkout -b issue-definitions origin/main
+3. git config user.name young-kobe
+4. git config user.email kobe.tyler.young@gmail.com
+5. git config commit.gpgsign false
+6. curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+7. bash /tmp/dotnet-install.sh --version 10.0.403 --install-dir /root/.dotnet
+8. docker info  (if it fails: run sudo dockerd > /tmp/dockerd.log 2>&1 & in the background, then check docker info again after 10 seconds)
+9. export PATH=/root/.dotnet:$PATH && dotnet restore tests/CivicLens.Tests --locked-mode
+Prefix every later dotnet call with export PATH=/root/.dotnet:$PATH &&. If a Testcontainers pull fails with HTTP 429, wait 60 seconds and retry. Run test classes one filter at a time with --filter FullyQualifiedName~<Class> (no | in filters). Run at most one PublishReleaseTests class.
+
+Rules: read AGENTS.md, docs/agent-rules.md and docs/architecture.md first. Each rule has one owner; reuse the existing shared owners before adding any. Every added member needs a production caller. Delete code the change makes unused. No backward compatibility shims, dual reads or legacy fallbacks beyond what the named precedent already does. Comments only when absolutely necessary; intent goes in names. Tests encode why the rule matters and must fail if the rule breaks. EF migrations: generate with the repo EF tool manifest (dotnet tool restore, then dotnet ef migrations add), strip the UTF-8 BOM from generated files, and make the Designer match the model at the migration's position. Regenerate schema docs with CIVIC_LENS_WRITE_SCHEMA_DOCS=1 and the SchemaReferenceTests class. Prose (docs, commit messages): ASD-STE100 style, active sentences of 25 words or fewer, no em or en dashes. Update the owning feature docs in place (template headings Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, Limits and planned work); each invariant names its rule, enforcer and test. Do not write session reports or changelogs. If you hit a design choice the brief does not settle, choose nothing: stop, commit what is done, and list the question with options in your final message.
+
+Checks before the last commit: dotnet build tests/CivicLens.Tests -c Release (0 errors), the changed and related test classes, dotnet format CivicLens.slnx --verify-no-changes --no-restore, python3 tools/check-docs.py --check, python3 tools/render-architecture.py --check.
+
+Finish, each its own Bash call: git add -A; git commit -m "<one plain sentence>"; git push origin issue-definitions. Commit messages hold no Co-Authored-By or session lines. Do not open a PR. Push only issue-definitions.
+
+Final message under 1,800 characters: the pushed SHA, what changed, test classes run with counts, new visible strings, and every open question with options.
