@@ -250,6 +250,10 @@ public sealed class PublishedHomePageTests
         Assert.True(form.HasAttribute("hidden"));
         Assert.Equal("officials/{id}.html", form.GetAttribute("data-official-page"));
         Assert.Equal("District of Columbia", System.Text.Json.JsonDocument.Parse(form.GetAttribute("data-states")!).RootElement.GetProperty("DC").GetString());
+        var offices = System.Text.Json.JsonDocument.Parse(form.GetAttribute("data-house-offices")!).RootElement;
+        Assert.Equal("Resident Commissioner", offices.GetProperty("PR").GetString());
+        Assert.Equal("Delegate", offices.GetProperty("DC").GetString());
+        Assert.Equal(6, offices.EnumerateObject().Count());
         var input = form.QuerySelector("input")!;
         Assert.Equal(("zip", "5", "numeric"), (input.GetAttribute("name"), input.GetAttribute("maxlength"), input.GetAttribute("inputmode")));
         Assert.Equal("Your ZIP code", form.QuerySelector("label[for='zip-code']")!.TextContent);

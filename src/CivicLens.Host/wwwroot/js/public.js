@@ -178,6 +178,7 @@
         const panel = document.querySelector("[data-zip-results]");
         const body = panel.querySelector("[data-zip-body]");
         const input = form.elements.namedItem("zip");
+        const houseOffices = JSON.parse(form.dataset.houseOffices);
         const stateName = code => states[code] ?? code;
         const element = (tag, text, className) => {
             const node = document.createElement(tag);
@@ -185,8 +186,8 @@
             if (className) node.className = className;
             return node;
         };
-        const seatTitle = (district, isTerritory) => {
-            if (isTerritory) return `Delegate for ${stateName(district.state)}`;
+        const seatTitle = district => {
+            if (district.state in houseOffices) return `${houseOffices[district.state]} for ${stateName(district.state)}`;
             return district.district === 0
                 ? `Representative for ${stateName(district.state)}, at large`
                 : `Representative for ${stateName(district.state)}, district ${district.district}`;
@@ -205,13 +206,12 @@
         };
         const show = nodes => { panel.hidden = false; body.replaceChildren(...nodes); };
         const showAnswer = answer => {
-            const territories = new Set(answer.states.filter(state => state.senators.length === 0).map(state => state.state));
             const list = element("ul", undefined, "zip-seats");
             const nodes = [];
             if (answer.districts.length > 1)
                 nodes.push(element("p", `Your ZIP area lies in ${answer.districts.length} districts. The district with the most land is first.`, "zip-count"));
             for (const district of answer.districts)
-                list.append(seat(seatTitle(district, territories.has(district.state)), district.representative));
+                list.append(seat(seatTitle(district), district.representative));
             for (const state of answer.states) {
                 if (state.senators.length === 0) { list.append(element("li", `${stateName(state.state)} has no senators.`, "zip-seat")); continue; }
                 for (const senator of state.senators) list.append(seat(`Senator for ${stateName(state.state)}`, senator));

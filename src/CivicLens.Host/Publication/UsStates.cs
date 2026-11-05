@@ -62,7 +62,19 @@ internal static class UsStates
         ["MP"] = "Northern Mariana Islands"
     };
 
+    private static readonly IReadOnlyDictionary<string, string> HouseOfficeOfNonStates = new Dictionary<string, string>
+    {
+        ["DC"] = "Delegate",
+        ["PR"] = "Resident Commissioner",
+        ["GU"] = "Delegate",
+        ["VI"] = "Delegate",
+        ["AS"] = "Delegate",
+        ["MP"] = "Delegate"
+    };
+
     public static IReadOnlyDictionary<string, string> NameByCode => Names;
+
+    public static IReadOnlyDictionary<string, string> HouseOfficeByNonStateCode => HouseOfficeOfNonStates;
 
     public static string NameOf(string code) => Names.GetValueOrDefault(code, code);
 }

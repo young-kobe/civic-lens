@@ -15,7 +15,7 @@
                             <span>The ZIP lookup needs JavaScript. Without it, browse <a href="@PublicationProtocol.OfficialsPagePath">all officials</a>.</span>
                         </div>
                     </noscript>
-                    <form class="zip-form" hidden data-zip-api="@PublicApiUrl" data-official-page="@PublicationProtocol.OfficialPagePath("{id}")" data-states="@StateNames">
+                    <form class="zip-form" hidden data-zip-api="@PublicApiUrl" data-official-page="@PublicationProtocol.OfficialPagePath("{id}")" data-states="@StateNames" data-house-offices="@HouseOffices">
                         <Field Label="Your ZIP code" For="zip-code">
                             <input id="zip-code" name="zip" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="5" placeholder="5 digits" />
                         </Field>
@@ -58,6 +58,7 @@
     [Parameter] public string? PublicApiUrl { get; set; }
 
     private static readonly string StateNames = JsonSerializer.Serialize(UsStates.NameByCode);
+    private static readonly string HouseOffices = JsonSerializer.Serialize(UsStates.HouseOfficeByNonStateCode);
 
     private string HomeDescription => Brief?.Headline
         ?? "Civic Lens collects what officials say and do, with the sources and the exact text that each record cites.";
