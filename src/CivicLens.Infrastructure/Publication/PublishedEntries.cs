@@ -29,9 +29,17 @@ internal static class PublishedEntries
         """;
 
     private const string FillBillLines = """
-        UPDATE published_entries e SET bill_line = k.bill_line
-        FROM unnest({0}::text[], {1}::text[], {2}::int[], {3}::text[]) AS k(kind, record_id, revision_number, bill_line)
-        WHERE e.kind = k.kind AND e.record_id = k.record_id AND e.revision_number = k.revision_number AND e.bill_line IS NULL
+        WITH locked AS (
+            SELECT e.kind, e.record_id, e.revision_number, k.bill_line
+            FROM published_entries e
+            JOIN unnest({0}::text[], {1}::text[], {2}::int[], {3}::text[]) AS k(kind, record_id, revision_number, bill_line)
+                ON e.kind = k.kind AND e.record_id = k.record_id AND e.revision_number = k.revision_number
+            WHERE e.bill_line IS NULL
+            ORDER BY e.kind, e.record_id, e.revision_number
+            FOR UPDATE OF e)
+        UPDATE published_entries e SET bill_line = locked.bill_line
+        FROM locked
+        WHERE e.kind = locked.kind AND e.record_id = locked.record_id AND e.revision_number = locked.revision_number
         """;
 
     private static readonly string InsertEntries = BuildInsertEntries();

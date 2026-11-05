@@ -156,6 +156,18 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task ARewrittenCarriedActionWithNoRowConflictsAndWritesNoReleaseBecauseTheRewriteNeedsAStoredRowForEveryCarriedAction()
+    {
+        await SeedActionAsync(A, B);
+        await CommitAsync(1, null, PublishedEntryFixtures.Action(B, First));
+
+        await Assert.ThrowsAsync<PublicationConflictException>(() =>
+            CommitRewrittenAsync(2, 1, PublishedEntryFixtures.Action(A, First) with { BillLine = "This bill funds rent aid." }));
+
+        Assert.Equal(["1"], await ReadAsync("SELECT release_number FROM publication_releases ORDER BY 1"));
+    }
+
+    [Fact]
     public async Task TheFillWritesTheBillLineOfARowThatHoldsNoneAndLeavesTheOtherFactsAsTheyAre()
     {
         await SeedActionAsync(A);

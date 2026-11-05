@@ -19,8 +19,9 @@ public sealed class PublishedEntriesInsertOnlyTests
         var found = files.SelectMany(file => writes.Matches(file.Value).Select(match => (file.Key, match.Value))).ToList();
         Assert.Equal([(writer, "UPDATE published_entries e SET bill_line")], found);
         var fill = Regex.Match(files[writer], "FillBillLines = \"\"\"(.*?)\"\"\"", RegexOptions.Singleline).Groups[1].Value;
-        Assert.Matches(@"SET bill_line = k\.bill_line\s+FROM", fill);
-        Assert.Contains("AND e.bill_line IS NULL", fill);
+        Assert.Matches(@"SET bill_line = locked\.bill_line\s+FROM locked", fill);
+        Assert.Contains("WHERE e.bill_line IS NULL", fill);
+        Assert.Matches(@"ORDER BY e\.kind, e\.record_id, e\.revision_number\s+FOR UPDATE OF e", fill);
         // The grants file names the table once, to give the public role a read grant on its columns.
         Assert.Equal(["CivicLens.Infrastructure/Publication/PublicApiGrants.cs", writer], files.Where(file => Regex.IsMatch(file.Value, @"\bpublished_entr(ies|y_\w+)\b")
             && !file.Key.Contains("/Persistence/", StringComparison.Ordinal)).Select(file => file.Key).Order(StringComparer.Ordinal));

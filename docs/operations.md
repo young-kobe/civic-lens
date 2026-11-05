@@ -959,7 +959,7 @@ The bill line needs one rollout command, because carried vote pages and official
 sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --rewrite-entries --rewrite-officials --rewrite-pages
 ```
 
-This publish fills the bill line of the entry rows of the open ranges at once. After it, run the [entries backfill](#entries-backfill) until it exits with 0, and then run `releases entries verify`. The backfill fills the rows of closed ranges. `public_api.bills` and the bills routes show a null `bill_line` for a row until it is filled.
+The rewrite needs a stored entry row for every carried action, and a missing row stops it. So do these steps in this order. Deploy. Run the [entries backfill](#entries-backfill) until it exits with 0 and `openRangesWithoutRow` is 0. Run the rewrite publish, which fills the bill line of the rows of the open ranges at once. Then run `releases entries verify`. The backfill creates the rows that are still missing. Rows of closed ranges from before the line keep a null line. `public_api.bills` and the bills routes show a null `bill_line` for a row until it is filled.
 
 Every publish now reads all release vote revisions. Before the deploy, run `votes revisions verify` and expect exit code 0. One vote revision that is not stored or not backfilled stops every publish.
 

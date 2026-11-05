@@ -110,6 +110,20 @@ public sealed class PublishEntryRewriteTests
     }
 
     [Fact]
+    public async Task OnlyTheCarriedActionIsHandedToTheCommitAndAPlainPublishHandsNoneBecauseOnlyActionRowsHoldALine()
+    {
+        var scenario = new PublicationScenario();
+        await PublishFirstAsync(scenario);
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true });
+        Assert.Equal(PublishedRecordKind.Action, Assert.Single(scenario.Publications.LastCommit!.RewrittenEntries).Kind);
+
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k3", new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('d'))));
+        Assert.Empty(scenario.Publications.LastCommit!.RewrittenEntries);
+    }
+
+    [Fact]
     public async Task TheRewriteOptionKeepsTheSameBillLineOfACarriedEntryThatHoldsOne()
     {
         var scenario = new PublicationScenario();
