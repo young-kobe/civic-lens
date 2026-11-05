@@ -16,7 +16,10 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     string? PolicyAreaId, ImmutableArray<string> TrackedIssueIds,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<string> IssueCandidateIds, string IssueRevisionId, ImmutableArray<ActionSponsorship> Sponsorships, string BillTitle,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SubjectsHash = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SourceSpan? BillCitation = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SourceSpan? BillCitation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TextPackageId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? WhyItMatters = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<ActionTextCitation> TextCitations = default)
     : IHeadlineSummaryRevision
 {
     public const int MaximumHeadlineLength = 256;
@@ -32,12 +35,22 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     public const int MaximumPersonIdLength = VoteDraftRevision.MaximumPersonIdLength;
     public const int MaximumBioguideIdLength = VoteDraftRevision.MaximumBioguideIdLength;
     public const int MaximumIssueIdLength = VoteDraftRevision.MaximumIssueIdLength;
+    public const int MaximumTextPackageIdLength = 64;
+    public const int MinimumSummarySentences = 2;
+    public const int MaximumSummarySentences = 3;
+    public const int MaximumWhyItMattersSentences = 3;
+    public const int MaximumTextCitations = MaximumSummarySentences + MaximumWhyItMattersSentences;
+    public const int MaximumTextQuoteLength = 300;
+    public const int MinimumTextQuoteWords = 4;
+    public const int MaximumTextSentenceLength = 400;
+
+    private ImmutableArray<ActionTextCitation> TextCitationList => TextCitations.IsDefault ? [] : TextCitations;
 
     public ReviewAuthorKind AuthorKind => ReviewAuthor.KindOf(AuthorSubject);
 
     public IEnumerable<SourceSpan> Citations => Sponsorships.SelectMany(item => item.Citations)
         .Concat(SummaryCitation is { } summary ? [summary] : []).Concat(PolicyAreaCitation is { } area ? [area] : [])
-        .Concat(BillCitation is { } bill ? [bill] : []);
+        .Concat(BillCitation is { } bill ? [bill] : []).Concat(TextCitationList.Select(citation => citation.Span));
 
     public DateOnly EventOn() => Sponsorships.Max(item => item.WithdrawnOn ?? item.SponsoredOn);
 
@@ -90,6 +103,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
             throw new ArgumentException("Citations must be bounded spans.");
         if (AuthorKind == ReviewAuthorKind.Code && BillCitation is null)
             throw new ArgumentException("Code text states the bill title and date, so the revision cites the bill page.");
+        ValidateTextSource();
         if ((SummaryVersion is null) != (SummaryCitation is null) || (PolicyArea is null) != (PolicyAreaCitation is null))
             throw new ArgumentException("A summary version and a policy area each need their citation.");
         if (PolicyAreaId is not null && PolicyArea is null)
@@ -97,6 +111,27 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         if (SummaryVersion is not null) ReviewTextRules.ValidateText(SummaryVersion, MaximumSummaryVersionLength, nameof(SummaryVersion));
         if (PolicyArea is not null) ReviewTextRules.ValidateText(PolicyArea, MaximumPolicyAreaLength, nameof(PolicyArea));
         if (PolicyAreaId is not null) ReviewTextRules.ValidateText(PolicyAreaId, MaximumPolicyAreaIdLength, nameof(PolicyAreaId));
+    }
+
+    private void ValidateTextSource()
+    {
+        var citations = TextCitationList;
+        if ((TextPackageId is null) != (WhyItMatters is null) || (TextPackageId is null) != citations.IsEmpty)
+            throw new ArgumentException("A bill text package, a why it matters part, and text citations come together.");
+        if (TextPackageId is null) return;
+        if (SummaryCitation is not null || SummaryVersion is not null)
+            throw new ArgumentException("An action revision cites the CRS summary or the bill text, never both.");
+        ReviewTextRules.ValidateText(TextPackageId, MaximumTextPackageIdLength, nameof(TextPackageId));
+        ReviewTextRules.ValidateText(WhyItMatters!, MaximumSummaryLength, nameof(WhyItMatters));
+        var summary = citations.Count(citation => citation.Part == ActionTextPart.Summary);
+        var why = citations.Count(citation => citation.Part == ActionTextPart.WhyItMatters);
+        var summaryComesFirst = citations.Take(summary).All(citation => citation.Part == ActionTextPart.Summary);
+        if (summary is < MinimumSummarySentences or > MaximumSummarySentences || why is < 1 or > MaximumWhyItMattersSentences || !summaryComesFirst)
+            throw new ArgumentException("Bill text gives 2 or 3 summary sentences, then 1 to 3 why it matters sentences.");
+        if (citations.Any(citation => !IsBounded(citation.Span) || citation.Span.Length > MaximumTextQuoteLength))
+            throw new ArgumentException("Each text citation is a bounded span of one quote.");
+        if (citations.Any(citation => string.IsNullOrWhiteSpace(citation.Sentence) || citation.Sentence.Length > MaximumTextSentenceLength))
+            throw new ArgumentException("Each text sentence has text and at most the maximum length.");
     }
 
     private static void ValidateIssueIds(ImmutableArray<string> ids, string name)
@@ -126,7 +161,12 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         ReviewTextRules.RequireSuggestionKeptOrCleared(this, previous);
     }
 
-    public void ValidateForApproval() => ValidateShape();
+    public void ValidateForApproval()
+    {
+        ValidateShape();
+        if (TextPackageId is not null)
+            throw new ArgumentException("A draft from the bill text waits for the publish step. That step adds the text citations and the label.");
+    }
 
     public void ValidateForApproval(IReadOnlyDictionary<string, DocumentExtraction> extractions)
     {
@@ -139,6 +179,30 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         foreach (var span in Citations)
             _ = new DocumentTextSpan(extractions.GetValueOrDefault(span.ExtractionId)
                 ?? throw new ArgumentException("An action citation names a missing extraction."), span.Start, span.Length);
+        if (TextPackageId is null) return;
+        RequireTextSpansInTheBody(extractions);
+        if (TextOrigin == ReviewTextOrigin.Model) RequireTextToQuoteItsCitations(extractions);
+    }
+
+    private void RequireTextSpansInTheBody(IReadOnlyDictionary<string, DocumentExtraction> extractions)
+    {
+        var extractionId = TextCitationList[0].Span.ExtractionId;
+        var bodyStart = BillTextBody.Start(extractions[extractionId].Text);
+        if (bodyStart < 0 || TextCitationList.Any(citation => citation.Span.ExtractionId != extractionId || citation.Span.Start < bodyStart))
+            throw new ArgumentException("Each text citation lies in the body of one bill text extraction.");
+    }
+
+    private void RequireTextToQuoteItsCitations(IReadOnlyDictionary<string, DocumentExtraction> extractions)
+    {
+        ActionTextCitation[] Of(ActionTextPart part) => [.. TextCitationList.Where(citation => citation.Part == part)];
+        if (Summary != ActionTextCitation.Join(Of(ActionTextPart.Summary)) || WhyItMatters != ActionTextCitation.Join(Of(ActionTextPart.WhyItMatters)))
+            throw new ArgumentException("Model text drawn from the bill text is the join of its sentences.");
+        foreach (var citation in TextCitationList)
+        {
+            var quote = citation.Span.QuoteIn(extractions);
+            if (!citation.Sentence.Contains(quote, StringComparison.Ordinal) || ActionTextCitation.WordCount(quote) < MinimumTextQuoteWords)
+                throw new ArgumentException($"Each text sentence contains its quote of at least {MinimumTextQuoteWords} words.");
+        }
     }
 
     public bool HasSameSponsorsAs(IEnumerable<ActionSponsorship> other) => SponsorsOf(Sponsorships).SequenceEqual(SponsorsOf(other));
@@ -151,7 +215,8 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         BillNumber == other.BillNumber && CandidateId == other.CandidateId && CandidateUpdateDate == other.CandidateUpdateDate &&
         CandidateIncludesSummaries == other.CandidateIncludesSummaries && CandidateIncludesSubjects == other.CandidateIncludesSubjects &&
         Fingerprint == other.Fingerprint && SummaryCitation == other.SummaryCitation && PolicyAreaCitation == other.PolicyAreaCitation &&
-        BillCitation == other.BillCitation &&
+        BillCitation == other.BillCitation && TextPackageId == other.TextPackageId && WhyItMatters == other.WhyItMatters &&
+        TextCitationList.SequenceEqual(other.TextCitationList) &&
         HasSameBillFactsAs(other) && SubjectsHash == other.SubjectsHash && Sponsorships.SequenceEqual(other.Sponsorships);
 
     private bool HasSameBillFactsAs(ActionDraftRevision other) =>

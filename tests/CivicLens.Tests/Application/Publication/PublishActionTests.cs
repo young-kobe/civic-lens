@@ -209,6 +209,19 @@ public sealed class PublishActionTests
     }
 
     [Fact]
+    public async Task ATextDraftThatSomeoneApprovedStillStopsThePublishBecauseThePublishedActionHasNoCitationOfItsTextSource()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c');
+        scenario.DraftActionFromBillText(action);
+
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action)));
+
+        Assert.Contains("cited", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(scenario.Publications.Committed);
+    }
+
+    [Fact]
     public async Task AnActionAndAStatementCannotShareOneIdBecauseTheyWouldShareOneRecordFile()
     {
         var scenario = new PublicationScenario();

@@ -4,7 +4,8 @@ namespace CivicLens.Application.Actions;
 
 public interface IActionDraftStore : IAnalysisQueueStore<ActionDraftRun, ActionDraftView, ActionDraftListItem>
 {
-    Task<ActionDraftEvidence?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken);
+    /// <summary>Reads the evidence of a candidate. The bill text is read only when <paramref name="withBillText"/> is true.</summary>
+    Task<ActionDraftEvidence?> ReadEvidenceAsync(string candidateId, bool withBillText, CancellationToken cancellationToken);
 
     Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken);
 

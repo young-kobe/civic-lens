@@ -18,8 +18,8 @@ internal sealed class FakeActionDraftStore : FakeAnalysisQueue<ActionDraftRun>, 
     public ActionDraftEvidence Evidence { get; }
     public List<ActionDraftRevision> Revisions { get; } = [];
 
-    public Task<ActionDraftEvidence?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken) =>
-        Task.FromResult<ActionDraftEvidence?>(Evidence);
+    public Task<ActionDraftEvidence?> ReadEvidenceAsync(string candidateId, bool withBillText, CancellationToken cancellationToken) =>
+        Task.FromResult<ActionDraftEvidence?>(withBillText ? Evidence : Evidence with { BillText = null });
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) => throw new NotSupportedException();
 

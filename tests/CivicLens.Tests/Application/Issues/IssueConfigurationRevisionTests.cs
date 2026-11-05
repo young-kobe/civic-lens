@@ -43,6 +43,25 @@ public sealed class IssueConfigurationRevisionTests
         Assert.Equal(valid, IsValid(Configuration(Issue() with { PolicyAreaIds = [id] }) with { PolicyAreas = [new() { Id = id, Name = "Area" }] }));
     }
 
+    [Theory]
+    [InlineData(120, true)]
+    [InlineData(121, false)]
+    public void ADefinitionOverTheCapIsRefusedBecauseTheIssuePageShowsItInOneShortParagraph(int length, bool valid)
+    {
+        Assert.Equal(valid, IsValid(Configuration(Issue() with { Definition = new string('d', length) })));
+    }
+
+    [Theory]
+    [InlineData(75, true)]
+    [InlineData(76, false)]
+    public void AnIncludeOrExcludeTermOverTheCapIsRefusedBecauseTheIssuePageShowsEachTermAsOneListLine(int length, bool valid)
+    {
+        var term = new string('t', length);
+
+        Assert.Equal(valid, IsValid(Configuration(Issue() with { Includes = [term] })));
+        Assert.Equal(valid, IsValid(Configuration(Issue() with { Excludes = [term] })));
+    }
+
     [Fact]
     public void RevisionJsonAndIdMatchThePinnedConfigurationVersion()
     {

@@ -126,7 +126,7 @@ public sealed class PublishedHomePageTests
     [Fact]
     public async Task TheIssueTilesLinkEachIssuePageAndDrawTheConfiguredIconOrTheNeutralDefaultAndSkipAnIssueWithNoPage()
     {
-        ReleaseFacet Facet(string id, string? icon) => new(FacetKind.Issue, id, $"Name {id}", [], icon);
+        ReleaseFacet Facet(string id, string? icon) => new(FacetKind.Issue, id, $"Name {id}", [], icon, null);
         var facets = new ReleaseFacets([Facet("firearms", "crosshair"), Facet("plain", null), Facet("not a segment", "bolt")], []);
 
         var main = await HomeAsync(ReleaseOf(), [], facets: facets);
