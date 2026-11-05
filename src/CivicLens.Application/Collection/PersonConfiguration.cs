@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace CivicLens.Application.Collection;
 
 public sealed record PersonConfiguration
@@ -9,9 +7,5 @@ public sealed record PersonConfiguration
     public DatedNameConfiguration[]? Names { get; init; }
     public string? BioguideId { get; init; }
     public string? WikidataId { get; init; }
-    public string? Website { get; init; }
     public OfficeConfiguration[]? Offices { get; init; }
-
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public bool WithholdPhoto { get; init; }
 }

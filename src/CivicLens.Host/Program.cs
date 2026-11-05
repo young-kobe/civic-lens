@@ -435,7 +435,7 @@ try
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var people = PostgresPersonRegistryStore.FromConnectionString(connectionString);
         executing = true;
-        return await PeopleCommand.ExecuteAsync(args, people, owner.Subject, cancellation.Token);
+        return await PeopleCommand.ExecuteAsync(args, people, owner, cancellation.Token);
     }
 
     if (ReleaseCommand.Matches(args))

@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Actions;
+using CivicLens.Application.People;
 using CivicLens.Application.Review;
 using CivicLens.Application.Roster;
 using CivicLens.Core.Review;
@@ -77,7 +78,8 @@ public sealed class PublishRelease
         var newWithdrawals = PublicationWithdrawals.Create(previous, corrections, now, withdrawalNotes);
         var returned = ImmutableArray.CreateRange(references.Where(reference => previous.IsWithdrawn(reference.RecordId)));
         var roster = await officials.ReadRosterAsync(cancellationToken);
-        var photos = await officials.ReadPhotosAsync(cancellationToken);
+        var settings = await officials.ReadSettingsAsync(cancellationToken);
+        var photos = await officials.ReadPhotosAsync(settings, cancellationToken);
         var statuses = await ReleaseBillStatuses.LoadAsync(loaders.Actions, previous, references, cancellationToken);
         var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster, byCode, firstPublished)
             .WithRemoved(withdrawn).WithReturned(returned).WithBillStatuses(statuses);
@@ -95,7 +97,7 @@ public sealed class PublishRelease
         RequireRoom(previous, carried.Count + additions.Count + withdrawals.Count, additions);
 
         var number = state.LatestReleaseNumber + 1;
-        var (directory, entries, names) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, released.BillLines, statuses, roster, photos, request.RewriteOfficials, request.RewriteEntries, request.RewritePages, cancellationToken);
+        var (directory, entries, names) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, released.BillLines, statuses, roster, settings, photos, request.RewriteOfficials, request.RewriteEntries, request.RewritePages, cancellationToken);
         var commit = new PublicationCommit(number, state.Active?.ReleaseNumber, directory,
             [.. entries.Select(PublishedRevisionBinding.Of)],
             [.. additions.Select(addition => addition.Expectation)])
@@ -180,7 +182,7 @@ public sealed class PublishRelease
     private async Task<(string Directory, List<PublishedRecordEntry> Entries, ReleaseNames Names)> StageAsync(int number, DateTimeOffset now,
         PreviousRelease previous, List<PublishedRecordEntry> carried, List<PendingRecord> additions,
         List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, StagedPage> pages, ReleaseBillLines billLines, IReadOnlyDictionary<string, ActionBillStatus> statuses, IReadOnlyList<RosterMember> roster,
-        IReadOnlyList<OfficialPhoto> photos, bool rewriteOfficials, bool rewriteEntries, bool rewritePages, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, PersonSetting> settings, IReadOnlyList<OfficialPhoto> photos, bool rewriteOfficials, bool rewriteEntries, bool rewritePages, CancellationToken cancellationToken)
     {
         List<PublishedRecordEntry> entries = [.. carried, .. additions.Select(addition => addition.Entry)];
         var manifest = new PublicationRelease
@@ -222,7 +224,7 @@ public sealed class PublishRelease
         var facets = ReleaseFacets.From(manifest, catalog);
         await indexPages.WriteAsync(staging, manifest, facets, billLines, cancellationToken);
         await ReleaseBillStatuses.WriteAsync(staging, ReleaseBillStatuses.ActionIdsOf(manifest.Records), statuses, cancellationToken);
-        var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, photos, cancellationToken);
+        var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, settings, photos, cancellationToken);
         if (additions.Count == 0 && removed.Count == 0 && !rewriteOfficials && !rewriteEntries && !rewritePages && !ReleaseOfficialPages.ChangesProfiles(previous, officials) &&
             !ReleaseBillStatuses.ChangedActionIds(ReleaseBillStatuses.ActionIdsOf(manifest.Records), previous, statuses).Any())
             throw new ArgumentException("Nothing to publish: no record, official, or bill status changed.");

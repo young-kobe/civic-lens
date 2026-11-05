@@ -1,4 +1,5 @@
 using CivicLens.Application.Collection;
+using CivicLens.Application.People;
 using CivicLens.Application.Roster;
 using CivicLens.Publication.Contracts;
 
@@ -6,9 +7,10 @@ namespace CivicLens.Application.Publication;
 
 /// <summary>
 /// Builds the profile of each official that a record names. A configured person matches roster terms by bioguide ID, else by
-/// Wikidata ID, else gets the configured offices. A person with `WithholdPhoto` gets no photo. The website is the valid roster URL of a member, else the configured website. A person who left the configuration keeps the name that the records hold, and has no terms.
+/// Wikidata ID, else gets the configured offices. A person whose newest setting withholds the photo gets no photo. The website is the valid roster URL of a member, else the website of the newest setting. A person who left the configuration keeps the name that the records hold, and has no terms.
 /// </summary>
-public sealed class PublicationOfficials(CollectionConfiguration configuration, IMemberRosterStore members, IExecutiveRosterStore executives)
+public sealed class PublicationOfficials(CollectionConfiguration configuration, IMemberRosterStore members, IExecutiveRosterStore executives,
+    IPersonRegistryStore people)
 {
     private static readonly PublishedOfficeTerm[] NoTerms = [];
 
@@ -21,11 +23,18 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
             ? await members.ReadLatestAsync(source.Id, cancellationToken)
             : [];
 
-    internal async Task<IReadOnlyList<OfficialPhoto>> ReadPhotosAsync(CancellationToken cancellationToken) =>
-        await members.ReadNewestPhotosAsync([.. configuration.People.Where(person => !person.WithholdPhoto).Select(person => person.Id)], cancellationToken);
+    /// <summary>Reads the newest setting of every configured person once, so the photo choice and the website of one publish agree.</summary>
+    internal async Task<IReadOnlyDictionary<string, PersonSetting>> ReadSettingsAsync(CancellationToken cancellationToken) =>
+        await people.ReadNewestSettingsAsync([.. configuration.People.Select(person => person.Id)], cancellationToken);
+
+    internal async Task<IReadOnlyList<OfficialPhoto>> ReadPhotosAsync(IReadOnlyDictionary<string, PersonSetting> settings,
+        CancellationToken cancellationToken) =>
+        await members.ReadNewestPhotosAsync([.. configuration.People.Where(person => !SettingOf(settings, person.Id).WithholdPhoto).Select(person => person.Id)],
+            cancellationToken);
 
     internal async Task<PublishedOfficials> ResolveAsync(IReadOnlySet<string> officialIds, IReadOnlyDictionary<string, string> recordNames,
-        IReadOnlyList<RosterMember> roster, IReadOnlyDictionary<string, PublishedPhoto> photos, CancellationToken cancellationToken)
+        IReadOnlyList<RosterMember> roster, IReadOnlyDictionary<string, PersonSetting> settings,
+        IReadOnlyDictionary<string, PublishedPhoto> photos, CancellationToken cancellationToken)
     {
         var people = configuration.People.Where(person => officialIds.Contains(person.Id)).ToArray();
         var memberFacts = people.Any(person => person.BioguideId is not null) ? MemberFactsOf(roster) : [];
@@ -33,7 +42,7 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
         var executiveTerms = await ReadExecutiveTermsAsync(needsExecutives, cancellationToken);
         var published = new PublishedOfficials
         {
-            Officials = [.. people.Select(person => ToProfile(person, memberFacts, executiveTerms, photos))
+            Officials = [.. people.Select(person => ToProfile(person, memberFacts, executiveTerms, settings, photos))
                 .Concat(officialIds.Except(people.Select(person => person.Id)).Select(id => Unconfigured(id, recordNames)))
                 .OrderBy(profile => profile.Name, StringComparer.Ordinal).ThenBy(profile => profile.Id, StringComparer.Ordinal)]
         };
@@ -84,12 +93,13 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
             : throw new InvalidDataException($"Official {id} is named by a record but no record holds a name for the official.");
 
     private static PublishedOfficialProfile ToProfile(PersonConfiguration person, Dictionary<string, MemberFacts> memberFacts,
-        Dictionary<string, PublishedOfficeTerm[]> executiveTerms, IReadOnlyDictionary<string, PublishedPhoto> photos) => new()
+        Dictionary<string, PublishedOfficeTerm[]> executiveTerms, IReadOnlyDictionary<string, PersonSetting> settings,
+        IReadOnlyDictionary<string, PublishedPhoto> photos) => new()
         {
             Id = person.Id,
             Name = person.Name,
             WikidataId = person.WikidataId,
-            Website = WebsiteOf(person, memberFacts),
+            Website = WebsiteOf(person, memberFacts, SettingOf(settings, person.Id)),
             Photo = photos.GetValueOrDefault(person.Id),
             Terms = TermsOf(person, memberFacts, executiveTerms)
         };
@@ -120,8 +130,11 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
     private static PublishedOfficeTerm[] MemberTermsOf(PersonConfiguration person, Dictionary<string, MemberFacts> memberFacts) =>
         person.BioguideId is not null && memberFacts.TryGetValue(person.BioguideId, out var facts) ? facts.Terms : NoTerms;
 
-    private static string? WebsiteOf(PersonConfiguration person, Dictionary<string, MemberFacts> memberFacts) =>
-        person.BioguideId is not null && memberFacts.TryGetValue(person.BioguideId, out var facts) && facts.Website is { } website ? website : person.Website;
+    private static string? WebsiteOf(PersonConfiguration person, Dictionary<string, MemberFacts> memberFacts, PersonSetting setting) =>
+        person.BioguideId is not null && memberFacts.TryGetValue(person.BioguideId, out var facts) && facts.Website is { } website ? website : setting.Website;
+
+    private static PersonSetting SettingOf(IReadOnlyDictionary<string, PersonSetting> settings, string personId) =>
+        settings.GetValueOrDefault(personId, PersonSetting.None);
 
     private static string? ValidWebsite(string? url) => PublishedWebsite.IsValid(url) ? url : null;
 

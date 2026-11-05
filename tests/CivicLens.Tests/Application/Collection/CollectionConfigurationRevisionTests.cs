@@ -107,35 +107,6 @@ public sealed class CollectionConfigurationRevisionTests
     }
 
     [Fact]
-    public void WebsiteSurvivesRevisionRoundTrip()
-    {
-        var configuration = new CollectionConfiguration
-        {
-            Version = 1,
-            People = [new PersonConfiguration { Id = "person", Name = "Official", Website = "https://www.whitehouse.gov" }],
-            Sources = [Configuration(["person"]).Sources[0]]
-        };
-
-        var revision = CollectionConfigurationRevision.Create(configuration);
-
-        Assert.Contains("\"website\":\"https://www.whitehouse.gov\"", revision.Json, StringComparison.Ordinal);
-        Assert.Equal("https://www.whitehouse.gov", revision.ReadConfiguration().People[0].Website);
-    }
-
-    [Fact]
-    public void WithholdPhotoSurvivesRevisionRoundTripAndAnAbsentFlagLeavesTheSnapshotUnchanged()
-    {
-        var configuration = Configuration(["person"]);
-        var withheld = configuration with { People = [new PersonConfiguration { Id = "person", Name = "Official", WithholdPhoto = true }] };
-
-        var revision = CollectionConfigurationRevision.Create(withheld);
-
-        Assert.Contains("\"withholdPhoto\":true", revision.Json, StringComparison.Ordinal);
-        Assert.True(revision.ReadConfiguration().People[0].WithholdPhoto);
-        Assert.DoesNotContain("withholdPhoto", CollectionConfigurationRevision.Create(configuration).Json, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void OfficesSurviveRevisionRoundTripAndAbsentOfficesLeaveTheSnapshotUnchanged()
     {
         var configuration = Configuration(["person"]);

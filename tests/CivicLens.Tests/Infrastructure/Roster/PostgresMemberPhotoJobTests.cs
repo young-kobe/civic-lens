@@ -1,7 +1,10 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.People;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Infrastructure.People;
 using CivicLens.Infrastructure.Roster;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -46,10 +49,11 @@ public sealed class PostgresMemberPhotoJobTests(PostgresCollection postgres) : I
     [Fact]
     public async Task AWithheldPersonStillGetsAPhotoJobSoRemovingTheFlagRestoresTheNewestPhoto()
     {
-        var people = People().Select(person => person.Id == "cantwell" ? person with { WithholdPhoto = true } : person).ToArray();
+        var registry = PostgresPersonRegistryStore.FromConnectionString(connectionString);
+        await registry.ImportAsync(People(), "owner", default);
+        await new ChangePersonSetting(registry).WithholdPhotoAsync(new ReviewActor("owner", ReviewRole.Owner), "cantwell", "Takedown.", default);
 
-        await roster.AdmitAsync(await ImportRosterAsync('a', 0), RosterFixtures.Members(),
-            new ConfiguredCollectionSource(MemberPhotoFixtures.Configuration(people), MemberPhotoFixtures.SourceId), default);
+        await roster.AdmitAsync(await ImportRosterAsync('a', 0), RosterFixtures.Members(), Photos(), default);
 
         Assert.Contains(await ReadPhotoJobsAsync(), job => job.IdempotencyKey.Contains("/C000127/", StringComparison.Ordinal));
     }
