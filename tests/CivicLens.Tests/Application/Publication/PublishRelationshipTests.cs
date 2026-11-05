@@ -263,11 +263,12 @@ public sealed class PublishRelationshipTests
             Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Action, action),
             Reference(PublishedRecordKind.Vote, vote)));
         var relationship = scenario.AddRelationship('e', statement, vote, PublishedRecordKind.Vote);
+        var before = scenario.Votes.BillLookups;
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
 
         Assert.Equal($"<html>vote {vote} bill {action} related e</html>", PageOf(scenario, summary.DirectoryName, vote));
-        Assert.Equal(1, scenario.Votes.BillLookups);
+        Assert.Equal(before + 1, scenario.Votes.BillLookups);
     }
 
     [Fact]
