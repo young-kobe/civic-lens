@@ -51,7 +51,9 @@ public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLife
     {
         var result = await HostProcess.RunAsync(connectionString, "people", "import", ShippedConfiguration);
 
-        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("Invalid input/configuration", result.Error, StringComparison.Ordinal);
+        Assert.Empty(await ReadPeopleAsync());
     }
 
     private Task<(int ExitCode, string Output, string Error)> ImportAsync() =>

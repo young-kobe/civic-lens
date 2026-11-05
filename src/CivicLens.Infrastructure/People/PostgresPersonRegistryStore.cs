@@ -1,5 +1,6 @@
 using CivicLens.Application.Collection;
 using CivicLens.Application.People;
+using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.People.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -23,9 +24,8 @@ public sealed class PostgresPersonRegistryStore(IDbContextFactory<CollectionAtte
     public async Task<PeopleImport> ImportAsync(IReadOnlyList<PersonConfiguration> people, string actorSubject, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(people);
-        ArgumentException.ThrowIfNullOrWhiteSpace(actorSubject);
-        if (actorSubject.Length > PersonRegistryLimits.ActorSubject)
-            throw new ArgumentException($"The actor must be at most {PersonRegistryLimits.ActorSubject} characters.", nameof(actorSubject));
+        if (!ReviewAuthor.IsValidSubject(actorSubject))
+            throw new ArgumentException($"The actor must have 1 to {ReviewAuthor.MaximumSubjectLength} characters.", nameof(actorSubject));
         foreach (var office in people.SelectMany(person => person.Offices ?? []))
             if (office.Kind is null)
                 throw new ArgumentException("Every office needs a kind.", nameof(people));

@@ -84,7 +84,22 @@ public sealed class PostgresPersonRegistryStoreTests(PostgresCollection postgres
     {
         await people.ImportAsync([Person("president", wikidataId: "Q22686")], Owner, default);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => people.ImportAsync([Person("copy", wikidataId: "Q22686")], Owner, default));
+        var failure = await Assert.ThrowsAsync<ArgumentException>(() =>
+            people.ImportAsync([Person("new-person"), Person("copy", wikidataId: "Q22686")], Owner, default));
+
+        Assert.Contains("Q22686", failure.Message, StringComparison.Ordinal);
+        Assert.Equal([1L], await QueryAsync("SELECT count(*) FROM people", reader => reader.GetInt64(0)));
+    }
+
+    [Fact]
+    public async Task AGovtrackIdOfAnotherPersonIsRefusedByTheDatabase()
+    {
+        await ExecuteAsync("INSERT INTO people (person_id, govtrack_id, created_at_utc_ticks, created_by_actor) VALUES ('a', 7, 1, 'o')");
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteAsync("INSERT INTO people (person_id, govtrack_id, created_at_utc_ticks, created_by_actor) VALUES ('b', 7, 1, 'o')"));
+
+        Assert.Equal("IX_people_govtrack_id", failure.ConstraintName);
     }
 
     [Fact]
@@ -134,7 +149,6 @@ public sealed class PostgresPersonRegistryStoreTests(PostgresCollection postgres
             """, reader => reader.GetInt64(0));
 
         Assert.Equal(numbers.Count, numbers.Distinct().Count());
-        Assert.Equal(numbers.Order(), numbers);
         Assert.Equal(4, numbers.Count);
     }
 

@@ -891,7 +891,7 @@ The output lists the members to add and the configured people who left the roste
 
 ### Import people into tables
 
-The tables `people`, `person_setting_revisions`, `person_office_revisions`, and `person_office_revision_terms` hold the people of the configuration. Run the import once after `db migrate`. It needs `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`. It prints `added` and `alreadyKnown`. A repeat adds nothing. It exits with code 2 and writes nothing when a bioguide ID or a Wikidata ID belongs to another person. No reader uses the tables yet. See [roster](architecture/roster.md#officials-in-tables).
+The tables `people`, `person_setting_revisions`, `person_office_revisions`, and `person_office_revision_terms` hold the people of the configuration. Run the import once after `db migrate`. It needs `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`. It prints `added` and `alreadyKnown`. Two imports at the same time make the second fail with exit code 1 and write nothing, so run it once. A repeat adds nothing. It exits with code 2 and writes nothing when a bioguide ID or a Wikidata ID belongs to another person. No reader uses the tables yet. See [roster](architecture/roster.md#officials-in-tables).
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- people import config/federal-coverage.json

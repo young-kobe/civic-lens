@@ -1,3 +1,4 @@
+using CivicLens.Core.Review;
 using CivicLens.Application.People;
 using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
@@ -20,7 +21,7 @@ internal sealed class PersonSettingRevisionRowConfiguration : IEntityTypeConfigu
         builder.Property(row => row.WithholdPhoto).HasColumnName("withhold_photo");
         builder.Property(row => row.Website).HasColumnName("website").HasMaxLength(PublishedWebsite.MaximumLength);
         builder.Property(row => row.Note).HasColumnName("note").HasMaxLength(PersonRegistryLimits.Note).IsRequired();
-        builder.Property(row => row.ActorSubject).HasColumnName("actor_subject").HasMaxLength(PersonRegistryLimits.ActorSubject).IsRequired();
+        builder.Property(row => row.ActorSubject).HasColumnName("actor_subject").HasMaxLength(ReviewAuthor.MaximumSubjectLength).IsRequired();
         builder.Property(row => row.RecordedAtUtcTicks).HasColumnName("recorded_at_utc_ticks");
         builder.Property(row => row.RegistrySequence).TakesNext();
         builder.HasIndex(row => row.RegistrySequence).IsUnique();

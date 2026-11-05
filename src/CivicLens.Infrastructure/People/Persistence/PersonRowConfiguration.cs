@@ -1,3 +1,4 @@
+using CivicLens.Core.Review;
 using CivicLens.Application.People;
 using CivicLens.Application.Roster;
 using CivicLens.Infrastructure.Collection.Persistence;
@@ -25,7 +26,7 @@ internal sealed class PersonRowConfiguration : IEntityTypeConfiguration<PersonRo
         builder.Property(row => row.GovtrackId).HasColumnName("govtrack_id");
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
         builder.Property(row => row.CreatedByAttemptId).HasColumnName("created_by_attempt_id");
-        builder.Property(row => row.CreatedByActor).HasColumnName("created_by_actor").HasMaxLength(PersonRegistryLimits.ActorSubject);
+        builder.Property(row => row.CreatedByActor).HasColumnName("created_by_actor").HasMaxLength(ReviewAuthor.MaximumSubjectLength);
         builder.HasIndex(row => row.BioguideId).IsUnique();
         builder.HasIndex(row => row.WikidataId).IsUnique();
         builder.HasIndex(row => row.GovtrackId).IsUnique();
