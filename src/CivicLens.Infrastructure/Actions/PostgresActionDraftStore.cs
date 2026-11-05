@@ -63,7 +63,8 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
             (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId);
         return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId), await ReadPagesAsync(db, row.DetailJobId, row.IncludesSummaries, row.IncludesSubjects, cancellationToken),
             current, hasNewerCandidate, hasStaleDraft, await ActionDraftRows.IsRejectedAsync(db, recordId, cancellationToken),
-            withBillText ? await ReadBillTextAsync(db, row.DetailJobId, cancellationToken) : null);
+            withBillText ? await ReadBillTextAsync(db, row.DetailJobId, cancellationToken) : null,
+            await ActionDraftRows.ReadStateVersionAsync(db, recordId, cancellationToken));
     }
 
     public async Task<string?> NewestCandidateIdAsync(CongressBillListItem bill, CancellationToken cancellationToken)
@@ -125,8 +126,12 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
                                    on new { draft.RecordId, Number = draft.CurrentRevisionNumber } equals new { revision.RecordId, Number = revision.RevisionNumber }
                                where draft.SourceId == candidate.SourceId && draft.Congress == candidate.Congress &&
                                    draft.BillType == candidate.BillType && draft.BillNumber == candidate.BillNumber &&
-                                   (revision.AuthorKind == ReviewAuthorKind.Code || draft.ReviewStatus == ReviewStatus.Rejected)
-                               select draft.RecordId).Any()
+                                   revision.AuthorKind == ReviewAuthorKind.Code
+                               select draft.RecordId).Any() &&
+                               !(from decided in ActionDraftRows.DraftsWithPersonDecision(db)
+                                 where decided.SourceId == candidate.SourceId && decided.Congress == candidate.Congress &&
+                                     decided.BillType == candidate.BillType && decided.BillNumber == candidate.BillNumber
+                                 select decided.RecordId).Any()
                            let newestDraftRunId = (from run in db.Set<ActionAnalysisRunRow>()
                                                    join sibling in db.Set<ActionCandidateRow>() on run.CandidateId equals sibling.CandidateId
                                                    where run.Task == ActionDraftTask.Task && run.Outcome == AnalysisRunOutcome.Drafted &&

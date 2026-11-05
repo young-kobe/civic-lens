@@ -68,17 +68,17 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         CancellationToken cancellationToken)
     {
         var request = context.Snapshot.NewestSummary is null ? null : BuildTextRequest(context, default);
-        if (request is not null) return await RunLoopAsync(attempt, TextLoop(attempt, context, request), cancellationToken);
+        if (request is not null) return await RunLoopAsync(attempt, context, TextLoop(attempt, context, request), cancellationToken);
         if (context.KeepsCurrentText)
             return change == ActionChange.StaleOnly
                 ? await SettleWithoutCallAsync(attempt, context.Snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken)
                 : await SettleRevisionWithoutCallAsync(attempt, context, ActionDraftErrorCodes.TextKept, ActionDraftResolver.CopyText, cancellationToken);
         if (context.Evidence.BillText is { } billText && BuildBillTextRequest(context, billText, default) is { } billTextRequest)
-            return await RunLoopAsync(attempt, BillTextLoop(attempt, context, billText, billTextRequest), cancellationToken);
+            return await RunLoopAsync(attempt, context, BillTextLoop(attempt, context, billText, billTextRequest), cancellationToken);
         return context.Issues.CandidateIds.IsEmpty
             ? await SettleRevisionWithoutCallAsync(attempt, context, ActionDraftErrorCodes.CodeWritten,
                 (draft, createdAtUtc) => ActionDraftResolver.WriteByCode(draft, createdAtUtc), cancellationToken)
-            : await RunLoopAsync(attempt, IssueLoop(attempt, context), cancellationToken);
+            : await RunLoopAsync(attempt, context, IssueLoop(attempt, context), cancellationToken);
     }
 
     private static Task<bool> SettleRevisionWithoutCallAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftContext context,
@@ -87,7 +87,7 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         var run = attempt.BypassRun(ActionDraftTask.Model, context.Snapshot.Fingerprint, null);
         var revision = write(context, run.FinishedAtUtc);
         return attempt.SettleAsync(new ActionDraftRun(run, reason),
-            ActionDraftCheckpoint.From(attempt.Claim, revision), cancellationToken);
+            ActionDraftCheckpoint.From(attempt.Claim, revision, context.Evidence.ReviewStateVersion), cancellationToken);
     }
 
     private AnalysisModelRequest? BuildTextRequest(ActionDraftContext context, ImmutableArray<string> errors) =>
@@ -119,14 +119,14 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
     private async Task<AnalysisRun?> ReadRunAsync(string runId, CancellationToken cancellationToken) =>
         (await store.GetRunAsync(runId, cancellationToken))?.Run;
 
-    private async Task<bool> RunLoopAsync(IAnalysisAttempt<ActionDraftRun> attempt,
+    private async Task<bool> RunLoopAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftContext context,
         AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision> loop, CancellationToken cancellationToken)
     {
         var result = await loop.RunAsync(cancellationToken);
         return result.End switch
         {
             AnalysisLoopEnd.Accepted => await attempt.SettleAsync(Wrap(result.Run!),
-                ActionDraftCheckpoint.From(attempt.Claim, result.Accepted!), cancellationToken),
+                ActionDraftCheckpoint.From(attempt.Claim, result.Accepted!, context.Evidence.ReviewStateVersion), cancellationToken),
             AnalysisLoopEnd.NotSent when result.Run is null =>
                 await attempt.CompleteAsync(State.Blocked, ActionDraftErrorCodes.OverByteCap, cancellationToken),
             AnalysisLoopEnd.Exhausted or AnalysisLoopEnd.NotSent => await loop.FailAsync(result, cancellationToken),

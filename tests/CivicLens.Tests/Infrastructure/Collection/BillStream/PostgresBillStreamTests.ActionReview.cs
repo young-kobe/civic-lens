@@ -372,7 +372,7 @@ public sealed partial class PostgresBillStreamTests
         var newer = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
         var model = new FakeHeadlineSummaryModel().Reply(async _ =>
         {
-            await ExecuteAsync(connectionString, $"UPDATE action_drafts SET review_status = 'Rejected' WHERE record_id = '{RecordId}'");
+            await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
             return new("end_turn", DraftableOutput, new(900, 100, 0, 0), "req_fixture");
         });
 
@@ -407,6 +407,42 @@ public sealed partial class PostgresBillStreamTests
     private async Task AssertApprovalStillRefusedAsync(ReviewDecision changes) =>
         await Assert.ThrowsAsync<StaleApprovalException>(() => new DecideActionReview(ActionReviews()).ExecuteAsync(Reviewer,
             new(RecordId, 1, 2, ReviewDecisionKind.Approve, "Looked again.", [changes.DecisionId], Guid.NewGuid().ToString("N"))));
+
+    [Theory]
+    [InlineData(ReviewDecisionKind.Approve, "Approved", null)]
+    [InlineData(ReviewDecisionKind.RequestChanges, "ChangesRequested", "Name the bill.")]
+    public async Task APersonDecisionDuringTheRedraftCallIsFinalSoTheAppendIsRefusedAndTheDecisionIsKept(ReviewDecisionKind kind, string status, string? note)
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await ExecuteAsync(connectionString, "UPDATE action_analysis_runs SET prompt_version = 'action-draft-prompt-v1'");
+        Assert.Equal(1, await ActionStore().RequeueStaleAsync(default));
+        var model = new FakeHeadlineSummaryModel().Reply(async _ =>
+        {
+            await DecideAsync(1, 0, kind, note);
+            return new("end_turn", DraftableOutput, new(900, 100, 0, 0), "req_fixture");
+        });
+
+        Assert.Single((await RunActionWorkerAsync(model)).Requests);
+
+        Assert.Equal(status, await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.Equal(1, await ScalarAsync("SELECT current_revision_number FROM action_drafts"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE outcome = 'DraftDiscarded' AND reason = 'recordRejected'"));
+        Assert.Equal(kind, Assert.Single(await ActionDecisionsAsync()).Kind);
+    }
+
+    [Theory]
+    [InlineData(ReviewDecisionKind.Approve, null)]
+    [InlineData(ReviewDecisionKind.RequestChanges, "Name the bill.")]
+    [InlineData(ReviewDecisionKind.Reject, null)]
+    public async Task APersonDecisionOnTheCurrentRevisionBlocksTheRequeueOfAStaleDraft(ReviewDecisionKind kind, string? note)
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await ExecuteAsync(connectionString, "UPDATE action_analysis_runs SET prompt_version = 'action-draft-prompt-v1'");
+        await DecideAsync(1, 0, kind, note, kind == ReviewDecisionKind.Reject ? ReviewReasonCode.Duplicate : null);
+
+        Assert.Equal(0, await ActionStore().RequeueStaleAsync(default));
+    }
 
     [Fact]
     public async Task AConflictRetryKeepsTheBlockEvenAfterTheRetryFailsBecauseOnlyANewDraftMayEndIt()

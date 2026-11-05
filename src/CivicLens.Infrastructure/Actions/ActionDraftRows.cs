@@ -15,7 +15,7 @@ namespace CivicLens.Infrastructure.Actions;
 internal static class ActionDraftRows
 {
     public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, ActionDraftRevision revision, string runId,
-        CodeVersion codeVersion, CancellationToken cancellationToken)
+        CodeVersion codeVersion, int readStateVersion, CancellationToken cancellationToken)
     {
         revision.ValidateShape();
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.ActionReview, cancellationToken);
@@ -24,7 +24,7 @@ internal static class ActionDraftRows
         if (await HasNewerCandidateAsync(db, candidate, cancellationToken)) return ActionDraftErrorCodes.SupersededByNewerCandidate;
         var draft = await db.Set<ActionDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
         if ((draft?.CurrentRevisionNumber ?? 0) != revision.RevisionNumber - 1) return ActionDraftErrorCodes.RevisionConflict;
-        if (draft?.ReviewStatus == ReviewStatus.Rejected)
+        if (draft is not null && draft.ReviewStateVersion != readStateVersion && await HasPersonDecisionAsync(db, draft, cancellationToken))
         {
             if (revision.CandidateId != draft.CandidateId) draft.RefusedCandidateId = revision.CandidateId;
             return ActionDraftErrorCodes.RecordRejected;
@@ -35,6 +35,23 @@ internal static class ActionDraftRows
             () => ApprovalCheck.OfAsync(() => PostgresActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)));
         return null;
     }
+
+    /// <summary>The decisions of a person that end a model revision: Approve, Request changes, and Reject. A withdrawal and a code approval are not among them.</summary>
+    private static readonly ReviewDecisionKind[] FinalKinds = [ReviewDecisionKind.Approve, ReviewDecisionKind.RequestChanges, ReviewDecisionKind.Reject];
+
+    /// <summary>The drafts with a final decision of a person on the current revision. A later revision supersedes the decision, so the draft is not listed then.
+    /// The stale query and the settlement both read this one rule.</summary>
+    internal static IQueryable<ActionDraftRow> DraftsWithPersonDecision(CollectionAttemptDbContext db) =>
+        db.Set<ActionDraftRow>().AsNoTracking().Where(draft => db.Set<ActionReviewDecisionRow>().Any(decision =>
+            decision.RecordId == draft.RecordId && decision.RevisionNumber == draft.CurrentRevisionNumber &&
+            FinalKinds.Contains(decision.Kind) && decision.ActorSubject != ReviewAuthor.CodeSubject));
+
+    private static Task<bool> HasPersonDecisionAsync(CollectionAttemptDbContext db, ActionDraftRow draft, CancellationToken cancellationToken) =>
+        DraftsWithPersonDecision(db).AnyAsync(decided => decided.RecordId == draft.RecordId, cancellationToken);
+
+    public static Task<int> ReadStateVersionAsync(CollectionAttemptDbContext db, string recordId, CancellationToken cancellationToken) =>
+        db.Set<ActionDraftRow>().AsNoTracking().Where(draft => draft.RecordId == recordId).Select(draft => draft.ReviewStateVersion)
+            .SingleOrDefaultAsync(cancellationToken);
 
     public static Task<bool> IsRejectedAsync(CollectionAttemptDbContext db, string recordId, CancellationToken cancellationToken) =>
         db.Set<ActionDraftRow>().AsNoTracking().AnyAsync(draft => draft.RecordId == recordId && draft.ReviewStatus == ReviewStatus.Rejected, cancellationToken);
