@@ -18,7 +18,7 @@ public sealed partial class SchemaReferenceTests(PostgresCollection postgres) : 
         ("collection", ["collection_admission_batches", "collection_attempts", "collection_candidate_jobs", "collection_captures",
             "collection_collector_slot", "collection_configuration_revisions", "collection_discoveries", "collection_job_attempts",
             "collection_job_origins", "collection_jobs", "collection_source_schedules", "evidence_processing", "worker_heartbeat"]),
-        ("bills", ["action_candidates", "bill_follow_on_jobs", "bill_gates", "bill_pages", "bill_stream_cursors", "bill_stream_pages", "bill_text_versions"]),
+        ("bills", ["action_candidates", "bill_action_recorded_votes", "bill_actions", "bill_follow_on_jobs", "bill_gates", "bill_pages", "bill_stream_cursors", "bill_stream_pages", "bill_text_versions"]),
         ("documents", ["document_comparisons", "document_extractions"]),
         ("analysis", ["analysis_output_schemas", "analysis_system_prompts", "document_change_analysis", "document_change_analysis_budget", "document_change_analysis_runs",
             "document_change_analysis_status"]),
