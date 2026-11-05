@@ -83,8 +83,8 @@ public sealed partial class PostgresBillStreamTests
         await AdmitActionsAsync(firstJob, new CongressBillActionsPage([HistoryAction("Old one."), HistoryAction("Old two.")], null));
         await AdmitActionsAsync(secondJob, new CongressBillActionsPage([HistoryAction("New one.")], null));
 
-        Assert.Equal([(0, "Old one.", firstJob), (1, "Old two.", firstJob), (0, "New one.", secondJob)],
-            await ActionPositionsAsync("detail_job_id, position"));
+        var expected = new[] { (0, "Old one.", firstJob), (1, "Old two.", firstJob), (0, "New one.", secondJob) };
+        Assert.Equivalent(expected, await ActionPositionsAsync("detail_job_id, position"));
     }
 
     [Fact]
