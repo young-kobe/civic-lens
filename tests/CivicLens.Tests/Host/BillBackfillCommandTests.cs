@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 
 namespace CivicLens.Tests.Host;
@@ -65,14 +66,67 @@ public sealed class BillBackfillCommandTests(PostgresCollection postgres) : IAsy
         var result = await RunAsync("bills", kind, "backfill", "5", "6");
 
         Assert.Equal(2, result.ExitCode);
-        Assert.Contains("Use bills subjects backfill [limit] or bills status backfill [limit].", result.Error, StringComparison.Ordinal);
+        Assert.Contains("Use bills subjects backfill [limit], bills status backfill [limit], bills text backfill [limit]", result.Error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("[\"119-hr-1943\",\"119-hr-1943\"]")]
+    [InlineData("[\"119-HR-1943\"]")]
+    [InlineData("[\"119-hr-01943\"]")]
+    [InlineData("[\"hr-1943\"]")]
+    [InlineData("[]")]
+    [InlineData("null")]
+    public async Task ABadOrRepeatedBillIdRefusesTheTextBackfillBeforeItReadsTheConfigurationOrAdmitsAnything(string json)
+    {
+        var billsFile = Path.Combine(artifactDirectory, "bills.json");
+        File.WriteAllText(billsFile, json);
+
+        var result = await RunAsync("bills", "text", "backfill", "--bills", billsFile);
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.DoesNotContain("CIVIC_LENS_COLLECTION_CONFIG", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain("examined", result.Output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheTextBackfillRefusesAConfigurationWithoutAnEnabledTextSource()
+    {
+        var result = await RunWithConfigAsync(Path.Combine(RepositoryRoot.FullName, "config", "federal-coverage.json"), "bills", "text", "backfill");
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("no enabled bill text source", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheTextBackfillTakesALimitOrTheFileOfTheMeasureBills()
+    {
+        var config = Path.Combine(artifactDirectory, "collection.json");
+        File.WriteAllText(config, File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "config", "federal-coverage.json"))
+            .Replace("\"apiParser\":\"congressBillText\",\"checkIntervalSeconds\":86400,\"enabled\":false", "\"apiParser\":\"congressBillText\",\"checkIntervalSeconds\":86400,\"enabled\":true", StringComparison.Ordinal));
+        var measureBills = Path.Combine(RepositoryRoot.FullName, "config", "action-text-measure-bills.json");
+
+        var byLimit = await RunWithConfigAsync(config, "bills", "text", "backfill", "5");
+        var byDefault = await RunWithConfigAsync(config, "bills", "text", "backfill");
+        var byFile = await RunWithConfigAsync(config, "bills", "text", "backfill", "--bills", measureBills);
+
+        Assert.All(new[] { byLimit, byDefault, byFile }, result =>
+        {
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("\"examined\":0", result.Output, StringComparison.Ordinal);
+        });
     }
 
     private Task<(int ExitCode, string Output, string Error)> RunAsync(params string[] arguments) =>
-        HostProcess.RunWithEnvironmentAsync(connectionString, null,
-            new Dictionary<string, string>
-            {
-                ["CIVIC_LENS_REVIEW_OWNER"] = "auth0|owner",
-                ["CIVIC_LENS_ARTIFACT_DIRECTORY"] = artifactDirectory
-            }, arguments);
+        RunWithConfigAsync(null, arguments);
+
+    private Task<(int ExitCode, string Output, string Error)> RunWithConfigAsync(string? collectionConfig, params string[] arguments)
+    {
+        var environment = new Dictionary<string, string>
+        {
+            ["CIVIC_LENS_REVIEW_OWNER"] = "auth0|owner",
+            ["CIVIC_LENS_ARTIFACT_DIRECTORY"] = artifactDirectory
+        };
+        if (collectionConfig is not null) environment["CIVIC_LENS_COLLECTION_CONFIG"] = collectionConfig;
+        return HostProcess.RunWithEnvironmentAsync(connectionString, null, environment, arguments);
+    }
 }

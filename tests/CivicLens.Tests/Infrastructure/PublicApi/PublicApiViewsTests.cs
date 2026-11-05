@@ -29,7 +29,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
 
     private static readonly string[] BaseTables =
         ["vote_revisions", "vote_revision_facts", "vote_member_list_entries", "vote_revision_issues", "publication_releases", "publication_record_states", "vote_drafts", "vote_member_lists",
-         "action_revisions", "action_revision_sponsorships", "action_revision_issues", "action_drafts", "zcta_districts", "roster_snapshots", "collection_attempts",
+         "action_revisions", "action_revision_sponsorships", "action_revision_issues", "action_drafts", "published_entries", "zcta_districts", "roster_snapshots", "collection_attempts",
          "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas"];
 
     private string connectionString = null!;
@@ -496,6 +496,27 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task ABillShowsTheBillLineOfTheEntryRowOfItsActiveRevisionAndNoneWhenTheRowHoldsNoLineOrDoesNotExist()
+    {
+        string[] ids = [new('a', 64), new('b', 64), new('c', 64)];
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+              VALUES (1, '000001-00000000000000000000000000000001', 'test', 1, 3, true);
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES
+              {string.Join(", ", ids.Select(id => $"('action', '{id}', 1, 1, NULL)"))};
+            {string.Join('\n', ids.Select(id => PublicActionRows.ActionRevision(id, 1, "Person", "2026-02-20", 1) + PublicActionRows.ActionSponsorship(id, 1, 0, "p1", "Sponsor", true, "2026-01-10")))}
+            INSERT INTO published_entries (kind, record_id, revision_number, action_record_id, action_revision_number, headline, bill_title, bill_line) VALUES
+              ('action', '{ids[0]}', 1, '{ids[0]}', 1, 'H', 'T', 'This bill funds rent aid.'),
+              ('action', '{ids[0]}', 2, '{ids[0]}', 2, 'H', 'T', 'This line is of another revision.'),
+              ('action', '{ids[1]}', 1, '{ids[1]}', 1, 'H', 'T', NULL);
+            """);
+
+        Assert.Equal(["a|This bill funds rent aid.", "b|none", "c|none"], await PublicAsync(
+            "SELECT left(record_id, 1) || '|' || coalesce(bill_line, 'none') FROM public_api.bills ORDER BY record_id"));
+    }
+
+    [Fact]
     public async Task EveryAiOrCodeBillHasItsLabelAndAPersonBillHasNone()
     {
         await SeedBillsAsync();
@@ -584,6 +605,9 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT record_id FROM public.action_revision_issues");
         await AssertDeniedAsync(connection, "SELECT headline FROM public.action_revisions");
         await AssertDeniedAsync(connection, "UPDATE public.action_revisions SET headline = 'x'");
+        await AssertDeniedAsync(connection, "SELECT bill_line FROM public.published_entries");
+        await AssertDeniedAsync(connection, "SELECT headline FROM public.published_entries");
+        await AssertDeniedAsync(connection, "UPDATE public.published_entries SET bill_line = 'x'");
     }
 
     [Fact]

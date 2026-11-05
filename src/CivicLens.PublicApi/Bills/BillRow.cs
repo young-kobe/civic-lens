@@ -20,4 +20,5 @@ public sealed record BillRow
     public required DateOnly EventDate { get; init; }
     public required int SponsorCount { get; init; }
     public required int CosponsorCount { get; init; }
+    public string? BillLine { get; init; }
 }

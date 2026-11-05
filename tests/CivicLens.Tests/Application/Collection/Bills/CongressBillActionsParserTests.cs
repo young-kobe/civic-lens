@@ -1,6 +1,7 @@
 using System.Text;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Core.Votes;
 using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Collection.Bills;
@@ -19,8 +20,8 @@ public sealed class CongressBillActionsParserTests
         var page = Parse($$$"""{"actions":[{{{Row}}},{"actionDate":"2025-07-03","actionTime":"13:45:10","text":"Passed House."}],"pagination":{"count":2,"next":"{{{NextPage}}}"}}""");
 
         Assert.Equal([new CongressBillAction(new DateOnly(2025, 7, 4), null, "Became Public Law No: 119-21.", "President",
-                "E40000", 9, "Library of Congress"),
-            new CongressBillAction(new DateOnly(2025, 7, 3), new TimeOnly(13, 45, 10), "Passed House.", null, null, null, null)],
+                "E40000", 9, "Library of Congress", []),
+            new CongressBillAction(new DateOnly(2025, 7, 3), new TimeOnly(13, 45, 10), "Passed House.", null, null, null, null, [])],
             page.Actions);
         Assert.Equal(NextPage, page.Next);
     }
@@ -84,6 +85,44 @@ public sealed class CongressBillActionsParserTests
     public void TheCurrentPageUrlMustBeAnActionPageOfTheExpectedBill(string current)
     {
         Assert.Throws<InvalidDataException>(() => Parse("""{"actions":[],"pagination":{}}""", current));
+    }
+
+    // Field shapes and the example roll come from the Congress.gov BillEndpoint.md documentation, "recordedVotes".
+    private const string SenateRollJson = """{"chamber":"Senate","congress":117,"date":"2022-03-08T22:45:05Z","rollNumber":70,"sessionNumber":2,"url":"https://www.senate.gov/legislative/LIS/roll_call_votes/vote1172/vote_117_2_00070.xml"}""";
+
+    [Fact]
+    public void RecordedVotesOfAnActionAreKeptInOrderWithTheirRollIdentity()
+    {
+        var houseRoll = """{"chamber":"House","congress":119,"rollNumber":190,"sessionNumber":1}""";
+        var page = Parse($$$"""{"actions":[{"actionDate":"2025-07-04","text":"Passed.","recordedVotes":[{{{SenateRollJson}}},{{{houseRoll}}}]}],"pagination":{}}""");
+
+        Assert.Equal([
+            new CongressBillRecordedVote(Chamber.Senate, 117, 2, 70, new DateTimeOffset(2022, 3, 8, 22, 45, 5, TimeSpan.Zero),
+                "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1172/vote_117_2_00070.xml"),
+            new CongressBillRecordedVote(Chamber.House, 119, 1, 190, null, null)], page.Actions.Single().RecordedVotes);
+    }
+
+    [Fact]
+    public void AnActionWithoutRecordedVotesHasAnEmptyList()
+    {
+        Assert.Empty(Parse("""{"actions":[{"actionDate":"2025-07-04","text":"Passed."}],"pagination":{}}""").Actions.Single().RecordedVotes);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("""{"congress":119,"rollNumber":1,"sessionNumber":1}""")]
+    [InlineData("""{"chamber":"Joint","congress":119,"rollNumber":1,"sessionNumber":1}""")]
+    [InlineData("""{"chamber":5,"congress":119,"rollNumber":1,"sessionNumber":1}""")]
+    [InlineData("""{"chamber":"House","rollNumber":1,"sessionNumber":1}""")]
+    [InlineData("""{"chamber":"House","congress":119,"sessionNumber":1}""")]
+    [InlineData("""{"chamber":"House","congress":119,"rollNumber":0,"sessionNumber":1}""")]
+    [InlineData("""{"chamber":"House","congress":119,"rollNumber":1,"sessionNumber":3}""")]
+    [InlineData("""{"chamber":"House","congress":119,"rollNumber":1,"sessionNumber":1,"url":"http://clerk.house.gov/evs/2025/roll001.xml"}""")]
+    [InlineData("""{"chamber":"House","congress":119,"rollNumber":1,"sessionNumber":1,"date":"soon"}""")]
+    public void AnIncompleteRecordedVoteIsInvalidDataBecauseAGuessedRollWouldBeFalseEvidence(string vote)
+    {
+        Assert.Throws<InvalidDataException>(() =>
+            Parse($$$"""{"actions":[{"actionDate":"2025-07-04","text":"Passed.","recordedVotes":[{{{vote}}}]}],"pagination":{}}"""));
     }
 
     [Fact]

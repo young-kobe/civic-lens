@@ -50,7 +50,7 @@ public sealed class CongressBillRendererTests
     public void EachLineBreakCharacterBecomesOneSpace(string lineBreak)
     {
         var page = new CongressBillActionsPage(
-            [new CongressBillAction(new DateOnly(2026, 10, 1), null, "one" + lineBreak + "two", null, null, null, null)], null);
+            [new CongressBillAction(new DateOnly(2026, 10, 1), null, "one" + lineBreak + "two", null, null, null, null, [])], null);
 
         Assert.Equal("Bill: 119 hr 1234\nAction 2026-10-01: one two", CongressBillRenderer.RenderActions(Item, page));
     }
@@ -59,7 +59,7 @@ public sealed class CongressBillRendererTests
     public void ATaggedValueWithALineBreakStaysOnOneLine()
     {
         var page = new CongressBillActionsPage(
-            [new CongressBillAction(new DateOnly(2026, 10, 1), null, "Text.", "a\nb", "c\u2028d", 1, "e\vf")], null);
+            [new CongressBillAction(new DateOnly(2026, 10, 1), null, "Text.", "a\nb", "c\u2028d", 1, "e\vf", [])], null);
 
         Assert.Equal("Bill: 119 hr 1234\nAction 2026-10-01 [type a b] [code c d] [source 1 e f]: Text.",
             CongressBillRenderer.RenderActions(Item, page));
@@ -96,11 +96,11 @@ public sealed class CongressBillRendererTests
         var page = new CongressBillActionsPage(
         [
             new CongressBillAction(new DateOnly(2026, 10, 1), new TimeOnly(14, 3, 0), "Referred to the Committee on Rules.",
-                "IntroReferral", "H11100", 2, "House floor actions"),
-            new CongressBillAction(new DateOnly(2026, 10, 2), null, "Passed House.", "Floor", null, null, null),
-            new CongressBillAction(new DateOnly(2026, 10, 3), new TimeOnly(9, 5, 7), "Held at the desk.", null, "H12345", 7, null),
-            new CongressBillAction(new DateOnly(2026, 10, 4), null, "Read twice.", null, null, null, "Senate"),
-            new CongressBillAction(new DateOnly(2026, 10, 5), null, "Introduced.", null, null, null, null)
+                "IntroReferral", "H11100", 2, "House floor actions", []),
+            new CongressBillAction(new DateOnly(2026, 10, 2), null, "Passed House.", "Floor", null, null, null, []),
+            new CongressBillAction(new DateOnly(2026, 10, 3), new TimeOnly(9, 5, 7), "Held at the desk.", null, "H12345", 7, null, []),
+            new CongressBillAction(new DateOnly(2026, 10, 4), null, "Read twice.", null, null, null, "Senate", []),
+            new CongressBillAction(new DateOnly(2026, 10, 5), null, "Introduced.", null, null, null, null, [])
         ], null);
         const string expected = "Bill: 119 hr 1234\n" +
             "Action 2026-10-01 14:03:00 [type IntroReferral] [code H11100] [source 2 House floor actions]: Referred to the Committee on Rules.\n" +
@@ -116,7 +116,7 @@ public sealed class CongressBillRendererTests
     public void ABracketOrParenthesisInATaggedValueIsWrittenAsReceivedBecauseTheLineStaysOneFact()
     {
         var page = new CongressBillActionsPage(
-            [new CongressBillAction(new DateOnly(2026, 10, 1), null, "Text.", "A) b] c", null, null, null)], null);
+            [new CongressBillAction(new DateOnly(2026, 10, 1), null, "Text.", "A) b] c", null, null, null, [])], null);
 
         Assert.Equal("Bill: 119 hr 1234\nAction 2026-10-01 [type A) b] c]: Text.", CongressBillRenderer.RenderActions(Item, page));
     }
@@ -125,7 +125,7 @@ public sealed class CongressBillRendererTests
     public void ActionTextKeepsItsWordsAndSpacingExceptThatEachLineBreakBecomesOneSpace()
     {
         var page = new CongressBillActionsPage(
-            [new CongressBillAction(new DateOnly(2026, 10, 1), null, "Motion  to reconsider\r\nlaid on the table.\nAgreed.\r", null, null, null, null)],
+            [new CongressBillAction(new DateOnly(2026, 10, 1), null, "Motion  to reconsider\r\nlaid on the table.\nAgreed.\r", null, null, null, null, [])],
             null);
 
         var lines = CongressBillRenderer.RenderActions(Item, page).Split('\n');
