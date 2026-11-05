@@ -25,8 +25,8 @@ public sealed class PublicationReleaseHandlersTests
     public async Task ActivatingAReleaseWhoseFilesAreGoneIsRefusedBecauseTheLinkCouldNotServeItAndLaterPublishesWouldFail()
     {
         var scenario = new PublicationScenario();
-        await scenario.Publications.CommitAsync("owner", new(1, null, "release-1", [], []) { Withdrawals = [] }, "a", "h", default);
-        await scenario.Publications.CommitAsync("owner", new(2, 1, "release-2", [], []) { Withdrawals = [] }, "b", "h", default);
+        await scenario.Publications.CommitAsync("owner", new(1, null, "release-1", [], []) { Withdrawals = [], Names = ReleaseNameFixtures.None }, "a", "h", default);
+        await scenario.Publications.CommitAsync("owner", new(2, 1, "release-2", [], []) { Withdrawals = [], Names = ReleaseNameFixtures.None }, "b", "h", default);
         SeedFiles(scenario, "release-2");
 
         var refusal = await Assert.ThrowsAsync<ArgumentException>(() => scenario.Activator().ExecuteAsync(PublicationScenario.Owner, 1));
@@ -40,8 +40,8 @@ public sealed class PublicationReleaseHandlersTests
     public async Task OwnerCanRollBackToAnEarlierCommittedRelease()
     {
         var scenario = new PublicationScenario();
-        await scenario.Publications.CommitAsync("owner", new(1, null, "release-1", [], []) { Withdrawals = [] }, "a", "h", default);
-        await scenario.Publications.CommitAsync("owner", new(2, 1, "release-2", [], []) { Withdrawals = [] }, "b", "h", default);
+        await scenario.Publications.CommitAsync("owner", new(1, null, "release-1", [], []) { Withdrawals = [], Names = ReleaseNameFixtures.None }, "a", "h", default);
+        await scenario.Publications.CommitAsync("owner", new(2, 1, "release-2", [], []) { Withdrawals = [], Names = ReleaseNameFixtures.None }, "b", "h", default);
         SeedFiles(scenario, "release-1", "release-2");
         var handler = scenario.Activator();
 
@@ -55,8 +55,8 @@ public sealed class PublicationReleaseHandlersTests
     public async Task ActivationServesTheRecordedActiveReleaseSoAnOlderRollbackCannotUndoANewerOne()
     {
         var scenario = new PublicationScenario();
-        await scenario.Publications.CommitAsync("owner", new(1, null, "release-1", [], []) { Withdrawals = [] }, "a", "h", default);
-        await scenario.Publications.CommitAsync("owner", new(2, 1, "release-2", [], []) { Withdrawals = [] }, "b", "h", default);
+        await scenario.Publications.CommitAsync("owner", new(1, null, "release-1", [], []) { Withdrawals = [], Names = ReleaseNameFixtures.None }, "a", "h", default);
+        await scenario.Publications.CommitAsync("owner", new(2, 1, "release-2", [], []) { Withdrawals = [], Names = ReleaseNameFixtures.None }, "b", "h", default);
         SeedFiles(scenario, "release-1", "release-2");
         scenario.Publications.BeforeServe = () => scenario.Publications.ActiveReleaseNumber = 2;
 
@@ -69,7 +69,7 @@ public sealed class PublicationReleaseHandlersTests
     public async Task ReviewerCannotActivateAReleaseButCanListThem()
     {
         var scenario = new PublicationScenario();
-        await scenario.Publications.CommitAsync("owner", new(1, null, "release-1", [], []) { Withdrawals = [] }, "a", "h", default);
+        await scenario.Publications.CommitAsync("owner", new(1, null, "release-1", [], []) { Withdrawals = [], Names = ReleaseNameFixtures.None }, "a", "h", default);
         await scenario.Releases.ActivateAsync("release-1", default);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>

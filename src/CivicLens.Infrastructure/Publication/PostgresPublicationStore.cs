@@ -223,6 +223,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         var publishedAt = await DatabaseClock.ReadAsync(db, cancellationToken);
         var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName, publishedAt.Offset, commit.Records.Length);
         db.Add(ToRow(actorSubject, commit, publishedAt, codeVersion));
+        ReleaseNameRows.Add(db, commit.ReleaseNumber, commit.Names);
         ReviewIdempotency.Add(db, actorSubject, PublishOperation, idempotencyKey, payloadHash, ReviewJson.Serialize(summary));
         await SaveAsync(db, cancellationToken);
         await PublicationRecordStates.RecordAsync(db, commit, cancellationToken);
