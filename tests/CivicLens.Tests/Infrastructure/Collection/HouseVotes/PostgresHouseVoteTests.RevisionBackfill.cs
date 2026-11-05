@@ -132,6 +132,20 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
+    public async Task ARevisionWithNoResultLineIsSkippedAsInvalidShapeBecauseTheResultColumnIsRequiredAndABadRowMustNotStopTheBatch()
+    {
+        await SettledLegacyAsync(basis => basis);
+        await RewriteJsonAsync(1, json => json["facts"] = new JsonArray(json["facts"]!.AsArray()
+            .Where(fact => !fact!["text"]!.GetValue<string>().StartsWith("Result: ", StringComparison.Ordinal)).Select(fact => fact!.DeepClone()).ToArray()));
+
+        var result = await BackfillAsync(10);
+
+        Assert.Equal((1, 0, 1), (result.Examined, result.Moved, result.Skipped));
+        Assert.Equal("InvalidShape", Assert.Single(result.SkippedRevisions).Reason);
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_revisions WHERE headline IS NULL"));
+    }
+
+    [Fact]
     public async Task DuplicateIssueCandidateIdsAreSkippedBecauseTheIssueKeyHoldsEachIdOnceAndTheRowsCouldNotRebuildTheList()
     {
         await SettledLegacyAsync(basis => basis);
