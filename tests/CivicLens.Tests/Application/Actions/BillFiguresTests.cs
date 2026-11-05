@@ -20,10 +20,19 @@ public sealed class BillFiguresTests
     [InlineData("It starts in January 2027.", 1)]
     [InlineData("It covers fiscal year 2026.", 1)]
     [InlineData("It runs from March 5, 2026 to June 30, 2031.", 2)]
-    [InlineData("It starts in 1999 and ends in 2099.", 2)]
+    [InlineData("It starts by 1999 and ends before 2099.", 2)]
+    [InlineData("It starts not later than 2027.", 1)]
+    [InlineData("Not later than January 1, 2027, the Secretary acts.", 1)]
+    [InlineData("It starts after 2027 and runs beginning 2028 or ending 2030.", 3)]
+    [InlineData("It amends the Internal Revenue Code of 1986.", 0)]
+    [InlineData("It amends the Social Security Act of 1935.", 0)]
+    [InlineData("It amends 42 U.S.C. 1981.", 0)]
+    [InlineData("It amends section 2001.", 0)]
+    [InlineData("Under the Act of 1935 the Secretary acts by 2031.", 1)]
+    [InlineData("It starts in 1999 and ends in 2099.", 0)]
     [InlineData("It starts in 2100 and the section is 1850X.", 0)]
     [InlineData("It starts soon.", 0)]
-    public void ADateIsAYearWithAnOptionalMonthAndDay(string text, int dates) =>
+    public void ADateIsAYearAfterAMonthFiscalYearOrDeadlinePhraseAndNeverAYearOfAnActOrCodeOrANumberAfterSectionOrUsc(string text, int dates) =>
         Assert.Equal(dates, BillFigures.Count(text).Dates);
 
     [Fact]

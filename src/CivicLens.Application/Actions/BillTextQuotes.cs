@@ -20,6 +20,9 @@ public sealed class BillTextQuotes
         normalizedBody = Normalize(billText.Body);
     }
 
+    /// <summary>The body of the bill text as the prompt sends it.</summary>
+    public string NormalizedBody => normalizedBody;
+
     public static string Normalize(string text)
     {
         var builder = new StringBuilder(text.Length);

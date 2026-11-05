@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Publication.Contracts;
 
@@ -12,10 +13,6 @@ namespace CivicLens.Application.Publication;
 internal static partial class BillLine
 {
     private const string CutMarker = "…";
-    private const string ClosingCharacters = "\"”’)";
-
-    // "L." in "Pub. L." is a single letter token, so the single letter rule covers it.
-    private static readonly string[] Abbreviations = ["St.", "Mr.", "Mrs.", "Dr.", "No.", "Sec.", "Pub."];
 
     public static PublishedRecordEntry EntryOf(PublishedAction action) => action.ToEntry() with { BillLine = Of(action) };
 
@@ -43,21 +40,8 @@ internal static partial class BillLine
     private static bool IsTitle(string paragraph) =>
         paragraph.Length <= PublishedRecordEntry.MaximumBillLineLength && (char.IsLetterOrDigit(paragraph[^1]) || paragraph[^1] == ')');
 
-    private static string FirstSentence(string paragraph)
-    {
-        foreach (Match mark in SentenceEnd().Matches(paragraph))
-        {
-            var sentence = paragraph[..(mark.Index + mark.Length)];
-            if (!EndsAbbreviation(sentence)) return sentence;
-        }
-        return paragraph;
-    }
-
-    private static bool EndsAbbreviation(string sentence)
-    {
-        var token = sentence.Split()[^1];
-        return Abbreviations.Contains(token) || InitialsToken().IsMatch(token);
-    }
+    private static string FirstSentence(string paragraph) =>
+        SentenceEnds.After(paragraph).Cast<int?>().FirstOrDefault() is { } end ? paragraph[..end] : paragraph;
 
     private static string? Cap(string sentence)
     {
@@ -74,12 +58,6 @@ internal static partial class BillLine
         return 0;
     }
 
-    [GeneratedRegex("[.!?][" + ClosingCharacters + @"]*(?=\s+[\p{Lu}""“(]|$)")]
-    private static partial Regex SentenceEnd();
-
-    [GeneratedRegex("[.!?][" + ClosingCharacters + "]*$")]
+    [GeneratedRegex("[.!?][" + SentenceEnds.ClosingCharacters + "]*$")]
     private static partial Regex FinalMark();
-
-    [GeneratedRegex(@"^(\p{L}\.)+$")]
-    private static partial Regex InitialsToken();
 }

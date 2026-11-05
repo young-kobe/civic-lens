@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace CivicLens.Application.Actions;
@@ -5,24 +6,54 @@ namespace CivicLens.Application.Actions;
 /// <summary>The counts of dollar amounts and of dates or years in a piece of text.</summary>
 public sealed record BillFigureCounts(int Amounts, int Dates);
 
-/// <summary>The one owner of the dollar amount and date patterns. The text measure uses them to see whether the accepted sentences keep the
-/// figures of the bill text. A dollar amount is "$" and digits, with commas, a decimal part, and a unit word as in "$2 billion", or digits
-/// and a unit word before "dollars" as in "2 million dollars". A date is a year from 1900 to 2099, with an optional month and day before it,
-/// as in "January 1, 2027" or "January 2027". "Fiscal year 2026" counts as the year 2026. The patterns are a measure, not a check: a number
-/// that looks like a year, such as a section number, counts as a date.</summary>
+/// <summary>The one owner of the dollar amount, year and date patterns. The text measure uses them to see whether the accepted sentences keep the
+/// figures of the bill text. The resolver uses them through <see cref="BillFigureSet"/> to refuse a figure that the bill text lacks.
+/// A dollar amount is "$" and digits, with commas, a decimal part, and a unit word as in "$2 billion", or digits
+/// and a unit word before "dollars" as in "2 million dollars". Its value is the full number, so "$50 million" and "$50,000,000" are the same
+/// amount. A year is a number from 1900 to 2099. A date is a year after a month name (with an optional day), after "fiscal year", or after a
+/// deadline phrase ("not later than", "before", "after", "beginning", "ending", "by"). A year after "Act of" or "Code of", and a number after
+/// "U.S.C." or "section", is no date. The patterns are a measure, not a check of meaning.</summary>
 public static partial class BillFigures
 {
+    private const string Month = "(?:January|February|March|April|May|June|July|August|September|October|November|December)";
+    private const string Number = @"\d[\d,]{0,15}(?:\.\d{1,6})?";
+    private const string Unit = "thousand|million|billion|trillion";
+    private const string YearPattern = @"(?:19|20)\d{2}";
+
     public static BillFigureCounts Count(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
         return new(Amount().Count(text), Date().Count(text));
     }
 
-    [GeneratedRegex(@"\$\d[\d,]*(?:\.\d+)?(?: (?:thousand|million|billion|trillion)\b)?|\b\d[\d,]*(?:\.\d+)? (?:(?:thousand|million|billion|trillion) )?dollars\b",
+    /// <summary>Each amount of the text as it is written and as a full number.</summary>
+    internal static IEnumerable<(string Written, decimal Value)> Amounts(string text) =>
+        Amount().Matches(text).Select(match => (match.Value.Trim(), ValueOf(match)));
+
+    /// <summary>Each year of the text, wherever it stands.</summary>
+    internal static IEnumerable<string> Years(string text) => Year().Matches(text).Select(match => match.Value);
+
+    private static decimal ValueOf(Match amount)
+    {
+        var number = decimal.Parse(amount.Groups["number"].Value.Replace(",", string.Empty, StringComparison.Ordinal), CultureInfo.InvariantCulture);
+        return number * (amount.Groups["unit"].Value.ToLowerInvariant() switch
+        {
+            "thousand" => 1_000m,
+            "million" => 1_000_000m,
+            "billion" => 1_000_000_000m,
+            "trillion" => 1_000_000_000_000m,
+            _ => 1m
+        });
+    }
+
+    [GeneratedRegex(@"\$(?<number>" + Number + ")(?: (?<unit>" + Unit + @")\b)?|\b(?<number>" + Number + @") (?:(?<unit>" + Unit + @") )?dollars\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Amount();
 
-    [GeneratedRegex(@"\b(?:(?:January|February|March|April|May|June|July|August|September|October|November|December) (?:\d{1,2}, )?)?(?:19|20)\d{2}\b",
-        RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\b" + YearPattern + @"\b", RegexOptions.CultureInvariant)]
+    private static partial Regex Year();
+
+    [GeneratedRegex(@"\b(?:" + Month + @" (?:\d{1,2}, )?|(?i:fiscal year) |(?i:not later than|before|after|beginning|ending|by) (?:" + Month + @" (?:\d{1,2}, )?)?)"
+        + YearPattern + @"\b", RegexOptions.CultureInvariant)]
     private static partial Regex Date();
 }

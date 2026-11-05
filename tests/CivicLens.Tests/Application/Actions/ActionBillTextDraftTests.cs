@@ -137,6 +137,64 @@ public sealed class ActionBillTextDraftTests
         Assert.True(ActionDraftResolver.ResolveBillText(Output(), context, "run", DateTimeOffset.UnixEpoch).IsAccepted);
     }
 
+    private const string EightPoint = "Many tenants pay rent into local landlords under the new program.";
+
+    [Fact]
+    public async Task TheResolverAcceptsAGradeThatRoundsToTheLimitAndPrintsTheSameValueThatItCompares()
+    {
+        var accepted = ActionDraftResolver.ResolveBillText(Output([(FirstPlain, FirstQuote), (EightPoint, SecondQuote)]), await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+
+        Assert.True(ReadingGrade.Of(EightPoint) > ReadingGrade.MaximumSentenceGrade);
+        Assert.Equal(ReadingGrade.MaximumSentenceGrade, ReadingGrade.Rounded(EightPoint));
+        Assert.True(accepted.IsAccepted);
+    }
+
+    [Fact]
+    public async Task TheResolverRefusesAHeadlineAboveTheGradeLimitWithTheSameMessageAsASentence()
+    {
+        var legal = "H.R. 1 provides compensatory disbursements notwithstanding aforementioned administrative requirements.";
+        var json = Output().Replace("H.R. 1 pays landlords for tenants with low income.", legal, StringComparison.Ordinal);
+
+        var refused = ActionDraftResolver.ResolveBillText(json, await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+
+        var error = Assert.Single(refused.Errors);
+        Assert.StartsWith("The headline \"H.R. 1 provides", error, StringComparison.Ordinal);
+        Assert.Contains($"reads at grade {ReadingGrade.Format(ReadingGrade.Rounded(legal))}", error, StringComparison.Ordinal);
+        Assert.Contains("grade 8 or below", error, StringComparison.Ordinal);
+        Assert.True(ActionDraftResolver.ResolveBillText(Output(), await ContextAsync(), "run", DateTimeOffset.UnixEpoch).IsAccepted);
+    }
+
+    [Theory]
+    [InlineData("The bill gives $5 million for rent aid.", false)]
+    [InlineData("The bill gives $50 million for rent aid.", true)]
+    [InlineData("The bill gives $50,000,000 for rent aid.", true)]
+    [InlineData("The bill gives rent aid in fiscal year 2027.", true)]
+    [InlineData("The bill gives rent aid in fiscal year 2028.", false)]
+    public async Task TheResolverRefusesAnAmountOrYearOfASentenceThatTheBillTextLacksAndComparesAmountsAsValues(string sentence, bool accepted)
+    {
+        var text = Of($"Section 1. {FirstSummary} The grant is $50,000,000 for fiscal year 2027. {SecondSummary} {WhyItMatters}");
+        var whole = await ContextAsync();
+        var context = whole with { Evidence = whole.Evidence with { BillText = text } };
+
+        var result = ActionDraftResolver.ResolveBillText(Output([(FirstPlain, FirstQuote), (sentence, SecondQuote)]), context, "run", DateTimeOffset.UnixEpoch);
+
+        Assert.Equal(accepted, result.IsAccepted);
+        if (!accepted) Assert.Contains(result.Errors, error => error.Contains("is not in the bill text", StringComparison.Ordinal) && error.Contains("summary", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task TheResolverChecksTheFiguresOfTheWhyItMattersSentencesAndOfTheHeadlineAndNamesTheFigure()
+    {
+        var context = await ContextAsync();
+        var json = Output(whyItMatters: [("Aid stops on December 31, 2031.", WhyQuote)])
+            .Replace("tenants with low income.", "tenants with $9 million.", StringComparison.Ordinal);
+
+        var refused = ActionDraftResolver.ResolveBillText(json, context, "run", DateTimeOffset.UnixEpoch);
+
+        Assert.Contains(refused.Errors, error => error.Contains("whyItMatters has the figure \"2031\"", StringComparison.Ordinal));
+        Assert.Contains(refused.Errors, error => error.Contains("headline has the figure \"$9 million\"", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task AGpoQuoteMarkReachesTheModelAsAPlainQuoteAndAQuoteOfThatMarkCitesTheStoredCharacters()
     {
@@ -153,6 +211,9 @@ public sealed class ActionBillTextDraftTests
 
         Assert.DoesNotContain("``", request.UserPrompt, StringComparison.Ordinal);
         Assert.Contains("eligible tenant\\\" means", request.UserPrompt, StringComparison.Ordinal);
+        Assert.True(text.CharsRead > BillTextQuotes.Normalize(text.Body).Length);
+        using var facts = JsonDocument.Parse(request.UserPrompt["Facts:\n".Length..]);
+        Assert.Equal(BillTextQuotes.Normalize(text.Body).Length, facts.RootElement.GetProperty("billText").GetProperty("charactersRead").GetInt32());
         var citation = resolved.Accepted!.TextCitations[0];
         Assert.Equal(stored, text.Text.Substring(citation.Span.Start, citation.Span.Length));
         var later = resolved.Accepted.TextCitations[1];

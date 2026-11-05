@@ -7,9 +7,9 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionTextPromptGoldenTests
 {
-    private const string SystemSha256 = "5d431e1cde4a147e43be1545ea4f0ee077e6ddcd6ef44275e92cbea09213a440";
+    private const string SystemSha256 = "d01f88460c92da55e4648cc8a4c0e8ca729e89593d4d633aefbb5f66705c3cac";
     private const string SchemaSha256 = "1842aea9479adba4bd6244a32833f17e655bb8083b18fb5c87380619258bc9e8";
-    private const string InputHash = "d079b81fe5e0ef86da4e1507bd24b5534ce53b97c6924a7b6737394cba9a0f12";
+    private const string InputHash = "88c6468320af54a48be7032dd8db7e12661cc03165180cf271bcfebfeefe10e0";
 
     [Fact]
     public async Task TheTextPromptAndSchemaMatchTheirPinnedVersions()

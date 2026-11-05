@@ -1,26 +1,38 @@
 using System.Globalization;
+using CivicLens.Application.Analysis;
 
 namespace CivicLens.Application.Actions;
 
-/// <summary>The one owner of the reading grade of a model sentence. The grade is the Flesch-Kincaid grade level,
-/// 0.39 * (words / sentences) + 11.8 * (syllables / words) - 15.59. Each model sentence counts as one sentence, because the output schema
-/// gives one sentence for each item, and a full stop in "H.R." or "U.S." is not a sentence end. A word is a run of characters between
-/// spaces. Its syllables are its groups of vowels (a, e, i, o, u, y), less one for a final silent e (a final "le" keeps it). A word has at least one syllable.</summary>
+/// <summary>The one owner of the reading grade of a piece of English text, such as a model sentence or a headline. The grade is the Flesch-Kincaid grade level,
+/// 0.39 * (words / sentences) + 11.8 * (syllables / words) - 15.59. <see cref="SentenceEnds"/> owns where a sentence ends, so a full stop in
+/// "H.R." or "U.S." does not end one. A word is a run of characters between spaces. A number is one syllable. A word of letters has its groups of
+/// vowels (a, e, i, o, u, y), less one for a final silent e (a final "le" keeps it), for a final "es" and for a final "ed". A final "es" is silent
+/// unless the letter before it is s, x, z, c or g, or the word ends in "ches" or "shes". A final "ed" is silent unless the letter before it is t or d.
+/// A word has at least one syllable.</summary>
 public static class ReadingGrade
 {
-    /// <summary>A sentence above this grade goes back to the model.</summary>
+    /// <summary>Text above this grade goes back to the model.</summary>
     public const double MaximumSentenceGrade = 8;
 
-    public static double Of(string sentence)
+    public static double Of(string text)
     {
-        ArgumentNullException.ThrowIfNull(sentence);
-        var words = sentence.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        ArgumentNullException.ThrowIfNull(text);
+        var words = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         if (words.Length == 0) return 0;
         var syllables = words.Sum(Syllables);
-        return 0.39 * words.Length + 11.8 * syllables / words.Length - 15.59;
+        return 0.39 * words.Length / Sentences(text) + 11.8 * syllables / words.Length - 15.59;
     }
 
+    /// <summary>The grade to one decimal. The limit check and the message both use this value, so a grade that prints as the limit never fails it.</summary>
+    public static double Rounded(string text) => Math.Round(Of(text), 1, MidpointRounding.AwayFromZero);
+
     public static string Format(double grade) => grade.ToString("0.0", CultureInfo.InvariantCulture);
+
+    private static int Sentences(string text)
+    {
+        var trimmed = text.Trim();
+        return SentenceEnds.After(trimmed).Count(end => end < trimmed.Length) + 1;
+    }
 
     private static int Syllables(string word)
     {
@@ -28,9 +40,19 @@ public static class ReadingGrade
         var groups = 0;
         for (var index = 0; index < letters.Length; index++)
             if (IsVowel(letters[index]) && (index == 0 || !IsVowel(letters[index - 1]))) groups++;
-        var silentE = letters.Length > 2 && letters[^1] == 'e' && !IsVowel(letters[^2]) && letters[^2] != 'l' && groups > 1;
-        return Math.Max(1, silentE ? groups - 1 : groups);
+        return Math.Max(1, HasSilentEnding(letters) && groups > 1 ? groups - 1 : groups);
     }
+
+    private static bool HasSilentEnding(string letters) =>
+        letters.Length > 2 && (SilentE(letters) || SilentEs(letters) || SilentEd(letters));
+
+    private static bool SilentE(string letters) => letters[^1] == 'e' && !IsVowel(letters[^2]) && letters[^2] != 'l';
+
+    private static bool SilentEs(string letters) =>
+        letters.EndsWith("es", StringComparison.Ordinal) && letters[^3] is not ('s' or 'x' or 'z' or 'c' or 'g')
+        && !letters.EndsWith("ches", StringComparison.Ordinal) && !letters.EndsWith("shes", StringComparison.Ordinal);
+
+    private static bool SilentEd(string letters) => letters.EndsWith("ed", StringComparison.Ordinal) && letters[^3] is not ('t' or 'd');
 
     private static bool IsVowel(char letter) => letter is 'a' or 'e' or 'i' or 'o' or 'u' or 'y';
 }

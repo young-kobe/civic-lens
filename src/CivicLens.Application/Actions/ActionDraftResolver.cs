@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
@@ -51,11 +52,15 @@ public static class ActionDraftResolver
         CheckConfidence(output.WhyItMatters.Confidence, "whyItMatters confidence", errors);
         CheckNames(output.Headline.Text, "headline", context.Snapshot, errors);
         CheckNoSummarySentence(output.Headline.Text, "headline", errors);
+        if (GradeError("headline", output.Headline.Text) is { } headlineGrade) errors.Add(headlineGrade);
         var quotes = new BillTextQuotes(billText);
+        var figures = new BillFigureSet(quotes.NormalizedBody);
+        var billNumber = context.Snapshot.Bill.Number.ToString(CultureInfo.InvariantCulture);
+        CheckFigures(output.Headline.Text, "headline", figures, billNumber, errors);
         var summary = QuotedSentences(output.Summary.Sentences, ActionTextPart.Summary, "summary", quotes, errors);
         var why = QuotedSentences(output.WhyItMatters.Sentences, ActionTextPart.WhyItMatters, "whyItMatters", quotes, errors);
-        CheckSentences(summary, "summary", context.Snapshot, errors);
-        CheckSentences(why, "whyItMatters", context.Snapshot, errors);
+        CheckSentences(summary, "summary", context.Snapshot, figures, errors);
+        CheckSentences(why, "whyItMatters", context.Snapshot, figures, errors);
         var issueIds = context.Issues.Check(output.IssueIds, errors);
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
         var citations = summary.Concat(why).ToImmutableArray();
@@ -120,17 +125,34 @@ public static class ActionDraftResolver
             errors.Add($"The {field} quote \"{Shorten(quote)}\" is not an exact quote of the bill text that was sent. Copy it exactly.");
         else if (span.Length > ActionDraftRevision.MaximumTextQuoteLength)
             errors.Add($"A {field} quote spans {span.Length} characters of the stored text. Quote at most {ActionDraftRevision.MaximumTextQuoteLength}.");
-        else if (ReadingGrade.Of(sentence) is var grade && grade > ReadingGrade.MaximumSentenceGrade)
-            errors.Add($"The {field} sentence \"{Shorten(sentence)}\" reads at grade {ReadingGrade.Format(grade)}. Write at grade {ReadingGrade.MaximumSentenceGrade} or below. Use shorter words and shorter sentences.");
+        else if (GradeError($"{field} sentence", sentence) is { } gradeError)
+            errors.Add(gradeError);
         else return new(part, span, sentence);
         return null;
     }
 
-    private static void CheckSentences(List<ActionTextCitation> citations, string field, ActionBillSnapshot snapshot, List<string> errors)
+    private static void CheckSentences(List<ActionTextCitation> citations, string field, ActionBillSnapshot snapshot, BillFigureSet figures,
+        List<string> errors)
     {
         var text = ActionTextCitation.Join(citations);
         CheckNames(text, field, snapshot, errors);
         CheckNoSummarySentence(text, field, errors);
+        CheckFigures(text, field, figures, snapshot.Bill.Number.ToString(CultureInfo.InvariantCulture), errors);
+    }
+
+    /// <summary>The sentences are free text apart from their quote, so the figures of a sentence are checked against the bill text that was sent.</summary>
+    private static void CheckFigures(string text, string field, BillFigureSet figures, string billNumber, List<string> errors)
+    {
+        foreach (var figure in figures.Missing(text, billNumber))
+            errors.Add($"The {field} has the figure \"{Shorten(figure)}\", which is not in the bill text that was sent. Use only amounts and years that the bill text has.");
+    }
+
+    private static string? GradeError(string subject, string text)
+    {
+        var grade = ReadingGrade.Rounded(text);
+        return grade > ReadingGrade.MaximumSentenceGrade
+            ? $"The {subject} \"{Shorten(text)}\" reads at grade {ReadingGrade.Format(grade)}. Write at grade {ReadingGrade.MaximumSentenceGrade} or below. Use shorter words and shorter sentences."
+            : null;
     }
 
     private static void CheckNoSummarySentence(string text, string field, List<string> errors)
