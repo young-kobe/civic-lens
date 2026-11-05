@@ -177,8 +177,8 @@ public sealed class VoteCommandTests(PostgresCollection postgres) : IAsyncLifeti
             INSERT INTO vote_member_lists (list_id, member_count, created_at_utc_ticks) VALUES ('{{record}}', 1, 100);
             INSERT INTO vote_member_list_entries (list_id, position, person_id, bioguide_id, vote_cast, citation_extraction_id, citation_start, citation_length)
             VALUES ('{{record}}', 0, 'p', 'A000001', 'Yea', '{{record}}', 0, 1);
-            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks{{columns}})
-            VALUES ('{{record}}', 1, 'auth0|editor', 'Person', NULL, '{{revisionJson}}', 100{{values}})
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks, result{{columns}})
+            VALUES ('{{record}}', 1, 'auth0|editor', 'Person', NULL, '{{revisionJson}}', 100, 'Passed'{{values}})
             """, connection);
         await command.ExecuteNonQueryAsync();
     }

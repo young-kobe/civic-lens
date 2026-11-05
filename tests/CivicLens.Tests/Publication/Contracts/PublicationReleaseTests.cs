@@ -287,6 +287,7 @@ public sealed class PublicationReleaseTests
             PolicyAreaIds = ["housing-and-community-development"],
             SourceHost = "api.congress.gov",
             BillTitle = "A bill to provide grants to States and local governments for housing and transit projects, and for other purposes",
+            BillLine = new string('x', PublishedRecordEntry.MaximumBillLineLength),
             EventDate = new DateOnly(2026, 1, 20),
             CosponsorIds = [.. Enumerable.Range(0, 15).Select(cosponsor => $"cosponsor-{cosponsor:D2}-of-a-long-name")]
         }).ToArray();

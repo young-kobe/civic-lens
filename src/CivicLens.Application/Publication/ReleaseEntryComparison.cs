@@ -3,7 +3,7 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-/// <summary>Owns the rule that two entries of one revision agree. The optional fields are new to the contract, so an older entry may lack them.</summary>
+/// <summary>Owns the rule that two entries of one revision agree. The six optional fields are new to the contract, so an older entry may lack them.</summary>
 internal static class ReleaseEntryComparison
 {
     public static bool SameOutsideNewFields(PublishedRecordEntry first, PublishedRecordEntry second) =>

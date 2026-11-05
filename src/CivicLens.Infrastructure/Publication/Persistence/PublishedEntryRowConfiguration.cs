@@ -29,9 +29,6 @@ internal sealed class PublishedEntryRowConfiguration : IEntityTypeConfiguration<
             table.HasCheckConstraint("ck_published_entries_source_host", "source_host IS NULL OR length(btrim(source_host)) > 0");
             table.HasCheckConstraint("ck_published_entries_bill_title",
                 $"(kind = '{Name(PublishedRecordKind.Action)}') = (bill_title IS NOT NULL) AND (bill_title IS NULL OR length(btrim(bill_title)) > 0)");
-            table.HasCheckConstraint("ck_published_entries_bill_line",
-                $"bill_line IS NULL OR (kind = '{Name(PublishedRecordKind.Action)}' AND length(btrim(bill_line)) > 0 AND " +
-                $"length(bill_line) <= {PublishedRecordEntry.MaximumBillLineLength})");
             table.HasCheckConstraint("ck_published_entries_document_type",
                 $"(kind = '{Name(PublishedRecordKind.ExecutiveAction)}') = (document_type IS NOT NULL) AND " +
                 $"(document_type IS NULL OR {EnumChecks.InList("document_type", Enum.GetNames<PublishedExecutiveActionKind>())})");
@@ -51,7 +48,6 @@ internal sealed class PublishedEntryRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.SourceHost).HasColumnName("source_host").HasMaxLength(PublishedRecordEntry.MaximumFilterValueLength);
         builder.Property(row => row.EventDate).HasColumnName("event_date");
         builder.Property(row => row.BillTitle).HasColumnName("bill_title").HasMaxLength(PublishedAction.MaximumBillTitleLength);
-        builder.Property(row => row.BillLine).HasColumnName("bill_line").HasMaxLength(PublishedRecordEntry.MaximumBillLineLength);
         builder.Property(row => row.LinkType).HasColumnName("link_type").HasConversion<string>().HasMaxLength(32);
         builder.Property(row => row.StatementRecordId).HasColumnName("statement_record_id").HasMaxLength(64);
         builder.Property(row => row.StatementKind).HasColumnName("statement_kind").HasMaxLength(32)

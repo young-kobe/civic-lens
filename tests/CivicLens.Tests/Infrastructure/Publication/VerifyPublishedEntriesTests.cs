@@ -63,7 +63,7 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
     }
 
     [Fact]
-    public async Task AnActionEntryWithABillLineRebuildsByteForByteFromItsRowSoTheLineLivesInOneColumn()
+    public async Task AnActionEntryWithABillLineRebuildsByteForByteBecauseTheSpliceTakesTheLineFromTheFile()
     {
         var action = await SeedActionAsync('a');
         await AddReleasesAsync(1);
@@ -75,24 +75,6 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
 
         Assert.Equal(0, exit);
         Assert.Equal(0, json.GetProperty("failedReleases").GetArrayLength());
-        Assert.Equal("This bill funds rent aid.", Assert.Single(await ReadAsync("SELECT bill_line FROM published_entries")));
-    }
-
-    [Fact]
-    public async Task AFileLineThatTheRowDoesNotHoldFailsTheReleaseBecauseTheFileNoLongerMatchesTheTables()
-    {
-        var action = await SeedActionAsync('a');
-        await AddReleasesAsync(1);
-        await AddRangeAsync(action, 1, null);
-        Keep(1, [new SampleRecord(action.ToEntry() with { BillLine = "This bill funds rent aid." }, action)], []);
-        await FillRowsAsync();
-        Keep(1, [new SampleRecord(action.ToEntry() with { BillLine = "This bill funds something else." }, action)], []);
-
-        var (exit, json) = await RunCommandAsync();
-
-        Assert.Equal(1, exit);
-        var failed = Assert.Single(json.GetProperty("failedReleases").EnumerateArray());
-        Assert.Equal(("bytesDiffer", $"action:{action.RecordId}"), (failed.GetProperty("reason").GetString(), failed.GetProperty("record").GetString()));
     }
 
     [Fact]
@@ -340,6 +322,7 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
         var kind = PublishedRecordReference.NameOf(entry.Kind);
         var revisions = kind + "_revisions";
         var idColumn = entry.Kind == PublishedRecordKind.Statement ? "candidate_id" : "record_id";
+        var (resultColumn, resultValue) = entry.Kind == PublishedRecordKind.Vote ? (", result", ", 'Passed'") : ("", "");
         var linked = string.Concat(PublishedRecordReference.LinkedBy(entry).Select(reference => $$"""
             INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks)
             VALUES ('{{PublishedRecordReference.NameOf(reference.Kind)}}', '{{reference.RecordId}}', 1) ON CONFLICT DO NOTHING;
@@ -347,8 +330,8 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
         await ExecuteAsync($$"""
             SET session_replication_role = replica;
             {{linked}}
-            INSERT INTO {{revisions}} ({{idColumn}}, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
-            VALUES ('{{entry.RecordId}}', {{entry.RevisionNumber}}, 'owner', 'Person', '{}', 0);
+            INSERT INTO {{revisions}} ({{idColumn}}, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks{{resultColumn}})
+            VALUES ('{{entry.RecordId}}', {{entry.RevisionNumber}}, 'owner', 'Person', '{}', 0{{resultValue}});
             INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks)
             VALUES ('{{kind}}', '{{entry.RecordId}}', {{entry.FirstPublishedAtUtc.UtcTicks}});
             INSERT INTO publication_record_states (kind, record_id, revision_number, first_release, last_release)
