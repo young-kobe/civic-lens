@@ -2,10 +2,12 @@ using System.Text.RegularExpressions;
 
 namespace CivicLens.Tests.Fixtures;
 
-internal static class HostStyleSheets
+internal static class WebStyleSheets
 {
+    private static readonly string[] Owners = ["CivicLens.PublicWeb", "CivicLens.Host"];
+
     public static string Read(string name) =>
-        File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.Host", "wwwroot", "css", name));
+        File.ReadAllText(Owners.Select(owner => Path.Combine(RepositoryRoot.FullName, "src", owner, "wwwroot", "css", name)).Single(File.Exists));
 
     public static IEnumerable<string> Selectors(string css)
     {
