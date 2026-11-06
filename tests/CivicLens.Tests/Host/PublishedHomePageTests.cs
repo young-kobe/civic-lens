@@ -310,6 +310,14 @@ public sealed class PublishedHomePageTests
     }
 
     [Fact]
+    public void TheZipResultShowsTheTermEndDateInTheSiteFormatOrSaysTheRecordsHoldNoEndDate()
+    {
+        var script = System.Text.Encoding.UTF8.GetString(new ReleaseRenderer(null, null).Assets.Single(asset => asset.RelativePath == "assets/js/public.js").Content);
+
+        Assert.Contains("holder.termEndsOn ? `Current term ends ${formatDay(holder.termEndsOn)}.` : \"Our records show no end date for this term.\"", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task WithoutAServiceAddressTheHomePageHasNoZipFormNoResultPanelAndNoNotice()
     {
         var html = await HomeHtmlAsync(null);

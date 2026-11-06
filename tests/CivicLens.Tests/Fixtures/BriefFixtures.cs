@@ -36,8 +36,8 @@ internal static class BriefFixtures
         new(BriefCitationKind.Action, id, 1, "Bill " + bill, "Summary of " + bill, null, [.. officials], bill, sponsorships);
 
     public static BriefDraftEvidence Evidence(IEnumerable<BriefRecord> records, BriefRevision? current = null, BriefWindow? window = null,
-        int leftOut = 0) =>
-        new(window ?? Window(), [.. records], leftOut, current);
+        int leftOut = 0, bool hasStaleDraft = false) =>
+        new(window ?? Window(), [.. records], leftOut, current, hasStaleDraft);
 
     public static BriefDraftContext Context(IEnumerable<BriefRecord> records, BriefRevision? current = null) =>
         BriefDraftContext.Create(Evidence(records, current), SelectAll(records), Officials);

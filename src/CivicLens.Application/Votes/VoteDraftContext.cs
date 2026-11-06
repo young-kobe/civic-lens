@@ -9,8 +9,8 @@ public sealed record VoteDraftContext(VoteDraftEvidence Evidence, VoteSnapshot S
     public VoteChange ChangeSinceCurrent()
     {
         var change = ChangeFromFacts(Evidence.Current);
-        if (!Evidence.DraftedUnderOlderPrompt) return change;
-        return change == VoteChange.None ? VoteChange.OlderPromptOnly : VoteChange.Other;
+        if (!Evidence.HasStaleDraft) return change;
+        return change == VoteChange.None ? VoteChange.StaleOnly : VoteChange.Other;
     }
 
     private VoteChange ChangeFromFacts(VoteDraftRevision? previous)
@@ -27,4 +27,4 @@ public sealed record VoteDraftContext(VoteDraftEvidence Evidence, VoteSnapshot S
         (member.PersonId, member.BioguideId, member.Cast);
 }
 
-public enum VoteChange { None, MemberVotesOnly, KindOnly, OlderPromptOnly, Other }
+public enum VoteChange { None, MemberVotesOnly, KindOnly, StaleOnly, Other }

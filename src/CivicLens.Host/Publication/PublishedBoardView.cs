@@ -130,7 +130,7 @@ internal static class PublishedBoardView
         if (page.WithoutMajorParty > 0)
             yield return $"{page.WithoutMajorParty} {PublishedOfficialView.Noun(page.WithoutMajorParty, "official")} with vote figures in this Congress but no {PublishedPartyMajority.Democrat} or {PublishedPartyMajority.Republican} party on their votes, so no party majority applies.";
         yield return "Members of the other party. They are on the other page for this chamber.";
-        yield return "Roll calls that are not on this site, and casts of Present or Not Voting. The split vote counts hold only Yes and No casts.";
+        yield return "Roll calls that are not on this site, and casts of Present or Not voting. The split vote counts hold only Yes and No casts.";
     }
 }
 

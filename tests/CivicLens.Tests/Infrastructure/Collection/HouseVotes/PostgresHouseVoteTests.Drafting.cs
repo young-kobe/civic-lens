@@ -298,11 +298,24 @@ public sealed partial class PostgresHouseVoteTests
         await InsertRunAsync(older, "vote-draft-prompt-v1", 1);
         await InsertRunAsync(newer, "vote-draft-prompt-v1", 2);
 
-        Assert.Equal(1, await VoteStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(1, await VoteStore().RequeueStaleAsync(default));
 
         var queue = await StatusAndAttemptsAsync();
         Assert.Equal(("Succeeded", 2), queue[older]);
         Assert.Equal(("Pending", 0), queue[newer]);
+    }
+
+    [Theory]
+    [InlineData("vote-draft-v0", VoteDraftTask.SchemaVersion, 1)]
+    [InlineData(VoteDraftTask.TaskVersion, "vote-draft-schema-v1", 1)]
+    [InlineData(VoteDraftTask.TaskVersion, VoteDraftTask.SchemaVersion, 0)]
+    public async Task RedraftTreatsADraftRunWithAnOlderTaskOrSchemaVersionAsStaleEvenWhenItsPromptIsCurrent(string taskVersion, string schemaVersion, int requeued)
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(VoteDraftErrorCodes.SupersededByNewerCandidate, null);
+        await InsertRunAsync(older, VoteDraftTask.PromptVersion, 1);
+        await InsertRunAsync(newer, VoteDraftTask.PromptVersion, 2, taskVersion: taskVersion, schemaVersion: schemaVersion);
+
+        Assert.Equal(requeued, await VoteStore().RequeueStaleAsync(default));
     }
 
     [Fact]
@@ -312,7 +325,7 @@ public sealed partial class PostgresHouseVoteTests
         await InsertRunAsync(older, "vote-draft-prompt-v1", 1);
         await InsertRunAsync(newer, VoteDraftTask.PromptVersion, 2);
 
-        Assert.Equal(0, await VoteStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(0, await VoteStore().RequeueStaleAsync(default));
 
         Assert.All((await StatusAndAttemptsAsync()).Values, entry => Assert.Equal(("Succeeded", 2), entry));
     }
@@ -324,7 +337,7 @@ public sealed partial class PostgresHouseVoteTests
         await InsertRunAsync(newer, "vote-draft-prompt-v1", 1);
         await InsertRunAsync(newer, VoteDraftTask.PromptVersion, 2, "Bypassed");
 
-        Assert.Equal(1, await VoteStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(1, await VoteStore().RequeueStaleAsync(default));
 
         var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => row.Status);
         Assert.Equal("Pending", queue[newer]);
@@ -341,7 +354,7 @@ public sealed partial class PostgresHouseVoteTests
         await ExecuteAsync($"UPDATE vote_analysis SET status = '{status}', error_code = '{errorCode}', attempts = 2");
         await InsertRunAsync(candidate, "vote-draft-prompt-v1", 1);
 
-        Assert.Equal(0, await VoteStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(0, await VoteStore().RequeueStaleAsync(default));
 
         Assert.Equal((status, 2), Assert.Single((await StatusAndAttemptsAsync()).Values));
     }
@@ -349,12 +362,12 @@ public sealed partial class PostgresHouseVoteTests
     [Theory]
     [InlineData("vote-draft-prompt-v1", true)]
     [InlineData(VoteDraftTask.PromptVersion, false)]
-    public async Task TheEvidenceNamesAnOlderPromptOnlyWhenTheNewestDraftRunUsedOneSoARerunSpendsNothingAfterTheRedraft(string prompt, bool older)
+    public async Task TheEvidenceFlagsAStaleDraftOnlyWhenTheNewestDraftRunUsedOneSoARerunSpendsNothingAfterTheRedraft(string prompt, bool stale)
     {
         var candidate = await PendingCandidateAsync();
         await InsertRunAsync(candidate, prompt, 1);
 
-        Assert.Equal(older, (await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
+        Assert.Equal(stale, (await VoteStore().ReadEvidenceAsync(candidate, default))!.HasStaleDraft);
     }
 
     [Fact]
@@ -363,8 +376,8 @@ public sealed partial class PostgresHouseVoteTests
         var candidate = await PendingCandidateAsync();
         await SettleAsync(candidate, await RevisionAsync(candidate, 1));
 
-        Assert.False((await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
-        Assert.Equal(0, await VoteStore().RequeueOlderPromptAsync(default));
+        Assert.False((await VoteStore().ReadEvidenceAsync(candidate, default))!.HasStaleDraft);
+        Assert.Equal(0, await VoteStore().RequeueStaleAsync(default));
     }
 
     [Theory]
@@ -384,8 +397,8 @@ public sealed partial class PostgresHouseVoteTests
         else if (change != "none")
             await ExecuteAsync($"UPDATE vote_drafts SET review_status = '{change}'");
 
-        Assert.Equal(requeued == 1, (await VoteStore().ReadEvidenceAsync(candidate, default))!.DraftedUnderOlderPrompt);
-        Assert.Equal(requeued, await VoteStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(requeued == 1, (await VoteStore().ReadEvidenceAsync(candidate, default))!.HasStaleDraft);
+        Assert.Equal(requeued, await VoteStore().RequeueStaleAsync(default));
     }
 
     [Fact]
@@ -395,7 +408,7 @@ public sealed partial class PostgresHouseVoteTests
         await InsertRunAsync(older, "vote-draft-prompt-v1", 1);
         await PendingCandidateAsync(Updated.AddDays(1));
 
-        Assert.False((await VoteStore().ReadEvidenceAsync(older, default))!.DraftedUnderOlderPrompt);
+        Assert.False((await VoteStore().ReadEvidenceAsync(older, default))!.HasStaleDraft);
     }
 
     [Fact]
@@ -405,7 +418,7 @@ public sealed partial class PostgresHouseVoteTests
         await ExecuteAsync($"UPDATE vote_analysis SET status = 'Succeeded', error_code = '{VoteDraftErrorCodes.Unchanged}', attempts = 2");
         await InsertRunAsync(candidate, "vote-draft-prompt-v1", 1, "Bypassed");
 
-        Assert.Equal(0, await VoteStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(0, await VoteStore().RequeueStaleAsync(default));
     }
 
     [Fact]
@@ -416,7 +429,7 @@ public sealed partial class PostgresHouseVoteTests
         await ExecuteAsync("UPDATE vote_analysis SET status = 'Succeeded', attempts = 2");
         await InsertRunAsync(candidate, "vote-draft-prompt-v1", 1);
 
-        Assert.Equal(0, await VoteStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(0, await VoteStore().RequeueStaleAsync(default));
     }
 
     [Fact]
@@ -431,7 +444,7 @@ public sealed partial class PostgresHouseVoteTests
         await InsertRunAsync(first, "vote-draft-prompt-v1", 1);
         await InsertRunAsync(second, VoteDraftTask.PromptVersion, 2);
 
-        Assert.Equal(1, await VoteStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(1, await VoteStore().RequeueStaleAsync(default));
 
         var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => row.Status);
         Assert.Equal(("Pending", "Succeeded"), (queue[first], queue[second]));
@@ -444,7 +457,7 @@ public sealed partial class PostgresHouseVoteTests
         await InsertRunAsync(older, "vote-draft-prompt-v1", 1);
         await InsertRunAsync(newer, "vote-draft-prompt-v1", 2, "Bypassed");
 
-        Assert.Equal(2, await VoteStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(2, await VoteStore().RequeueStaleAsync(default));
 
         Assert.All((await QueueAsync()).Select(row => row.Status), status => Assert.Equal("Pending", status));
     }
@@ -462,7 +475,7 @@ public sealed partial class PostgresHouseVoteTests
         await InsertRunAsync(house, "vote-draft-prompt-v1", 1);
         await InsertRunAsync(other, VoteDraftTask.PromptVersion, 2);
 
-        Assert.Equal(1, await VoteStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(1, await VoteStore().RequeueStaleAsync(default));
 
         var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => row.Status);
         Assert.Equal(("Pending", "Succeeded"), (queue[house], queue[other]));
@@ -489,11 +502,12 @@ public sealed partial class PostgresHouseVoteTests
 
     private static string SqlLiteral(string? value) => value is null ? "NULL" : $"'{value}'";
 
-    private async Task InsertRunAsync(string candidate, string promptVersion, long startedAtTicks, string outcome = "Drafted", string? runId = null) => await ExecuteAsync($"""
+    private async Task InsertRunAsync(string candidate, string promptVersion, long startedAtTicks, string outcome = "Drafted", string? runId = null,
+        string taskVersion = VoteDraftTask.TaskVersion, string schemaVersion = VoteDraftTask.SchemaVersion) => await ExecuteAsync($"""
         INSERT INTO vote_analysis_runs (run_id, candidate_id, task, task_version, model, prompt_version, schema_version, input_hash, outcome,
             input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks)
-        VALUES ('{runId ?? Guid.NewGuid().ToString("N")}', '{candidate}', '{VoteDraftTask.Task}', '{VoteDraftTask.TaskVersion}', '{VoteDraftTask.Model}', '{promptVersion}',
-            '{VoteDraftTask.SchemaVersion}', '{new string('1', 64)}', '{outcome}', 0, 0, 0, 0, 0, {startedAtTicks}, {startedAtTicks})
+        VALUES ('{runId ?? Guid.NewGuid().ToString("N")}', '{candidate}', '{VoteDraftTask.Task}', '{taskVersion}', '{VoteDraftTask.Model}', '{promptVersion}',
+            '{schemaVersion}', '{new string('1', 64)}', '{outcome}', 0, 0, 0, 0, 0, {startedAtTicks}, {startedAtTicks})
         """);
 
     private async Task<string> PendingCandidateAsync(DateTimeOffset? updated = null, int roll = 100)
