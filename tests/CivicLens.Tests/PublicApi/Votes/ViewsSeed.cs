@@ -11,6 +11,7 @@ internal sealed record SeededVote(char Id, string VotedOn)
     public int Session { get; init; } = 1;
     public int RollCall { get; init; } = 1;
     public string Kind { get; init; } = "Passage";
+    public string Result { get; init; } = $"Passed {Id}";
     public string? BillType { get; init; } = "hr";
     public int? BillNumber { get; init; } = 1;
     public string TextOrigin { get; init; } = "Model";
@@ -56,9 +57,9 @@ internal static class ViewsSeed
                 kind, member_list_id, issue_revision_id, issue_candidates_recorded, bill_type, bill_number, question, result)
             VALUES ('{vote.RecordId}', 1, 'test', 'Person', 1, 'Headline {vote.Id}', 'Summary {vote.Id}', '{vote.TextOrigin}', 'src', '{source}',
                 '{vote.Chamber}', {vote.Congress}, {vote.Session}, {vote.RollCall}, 'cand', 1, '{vote.VotedOn}', 'ext', 0, 1,
-                '{vote.Kind}', '{list}', '{new string('a', 64)}', true, {bill}, 'On {vote.Id}', 'Passed {vote.Id}');
+                '{vote.Kind}', '{list}', '{new string('a', 64)}', true, {bill}, 'On {vote.Id}', '{vote.Result}');
             INSERT INTO vote_revision_facts (record_id, revision_number, "position", fact_text, citation_extraction_id, citation_start, citation_length)
-              VALUES ('{vote.RecordId}', 1, 0, 'Question: On {vote.Id}', 'ext', 0, 1), ('{vote.RecordId}', 1, 1, 'Result: Passed {vote.Id}', 'ext', 0, 1);
+              VALUES ('{vote.RecordId}', 1, 0, 'Question: On {vote.Id}', 'ext', 0, 1), ('{vote.RecordId}', 1, 1, 'Result: {vote.Result}', 'ext', 0, 1);
             {string.Join('\n', vote.Casts.Select((cast, index) => $"""
                 INSERT INTO vote_member_list_entries (list_id, "position", person_id, bioguide_id, vote_cast, citation_extraction_id, citation_start, citation_length)
                 VALUES ('{list}', {index}, 'p{index}', 'B{index:000000}', '{cast}', 'ext', 0, 1);
