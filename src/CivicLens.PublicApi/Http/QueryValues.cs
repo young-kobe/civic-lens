@@ -26,9 +26,11 @@ internal static class QueryValues
 
     public static int PageLimit(IQueryCollection query) => Number(query, "limit", 1, SearchRequest.MaximumLimit) ?? SearchRequest.DefaultLimit;
 
-    public static string? Filter(IQueryCollection query, string name)
+    public static string? Filter(IQueryCollection query, string name) => FilterValue(Value(query, name), name);
+
+    /// <summary>Applies the filter rule to one value: empty means no filter, and a value over the maximum length throws <see cref="ArgumentException"/>.</summary>
+    public static string? FilterValue(string? value, string name)
     {
-        var value = Value(query, name);
         if (string.IsNullOrEmpty(value)) return null;
         return value.Length <= PublishedRecordEntry.MaximumFilterValueLength
             ? value
