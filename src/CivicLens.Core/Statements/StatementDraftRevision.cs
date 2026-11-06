@@ -26,10 +26,10 @@ public sealed record StatementDraftRevision(string CandidateId, int RevisionNumb
 
     public DateOnly EventOn(DateOnly capturedOn) => StatementDate ?? capturedOn;
 
-    public void ValidateAsFirstAnalysisRevision()
+    public void ValidateAsAnalysisRevision()
     {
-        if (RevisionNumber != 1 || AuthorKind != ReviewAuthorKind.Analysis)
-            throw new ArgumentException("An analysis statement draft must be revision 1 by the analysis author.");
+        if (RevisionNumber < 1 || AuthorKind != ReviewAuthorKind.Analysis)
+            throw new ArgumentException("An analysis statement draft must be a numbered revision by the analysis author.");
         if ((StatementDate is null) != (StatementDateEvidence is null))
             throw new ArgumentException("A statement date requires an exact evidence span.");
         if (string.IsNullOrWhiteSpace(Headline) || string.IsNullOrWhiteSpace(Summary) || Quotations.IsDefaultOrEmpty)

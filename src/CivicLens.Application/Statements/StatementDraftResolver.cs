@@ -29,7 +29,7 @@ public static class StatementDraftResolver
         var date = ResolveDate(output.StatementDate, extraction, errors, citationErrors);
         var quotations = ResolveQuotations(output.Quotations, extraction, errors, citationErrors);
         if (errors.Count > 0) return Rejected(errors, citationErrors.Count > 0);
-        var revision = new StatementDraftRevision(evidence.Article.CandidateId, 1, ReviewAuthor.AnalysisSubject, createdAtUtc,
+        var revision = new StatementDraftRevision(evidence.Article.CandidateId, evidence.NextRevisionNumber, ReviewAuthor.AnalysisSubject, createdAtUtc,
             output.Headline, output.Summary, date?.Date, date?.Evidence, speakers, others, evidence.CarryOver.IssueIds,
             evidence.CarryOver.PolicyAreaIds, quotations, []);
         return new(WithArticleDerivedFields(revision, extraction.Text), [], false);

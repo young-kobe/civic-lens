@@ -32,7 +32,7 @@ public sealed class AnalysisCommandTests(PostgresCollection postgres) : IAsyncLi
         var votes = await RunAsync("auth0|owner", "analyses", "redraft", "--stale", "votes");
         var documents = await RunAsync("auth0|owner", "analyses", "redraft", "--stale", "document-changes");
 
-        Assert.Equal((0, """{"requeued":{"actions":0,"votes":0,"document-changes":0,"briefs":0}}"""), (all.ExitCode, all.Output.Trim()));
+        Assert.Equal((0, """{"requeued":{"actions":0,"votes":0,"statements":0,"document-changes":0,"briefs":0}}"""), (all.ExitCode, all.Output.Trim()));
         Assert.Equal((0, """{"requeued":{"votes":0}}"""), (votes.ExitCode, votes.Output.Trim()));
         Assert.Equal((0, """{"requeued":{"document-changes":0}}"""), (documents.ExitCode, documents.Output.Trim()));
     }
@@ -40,7 +40,7 @@ public sealed class AnalysisCommandTests(PostgresCollection postgres) : IAsyncLi
     [Fact]
     public async Task RedraftStaleRefusesAnUnknownStageAndTheAiDrafter()
     {
-        var unknown = await RunAsync("auth0|owner", "analyses", "redraft", "--stale", "statements");
+        var unknown = await RunAsync("auth0|owner", "analyses", "redraft", "--stale", "documents");
         var drafter = await RunAsync("civic-lens:analysis", "analyses", "redraft", "--stale");
 
         Assert.Equal(2, unknown.ExitCode);

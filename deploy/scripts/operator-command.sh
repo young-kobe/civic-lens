@@ -64,8 +64,8 @@ case "$*" in
   "db migrate") "$compose" run --rm cli db migrate ;;
   # usage: worker health
   "worker health") "$compose" run --rm cli worker health ;;
-  # usage: analyses redraft --stale [actions|votes|document-changes|briefs]
-  "analyses redraft --stale"|"analyses redraft --stale actions"|"analyses redraft --stale votes"|"analyses redraft --stale document-changes"|"analyses redraft --stale briefs")
+  # usage: analyses redraft --stale [actions|votes|statements|document-changes|briefs]
+  "analyses redraft --stale"|"analyses redraft --stale actions"|"analyses redraft --stale votes"|"analyses redraft --stale statements"|"analyses redraft --stale document-changes"|"analyses redraft --stale briefs")
     "$compose" run --rm cli analyses redraft --stale "${@:4}"
     ;;
   # usage: bills subjects backfill <count>

@@ -174,13 +174,40 @@ public sealed class StatementDraftStepTests
     [Fact]
     public async Task AnExistingDraftSucceedsTheEntryWithoutACall()
     {
-        var store = new FakeStatementDraftStore(DraftEvidence(existingDraftId: "someone"));
+        var store = new FakeStatementDraftStore(DraftEvidence(existingDraft: new(1, IsStaleModelDraft: false)));
         var model = new FakeStatementDraftModel();
 
         await Worker(store, model).ExecuteAsync(once: true);
 
         Assert.Empty(model.Requests);
         Assert.Equal((State.Succeeded, "humanDraftExists"), (store.Entries.Single().Status, store.Entries.Single().ErrorCode));
+    }
+
+    [Fact]
+    public async Task AStaleModelDraftGetsTheNextModelRevisionWithTheRunOfTheNewDraft()
+    {
+        var store = new FakeStatementDraftStore(DraftEvidence(existingDraft: new(2, IsStaleModelDraft: true)));
+        var model = new FakeStatementDraftModel().Draft(Output());
+
+        await Worker(store, model).ExecuteAsync(once: true);
+
+        Assert.Single(model.Requests);
+        Assert.Equal((State.Succeeded, null), (store.Entries.Single().Status, store.Entries.Single().ErrorCode));
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal((3, "civic-lens:analysis"), (revision.RevisionNumber, revision.AuthorSubject));
+        Assert.Equal(AnalysisRunOutcome.Drafted, Assert.Single(store.Runs).Run.Outcome);
+    }
+
+    [Fact]
+    public async Task ADraftThatIsNotStaleIsNotRedraftedBecauseItsVersionsAreCurrent()
+    {
+        var store = new FakeStatementDraftStore(DraftEvidence(existingDraft: new(1, IsStaleModelDraft: false)));
+        var model = new FakeStatementDraftModel();
+
+        await Worker(store, model).ExecuteAsync(once: true);
+
+        Assert.Empty(model.Requests);
+        Assert.Empty(store.Revisions);
     }
 
     [Fact]

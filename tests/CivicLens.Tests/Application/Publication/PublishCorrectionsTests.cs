@@ -191,6 +191,25 @@ public sealed class PublishCorrectionsTests
     }
 
     [Fact]
+    public async Task ACodeApprovedReplacementOfAPublishedStatementRepublishesWithAnEntryWithoutANoteLikeAnActionReplacement()
+    {
+        var scenario = new PublicationScenario();
+        var codeDecision = PublicationScenario.Decision(new string('b', 64), 1, ReviewDecisionKind.Approve) with { ActorSubject = ReviewAuthor.CodeSubject };
+        var statement = scenario.AddStatement('b', [codeDecision], author: ReviewAuthor.AnalysisSubject);
+        var reference = new PublishedRecordReference(PublishedRecordKind.Statement, statement);
+        await scenario.Publisher().ExecuteAsync(Code, PublicationScenario.Request("k1", reference));
+        scenario.ReviseStatementByCode(statement, 2);
+
+        var second = await scenario.Publisher().ExecuteAsync(Code, PublicationScenario.Request("k2", reference));
+
+        var record = JsonSerializer.Deserialize<PublishedStatement>(
+            scenario.Releases.Directories[second.DirectoryName][PublicationProtocol.RecordDataPath(statement)], PublicationProtocol.JsonOptions)!;
+        Assert.Equal(2, record.RevisionNumber);
+        var entry = Assert.Single(record.Corrections);
+        Assert.Equal((1, null), (entry.ReplacedRevisionNumber, entry.Note));
+    }
+
+    [Fact]
     public async Task APersonApprovalThatReplacesAPublishedRecordNeedsANoteEvenWhenTheCodeSubjectPublishesIt()
     {
         var (scenario, action) = await PublishedActionAsync();

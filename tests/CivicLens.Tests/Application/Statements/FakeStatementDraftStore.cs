@@ -24,6 +24,8 @@ internal sealed class FakeStatementDraftStore : FakeAnalysisQueue<StatementDraft
     public Task<StatementDraftEvidence?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken) =>
         Task.FromResult<StatementDraftEvidence?>(Evidence);
 
+    public Task<int> RequeueStaleAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+
     public Task<IReadOnlyList<StatementDraftListItem>> ListAsync(StatementDraftView? view, int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<StatementDraftListItem>>([]);
 

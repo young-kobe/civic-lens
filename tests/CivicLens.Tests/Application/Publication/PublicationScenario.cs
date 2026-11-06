@@ -322,6 +322,28 @@ internal sealed class PublicationScenario
         };
     }
 
+    /// <summary>Adds a model revision that code approves, after an earlier approved revision.</summary>
+    public void ReviseStatementByCode(string recordId, int revisionNumber)
+    {
+        var publishable = Statements.Publishable[recordId];
+        var review = publishable.Review;
+        var revised = review.CurrentRevision! with { RevisionNumber = revisionNumber, Headline = $"Statement again {revisionNumber}" };
+        Statements.Publishable[recordId] = publishable with
+        {
+            Review = review with
+            {
+                CurrentRevision = revised,
+                Revisions = review.Revisions.Add(revised),
+                Decisions = review.Decisions.Add(Decision(recordId, revisionNumber, ReviewDecisionKind.Approve) with
+                {
+                    RevisionNumber = revisionNumber,
+                    ActorSubject = ReviewAuthor.CodeSubject
+                }),
+                ReviewStateVersion = revisionNumber
+            }
+        };
+    }
+
     public void ReviseAction(string recordId, int revisionNumber, string? approverSubject = null, string? correctionNote = PersonNote)
     {
         var publishable = Actions.Publishable[recordId];

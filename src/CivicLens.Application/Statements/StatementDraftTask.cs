@@ -15,4 +15,6 @@ public static class StatementDraftTask
     public const int MaximumValidationPasses = 2;
 
     public static readonly AnalysisTaskIdentity Identity = new(Task, TaskVersion, Model, PromptVersion, SchemaVersion);
+
+    public static readonly AnalysisCurrentVersions CurrentVersions = AnalysisCurrentVersions.Of(Identity);
 }

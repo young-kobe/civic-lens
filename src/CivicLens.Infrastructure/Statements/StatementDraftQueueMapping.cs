@@ -43,7 +43,7 @@ internal sealed class StatementDraftQueueMapping(Func<CollectionAttemptDbContext
             return settlement;
         if (run.Run.Outcome != AnalysisRunOutcome.Drafted) throw new ArgumentException("A draft needs its drafted run.", nameof(settlement));
         if (checkpoint.CodeApproval is not { } codeApproval) throw new ArgumentException("A draft needs its approval check.", nameof(settlement));
-        if (await StatementDraftRows.TryAddAnalysisDraftAsync(db, revision, run.Run.RunId, codeApproval, cancellationToken)) return settlement;
+        if (await StatementDraftRows.TryAppendAnalysisRevisionAsync(db, revision, run.Run.RunId, codeApproval, cancellationToken)) return settlement;
         return new(checkpoint with { Revision = null, ErrorCode = StatementDraftErrorCodes.DraftDiscarded },
             run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } });
     }
