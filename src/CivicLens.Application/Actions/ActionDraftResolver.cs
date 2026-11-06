@@ -149,8 +149,7 @@ public static class ActionDraftResolver
     private static string? PassageGradeError(ActionTextOutput output)
     {
         var pieces = PassageOf(output);
-        var grade = ReadingGrade.RoundedPassage(pieces);
-        if (grade <= ReadingGrade.MaximumGrade) return null;
+        if (ActionTextApproval.IsPassageReadable(pieces, out var grade)) return null;
         var hardest = pieces.MaxBy(ReadingGrade.Of)!;
         return $"The headline and the sentences read at grade {ReadingGrade.Format(grade)} as one passage. Write at grade {ReadingGrade.MaximumGrade} or below. The hardest sentence is \"{Shorten(hardest)}\" at grade {ReadingGrade.Format(ReadingGrade.Rounded(hardest))}. Use shorter words and shorter sentences. Keep the summary at {ActionDraftRevision.MinimumSummarySentences} to {ActionDraftRevision.MaximumSummarySentences} sentences.";
     }

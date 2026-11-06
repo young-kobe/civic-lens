@@ -56,7 +56,7 @@ public sealed class PublishedActionTests
         var json = JsonSerializer.Serialize(Action(), PublicationProtocol.JsonOptions);
 
         Assert.Equal(1, PublicationProtocol.SchemaVersion);
-        Assert.True(json == """{"recordId":"5555555555555555555555555555555555555555555555555555555555555555","revisionNumber":1,"headline":"Headline","summary":"Summary","textOrigin":"model","congress":119,"billType":"hr","billNumber":7,"billTitle":"A housing bill","policyArea":"Housing","policyAreaId":"housing-area","policyAreaCitation":{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":17,"length":20,"quote":"Policy area: Housing"},"trackedIssueIds":["housing"],"summaryCitation":null,"billCitation":null,"sponsorships":[{"official":{"id":"mayor","name":"Mayor Example"},"role":"sponsor","isOriginal":false,"sponsoredOn":"2026-01-03","withdrawnOn":null,"citations":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":0,"length":16,"quote":"Sponsor: M000001"}]},{"official":{"id":"chair","name":"Chair Example"},"role":"cosponsor","isOriginal":true,"sponsoredOn":"2026-01-05","withdrawnOn":"2026-01-20","citations":[{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","start":0,"length":30,"quote":"Cosponsor: C000001, 2026-01-05"}]}],"sources":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","url":"https://api.congress.gov/v3/bill/119/hr/7","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Sponsor: M000001\nPolicy area: Housing\n"},{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","url":"https://api.congress.gov/v3/bill/119/hr/7/cosponsors","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Cosponsor: C000001, 2026-01-05\n"}],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
+        Assert.True(json == """{"recordId":"5555555555555555555555555555555555555555555555555555555555555555","revisionNumber":1,"headline":"Headline","summary":"Summary","textOrigin":"model","congress":119,"billType":"hr","billNumber":7,"billTitle":"A housing bill","policyArea":"Housing","policyAreaId":"housing-area","policyAreaCitation":{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":17,"length":20,"quote":"Policy area: Housing"},"trackedIssueIds":["housing"],"summaryCitation":null,"billCitation":null,"billText":null,"sponsorships":[{"official":{"id":"mayor","name":"Mayor Example"},"role":"sponsor","isOriginal":false,"sponsoredOn":"2026-01-03","withdrawnOn":null,"citations":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":0,"length":16,"quote":"Sponsor: M000001"}]},{"official":{"id":"chair","name":"Chair Example"},"role":"cosponsor","isOriginal":true,"sponsoredOn":"2026-01-05","withdrawnOn":"2026-01-20","citations":[{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","start":0,"length":30,"quote":"Cosponsor: C000001, 2026-01-05"}]}],"sources":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","url":"https://api.congress.gov/v3/bill/119/hr/7","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Sponsor: M000001\nPolicy area: Housing\n"},{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","url":"https://api.congress.gov/v3/bill/119/hr/7/cosponsors","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Cosponsor: C000001, 2026-01-05\n"}],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
             "The published action JSON changed. Bump PublicationProtocol.SchemaVersion, update the version table " +
             "in docs/architecture.md, then update this test. Actual: " + json);
     }
@@ -330,6 +330,106 @@ public sealed class PublishedActionTests
         SponsoredOn = new DateOnly(2026, 1, 6),
         Citations = [Cite(CosponsorsId, CosponsorsText, "Cosponsor: C000001, 2026-01-05")]
     };
+
+    private const string TextId = "3333333333333333333333333333333333333333333333333333333333333333";
+    private const string BillTextBody = "Package: BILLS-119hr7ih\nText:\nThe program ends on December 31, 2030. The Secretary shall pay landlords.";
+
+    [Fact]
+    public void ARecordThatCitesItsBillTextPassesAndOneThatLeavesTheTextSourceUncitedFailsBecauseEverySourceNeedsACitation()
+    {
+        var cited = WithBillText();
+        var uncited = cited with { BillText = cited.BillText! with { Sentences = [.. cited.BillText.Sentences.Select(item => item with { Citation = Cite(DetailId, DetailText, "Sponsor: M000001") })] } };
+
+        cited.Validate();
+        Assert.Equal(3, cited.Citations().Count(citation => citation.ExtractionId == TextId));
+        var error = Assert.Throws<InvalidDataException>(uncited.Validate);
+        Assert.Contains("must be cited", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ABillTextSentenceWhoseQuoteIsNotAtItsOffsetsIsRefusedBecauseEachCitationQuotesItsSourceExactly()
+    {
+        var record = WithBillText();
+        var wrong = record with { BillText = record.BillText! with { Sentences = [.. record.BillText.Sentences.Select((item, index) => index == 1 ? item with { Citation = item.Citation with { Quote = "The program ENDS" } } : item)] } };
+
+        Assert.Throws<InvalidDataException>(wrong.Validate);
+    }
+
+    [Fact]
+    public void ARecordNeverCitesTheCrsSummaryAndTheBillTextTogether()
+    {
+        var both = WithBillText() with { SummaryCitation = Cite(DetailId, DetailText, "Sponsor: M000001") };
+
+        Assert.Throws<InvalidDataException>(both.Validate);
+    }
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(4, 1)]
+    [InlineData(2, 0)]
+    [InlineData(2, 4)]
+    public void BillTextHoldsTwoOrThreeSummarySentencesThenOneToThreeWhyItMattersSentences(int summary, int why)
+    {
+        var record = WithBillText(summary, why);
+
+        Assert.Throws<InvalidDataException>(record.Validate);
+    }
+
+    [Fact]
+    public void BillTextWithTheWhyItMattersPartBeforeTheSummaryIsRefused()
+    {
+        var record = WithBillText();
+        var swapped = record with { BillText = record.BillText! with { Sentences = [.. record.BillText.Sentences.Reverse()] } };
+
+        Assert.Throws<InvalidDataException>(swapped.Validate);
+    }
+
+    [Theory]
+    [InlineData(0, 10)]
+    [InlineData(11, 10)]
+    public void BillTextCountsAtLeastOneCharacterReadAndNoMoreThanTheTotal(int read, int total)
+    {
+        var record = WithBillText();
+
+        Assert.Throws<InvalidDataException>((record with { BillText = record.BillText! with { CharsRead = read, CharsTotal = total } }).Validate);
+    }
+
+    [Fact]
+    public void ABillTextRoundTripsThroughTheRecordFileWithItsSentencesAndCounts()
+    {
+        var json = JsonSerializer.Serialize(WithBillText(), PublicationProtocol.JsonOptions);
+
+        var read = JsonSerializer.Deserialize<PublishedAction>(json, PublicationProtocol.JsonOptions)!;
+
+        read.Validate();
+        Assert.Contains("\"part\":\"whyItMatters\"", json, StringComparison.Ordinal);
+        Assert.Equal(WithBillText().BillText!.Sentences.Select(item => item.Sentence), read.BillText!.Sentences.Select(item => item.Sentence));
+        Assert.Equal((70_000, 60_000), (read.BillText.CharsTotal, read.BillText.CharsRead));
+    }
+
+    private static PublishedAction WithBillText(int summary = 2, int why = 1)
+    {
+        PublishedTextSentence Sentence(PublishedTextPart part, int index) => new()
+        {
+            Part = part,
+            Sentence = $"Sentence {index}.",
+            Citation = Cite(TextId, BillTextBody, "The program ends")
+        };
+        var sentences = Enumerable.Range(0, summary).Select(index => Sentence(PublishedTextPart.Summary, index))
+            .Concat(Enumerable.Range(0, why).Select(index => Sentence(PublishedTextPart.WhyItMatters, summary + index)));
+        return Action() with
+        {
+            BillText = new PublishedBillText
+            {
+                VersionName = "Introduced in House",
+                VersionDate = new DateOnly(2026, 1, 3),
+                CharsRead = 60_000,
+                CharsTotal = 70_000,
+                Sentences = [.. sentences]
+            },
+            Sources = [.. Action().Sources, Source(TextId, "https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm", BillTextBody)]
+        };
+    }
 
     private static PublishedAction Action() => new()
     {
