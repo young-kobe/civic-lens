@@ -19,10 +19,15 @@ public static class AnalysisSchema
         return id;
     }
 
-    public static string HeadlineAndSummary(JsonObject? issueIds = null)
+    public static string HeadlineAndSummary(JsonObject? issueIds = null, bool withBillLine = false)
     {
         var properties = new JsonObject { ["headline"] = TextWithConfidence(), ["summary"] = TextWithConfidence() };
         var required = new JsonArray("headline", "summary");
+        if (withBillLine)
+        {
+            properties["billLine"] = LineWithQuote();
+            required.Add("billLine");
+        }
         if (issueIds is not null)
         {
             properties["issueIds"] = issueIds;
@@ -57,6 +62,14 @@ public static class AnalysisSchema
         };
         return schema.ToJsonString(AnalysisPromptText.CompactJson);
     }
+
+    private static JsonObject LineWithQuote() => new()
+    {
+        ["type"] = "object",
+        ["additionalProperties"] = false,
+        ["required"] = new JsonArray("line", "quote"),
+        ["properties"] = new JsonObject { ["line"] = new JsonObject { ["type"] = "string" }, ["quote"] = new JsonObject { ["type"] = "string" } }
+    };
 
     private static JsonObject QuotedSentence() => new()
     {

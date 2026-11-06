@@ -289,10 +289,10 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Statement draft prompt | `statement-draft-prompt-v2` | same file | Statement analysis runs | Prompt text or input framing changes, for either speaker shape |
 | Statement draft schema | `statement-draft-schema-v1` | same file | Statement analysis runs | The model output schema changes, for either speaker shape |
 | Action draft task | `action-draft-v1` | `src/CivicLens.Application/Actions/ActionDraftTask.cs` | Action analysis runs | Task flow or output handling changes |
-| Action draft prompt | `action-draft-prompt-v5` | same file | Action analysis runs | Prompt text or input framing changes |
+| Action draft prompt | `action-draft-prompt-v6` | same file | Action analysis runs | Prompt text or input framing changes |
 | Action issue prompt | `action-issue-prompt-v3` | same file | Action analysis runs | Prompt text or input framing changes |
 | Action text prompt | `action-text-prompt-v6` | same file | Action analysis runs | Prompt text or input framing changes |
-| Action draft schema | `action-draft-schema-v2` | same file | Action analysis runs | The model output schema changes |
+| Action draft schema | `action-draft-schema-v3` | same file | Action analysis runs | The model output schema changes |
 | Action issue schema | `action-issue-schema-v1` | same file | Action analysis runs | The model output schema changes |
 | Action text schema | `action-text-schema-v1` | same file | Action analysis runs | The model output schema changes |
 | Vote draft task | `vote-draft-v1` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |

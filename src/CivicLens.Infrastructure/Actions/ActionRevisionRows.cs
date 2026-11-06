@@ -59,6 +59,7 @@ internal static class ActionRevisionRows
         row.BillCitationLength = revision.BillCitation?.Length;
         row.TextPackageId = revision.TextPackageId;
         row.WhyItMatters = revision.WhyItMatters;
+        row.BillLine = revision.BillLine;
         row.IssueRevisionId = revision.IssueRevisionId;
         row.SubjectsHash = revision.SubjectsHash;
         row.IssueCandidatesRecorded = !revision.IssueCandidateIds.IsDefault;

@@ -19,7 +19,8 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SourceSpan? BillCitation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TextPackageId = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? WhyItMatters = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<ActionTextCitation> TextCitations = default)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<ActionTextCitation> TextCitations = default,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BillLine = null)
     : IHeadlineSummaryRevision
 {
     public const int MaximumHeadlineLength = 256;
@@ -43,6 +44,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     public const int MaximumTextQuoteLength = 300;
     public const int MinimumTextQuoteWords = 4;
     public const int MaximumTextSentenceLength = 400;
+    public const int MaximumBillLineLength = 200;
 
     private ImmutableArray<ActionTextCitation> TextCitationList => TextCitations.IsDefault ? [] : TextCitations;
 
@@ -104,6 +106,8 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         if (AuthorKind == ReviewAuthorKind.Code && BillCitation is null)
             throw new ArgumentException("Code text states the bill title and date, so the revision cites the bill page.");
         ValidateTextSource();
+        if (BillLine is not null && (SummaryCitation is null || string.IsNullOrWhiteSpace(BillLine) || BillLine.Length > MaximumBillLineLength))
+            throw new ArgumentException($"A bill line has 1 to {MaximumBillLineLength} characters and needs the summary citation that it quotes.");
         if ((SummaryVersion is null) != (SummaryCitation is null) || (PolicyArea is null) != (PolicyAreaCitation is null))
             throw new ArgumentException("A summary version and a policy area each need their citation.");
         if (PolicyAreaId is not null && PolicyArea is null)

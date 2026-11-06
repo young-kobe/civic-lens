@@ -29,7 +29,7 @@ internal sealed class ActionRecordLoader(IActionReviewStore actions)
         var review = addition.Review;
         RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
         var record = new PublishedActionBuilder(build.Rules).Build(addition, build.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions), build.Now);
-        return PendingRecord.Create(BillLine.EntryOf(record), review.ReviewStateVersion, record,
+        return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
             (related, _, cancellationToken) => build.Renderer.RenderActionAsync(record, build.BillStatuses.GetValueOrDefault(recordId)?.Status, related, build.Catalog, cancellationToken));
     }
 

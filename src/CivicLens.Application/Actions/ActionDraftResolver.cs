@@ -10,9 +10,9 @@ namespace CivicLens.Application.Actions;
 
 public static class ActionDraftResolver
 {
-    private readonly record struct TextSource(string? PackageId, string? WhyItMatters, ImmutableArray<ActionTextCitation> Citations)
+    private readonly record struct TextSource(string? PackageId, string? WhyItMatters, ImmutableArray<ActionTextCitation> Citations, string? BillLine = null)
     {
-        public static TextSource Of(ActionDraftRevision revision) => new(revision.TextPackageId, revision.WhyItMatters, revision.TextCitations);
+        public static TextSource Of(ActionDraftRevision revision) => new(revision.TextPackageId, revision.WhyItMatters, revision.TextCitations, revision.BillLine);
     }
 
     public static AnalysisResolution<ActionDraftRevision> Resolve(string outputJson, ActionDraftContext context, string runId,
@@ -35,7 +35,7 @@ public static class ActionDraftResolver
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
         return AnalysisResolution<ActionDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current,
             output.Headline.Text, output.Summary.Text, runId, snapshot.Fingerprint), issueIds, context.Issues.SubjectsHash,
-            snapshot.SummaryVersion, snapshot.SummaryCitation, default));
+            snapshot.SummaryVersion, snapshot.SummaryCitation, new TextSource(null, null, default, ActionBillLineRule.Check(output.BillLine, snapshot.NewestSummary))));
     }
 
     public static AnalysisResolution<ActionDraftRevision> ResolveBillText(string outputJson, ActionDraftContext context, string runId,
@@ -178,7 +178,8 @@ public static class ActionDraftResolver
             candidate.IncludesSummaries, candidate.IncludesSubjects,
             snapshot.Fingerprint, summaryVersion, summaryCitation, snapshot.Bill.PolicyArea, snapshot.PolicyAreaCitation,
             policyAreaId, trackedIssueIds, issues.CandidateIds, issueRevisionId, snapshot.Sponsorships, snapshot.Bill.Title, subjectsHash,
-            text.Origin == ReviewTextOrigin.Code ? snapshot.BillCitation : null, textSource.PackageId, textSource.WhyItMatters, textSource.Citations);
+            text.Origin == ReviewTextOrigin.Code ? snapshot.BillCitation : null, textSource.PackageId, textSource.WhyItMatters, textSource.Citations,
+            textSource.BillLine);
         revision.ValidateAsWorkerRevision(current);
         return revision;
     }

@@ -501,7 +501,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
-    public async Task ABillShowsTheBillLineOfTheEntryRowOfItsActiveRevisionAndNoneWhenTheRowHoldsNoLineOrDoesNotExist()
+    public async Task ABillShowsTheModelLineOfItsActiveRevisionWithOriginAndLabelAndNoneForALineOfTheRetiredRuleOrOfAnotherRevision()
     {
         string[] ids = [new('a', 64), new('b', 64), new('c', 64)];
         await ExecuteAsync($"""
@@ -510,15 +510,19 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
               VALUES (1, '000001-00000000000000000000000000000001', 'test', 1, 3, true);
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES
               {string.Join(", ", ids.Select(id => $"('action', '{id}', 1, 1, NULL)"))};
-            {string.Join('\n', ids.Select(id => PublicActionRows.ActionRevision(id, 1, "Person", "2026-02-20", 1) + PublicActionRows.ActionSponsorship(id, 1, 0, "p1", "Sponsor", true, "2026-01-10")))}
+            {PublicActionRows.ActionRevision(ids[0], 1, "Model", "2026-02-20", 1, billLine: "The bill pays for rent aid.") + PublicActionRows.ActionSponsorship(ids[0], 1, 0, "p1", "Sponsor", true, "2026-01-10")}
+            {PublicActionRows.ActionRevision(ids[0], 2, "Person", "2026-02-20", 1) + PublicActionRows.ActionSponsorship(ids[0], 2, 0, "p1", "Sponsor", true, "2026-01-10")}
+            {PublicActionRows.ActionRevision(ids[1], 1, "Model", "2026-02-20", 1) + PublicActionRows.ActionSponsorship(ids[1], 1, 0, "p1", "Sponsor", true, "2026-01-10")}
+            {PublicActionRows.ActionRevision(ids[2], 1, "Model", "2026-02-20", 1, billLine: "The bill names a post office.") + PublicActionRows.ActionSponsorship(ids[2], 1, 0, "p1", "Sponsor", true, "2026-01-10")}
+            UPDATE publication_record_states SET revision_number = 2 WHERE record_id = '{ids[0]}';
             INSERT INTO published_entries (kind, record_id, revision_number, action_record_id, action_revision_number, headline, bill_title, bill_line) VALUES
-              ('action', '{ids[0]}', 1, '{ids[0]}', 1, 'H', 'T', 'This bill funds rent aid.'),
-              ('action', '{ids[0]}', 2, '{ids[0]}', 2, 'H', 'T', 'This line is of another revision.'),
-              ('action', '{ids[1]}', 1, '{ids[1]}', 1, 'H', 'T', NULL);
+              ('action', '{ids[0]}', 2, '{ids[0]}', 2, 'H', 'T', 'A first sentence of the retired rule.'),
+              ('action', '{ids[1]}', 1, '{ids[1]}', 1, 'H', 'T', 'A first sentence of the retired rule.');
             """);
 
-        Assert.Equal(["a|This bill funds rent aid.", "b|none", "c|none"], await PublicAsync(
-            "SELECT left(record_id, 1) || '|' || coalesce(bill_line, 'none') FROM public_api.bills ORDER BY record_id"));
+        Assert.Equal(["a|none|none|none", "b|none|none|none", "c|The bill names a post office.|Model|AI summary of the Congressional Research Service summary."],
+            await PublicAsync("SELECT left(record_id, 1) || '|' || coalesce(bill_line, 'none') || '|' || coalesce(bill_line_origin, 'none') || '|' || coalesce(bill_line_label, 'none') " +
+                "FROM public_api.bills ORDER BY record_id"));
     }
 
     [Fact]
@@ -611,6 +615,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT headline FROM public.action_revisions");
         await AssertDeniedAsync(connection, "UPDATE public.action_revisions SET headline = 'x'");
         await AssertDeniedAsync(connection, "SELECT bill_line FROM public.published_entries");
+        await AssertDeniedAsync(connection, "SELECT bill_line FROM public.action_revisions");
         await AssertDeniedAsync(connection, "SELECT headline FROM public.published_entries");
         await AssertDeniedAsync(connection, "UPDATE public.published_entries SET bill_line = 'x'");
     }

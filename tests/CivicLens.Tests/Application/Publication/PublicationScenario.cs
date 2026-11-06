@@ -267,7 +267,7 @@ internal sealed class PublicationScenario
     // The sponsor cites the detail page and the cosponsor cites a second API page, so the record has two sources.
     public string AddAction(char id, ImmutableArray<ReviewDecision>? decisions = null, string sponsorId = "mayor",
         string? policyAreaId = "housing-development", bool personText = false, bool cosponsorWithdrawn = true, bool chairSponsors = false,
-        string? summaryText = null)
+        string? summaryText = null, string? billLine = null)
     {
         var recordId = new string(id, 64);
         var detailText = summaryText is null ? ActionDetail : ActionDetail + SummaryBlock(summaryText);
@@ -284,7 +284,8 @@ internal sealed class PublicationScenario
                 new("chair", "C000001", chairSponsors ? ActionSponsorshipRole.Sponsor : ActionSponsorshipRole.Cosponsor, true, new DateOnly(2026, 1, 5), cosponsorWithdrawn ? new DateOnly(2026, 1, 20) : null,
                     [new(cosponsors.ExtractionId, ActionCosponsors.IndexOf("Cosponsor", StringComparison.Ordinal),
                         ActionCosponsors.Length - ActionCosponsors.IndexOf("Cosponsor", StringComparison.Ordinal) - 1)])
-            ], "A housing bill");
+            ], "A housing bill") with
+        { BillLine = billLine };
         var all = decisions ?? [Decision(recordId, 1, ReviewDecisionKind.Approve)];
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
         var review = new ActionReview(recordId, revision, null, [revision], all.Length, ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);

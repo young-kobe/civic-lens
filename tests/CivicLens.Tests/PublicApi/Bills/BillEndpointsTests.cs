@@ -132,7 +132,7 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task ABillRowAndABillDetailShowTheBillLineOfTheEntryRowAndNullWhenTheBillHasNone()
+    public async Task ABillRowAndABillDetailShowTheBillLineOfTheRevisionWithItsModelOriginAndLabelAndNullsWhenTheBillHasNone()
     {
         await using var host = await StartWithBillsAsync(A, B);
 
@@ -144,6 +144,10 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
         Assert.Equal("This bill funds rent aid.", lines['a'].GetString());
         Assert.Equal(JsonValueKind.Null, lines['b'].ValueKind);
         Assert.Equal("This bill funds rent aid.", detail.RootElement.GetProperty("bill").GetProperty("billLine").GetString());
+        var origins = page.RootElement.GetProperty("bills").EnumerateArray().ToDictionary(bill => bill.GetProperty("recordId").GetString()![0],
+            bill => (bill.GetProperty("billLineOrigin"), bill.GetProperty("billLineLabel")));
+        Assert.Equal(("model", "AI summary of the Congressional Research Service summary."), (origins['a'].Item1.GetString(), origins['a'].Item2.GetString()));
+        Assert.Equal((JsonValueKind.Null, JsonValueKind.Null), (origins['b'].Item1.ValueKind, origins['b'].Item2.ValueKind));
     }
 
     [Fact]

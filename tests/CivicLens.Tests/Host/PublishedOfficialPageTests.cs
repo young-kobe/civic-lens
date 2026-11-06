@@ -21,7 +21,7 @@ public sealed class PublishedOfficialPageTests
 
         var document = new HtmlParser().ParseDocument(html);
         Assert.Equal(["This bill funds rent aid."], document.QuerySelectorAll(".bill-line").Select(line => line.TextContent));
-        Assert.Equal(1, html.Split("From the Congressional Research Service summary.").Length - 1);
+        Assert.Equal(1, html.Split("AI summary of the Congressional Research Service summary.").Length - 1);
     }
 
     [Fact]
@@ -31,7 +31,7 @@ public sealed class PublishedOfficialPageTests
 
         var html = await new ReleaseRenderer(null, null).RenderOfficialRecordAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
-        Assert.DoesNotContain("From the Congressional Research Service summary.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("AI summary of the Congressional Research Service summary.", html, StringComparison.Ordinal);
     }
 
     [Fact]

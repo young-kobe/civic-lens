@@ -250,8 +250,8 @@ public sealed class PublishedHomePageTests
         var bare = await HomeAsync(release, []);
 
         Assert.Equal(["This bill funds rent aid."], shown.QuerySelectorAll("#latest .bill-line").Select(line => line.TextContent));
-        Assert.Equal(1, shown.TextContent.Split("From the Congressional Research Service summary.").Length - 1);
-        Assert.DoesNotContain("From the Congressional Research Service summary.", bare.TextContent, StringComparison.Ordinal);
+        Assert.Equal(1, shown.TextContent.Split("AI summary of the Congressional Research Service summary.").Length - 1);
+        Assert.DoesNotContain("AI summary of the Congressional Research Service summary.", bare.TextContent, StringComparison.Ordinal);
     }
 
     private static async Task<AngleSharp.Dom.IElement> AllRecordsAsync(PublicationRelease release) =>

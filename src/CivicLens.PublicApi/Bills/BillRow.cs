@@ -21,4 +21,6 @@ public sealed record BillRow
     public required int SponsorCount { get; init; }
     public required int CosponsorCount { get; init; }
     public string? BillLine { get; init; }
+    public PublishedTextOrigin? BillLineOrigin { get; init; }
+    public string? BillLineLabel { get; init; }
 }

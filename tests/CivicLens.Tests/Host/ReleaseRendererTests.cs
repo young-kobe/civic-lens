@@ -1679,7 +1679,7 @@ public sealed class ReleaseRendererTests
             ($"records/{new string('d', 64)}.html", "Statement"), ($"records/{new string('f', 64)}.html", "Bill or resolution")], rows);
     }
 
-    private const string BillLineNote = "From the Congressional Research Service summary.";
+    private const string BillLineNote = "AI summary of the Congressional Research Service summary.";
 
     [Fact]
     public async Task AllRecordsPageShowsTheBillLineOfEachActionAndOfAVoteOnTheirBillsAndTheSourceNoteOnceSoNoRowRepeatsIt()

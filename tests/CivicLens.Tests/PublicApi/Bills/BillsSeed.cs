@@ -32,11 +32,6 @@ internal static class BillsSeed
         foreach (var bill in bills) await ViewsSeed.ExecuteAsync(database, Insert(bill));
     }
 
-    private static string EntryRow(SeededBill bill) => bill.BillLine is null ? "" : $"""
-        INSERT INTO published_entries (kind, record_id, revision_number, action_record_id, action_revision_number, headline, bill_title, bill_line)
-          VALUES ('action', '{bill.RecordId}', 1, '{bill.RecordId}', 1, 'H', 'T', '{bill.BillLine}');
-        """;
-
     private static string Insert(SeededBill bill)
     {
         var last = bill.LastRelease?.ToString(CultureInfo.InvariantCulture) ?? "NULL";
@@ -45,11 +40,10 @@ internal static class BillsSeed
             SET session_replication_role = replica;
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
               VALUES ('{bill.RecordKind}', '{bill.RecordId}', {bill.FirstRelease}, 1, {last});
-            {PublicActionRows.ActionRevision(bill.RecordId, 1, bill.TextOrigin, bill.EventOn, cosponsors, bill.Congress, bill.BillType, bill.BillNumber, bill.PolicyAreaId)}
+            {PublicActionRows.ActionRevision(bill.RecordId, 1, bill.TextOrigin, bill.EventOn, cosponsors, bill.Congress, bill.BillType, bill.BillNumber, bill.PolicyAreaId, bill.BillLine)}
             {string.Join('\n', bill.Sponsorships.Select((item, position) => PublicActionRows.ActionSponsorship(
                 bill.RecordId, 1, position, item.Person, item.Role, item.IsOriginal, item.SponsoredOn, item.WithdrawnOn)))}
             {string.Join('\n', bill.Issues.Select((issue, position) => PublicActionRows.ActionIssue(bill.RecordId, 1, issue, position, true)))}
-            {EntryRow(bill)}
             {string.Join('\n', bill.UntrackedIssues.Select((issue, position) => PublicActionRows.ActionIssue(bill.RecordId, 1, issue, bill.Issues.Length + position, false)))}
             """;
     }

@@ -112,6 +112,9 @@ public sealed partial class PostgresBillStreamTests
     [InlineData("action_revisions", "bill_citation_start = NULL", "ck_action_revisions_bill_citation")]
     [InlineData("action_revisions", "author_kind = 'Code', bill_citation_extraction_id = NULL, bill_citation_start = NULL, bill_citation_length = NULL", "ck_action_revisions_code_bill_citation")]
     [InlineData("action_revisions", "headline = NULL", "ck_action_revisions_columns_written")]
+    [InlineData("action_revisions", "bill_line = ' '", "ck_action_revisions_bill_line")]
+    [InlineData("action_revisions", "bill_line = repeat('x', 201)", "ck_action_revisions_bill_line")]
+    [InlineData("action_revisions", "summary_version = NULL, summary_citation_extraction_id = NULL, summary_citation_start = NULL, summary_citation_length = NULL", "ck_action_revisions_bill_line")]
     [InlineData("action_revisions", "event_on = NULL", "ck_action_revisions_derived_columns_written")]
     [InlineData("action_revisions", "cosponsor_count = NULL", "ck_action_revisions_derived_columns_written")]
     [InlineData("action_revisions", "cosponsor_count = -1", "ck_action_revisions_cosponsor_count")]
@@ -179,6 +182,7 @@ public sealed partial class PostgresBillStreamTests
         {
             SummaryVersion = "summary-v1",
             SummaryCitation = summarySpan,
+            BillLine = "The bill pays for rent aid.",
             PolicyArea = "Housing",
             PolicyAreaCitation = policyAreaSpan,
             PolicyAreaId = "housing",
@@ -222,6 +226,7 @@ public sealed partial class PostgresBillStreamTests
             ["summary_citation_extraction_id"] = revision.SummaryCitation?.ExtractionId,
             ["summary_citation_start"] = revision.SummaryCitation?.Start,
             ["summary_citation_length"] = revision.SummaryCitation?.Length,
+            ["bill_line"] = revision.BillLine,
             ["policy_area"] = revision.PolicyArea,
             ["policy_area_citation_extraction_id"] = revision.PolicyAreaCitation?.ExtractionId,
             ["policy_area_citation_start"] = revision.PolicyAreaCitation?.Start,

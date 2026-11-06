@@ -10,7 +10,7 @@ internal static class LegacyActionRevisionInsert
         summary_version = NULL, summary_citation_extraction_id = NULL, summary_citation_start = NULL, summary_citation_length = NULL,
         policy_area = NULL, policy_area_citation_extraction_id = NULL, policy_area_citation_start = NULL, policy_area_citation_length = NULL,
         policy_area_id = NULL, bill_title = NULL, bill_citation_extraction_id = NULL, bill_citation_start = NULL, bill_citation_length = NULL,
-        issue_revision_id = NULL, subjects_hash = NULL, issue_candidates_recorded = NULL, event_on = NULL, cosponsor_count = NULL
+        issue_revision_id = NULL, subjects_hash = NULL, issue_candidates_recorded = NULL, event_on = NULL, cosponsor_count = NULL, bill_line = NULL
         """;
 
     public static string Sql(string recordId, string revisionJson) => $$"""

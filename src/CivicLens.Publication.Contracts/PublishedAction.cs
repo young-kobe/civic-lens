@@ -21,6 +21,7 @@ public sealed record PublishedAction
     public PublishedCitation? PolicyAreaCitation { get; init; }
     public required string[] TrackedIssueIds { get; init; }
     public PublishedCitation? SummaryCitation { get; init; }
+    public string? BillLine { get; init; }
     public PublishedCitation? BillCitation { get; init; }
     public required PublishedSponsorship[] Sponsorships { get; init; }
     public required PublishedDocumentVersion[] Sources { get; init; }
@@ -41,6 +42,7 @@ public sealed record PublishedAction
         SourceHost = Sources[0].Host,
         BillTitle = BillTitle,
         EventDate = Sponsorships.Max(item => item.LatestDate),
+        BillLine = BillLine,
         CosponsorIds = CosponsorIdsOfEntry()
     };
 
@@ -71,6 +73,8 @@ public sealed record PublishedAction
             throw new InvalidDataException("A policy area id requires a policy area.");
         if (PolicyAreaCitation is not null) ValidateCitation(PolicyAreaCitation);
         if (SummaryCitation is not null) ValidateCitation(SummaryCitation);
+        if (BillLine is not null && (SummaryCitation is null || !PublishedRecordEntry.IsBillLine(BillLine)))
+            throw new InvalidDataException($"A bill line has 1 to {PublishedRecordEntry.MaximumBillLineLength} characters and needs the summary citation that it quotes.");
         if (BillCitation is not null) ValidateCitation(BillCitation);
         if (TrackedIssueIds is null || !PublishedEvidenceRules.AreDistinctAndNotBlank(TrackedIssueIds))
             throw new InvalidDataException("Published action tracked issue ids must be distinct and not blank.");

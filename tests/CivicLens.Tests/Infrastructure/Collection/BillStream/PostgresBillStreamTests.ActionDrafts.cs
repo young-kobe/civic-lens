@@ -626,7 +626,8 @@ public sealed partial class PostgresBillStreamTests
     [Theory]
     [InlineData("action-draft-prompt-v3", 1)]
     [InlineData("action-draft-prompt-v4", 1)]
-    [InlineData("action-draft-prompt-v5", 0)]
+    [InlineData("action-draft-prompt-v5", 1)]
+    [InlineData(ActionDraftTask.PromptVersion, 0)]
     [InlineData("action-issue-prompt-v3", 0)]
     public async Task RedraftTreatsOnlyAnOldFullDraftAsStaleBecauseBothCurrentPromptsNameAFinishedDraft(string newestDraftPrompt, int requeued)
     {

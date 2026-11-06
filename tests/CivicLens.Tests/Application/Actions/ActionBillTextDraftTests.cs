@@ -332,7 +332,7 @@ public sealed class ActionBillTextDraftTests
 
         var fromSummary = Assert.Single(summaryStore.Revisions);
         Assert.Equal((null, "00@2025-01-05T10:00:00Z"), (fromSummary.TextPackageId, fromSummary.SummaryVersion));
-        Assert.Null(Assert.Single(summaryModel.Requests).PromptVersion);
+        Assert.Equal(ActionDraftTask.PromptVersion, Assert.Single(summaryModel.Requests).PromptVersion);
         Assert.Equal(PackageId, Assert.Single(textStore.Revisions).TextPackageId);
         Assert.Equal(ActionDraftTask.TextPromptVersion, Assert.Single(textModel.Requests).PromptVersion);
         Assert.Equal((ReviewTextOrigin.Code, null), (Assert.Single(codeStore.Revisions).TextOrigin, Assert.Single(codeStore.Revisions).TextPackageId));

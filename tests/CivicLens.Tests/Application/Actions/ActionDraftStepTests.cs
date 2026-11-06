@@ -7,6 +7,7 @@ using CivicLens.Core.Review;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Statements;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.Fixtures.ActionBillWorld;
@@ -18,12 +19,14 @@ namespace CivicLens.Tests.Application.Actions;
 public sealed class ActionDraftStepTests
 {
     private static string Output(string headline = "Warren sponsored a housing bill", string summary = "Elizabeth Warren introduced a housing bill on January 3, 2025.",
-        double headlineConfidence = 0.8, double summaryConfidence = 0.7, string[]? issueIds = null) =>
-        HeadlineSummaryOutputs.Output(headline, summary, headlineConfidence, summaryConfidence, issueIds ?? ["rent"]);
+        double headlineConfidence = 0.8, double summaryConfidence = 0.7, string[]? issueIds = null, (string Line, string Quote)? billLine = null) =>
+        HeadlineSummaryOutputs.Output(headline, summary, headlineConfidence, summaryConfidence, issueIds ?? ["rent"], billLine);
 
     private static readonly string UnnamedOutput = Output(headline: "A housing bill", summary: "A housing bill was introduced.");
     private static readonly CosponsorSpec MarkeyOriginal = new(Markey, "2025-01-04", Original: true);
     private static readonly SummarySpec Summary = new("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>It funds rent aid.</p>");
+    private static readonly SummarySpec LineSummary = new("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>It funds rent aid for tenants with low income.</p>");
+    private const string LineQuote = "funds rent aid for tenants";
 
     private static ActionBillWorld Bare(string? policyArea = BillGateFixtures.TrackedPolicyArea, CosponsorSpec[][]? cosponsorPages = null,
         string title = "A housing bill") =>
@@ -1309,6 +1312,109 @@ public sealed class ActionDraftStepTests
 
         Assert.Empty(model.Requests);
         Assert.Equal(ActionDraftErrorCodes.Unchanged, Assert.Single(rejected.Runs).Reason);
+    }
+
+    [Fact]
+    public async Task ALineWithAnExactQuoteOfTheSummaryTextIsStoredOnTheRevisionAndCitesTheSummary()
+    {
+        var model = new FakeHeadlineSummaryModel().Draft(Output(billLine: ("The bill pays for rent aid.", LineQuote)));
+
+        var (store, _) = await RunAsync(Create(summaries: [LineSummary]), model);
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal("The bill pays for rent aid.", revision.BillLine);
+        Assert.NotNull(revision.SummaryCitation);
+    }
+
+    [Theory]
+    [InlineData("The bill pays for rent aid.", "funds rent aid for landlords", "the quote is not in the summary text")]
+    [InlineData("The bill pays for rent aid.", "Funds rent aid for tenants", "the quote differs in case")]
+    [InlineData("The bill pays for rent aid.", "funds rent aid", "the quote has fewer than four words")]
+    [InlineData("The bill pays for rent aid.", "", "the quote is empty")]
+    [InlineData("", LineQuote, "the line is empty")]
+    [InlineData("   ", LineQuote, "the line is blank")]
+    public async Task ALineThatFailsACheckIsDroppedAndTheDraftStaysAcceptedBecauseTheBillHasNoLineInsteadOfNoRecord(string line, string quote, string because)
+    {
+        var model = new FakeHeadlineSummaryModel().Draft(Output(billLine: (line, quote)));
+
+        var (store, fake) = await RunAsync(Create(summaries: [LineSummary]), model);
+
+        var revision = Assert.Single(store.Revisions);
+        Assert.True(revision.BillLine is null, because);
+        Assert.Single(fake.Requests);
+        Assert.Equal(State.Succeeded, Assert.Single(store.Entries).Status);
+    }
+
+    [Theory]
+    [InlineData(200, true)]
+    [InlineData(201, false)]
+    public async Task ALineIsKeptAtTwoHundredCharactersAndDroppedAtTwoHundredAndOne(int length, bool kept)
+    {
+        var model = new FakeHeadlineSummaryModel().Draft(Output(billLine: (new string('a', length), LineQuote)));
+
+        var (store, _) = await RunAsync(Create(summaries: [LineSummary]), model);
+
+        Assert.Equal(kept, Assert.Single(store.Revisions).BillLine is not null);
+        Assert.Equal(ActionDraftRevision.MaximumBillLineLength, PublishedRecordEntry.MaximumBillLineLength);
+    }
+
+    [Theory]
+    [InlineData("Appropriations authorizations notwithstanding congressional administrative responsibilities.", false)]
+    [InlineData("The bill pays for rent aid.", true)]
+    public async Task ALineThatReadsAboveGradeTwelveIsDroppedAndAPlainLineIsKept(string line, bool kept)
+    {
+        Assert.Equal(kept, ReadingGrade.Rounded(line) <= ReadingGrade.MaximumGrade);
+        var model = new FakeHeadlineSummaryModel().Draft(Output(billLine: (line, LineQuote)));
+
+        var (store, _) = await RunAsync(Create(summaries: [LineSummary]), model);
+
+        Assert.Equal(kept, Assert.Single(store.Revisions).BillLine is not null);
+    }
+
+    [Fact]
+    public async Task ABillWithNoSummaryTextGetsNoLineFromThisPath()
+    {
+        var (store, model) = await RunAsync(Bare(policyArea: null), new FakeHeadlineSummaryModel());
+
+        Assert.Null(Assert.Single(store.Revisions).BillLine);
+        Assert.Empty(model.Requests);
+    }
+
+    [Fact]
+    public async Task ACopyOfTheTextForANewCosponsorKeepsTheLineBecauseTheLineQuotesTheSameSummary()
+    {
+        var model = new FakeHeadlineSummaryModel().Draft(Output(billLine: ("The bill pays for rent aid.", LineQuote)));
+        var (first, _) = await RunAsync(Create(summaries: [LineSummary]), model);
+
+        var (second, _) = await RunAsync(Create(summaries: [LineSummary], cosponsorPages: [[MarkeyOriginal]]), new FakeHeadlineSummaryModel(),
+            Assert.Single(first.Revisions), hasStaleDraft: true);
+
+        Assert.Equal("The bill pays for rent aid.", Assert.Single(second.Revisions).BillLine);
+    }
+
+    [Theory]
+    [InlineData("refusal", AnalysisRunOutcome.Refused)]
+    [InlineData("max_tokens", AnalysisRunOutcome.OutputLimitReached)]
+    public async Task AModelStopOnTheSummaryCallFailsTheEntryAndIsNeverARejectionOfTheOutput(string stopReason, AnalysisRunOutcome outcome)
+    {
+        var model = new FakeHeadlineSummaryModel().Reply(_ => Task.FromResult(new AnalysisModelResponse(stopReason, null, new(900, 100, 0, 0), "req_fixture")));
+
+        var (store, _) = await RunAsync(Create(summaries: [LineSummary]), model);
+
+        Assert.Empty(store.Revisions);
+        var entry = Assert.Single(store.Entries);
+        Assert.Equal((State.Failed, AnalysisErrorCodes.ForOutcome(outcome)), (entry.Status, entry.ErrorCode));
+        Assert.Equal(outcome, Assert.Single(store.Runs).Run.Outcome);
+    }
+
+    [Theory]
+    [InlineData("action-draft-prompt-v5", "action-draft-schema-v2")]
+    [InlineData("action-draft-prompt-v5", ActionDraftTask.SchemaVersion)]
+    [InlineData(ActionDraftTask.PromptVersion, "action-draft-schema-v2")]
+    public void ADraftFromTheOlderSummaryPromptOrSchemaIsStaleSoARedraftReachesEveryBillThatHasASummary(string prompt, string schema)
+    {
+        Assert.False(ActionDraftTask.CurrentVersions.IsCurrent(ActionDraftTask.TaskVersion, prompt, schema));
+        Assert.True(ActionDraftTask.CurrentVersions.IsCurrent(ActionDraftTask.TaskVersion, ActionDraftTask.PromptVersion, ActionDraftTask.SchemaVersion));
     }
 
     private static async Task<(FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> RunAsync(ActionBillWorld world,

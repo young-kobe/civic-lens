@@ -11,7 +11,7 @@ public sealed class BillStore(NpgsqlDataSource views)
 {
     private const string Columns = """
         b.record_id, b.revision_number, b.congress, b.bill_type, b.bill_number, b.bill_title, b.headline, b.summary, b.text_origin, b.label,
-        b.policy_area, b.policy_area_id, b.event_date, b.sponsor_count, b.cosponsor_count, b.bill_line
+        b.policy_area, b.policy_area_id, b.event_date, b.sponsor_count, b.cosponsor_count, b.bill_line, b.bill_line_origin, b.bill_line_label
         """;
     private const string Order = "b.event_date DESC, b.record_id";
     private const string AfterCursor = " AND (b.event_date < @cursor_date OR (b.event_date = @cursor_date AND b.record_id > @cursor_id))";
@@ -45,7 +45,7 @@ public sealed class BillStore(NpgsqlDataSource views)
             """);
         command.Parameters.AddWithValue("id", recordId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken) ? new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(17)) : null;
+        return await reader.ReadAsync(cancellationToken) ? new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(19)) : null;
     }
 
     /// <summary>Reads one page of the sponsorships of a bill. Null means that no release is active or that the active release holds no such bill.</summary>
@@ -147,7 +147,9 @@ public sealed class BillStore(NpgsqlDataSource views)
         EventDate = reader.GetFieldValue<DateOnly>(13),
         SponsorCount = ViewColumns.Number(reader, 14)!.Value,
         CosponsorCount = ViewColumns.Number(reader, 15)!.Value,
-        BillLine = ViewColumns.Text(reader, 16)
+        BillLine = ViewColumns.Text(reader, 16),
+        BillLineOrigin = reader.IsDBNull(17) ? null : ViewColumns.Enum<PublishedTextOrigin>(reader, 17),
+        BillLineLabel = ViewColumns.Text(reader, 18)
     };
 
     // Column 0 holds the release and column 1 holds whether the bill exists. The row starts at column 2.

@@ -125,9 +125,9 @@ public sealed class PublishedBoardPageTests
         var bare = await RenderAsync(Page(), closest);
 
         Assert.Equal(["This bill funds rent aid."], shown.QuerySelectorAll(".bill-line").Select(line => line.TextContent));
-        Assert.Contains("From the Congressional Research Service summary.", shown.Body!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("AI summary of the Congressional Research Service summary.", shown.Body!.TextContent, StringComparison.Ordinal);
         Assert.Empty(bare.QuerySelectorAll(".bill-line"));
-        Assert.DoesNotContain("From the Congressional Research Service summary.", bare.Body!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("AI summary of the Congressional Research Service summary.", bare.Body!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

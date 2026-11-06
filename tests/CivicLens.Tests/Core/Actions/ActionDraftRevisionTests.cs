@@ -173,6 +173,18 @@ public sealed class ActionDraftRevisionTests
     }
 
     [Fact]
+    public void ABillLineNeedsTheSummaryCitationItQuotesAndFitsOneToTwoHundredCharacters()
+    {
+        var cited = Model() with { SummaryVersion = "00@2025-01-05T10:00:00Z", SummaryCitation = new(ExtractionId, 0, 5), BillLine = "The bill pays for rent aid." };
+
+        cited.ValidateShape();
+        (cited with { BillLine = new string('x', ActionDraftRevision.MaximumBillLineLength) }).ValidateShape();
+        Assert.Throws<ArgumentException>(() => (cited with { BillLine = new string('x', ActionDraftRevision.MaximumBillLineLength + 1) }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (cited with { BillLine = " " }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (Model() with { BillLine = "The bill pays for rent aid." }).ValidateShape());
+    }
+
+    [Fact]
     public void ARecordNeedsAtLeastOneSponsorshipWithBoundedCitations()
     {
         Assert.Throws<ArgumentException>(() => (Model() with { Sponsorships = [] }).ValidateShape());

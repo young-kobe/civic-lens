@@ -22,7 +22,8 @@ public static class ActionDraftPrompt
         Fields:
         - headline: one sentence of about 150 characters or fewer that states what the bill does, and who sponsored it when the facts list a sponsor. Name the bill by its number, such as H.R. 764. Do not copy the full bill title, because the page shows it.
         - summary: one to three short paragraphs, at most {ActionDraftRevision.MaximumSummaryLength} characters. Say what the bill does, and who sponsored it and when, if the facts list a sponsor.
-        Each field has a text and a confidence. The confidence is your probability that a careful human reviewer would approve the text without changing its substance. It is a number from 0 to 1. Civic Lens records the values to calibrate them against human review. No rule acts on them. Use the full range honestly.
+        - billLine: an object with a line and a quote. The line is one plain sentence of at most {ActionDraftRevision.MaximumBillLineLength} characters that says what the bill does, in short words for a reader who knows nothing about the bill. It reads at grade {ReadingGrade.MaximumGrade:0} or below. The quote is one exact quote from the summary text in the facts that is the evidence for the line. Copy the characters of the quote exactly, with at least {ActionDraftRevision.MinimumTextQuoteWords} words. Never change, join, shorten, or reorder the words of a quote. When the facts hold no summary text, or the summary does not say what the bill does, write an empty line and an empty quote.
+        Each of the headline and the summary has a text and a confidence. The confidence is your probability that a careful human reviewer would approve the text without changing its substance. It is a number from 0 to 1. Civic Lens records the values to calibrate them against human review. No rule acts on them. Use the full range honestly.
         """;
 
     public static long MinimumReservation => Encoding.UTF8.GetByteCount(SystemInstructions) + ActionDraftTask.MaximumOutputTokens;
@@ -35,10 +36,11 @@ public static class ActionDraftPrompt
         var issueSchema = issues.AnswerSchema();
         var system = issueSchema is null ? SystemInstructions : SystemInstructions + issues.Instructions("the title or the summary of the bill");
         var user = UserPrompt(snapshot, issues, previousErrors, withSummary: true, billText: null);
-        var schema = AnalysisSchema.HeadlineAndSummary(issueSchema);
+        var schema = AnalysisSchema.HeadlineAndSummary(issueSchema, withBillLine: true);
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
-        return AnalysisModelRequest.Create(ActionDraftTask.Model, ActionDraftTask.MaximumOutputTokens, system, user, schema, bytes, cacheSystemPrompt: true);
+        return AnalysisModelRequest.Create(ActionDraftTask.Model, ActionDraftTask.MaximumOutputTokens, system, user, schema, bytes, cacheSystemPrompt: true,
+            promptVersion: ActionDraftTask.PromptVersion, schemaVersion: ActionDraftTask.SchemaVersion);
     }
 
     public static string SerializeContext(ActionBillSnapshot snapshot, BillIssueChoice issues, string issueRevisionId) =>

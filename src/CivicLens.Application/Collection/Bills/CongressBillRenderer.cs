@@ -101,7 +101,7 @@ public static class CongressBillRenderer
         return string.Join('\n', lines);
     }
 
-    internal const string SummaryTextLabel = "Text:";
+    private const string SummaryTextLabel = "Text:";
 
     internal static string SummaryVersionLine(CongressBillSummary summary) => Line("Summary version", summary.VersionCode);
 
