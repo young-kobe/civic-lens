@@ -2,6 +2,28 @@
 
 <PublicPage Section="PublicSection.Glossary" CanonicalPath="@PublicationProtocol.GlossaryPagePath" Title="Glossary" Description="What each term means and why it matters.">
     <PageHeader Title="Glossary" />
+    <Panel Title="Index of terms" Padded="true">
+        <nav class="glossary-index" aria-label="@Glossary.IndexLabel">
+            <ul class="glossary-index-groups">
+                @foreach (var group in Glossary.Groups)
+                {
+                    <li>
+                        <a href="@($"#{group.AnchorId}")">@group.Title</a>
+                        <ul class="glossary-index-terms">
+                            @foreach (var term in group.Terms)
+                            {
+                                <li><a href="@($"#{term.AnchorId}")">@term.Name</a></li>
+                            }
+                            @if (group == Glossary.PartyCountGroup)
+                            {
+                                <li><a href="@($"#{Glossary.PartyCountAnchorId}")">@Glossary.PartyCountHeading</a></li>
+                            }
+                        </ul>
+                    </li>
+                }
+            </ul>
+        </nav>
+    </Panel>
     @foreach (var group in Glossary.Groups)
     {
         <Panel Title="@group.Title" Id="@group.AnchorId" Padded="true">
@@ -23,10 +45,10 @@
                     }
                 </section>
             }
-            @if (group == Glossary.Groups[0])
+            @if (group == Glossary.PartyCountGroup)
             {
-                <section class="glossary-term" aria-labelledby="glossary-party-count">
-                    <h3 id="glossary-party-count">@Glossary.PartyCountHeading</h3>
+                <section class="glossary-term" aria-labelledby="@Glossary.PartyCountAnchorId">
+                    <h3 id="@Glossary.PartyCountAnchorId">@Glossary.PartyCountHeading</h3>
                     <ul>
                         @foreach (var rule in Glossary.PartyCountRules)
                         {

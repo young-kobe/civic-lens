@@ -109,6 +109,7 @@ END
 - check ck_published_entry_officials_official_id: length(btrim(official_id)) > 0
 - check ck_published_entry_officials_position: "position" >= 0
 - unique AK_published_entry_officials_kind_record_id_revision_number_of~ (kind, record_id, revision_number, official_id)
+- index ix_published_entry_officials_official_id (official_id)
 - unique index ux_published_entry_officials_matched (kind, record_id, revision_number) where is_matched
 
 ## published_entry_policy_areas
