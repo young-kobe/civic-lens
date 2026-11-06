@@ -138,6 +138,21 @@ public sealed class PublishEntryRewriteTests
     }
 
     [Fact]
+    public async Task TheRewriteKeepsTheBillLineOfACarriedEntryWhenTheLineRuleNowGivesAnotherLineBecauseTheTableWritesTheLineOnce()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('b', summaryText: "This resolution informs the Senate that Rep. Steve Scalise was elected Speaker.");
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
+            PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
+        WithBillLine(scenario, first, "This resolution informs the Senate that Rep.");
+
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true });
+
+        Assert.Equal("This resolution informs the Senate that Rep.", Assert.Single(Manifest(scenario, second).Records).BillLine);
+        Assert.Equal("This resolution informs the Senate that Rep.", Assert.Single(scenario.Publications.LastCommit!.RewrittenEntries).BillLine);
+    }
+
+    [Fact]
     public async Task TheRewriteOptionWithNoChangeToAnyRecordIsStillAPublishSoTheOperatorCanRunItAlone()
     {
         var scenario = new PublicationScenario();
@@ -383,6 +398,13 @@ public sealed class PublishEntryRewriteTests
         files[PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(
             manifest with { Records = [.. manifest.Records.Select(WithoutNewFields)] }, PublicationProtocol.JsonOptions);
         files.Remove(PublicationProtocol.OfficialSummariesPath);
+    }
+
+    private static void WithBillLine(PublicationScenario scenario, PublicationReleaseSummary release, string line)
+    {
+        var manifest = Manifest(scenario, release);
+        scenario.Releases.Directories[release.DirectoryName][PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(
+            manifest with { Records = [.. manifest.Records.Select(entry => entry with { BillLine = line })] }, PublicationProtocol.JsonOptions);
     }
 
     private static PublishedRecordEntry WithoutNewFields(PublishedRecordEntry entry) =>
