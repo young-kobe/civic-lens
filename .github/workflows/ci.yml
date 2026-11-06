@@ -18,6 +18,8 @@ jobs:
           python-version: '3.12'
       - run: dotnet restore --locked-mode
       - run: dotnet build --no-restore --configuration Release
+      - run: dotnet publish src/CivicLens.Host --no-build --configuration Release --output out
+      - run: test -f out/wwwroot/css/app.css -a -f out/wwwroot/js/app.js -a -f out/wwwroot/favicon.svg -a -f out/wwwroot/fonts/newsreader.woff2
       - run: dotnet format CivicLens.slnx --verify-no-changes --no-restore
       - run: python3 tools/render-architecture.py --check
       - run: python3 tools/check-docs.py --check

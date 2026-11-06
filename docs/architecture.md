@@ -59,7 +59,7 @@ Pending: live Auth0 tenant verification, production deployment, AI classificatio
 
 ## Layers and dependency rules
 
-Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. PublicWeb holds the public Razor components and references Publication.Contracts only. Host references PublicWeb, and no production project references Host. Collection.Contracts and Publication.Contracts have no dependencies. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts only. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
+Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. PublicWeb holds the public Razor components and references Publication.Contracts only. Host references PublicWeb, and no production project references Host. Collection.Contracts and Publication.Contracts have no dependencies. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts and PublicWeb only. It renders PublicWeb components as static server pages. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
 
 | Layer | Owns | Must not own |
 |---|---|---|
@@ -123,6 +123,7 @@ flowchart LR
     collector --> cc
     web --> pc
     api --> pc
+    api --> web
 ```
 
 <!-- diagrams:end -->
@@ -170,7 +171,7 @@ Package rules:
 - EF Core Design is private tooling in Infrastructure. Other production projects must not reference database packages.
 - Infrastructure pins the official `Anthropic` C# SDK 12.50.0 for the model adapters only. An architecture test checks that no other project references its assembly.
 - Application pins one package, `Microsoft.Extensions.Logging.Abstractions` 10.0.14, so workers take `ILogger<T>`. The worker command builds a console provider in `Program.cs` that writes to stderr. The review workspace builds its own console provider with a Warning minimum. An architecture test allows no other Application package.
-- `CivicLens.PublicApi` pins Npgsql 10.0.3 and references `Publication.Contracts` only. It has no EF Core, no Application, and no operational storage beyond the `public_api` views. Only Host and PublicApi use the Web SDK. An architecture test checks the references.
+- `CivicLens.PublicApi` pins Npgsql 10.0.3 and references `Publication.Contracts` and `PublicWeb` only. It has no EF Core, no Application, and no operational storage beyond the `public_api` views. It renders Razor components with static server rendering: no interactivity, no SignalR, no WebAssembly. Only Host and PublicApi use the Web SDK. An architecture test checks the references and the assembly references. The owner chose this design on 2026-11-06.
 - `CivicLens.PublicWeb` uses the Razor SDK with the ASP.NET shared framework reference, and has no package. It references `Publication.Contracts` only. An architecture test checks its references and its assembly references.
 - No Rust, Go, Python analysis service, or React application is planned. Python's standard library serves only the development tools in `tools/`.
 
@@ -450,6 +451,7 @@ This is the only navigation index.
 | MCP plans | [Review](architecture/review.md#limits-and-planned-work), [Publication](architecture/publication.md#limits-and-planned-work) | none |
 | Public views, role, active release rule | [Publication](architecture/publication.md#public-api-views) | `src/CivicLens.Infrastructure/Collection/Migrations/20261103165431_PublicApiViews.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261104013000_PublicApiZipDistricts.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261104014700_PublicApiReleaseTime.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261105005544_VoteQuestionResultColumns.cs`, `src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs` |
 | Public search service: ingest, index, read API, rate limit | [Search](architecture/search.md#decisions) | `src/CivicLens.PublicApi/PublicApiApp.cs` |
+| Server pages: cache rule, render pipeline, shared files | [Search](architecture/search.md#server-pages) | `src/CivicLens.PublicApi/Pages/ServerPageResponder.cs`, `src/CivicLens.PublicApi/Pages/PageCache.cs` |
 | Public vote routes, vote cursor, views data source, `/v1/release` | [Search](architecture/search.md#api) | `src/CivicLens.PublicApi/Votes/VoteEndpoints.cs`, `src/CivicLens.PublicApi/ActiveRelease/ReleaseEndpoints.cs` |
 | Reader report queue: pull, dismiss, editor panel, close by approval | [Review](architecture/review.md#reader-reports), [Search](architecture/search.md#operational-pull) | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Infrastructure/Reports/PostgresReaderReportStore.cs` |
 | Search ingest of a release | [Search](architecture/search.md#ingest) | `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs` |
@@ -457,6 +459,8 @@ This is the only navigation index.
 | Issue panel and `method.html` | [Publication](architecture/publication.md#issue-panel) | `src/CivicLens.Application/Publication/TalkAndActionProfile.cs` |
 | Officials and catalog files of a release | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/PublicationOfficials.cs` |
 | Official pages, officials list, and vote files of an official | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseOfficialPages.cs` |
+| Public site theme, layout rules, and standing page rules | [Public site](architecture/public-site.md#decisions) | `src/CivicLens.PublicWeb/wwwroot/css/theme.css` |
+| Reader flow matrix and component inventory | [Public site](architecture/public-site.md#behavior) | `src/CivicLens.PublicWeb/Components/` |
 | Canonical addresses, sitemap, robots file, and not found page | [Publication](architecture/publication.md#public-base-url) | `src/CivicLens.Application/Publication/ReleaseSite.cs` |
 | Public filter pages | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseFacets.cs` |
 | Pending work, decisions, MVP criteria | [Roadmap](roadmap.md) | none |

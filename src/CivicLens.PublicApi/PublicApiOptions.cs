@@ -19,12 +19,15 @@ public sealed record PublicApiOptions
     public const string ReportsPerDayVariable = "CIVIC_LENS_REPORTS_PER_DAY";
     public const string TurnstileSecretVariable = "CIVIC_LENS_TURNSTILE_SECRET";
     public const string TurnstileHostnameVariable = "CIVIC_LENS_TURNSTILE_HOSTNAME";
+    public const string PublicBaseUrlVariable = "CIVIC_LENS_PUBLIC_BASE_URL";
     public const string ReportPullTokenVariable = "CIVIC_LENS_REPORT_PULL_TOKEN";
 
     public required Uri ReleaseBaseUrl { get; init; }
     public required string Database { get; init; }
     /// <summary>The connection of the role <c>civic_lens_public</c> to the operational database. Only the views of <c>public_api</c> are readable through it.</summary>
     public required string PublicViewsDatabase { get; init; }
+    /// <summary>The public origin of the site. The server pages use it for their links, as the static release does. Null means that the server page routes do not exist.</summary>
+    public PublicBaseUrl? PublicBaseUrl { get; init; }
     public IReadOnlyList<IPNetwork> TrustedProxyRanges { get; init; } = [];
     public int RequestsPerMinute { get; init; } = 60;
     public int ReportsPerHour { get; init; } = 5;
@@ -58,6 +61,7 @@ public sealed record PublicApiOptions
         ReleaseBaseUrl = Directory(Required(ReleaseBaseUrlVariable)),
         Database = Required(DatabaseVariable),
         PublicViewsDatabase = Required(PublicViewsDatabaseVariable),
+        PublicBaseUrl = PublicBaseUrl.Parse(Environment.GetEnvironmentVariable(PublicBaseUrlVariable), PublicBaseUrlVariable),
         TrustedProxyRanges = [.. (Environment.GetEnvironmentVariable(TrustedProxyRangesVariable) ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(IPNetwork.Parse)],
         RequestsPerMinute = ParseLimit(RequestsPerMinuteVariable, 60),

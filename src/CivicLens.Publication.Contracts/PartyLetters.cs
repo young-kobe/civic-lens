@@ -1,6 +1,4 @@
-using CivicLens.Publication.Contracts;
-
-namespace CivicLens.Application.Publication;
+namespace CivicLens.Publication.Contracts;
 
 public static class PartyLetters
 {
