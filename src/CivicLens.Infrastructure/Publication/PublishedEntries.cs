@@ -106,7 +106,7 @@ internal static class PublishedEntries
     }
 
     /// <summary>
-    /// Writes the bill line of action rows that hold none. This is the only update of an entry row. A row that holds a line stays as it is, and
+    /// Writes the bill line of action rows that hold none. It and <see cref="FillCongressesAsync"/> are the only updates of an entry row. A row that holds a line stays as it is, and
     /// <see cref="RequireSameAsync"/> then refuses a line that differs. The insert calls it for the rows that already exist.
     /// </summary>
     public static async Task<int> FillBillLinesAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,

@@ -11,7 +11,7 @@ public static class ReleaseRecordOrder
     public static DateOnly Day(DateOnly? eventDate, DateTimeOffset firstPublishedAtUtc) =>
         eventDate ?? DateOnly.FromDateTime(firstPublishedAtUtc.UtcDateTime);
 
-    /// <summary>The Congress of the record day. The entry column <c>published_entries.congress</c> stores this value, and the profile counts use it.</summary>
+    /// <summary>The Congress of the record day. The stored entry Congress column holds this value, and the profile counts use it.</summary>
     public static int? CongressOf(PublishedRecordEntry entry) => CongressCalendar.CongressOn(Day(entry));
 
     public static int? CongressOf(DateOnly? eventDate, DateTimeOffset firstPublishedAtUtc) =>
