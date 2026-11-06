@@ -7,9 +7,17 @@ namespace CivicLens.Publication.Contracts;
 /// </summary>
 public static class NextStep
 {
-    private enum BillShape { None, Law, ConcurrentResolution, SimpleResolution }
+    private enum BillShape { None, Law, JointResolution, ConcurrentResolution, SimpleResolution }
+
+    /// <summary>The heading above the next step on the vote page.</summary>
+    public const string Heading = "What happens next";
+
+    /// <summary>The line for a record whose vote kind has words but whose inputs give no known step.</summary>
+    public const string NotShown = "This record does not show the next step.";
 
     private const string NotCertain = " This record does not say which case applies.";
+
+    private const string JointResolutionNote = " A joint resolution that proposes an amendment to the Constitution goes to the states, not the President.";
 
     /// <summary>The next step in plain words, or null when the inputs give no known step. It never guesses.</summary>
     public static string? Of(PublishedVoteKind kind, string result, PublishedChamber chamber, string? billType)
@@ -23,7 +31,7 @@ public static class NextStep
             PublishedVoteKind.Amendment => succeeded ? AmendmentAdopted(chamber) : AmendmentRefused,
             PublishedVoteKind.Suspension when chamber == PublishedChamber.House => succeeded ? Passed(chamber, billType) : SuspensionFailed,
             PublishedVoteKind.Passage => succeeded ? Passed(chamber, billType) : PassageFailed(chamber),
-            PublishedVoteKind.ConferenceReport => succeeded ? ConferenceReportAccepted(chamber) : ConferenceReportRejected(chamber),
+            PublishedVoteKind.ConferenceReport => succeeded ? ConferenceReportAccepted(chamber, billType) : ConferenceReportRejected(chamber),
             PublishedVoteKind.VetoOverride => succeeded ? VetoOverridden(chamber) : VetoStands,
             PublishedVoteKind.Nomination when chamber == PublishedChamber.Senate => succeeded ? NomineeConfirmed : NomineeNotConfirmed,
             PublishedVoteKind.Cloture when chamber == PublishedChamber.Senate => succeeded ? ClotureAgreed : ClotureRefused,
@@ -42,7 +50,7 @@ public static class NextStep
 
     private static string? Passed(PublishedChamber chamber, string? billType) => ShapeOf(billType) switch
     {
-        BillShape.Law => OriginOf(billType!) == chamber ? LawPassedInOrigin(chamber) : LawPassedInOther(chamber),
+        BillShape.Law or BillShape.JointResolution => OriginOf(billType!) == chamber ? LawPassedInOrigin(chamber, billType!) : LawPassedInOther(chamber, billType!),
         BillShape.ConcurrentResolution => OriginOf(billType!) == chamber ? ConcurrentPassedInOrigin(chamber) : ConcurrentPassedInOther(chamber),
         BillShape.SimpleResolution => SimplePassed(chamber),
         _ => null
@@ -50,7 +58,8 @@ public static class NextStep
 
     private static BillShape ShapeOf(string? billType) => billType?.ToLowerInvariant() switch
     {
-        "hr" or "s" or "hjres" or "sjres" => BillShape.Law,
+        "hr" or "s" => BillShape.Law,
+        "hjres" or "sjres" => BillShape.JointResolution,
         "hconres" or "sconres" => BillShape.ConcurrentResolution,
         "hres" or "sres" => BillShape.SimpleResolution,
         _ => BillShape.None
@@ -66,33 +75,33 @@ public static class NextStep
     private const string RuleAdopted = "The House can now debate the bill under these rules. A vote on the bill usually follows.";
     private const string RuleRefused = "The bill cannot move to debate under this rule. House leaders may try again with a new rule.";
     private const string PreviousQuestionAgreed = "Debate is over. The House now votes on the matter that was being debated.";
-    private const string PreviousQuestionRefused = "Debate can go on. Members may still try to change the matter.";
+    private const string PreviousQuestionRefused = "Debate is not over. The minority can now offer a change to the matter being debated.";
     private const string RecommitAgreed = "The bill goes back to a committee. It usually goes no further.";
     private const string RecommitRefused = "The bill stays before the House. A vote on passing it usually follows.";
     private const string AmendmentRefused = "The text stays as it was. The vote on the bill itself comes later.";
     private const string SuspensionFailed = "The House did not pass it by this fast route. It can come back to the floor under the normal rules.";
     private const string VetoStands = "The veto stands. The bill does not become law.";
-    private const string NomineeConfirmed = "The nominee is confirmed and can now take the office.";
+    private const string NomineeConfirmed = "The nominee is confirmed. The President can now appoint the nominee to the office.";
     private const string NomineeNotConfirmed = "The nominee is not confirmed and does not take the office. The President may name someone else.";
-    private const string ClotureAgreed = "Debate is now limited. The Senate then votes on the matter itself.";
-    private const string ClotureRefused = "Debate can go on. The matter stays before the Senate and is not voted on yet.";
+    private const string ClotureAgreed = "Debate is now limited, usually to 30 more hours. Then the Senate votes on the question before it. That can be a motion or the bill itself.";
+    private const string ClotureRefused = "Debate can go on. Senate leaders may move on to other business.";
     private const string ProceedAgreed = "The Senate starts debate on the matter. A vote to end debate and a vote on the matter itself usually come later.";
     private const string ProceedRefused = "The Senate does not start debate on the matter now. It may try again later.";
 
     private static string AmendmentAdopted(PublishedChamber chamber) =>
-        $"The change is now part of the text. The {Name(chamber)} then goes on to vote on the bill itself.";
+        $"The change is now part of the text. The {Name(chamber)} can still vote on other changes before it votes on the bill itself.";
 
     private static string PassageFailed(PublishedChamber chamber) =>
         $"The {Name(chamber)} did not pass it. It goes no further unless the {Name(chamber)} votes on it again.";
 
-    private static string LawPassedInOrigin(PublishedChamber chamber) =>
-        $"The {Name(chamber)} passed it. It usually goes to the {Other(chamber)} next. If this vote agreed to a change from the {Other(chamber)}, it goes to the President instead.{NotCertain}";
+    private static string LawPassedInOrigin(PublishedChamber chamber, string billType) =>
+        $"The {Name(chamber)} passed it. It usually goes to the {Other(chamber)} next. If this vote agreed to a change from the {Other(chamber)}, it goes to the President instead.{JointNote(billType)}{NotCertain}";
 
-    private static string LawPassedInOther(PublishedChamber chamber) =>
-        $"Both chambers have now passed it. If the {Name(chamber)} did not change the text, it goes to the President. If the {Name(chamber)} changed the text, it goes back to the {Other(chamber)}.{NotCertain}";
+    private static string LawPassedInOther(PublishedChamber chamber, string billType) =>
+        $"Both chambers have now passed it. If the {Name(chamber)} did not change the text, it goes to the President. If the {Name(chamber)} changed the text, it goes back to the {Other(chamber)}.{JointNote(billType)}{NotCertain}";
 
     private static string ConcurrentPassedInOrigin(PublishedChamber chamber) =>
-        $"The {Name(chamber)} passed it. It usually goes to the {Other(chamber)} next. A concurrent resolution does not go to the President.{NotCertain}";
+        $"The {Name(chamber)} passed it. It usually goes to the {Other(chamber)} next. If this vote agreed to a change from the {Other(chamber)}, Congress has now adopted it instead. A concurrent resolution does not go to the President.{NotCertain}";
 
     private static string ConcurrentPassedInOther(PublishedChamber chamber) =>
         $"Both chambers have now passed it. If the {Name(chamber)} did not change the text, Congress has adopted it. If the {Name(chamber)} changed the text, it goes back to the {Other(chamber)}. It does not go to the President.{NotCertain}";
@@ -100,11 +109,22 @@ public static class NextStep
     private static string SimplePassed(PublishedChamber chamber) =>
         $"The {Name(chamber)} passed it. A simple resolution needs only one chamber, so it goes no further.";
 
-    private static string ConferenceReportAccepted(PublishedChamber chamber) =>
-        $"The {Name(chamber)} accepted the final text. Once the {Other(chamber)} accepts it too, the bill goes to the President. Neither chamber can change the text now.";
+    private static string? ConferenceReportAccepted(PublishedChamber chamber, string? billType) => ShapeOf(billType) switch
+    {
+        BillShape.Law => ConferenceReportToPresident(chamber, ""),
+        BillShape.JointResolution => ConferenceReportToPresident(chamber, JointResolutionNote),
+        BillShape.ConcurrentResolution =>
+            $"The {Name(chamber)} accepted the final text. If the {Other(chamber)} has also accepted it, Congress has adopted it. If not, the {Other(chamber)} votes on it next. A concurrent resolution does not go to the President.",
+        _ => null
+    };
+
+    private static string ConferenceReportToPresident(PublishedChamber chamber, string note) =>
+        $"The {Name(chamber)} accepted the final text. If the {Other(chamber)} has also accepted it, the bill goes to the President. If not, the {Other(chamber)} votes on it next.{note}";
 
     private static string ConferenceReportRejected(PublishedChamber chamber) =>
-        $"The {Name(chamber)} did not accept the final text. The bill goes no further until both chambers work out new text.";
+        $"The {Name(chamber)} did not accept the final text. It goes no further until both chambers agree on new text.";
+
+    private static string JointNote(string billType) => ShapeOf(billType) == BillShape.JointResolution ? JointResolutionNote : "";
 
     private static string VetoOverridden(PublishedChamber chamber) =>
         $"The {Name(chamber)} voted to override the veto. If the {Other(chamber)} also votes by two thirds to override it, the bill becomes law. If it already did, the bill is now law.{NotCertain}";

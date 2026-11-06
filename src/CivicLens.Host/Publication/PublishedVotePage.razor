@@ -7,14 +7,11 @@
                       Caveat="@PublishedVoteView.Caveat(Record)">
     @if (PublishedVoteView.Meaning(Record) is { } meaning)
     {
-        <Panel Title="What this vote meant" Id="meaning-title" Padded="true">
+        <Panel Title="@VoteMeaning.Heading" Id="meaning-title" Padded="true">
             <p>@meaning.Yes</p>
             <p>@meaning.No</p>
-            @if (PublishedVoteView.NextStepOf(Record) is { } next)
-            {
-                <h3>What happens next</h3>
-                <p>@next</p>
-            }
+            <h3>@NextStep.Heading</h3>
+            <p>@(PublishedVoteView.NextStepOf(Record) ?? NextStep.NotShown)</p>
         </Panel>
     }
 

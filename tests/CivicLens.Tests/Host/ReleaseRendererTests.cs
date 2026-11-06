@@ -1094,6 +1094,18 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task VotePageSaysItDoesNotShowTheNextStepWhenTheKindHasWordsButTheBillTypeGivesNoStep()
+    {
+        var vote = VoteWithResult("Passed") with { BillType = null, BillNumber = null };
+
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("#meaning-title")!.ParentElement!.ParentElement!;
+        Assert.Contains(NextStep.Heading, panel.TextContent, StringComparison.Ordinal);
+        Assert.Contains("This record does not show the next step.", panel.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AnOtherKindVoteWithAQuestionQuoteIsCalledAnOtherQuestionAndShowsTheQuestion()
     {
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Kind = PublishedVoteKind.Other }, null, [], PublicationCatalogs.None, CancellationToken.None);
