@@ -23,5 +23,8 @@ internal sealed class DocumentChangeAnalysisRow : IAnalysisRow
     public long CreatedAtUtcTicks { get; set; }
     public int Priority { get; set; }
 
+    /// <summary>The revision that this checkpoint appended. It is set while one settlement runs and is never stored.</summary>
+    public (string DraftId, int RevisionNumber)? AppendedRevision { get; set; }
+
     string IAnalysisRow.SubjectId => ComparisonId;
 }

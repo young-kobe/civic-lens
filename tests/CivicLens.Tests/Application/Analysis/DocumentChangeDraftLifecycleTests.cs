@@ -15,6 +15,7 @@ public sealed class DocumentChangeDraftLifecycleTests
         (State.WaitingForBudget, State.Running),
         (State.WaitingForBudget, State.Pending),
         (State.Failed, State.Pending),
+        (State.Succeeded, State.Pending),
         (State.Running, State.Running),
         (State.Running, State.Pending),
         (State.Running, State.RetryWaiting),
@@ -31,6 +32,15 @@ public sealed class DocumentChangeDraftLifecycleTests
             foreach (var to in Enum.GetValues<State>())
                 Assert.True(Allowed.Contains((from, to)) == DocumentChangeDraftLifecycle.CanTransition(Record(from), Move(from, to)),
                     $"{from} to {to}");
+    }
+
+    [Fact]
+    public void OnlyADraftedEntryCanBeRequeuedAfterSuccess()
+    {
+        var move = Move(State.Succeeded, State.Pending);
+
+        Assert.True(DocumentChangeDraftLifecycle.CanTransition(Record(State.Succeeded), move));
+        Assert.False(DocumentChangeDraftLifecycle.CanTransition(Record(State.Succeeded) with { ErrorCode = "draftDiscarded" }, move));
     }
 
     [Fact]

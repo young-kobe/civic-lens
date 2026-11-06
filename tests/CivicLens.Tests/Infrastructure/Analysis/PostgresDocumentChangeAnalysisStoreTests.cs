@@ -20,7 +20,7 @@ namespace CivicLens.Tests.Infrastructure.Analysis;
 
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
-public sealed class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection postgres) : IAsyncLifetime
+public sealed partial class PostgresDocumentChangeAnalysisStoreTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
