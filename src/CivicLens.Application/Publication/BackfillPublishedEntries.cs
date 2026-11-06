@@ -37,6 +37,11 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
             await ReadFolderAsync(release, [.. pending.Where(entry => entry.Candidate.Covers(release.ReleaseNumber))], cancellationToken);
         var (added, racedIn) = await WriteRowsAsync([.. pending.Where(entry => entry.WritesRow)], limit, cancellationToken);
         var filled = await FillBillLinesAsync([.. pending.Where(entry => !entry.WritesRow)], cancellationToken);
+        foreach (var batch in pending.Where(entry => !entry.WritesRow && entry.IsReady && entry.Entry!.ApprovedBy is not null).Chunk(BatchSize))
+        {
+            await publications.FillStatementApproversAsync([.. batch.Select(entry => entry.EntryToInsert!)], cancellationToken);
+            foreach (var entry in batch) entry.ApproverFilled = true;
+        }
         var statusesPinned = await PinBillStatusesAsync(keptReleases, cancellationToken);
         return Report(added, filled, statusesPinned, candidates.Count(candidate => candidate.HasEntry) + racedIn, pending);
     }
@@ -73,14 +78,15 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
             pending.Block(FoldersDiffer);
         else if (pending.Entry is null)
             await ReadFirstEntryAsync(release, entry, pending, cancellationToken);
-        else if (!ReleaseEntryComparison.SameOutsideNewFields(pending.Entry, entry))
+        else if (entry.ApprovedBy is { } approver && pending.Entry.ApprovedBy != approver ||
+                 !ReleaseEntryComparison.SameOutsideNewFields(pending.Entry, entry))
             pending.Block(FoldersDiffer);
     }
 
     private async Task ReadFirstEntryAsync(PublicationReleaseSummary release, PublishedRecordEntry entry, PendingPublishedEntry pending,
         CancellationToken cancellationToken)
     {
-        if (pending.Candidate.HasEntry)
+        if (pending.Candidate.HasEntry && !pending.Candidate.LacksStatementApprover)
         {
             pending.Entry = entry;
             return;
@@ -96,7 +102,9 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
             pending.Block(RecordFileInvalid);
             return;
         }
-        if (ReleaseEntryComparison.SameOutsideNewFields(entry, fromFile)) pending.Entry = entry;
+        if (ReleaseEntryComparison.SameOutsideNewFields(entry, fromFile) &&
+            (entry.ApprovedBy is null || entry.ApprovedBy == fromFile.ApprovedBy))
+            pending.Entry = entry with { ApprovedBy = fromFile.ApprovedBy };
         else pending.Block(RecordFileDiffers);
     }
 
@@ -160,6 +168,9 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
         return new(pending.Count, added, filled, statusesPinned, alreadyPresent, skipped.Count, byReason, first,
             pending.Count(entry => entry.Candidate.IsOpen && !entry.HasRow),
             pending.Count(entry => !entry.Candidate.IsOpen && entry.Entry is null && !entry.IsBlocked),
-            pending.Count(entry => entry.IsReady && !entry.HasRow));
+            pending.Count(entry => entry.IsReady && !entry.HasRow))
+        {
+            OpenStatementsWithoutApprover = all.Count(entry => entry.Candidate.IsOpen && entry.Candidate.LacksStatementApprover && !entry.ApproverFilled)
+        };
     }
 }

@@ -10,4 +10,7 @@ namespace CivicLens.Application.Publication;
 /// <param name="ReadyRangesWithoutRow">The open or closed ranges that passed every check but got no row, because the limit stopped the run.</param>
 public sealed record PublishedEntriesBackfillResult(int Examined, int Added, int BillLinesFilled, int BillStatusesPinned, int AlreadyPresent, int Skipped,
     IReadOnlyDictionary<string, int> SkippedByReason, IReadOnlyList<SkippedPublishedEntry> SkippedEntries,
-    int OpenRangesWithoutRow, int ClosedRangesWithoutKeptFolder, int ReadyRangesWithoutRow);
+    int OpenRangesWithoutRow, int ClosedRangesWithoutKeptFolder, int ReadyRangesWithoutRow)
+{
+    public int OpenStatementsWithoutApprover { get; init; }
+}

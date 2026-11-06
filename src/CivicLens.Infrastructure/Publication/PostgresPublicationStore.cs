@@ -132,6 +132,16 @@ public sealed class PostgresPublicationStore : IPublicationStore
         return filled;
     }
 
+    public async Task<int> FillStatementApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var filled = await PublishedEntries.FillStatementApproversAsync(db, entries,
+            "The published statement approval differs from its kept record file.", cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return filled;
+    }
+
     public async Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses,
         CancellationToken cancellationToken)
     {
@@ -236,6 +246,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         await RequireUnchangedReleasesAsync(db, commit, cancellationToken);
         await RequireUnchangedReviewStateAsync(db, commit, cancellationToken);
         await RequireCurrentCitationsAsync(db, commit, cancellationToken);
+        await PublishedEntries.RequireHistoricalStatementApproversAsync(db, commit.AddedEntries, cancellationToken);
         await BriefStaleness.RequeueAfterPublicationAsync(briefQueue, db, commit, cancellationToken);
         await ClearActiveAsync(db, cancellationToken);
         var publishedAt = await DatabaseClock.ReadAsync(db, cancellationToken);

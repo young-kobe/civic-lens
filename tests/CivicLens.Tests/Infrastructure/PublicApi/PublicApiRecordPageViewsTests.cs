@@ -197,11 +197,11 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
             {string.Join("\n", origins.Select((origin, index) => PublicRecordPageRows.Headline("vote", votes[index], "Vote " + origin, origin)))}
             {PublicRecordPageRows.Headline("statement", statements[0], "Statement 0", "Model")}
             {PublicRecordPageRows.StatementApproval(statements[0], 1, 1, ReviewAuthor.CodeSubject)}
-            {PublicRecordPageRows.Headline("statement", statements[1], "Statement 1", "Model")}
+            {PublicRecordPageRows.Headline("statement", statements[1], "Statement 1", "Model", "Person")}
             {PublicRecordPageRows.StatementApproval(statements[1], 1, 1, "auth0|owner")}
             {PublicRecordPageRows.Headline("statement", statements[2], "Statement 2", "Person")}
             {PublicRecordPageRows.StatementApproval(statements[2], 1, 1, "auth0|owner")}
-            {PublicRecordPageRows.Headline("statement", statements[3], "Statement 3", "Model")}
+            {PublicRecordPageRows.Headline("statement", statements[3], "Statement 3", "Model", "Person")}
             {PublicRecordPageRows.StatementApproval(statements[3], 1, 1, ReviewAuthor.CodeSubject)}
             {PublicRecordPageRows.StatementApproval(statements[3], 1, 2, "auth0|owner")}
             {PublicRecordPageRows.Headline("statement", statements[4], "Statement 4", "Model")}
@@ -226,6 +226,46 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
         Assert.Equal(expected, fromView);
         Assert.Contains($"Statement 0|Model|{PublishedRecordLabels.StatementModelWording}", fromView);
         Assert.Contains("Statement 1|Model|none", fromView);
+    }
+
+    [Fact]
+    public async Task LaterUnpublishedApprovalsAndReleaseRollbackNeverChangeThePublishedStatementLabel()
+    {
+        await SeedAsync($"""
+            {PublicRecordPageRows.Headline("statement", Statement1, "Published statement", "Model")}
+            {PublicRecordPageRows.StatementApproval(Statement1, 1, 1, ReviewAuthor.CodeSubject)}
+            {PublicRecordPageRows.Link(Link1, Statement1, Action1, "action", "DescribesOwnBill", null)}
+            {PublicRecordPageRows.Headline("action", Action1, "Bill")}
+            """);
+        const string query = "SELECT related_label FROM public_api.record_links WHERE kind = 'action'";
+        var published = await PublicAsync(query);
+        Assert.Equal([PublishedRecordLabels.StatementModelWording], published);
+
+        await SeedAsync(PublicRecordPageRows.StatementApproval(Statement1, 1, 2, "auth0|owner"));
+        Assert.Equal(published, await PublicAsync(query));
+
+        await ExecuteAsync("""
+            UPDATE publication_releases SET is_active = false;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+              VALUES (2, '000002-00000000000000000000000000000002', 'test', 2, 1, true);
+            """);
+        Assert.Equal(published, await PublicAsync(query));
+        await ExecuteAsync("UPDATE publication_releases SET is_active = false; UPDATE publication_releases SET is_active = true WHERE release_number = 1");
+        Assert.Equal(published, await PublicAsync(query));
+    }
+
+    [Fact]
+    public async Task AStatementWhosePublishedApprovalIsUnknownIsHiddenUntilBackfillRatherThanShownWithoutItsAiLabel()
+    {
+        await SeedAsync($"""
+            {PublicRecordPageRows.Headline("statement", Statement1, "Published statement", "Model")}
+            {PublicRecordPageRows.Headline("action", Action1, "Bill")}
+            {PublicRecordPageRows.Link(Link1, Statement1, Action1, "action", "DescribesOwnBill", null)}
+            UPDATE published_entries SET approved_by = NULL WHERE kind = 'statement';
+            """);
+
+        Assert.Empty(await PublicAsync("SELECT headline FROM public_api.record_headlines WHERE kind = 'statement'"));
+        Assert.Empty(await PublicAsync("SELECT related_headline FROM public_api.record_links WHERE kind = 'action'"));
     }
 
     // The C# rule for an action or a vote is PublishedRecordLabels.Wording.

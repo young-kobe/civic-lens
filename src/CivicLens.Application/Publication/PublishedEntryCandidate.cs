@@ -2,11 +2,11 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-/// <summary>One revision range of the state table, whether the entry table holds the entry of that revision, and whether an action row lacks its bill line.</summary>
+/// <summary>One revision range of the state table, whether the entry table holds the entry of that revision, and which published fields still need backfill.</summary>
 public sealed record PublishedEntryCandidate(PublishedRecordKind Kind, string RecordId, int RevisionNumber, int FirstRelease, int? LastRelease,
-    bool HasEntry, bool LacksBillLine)
+    bool HasEntry, bool LacksBillLine, bool LacksStatementApprover = false)
 {
-    public bool NeedsBackfill => !HasEntry || LacksBillLine;
+    public bool NeedsBackfill => !HasEntry || LacksBillLine || LacksStatementApprover;
 
     public bool IsOpen => LastRelease is null;
 

@@ -61,6 +61,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await using (var lift = new NpgsqlCommand("SET default_transaction_read_only = off", connection)) await lift.ExecuteNonQueryAsync();
         foreach (var table in BaseTables)
             await AssertDeniedAsync(connection, $"SELECT * FROM public.{table}");
+        Assert.Equal(["false"], await QueryAsync($"SELECT has_any_column_privilege('{Owner}', 'public.statement_review_decisions', 'SELECT')::text", connectionString));
         await AssertDeniedAsync(connection, "SELECT count(*) FROM public.vote_revisions");
         await AssertDeniedAsync(connection, "INSERT INTO public.publication_releases (release_number) VALUES (9)");
         await AssertDeniedAsync(connection, "UPDATE public.vote_revisions SET headline = 'x'");

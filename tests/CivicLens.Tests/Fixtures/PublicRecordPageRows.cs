@@ -50,9 +50,11 @@ internal static class PublicRecordPageRows
 
     /// <summary>The revision 1 of a statement, action, or vote, with its headline and text origin ("Model", "Code", or "Person"). Write it once for each record.
     /// A statement has no origin column, so "Model" gives the author kind Analysis and any other origin gives Person.</summary>
-    public static string Headline(string kind, string record, string headline, string origin = "Person") => kind switch
+    public static string Headline(string kind, string record, string headline, string origin = "Person", string? approvedBy = null) => kind switch
     {
         "statement" => $"""
+            INSERT INTO published_entries (kind, record_id, revision_number, statement_candidate_id, statement_revision_number, headline, approved_by)
+              VALUES ('statement', '{record}', 1, '{record}', 1, '{headline}', '{approvedBy ?? (origin == "Model" ? "Code" : "Person")}');
             INSERT INTO statement_revisions (candidate_id, revision_number, author_kind, author_subject, run_id, created_at_utc_ticks, headline, summary, revision_json)
               VALUES ('{record}', 1, '{(origin == "Model" ? "Analysis" : "Person")}', 'test', {(origin == "Model" ? $"'run-{record[..16]}'" : "NULL")}, 1, '{headline}', 'Summary', 'x');
             """,

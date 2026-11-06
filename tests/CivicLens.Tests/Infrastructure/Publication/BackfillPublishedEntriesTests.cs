@@ -9,6 +9,7 @@ using CivicLens.Tests.Application.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi;
+using CivicLens.Tests.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
@@ -479,6 +480,70 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
         await Assert.ThrowsAsync<PublicationConflictException>(() => new BackfillPublishedEntries(store, releases).ExecuteAsync(Owner, 10));
 
         Assert.Equal(["The commit headline"], await ReadAsync("SELECT headline FROM published_entries"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StatementApproverBackfillReadsThePublishedFileAndNeverLaterReviewDecisionsOrOverwritesAPinnedValue(bool hasEntry)
+    {
+        var statement = PublishedStatementTests.Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Code };
+        await AddReleasesAsync(1);
+        await AddRangeAsync(statement.RecordId, "statement", 1, null);
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            {PublicRecordPageRows.Headline("statement", statement.RecordId, statement.Headline, "Model")}
+            DELETE FROM published_entries WHERE kind = 'statement' AND record_id = '{statement.RecordId}';
+            {PublicRecordPageRows.StatementApproval(statement.RecordId, 1, 1, "auth0|owner")}
+            """);
+        var oldEntry = statement.ToEntry() with { ApprovedBy = null };
+        await publications.AddFirstPublishedAsync([new(PublishedRecordKind.Statement, statement.RecordId, statement.FirstPublishedAtUtc)], default);
+        if (hasEntry)
+        {
+            await publications.AddEntriesAsync([oldEntry], default);
+            await Assert.ThrowsAsync<PublicationConflictException>(() => publications.AddEntriesAsync(
+                [oldEntry with { ApprovedBy = PublishedApprover.Person }], default));
+            Assert.Equal(["unknown"], await ReadAsync("SELECT coalesce(approved_by, 'unknown') FROM published_entries WHERE kind = 'statement'"));
+        }
+        var incoming = oldEntry with { ApprovedBy = PublishedApprover.Person };
+        var commit = new PublicationCommit(2, null, $"000002-{Guid.NewGuid():N}", [PublishedRevisionBinding.Of(incoming)], [])
+        {
+            Withdrawals = [],
+            AddedEntries = [incoming],
+            Names = new ReleaseNames([], new ReleaseFacets([], []))
+        };
+        var refused = await Assert.ThrowsAsync<PublicationConflictException>(() => publications.CommitAsync(
+            "auth0|owner", commit, "historical-statement", new string('0', 64), default));
+        Assert.Contains("releases entries backfill", refused.Message, StringComparison.Ordinal);
+        Keep(1, new FolderRecord(oldEntry, statement));
+
+        await RunAsync(10);
+
+        Assert.Equal(["Code"], await ReadAsync("SELECT approved_by FROM published_entries WHERE kind = 'statement'"));
+        await Assert.ThrowsAsync<PublicationConflictException>(() => publications.FillStatementApproversAsync(
+            [oldEntry with { ApprovedBy = PublishedApprover.Person }], default));
+        Assert.Equal(["Code"], await ReadAsync("SELECT approved_by FROM published_entries WHERE kind = 'statement'"));
+        Assert.False((await publications.ReadEntryCandidatesAsync(default)).Single().NeedsBackfill);
+    }
+
+    [Fact]
+    public async Task AnOpenStatementWithNoKeptManifestReportsItsMissingApproverSoTheBackfillCannotReportSuccess()
+    {
+        var statement = PublishedStatementTests.Statement();
+        await AddReleasesAsync(1);
+        await AddRangeAsync(statement.RecordId, "statement", 1, null);
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            {PublicRecordPageRows.Headline("statement", statement.RecordId, statement.Headline)}
+            DELETE FROM published_entries WHERE kind = 'statement' AND record_id = '{statement.RecordId}';
+            """);
+        await publications.AddFirstPublishedAsync([new(PublishedRecordKind.Statement, statement.RecordId, statement.FirstPublishedAtUtc)], default);
+        await publications.AddEntriesAsync([statement.ToEntry() with { ApprovedBy = null }], default);
+
+        var result = await RunAsync(10);
+
+        Assert.Equal(1, result.OpenStatementsWithoutApprover);
+        Assert.Equal(["unknown"], await ReadAsync("SELECT coalesce(approved_by, 'unknown') FROM published_entries WHERE kind = 'statement'"));
     }
 
     private sealed record FolderRecord(PublishedRecordEntry Entry, object? File);

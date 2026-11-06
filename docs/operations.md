@@ -250,6 +250,8 @@ The first full run drafts every roll call that has a tracked senator. Code appro
 
 ## Postgres adapter and migrations
 
+`PublishedStatementApprover` adds `published_entries.approved_by`. Run `releases entries backfill` before starting public serving after this migration. It reads the kept statement files and reports unresolved open classifiers. Statements with unknown classifiers stay hidden. New manifests include `approvedBy`; older images reject that field. Before rolling back an image, use the newer image to activate a kept release from before this field was written.
+
 Set `CIVIC_LENS_DATABASE` in your local environment to a Postgres connection string with Host and Database, and with authentication for your local server. Runtime commands need this variable and have no default database. Keep credentials out of committed files, command arguments, and captured output. The commands need a reachable Postgres server and enough database permissions. They do not install or start Postgres.
 
 After you set the variable, run:
