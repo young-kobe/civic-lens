@@ -1,4 +1,3 @@
-using System.Reflection;
 using CivicLens.Application.Publication;
 using CivicLens.PublicWeb.Publication;
 
@@ -10,7 +9,7 @@ internal static class PublicAssetFiles
 
     private static byte[] Read(string path)
     {
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(path)
+        using var stream = typeof(PublicAssets).Assembly.GetManifestResourceStream(path)
             ?? throw new InvalidOperationException($"Public asset {path} is not embedded.");
         using var buffer = new MemoryStream();
         stream.CopyTo(buffer);
