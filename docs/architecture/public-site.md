@@ -34,7 +34,10 @@ Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 th
 ### Home
 
 - The hero side tile is a featured vote. A fixed rule in code picks it: the latest passage vote on a bill. It shows the result, a small map, party bars, the labeled AI summary, and a ZIP prompt.
-- The featured vote does not repeat in the recent votes list.
+- The featured vote does not repeat in the recent votes list. It includes the bill line and what a Yes vote meant.
+- Recent votes show two House votes and two Senate votes. Repeated split badges become one scoped caption when all four votes split the parties.
+- Issue tiles name their vote and bill counts and the Congress.
+- Executive actions show one row per document type, with its newest title and count. The AI summary follows when executive summaries land.
 - A weekly brief shows as one "This week" lead line above the latest votes, only when a brief exists (DR5).
 
 ### Reader-flow decisions
@@ -46,13 +49,24 @@ These decisions come from the component audit. The owner accepted every recommen
 - DR3: A vote page puts the answer first. The fact rows and the source texts go into one "Check the source" fold on the same page.
 - DR4: The first map layer colors by cast only. The party layer waits for its own step. Then the owner picks the party colors.
 - DR5: See Home above.
-- DR6: Per-kind list pages replace "All records" in the navigation. The nav shows issues only. Policy area pages and old URLs stay, outside the nav.
+- DR6: Per-kind list pages replace "All records" in the navigation. The navigation includes Votes, Bills, Executive actions, Statements, and Issues. Policy area pages and old URLs stay, outside the navigation.
 - DR7: A record row shows the link type, reason, quote, and fact. The relationship URL stays for old links.
 - DR8: Bills get a status stepper. Other kinds put dates in the lede and site events in the fold. The timeline panel is cut on votes, statements, and executive actions.
 - DR9: One plain name for each vote kind appears everywhere. The record term appears in the popover and the fold. The owner approves each name.
 - DR10: The officials list shows seat, party, term end, and one labeled figure. Until the paging route exists, it shows seat and party only.
-- Cut: the bill cost and date slot, the vote timeline panel, the facts list as a page section, and the example slots in glossary popovers.
-- Merge: the two vote kind blocks into one. Merge the CRS block into a fold under the AI summary. Merge the Congress.gov card into the source fold. Merge the two official party-vote figures into one.
+- Cut B4: the bill cost and date slot.
+- Cut V12: the timeline panel on votes, statements, and executive actions.
+- Cut F2: the voting boards panel on the officials list. Party boards remain available through navigation.
+- Cut L3: the links panel on official pages. The official website stays in the profile header.
+- Merge: the two vote kind blocks into one. Merge the CRS block into a fold under the AI summary. Merge the Congress.gov card into the source fold. Merge the two official party-vote figures into one. Merge the page-foot caveat into the AI summary check line (R5).
+- Inner pages have breadcrumbs (X7).
+- Party tally legends name the chamber and base, with a mark at the majority needed (H3).
+- Boards label each seat and any delegate, and retain the count base (H6, K1). Agreement cards appear once per chamber outside party tabs (K2).
+- Empty linked-statement sections are hidden, with one message in the jump row (O6). President speeches stay hidden until a source exists (P2).
+- Introduced-bill rows use the official title when no bill line exists, the introduced date, and a status badge (O7).
+- Brief pages keep the text, citations, and records list, and drop weak figures (L2).
+- Bill cards on votes use the labeled bill line, a status badge, and a bill link (V8).
+- Record rows label the date by its event and share one bill-number format (R1).
 - Header search appears on every page. Results show an official first and pin an exact bill number.
 - Every number and date names its base and time frame. The freshness line names the newest roll call of each chamber, not only the release time.
 
