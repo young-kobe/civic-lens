@@ -1,5 +1,5 @@
 using CivicLens.Application.Publication;
-using CivicLens.Host.Components.Ui;
+using CivicLens.PublicWeb.Components.Ui;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Host.Publication;
@@ -15,8 +15,6 @@ internal static class PublishedOfficialSectionsView
     public const string NoBreaks = "No votes against most of their party.";
 
     private const string NoBills = "No bills on record.";
-
-    private const string NoExecutiveActions = "No executive actions on record.";
 
     private const string NoVotes = "No votes on record.";
 
@@ -53,13 +51,13 @@ internal static class PublishedOfficialSectionsView
         var executiveActions = rows.Where(row => row.Kind == PublishedRecordKind.ExecutiveAction).ToList();
         if (executiveActions.Count > 0)
             sections.Add(Latest(page, recordTabs, "executive-actions", "Executive actions", executiveActions, PublishedOfficialView.KindClass(PublishedRecordKind.ExecutiveAction),
-                count => $"See all {PublishedOfficialView.Counted(count, "executive action")}", NoExecutiveActions));
+                count => $"See all {PublishedOfficialView.Counted(count, "executive action")}"));
         sections.Add(Latest(page, recordTabs, "statements", "What they said", rows.Where(row => row.Kind == PublishedRecordKind.Statement).ToList(),
             PublishedOfficialView.KindClass(PublishedRecordKind.Statement), count => $"See all {PublishedOfficialView.Counted(count, "statement")}", NoStatements));
         return sections;
     }
 
     private static OfficialSection Latest(ReleaseOfficialPage page, IReadOnlyList<FilterTab> recordTabs, string id, string title, List<PublishedOfficialRow> matching, string tab,
-        Func<int, string> seeAll, string empty) =>
+        Func<int, string> seeAll, string empty = "") =>
         new(id, title, [.. matching.Take(ItemCount)], matching.Count == 0 ? null : seeAll(matching.Count), RecordPageLink(page, recordTabs.Any(recordTab => recordTab.Value == tab) ? tab : null), empty);
 }
