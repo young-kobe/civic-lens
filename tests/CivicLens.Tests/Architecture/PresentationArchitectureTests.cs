@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Architecture;
@@ -16,6 +17,17 @@ public sealed class PresentationArchitectureTests
         Path.Combine(ComponentsRoot, "App.razor"),
         Path.Combine(HostRoot, "Publication", "PublicPage.razor")
     ];
+
+    [Fact]
+    public void PublicWebOwnsEverySharedStaticFileAndHostKeepsOnlyReviewFiles()
+    {
+        var owned = RelativeFiles(PublicWebRoot);
+        foreach (var path in PublicAssets.Paths)
+            Assert.Contains(path["assets/".Length..], owned, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(
+            ["css/review.css", "fonts/OFL-instrument-sans.txt", "fonts/instrument-sans.woff2", "js/review.js"],
+            RelativeFiles(HostRoot).Order(StringComparer.Ordinal));
+    }
 
     [Fact]
     public void ThemeColorsHaveOneOwnerSoBothThemesStayComplete()
@@ -48,7 +60,7 @@ public sealed class PresentationArchitectureTests
     [Fact]
     public void EveryDarkThemeTokenAlsoHasALightDefault()
     {
-        var theme = File.ReadAllText(Path.Combine(HostRoot, "wwwroot", "css", "theme.css"));
+        var theme = HostStyleSheets.Read("theme.css");
         var lightBlock = theme[..theme.IndexOf("@media (prefers-color-scheme: dark)", StringComparison.Ordinal)];
         var light = Tokens(lightBlock);
         foreach (var token in Tokens(theme[lightBlock.Length..]))
@@ -141,6 +153,12 @@ public sealed class PresentationArchitectureTests
         Assert.Equal(["app.css"], owners);
         Assert.Matches(@"@media \(prefers-reduced-motion: reduce\)\s*\{\s*\*, \*::before, \*::after \{ animation: none !important; transition: none !important; \}\s*\}",
             HostStyleSheets.Read("app.css"));
+    }
+
+    private static string[] RelativeFiles(string projectRoot)
+    {
+        var root = Path.Combine(projectRoot, "wwwroot");
+        return [.. Directory.GetFiles(root, "*", SearchOption.AllDirectories).Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))];
     }
 
     private static IEnumerable<string> StyleSheets() =>
