@@ -16,7 +16,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             SELECT a.record_id, a.revision_number, a.release_number,
                    r.congress, r.bill_type, r.bill_number, r.bill_title, r.headline, r.summary, r.text_origin,
                    CASE
-                     WHEN r.text_origin = 'Model' AND r.text_package_id IS NOT NULL THEN 'AI summary of the bill text. An AI model wrote this. Code checked that each sentence quotes the text.'
+                     WHEN r.text_origin = 'Model' AND r.text_package_id IS NOT NULL THEN 'AI summary of the bill text. An AI model wrote this. Each sentence comes with an exact quote from the text. Code checked the quotes, not the meaning of the sentences.'
                      WHEN r.text_origin = 'Model' THEN 'An AI summary of the official record'
                      WHEN r.text_origin = 'Code' THEN 'Written automatically from Congress.gov data, with no AI'
                    END AS label,

@@ -23,8 +23,13 @@ public static class ActionTextApproval
     private static void RequireReadablePassage(ActionDraftRevision revision)
     {
         var pieces = revision.TextCitations.Select(citation => citation.Sentence).Prepend(revision.Headline).ToArray();
-        var grade = ReadingGrade.RoundedPassage(pieces);
-        if (grade > ReadingGrade.MaximumGrade)
+        if (!IsPassageReadable(pieces, out var grade))
             throw new ArgumentException($"The headline and the sentences read at grade {ReadingGrade.Format(grade)} as one passage. The limit is grade {ReadingGrade.Format(ReadingGrade.MaximumGrade)}.");
+    }
+
+    internal static bool IsPassageReadable(IReadOnlyCollection<string> pieces, out double grade)
+    {
+        grade = ReadingGrade.RoundedPassage(pieces);
+        return grade <= ReadingGrade.MaximumGrade;
     }
 }

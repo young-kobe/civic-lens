@@ -7,7 +7,7 @@ public sealed class BillTextWordsTests
     [Fact]
     public void TheApprovedWordsStayAsTheOwnerWroteThemBecauseAPageNeverReadsAChangedWording()
     {
-        Assert.Equal("AI summary of the bill text. An AI model wrote this. Code checked that each sentence quotes the text.", BillTextWords.Label);
+        Assert.Equal("AI summary of the bill text. An AI model wrote this. Each sentence comes with an exact quote from the text. Code checked the quotes, not the meaning of the sentences.", BillTextWords.Label);
         Assert.Equal("Why it matters, as the text states it.", BillTextWords.WhyItMattersHeading);
     }
 
