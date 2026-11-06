@@ -30,11 +30,12 @@ VIEWS = [
             ("app", "Application", "Use cases and external interfaces; no infrastructure reference. Logs through Microsoft.Extensions.Logging.Abstractions, its only package."),
             ("core", "Core", "Domain invariants. No project or third-party dependencies."),
             ("cc", "Collection.Contracts", "Versioned page/feed/HTML requests, capture/response metadata, bounded discovery and receipt validation. No dependencies."),
-            ("pc", "Publication.Contracts", "Public release contract, read by Application and PublicApi. No dependencies."),
+            ("pc", "Publication.Contracts", "Public release contract, read by Application, PublicWeb and PublicApi. No dependencies."),
+            ("web", "PublicWeb", "Razor class library with the public Razor components. References Publication.Contracts only. Host renders it today. PublicApi will render it later."),
             ("api", "PublicApi", "Public search service and read API over its own Postgres database, fed from published releases. Reads operational data only through the public_api views. References Publication.Contracts only."),
             ("collector", "Collector", "Independent executable referencing Collection.Contracts only."),
         ],
-        "edges": [("host", "app"), ("host", "infra"), ("infra", "app"), ("app", "core"), ("app", "cc"), ("app", "pc"), ("collector", "cc"), ("api", "pc")],
+        "edges": [("host", "app"), ("host", "infra"), ("host", "web"), ("infra", "app"), ("app", "core"), ("app", "cc"), ("app", "pc"), ("collector", "cc"), ("web", "pc"), ("api", "pc")],
     },
 ]
 

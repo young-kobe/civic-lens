@@ -1,5 +1,5 @@
 using AngleSharp.Html.Parser;
-using CivicLens.Host.Components.Ui;
+using CivicLens.PublicWeb.Components.Ui;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.AspNetCore.Components.Web;

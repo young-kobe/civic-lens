@@ -1,0 +1,19 @@
+namespace CivicLens.PublicWeb.Components.Evidence;
+
+public sealed record Fact(string Label, string Value, IReadOnlyList<FactLink>? Links = null)
+{
+    public string Separator { get; init; } = ", ";
+
+    public string? TermKey { get; init; }
+
+    public FactSource? Source { get; init; }
+
+    public Fact CitedAt(string? anchor, string? target = null) =>
+        anchor is null ? this : this with { Source = new(anchor, target ?? Label) };
+
+    public static Fact List(string label, IEnumerable<string> values) =>
+        new(label, values.Any() ? string.Join(", ", values) : "None");
+
+    public static Fact LinkList(string label, IReadOnlyList<FactLink> links) =>
+        links.Count == 0 ? List(label, []) : new(label, string.Join(", ", links.Select(link => link.Text)), links);
+}

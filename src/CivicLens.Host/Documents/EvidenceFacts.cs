@@ -1,6 +1,6 @@
 using CivicLens.Core.Documents;
-using CivicLens.Host.Components.Evidence;
-using CivicLens.Host.Components.Ui;
+using CivicLens.PublicWeb.Components.Evidence;
+using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.Host.Documents;
 

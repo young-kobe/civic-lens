@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using AngleSharp.Html.Parser;
 using CivicLens.Host.Publication;
+using CivicLens.PublicWeb.Publication;
 
 namespace CivicLens.Tests.Host;
 

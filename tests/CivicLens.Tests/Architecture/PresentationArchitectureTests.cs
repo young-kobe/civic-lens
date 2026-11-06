@@ -6,7 +6,9 @@ namespace CivicLens.Tests.Architecture;
 public sealed class PresentationArchitectureTests
 {
     private static readonly string HostRoot = Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.Host");
+    private static readonly string PublicWebRoot = Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.PublicWeb");
     private static readonly string ComponentsRoot = Path.Combine(HostRoot, "Components");
+    private static readonly string[] ComponentRoots = [ComponentsRoot, Path.Combine(PublicWebRoot, "Components")];
 
     // Documents that own <html>: the workspace document and the published-page document.
     private static readonly string[] DocumentShells =
@@ -53,8 +55,11 @@ public sealed class PresentationArchitectureTests
             Assert.False(Regex.IsMatch(text, @"<html\b|<link\b|<script\b", RegexOptions.IgnoreCase),
                 $"{file} must inherit its document shell and assets.");
         }
-        Assert.Empty(Directory.GetFiles(HostRoot, "*.razor.css", SearchOption.AllDirectories));
-        Assert.Empty(Directory.GetFiles(HostRoot, "*.cshtml", SearchOption.AllDirectories));
+        foreach (var root in new[] { HostRoot, PublicWebRoot })
+        {
+            Assert.Empty(Directory.GetFiles(root, "*.razor.css", SearchOption.AllDirectories));
+            Assert.Empty(Directory.GetFiles(root, "*.cshtml", SearchOption.AllDirectories));
+        }
     }
 
     [Fact]
@@ -63,7 +68,7 @@ public sealed class PresentationArchitectureTests
         Assert.Contains("PublicThemeMenu", File.ReadAllText(Path.Combine(HostRoot, "Publication", "PublicPage.razor")), StringComparison.Ordinal);
         Assert.Contains("ThemeToggle", File.ReadAllText(Path.Combine(ComponentsRoot, "Layout", "WorkspaceLayout.razor")), StringComparison.Ordinal);
         Assert.Contains("css/theme.css", File.ReadAllText(DocumentShells[0]), StringComparison.Ordinal);
-        Assert.Contains("assets/css/theme.css", File.ReadAllText(Path.Combine(HostRoot, "Publication", "PublicAssets.cs")), StringComparison.Ordinal);
+        Assert.Contains("assets/css/theme.css", File.ReadAllText(Path.Combine(PublicWebRoot, "Publication", "PublicAssets.cs")), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -75,7 +80,7 @@ public sealed class PresentationArchitectureTests
         Assert.InRange(workspace.IndexOf("js/app.js", StringComparison.Ordinal), 0, workspace.IndexOf("js/review.js", StringComparison.Ordinal) - 1);
         Assert.InRange(workspace.IndexOf("_framework/blazor.web.js", StringComparison.Ordinal), 0, workspace.IndexOf("js/review.js", StringComparison.Ordinal) - 1);
         Assert.DoesNotContain("public.js", workspace, StringComparison.Ordinal);
-        var publicAssets = File.ReadAllText(Path.Combine(HostRoot, "Publication", "PublicAssets.cs"));
+        var publicAssets = File.ReadAllText(Path.Combine(PublicWebRoot, "Publication", "PublicAssets.cs"));
         Assert.InRange(publicAssets.IndexOf("assets/css/app.css", StringComparison.Ordinal), 0, publicAssets.IndexOf("assets/css/public.css", StringComparison.Ordinal) - 1);
         Assert.DoesNotContain("review.css", publicAssets, StringComparison.Ordinal);
         Assert.DoesNotContain("review.js", publicAssets, StringComparison.Ordinal);
@@ -101,7 +106,7 @@ public sealed class PresentationArchitectureTests
     [Fact]
     public void PagesShowChangesThroughTheSharedComparisonComponent()
     {
-        foreach (var file in Markup().Where(file => !file.StartsWith(ComponentsRoot, StringComparison.Ordinal)))
+        foreach (var file in Markup().Where(file => !ComponentRoots.Any(root => file.StartsWith(root, StringComparison.Ordinal))))
         {
             var text = File.ReadAllText(file);
             Assert.DoesNotContain("<del", text, StringComparison.OrdinalIgnoreCase);
@@ -120,7 +125,7 @@ public sealed class PresentationArchitectureTests
         Directory.GetFiles(Path.Combine(HostRoot, "wwwroot"), "*.css", SearchOption.AllDirectories);
 
     private static IEnumerable<string> Markup() =>
-        Directory.GetFiles(HostRoot, "*.razor", SearchOption.AllDirectories)
+        new[] { HostRoot, PublicWebRoot }.SelectMany(root => Directory.GetFiles(root, "*.razor", SearchOption.AllDirectories))
             .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal) &&
                            !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
 

@@ -1,4 +1,4 @@
-using CivicLens.Host.Components.Ui;
+using CivicLens.PublicWeb.Components.Ui;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Host is the composition root, the CLI, and the authenticated web workspace. It owns the shared Razor component library that both private pages and static releases render. This page also records the agreed production hosting plan.
+The Host is the composition root, the CLI, and the authenticated web workspace. The shared Razor component library that both private pages and static releases render lives in `CivicLens.PublicWeb`. Host keeps the review pages and the public page components that need Application types. This page also records the agreed production hosting plan.
 
 ## Decisions
 
@@ -110,8 +110,8 @@ A systemd timer runs `deploy/scripts/check-health.sh` every 10 minutes on the ho
 | Entry point and commands | `src/CivicLens.Host/Program.cs` |
 | Owner command rules and JSON output | `src/CivicLens.Host/OwnerCommand.cs`, `src/CivicLens.Host/CommandOutput.cs` |
 | App shell and routes | `src/CivicLens.Host/Components/App.razor`, `src/CivicLens.Host/Components/Routes.razor`, `src/CivicLens.Host/Components/Layout/WorkspaceLayout.razor` |
-| Public portrait | `src/CivicLens.Host/Publication/OfficialPortrait.razor` |
-| Shared evidence components | `src/CivicLens.Host/Components/Evidence/DocumentComparisonView.razor`, `src/CivicLens.Host/Components/Evidence/RecordView.razor`, `src/CivicLens.Host/Components/Evidence/StatementRecord.razor` |
+| Public portrait | `src/CivicLens.PublicWeb/Publication/OfficialPortrait.razor` |
+| Shared evidence components | `src/CivicLens.Host/Components/Evidence/DocumentComparisonView.razor`, `src/CivicLens.PublicWeb/Components/Evidence/RecordView.razor`, `src/CivicLens.PublicWeb/Components/Evidence/StatementRecord.razor` |
 | Styles and scripts | `src/CivicLens.Host/wwwroot/css/theme.css`, `src/CivicLens.Host/wwwroot/css/app.css`, `src/CivicLens.Host/wwwroot/css/public.css`, `src/CivicLens.Host/wwwroot/css/review.css`, `src/CivicLens.Host/wwwroot/js/theme.js`, `src/CivicLens.Host/wwwroot/js/app.js`, `src/CivicLens.Host/wwwroot/js/public.js`, `src/CivicLens.Host/wwwroot/js/review.js` |
 | Workspace wiring | `src/CivicLens.Host/Review/ReviewWorkspace.cs` |
 | Sources page | `src/CivicLens.Host/Collection/SourcesPage.razor` |

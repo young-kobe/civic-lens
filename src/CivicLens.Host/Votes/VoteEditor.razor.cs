@@ -4,12 +4,12 @@ using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
-using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Layout;
-using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Review;
 using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
+using CivicLens.PublicWeb.Components.Evidence;
+using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.Host.Votes;
 
