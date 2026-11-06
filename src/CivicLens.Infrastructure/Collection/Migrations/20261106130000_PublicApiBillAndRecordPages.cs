@@ -11,6 +11,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         // bill_status shows the same bills as public_api.bills, so a child view never shows a record that bills hides.
         // bill_status takes the newest gate row of the bill and then drops a row with no text, as IActionReviewStore.ReadBillStatusesAsync does.
         // record_links gives each relationship two rows: one for the page of the statement and one for the page of the target.
+        // Each branch starts from the link table l, so the filter on the statement or target ID uses the indexes of l.
+        // record_headlines holds the current headline of an active statement, action, or vote, with its text origin and label. It is the one owner of that rule.
+        // A statement has no origin column. The author kind Analysis means model text. Any other author kind means person text.
         // Both ends and the relationship must be active, so no row names a record that the release does not hold.
         private const string UpSql = """
             CREATE VIEW public_api.bill_status WITH (security_barrier = true) AS
@@ -26,26 +29,49 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                AND EXISTS (SELECT 1 FROM public.action_revision_sponsorships p
                             WHERE p.record_id = r.record_id AND p.revision_number = r.revision_number);
 
+            CREATE VIEW public_api.record_headlines WITH (security_barrier = true) AS
+            SELECT x.kind, x.record_id, x.headline, x.text_origin,
+                   -- The wording repeats PublishedRecordLabels.ModelWording and CodeWording, as in the views votes and bills.
+                   CASE x.text_origin
+                     WHEN 'Model' THEN 'An AI summary of the official record'
+                     WHEN 'Code' THEN 'Written automatically from Congress.gov data, with no AI'
+                   END AS label
+              FROM (SELECT a.kind, a.record_id, r.headline, r.text_origin
+                      FROM public_api.active_records a
+                      JOIN public.action_revisions r ON r.record_id = a.record_id AND r.revision_number = a.revision_number
+                     WHERE a.kind = 'action'
+                    UNION ALL
+                    SELECT a.kind, a.record_id, r.headline, r.text_origin
+                      FROM public_api.active_records a
+                      JOIN public.vote_revisions r ON r.record_id = a.record_id AND r.revision_number = a.revision_number
+                     WHERE a.kind = 'vote'
+                    UNION ALL
+                    SELECT a.kind, a.record_id, r.headline, CASE r.author_kind WHEN 'Analysis' THEN 'Model' ELSE 'Person' END
+                      FROM public_api.active_records a
+                      JOIN public.statement_revisions r ON r.candidate_id = a.record_id AND r.revision_number = a.revision_number
+                     WHERE a.kind = 'statement') x
+             WHERE x.headline IS NOT NULL;
+
             CREATE VIEW public_api.record_links WITH (security_barrier = true) AS
             SELECT s.record_id, 'statement' AS kind,
-                   t.kind AS related_kind, t.record_id AS related_record_id, te.headline AS related_headline,
-                   l.link_type, l.event_date AS statement_date, a.record_id AS link_record_id
-              FROM public_api.active_records a
-              JOIN public.published_entries l ON l.kind = 'relationship' AND l.record_id = a.record_id AND l.revision_number = a.revision_number
+                   t.kind AS related_kind, t.record_id AS related_record_id, h.headline AS related_headline, h.text_origin AS related_text_origin, h.label AS related_label,
+                   l.link_type, l.event_date AS statement_date, l.record_id AS link_record_id
+              FROM public.published_entries l
+              JOIN public_api.active_records a ON a.kind = 'relationship' AND a.record_id = l.record_id AND a.revision_number = l.revision_number
               JOIN public_api.active_records s ON s.kind = 'statement' AND s.record_id = l.statement_record_id
               JOIN public_api.active_records t ON t.kind = l.target_kind AND t.record_id = l.target_record_id
-              JOIN public.published_entries te ON te.kind = t.kind AND te.record_id = t.record_id AND te.revision_number = t.revision_number
-             WHERE a.kind = 'relationship'
+              JOIN public_api.record_headlines h ON h.kind = t.kind AND h.record_id = t.record_id
+             WHERE l.kind = 'relationship'
             UNION ALL
             SELECT t.record_id, t.kind,
-                   'statement', s.record_id, se.headline,
-                   l.link_type, l.event_date, a.record_id
-              FROM public_api.active_records a
-              JOIN public.published_entries l ON l.kind = 'relationship' AND l.record_id = a.record_id AND l.revision_number = a.revision_number
+                   'statement', s.record_id, h.headline, h.text_origin, h.label,
+                   l.link_type, l.event_date, l.record_id
+              FROM public.published_entries l
+              JOIN public_api.active_records a ON a.kind = 'relationship' AND a.record_id = l.record_id AND a.revision_number = l.revision_number
               JOIN public_api.active_records s ON s.kind = 'statement' AND s.record_id = l.statement_record_id
               JOIN public_api.active_records t ON t.kind = l.target_kind AND t.record_id = l.target_record_id
-              JOIN public.published_entries se ON se.kind = 'statement' AND se.record_id = s.record_id AND se.revision_number = s.revision_number
-             WHERE a.kind = 'relationship';
+              JOIN public_api.record_headlines h ON h.kind = 'statement' AND h.record_id = s.record_id
+             WHERE l.kind = 'relationship';
 
             CREATE VIEW public_api.vote_facts WITH (security_barrier = true) AS
             SELECT a.record_id, a.revision_number, f."position", f.fact_text
@@ -68,9 +94,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
               JOIN public.executive_action_revisions r ON r.record_id = a.record_id AND r.revision_number = a.revision_number
               JOIN public.executive_action_revision_notices n ON n.record_id = r.record_id AND n.revision_number = r.revision_number
               JOIN public.executive_action_documents d ON d.source_id = n.source_id AND d.document_number = n.document_number
-             WHERE a.kind = 'executiveAction' AND r.title IS NOT NULL;
+             WHERE a.kind = 'executiveAction' AND r.title IS NOT NULL AND d.notice_url IS NOT NULL;
 
             ALTER VIEW public_api.bill_status OWNER TO civic_lens_public_owner;
+            ALTER VIEW public_api.record_headlines OWNER TO civic_lens_public_owner;
             ALTER VIEW public_api.record_links OWNER TO civic_lens_public_owner;
             ALTER VIEW public_api.vote_facts OWNER TO civic_lens_public_owner;
             ALTER VIEW public_api.executive_actions OWNER TO civic_lens_public_owner;
@@ -79,7 +106,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
         private const string DownSql = """
             DROP VIEW public_api.executive_action_notices, public_api.executive_actions, public_api.vote_facts,
-                public_api.record_links, public_api.bill_status;
+                public_api.record_links, public_api.record_headlines, public_api.bill_status;
             """;
 
         /// <inheritdoc />

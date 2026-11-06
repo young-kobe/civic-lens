@@ -32,7 +32,7 @@ internal static class PublicApiGrants
         GRANT SELECT (kind, record_id, first_release, revision_number, last_release) ON publication_record_states TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, chamber, congress, session_number, roll_call_number, voted_on, kind,
             bill_type, bill_number, headline, summary, text_origin, member_list_id, question, result) ON vote_revisions TO civic_lens_public_owner;
-        GRANT SELECT (kind, record_id, revision_number, headline, event_date, link_type, statement_record_id, target_kind, target_record_id, bill_line)
+        GRANT SELECT (kind, record_id, revision_number, event_date, link_type, statement_record_id, target_kind, target_record_id, bill_line)
             ON published_entries TO civic_lens_public_owner;
         GRANT SELECT (list_id, "position", person_id, vote_cast) ON vote_member_list_entries TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, is_tracked) ON vote_revision_issues TO civic_lens_public_owner;
@@ -41,6 +41,7 @@ internal static class PublicApiGrants
         GRANT SELECT (record_id, revision_number, "position", person_id, role, is_original, sponsored_on, withdrawn_on)
             ON action_revision_sponsorships TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, "position", is_tracked) ON action_revision_issues TO civic_lens_public_owner;
+        GRANT SELECT (candidate_id, revision_number, author_kind, headline) ON statement_revisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", fact_text) ON vote_revision_facts TO civic_lens_public_owner;
         GRANT SELECT (source_id, congress, bill_type, bill_number, update_date_utc_ticks, latest_action_text, latest_action_date, created_at_utc_ticks)
             ON bill_gates TO civic_lens_public_owner;
@@ -63,7 +64,7 @@ internal static class PublicApiGrants
         GRANT SELECT ON public_api.active_records, public_api.votes, public_api.vote_members, public_api.member_votes, public_api.vote_issues,
             public_api.bills, public_api.bill_sponsorships, public_api.bill_issues, public_api.zip_districts,
             public_api.release_officials, public_api.release_official_terms, public_api.release_issues, public_api.release_issue_includes,
-            public_api.release_issue_excludes, public_api.release_policy_areas, public_api.bill_status, public_api.record_links, public_api.vote_facts,
+            public_api.release_issue_excludes, public_api.release_policy_areas, public_api.bill_status, public_api.record_headlines, public_api.record_links, public_api.vote_facts,
             public_api.executive_actions, public_api.executive_action_notices TO civic_lens_public;
         """;
 

@@ -36,7 +36,7 @@ public sealed class RelatedStore(NpgsqlDataSource views)
     private static string Sql(RelatedRequest request) => $"""
         SELECT a.release_number,
                EXISTS (SELECT 1 FROM public_api.active_records x WHERE x.kind = @kind AND x.record_id = @id),
-               l.related_kind, l.related_record_id, l.related_headline, l.link_type, l.statement_date, l.link_record_id
+               l.related_kind, l.related_record_id, l.related_headline, l.related_text_origin, l.related_label, l.link_type, l.statement_date, l.link_record_id
           FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT l.* FROM public_api.record_links l
@@ -70,8 +70,10 @@ public sealed class RelatedStore(NpgsqlDataSource views)
         Kind = RecordKinds.TryParse(reader.GetString(2), out var kind) ? kind : throw new InvalidDataException("The view holds an unknown record kind."),
         RecordId = reader.GetString(3),
         Headline = reader.GetString(4),
-        LinkType = ViewColumns.Enum<PublishedRelationshipType>(reader, 5),
-        StatementDate = ViewColumns.Date(reader, 6),
-        LinkRecordId = reader.GetString(7)
+        TextOrigin = ViewColumns.Enum<PublishedTextOrigin>(reader, 5),
+        Label = ViewColumns.Text(reader, 6),
+        LinkType = ViewColumns.Enum<PublishedRelationshipType>(reader, 7),
+        StatementDate = ViewColumns.Date(reader, 8),
+        LinkRecordId = reader.GetString(9)
     };
 }

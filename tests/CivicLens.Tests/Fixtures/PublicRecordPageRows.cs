@@ -24,38 +24,36 @@ internal static class PublicRecordPageRows
           VALUES ('{record}', 'src', 119, 'hr', {billNumber}, 1, 0, 0, 0, 'AwaitingReview');
         """;
 
-    /// <summary>One relationship with its entry rows and the entry rows of both ends. A first release of 2 keeps a record out of the active release 1.</summary>
-    public static string Link(string link, string statement, string statementHeadline, string target, string targetKind, string targetHeadline, string type,
-        string? statementDate, int linkFirst = 1, int targetFirst = 1) => $"""
+    /// <summary>One relationship with its entry row and the record states of the relationship and of both ends. A first release of 2 keeps a record out of the active release 1.
+    /// The headline of an end comes from <see cref="Headline"/>.</summary>
+    public static string Link(string link, string statement, string target, string targetKind, string type,
+        string? statementDate, int linkFirst = 1, int statementFirst = 1, int targetFirst = 1) => $"""
         {ActiveRelease}
         INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES
           ('relationship', '{link}', {linkFirst}, 1, NULL),
-          ('statement', '{statement}', 1, 1, NULL),
+          ('statement', '{statement}', {statementFirst}, 1, NULL),
           ('{targetKind}', '{target}', {targetFirst}, 1, NULL)
           ON CONFLICT DO NOTHING;
         INSERT INTO published_entries (kind, record_id, revision_number, relationship_record_id, relationship_revision_number, headline, event_date, link_type,
             statement_record_id, target_kind, target_record_id)
           VALUES ('relationship', '{link}', 1, '{link}', 1, 'Link', {(statementDate is null ? "NULL" : $"'{statementDate}'")}, '{type}', '{statement}', '{targetKind}', '{target}');
-        {Entry("statement", statement, statementHeadline)}
-        {Entry(targetKind, target, targetHeadline)}
         """;
 
-    // The check ck_published_entries_revision_key wants the typed key columns of the kind.
-    public static string Entry(string kind, string record, string headline)
+    /// <summary>The revision 1 of a statement, action, or vote, with its headline and text origin ("Model", "Code", or "Person"). Write it once for each record.
+    /// A statement has no origin column, so "Model" gives the author kind Analysis and any other origin gives Person.</summary>
+    public static string Headline(string kind, string record, string headline, string origin = "Person") => kind switch
     {
-        var columns = kind switch
-        {
-            "statement" => "statement_candidate_id, statement_revision_number",
-            "action" => "action_record_id, action_revision_number",
-            _ => "vote_record_id, vote_revision_number"
-        };
-        var billTitle = kind == "action" ? ", bill_title" : "";
-        var billTitleValue = kind == "action" ? ", 'T'" : "";
-        return $"""
-            INSERT INTO published_entries (kind, record_id, revision_number, {columns}, headline{billTitle})
-              VALUES ('{kind}', '{record}', 1, '{record}', 1, '{headline}'{billTitleValue}) ON CONFLICT DO NOTHING;
-            """;
-    }
+        "statement" => $"""
+            INSERT INTO statement_revisions (candidate_id, revision_number, author_kind, author_subject, run_id, created_at_utc_ticks, headline, summary, revision_json)
+              VALUES ('{record}', 1, '{(origin == "Model" ? "Analysis" : "Person")}', 'test', {(origin == "Model" ? $"'run-{record[..16]}'" : "NULL")}, 1, '{headline}', 'Summary', 'x');
+            """,
+        "action" => PublicActionRows.ActionRevision(record, 1, origin, null, null, headline: headline),
+        _ => $"""
+            INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, run_id, created_at_utc_ticks, {VoteRevisionColumnsSeed.RequiredColumns})
+              VALUES ('{record}', 1, 'test', '{(origin == "Person" ? "Person" : "Analysis")}', {(origin == "Person" ? "NULL" : $"'run-{record[..16]}'")}, 1, '{headline}', 'Summary', '{origin}', 'src', 'CongressGov', 'House', 119, 1, 1, 'c', 1,
+                  '2026-02-01', 'ext', 0, 1, 'Passage', '{record}', '{new string('a', 64)}', true, 'Passed');
+            """
+    };
 
     /// <summary>An executive action with two revisions and two correction notices. The active revision is 2 and it holds both notices in reverse position order.</summary>
     public static string ExecutiveAction(string record) => $"""

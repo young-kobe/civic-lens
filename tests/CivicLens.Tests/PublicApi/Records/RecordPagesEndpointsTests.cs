@@ -104,9 +104,13 @@ public sealed class RecordPagesEndpointsTests(PostgresCollection postgres)
         string[] links = [new('7', 64), new('8', 64), new('9', 64)];
         string[] actions = [new('a', 64), new('b', 64)];
         await using var host = await StartAsync($"""
-            {PublicRecordPageRows.Link(links[0], Statement, "Doe on rent", actions[0], "action", "Housing bill", "DescribesOwnBill", "2026-05-02")}
-            {PublicRecordPageRows.Link(links[1], Statement, "Doe on rent", actions[1], "action", "Tax bill", "ClaimsCreditFor", "2026-05-01")}
-            {PublicRecordPageRows.Link(links[2], Statement, "Doe on rent", Vote, "vote", "Vote on housing", "StatementAboutVote", null)}
+            {PublicRecordPageRows.Headline("statement", Statement, "Doe on rent")}
+            {PublicRecordPageRows.Headline("action", actions[0], "Housing bill")}
+            {PublicRecordPageRows.Headline("action", actions[1], "Tax bill")}
+            {PublicRecordPageRows.Headline("vote", Vote, "Vote on housing")}
+            {PublicRecordPageRows.Link(links[0], Statement, actions[0], "action", "DescribesOwnBill", "2026-05-02")}
+            {PublicRecordPageRows.Link(links[1], Statement, actions[1], "action", "ClaimsCreditFor", "2026-05-01")}
+            {PublicRecordPageRows.Link(links[2], Statement, Vote, "vote", "StatementAboutVote", null)}
             """);
 
         using var first = await GetAsync(host, $"/v1/records/statement/{Statement}/related?limit=2");
@@ -125,8 +129,7 @@ public sealed class RecordPagesEndpointsTests(PostgresCollection postgres)
     public async Task RelatedRecordsGiveAnEmptyListFor404ForAnUnknownRecordAnd400ForAKindThatNoRelationshipCitesAnd409ForACursorOfAnotherRelease()
     {
         await using var host = await StartAsync($"""
-            {PublicRecordPageRows.Link(new string('7', 64), Statement, "Doe on rent", Action, "action", "Housing bill", "DescribesOwnBill", "2026-05-02")}
-            {PublicRecordPageRows.Entry("action", new string('b', 64), "Lonely bill")}
+            {PublicRecordPageRows.Link(new string('7', 64), Statement, Action, "action", "DescribesOwnBill", "2026-05-02")}
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('action', '{new string('b', 64)}', 1, 1, NULL);
             """);
 

@@ -2,7 +2,7 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.PublicApi.ExecutiveActions;
 
-/// <summary>One row of the view <c>public_api.executive_actions</c>. The official ID is the configured ID of the President. The Federal Register wrote every field.</summary>
+/// <summary>One row of the view <c>public_api.executive_actions</c>. The official ID is the configured ID of the President. The Federal Register document gives every field except the official ID, which comes from the configuration of the President.</summary>
 public sealed record ExecutiveActionRow
 {
     public required string RecordId { get; init; }

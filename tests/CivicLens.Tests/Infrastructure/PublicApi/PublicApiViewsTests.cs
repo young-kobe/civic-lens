@@ -69,7 +69,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
         foreach (var view in new[] { "active_records", "votes", "vote_members", "member_votes", "vote_issues", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas",
-            "bill_status", "record_links", "vote_facts", "executive_actions", "executive_action_notices" })
+            "bill_status", "record_headlines", "record_links", "vote_facts", "executive_actions", "executive_action_notices" })
         {
             // A view with a join or a group cannot take a write at all, so Postgres refuses with 55000 before it checks a privilege.
             await AssertDeniedAsync(connection, $"DELETE FROM public_api.{view}", "55000");
@@ -108,6 +108,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"executive_action_notices v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"executive_actions v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"member_votes v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"record_headlines v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"record_links v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issue_excludes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issue_includes v {Owner} {Role}:SELECT {{security_barrier=true}}",
