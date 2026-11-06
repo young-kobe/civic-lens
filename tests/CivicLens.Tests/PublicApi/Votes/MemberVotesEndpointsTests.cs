@@ -232,11 +232,12 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task TheIssueFilterUsesTheIssuesOfTheActiveRevisionOnly()
     {
-        var retired = new SeededVote('a', "2026-03-01") { Issues = ["health"], FirstRelease = 2 };
-        await using var host = await StartWithVotesAsync(retired, new SeededVote('b', "2026-03-02") { RollCall = 2, Issues = ["health"] });
+        var retagged = new SeededVote('a', "2026-03-01") { ActiveRevision = 2, EarlierIssues = ["health"] };
+        var tagged = new SeededVote('b', "2026-03-02") { RollCall = 2, ActiveRevision = 2, EarlierIssues = ["tax"], Issues = ["health"] };
+        await using var host = await StartWithVotesAsync(retagged, tagged);
 
         var answer = await GetAsync(host, "/v1/member-votes?official=p0&issue=health");
 
-        Assert.Equal([new string('b', 64)], Ids(answer));
+        Assert.Equal([tagged.RecordId], Ids(answer));
     }
 }
