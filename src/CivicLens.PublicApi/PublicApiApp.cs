@@ -63,7 +63,7 @@ public static class PublicApiApp
         {
             builder.Services.AddSingleton(baseUrl);
             builder.Services.AddSingleton(new MembersStripSlot());
-            builder.Services.AddSingleton(new PageCache(buildId!));
+            builder.Services.AddSingleton(new PageCache(buildId!, baseUrl));
             builder.Services.AddSingleton<PageRenderer>();
             builder.Services.AddSingleton<ServerPageResponder>();
         }
