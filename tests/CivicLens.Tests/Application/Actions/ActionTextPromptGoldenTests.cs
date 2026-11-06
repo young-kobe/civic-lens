@@ -7,9 +7,9 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionTextPromptGoldenTests
 {
-    private const string SystemSha256 = "9cb731c8e8890c29c16ab1cc9fb5e51811cd4aa36ee70da8c581a694de40bdd8";
+    private const string SystemSha256 = "c91a66f3431c59d3fbe93f12659e09a7e5a61c81c681d01e1de096576de84030";
     private const string SchemaSha256 = "1842aea9479adba4bd6244a32833f17e655bb8083b18fb5c87380619258bc9e8";
-    private const string InputHash = "a8dde3568365f042be7c99962d0e47e1dc1b51aa9bf145c3c9dd4a60b74b402d";
+    private const string InputHash = "a04b90e40575fb47c74f9554c970bda667b36f508b1860b0406c54089bb69782";
 
     [Fact]
     public async Task TheTextPromptAndSchemaMatchTheirPinnedVersions()
@@ -21,7 +21,7 @@ public sealed class ActionTextPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(ActionDraftTask.TextPromptVersion)} ({ActionDraftTask.TextPromptVersion}) or " +
             $"{nameof(ActionDraftTask.TextSchemaVersion)} ({ActionDraftTask.TextSchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("action-text-prompt-v4", "action-text-schema-v1", "claude-haiku-5-5"),
+        Assert.Equal(("action-text-prompt-v5", "action-text-schema-v1", "claude-haiku-5-5"),
             (ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model));
         Assert.Equal((ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion), (request.PromptVersion, request.SchemaVersion));
         Assert.Contains(ActionDraftTask.TextPromptVersion, ActionDraftTask.CurrentVersions.PromptVersions);
@@ -41,8 +41,11 @@ public sealed class ActionTextPromptGoldenTests
         var system = ActionTextPrompt.Build(snapshot, ActionBillTexts.Of(), BillGateFixtures.HousingChoice(), ActionDraftTask.MaximumPromptBytes)!.SystemPrompt;
 
         Assert.Contains("It never asks for fewer facts.", system, StringComparison.Ordinal);
-        Assert.Contains("If a fact needs a long word, split the sentence in two.", system, StringComparison.Ordinal);
-        Assert.Contains("Name who the bill affects, what it changes, and each dollar amount, date, or deadline in the bill text that is central to a change.", system, StringComparison.Ordinal);
+        Assert.DoesNotContain("split the sentence", system, StringComparison.Ordinal);
+        Assert.Contains("Keep the summary at 2 to 3 sentences.", system, StringComparison.Ordinal);
+        Assert.Contains("After a long name is used once, use a short name for it, for example \"the Secretary\".", system, StringComparison.Ordinal);
+        Assert.Contains("Name who the bill affects, what it changes, and each dollar amount in the bill text that is central to a change.", system, StringComparison.Ordinal);
+        Assert.Contains("Name each date that the text sets for a change to start, end, or be due, for example a deadline or a fiscal year range, in the sentence that states the change.", system, StringComparison.Ordinal);
         Assert.Contains("helps, supports, addresses, or improves", system, StringComparison.Ordinal);
     }
 

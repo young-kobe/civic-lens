@@ -41,4 +41,16 @@ public sealed class BillFiguresTests
     [Fact]
     public void ADateWithAMonthAndDayCountsOnceAndAnAmountIsNotADate() =>
         Assert.Equal(new BillFigureCounts(1, 1), BillFigures.Count("Pay $2,000 by December 31, 2030."));
+
+    [Fact]
+    public void MissingDatesListsTheDatesOfTheTextWithoutTheirDeadlinePhraseThatNoSentenceWritesAndTheCountUsesTheSameMatches()
+    {
+        const string text = "Not later than September 30, 2027, the Secretary acts. It covers fiscal year 2026 and fiscal year 2026. It starts by 2028.";
+
+        Assert.Equal(["September 30, 2027", "fiscal year 2026", "2028"], BillFigures.MissingDates(text, "The bill is plain."));
+        Assert.Equal(["fiscal year 2026"], BillFigures.MissingDates(text, "It acts by September 30, 2027 and starts after 2028."));
+        Assert.Equal(["September 30, 2027"], BillFigures.MissingDates(text, "It covers Fiscal Year 2026 and starts before 2028."));
+        Assert.Empty(BillFigures.MissingDates(text, "By September 30, 2027, fiscal year 2026 and after 2028."));
+        Assert.Equal(4, BillFigures.Count(text).Dates);
+    }
 }

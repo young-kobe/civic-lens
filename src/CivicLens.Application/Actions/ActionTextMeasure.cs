@@ -71,10 +71,12 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         ActionTextMeasureBill With(ActionTextMeasureOutcome outcome, string? reason, ImmutableArray<ActionTextMeasureSentence> sentences = default, double? passageGrade = null)
         {
             var kept = sentences.IsDefault ? [] : sentences;
-            return new(billId, TitleOf(evidence), outcome, reason, billText.CharsRead, billText.CharsTotal, attempt.Calls, usage,
+            var sentenceText = string.Join('\n', kept.Select(sentence => sentence.Sentence));
+            var bill = new ActionTextMeasureBill(billId, TitleOf(evidence), outcome, reason, billText.CharsRead, billText.CharsTotal, attempt.Calls, usage,
                 attempt.Runs.Sum(run => run.ChargedTokens), kept, rejections,
                 [.. attempt.Runs.Where(run => run.OutputJson is not null).Select(run => new ActionTextMeasurePass(run.Outcome, run.OutputJson))],
-                textFigures, BillFigures.Count(string.Join('\n', kept.Select(sentence => sentence.Sentence))), passageGrade);
+                textFigures, BillFigures.Count(sentenceText), passageGrade, []);
+            return bill.LosesFigures ? bill with { MissingDates = [.. BillFigures.MissingDates(billText.Body, sentenceText)] } : bill;
         }
 
         if (attempt.RefusedOtherPrompt) return With(ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.NotTextPrompt);

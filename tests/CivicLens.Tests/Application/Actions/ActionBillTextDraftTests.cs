@@ -154,6 +154,15 @@ public sealed class ActionBillTextDraftTests
     }
 
     [Fact]
+    public async Task ThePassageGradeMessageKeepsTheSummaryAtTwoToThreeSentencesSoARepairDoesNotAddAFourth()
+    {
+        var refused = ActionDraftResolver.ResolveBillText(Output([(Medium, FirstQuote), (Legal, SecondQuote)]), await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+
+        var error = Assert.Single(refused.Errors);
+        Assert.EndsWith("Keep the summary at 2 to 3 sentences.", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ThePassageGradeRoundsToTheLimitAndPrintsTheSameValueThatItCompares()
     {
         var pieces = new[] { "H.R. 1 pays landlords for tenants with low income.", FirstPlain, SecondPlain, WhyPlain, EightPoint };

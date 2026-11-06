@@ -152,7 +152,7 @@ public static class ActionDraftResolver
         var grade = ReadingGrade.RoundedPassage(pieces);
         if (grade <= ReadingGrade.MaximumGrade) return null;
         var hardest = pieces.MaxBy(ReadingGrade.Of)!;
-        return $"The headline and the sentences read at grade {ReadingGrade.Format(grade)} as one passage. Write at grade {ReadingGrade.MaximumGrade} or below. The hardest sentence is \"{Shorten(hardest)}\" at grade {ReadingGrade.Format(ReadingGrade.Rounded(hardest))}. Use shorter words and shorter sentences.";
+        return $"The headline and the sentences read at grade {ReadingGrade.Format(grade)} as one passage. Write at grade {ReadingGrade.MaximumGrade} or below. The hardest sentence is \"{Shorten(hardest)}\" at grade {ReadingGrade.Format(ReadingGrade.Rounded(hardest))}. Use shorter words and shorter sentences. Keep the summary at {ActionDraftRevision.MinimumSummarySentences} to {ActionDraftRevision.MaximumSummarySentences} sentences.";
     }
 
     private static ImmutableArray<string> PassageOf(ActionTextOutput output) =>

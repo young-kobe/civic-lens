@@ -23,7 +23,19 @@ public static partial class BillFigures
     public static BillFigureCounts Count(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        return new(Amount().Count(text), Date().Count(text));
+        return new(Amount().Count(text), Dates(text).Count());
+    }
+
+    /// <summary>Each date of the text as it is written, without its deadline phrase. "Not later than September 30, 2027" is "September 30, 2027".</summary>
+    private static IEnumerable<string> Dates(string text) => Date().Matches(text).Select(match => match.Groups["date"].Value);
+
+    /// <summary>The dates of <paramref name="text"/> that no date of <paramref name="sentences"/> writes the same way, ignoring case. A date repeated in
+    /// the text is listed once.</summary>
+    public static IReadOnlyList<string> MissingDates(string text, string sentences)
+    {
+        ArgumentNullException.ThrowIfNull(sentences);
+        var held = Dates(sentences).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return [.. Dates(text).Where(date => !held.Contains(date)).Distinct(StringComparer.OrdinalIgnoreCase)];
     }
 
     /// <summary>Each amount of the text as it is written and as a full number.</summary>
@@ -61,7 +73,7 @@ public static partial class BillFigures
     [GeneratedRegex(@"\b" + YearPattern + @"\b", RegexOptions.CultureInvariant)]
     private static partial Regex Year();
 
-    [GeneratedRegex(@"\b(?:" + Month + @" (?:\d{1,2}, )?|(?i:fiscal years?) |(?i:not later than|before|after|beginning|ending|by) (?:" + Month + @" (?:\d{1,2}, )?)?)"
-        + YearPattern + @"\b", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\b(?:(?<date>" + Month + @" (?:\d{1,2}, )?" + YearPattern + @")|(?<date>(?i:fiscal years?) " + YearPattern + @")|(?i:not later than|before|after|beginning|ending|by) (?<date>(?:" + Month
+        + @" (?:\d{1,2}, )?)?" + YearPattern + @"))\b", RegexOptions.CultureInvariant)]
     private static partial Regex Date();
 }
