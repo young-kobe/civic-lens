@@ -77,13 +77,12 @@ public sealed class ActionDraftRevisionTextTests
     }
 
     [Fact]
-    public void ADraftFromTheBillTextCannotBeApprovedBecauseThePublishedActionHasNoCitationOfItsTextSource()
+    public void ADraftFromTheBillTextPassesTheShapeCheckOfApprovalAndABrokenOneDoesNot()
     {
-        var error = Assert.Throws<ArgumentException>(() => TextModel().ValidateForApproval());
-
-        Assert.Contains("waits for the publish step", error.Message, StringComparison.Ordinal);
-        Assert.Throws<ArgumentException>(() => PersonEditOf(TextModel(), "Edited headline", "Edited summary.").ValidateForApproval());
+        TextModel().ValidateForApproval();
+        PersonEditOf(TextModel(), "Edited headline", "Edited summary.").ValidateForApproval();
         Model().ValidateForApproval();
+        Assert.Throws<ArgumentException>(() => (TextModel() with { WhyItMatters = null }).ValidateForApproval());
     }
 
     [Fact]

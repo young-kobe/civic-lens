@@ -22,6 +22,7 @@ public sealed record PublishedAction
     public required string[] TrackedIssueIds { get; init; }
     public PublishedCitation? SummaryCitation { get; init; }
     public PublishedCitation? BillCitation { get; init; }
+    public PublishedBillText? BillText { get; init; }
     public required PublishedSponsorship[] Sponsorships { get; init; }
     public required PublishedDocumentVersion[] Sources { get; init; }
     public required DateTimeOffset ApprovedAtUtc { get; init; }
@@ -72,6 +73,7 @@ public sealed record PublishedAction
         if (PolicyAreaCitation is not null) ValidateCitation(PolicyAreaCitation);
         if (SummaryCitation is not null) ValidateCitation(SummaryCitation);
         if (BillCitation is not null) ValidateCitation(BillCitation);
+        ValidateBillText();
         if (TrackedIssueIds is null || !PublishedEvidenceRules.AreDistinctAndNotBlank(TrackedIssueIds))
             throw new InvalidDataException("Published action tracked issue ids must be distinct and not blank.");
         PublishedEvidenceRules.RequireEverySourceCited(Sources, Citations(), "action");
@@ -79,7 +81,15 @@ public sealed record PublishedAction
 
     public IEnumerable<PublishedCitation> Citations() => Sponsorships.SelectMany(item => item.Citations)
         .Concat(PolicyAreaCitation is { } area ? [area] : []).Concat(SummaryCitation is { } summary ? [summary] : [])
-        .Concat(BillCitation is { } bill ? [bill] : []);
+        .Concat(BillCitation is { } bill ? [bill] : []).Concat(BillText?.Sentences.Select(item => item.Citation) ?? []);
+
+    private void ValidateBillText()
+    {
+        if (BillText is null) return;
+        if (SummaryCitation is not null) throw new InvalidDataException("A published action cites the CRS summary or the bill text, never both.");
+        BillText.Validate();
+        foreach (var sentence in BillText.Sentences) ValidateCitation(sentence.Citation);
+    }
 
     private void ValidateSponsorship(PublishedSponsorship? sponsorship)
     {

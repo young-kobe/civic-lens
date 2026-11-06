@@ -289,7 +289,7 @@ internal sealed class PublicationScenario
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
         var review = new ActionReview(recordId, revision, null, [revision], all.Length, ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
         Actions.Publishable[recordId] = new(review, ImmutableDictionary.CreateRange(StringComparer.Ordinal,
-            [KeyValuePair.Create(detail.ExtractionId, detail), KeyValuePair.Create(cosponsors.ExtractionId, cosponsors)]));
+            [KeyValuePair.Create(detail.ExtractionId, detail), KeyValuePair.Create(cosponsors.ExtractionId, cosponsors)]), null);
         return recordId;
     }
 
@@ -318,7 +318,8 @@ internal sealed class PublicationScenario
         Actions.Publishable[recordId] = publishable with
         {
             Review = publishable.Review with { CurrentRevision = revision, Revisions = [revision] },
-            Extractions = publishable.Extractions.SetItem(text.ExtractionId, text)
+            Extractions = publishable.Extractions.SetItem(text.ExtractionId, text),
+            TextVersion = new ActionTextVersion("BILLS-119hr7ih", "Introduced in House", new DateOnly(2026, 1, 3), text.Text.Length, text.Text.Length)
         };
     }
 

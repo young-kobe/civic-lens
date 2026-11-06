@@ -161,12 +161,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         ReviewTextRules.RequireSuggestionKeptOrCleared(this, previous);
     }
 
-    public void ValidateForApproval()
-    {
-        ValidateShape();
-        if (TextPackageId is not null)
-            throw new ArgumentException("A draft from the bill text waits for the publish step. That step adds the text citations and the label.");
-    }
+    public void ValidateForApproval() => ValidateShape();
 
     public void ValidateForApproval(IReadOnlyDictionary<string, DocumentExtraction> extractions)
     {

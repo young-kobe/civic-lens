@@ -119,10 +119,30 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
         var currents = histories.Values.Select(history => history.CurrentRevision!).ToArray();
         var extractions = (await ReadExtractionsAsync(db, currents, cancellationToken)).ToImmutableDictionary(StringComparer.Ordinal);
+        var textVersions = await ReadTextVersionsAsync(db, currents, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         foreach (var current in currents) current.ValidateAgainst(extractions);
         return drafts.ToDictionary(draft => draft.RecordId,
-            draft => new PublishableAction(ToReview(draft, histories[draft.RecordId]), extractions), StringComparer.Ordinal);
+            draft => new PublishableAction(ToReview(draft, histories[draft.RecordId]), extractions, textVersions.GetValueOrDefault(draft.RecordId)),
+            StringComparer.Ordinal);
+    }
+
+    /// <summary>One bounded read of the stored bill text rows that the text drafts cite, by record ID. A revision with no bill text has no entry.</summary>
+    private static async Task<Dictionary<string, ActionTextVersion>> ReadTextVersionsAsync(CollectionAttemptDbContext db,
+        IEnumerable<ActionDraftRevision> revisions, CancellationToken cancellationToken)
+    {
+        var texts = revisions.Where(revision => revision.TextPackageId is not null).ToArray();
+        if (texts.Length == 0) return new(StringComparer.Ordinal);
+        var packageIds = texts.Select(revision => revision.TextPackageId!).Distinct(StringComparer.Ordinal).ToArray();
+        var rows = await db.Set<BillTextVersionRow>().AsNoTracking().Where(row => packageIds.Contains(row.PackageId)).ToArrayAsync(cancellationToken);
+        return texts.ToDictionary(revision => revision.RecordId, revision =>
+        {
+            var row = rows.Single(row => row.Congress == revision.Congress && row.BillType == revision.BillType &&
+                row.BillNumber == revision.BillNumber && row.PackageId == revision.TextPackageId);
+            if (revision.TextCitations.Any(citation => citation.Span.ExtractionId != row.ExtractionId))
+                throw new InvalidDataException("Bill text citations do not name the extraction of their stored text version.");
+            return new ActionTextVersion(row.PackageId, row.VersionType, row.VersionDate, row.CharsRead, row.CharsTotal);
+        }, StringComparer.Ordinal);
     }
 
     public async Task<IReadOnlyList<ActionBillStatus>> ReadBillStatusesAsync(ImmutableArray<string> recordIds,
@@ -159,7 +179,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
             history.CurrentStatus, history.Decisions, history.UnresolvedConcerns);
 
     internal static async Task ValidateApprovalAsync(CollectionAttemptDbContext db, ActionDraftRevision revision, CancellationToken cancellationToken) =>
-        revision.ValidateForApproval(await ReadExtractionsAsync(db, [revision], cancellationToken));
+        ActionTextApproval.Validate(revision, await ReadExtractionsAsync(db, [revision], cancellationToken));
 
     private static Task<Dictionary<string, DocumentExtraction>> ReadExtractionsAsync(CollectionAttemptDbContext db,
         IEnumerable<ActionDraftRevision> revisions, CancellationToken cancellationToken) =>

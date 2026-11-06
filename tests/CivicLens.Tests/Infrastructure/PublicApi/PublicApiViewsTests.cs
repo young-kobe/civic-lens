@@ -618,6 +618,30 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task ABillThatCitesBillTextServesItsTextLabelWhyItMattersAndVersionAndOnlyModelWordingCarriesWhyItMattersBecauseModelTextNeedsItsLabel()
+    {
+        await SeedBillsAsync();
+        await ExecuteAsync("""
+            SET session_replication_role = replica;
+            INSERT INTO bill_text_versions (congress, bill_type, bill_number, package_id, version_type, version_date, source_url, extraction_id, chars_total, chars_read)
+              VALUES (119, 'hr', 7, 'BILLS-119hr7ih', 'Introduced in House', '2025-01-03',
+                      'https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm', 'x', 85000, 59987);
+            UPDATE action_revisions SET text_package_id = 'BILLS-119hr7ih', why_it_matters = 'It pays landlords.' WHERE record_id IN ('A', 'M');
+            """);
+
+        Assert.Equal(
+        [
+            "A|Person|none|none|Introduced in House|2025-01-03|59987|85000",
+            $"C|Code|{PublishedRecordLabels.CodeWording}|none|none|none|none|none",
+            $"M|Model|{BillTextWords.Label}|It pays landlords.|Introduced in House|2025-01-03|59987|85000"
+        ], await PublicAsync("""
+            SELECT concat_ws('|', record_id, text_origin, coalesce(label, 'none'), coalesce(why_it_matters, 'none'), coalesce(text_version_name, 'none'),
+                   coalesce(text_version_date::text, 'none'), coalesce(text_chars_read::text, 'none'), coalesce(text_chars_total::text, 'none'))
+              FROM public_api.bills ORDER BY record_id
+            """));
+    }
+
+    [Fact]
     public async Task EventDateAndCosponsorCountEqualTheStoredColumnsBecauseCSharpWritesThemOnceAndTheViewMustNotComputeThem()
     {
         var revision = ActionRevisionFixtures.Model() with
