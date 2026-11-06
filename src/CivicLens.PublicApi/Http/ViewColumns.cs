@@ -12,6 +12,9 @@ internal static class ViewColumns
     public static int? Number(DbDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : Convert.ToInt32(reader.GetValue(ordinal), CultureInfo.InvariantCulture);
 
+    public static DateOnly? Date(DbDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? null : reader.GetFieldValue<DateOnly>(ordinal);
+
     public static T Enum<T>(DbDataReader reader, int ordinal) where T : struct, Enum =>
         System.Enum.TryParse<T>(reader.GetString(ordinal), out var value) && System.Enum.IsDefined(value)
             ? value
