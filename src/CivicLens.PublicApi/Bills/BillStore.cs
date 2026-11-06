@@ -41,12 +41,15 @@ public sealed class BillStore(NpgsqlDataSource views)
         await using var command = views.CreateCommand($"""
             SELECT b.release_number, {Columns},
                    ARRAY(SELECT i.issue_id FROM public_api.bill_issues i
-                          WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number ORDER BY i."position")
-              FROM public_api.bills b WHERE b.record_id = @id
+                          WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number ORDER BY i."position"),
+                   s.latest_action_text, s.latest_action_date, s.read_at_utc_ticks
+              FROM public_api.bills b
+              LEFT JOIN public_api.bill_status s ON s.record_id = b.record_id AND s.revision_number = b.revision_number
+             WHERE b.record_id = @id
             """);
         command.Parameters.AddWithValue("id", recordId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken) ? new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(22)) : null;
+        return await reader.ReadAsync(cancellationToken) ? new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(22), ReadLatestAction(reader)) : null;
     }
 
     /// <summary>Reads one page of the sponsorships of a bill. Null means that no release is active or that the active release holds no such bill.</summary>
@@ -155,6 +158,11 @@ public sealed class BillStore(NpgsqlDataSource views)
         TextCharsRead = ViewColumns.Number(reader, 20),
         TextCharsTotal = ViewColumns.Number(reader, 21)
     };
+
+    // Columns 23 to 25 hold the status. The view holds no row for a bill with no latest action.
+    private static BillLatestAction? ReadLatestAction(DbDataReader reader) => reader.IsDBNull(23)
+        ? null
+        : new(reader.GetString(23), reader.GetFieldValue<DateOnly>(24), new DateTimeOffset(reader.GetInt64(25), TimeSpan.Zero));
 
     // Column 0 holds the release and column 1 holds whether the bill exists. The row starts at column 2.
     private static SponsorshipRow ReadSponsorship(DbDataReader reader) => new()

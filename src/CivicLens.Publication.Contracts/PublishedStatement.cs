@@ -35,7 +35,8 @@ public sealed record PublishedStatement
         IssueIds = IssueIds,
         PolicyAreaIds = PolicyAreaIds,
         SourceHost = Source.Host,
-        EventDate = StatementDate
+        EventDate = StatementDate,
+        ApprovedBy = ApprovedBy
     };
 
     public void Validate()
