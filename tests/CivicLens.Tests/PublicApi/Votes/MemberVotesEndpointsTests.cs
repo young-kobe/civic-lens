@@ -152,7 +152,7 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
     [InlineData("/v1/member-votes")]
     [InlineData("/v1/member-votes?official=")]
     [InlineData("/v1/member-votes?official=p0&official=p1")]
-    public async Task AMissingBlankOrRepeatedOfficialIsRefusedWithNoCacheHeader(string path)
+    public async Task AMissingEmptyOrRepeatedOfficialIsRefusedWithNoCacheHeader(string path)
     {
         await using var host = await StartWithVotesAsync();
 

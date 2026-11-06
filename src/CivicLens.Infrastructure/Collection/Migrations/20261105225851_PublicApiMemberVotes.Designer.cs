@@ -2370,6 +2370,121 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillActionRecordedVoteRow", b =>
+                {
+                    b.Property<string>("DetailJobId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("detail_job_id");
+
+                    b.Property<int>("ActionPosition")
+                        .HasColumnType("integer")
+                        .HasColumnName("action_position");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<string>("Chamber")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("chamber");
+
+                    b.Property<int>("Congress")
+                        .HasColumnType("integer")
+                        .HasColumnName("congress");
+
+                    b.Property<int>("RollNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("roll_number");
+
+                    b.Property<int>("SessionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("session_number");
+
+                    b.Property<string>("Url")
+                        .HasColumnType("text")
+                        .HasColumnName("url");
+
+                    b.Property<long?>("VotedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("voted_at_utc_ticks");
+
+                    b.HasKey("DetailJobId", "ActionPosition", "Position");
+
+                    b.ToTable("bill_action_recorded_votes", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_bill_action_recorded_votes_chamber", "chamber IN ('House', 'Senate')");
+
+                            t.HasCheckConstraint("ck_bill_action_recorded_votes_position", "action_position >= 0 AND position >= 0");
+
+                            t.HasCheckConstraint("ck_bill_action_recorded_votes_roll", "congress >= 1 AND session_number IN (1, 2) AND roll_number >= 1");
+
+                            t.HasCheckConstraint("ck_bill_action_recorded_votes_url", "url IS NULL OR url LIKE 'https://%'");
+
+                            t.HasCheckConstraint("ck_bill_action_recorded_votes_voted_at_utc_ticks", "voted_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillActionRow", b =>
+                {
+                    b.Property<string>("DetailJobId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("detail_job_id");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<string>("ActionCode")
+                        .HasColumnType("text")
+                        .HasColumnName("action_code");
+
+                    b.Property<DateOnly>("ActionDate")
+                        .HasColumnType("date")
+                        .HasColumnName("action_date");
+
+                    b.Property<TimeOnly?>("ActionTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("action_time");
+
+                    b.Property<string>("JobId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("job_id");
+
+                    b.Property<int?>("SourceSystemCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("source_system_code");
+
+                    b.Property<string>("SourceSystemName")
+                        .HasColumnType("text")
+                        .HasColumnName("source_system_name");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("text");
+
+                    b.Property<string>("Type")
+                        .HasColumnType("text")
+                        .HasColumnName("type");
+
+                    b.HasKey("DetailJobId", "Position");
+
+                    b.HasIndex("JobId");
+
+                    b.ToTable("bill_actions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_bill_actions_position", "position >= 0");
+
+                            t.HasCheckConstraint("ck_bill_actions_text", "text ~ '\\S'");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillFollowOnJobRow", b =>
                 {
                     b.Property<string>("JobId")
@@ -4803,6 +4918,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("action_revision_number");
 
+                    b.Property<string>("BillLine")
+                        .HasColumnType("text")
+                        .HasColumnName("bill_line");
+
                     b.Property<string>("BillTitle")
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)")
@@ -4930,6 +5049,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("published_entries", null, t =>
                         {
+                            t.HasCheckConstraint("ck_published_entries_bill_line", "bill_line IS NULL OR (kind = 'action' AND length(btrim(bill_line)) >= 1 AND length(bill_line) <= 200)");
+
                             t.HasCheckConstraint("ck_published_entries_bill_title", "(kind = 'action') = (bill_title IS NOT NULL) AND (bill_title IS NULL OR length(btrim(bill_title)) > 0)");
 
                             t.HasCheckConstraint("ck_published_entries_document_type", "(kind = 'executiveAction') = (document_type IS NOT NULL) AND (document_type IS NULL OR document_type IN ('ExecutiveOrder', 'Proclamation', 'Notice', 'Memorandum'))");
@@ -8915,6 +9036,30 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Collection.BillStream.BillGateRow", null)
                         .WithMany()
                         .HasForeignKey("DetailJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillActionRecordedVoteRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.BillStream.BillActionRow", null)
+                        .WithMany()
+                        .HasForeignKey("DetailJobId", "ActionPosition")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillActionRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.BillStream.BillGateRow", null)
+                        .WithMany()
+                        .HasForeignKey("DetailJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Collection.BillStream.BillPageRow", null)
+                        .WithMany()
+                        .HasForeignKey("JobId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
