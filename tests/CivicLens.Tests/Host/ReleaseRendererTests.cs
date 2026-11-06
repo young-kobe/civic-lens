@@ -724,7 +724,7 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
-        Assert.Equal("HR 7, Congress 119", facts["Bill"]);
+        Assert.Equal("H.R. 7, Congress 119", facts["Bill"]);
         Assert.Equal("A <housing> bill", facts["Title"]);
         Assert.Equal("Housing and Community Development", facts["Policy area"]);
         Assert.Equal("Housing costs", facts["Tracked issues"]);
@@ -1497,9 +1497,9 @@ public sealed class ReleaseRendererTests
         var plain = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None));
 
         var link = Assert.Single(linked.QuerySelectorAll("[aria-labelledby='bill-title'] a"));
-        Assert.Equal(($"../records/{actionId}.html", "HR 7, Congress 119"), (link.GetAttribute("href"), link.TextContent));
+        Assert.Equal(($"../records/{actionId}.html", "H.R. 7, Congress 119"), (link.GetAttribute("href"), link.TextContent));
         Assert.Empty(plain.QuerySelectorAll("[aria-labelledby='bill-title'] a"));
-        Assert.Contains("HR 7, Congress 119", plain.QuerySelector("[aria-labelledby='bill-title']")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("H.R. 7, Congress 119", plain.QuerySelector("[aria-labelledby='bill-title']")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

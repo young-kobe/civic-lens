@@ -47,7 +47,7 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal([new string('2', 64), new string('3', 64), new string('1', 64), new string('4', 64)],
             records.QuerySelectorAll("a.cell-title").Select(link => link.GetAttribute("href")!.Replace("../", "").Replace("records/", "").Replace(".html", "")));
         Assert.Equal(["Bill or resolution, 1 May 2026", "Vote, 1 Apr 2026", "Statement, 1 Mar 2026", "Vote, 1 Dec 2025"], records.QuerySelectorAll("tbody .record-kind").Select(line => line.TextContent));
-        Assert.Contains("House roll call 100, Congress 119, session 1, HR 7. Result of the vote: Passed", records.TextContent, StringComparison.Ordinal);
+        Assert.Contains("House roll call 100, Congress 119, session 1, H.R. 7. Result of the vote: Passed", records.TextContent, StringComparison.Ordinal);
         Assert.Equal(["Yes (Yea)", "Yes (Yea)"], records.QuerySelectorAll("tbody .cast-pill").Select(pill => pill.TextContent));
     }
 
