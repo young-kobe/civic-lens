@@ -35,6 +35,17 @@ public sealed class PresentationArchitectureTests
     }
 
     [Fact]
+    public void RestingFieldStylesNeverOutrankTheFocusRuleSoEveryFieldControlShowsItsFocusRing()
+    {
+        var control = new Regex(@"^\.field .*\b(?:input|textarea|select)\b");
+        var resting = HostStyleSheets.Selectors(HostStyleSheets.Read("app.css"))
+            .Where(selector => control.IsMatch(selector) && !selector.Contains(":focus-visible", StringComparison.Ordinal)
+                && (selector.Contains(":not(", StringComparison.Ordinal) || selector.Contains(":hover", StringComparison.Ordinal)));
+
+        Assert.All(resting, selector => Assert.Contains(":where(", selector, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void EveryDarkThemeTokenAlsoHasALightDefault()
     {
         var theme = File.ReadAllText(Path.Combine(HostRoot, "wwwroot", "css", "theme.css"));
