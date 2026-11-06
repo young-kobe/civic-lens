@@ -12,6 +12,8 @@ public sealed record VoteMemberRequest
 
     /// <summary>The stored form. A plain comparison lets the filter move below the view. A word that is no cast word stays as it is, because a cast can be a candidate name.</summary>
     public string? Cast { get; init; }
+    /// <summary>The officials of the reader, at most <see cref="OfficialFilter.Maximum"/>. An empty array means no filter.</summary>
+    public string[] Officials { get; init; } = [];
     public VoteMemberCursor? Cursor { get; init; }
     public int Limit { get; init; } = SearchRequest.DefaultLimit;
 
@@ -19,6 +21,7 @@ public sealed record VoteMemberRequest
     public static VoteMemberRequest Parse(IQueryCollection query) => new()
     {
         Cast = StoredCast(QueryValues.Filter(query, "cast")),
+        Officials = OfficialFilter.Parse(query),
         Cursor = VoteMemberCursor.Parse(QueryValues.Value(query, "cursor")),
         Limit = QueryValues.PageLimit(query)
     };
