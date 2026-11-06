@@ -25,11 +25,36 @@ public sealed class AnalysisCommandTests(PostgresCollection postgres) : IAsyncLi
         Assert.Equal((0, """{"requeued":0}"""), (one.ExitCode, one.Output.Trim()));
     }
 
+    [Fact]
+    public async Task RedraftStaleReportsACountForEachStageOrForTheNamedStage()
+    {
+        var all = await RunAsync("auth0|owner", "analyses", "redraft", "--stale");
+        var votes = await RunAsync("auth0|owner", "analyses", "redraft", "--stale", "votes");
+
+        Assert.Equal((0, """{"requeued":{"actions":0,"votes":0,"briefs":0}}"""), (all.ExitCode, all.Output.Trim()));
+        Assert.Equal((0, """{"requeued":{"votes":0}}"""), (votes.ExitCode, votes.Output.Trim()));
+    }
+
+    [Fact]
+    public async Task RedraftStaleRefusesAnUnknownStageAndTheAiDrafter()
+    {
+        var unknown = await RunAsync("auth0|owner", "analyses", "redraft", "--stale", "statements");
+        var drafter = await RunAsync("civic-lens:analysis", "analyses", "redraft", "--stale");
+
+        Assert.Equal(2, unknown.ExitCode);
+        Assert.Contains("Unknown stage", unknown.Error, StringComparison.Ordinal);
+        Assert.Equal(2, drafter.ExitCode);
+        Assert.Contains("The configured actor is not the owner.", drafter.Error, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("analyses")]
     [InlineData("analyses", "requeue")]
     [InlineData("analyses", "requeue", "a", "b")]
     [InlineData("analyses", "retry", "--all")]
+    [InlineData("analyses", "redraft")]
+    [InlineData("analyses", "redraft", "votes")]
+    [InlineData("analyses", "redraft", "--stale", "votes", "extra")]
     public async Task BadArgumentsShowTheUsage(params string[] arguments)
     {
         var result = await RunAsync("auth0|owner", arguments);

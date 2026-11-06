@@ -143,6 +143,6 @@ public sealed partial class PostgresBillStreamTests
         var store = ActionStore();
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
         var runId = await ReserveAsync(store, claim);
-        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, revision), DraftedRun(runId, candidate), default));
+        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, revision, 0), DraftedRun(runId, candidate), default));
     }
 }
