@@ -7,7 +7,7 @@ The search service gives readers full-text search over every published record. I
 ## Decisions
 
 - The kind `executiveAction` indexes the saved Federal Register record as source text and has no summary text. Deploy the search service before the publisher. An older service refuses a release that holds the new kind.
-- The service is its own Web SDK project, `CivicLens.PublicApi`. It references `CivicLens.Publication.Contracts` and the Npgsql package only. It has no path to operational storage, credentials, job handlers, or unpublished evidence.
+- The service is its own Web SDK project, `CivicLens.PublicApi`. It references `CivicLens.Publication.Contracts`, `CivicLens.PublicWeb`, and the Npgsql package only. PublicWeb holds only public components, so the reference gives no path to operational storage. It has no path to operational storage, credentials, job handlers, or unpublished evidence.
 - The service has its own Postgres database, named by `CIVIC_LENS_SEARCH_DATABASE`. It connects to the operational database only through the role `civic_lens_public`, which reads `public_api` views and nothing else. The option `CIVIC_LENS_PUBLIC_VIEWS_DATABASE` names that connection. `/v1/release`, the vote routes, and the bill routes use it. See [public API views](publication.md#public-api-views). The tradeoff is that an operational database outage stops the live API, while the cached pages stay up.
 - The service reads the public release files over HTTP. The base address is `CIVIC_LENS_RELEASE_BASE_URL`. A dev or test server can serve the release root.
 - The ingest polls `release.json` every 30 seconds with a conditional GET. It sends the ETag and the Last-Modified time that the server gave. An unchanged manifest costs one empty reply.
@@ -168,6 +168,14 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - An active release with no name rows answers 503, so no seat reads as vacant by mistake. Enforced by `ZipDistrictStore`. Test: `ZipDistrictEndpointsTests.AnActiveReleaseWithNoNameRowsAnswers503SoNoSeatReadsAsVacantByMistake`.
 - A bad ZCTA or Congress gets 400, and a ZCTA with no row gets 404. Only an answer carries `Cache-Control`. Enforced by `ZipDistrictRequest` and `ZipDistrictEndpoints`. Tests: `ZipDistrictEndpointsTests.ABadZctaOrCongressIsRefusedWith400AsProblemJson`, `ZipDistrictEndpointsTests.AZctaWithNoRowAnswers404AsProblemJson`, `ZipDistrictEndpointsTests.AnAnswerCanBeCachedForOneHourAndAnErrorCarriesNoCacheHeader`.
 - The ZIP route counts against the global rate limit. Enforced by `PublicApiApp`. Test: `RateLimitTests.TheZipRouteCountsAgainstTheGlobalLimitLikeTheVoteRoutes`.
+- Every server page response carries the ETag `"r{release}-{build}"` and `Cache-Control: public, s-maxage=60, stale-while-revalidate=600, stale-if-error=86400`. The release is the active release of the view. Enforced by `PageCache`, which `ServerPageResponder` calls for every page. Tests: `ServerPageTests.AnUnknownServerPageAnswers404WithTheETagOfTheActiveReleaseAndBuild`, `ServerPageTests.TheETagChangesWithTheReleaseSoARollbackOrPublishReplacesTheCachedPage`, `ServerPageTests.EveryServerPageResponseCarriesTheSharedCacheControlValue`.
+- A request with the current ETag gets 304 with no body, and a stale ETag gets the page. Enforced by `PageCache.Apply` and `ServerPageResponder`. Test: `ServerPageTests.ARequestWithTheCurrentETagGets304WithNoBodyAndAStaleTagGetsThePage`.
+- With no active release a server page answers 503 with no ETag and no cache value. The edge never keeps the error as a page. Enforced by `ServerPageResponder`. Test: `ServerPageTests.WithNoActiveReleaseAServerPageAnswers503WithNoCacheValidator`.
+- A server page holds no reader data: it sets no cookie, does not vary by cookie, and ignores the query. Enforced by `PageCache` and by `ServerPageEndpoints`, which read no request value. Test: `ServerPageTests.ThePageHoldsNoReaderDataSoItSetsNoCookieAndDoesNotVaryByCookie`.
+- The server not found page is the static not found page plus the empty members strip, and nothing else. Enforced by `PublicPage` and `ServerPageEndpoints`. Test: `ServerPageTests.TheNotFoundPageIsTheStaticNotFoundPagePlusTheEmptyMembersStrip`.
+- The server page routes exist only when `CIVIC_LENS_PUBLIC_BASE_URL` is set. Enforced by `PublicApiApp`. Test: `ServerPageTests.WithNoPublicBaseUrlTheServerPageRouteDoesNotExist`.
+- The service serves every shared file at its release path with the saved bytes and a content ETag, and answers 304 for the same ETag. Enforced by `SharedAssetEndpoints`. Tests: `ServerPageTests.EverySharedFileIsServedAtItsReleasePathWithTheSavedBytesAndAContentETag`, `ServerPageTests.ASharedFileGets304WhenTheReaderHoldsTheSameBytes`.
+- The build ID is the SHA after the plus of the informational version, or `unversioned`, and always a valid ETag token. Enforced by `BuildId`. Test: `BuildIdTests`.
 
 ## Behavior
 
@@ -227,6 +235,14 @@ A result has the manifest entry fields, including `billLine` of an action, `firs
 | 429 | The client passed the rate limit. |
 | 503 | One of these cases. No release is active yet. A search, a vote, or a bill read ran over the timeout. Reports are not available. The Turnstile check is not available. The daily report cap is reached. The active release has no official names, as a release from before the name tables. |
 
+### Server pages
+
+The service renders public components to static HTML with `PageRenderer`, which wraps `HtmlRenderer`. A page has no interactivity, no SignalR, and no WebAssembly. `ServerPageResponder` is the pipeline of every server page. It reads the active release from `public_api.active_records` through `ActiveReleaseReader`, asks `PageCache` for the validators, answers 304 when the request holds the page, and renders otherwise. `PageCache` owns the cache rule. The ETag is `"r{release}-{build}"`. The build is the git SHA that `SourceRevisionId` bakes into the assembly (`BuildId`). A build without a SHA reads as `unversioned`. Every page response has `Cache-Control: public, s-maxage=60, stale-while-revalidate=600, stale-if-error=86400`. The edge revalidates with `If-None-Match`, and a 304 skips the render. A page holds nothing that depends on the reader: no cookie, no `Vary`, and no query value. The members strip is an empty slot, `MembersStripSlot`, which a later step fills in the browser from the ZIP on the device. `PublicPage` shows the slot only when the service registers `MembersStripSlot`, so the static release pages stay the same.
+
+The prefix of the server pages is `/web`. The route `/web/{**path}` answers every path with the not found page of PublicWeb and status 404, with the same cache headers. With no active release the route answers 503 with no validator. No live route moves yet, so the static pages stay the production path.
+
+`SharedAssetEndpoints` serves the shared files of `PublicAssets.Paths` at the paths of the static release, for example `/assets/css/app.css`. Each file has an ETag of its SHA-256 hash and the value `public, max-age=60` of the static release. No shared file has a hashed or versioned name, so none has a long cache value.
+
 ### Configuration
 
 | Variable | Meaning |
@@ -234,6 +250,7 @@ A result has the manifest entry fields, including `billLine` of an action, `firs
 | `CIVIC_LENS_RELEASE_BASE_URL` | Required. The address of the release root. |
 | `CIVIC_LENS_SEARCH_DATABASE` | Required. The Npgsql connection string of the search database. |
 | `CIVIC_LENS_PUBLIC_VIEWS_DATABASE` | Required. The Npgsql connection string of the operational database as the role `civic_lens_public`. The service sets the pool to 4 connections and closes idle connections after 30 seconds. |
+| `CIVIC_LENS_PUBLIC_BASE_URL` | Optional. The public origin of the site, the same variable as for publish. Without it, the server page routes do not exist. |
 | `CIVIC_LENS_TRUSTED_PROXY_RANGES` | Optional. Comma-separated CIDR ranges of Cloudflare. Empty means that the remote address names the client. |
 | `CIVIC_LENS_REQUESTS_PER_MINUTE` | Optional. The rate limit for each client, 1 or more. The default is 60. A lower value stops the service at startup. |
 | `CIVIC_LENS_REPORTS_PER_HOUR` | Optional. The report limit for each client, 1 or more. The default is 5. The state is in memory, so a restart resets it. |
@@ -278,6 +295,7 @@ The poll interval is 30 seconds and the statement timeout is 2 seconds. Both are
 | Schema | `src/CivicLens.PublicApi/Schema/SchemaMigrator.cs`, `src/CivicLens.PublicApi/Schema/SchemaStartup.cs`, `src/CivicLens.PublicApi/Schema/001_search_index.sql`, `src/CivicLens.PublicApi/Schema/003_drop_report_release_number.sql`, `src/CivicLens.PublicApi/Schema/004_record_bill_line.sql` |
 | Ingest | `src/CivicLens.PublicApi/Ingest/IngestWorker.cs`, `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs`, `src/CivicLens.PublicApi/Ingest/ReleaseFeed.cs`, `src/CivicLens.PublicApi/Ingest/RecordReader.cs`, `src/CivicLens.PublicApi/Ingest/IndexedRecord.cs`, `src/CivicLens.PublicApi/Ingest/IndexTransaction.cs`, `src/CivicLens.PublicApi/Ingest/IngestResult.cs` |
 | Search and API | `src/CivicLens.PublicApi/Search/SearchEndpoints.cs`, `src/CivicLens.PublicApi/Search/SearchRequest.cs`, `src/CivicLens.PublicApi/Search/SearchIndex.cs`, `src/CivicLens.PublicApi/Search/SearchCursor.cs`, `src/CivicLens.PublicApi/Search/SearchSortKey.cs`, `src/CivicLens.PublicApi/Search/RecordHit.cs`, `src/CivicLens.PublicApi/Search/SearchPage.cs`, `src/CivicLens.PublicApi/Search/ReleaseInfo.cs` |
+| Server pages | `src/CivicLens.PublicApi/Pages/ServerPageEndpoints.cs`, `src/CivicLens.PublicApi/Pages/ServerPageResponder.cs`, `src/CivicLens.PublicApi/Pages/PageCache.cs`, `src/CivicLens.PublicApi/Pages/PageRenderer.cs`, `src/CivicLens.PublicApi/Pages/BuildId.cs`, `src/CivicLens.PublicApi/Pages/SharedAssetEndpoints.cs`, `src/CivicLens.PublicWeb/Publication/MembersStripSlot.cs`, `src/CivicLens.PublicWeb/Publication/EmbeddedPublicAssets.cs` |
 | Active release | `src/CivicLens.PublicApi/ActiveRelease/ActiveReleaseReader.cs`, `src/CivicLens.PublicApi/ActiveRelease/ReleaseEndpoints.cs` |
 | Votes | `src/CivicLens.PublicApi/Votes/VoteEndpoints.cs`, `src/CivicLens.PublicApi/Votes/VoteRequest.cs`, `src/CivicLens.PublicApi/Votes/VoteCursor.cs`, `src/CivicLens.PublicApi/Votes/VoteStore.cs`, `src/CivicLens.PublicApi/Votes/VoteRow.cs`, `src/CivicLens.PublicApi/Votes/VotePage.cs`, `src/CivicLens.PublicApi/Votes/VoteDetail.cs`, `src/CivicLens.PublicApi/Votes/VoteMemberRequest.cs`, `src/CivicLens.PublicApi/Votes/VoteMemberCursor.cs`, `src/CivicLens.PublicApi/Votes/VoteMemberPage.cs`, `src/CivicLens.PublicApi/Votes/VoteMember.cs`, `src/CivicLens.PublicApi/Votes/MemberVoteEndpoints.cs`, `src/CivicLens.PublicApi/Votes/MemberVoteRequest.cs`, `src/CivicLens.PublicApi/Votes/MemberVoteStore.cs`, `src/CivicLens.PublicApi/Votes/MemberVoteAnswer.cs`, `src/CivicLens.PublicApi/Votes/MemberVote.cs` |
 | Bills | `src/CivicLens.PublicApi/Bills/BillEndpoints.cs`, `src/CivicLens.PublicApi/Bills/BillRequest.cs`, `src/CivicLens.PublicApi/Bills/SponsorshipRequest.cs`, `src/CivicLens.PublicApi/Bills/BillCursor.cs`, `src/CivicLens.PublicApi/Bills/SponsorshipCursor.cs`, `src/CivicLens.PublicApi/Bills/BillStore.cs`, `src/CivicLens.PublicApi/Bills/BillRow.cs`, `src/CivicLens.PublicApi/Bills/BillPage.cs`, `src/CivicLens.PublicApi/Bills/BillDetail.cs`, `src/CivicLens.PublicApi/Bills/SponsorshipRow.cs`, `src/CivicLens.PublicApi/Bills/SponsorshipPage.cs` |
@@ -296,6 +314,7 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 
 ## Limits and planned work
 
+- Server pages cover the not found page only. The page routes move one at a time (R-68). A shared file has no hashed name, so it has no long cache value yet.
 - `/v1/release` reads `public_api.active_records`. An active release that holds no record reads as no release and answers 503.
 - The ZIP lookup ends a term at the database date of the request. Official pages end it at the publish day of the release. On the day a term ends, the two can disagree until the next publish, which takes about one hour. The ZIP answer cache adds up to one hour. The owner accepted this.
 - A release from before the name tables has no name rows. The ZIP route answers 503 until the next publish writes them.

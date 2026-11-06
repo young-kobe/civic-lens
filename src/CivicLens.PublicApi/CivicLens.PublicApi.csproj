@@ -6,5 +6,6 @@
   <ItemGroup>
     <PackageReference Include="Npgsql" Version="10.0.3" />
     <ProjectReference Include="../CivicLens.Publication.Contracts/CivicLens.Publication.Contracts.csproj" />
+    <ProjectReference Include="../CivicLens.PublicWeb/CivicLens.PublicWeb.csproj" />
   </ItemGroup>
 </Project>
