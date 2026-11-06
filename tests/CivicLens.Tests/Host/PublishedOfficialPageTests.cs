@@ -899,6 +899,66 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal(["bills", "statements"], sponsor.QuerySelectorAll(".answer-section").Select(section => section.Id));
     }
 
+    private static ReleaseOfficialPage PageWithExecutiveActions(int count, params PublishedRecordEntry[] others)
+    {
+        var day = new DateOnly(2026, 1, 1);
+        var kinds = new[] { PublishedExecutiveActionKind.ExecutiveOrder, PublishedExecutiveActionKind.Proclamation };
+        var actions = Enumerable.Range(0, count).Select(index => Entry((char)('a' + index), PublishedRecordKind.ExecutiveAction, day.AddDays(index)) with { DocumentType = kinds[index % 2] });
+        return Current([.. actions, .. others], []);
+    }
+
+    [Fact]
+    public async Task AnExecutiveOfficialShowsTheNewestFiveExecutiveActionsWithTheirTypeAndALabeledCountThatLinksTheFullList()
+    {
+        var document = await OfficialDocumentAsync(PageWithExecutiveActions(7));
+
+        var section = document.QuerySelector("#executive-actions")!;
+        Assert.Equal("Executive actions", section.QuerySelector("h2")!.TextContent);
+        Assert.Equal(["Entry g", "Entry f", "Entry e", "Entry d", "Entry c"], section.QuerySelectorAll("tbody a.cell-title").Select(link => link.TextContent.Trim()));
+        Assert.Equal(["Executive order, 7 Jan 2026", "Proclamation, 6 Jan 2026", "Executive order, 5 Jan 2026", "Proclamation, 4 Jan 2026", "Executive order, 3 Jan 2026"],
+            section.QuerySelectorAll("tbody .record-kind").Select(line => line.TextContent.Trim()));
+        var seeAll = section.QuerySelector(".see-all a")!;
+        Assert.Equal(("See all 7 executive actions", "../officials/mayor/record.html"), (seeAll.TextContent, seeAll.GetAttribute("href")));
+        Assert.Contains(document.QuerySelectorAll("nav.jump-links a"), link => link.GetAttribute("href") == "#executive-actions");
+    }
+
+    [Fact]
+    public async Task TheExecutiveActionsSectionComesBeforeTheStatementsSectionWhichKeepsItsEmptyTextBecauseTheOfficialHasRecordsButNoStatements()
+    {
+        var document = await OfficialDocumentAsync(PageWithExecutiveActions(1));
+
+        Assert.Equal(["executive-actions", "statements"], document.QuerySelectorAll(".answer-section").Select(section => section.Id));
+        Assert.Equal("No statements on record.", document.QuerySelector("#statements > p")!.TextContent);
+    }
+
+    [Fact]
+    public async Task AnOfficialWithNoExecutiveActionHasNoExecutiveActionsSectionAndTheSeeAllLinkOpensATabTheRecordPageHas()
+    {
+        var plain = await OfficialDocumentAsync(Current([Entry('1', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1))], []));
+        var mixed = PageWithExecutiveActions(2, Entry('z', PublishedRecordKind.Statement, new DateOnly(2026, 3, 1)));
+        var record = await RecordDocumentAsync(mixed);
+        var wanted = (await OfficialDocumentAsync(mixed)).QuerySelector("#executive-actions .see-all a")!.GetAttribute("href")!.Split("tab=")[1];
+
+        Assert.Null(plain.QuerySelector("#executive-actions"));
+        var tabs = record.QuerySelectorAll("[data-record-filters] [data-filter-value]").Select(tab => tab.GetAttribute("data-filter-value"));
+        Assert.Contains(wanted, tabs);
+    }
+
+    [Fact]
+    public async Task ASeeAllLinkLeavesOutTheTabWhenTheRecordPageHasNoTabForItBecauseTheListHoldsOneKind()
+    {
+        var presidentOnly = PageWithExecutiveActions(2);
+        var billsOnly = Current([Entry('1', PublishedRecordKind.Action, new DateOnly(2026, 3, 1))], []);
+
+        foreach (var (page, section) in new[] { (presidentOnly, "executive-actions"), (billsOnly, "bills") })
+        {
+            var href = (await OfficialDocumentAsync(page)).QuerySelector($"#{section} .see-all a")!.GetAttribute("href");
+            var tabs = (await RecordDocumentAsync(page)).QuerySelectorAll("[data-record-filters] [data-filter-value]");
+            Assert.Equal("../officials/mayor/record.html", href);
+            Assert.Empty(tabs);
+        }
+    }
+
     [Fact]
     public async Task TheJumpRowLinksEachShownSectionByItsAnchorAndNoOtherSoNoLinkLeadsNowhere()
     {
