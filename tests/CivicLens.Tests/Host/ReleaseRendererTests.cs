@@ -2742,7 +2742,7 @@ public sealed class ReleaseRendererTests
             Assert.Equal("search.html", ReleasePath(pagePath, form.GetAttribute("action")!));
             Assert.Equal("q", form.QuerySelector("input[type='search']")!.GetAttribute("name"));
             Assert.Equal("Search bills, votes, people", form.QuerySelector("input")!.GetAttribute("placeholder"));
-            Assert.Equal("Search records", form.QuerySelector("label[for='site-search']")!.TextContent);
+            Assert.Equal("Search the site", form.QuerySelector("label[for='site-search']")!.TextContent);
         }
     }
 

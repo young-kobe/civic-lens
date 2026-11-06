@@ -244,12 +244,15 @@
             return message;
         };
         const look = async zip => {
+            let answer;
             try {
                 const response = await fetch(`${api}/v1/zip-districts/${zip}`);
-                if (!response.ok) { showProblem(failure(zip, response.status)); return; }
-                showAnswer(await response.json());
+                if (!response.ok) { showProblem(failure(zip, response.status)); return false; }
+                answer = await response.json();
             }
-            catch { showProblem(failure(zip, 0)); }
+            catch { showProblem(failure(zip, 0)); return false; }
+            showAnswer(answer);
+            return true;
         };
         form.addEventListener("submit", async event => {
             event.preventDefault();
@@ -259,9 +262,10 @@
             submit.disabled = true;
             body.setAttribute("aria-busy", "true");
             show([element("p", "Looking up your officials.")]);
-            await look(zip);
+            const found = await look(zip);
             body.removeAttribute("aria-busy");
             submit.disabled = false;
+            if (!found) input.focus();
         });
         form.hidden = false;
     };
