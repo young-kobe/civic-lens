@@ -1720,4 +1720,19 @@ public sealed class PublishedOfficialPageTests
         Kind = PublishedVoteKind.Passage,
         IssueIds = []
     };
+
+    [Fact]
+    public async Task TheOfficesNoteHasPanelPaddingAndTheHeroCreditGetsTheFullRowOnNarrowScreensSoNeitherTouchesAnEdge()
+    {
+        var page = Current([], []) with { Profile = Profile("sen", "Sam Sen", Term("sen", "MA", "Democratic")) };
+        var renderer = new ReleaseRenderer(null, null);
+
+        var note = (await OfficialDocumentAsync(page)).QuerySelector("main section:has(table) > p")!;
+        var css = System.Text.Encoding.UTF8.GetString(renderer.Assets.Single(asset => asset.RelativePath == "assets/css/public.css").Content);
+
+        Assert.Contains("panel-note", note.ClassList);
+        Assert.Contains(".public .panel > .panel-note { margin: 0; padding: var(--s3) var(--s4) var(--s4); }", css, StringComparison.Ordinal);
+        Assert.Contains(".official-hero .page-header-portrait { flex-basis: 100%; }", css, StringComparison.Ordinal);
+        Assert.Contains(".official-hero .portrait { width: auto; }", css, StringComparison.Ordinal);
+    }
 }

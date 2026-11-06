@@ -226,11 +226,28 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         var panel = document.QuerySelector("[data-report-missing]")!;
 
-        Assert.Equal("Choose the record first", panel.QuerySelector("h3")!.TextContent);
-        Assert.Contains($"use the link \"{PublishedRecordLabels.ReportRecordLink}\"", panel.TextContent, StringComparison.Ordinal);
+        Assert.Equal("Find the record first", panel.QuerySelector("h3")!.TextContent);
+        Assert.Equal([PublicationProtocol.SearchPagePath, PublicationProtocol.OfficialsPagePath], panel.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
+        Assert.Contains($"has the link \"{PublishedRecordLabels.ReportRecordLink}\"", panel.TextContent, StringComparison.Ordinal);
         Assert.Equal($"mailto:{PublishedRecordLabels.ContactEmail}", document.QuerySelector("main a[href^='mailto:']")!.GetAttribute("href"));
         AssertMailtoPanelIsAlwaysShown(document);
         AssertMailtoPanelIsAlwaysShown(new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderReportAsync(CancellationToken.None)));
+    }
+
+    [Fact]
+    public async Task TheReportPageShowsTheNoScriptMessageOnlyInsideNoScriptAndNamesTheRecordFromTheScript()
+    {
+        var html = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);
+
+        var start = html.IndexOf("<noscript>", StringComparison.Ordinal);
+        var end = html.IndexOf("</noscript>", StringComparison.Ordinal);
+        var message = html.IndexOf("needs JavaScript", StringComparison.Ordinal);
+        Assert.InRange(message, start + 1, end);
+        Assert.Equal(message, html.LastIndexOf("needs JavaScript", StringComparison.Ordinal));
+        var form = new HtmlParser().ParseDocument(html).QuerySelector("[data-report-form-panel]")!;
+        Assert.NotNull(form.QuerySelector("[data-report-subject]"));
+        var script = System.Text.Encoding.UTF8.GetString(new ReleaseRenderer(null, null).Assets.Single(asset => asset.RelativePath == "assets/js/public.js").Content);
+        Assert.Contains("[data-report-subject]\").textContent = `You are reporting the record with ID ${recordId}, version ${revision}.`", script, StringComparison.Ordinal);
     }
 
     private static void AssertMailtoPanelIsAlwaysShown(AngleSharp.Dom.IDocument document)

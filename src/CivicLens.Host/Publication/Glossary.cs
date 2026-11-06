@@ -5,6 +5,10 @@ public static class Glossary
 {
     public const string BillsAndCongress = "Bills and Congress";
 
+    public const string IndexLabel = "Terms in the glossary";
+
+    public const string PartyCountAnchorId = "glossary-party-count";
+
     public static readonly IReadOnlyList<GlossaryGroup> Groups =
     [
         new("How members vote",

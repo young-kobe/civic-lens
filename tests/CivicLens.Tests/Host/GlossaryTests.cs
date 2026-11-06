@@ -52,6 +52,23 @@ public sealed class GlossaryTests
     }
 
     [Fact]
+    public async Task TheGlossaryPageStartsWithAnIndexThatLinksEveryGroupAndTermToItsAnchor()
+    {
+        var document = new HtmlParser().ParseDocument(await Renderer.RenderGlossaryAsync(CancellationToken.None));
+        var main = document.QuerySelector("main")!;
+        var index = main.QuerySelector($"nav[aria-label='{Glossary.IndexLabel}']")!;
+
+        var expected = Glossary.Groups.Select(group => group.AnchorId)
+            .Concat(AllTerms.Select(term => term.AnchorId))
+            .Append(Glossary.PartyCountAnchorId);
+        var links = index.QuerySelectorAll("a").ToList();
+
+        Assert.Equal(expected.Order(), links.Select(link => link.GetAttribute("href")!.TrimStart('#')).Order());
+        Assert.All(links, link => Assert.NotNull(main.QuerySelector($"[id='{link.GetAttribute("href")!.TrimStart('#')}']")));
+        Assert.True(index.CompareDocumentPosition(main.QuerySelector("section.glossary-term")!).HasFlag(AngleSharp.Dom.DocumentPositions.Following));
+    }
+
+    [Fact]
     public async Task ATermIsAPopoverOnItsFirstUseOnlyAndPlainTextAfterThat()
     {
         var document = new HtmlParser().ParseDocument(await Renderer.RenderMethodAsync(CancellationToken.None));

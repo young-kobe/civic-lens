@@ -14,6 +14,7 @@
     else
     {
         <Panel Label="Report form" Padded="true" hidden data-report-form-panel>
+            <p class="report-subject" data-report-subject></p>
             <form class="form" data-report-api="@(PublicApiUrl + ReaderReportProtocol.SubmitPath)" data-record-page="@PublicationProtocol.RecordPagePath("{id}")">
                 <input type="hidden" name="@ReaderReportProtocol.RecordIdField" data-report-query />
                 <input type="hidden" name="@ReaderReportProtocol.RevisionField" data-report-query />
@@ -36,15 +37,22 @@
         </Panel>
         <div role="status" tabindex="-1" data-report-result></div>
         <div role="alert" tabindex="-1" data-report-failure></div>
-        <Panel Label="Choose the record first" Padded="true" hidden data-report-missing>
-            <EmptyState Title="Choose the record first"
-                        Text="@($"To report a record, open its page and use the link \"{PublishedRecordLabels.ReportRecordLink}\". This page needs that link to know which record you mean.")">
-                <Action><Button Href="@PublicationProtocol.AllRecordsPagePath(1)">All records</Button></Action>
+        <Panel Label="Find the record first" Padded="true" hidden data-report-missing>
+            <EmptyState Title="Find the record first"
+                        Text="@($"To report a record, open the record. Each record page has the link \"{PublishedRecordLabels.ReportRecordLink}\" below the record. Use that link to come back here. Search for a record, or start with an official.")">
+                <Action>
+                    <Button Href="@PublicationProtocol.SearchPagePath">Search records</Button>
+                    <Button Href="@PublicationProtocol.OfficialsPagePath">Officials</Button>
+                </Action>
             </EmptyState>
         </Panel>
         <Panel Title="About reports" Padded="true">
             <p>A report stores the record, the category, and your text. It stores nothing about you. A person reads it and decides whether to change the record.</p>
-            <p>This page needs JavaScript to run the check that you are not a robot. Without JavaScript, you cannot send a report here.</p>
+            <noscript>
+                <div class="notice notice-warn">
+                    <span>This page needs JavaScript to run the check that you are not a robot. Without JavaScript, you cannot send a report here.</span>
+                </div>
+            </noscript>
             <p><a data-report-record href="@PublicationProtocol.AllRecordsPagePath(1)">All records</a></p>
         </Panel>
     }

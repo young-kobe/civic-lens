@@ -146,6 +146,7 @@
         const validRecord = /^([0-9a-f]{32}|[0-9a-f]{64})$/.test(recordId) && /^[0-9]+$/.test(revision)
             && Number(revision) >= 1 && Number(revision) <= 2147483647;
         if (!validRecord) { document.querySelector("[data-report-missing]").hidden = false; return; }
+        document.querySelector("[data-report-subject]").textContent = `You are reporting the record with ID ${recordId}, version ${revision}.`;
         const back = document.querySelector("[data-report-record]");
         back.href = form.dataset.recordPage.replace("{id}", recordId);
         back.textContent = "Back to the record";

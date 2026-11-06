@@ -149,6 +149,8 @@ table[data-paged]:focus { outline: none; }
 .portrait-placeholder * { fill: var(--line-strong); }
 .portrait figcaption { color: var(--muted); font-size: var(--t-xs); }
 
+.public .panel > .panel-note { margin: 0; padding: var(--s3) var(--s4) var(--s4); }
+.report-subject { margin: 0; overflow-wrap: anywhere; }
 .portrait-compact { flex: none; width: 64px; }
 .portrait-compact img, .portrait-compact .portrait-placeholder { border-radius: var(--r-control); }
 
@@ -187,12 +189,19 @@ table[data-paged]:focus { outline: none; }
 @supports not selector(:popover-open) { .term-popover { display: none; } .term { border-bottom: 0; cursor: text; } }
 .term-popover:popover-open { display: grid; gap: var(--s2); }
 .term-means { font-weight: 600; }
+.glossary-index h3 { margin: var(--s4) 0 0; font-size: var(--t-sm); }
+.glossary-index h3:first-child { margin-top: 0; }
+.glossary-index-terms { display: flex; flex-wrap: wrap; gap: 0 var(--s4); margin: var(--s1) 0 0; padding: 0; list-style: none; }
+.glossary-index-terms a { display: inline-block; padding-block: var(--s1); font-size: var(--t-sm); }
 .glossary-term + .glossary-term { margin-top: var(--s5); }
 .glossary-term h3 { margin: 0 0 var(--s2); }
 .glossary-term dt { color: var(--muted); font-size: var(--t-xs); font-weight: 600; }
 .glossary-term dd { margin: 0 0 var(--s2); }
 
 @media (max-width: 760px) {
+    .official-hero .page-header-portrait { flex-basis: 100%; }
+    .official-hero .portrait { width: auto; }
+    .official-hero .portrait img, .official-hero .portrait-placeholder { width: 132px; }
     .officials { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .official-card { flex-direction: column; align-items: flex-start; }
     .public-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand tools" "nav nav" "search search"; gap: 0 var(--s3); padding-block: 10px 14px; }
