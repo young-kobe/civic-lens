@@ -39,7 +39,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         var response = await host.Client.GetAsync(UnknownPage);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        Assert.Equal($"\"r7-{BuildId.FromAssembly(typeof(PublicApiApp).Assembly)}\"", response.Headers.ETag!.Tag);
+        Assert.Matches($"^\"r7-{BuildId.FromAssembly(typeof(PublicApiApp).Assembly)}-[0-9a-f]{{64}}\"$", response.Headers.ETag!.Tag);
         Assert.Equal("text/html; charset=utf-8", response.Content.Headers.ContentType!.ToString());
     }
 
@@ -95,7 +95,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
         await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsReaderDatabase);
         await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
-        var cache = new PageCache(TestCodeVersion.Sha);
+        var cache = new PageCache(TestCodeVersion.Sha, BaseUrl);
         var responder = new ServerPageResponder(new ActiveReleaseReader(views), cache, new PageRenderer(services, services.GetRequiredService<ILoggerFactory>()));
         foreach (var tag in new[] { cache.ETag(3).ToString(), "W/" + cache.ETag(3), "*", "\"old\", W/" + cache.ETag(3) })
         {
@@ -116,7 +116,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
         await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsReaderDatabase);
         await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
-        var responder = new ServerPageResponder(new ActiveReleaseReader(views), new PageCache(TestCodeVersion.Sha),
+        var responder = new ServerPageResponder(new ActiveReleaseReader(views), new PageCache(TestCodeVersion.Sha, BaseUrl),
             new PageRenderer(services, services.GetRequiredService<ILoggerFactory>()));
         var context = new DefaultHttpContext();
         context.Request.Headers.IfNoneMatch = "\"stale\"";
