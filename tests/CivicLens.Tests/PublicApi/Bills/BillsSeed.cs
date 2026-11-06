@@ -4,6 +4,9 @@ using CivicLens.Tests.PublicApi.Votes;
 
 namespace CivicLens.Tests.PublicApi.Bills;
 
+/// <summary>The bill text version that a text summary cites, and the characters of it that the model read.</summary>
+internal sealed record SeededBillText(int CharsRead, int CharsTotal);
+
 internal sealed record SeededSponsorship(string Person, string Role, string SponsoredOn, string? WithdrawnOn = null, bool IsOriginal = true);
 
 /// <summary>A published bill as the operational tables hold it. The public views read these rows.</summary>
@@ -21,6 +24,7 @@ internal sealed record SeededBill(char Id, string EventOn)
     public int? LastRelease { get; init; }
     public string RecordKind { get; init; } = "action";
     public string? BillLine { get; init; }
+    public SeededBillText? Text { get; init; }
 
     public string RecordId { get; init; } = new(Id, 64);
 }
@@ -37,6 +41,18 @@ internal static class BillsSeed
           VALUES ('action', '{bill.RecordId}', 1, '{bill.RecordId}', 1, 'H', 'T', '{bill.BillLine}');
         """;
 
+    private static string TextRows(SeededBill bill)
+    {
+        if (bill.Text is null) return "";
+        var package = $"BILLS-{bill.Congress}{bill.BillType}{bill.BillNumber}ih";
+        return $"""
+            INSERT INTO bill_text_versions (congress, bill_type, bill_number, package_id, version_type, version_date, source_url, extraction_id, chars_total, chars_read)
+              VALUES ({bill.Congress}, '{bill.BillType}', {bill.BillNumber}, '{package}', 'Introduced in House', '2025-01-03',
+                      'https://www.congress.gov/{bill.Congress}/bills/{bill.BillType}{bill.BillNumber}/{package}.htm', 'x', {bill.Text.CharsTotal}, {bill.Text.CharsRead});
+            UPDATE action_revisions SET text_package_id = '{package}', why_it_matters = 'It pays landlords.' WHERE record_id = '{bill.RecordId}';
+            """;
+    }
+
     private static string Insert(SeededBill bill)
     {
         var last = bill.LastRelease?.ToString(CultureInfo.InvariantCulture) ?? "NULL";
@@ -50,6 +66,7 @@ internal static class BillsSeed
                 bill.RecordId, 1, position, item.Person, item.Role, item.IsOriginal, item.SponsoredOn, item.WithdrawnOn)))}
             {string.Join('\n', bill.Issues.Select((issue, position) => PublicActionRows.ActionIssue(bill.RecordId, 1, issue, position, true)))}
             {EntryRow(bill)}
+            {TextRows(bill)}
             {string.Join('\n', bill.UntrackedIssues.Select((issue, position) => PublicActionRows.ActionIssue(bill.RecordId, 1, issue, bill.Issues.Length + position, false)))}
             """;
     }

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
 
@@ -129,6 +130,27 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
         Assert.Equal("2026-03-02", bill.GetProperty("eventDate").GetString());
         Assert.Equal(1, bill.GetProperty("sponsorCount").GetInt32());
         Assert.Equal(4, bill.GetProperty("cosponsorCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task ABillThatCitesBillTextShowsItsTextLabelWhyItMattersAndVersionCountsAndOtherBillsShowNullBecauseOnlyATextSummaryHasThem()
+    {
+        var text = new SeededBill('d', "2026-03-01") { Text = new SeededBillText(59_987, 85_000) };
+        await using var host = await StartWithBillsAsync(text, B);
+
+        using var page = await GetAsync(host, "/v1/bills");
+        using var detail = await GetAsync(host, $"/v1/bills/{text.RecordId}");
+
+        var bills = page.RootElement.GetProperty("bills").EnumerateArray().ToDictionary(bill => bill.GetProperty("recordId").GetString()![0]);
+        var withText = detail.RootElement.GetProperty("bill");
+        Assert.Equal(BillTextWords.Label, withText.GetProperty("label").GetString());
+        Assert.Equal("It pays landlords.", withText.GetProperty("whyItMatters").GetString());
+        Assert.Equal("Introduced in House", withText.GetProperty("textVersionName").GetString());
+        Assert.Equal("2025-01-03", withText.GetProperty("textVersionDate").GetString());
+        Assert.Equal((59_987, 85_000), (withText.GetProperty("textCharsRead").GetInt32(), withText.GetProperty("textCharsTotal").GetInt32()));
+        Assert.Equal("It pays landlords.", bills['d'].GetProperty("whyItMatters").GetString());
+        foreach (var name in new[] { "whyItMatters", "textVersionName", "textVersionDate", "textCharsRead", "textCharsTotal" })
+            Assert.Equal(JsonValueKind.Null, bills['b'].GetProperty(name).ValueKind);
     }
 
     [Fact]

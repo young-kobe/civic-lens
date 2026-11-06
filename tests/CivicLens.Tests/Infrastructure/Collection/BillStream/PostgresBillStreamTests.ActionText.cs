@@ -71,16 +71,32 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task ACodeApprovalIsNeverGivenToATextDraftSoItWaitsForAPersonWithTheReasonKeptBecauseThePublishStepOwnsItsCitations()
+    public async Task CodeApprovesATextDraftInTheSameTransactionAfterItsChecksPassSoItIsReadyToPublish()
     {
         var candidate = await ReadableCandidateAsync("A000001", withSummary: false);
         var stored = await StoreBillTextAsync(candidate, ActionBillTexts.Body);
 
         await SettleTextRevisionAsync(candidate, TextRevision(candidate, stored));
 
+        Assert.Equal("Approved", await ScalarAsync("SELECT review_status FROM action_drafts"));
+        Assert.Equal("civic-lens:code", await ScalarAsync("SELECT actor_subject FROM action_review_decisions"));
+        Assert.Null(await ScalarAsync("SELECT held_reason FROM action_drafts"));
+    }
+
+    [Fact]
+    public async Task ATextDraftAboveTheGradeLimitWaitsForAPersonWithTheReasonKeptBecauseCodeApprovesOnlyReadableText()
+    {
+        var candidate = await ReadableCandidateAsync("A000001", withSummary: false);
+        var stored = await StoreBillTextAsync(candidate, ActionBillTexts.Body);
+        var hard = "Comprehensive reauthorization notwithstanding administrative reconsideration necessitates multidimensional intergovernmental accountability.";
+        var revision = TextRevision(candidate, stored);
+        var citations = revision.TextCitations.SetItem(0, revision.TextCitations[0] with { Sentence = hard });
+
+        await SettleTextRevisionAsync(candidate, revision with { TextCitations = citations, Summary = ActionTextCitation.Join(citations.Where(item => item.Part == ActionTextPart.Summary)) });
+
         Assert.Equal("AwaitingReview", await ScalarAsync("SELECT review_status FROM action_drafts"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_review_decisions"));
-        Assert.Contains("waits for the publish step", (string)(await ScalarAsync("SELECT held_reason FROM action_drafts"))!, StringComparison.Ordinal);
+        Assert.Contains("read at grade", (string)(await ScalarAsync("SELECT held_reason FROM action_drafts"))!, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -9,7 +9,7 @@ internal sealed class PublishedActionBuilder(PublishedRecordRules rules)
 {
     public PublishedAction Build(PublishableAction action, DateTimeOffset? firstPublishedAtUtc, PublishedCorrection[] corrections, DateTimeOffset now)
     {
-        var (review, extractions) = action;
+        var (review, extractions, textVersion) = action;
         var revision = review.CurrentRevision;
         PublishedCitation Cite(SourceSpan span) => PublishedRecordRules.Cite(span, extractions[span.ExtractionId]);
 
@@ -30,6 +30,7 @@ internal sealed class PublishedActionBuilder(PublishedRecordRules rules)
             TrackedIssueIds = [.. revision.TrackedIssueIds],
             SummaryCitation = revision.SummaryCitation is { } summary ? Cite(summary) : null,
             BillCitation = revision.BillCitation is { } bill ? Cite(bill) : null,
+            BillText = BillTextOf(revision, textVersion, Cite),
             Sponsorships = [.. revision.Sponsorships.Select(sponsorship => new PublishedSponsorship
             {
                 Official = rules.MapOfficial(review.RecordId, sponsorship.PersonId),
@@ -46,6 +47,26 @@ internal sealed class PublishedActionBuilder(PublishedRecordRules rules)
         };
         record.Validate();
         return record;
+    }
+
+    private static PublishedBillText? BillTextOf(ActionDraftRevision revision, ActionTextVersion? version, Func<SourceSpan, PublishedCitation> cite)
+    {
+        if (revision.TextPackageId is null) return null;
+        if (version?.PackageId != revision.TextPackageId)
+            throw new InvalidOperationException("A text draft is published with the stored bill text version that it cites.");
+        return new PublishedBillText
+        {
+            VersionName = version.VersionType,
+            VersionDate = version.VersionDate,
+            CharsRead = version.CharsRead,
+            CharsTotal = version.CharsTotal,
+            Sentences = [.. revision.TextCitations.Select(item => new PublishedTextSentence
+            {
+                Part = item.Part == ActionTextPart.Summary ? PublishedTextPart.Summary : PublishedTextPart.WhyItMatters,
+                Sentence = item.Sentence,
+                Citation = cite(item.Span)
+            })]
+        };
     }
 
     private static PublishedSponsorshipRole RoleOf(ActionSponsorshipRole role) => role switch

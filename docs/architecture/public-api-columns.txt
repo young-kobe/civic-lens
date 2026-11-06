@@ -33,7 +33,12 @@ bills release_number
 bills revision_number
 bills sponsor_count
 bills summary
+bills text_chars_read
+bills text_chars_total
 bills text_origin
+bills text_version_date
+bills text_version_name
+bills why_it_matters
 member_votes official_id
 member_votes record_id
 member_votes chamber

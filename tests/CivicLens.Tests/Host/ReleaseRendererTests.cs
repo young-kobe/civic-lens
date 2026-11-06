@@ -3291,6 +3291,90 @@ public sealed class ReleaseRendererTests
         FirstPublishedAtUtc = new DateTimeOffset(2026, 10, 7, 8, 0, 0, TimeSpan.Zero)
     };
 
+    [Fact]
+    public async Task ABillTextSummaryShowsItsLabelSentencesQuotesSourceLineAndCutNoteWithEachQuoteLinkedToItsMarkInTheText()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(TextAction(), null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var document = new HtmlParser().ParseDocument(html);
+        var panel = document.QuerySelector("[aria-labelledby='bill-text-title']")!;
+        Assert.Equal("Summary of the bill text", panel.QuerySelector("h2")!.TextContent);
+        Assert.Equal(BillTextWords.Label, panel.QuerySelector("p.muted")!.TextContent);
+        Assert.Equal(["The bill pays landlords for tenants.", "A tenant needs a low income.", "Aid stops in 2030."],
+            panel.QuerySelectorAll("p.record-body").Select(item => item.TextContent));
+        Assert.Equal(BillTextWords.WhyItMattersHeading, panel.QuerySelector("h3")!.TextContent);
+        Assert.Equal(["Based on: Introduced in House, 3 Jan 2026. Read the full text on Congress.gov.",
+                "This summary covers the first 59,987 of 85,000 characters. Later sections are not covered."],
+            panel.QuerySelectorAll("p.muted").Skip(1).Select(item => item.TextContent));
+        var quotes = panel.QuerySelectorAll("blockquote.quote").Select(item => item.TextContent).ToArray();
+        Assert.Equal(["pay landlords on behalf of tenants", "household income is under 50 percent", "program ends on December 31, 2030"], quotes);
+        var links = panel.QuerySelectorAll("a[href^='#cite-']").ToArray();
+        Assert.Equal(quotes, links.Select(link => document.QuerySelector(link.GetAttribute("href")!)!.TextContent));
+        Assert.Contains(BillTextWords.Label, document.QuerySelector("dl")!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain(PublishedRecordLabels.ModelWording, html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABillTextSummaryReadInFullHasNoCutNoteAndAPersonWrittenOneShowsNoLabelAndNoWhyItMattersBecauseOnlyModelWordingCarriesThem()
+    {
+        var full = TextAction();
+        var whole = full with { BillText = full.BillText! with { CharsRead = 40_000, CharsTotal = 40_000 } };
+        var person = full with { TextOrigin = PublishedTextOrigin.Person };
+
+        var wholeHtml = await new ReleaseRenderer(null, null).RenderActionAsync(whole, null, [], PublicationCatalogs.None, CancellationToken.None);
+        var personHtml = await new ReleaseRenderer(null, null).RenderActionAsync(person, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.DoesNotContain("Later sections are not covered", wholeHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("AI summary", personHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain(BillTextWords.WhyItMattersHeading, personHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Aid stops in 2030.", personHtml, StringComparison.Ordinal);
+        Assert.Contains("pay landlords on behalf of tenants", personHtml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABillWithACrsSummaryShowsNoBillTextPanel()
+    {
+        var html = await new ReleaseRenderer(null, null).RenderActionAsync(Action(), null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        Assert.DoesNotContain("bill-text-title", html, StringComparison.Ordinal);
+    }
+
+    private static PublishedAction TextAction()
+    {
+        const string body = "Package: BILLS-119hr7ih\nText:\nSection 2. The Secretary shall pay landlords on behalf of tenants. A household income is under 50 percent of the median. The program ends on December 31, 2030.";
+        var id = new string('3', 64);
+        PublishedTextSentence Sentence(PublishedTextPart part, string sentence, string quote) => new()
+        {
+            Part = part,
+            Sentence = sentence,
+            Citation = new() { ExtractionId = id, Start = body.IndexOf(quote, StringComparison.Ordinal), Length = quote.Length, Quote = quote }
+        };
+        var action = Action();
+        return action with
+        {
+            SummaryCitation = null,
+            Summary = "The bill pays landlords for tenants. A tenant needs a low income.",
+            BillText = new PublishedBillText
+            {
+                VersionName = "Introduced in House",
+                VersionDate = new DateOnly(2026, 1, 3),
+                CharsRead = 59_987,
+                CharsTotal = 85_000,
+                Sentences =
+                [
+                    Sentence(PublishedTextPart.Summary, "The bill pays landlords for tenants.", "pay landlords on behalf of tenants"),
+                    Sentence(PublishedTextPart.Summary, "A tenant needs a low income.", "household income is under 50 percent"),
+                    Sentence(PublishedTextPart.WhyItMatters, "Aid stops in 2030.", "program ends on December 31, 2030")
+                ]
+            },
+            Sources =
+            [
+                .. action.Sources.Take(2),
+                new PublishedDocumentVersion { ExtractionId = id, Url = "https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm", ObservedAtUtc = new DateTimeOffset(2026, 1, 21, 9, 0, 0, TimeSpan.Zero), Text = body }
+            ]
+        };
+    }
+
     private static PublishedAction Action()
     {
         const string detail = "Sponsor: D000001\nPolicy area: Housing and Community Development\nSummary version: 00 <i>funds</i> rent aid.\n";

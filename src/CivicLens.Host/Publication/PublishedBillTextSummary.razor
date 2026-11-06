@@ -1,0 +1,38 @@
+@using CivicLens.Publication.Contracts
+
+@* Shows the AI summary of a bill text with its supporting quotes. The words come from BillTextWords. Model wording shows only under the origin Model, with its label. *@
+<Panel Title="Summary of the bill text" Id="bill-text-title" Padded="true">
+    @if (IsModelText)
+    {
+        <p class="muted small">@BillTextWords.Label</p>
+    }
+    @SentenceList(PublishedTextPart.Summary)
+    @if (IsModelText)
+    {
+        <h3>@BillTextWords.WhyItMattersHeading</h3>
+        @SentenceList(PublishedTextPart.WhyItMatters)
+    }
+    <p class="muted small">@BillTextWords.SourceLine(BillText.VersionName, BillText.VersionDate is { } date ? Moment.Day(date) : null)</p>
+    @if (BillTextWords.CutNote(BillText.CharsRead, BillText.CharsTotal) is { } cutNote)
+    {
+        <p class="muted small">@cutNote</p>
+    }
+</Panel>
+
+@code {
+    [Parameter, EditorRequired] public PublishedAction Record { get; set; } = default!;
+
+    private PublishedBillText BillText => Record.BillText!;
+
+    private bool IsModelText => Record.TextOrigin == PublishedTextOrigin.Model;
+
+    private RenderFragment SentenceList(PublishedTextPart part) => @<div>
+        @foreach (var item in BillText.In(part))
+        {
+            <p class="record-body">@item.Sentence</p>
+            <CitationQuote Label="Quote that supports the sentence" Quote="@item.Citation.Quote">
+                <SourceLineLink Anchor="@PublishedActionView.CitationAnchorOf(Record, item.Citation)" Target="Bill text" />
+            </CitationQuote>
+        }
+    </div>;
+}
