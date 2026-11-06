@@ -3,7 +3,7 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 /// <summary>
-/// A range that needs the backfill while it reads the kept folders: it has no row, or its action row has no bill line. The first reason that blocks
+/// A range that needs the backfill while it reads the kept folders: it has no row, or lacks its bill line or statement approver. The first reason that blocks
 /// the range stays. The bill line is the one that every kept folder of the range agrees on. A folder from before the line has none.
 /// </summary>
 internal sealed class PendingPublishedEntry(PublishedEntryCandidate candidate)
@@ -17,6 +17,8 @@ internal sealed class PendingPublishedEntry(PublishedEntryCandidate candidate)
     public string? BillLine { get; private set; }
 
     public bool HasRow { get; set; }
+
+    public bool ApproverFilled { get; set; }
 
     public bool WritesRow => !Candidate.HasEntry;
 

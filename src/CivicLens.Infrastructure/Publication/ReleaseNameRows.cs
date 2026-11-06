@@ -2,6 +2,7 @@ using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication.Persistence;
 using CivicLens.Publication.Contracts;
+using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Publication;
 
@@ -18,7 +19,8 @@ internal static class ReleaseNameRows
                 OfficialId = official.Id,
                 Name = official.Name,
                 WikidataId = official.WikidataId,
-                Website = official.Website
+                Website = official.Website,
+                PhotoPath = official.Photo?.Path
             });
             db.AddRange(official.Terms.Select((term, position) => TermRow(releaseNumber, official.Id, (short)position, term)));
         }
@@ -26,6 +28,14 @@ internal static class ReleaseNameRows
         db.AddRange(names.Facets.PolicyAreas.Select(area =>
             new ReleasePolicyAreaRow { ReleaseNumber = releaseNumber, PolicyAreaId = area.Id, Name = area.Name }));
     }
+
+    /// <summary>Fills the photo path of rows that hold none. A written path never changes, because the release is immutable.</summary>
+    public static Task<int> FillPhotoPathsAsync(CollectionAttemptDbContext db, int releaseNumber, IReadOnlyDictionary<string, string> photoPaths,
+        CancellationToken cancellationToken) => photoPaths.Count == 0 ? Task.FromResult(0) : db.Database.ExecuteSqlRawAsync("""
+            UPDATE release_officials o SET photo_path = k.photo_path
+            FROM unnest({1}::text[], {2}::text[]) AS k(official_id, photo_path)
+            WHERE o.release_number = {0} AND o.official_id = k.official_id AND o.photo_path IS NULL
+            """, [releaseNumber, photoPaths.Keys.ToArray(), photoPaths.Values.ToArray()], cancellationToken);
 
     private static void AddIssue(CollectionAttemptDbContext db, int releaseNumber, ReleaseFacet issue)
     {

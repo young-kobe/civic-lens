@@ -1,0 +1,107 @@
+@using Microsoft.Extensions.DependencyInjection
+@using CivicLens.Publication.Contracts
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>@documentTitle</title>
+    <meta name="description" content="@description" />
+    <meta property="og:title" content="@documentTitle" />
+    <meta property="og:description" content="@description" />
+    <meta property="og:type" content="@(IsArticle ? "article" : "website")" />
+    <meta property="og:site_name" content="@PublicHead.SiteName" />
+    @if (canonicalUrl is not null)
+    {
+        <link rel="canonical" href="@canonicalUrl" />
+        <meta property="og:url" content="@canonicalUrl" />
+    }
+    @if (NoIndex)
+    {
+        <meta name="robots" content="noindex" />
+    }
+    <link rel="icon" type="image/svg+xml" href="@(RootPath + PublicAssets.Favicon)" />
+    <link rel="preload" href="@(RootPath + PublicAssets.SchibstedGroteskFont)" as="font" type="font/woff2" crossorigin />
+    @if (UsesRecordFont)
+    {
+        <link rel="preload" href="@(RootPath + PublicAssets.NewsreaderFont)" as="font" type="font/woff2" crossorigin />
+    }
+    @foreach (var stylesheet in PublicAssets.Stylesheets)
+    {
+        <link rel="stylesheet" href="@(RootPath + stylesheet)" />
+    }
+    <script src="@(RootPath + PublicAssets.ThemeScript)"></script>
+    <script src="@(RootPath + PublicAssets.Script)" defer></script>
+    <script src="@(RootPath + PublicAssets.PublicScript)" defer></script>
+    @if (ExternalScript is not null)
+    {
+        <script src="@ExternalScript" async defer></script>
+    }
+</head>
+<body class="public">
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="public-header">
+        <a class="public-brand" href="@(RootPath + PublicationProtocol.HomePath)"><BrandMark />Civic Lens</a>
+        <nav class="public-nav" aria-label="Site">@NavLinks(PublicSections.Header)</nav>
+        <form class="public-search" role="search" action="@(RootPath + PublicationProtocol.SearchPagePath)" method="get">
+            <label class="visually-hidden" for="site-search">Search the site</label>
+            <Icon Name="IconName.Search" />
+            <input id="site-search" type="search" name="q" maxlength="200" placeholder="Search bills, votes, people" />
+        </form>
+        <div class="topbar-tools"><PublicThemeMenu /></div>
+    </header>
+    @if (showMembersStrip)
+    {
+        <div class="members-strip" id="@MembersStripSlot.ElementId" aria-live="polite"></div>
+    }
+    @if (Hero is not null)
+    {
+        <div class="public-hero">@Hero</div>
+    }
+    <main class="public-main" id="main" tabindex="-1"><div class="content"><CascadingValue Value="glossaryUse" IsFixed="true">@ChildContent</CascadingValue></div></main>
+    <footer class="public-footer">
+        <span class="public-footer-name">Civic Lens</span>
+        <nav class="public-footer-nav" aria-label="Footer">@NavLinks(PublicSections.Footer)</nav>
+    </footer>
+</body>
+</html>
+
+@code {
+    private string documentTitle = string.Empty;
+    private string description = string.Empty;
+    private string? canonicalUrl;
+    private bool showMembersStrip;
+    private readonly GlossaryPageUse glossaryUse = new();
+
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Description { get; set; } = string.Empty;
+    [Parameter] public int Page { get; set; } = 1;
+    [Parameter] public int PageCount { get; set; } = 1;
+    [Parameter] public PublicSection? Section { get; set; }
+    [Parameter] public bool IsArticle { get; set; }
+    [Parameter] public bool UsesRecordFont { get; set; }
+    [Parameter] public bool NoIndex { get; set; }
+    [Parameter, EditorRequired] public string? CanonicalPath { get; set; }
+    [Parameter] public string? ExternalScript { get; set; }
+    [Parameter] public string RootPath { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? Hero { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private RenderFragment NavLinks(IReadOnlyList<PublicSections.NavLink> links) => @<text>
+        @foreach (var link in links)
+        {
+            <a href="@(RootPath + link.Path)" aria-current="@(link.Section is { } section && section == Section ? "page" : null)">@link.Text</a>
+        }
+    </text>;
+
+    [Inject] private IServiceProvider Services { get; set; } = default!;
+
+    protected override void OnParametersSet()
+    {
+        documentTitle = PublicHead.DocumentTitle(Title, Page, PageCount);
+        description = PublicHead.Description(Description);
+        showMembersStrip = Services.GetService<MembersStripSlot>() is not null;
+        canonicalUrl = CanonicalPath is null ? null : Services.GetService<PublicBaseUrl>()?.Join(CanonicalPath);
+    }
+}

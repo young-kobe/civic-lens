@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Architecture;
@@ -14,8 +15,19 @@ public sealed class PresentationArchitectureTests
     private static readonly string[] DocumentShells =
     [
         Path.Combine(ComponentsRoot, "App.razor"),
-        Path.Combine(HostRoot, "Publication", "PublicPage.razor")
+        Path.Combine(PublicWebRoot, "Publication", "PublicPage.razor")
     ];
+
+    [Fact]
+    public void PublicWebOwnsEverySharedStaticFileAndHostKeepsOnlyReviewFiles()
+    {
+        var owned = RelativeFiles(PublicWebRoot);
+        foreach (var path in PublicAssets.Paths)
+            Assert.Contains(path["assets/".Length..], owned, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(
+            ["css/review.css", "fonts/OFL-instrument-sans.txt", "fonts/instrument-sans.woff2", "js/review.js"],
+            RelativeFiles(HostRoot).Order(StringComparer.Ordinal));
+    }
 
     [Fact]
     public void ThemeColorsHaveOneOwnerSoBothThemesStayComplete()
@@ -38,7 +50,7 @@ public sealed class PresentationArchitectureTests
     public void RestingFieldStylesNeverOutrankTheFocusRuleSoEveryFieldControlShowsItsFocusRing()
     {
         var control = new Regex(@"^\.field .*\b(?:input|textarea|select)\b");
-        var resting = HostStyleSheets.Selectors(HostStyleSheets.Read("app.css"))
+        var resting = WebStyleSheets.Selectors(WebStyleSheets.Read("app.css"))
             .Where(selector => control.IsMatch(selector) && !selector.Contains(":focus-visible", StringComparison.Ordinal)
                 && (selector.Contains(":not(", StringComparison.Ordinal) || selector.Contains(":hover", StringComparison.Ordinal)));
 
@@ -48,7 +60,7 @@ public sealed class PresentationArchitectureTests
     [Fact]
     public void EveryDarkThemeTokenAlsoHasALightDefault()
     {
-        var theme = File.ReadAllText(Path.Combine(HostRoot, "wwwroot", "css", "theme.css"));
+        var theme = WebStyleSheets.Read("theme.css");
         var lightBlock = theme[..theme.IndexOf("@media (prefers-color-scheme: dark)", StringComparison.Ordinal)];
         var light = Tokens(lightBlock);
         foreach (var token in Tokens(theme[lightBlock.Length..]))
@@ -76,7 +88,7 @@ public sealed class PresentationArchitectureTests
     [Fact]
     public void ShellsLoadTheSameThemeSoTheWorkspaceAndPublishedPagesMatch()
     {
-        Assert.Contains("PublicThemeMenu", File.ReadAllText(Path.Combine(HostRoot, "Publication", "PublicPage.razor")), StringComparison.Ordinal);
+        Assert.Contains("PublicThemeMenu", File.ReadAllText(Path.Combine(PublicWebRoot, "Publication", "PublicPage.razor")), StringComparison.Ordinal);
         Assert.Contains("ThemeToggle", File.ReadAllText(Path.Combine(ComponentsRoot, "Layout", "WorkspaceLayout.razor")), StringComparison.Ordinal);
         Assert.Contains("css/theme.css", File.ReadAllText(DocumentShells[0]), StringComparison.Ordinal);
         Assert.Contains("assets/css/theme.css", File.ReadAllText(Path.Combine(PublicWebRoot, "Publication", "PublicAssets.cs")), StringComparison.Ordinal);
@@ -95,7 +107,7 @@ public sealed class PresentationArchitectureTests
         Assert.InRange(publicAssets.IndexOf("assets/css/app.css", StringComparison.Ordinal), 0, publicAssets.IndexOf("assets/css/public.css", StringComparison.Ordinal) - 1);
         Assert.DoesNotContain("review.css", publicAssets, StringComparison.Ordinal);
         Assert.DoesNotContain("review.js", publicAssets, StringComparison.Ordinal);
-        var publicPage = File.ReadAllText(Path.Combine(HostRoot, "Publication", "PublicPage.razor"));
+        var publicPage = File.ReadAllText(Path.Combine(PublicWebRoot, "Publication", "PublicPage.razor"));
         Assert.InRange(publicPage.IndexOf("PublicAssets.Script", StringComparison.Ordinal), 0, publicPage.IndexOf("PublicAssets.PublicScript", StringComparison.Ordinal) - 1);
         Assert.DoesNotContain("review.js", publicPage, StringComparison.Ordinal);
     }
@@ -106,7 +118,7 @@ public sealed class PresentationArchitectureTests
         var owners = new Dictionary<string, string>();
         foreach (var name in new[] { "app.css", "public.css", "review.css" })
         {
-            foreach (var selector in HostStyleSheets.Selectors(HostStyleSheets.Read(name)).Distinct())
+            foreach (var selector in WebStyleSheets.Selectors(WebStyleSheets.Read(name)).Distinct())
             {
                 Assert.True(owners.TryAdd(selector, name), $"'{selector}' is in {owners.GetValueOrDefault(selector)} and {name}.");
                 Assert.True(name == "public.css" || !selector.Contains(".public-", StringComparison.Ordinal), $"'{selector}' must live in public.css.");
@@ -136,11 +148,17 @@ public sealed class PresentationArchitectureTests
     public void OneRuleInTheSharedStylesheetTurnsOffEveryTransitionAndAnimationForReducedMotion()
     {
         var owners = new[] { "app.css", "public.css", "review.css", "theme.css" }
-            .Where(name => HostStyleSheets.Read(name).Contains("prefers-reduced-motion", StringComparison.Ordinal)).ToArray();
+            .Where(name => WebStyleSheets.Read(name).Contains("prefers-reduced-motion", StringComparison.Ordinal)).ToArray();
 
         Assert.Equal(["app.css"], owners);
         Assert.Matches(@"@media \(prefers-reduced-motion: reduce\)\s*\{\s*\*, \*::before, \*::after \{ animation: none !important; transition: none !important; \}\s*\}",
-            HostStyleSheets.Read("app.css"));
+            WebStyleSheets.Read("app.css"));
+    }
+
+    private static string[] RelativeFiles(string projectRoot)
+    {
+        var root = Path.Combine(projectRoot, "wwwroot");
+        return [.. Directory.GetFiles(root, "*", SearchOption.AllDirectories).Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))];
     }
 
     private static IEnumerable<string> StyleSheets() =>

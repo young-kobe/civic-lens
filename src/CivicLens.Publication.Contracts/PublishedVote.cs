@@ -103,7 +103,7 @@ public sealed record PublishedVote
         Congress = Congress
     };
 
-    private PublishedVoteAlignment? AlignmentOfParties()
+    public PublishedVoteAlignment? AlignmentOfParties()
     {
         if (!Kind.IsSubstantive() || Totals is null || !HasBothMajorParties) return null;
         return IsSplit() ? PublishedVoteAlignment.Split : PartiesAgree() ? PublishedVoteAlignment.PartiesAgree : PublishedVoteAlignment.Mixed;

@@ -23,4 +23,15 @@ public sealed record BillRow
     public string? BillLine { get; init; }
     public PublishedTextOrigin? BillLineOrigin { get; init; }
     public string? BillLineLabel { get; init; }
+
+    /// <summary>The "why it matters" text of an AI summary of the bill text. It is null unless <see cref="TextOrigin"/> is Model and the bill has a text summary.</summary>
+    public string? WhyItMatters { get; init; }
+
+    /// <summary>The name of the bill text version that a text summary cites, such as "Introduced in House". Null when the summary cites no bill text.</summary>
+    public string? TextVersionName { get; init; }
+    public DateOnly? TextVersionDate { get; init; }
+
+    /// <summary>The characters of that version that the model read, and all the characters of that version.</summary>
+    public int? TextCharsRead { get; init; }
+    public int? TextCharsTotal { get; init; }
 }

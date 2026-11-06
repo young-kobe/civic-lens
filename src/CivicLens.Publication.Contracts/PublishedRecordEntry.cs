@@ -14,6 +14,7 @@ public sealed record PublishedRecordEntry
     public required PublishedOfficial[] Officials { get; init; }
     public required string[] IssueIds { get; init; }
     public required string[] PolicyAreaIds { get; init; }
+    public PublishedApprover? ApprovedBy { get; init; }
     public string? SourceHost { get; init; }
     public DateOnly? EventDate { get; init; }
     public string? BillTitle { get; init; }
@@ -47,6 +48,8 @@ public sealed record PublishedRecordEntry
             throw new InvalidDataException("An executive action manifest entry names its document type. Other entries name none.");
         if (Kind == PublishedRecordKind.Relationship ? !HasValidLink : HasAnyLink)
             throw new InvalidDataException("A relationship manifest entry names its link type, statement, and target. Other entries name none.");
+        if (ApprovedBy is { } approver && (Kind != PublishedRecordKind.Statement || !Enum.IsDefined(approver)))
+            throw new InvalidDataException("Only a statement entry may name its public approver classification.");
         if (!HasValidVoteFacts)
             throw new InvalidDataException("A vote manifest entry holds both Yea and Nay counts or none, and an alignment only with them. Other entries hold none.");
         if (!HasValidChamber)

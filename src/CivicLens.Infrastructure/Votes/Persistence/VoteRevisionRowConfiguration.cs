@@ -2,6 +2,7 @@ using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection.Votes;
 using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Review.Persistence;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -24,6 +25,12 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
             table.HasCheckConstraint("ck_vote_revisions_kind", EnumChecks.InList("kind", Enum.GetNames<VoteKind>()));
             table.HasCheckConstraint("ck_vote_revisions_issue_revision", "issue_revision_id ~ '^[0-9a-f]{64}$'");
             table.HasCheckConstraint("ck_vote_revisions_subjects_hash", "subjects_hash ~ '^[0-9a-f]{64}$'");
+            table.HasCheckConstraint("ck_vote_revisions_columns_written",
+                "columns_written OR (alignment IS NULL AND democrat_majority IS NULL AND republican_majority IS NULL)");
+            table.HasCheckConstraint("ck_vote_revisions_alignment", $"alignment IS NULL OR {EnumChecks.InList("alignment", Enum.GetNames<PublishedVoteAlignment>())}");
+            table.HasCheckConstraint("ck_vote_revisions_majorities",
+                $"(democrat_majority IS NULL OR democrat_majority IN ('{PublishedPartyMajority.Yea}', '{PublishedPartyMajority.Nay}')) AND " +
+                $"(republican_majority IS NULL OR republican_majority IN ('{PublishedPartyMajority.Yea}', '{PublishedPartyMajority.Nay}'))");
         });
         builder.HasKey(row => new { row.RecordId, row.RevisionNumber });
         builder.Property(row => row.RecordId).HasColumnName("record_id").HasMaxLength(64);
@@ -50,6 +57,10 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
         builder.Property(row => row.IssueCandidatesRecorded).HasColumnName("issue_candidates_recorded");
         builder.Property(row => row.Question).HasColumnName("question").HasMaxLength(VoteDraftRevision.MaximumFactLength);
         builder.Property(row => row.Result).HasColumnName("result").HasMaxLength(VoteDraftRevision.MaximumFactLength).IsRequired();
+        builder.Property(row => row.ColumnsWritten).HasColumnName("columns_written").HasDefaultValue(false);
+        builder.Property(row => row.Alignment).HasColumnName("alignment").HasConversion<string>().HasMaxLength(16);
+        builder.Property(row => row.DemocratMajority).HasColumnName("democrat_majority").HasMaxLength(8);
+        builder.Property(row => row.RepublicanMajority).HasColumnName("republican_majority").HasMaxLength(8);
         ReviewTextColumns.Configure(builder, "vote_revisions", VoteDraftRevision.MaximumHeadlineLength, VoteDraftRevision.MaximumSummaryLength);
         builder.Property(row => row.Headline).IsRequired();
         builder.Property(row => row.Summary).IsRequired();

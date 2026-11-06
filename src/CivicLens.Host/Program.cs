@@ -480,7 +480,7 @@ try
         return await ReleaseCommand.ExecuteAsync(args, publish, new ListPublicationReleases(publications, releases),
             new ListBlockedPublished(publications, releases, blocked),
             new ActivatePublicationRelease(publications, releases, blocked, loggers.CreateLogger<ActivatePublicationRelease>()),
-            new BackfillFirstPublished(publications, releases), new BackfillPublishedEntries(publications, releases), new VerifyPublishedEntries(publications, releases), owner,
+            new BackfillFirstPublished(publications, releases), new BackfillPublishedEntries(publications, releases), new BackfillStoredColumns(publications, releases), new VerifyPublishedEntries(publications, releases), owner,
             Console.Out, Console.Error, cancellation.Token);
     }
 

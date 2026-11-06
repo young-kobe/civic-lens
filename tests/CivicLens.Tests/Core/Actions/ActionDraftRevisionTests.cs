@@ -175,13 +175,31 @@ public sealed class ActionDraftRevisionTests
     [Fact]
     public void ABillLineNeedsTheSummaryCitationItQuotesAndFitsOneToTwoHundredCharacters()
     {
-        var cited = Model() with { SummaryVersion = "00@2025-01-05T10:00:00Z", SummaryCitation = new(ExtractionId, 0, 5), BillLine = "The bill pays for rent aid." };
+        var cited = Model() with { SummaryVersion = "00@2025-01-05T10:00:00Z", SummaryCitation = new(ExtractionId, 0, 40), BillLine = "The bill pays for rent aid.", BillLineCitation = new(ExtractionId, 5, 25) };
 
         cited.ValidateShape();
         (cited with { BillLine = new string('x', ActionDraftRevision.MaximumBillLineLength) }).ValidateShape();
         Assert.Throws<ArgumentException>(() => (cited with { BillLine = new string('x', ActionDraftRevision.MaximumBillLineLength + 1) }).ValidateShape());
         Assert.Throws<ArgumentException>(() => (cited with { BillLine = " " }).ValidateShape());
         Assert.Throws<ArgumentException>(() => (Model() with { BillLine = "The bill pays for rent aid." }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (cited with { BillLineCitation = new(ExtractionId, 40, 1) }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (cited with { BillLineCitation = new(new string('1', 64), 5, 25) }).ValidateShape());
+    }
+
+    [Fact]
+    public void APersonEditKeepsTheBillLineAndItsSourceSpan()
+    {
+        var previous = Model() with
+        {
+            SummaryVersion = "00@2025-01-05T10:00:00Z",
+            SummaryCitation = new(ExtractionId, 0, 40),
+            BillLine = "The bill pays for rent aid.",
+            BillLineCitation = new(ExtractionId, 5, 25)
+        };
+        var edit = previous with { RevisionNumber = previous.RevisionNumber + 1, AuthorSubject = "auth0|person", Headline = "Updated headline" };
+
+        edit.ValidatePersonEditOf(previous);
+        Assert.Throws<ArgumentException>(() => (edit with { BillLineCitation = new(ExtractionId, 0, 25) }).ValidatePersonEditOf(previous));
     }
 
     [Fact]

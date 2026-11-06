@@ -10,4 +10,5 @@ internal sealed class VoteMemberListEntryRow
     public string CitationExtractionId { get; set; } = string.Empty;
     public int CitationStart { get; set; }
     public int CitationLength { get; set; }
+    public string? Party { get; set; }
 }

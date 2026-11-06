@@ -179,6 +179,7 @@ The join of a configured person to roster terms is in [publication](publication.
 
 ## Limits and planned work
 
+- A member who switches party inside one term has one term row. `MemberRosterParser` ignores the `party_affiliations` list of the legislators file, and it reads one party for the term. A vote on a day on the other side of the switch can take the wrong party, and the stored party then pins that value. The test `PostgresStoredColumnsTests.ATermSplitAtAPartyChangeStoresThePartyOfTheTermThatCoversTheVoteDayBecauseTheReleaseUsesThatTerm` builds two roster terms for the switch. It proves the term lookup by vote day, and it does not cover an in-term switch.
 - The roster lists current members only. A past member has no rows. The historical file is not read.
 - Publish reads the dated terms of configured people only. It matches a person by bioguide ID, then by Wikidata ID. The official profile pages show them; see [publication](publication.md).
 - Voteview Senate votes match senators by bioguide ID, the same key as the roster. A senator who is not in the roster takes the party letter of the member line; see [votes](votes.md#invariants).

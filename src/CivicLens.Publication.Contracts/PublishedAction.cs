@@ -6,6 +6,7 @@ public sealed record PublishedAction
     public const int MaximumCitationsPerSponsorship = 2;
     public const int MaximumSources = 8;
     public const int MaximumBillTitleLength = 4_000;
+    public const int MinimumBillLineQuoteWords = 4;
 
     public required string RecordId { get; init; }
     public required int RevisionNumber { get; init; }
@@ -22,7 +23,9 @@ public sealed record PublishedAction
     public required string[] TrackedIssueIds { get; init; }
     public PublishedCitation? SummaryCitation { get; init; }
     public string? BillLine { get; init; }
+    public PublishedCitation? BillLineCitation { get; init; }
     public PublishedCitation? BillCitation { get; init; }
+    public PublishedBillText? BillText { get; init; }
     public required PublishedSponsorship[] Sponsorships { get; init; }
     public required PublishedDocumentVersion[] Sources { get; init; }
     public required DateTimeOffset ApprovedAtUtc { get; init; }
@@ -73,9 +76,17 @@ public sealed record PublishedAction
             throw new InvalidDataException("A policy area id requires a policy area.");
         if (PolicyAreaCitation is not null) ValidateCitation(PolicyAreaCitation);
         if (SummaryCitation is not null) ValidateCitation(SummaryCitation);
-        if (BillLine is not null && (SummaryCitation is null || !PublishedRecordEntry.IsBillLine(BillLine)))
-            throw new InvalidDataException($"A bill line has 1 to {PublishedRecordEntry.MaximumBillLineLength} characters and needs the summary citation that it quotes.");
+        if ((BillLine is null) != (BillLineCitation is null) || BillLine is not null &&
+            (SummaryCitation is null || !PublishedRecordEntry.IsBillLine(BillLine) || !Covers(SummaryCitation, BillLineCitation!)))
+            throw new InvalidDataException($"A bill line has 1 to {PublishedRecordEntry.MaximumBillLineLength} characters and needs its quote span inside the cited summary.");
+        if (BillLineCitation is not null)
+        {
+            ValidateCitation(BillLineCitation);
+            if (BillLineCitation.Quote.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length < MinimumBillLineQuoteWords)
+                throw new InvalidDataException($"A bill line quote has at least {MinimumBillLineQuoteWords} words.");
+        }
         if (BillCitation is not null) ValidateCitation(BillCitation);
+        ValidateBillText();
         if (TrackedIssueIds is null || !PublishedEvidenceRules.AreDistinctAndNotBlank(TrackedIssueIds))
             throw new InvalidDataException("Published action tracked issue ids must be distinct and not blank.");
         PublishedEvidenceRules.RequireEverySourceCited(Sources, Citations(), "action");
@@ -83,7 +94,15 @@ public sealed record PublishedAction
 
     public IEnumerable<PublishedCitation> Citations() => Sponsorships.SelectMany(item => item.Citations)
         .Concat(PolicyAreaCitation is { } area ? [area] : []).Concat(SummaryCitation is { } summary ? [summary] : [])
-        .Concat(BillCitation is { } bill ? [bill] : []);
+        .Concat(BillCitation is { } bill ? [bill] : []).Concat(BillLineCitation is { } line ? [line] : []).Concat(BillText?.Sentences.Select(item => item.Citation) ?? []);
+
+    private void ValidateBillText()
+    {
+        if (BillText is null) return;
+        if (SummaryCitation is not null) throw new InvalidDataException("A published action cites the CRS summary or the bill text, never both.");
+        BillText.Validate();
+        foreach (var sentence in BillText.Sentences) ValidateCitation(sentence.Citation);
+    }
 
     private void ValidateSponsorship(PublishedSponsorship? sponsorship)
     {
@@ -96,6 +115,9 @@ public sealed record PublishedAction
             throw new InvalidDataException("A sponsorship cannot be withdrawn before it began.");
         foreach (var citation in sponsorship.Citations) ValidateCitation(citation);
     }
+
+    private static bool Covers(PublishedCitation summary, PublishedCitation quote) =>
+        summary.ExtractionId == quote.ExtractionId && summary.Start <= quote.Start && (long)quote.Start + quote.Length <= (long)summary.Start + summary.Length;
 
     private void ValidateCitation(PublishedCitation? citation) => PublishedEvidenceRules.RequireCitation(Sources, citation, "action");
 }

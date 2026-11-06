@@ -59,7 +59,7 @@ Pending: live Auth0 tenant verification, production deployment, AI classificatio
 
 ## Layers and dependency rules
 
-Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. PublicWeb holds the public Razor components and references Publication.Contracts only. Host references PublicWeb, and no production project references Host. Collection.Contracts and Publication.Contracts have no dependencies. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts only. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
+Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. PublicWeb holds the public Razor components and references Publication.Contracts only. Host references PublicWeb, and no production project references Host. Collection.Contracts and Publication.Contracts have no dependencies. Publication.Contracts also holds pure public rules that Host and PublicApi share, such as `BillStatusMeaning`, so each rule has one owner. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts and PublicWeb and uses the Npgsql package. It renders PublicWeb components as static server pages. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
 
 | Layer | Owns | Must not own |
 |---|---|---|
@@ -70,7 +70,7 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 | Collector | Bounded source interaction and complete raw capture production | Durable scheduling, imports, officials registry or publication |
 | Host | Command parsing, composition, review pages, and the public page components that still need Application types | Collection algorithms or evidence invariants |
 | PublicWeb | The public Razor components: shared UI, evidence display, and the public pages that need only Publication.Contracts | Application, Infrastructure, or Host types, packages, and operational storage |
-| PublicApi | Release ingest, the search index, and the public read API | Operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence |
+| PublicApi | Release ingest, the search index, static server rendering, and the public read API | Operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence |
 
 `tools/render-architecture.py` generates the diagrams below. Run `python3 tools/render-architecture.py`, then open `artifacts/architecture.html` for the explorer. Planned components are labeled there; a diagram is not a claim that the pipeline exists.
 
@@ -123,6 +123,7 @@ flowchart LR
     collector --> cc
     web --> pc
     api --> pc
+    api --> web
 ```
 
 <!-- diagrams:end -->
@@ -170,7 +171,7 @@ Package rules:
 - EF Core Design is private tooling in Infrastructure. Other production projects must not reference database packages.
 - Infrastructure pins the official `Anthropic` C# SDK 12.50.0 for the model adapters only. An architecture test checks that no other project references its assembly.
 - Application pins one package, `Microsoft.Extensions.Logging.Abstractions` 10.0.14, so workers take `ILogger<T>`. The worker command builds a console provider in `Program.cs` that writes to stderr. The review workspace builds its own console provider with a Warning minimum. An architecture test allows no other Application package.
-- `CivicLens.PublicApi` pins Npgsql 10.0.3 and references `Publication.Contracts` only. It has no EF Core, no Application, and no operational storage beyond the `public_api` views. Only Host and PublicApi use the Web SDK. An architecture test checks the references.
+- `CivicLens.PublicApi` pins Npgsql 10.0.3 and references `Publication.Contracts` and `PublicWeb` only. It has no EF Core, no Application, and no operational storage beyond the `public_api` views. It renders Razor components with static server rendering: no interactivity, no SignalR, no WebAssembly. Only Host and PublicApi use the Web SDK. An architecture test checks the references and the assembly references. The owner chose this design on 2026-11-06.
 - `CivicLens.PublicWeb` uses the Razor SDK with the ASP.NET shared framework reference, and has no package. It references `Publication.Contracts` only. An architecture test checks its references and its assembly references.
 - No Rust, Go, Python analysis service, or React application is planned. Python's standard library serves only the development tools in `tools/`.
 
@@ -377,6 +378,7 @@ This is the only navigation index.
 | Member photo jobs, validation, and rows | [Roster](architecture/roster.md#member-photos) | `src/CivicLens.Application/Collection/MemberPhotos/MemberPhotoUrl.cs` |
 | ZCTA to congressional district snapshot | [Districts](architecture/districts.md#behavior) | `src/CivicLens.Application/Districts/ZctaDistrictParser.cs` |
 | Official photo files in a release and the portrait | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleasePhotos.cs` |
+| Columns that C# writes at publication: vote parties, alignment, party majorities, photo path, entry Congress | [Publication](architecture/publication.md#storage-and-contracts) | `src/CivicLens.Application/Publication/VoteStoredColumns.cs` |
 | Generated schema: tables, keys, checks, indexes, triggers | [collection](architecture/schema/collection.md), [bills](architecture/schema/bills.md), [votes](architecture/schema/votes.md), [roster](architecture/schema/roster.md), [districts](architecture/schema/districts.md), [documents](architecture/schema/documents.md), [analysis](architecture/schema/analysis.md), [statements](architecture/schema/statements.md), [actions](architecture/schema/actions.md), [executive actions](architecture/schema/executive-actions.md), [briefs](architecture/schema/briefs.md), [relationships](architecture/schema/relationships.md), [review](architecture/schema/review.md), [reports](architecture/schema/reports.md), [publication](architecture/schema/publication.md) | `tests/CivicLens.Tests/Infrastructure/SchemaReferenceTests.cs` |
 | Collection tables and the import lock | [Collection](architecture/collection.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Collection/PostgresCollectionAttemptStore.cs` |
 | Congress.gov bill list, window, cursor | [Bills](architecture/bills.md#daily-window) | `src/CivicLens.Application/Collection/Bills/BillStreamWindow.cs` |
@@ -409,7 +411,7 @@ This is the only navigation index.
 | Action tables: queue, runs, budget, drafts, revisions, decisions | [Actions](architecture/actions.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Actions/` |
 | Relationship pairs, bill number and title matching, the pair key | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Application/Relationships/RelationshipPairFinder.cs` |
 | Relationship drafting, fingerprint, staleness, and outcomes | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Application/Relationships/RelationshipDraftStep.cs` |
-| Relationship revisions and the Congress rule | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Core/Relationships/RelationshipRevision.cs` |
+| Relationship revisions | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Core/Relationships/RelationshipRevision.cs` |
 | Relationship review pages, person edits, approval gate, and changed-citation flag | [Statements](architecture/statements.md#relationship-review) | `src/CivicLens.Host/Relationships/RelationshipEditor.razor`, `src/CivicLens.Infrastructure/Relationships/PostgresRelationshipReviewStore.cs` |
 | Relationship commands | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Host/Relationships/RelationshipCommand.cs` |
 | Relationship tables: queue, runs, budget, drafts, revisions, decisions | [Statements](architecture/statements.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Relationships/` |
@@ -440,6 +442,7 @@ This is the only navigation index.
 | Approval check | [Review](architecture/review.md#approval-check) | `src/CivicLens.Application/Review/ApprovalCheck.cs` |
 | Releases, activation, rollback | [Publication](architecture/publication.md#publish) | `src/CivicLens.Application/Publication/PublishRelease.cs` |
 | Release record content and schema | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Publication.Contracts/PublicationRelease.cs` |
+| The Congress rule: day to Congress and session | [Publication](architecture/publication.md#invariants) | `src/CivicLens.Publication.Contracts/CongressCalendar.cs` |
 | Published vote record, builder, and page | [Publication](architecture/publication.md#vote-record) | `src/CivicLens.Publication.Contracts/PublishedVote.cs` |
 | Published relationship record, builder, and page | [Publication](architecture/publication.md#relationship-record) | `src/CivicLens.Publication.Contracts/PublishedRelationship.cs` |
 | Related records on record pages | [Publication](architecture/publication.md#related-records) | `src/CivicLens.Application/Publication/ReleasePages.cs` |
@@ -450,6 +453,7 @@ This is the only navigation index.
 | MCP plans | [Review](architecture/review.md#limits-and-planned-work), [Publication](architecture/publication.md#limits-and-planned-work) | none |
 | Public views, role, active release rule | [Publication](architecture/publication.md#public-api-views) | `src/CivicLens.Infrastructure/Collection/Migrations/20261103165431_PublicApiViews.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261104013000_PublicApiZipDistricts.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261104014700_PublicApiReleaseTime.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261105005544_VoteQuestionResultColumns.cs`, `src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs` |
 | Public search service: ingest, index, read API, rate limit | [Search](architecture/search.md#decisions) | `src/CivicLens.PublicApi/PublicApiApp.cs` |
+| Server pages: cache rule, render pipeline, shared files | [Search](architecture/search.md#server-pages) | `src/CivicLens.PublicApi/Pages/ServerPageResponder.cs`, `src/CivicLens.PublicApi/Pages/PageCache.cs` |
 | Public vote routes, vote cursor, views data source, `/v1/release` | [Search](architecture/search.md#api) | `src/CivicLens.PublicApi/Votes/VoteEndpoints.cs`, `src/CivicLens.PublicApi/ActiveRelease/ReleaseEndpoints.cs` |
 | Reader report queue: pull, dismiss, editor panel, close by approval | [Review](architecture/review.md#reader-reports), [Search](architecture/search.md#operational-pull) | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Infrastructure/Reports/PostgresReaderReportStore.cs` |
 | Search ingest of a release | [Search](architecture/search.md#ingest) | `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs` |
@@ -457,6 +461,8 @@ This is the only navigation index.
 | Issue panel and `method.html` | [Publication](architecture/publication.md#issue-panel) | `src/CivicLens.Application/Publication/TalkAndActionProfile.cs` |
 | Officials and catalog files of a release | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/PublicationOfficials.cs` |
 | Official pages, officials list, and vote files of an official | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseOfficialPages.cs` |
+| Public site theme, layout rules, and standing page rules | [Public site](architecture/public-site.md#decisions) | `src/CivicLens.PublicWeb/wwwroot/css/theme.css` |
+| Reader flow matrix and component inventory | [Public site](architecture/public-site.md#behavior) | `src/CivicLens.PublicWeb/Components/` |
 | Canonical addresses, sitemap, robots file, and not found page | [Publication](architecture/publication.md#public-base-url) | `src/CivicLens.Application/Publication/ReleaseSite.cs` |
 | Public filter pages | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseFacets.cs` |
 | Pending work, decisions, MVP criteria | [Roadmap](roadmap.md) | none |

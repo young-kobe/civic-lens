@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using CivicLens.Core.Relationships;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -33,7 +32,7 @@ public sealed record TalkAndActionProfile(TalkAndActionColumn Statements, Immuta
 
     public static TalkAndActionProfile Of(int congress, IEnumerable<PublishedRecordEntry> entries, IEnumerable<PublishedOfficialVote> votes)
     {
-        var inCongress = entries.Where(entry => CongressCalendar.CongressOn(ReleaseRecordOrder.Day(entry)) == congress).ToLookup(entry => entry.Kind);
+        var inCongress = entries.Where(entry => ReleaseRecordOrder.CongressOf(entry) == congress).ToLookup(entry => entry.Kind);
         var allVotes = votes.ToArray();
         return new(TalkAndActionColumn.Of(inCongress[PublishedRecordKind.Statement].Select(entry => (entry.RecordId, entry.IssueIds))),
             [.. inCongress[PublishedRecordKind.Action]],

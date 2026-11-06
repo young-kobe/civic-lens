@@ -11,7 +11,7 @@ internal sealed class ReleaseIndexPages(IReleaseDirectory releases, IReleaseRend
         for (var page = 1; page <= PublicationProtocol.PageCount(manifest.Records.Length); page++)
             await WriteAsync(staging, PublicationProtocol.AllRecordsPagePath(page),
                 await renderer.RenderAllRecordsAsync(manifest, page, billLines, cancellationToken), cancellationToken);
-        var briefs = BriefsNewestFirst(manifest);
+        var briefs = ReleaseRecordOrder.BriefsNewestFirst(manifest.Records);
         for (var page = 1; page <= PublicationProtocol.PageCount(briefs.Length); page++)
             await WriteAsync(staging, PublicationProtocol.BriefsPagePath(page),
                 await renderer.RenderBriefsAsync(manifest, briefs, page, cancellationToken), cancellationToken);
@@ -30,15 +30,11 @@ internal sealed class ReleaseIndexPages(IReleaseDirectory releases, IReleaseRend
     public async Task WriteHomeAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets, HomeHighlights highlights,
         IReadOnlyList<PendingRecord> additions, PreviousRelease previous, CancellationToken cancellationToken)
     {
-        var latestBrief = BriefsNewestFirst(manifest).FirstOrDefault();
+        var latestBrief = ReleaseRecordOrder.BriefsNewestFirst(manifest.Records).FirstOrDefault();
         var brief = await LoadLatestBriefAsync(latestBrief, additions, previous, cancellationToken);
         await WriteAsync(staging, PublicationProtocol.HomePath,
             await renderer.RenderHomeAsync(manifest, brief, facets, highlights, cancellationToken), cancellationToken);
     }
-
-    private static PublishedRecordEntry[] BriefsNewestFirst(PublicationRelease manifest) =>
-        [.. ReleaseRecordOrder.NewestFirst(manifest.Records.Where(entry => entry.Kind == PublishedRecordKind.Brief),
-            ReleaseRecordOrder.Day, entry => entry.FirstPublishedAtUtc, entry => entry.RecordId)];
 
     private static Task WriteAsync(IReleaseStaging staging, string path, string html, CancellationToken cancellationToken) =>
         staging.WriteFileAsync(path, Encoding.UTF8.GetBytes(html), cancellationToken);

@@ -30,7 +30,7 @@ internal sealed record ActionRevisionPage(IReadOnlyList<ActionRevisionRow> Rows,
             [.. tracked], recorded ? [.. issues.Select(issue => issue.IssueId)] : default,
             row.IssueRevisionId!, SponsorshipsOf(row), row.BillTitle!, row.SubjectsHash,
             SpanOf(row.BillCitationExtractionId, row.BillCitationStart, row.BillCitationLength), row.TextPackageId, row.WhyItMatters,
-            TextCitationsOf(row), row.BillLine);
+            TextCitationsOf(row), row.BillLine, SpanOf(row.BillLineCitationExtractionId, row.BillLineCitationStart, row.BillLineCitationLength));
     }
 
     public IReadOnlyList<StoredRevision<ActionRevisionRow, ActionDraftRevision>> ToStoredRevisions() =>

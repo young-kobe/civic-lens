@@ -36,6 +36,11 @@
         </Panel>
     }
 
+    @if (Record.BillText is not null)
+    {
+        <PublishedBillTextSummary Record="Record" />
+    }
+
     <Panel Title="Sources" Id="sources-title" Padded="true">
         <SourceLinesNote>Congress.gov API page</SourceLinesNote>
         @for (var index = 0; index < Record.Sources.Length; index++)

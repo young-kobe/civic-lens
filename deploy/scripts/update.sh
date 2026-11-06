@@ -36,6 +36,7 @@ export CIVIC_LENS_IMAGE_TAG=$tag
 compose pull
 compose stop worker review
 compose run --rm cli db migrate
+compose run --rm cli releases columns backfill
 sed -i "s/^CIVIC_LENS_IMAGE_TAG=.*/CIVIC_LENS_IMAGE_TAG=$tag/" "$tag_file"
 compose up --detach --remove-orphans
 compose up --detach --force-recreate caddy cloudflared

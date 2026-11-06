@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Publication;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;

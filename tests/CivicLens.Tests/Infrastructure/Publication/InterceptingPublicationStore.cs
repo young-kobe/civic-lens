@@ -31,6 +31,26 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
     public Task<int> FillBillLinesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         inner.FillBillLinesAsync(entries, cancellationToken);
 
+    public Task<IReadOnlyList<VoteColumnGap>> ReadVoteColumnGapsAsync(CancellationToken cancellationToken) => inner.ReadVoteColumnGapsAsync(cancellationToken);
+
+    public Task WriteVoteColumnsAsync(IReadOnlyCollection<VoteStoredColumns> columns, CancellationToken cancellationToken) =>
+        inner.WriteVoteColumnsAsync(columns, cancellationToken);
+
+    public Task<int> FillOfficialPhotoPathsAsync(int releaseNumber, IReadOnlyDictionary<string, string> photoPaths, CancellationToken cancellationToken) =>
+        inner.FillOfficialPhotoPathsAsync(releaseNumber, photoPaths, cancellationToken);
+
+    public Task<IReadOnlyList<PublishedEntryDay>> ReadEntryDaysWithoutCongressAsync(PublishedEntryDay? after, int limit, CancellationToken cancellationToken) =>
+        inner.ReadEntryDaysWithoutCongressAsync(after, limit, cancellationToken);
+
+    public Task<int> FillEntryCongressesAsync(IReadOnlyCollection<PublishedEntryDay> entries, CancellationToken cancellationToken) =>
+        inner.FillEntryCongressesAsync(entries, cancellationToken);
+
+    public Task<int> FillStatementApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
+        inner.FillStatementApproversAsync(entries, cancellationToken);
+
+    public Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses, CancellationToken cancellationToken) =>
+        inner.AddBillStatusesAsync(releaseNumber, statuses, cancellationToken);
+
     public Task<StoredRelease> ReadReleaseAsync(int releaseNumber, CancellationToken cancellationToken) => inner.ReadReleaseAsync(releaseNumber, cancellationToken);
 
     public Task<PublicationState> GetStateAsync(CancellationToken cancellationToken) => inner.GetStateAsync(cancellationToken);

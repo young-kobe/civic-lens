@@ -181,16 +181,49 @@ public sealed class PublishActionTests
     }
 
     [Fact]
-    public async Task ATextDraftThatSomeoneApprovedStillStopsThePublishBecauseThePublishedActionHasNoCitationOfItsTextSource()
+    public async Task AnApprovedTextDraftPublishesItsSentencesWithTheExactQuotesAndTheVersionItCitesSoThePublishedActionCitesItsTextSource()
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('c');
         scenario.DraftActionFromBillText(action);
 
-        var error = await Assert.ThrowsAsync<InvalidDataException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action)));
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
 
-        Assert.Contains("cited", error.Message, StringComparison.OrdinalIgnoreCase);
+        var files = scenario.Releases.Directories[summary.DirectoryName];
+        var record = JsonSerializer.Deserialize<PublishedAction>(files[PublicationProtocol.RecordDataPath(action)], PublicationProtocol.JsonOptions)!;
+        var text = record.BillText!;
+        Assert.Equal(["One.", "Two.", "Three."], text.Sentences.Select(item => item.Sentence));
+        Assert.Equal([PublishedTextPart.Summary, PublishedTextPart.Summary, PublishedTextPart.WhyItMatters], text.Sentences.Select(item => item.Part));
+        Assert.All(text.Sentences, item => Assert.Equal("The program ends", item.Citation.Quote));
+        Assert.Equal(("Introduced in House", new DateOnly(2026, 1, 3)), (text.VersionName, text.VersionDate));
+        var source = Assert.Single(record.Sources, item => item.ExtractionId == text.Sentences[0].Citation.ExtractionId);
+        Assert.Contains("The program ends on December 31, 2030.", source.Text, StringComparison.Ordinal);
+        Assert.Null(Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine);
+    }
+
+    [Fact]
+    public async Task ATextDraftWithoutItsStoredVersionRowStopsThePublishBecauseThePageCouldNotNameTheVersionItCites()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c');
+        scenario.DraftActionFromBillText(action);
+        scenario.Actions.Publishable[action] = scenario.Actions.Publishable[action] with { TextVersion = null };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action)));
+
         Assert.Empty(scenario.Publications.Committed);
+    }
+
+    [Fact]
+    public async Task ATextDraftWithTheRowOfAnotherVersionStopsThePublishBecausePublicationNamesTheExactVersionTheRevisionCites()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c');
+        scenario.DraftActionFromBillText(action);
+        var publishable = scenario.Actions.Publishable[action];
+        scenario.Actions.Publishable[action] = publishable with { TextVersion = publishable.TextVersion! with { PackageId = "BILLS-119hr7eh" } };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action)));
     }
 
     [Fact]

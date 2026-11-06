@@ -1319,11 +1319,32 @@ public sealed class ActionDraftStepTests
     {
         var model = new FakeHeadlineSummaryModel().Draft(Output(billLine: ("The bill pays for rent aid.", LineQuote)));
 
-        var (store, _) = await RunAsync(Create(summaries: [LineSummary]), model);
+        var world = Create(summaries: [LineSummary]);
+        var (store, _) = await RunAsync(world, model);
 
         var revision = Assert.Single(store.Revisions);
         Assert.Equal("The bill pays for rent aid.", revision.BillLine);
         Assert.NotNull(revision.SummaryCitation);
+        var billLineCitation = Assert.IsType<CivicLens.Core.Documents.SourceSpan>(revision.BillLineCitation);
+        Assert.Equal(LineQuote, world.Quote(billLineCitation));
+        Assert.True(revision.SummaryCitation!.Covers(billLineCitation));
+    }
+
+    [Fact]
+    public async Task AQuoteRepeatedInTheSummaryMetadataIsBoundToTheSummaryBodyText()
+    {
+        var repeated = LineSummary with { Html = $"<p>{LineQuote}</p>", ActionDescription = LineQuote };
+        var world = Create(summaries: [repeated]);
+        var model = new FakeHeadlineSummaryModel().Draft(Output(billLine: ("The bill pays for rent aid.", LineQuote)));
+
+        var (store, _) = await RunAsync(world, model);
+        var revision = Assert.Single(store.Revisions);
+        var quote = Assert.IsType<CivicLens.Core.Documents.SourceSpan>(revision.BillLineCitation);
+
+        Assert.Equal(LineQuote, world.Quote(quote));
+        var page = Assert.Single(world.Pages, item => item.Resource == ApiResource.BillSummaries);
+        Assert.Equal(page.Text.LastIndexOf(LineQuote, StringComparison.Ordinal), quote.Start);
+        Assert.True(revision.SummaryCitation.Covers(quote));
     }
 
     [Theory]
@@ -1389,7 +1410,9 @@ public sealed class ActionDraftStepTests
         var (second, _) = await RunAsync(Create(summaries: [LineSummary], cosponsorPages: [[MarkeyOriginal]]), new FakeHeadlineSummaryModel(),
             Assert.Single(first.Revisions), hasStaleDraft: true);
 
-        Assert.Equal("The bill pays for rent aid.", Assert.Single(second.Revisions).BillLine);
+        var copied = Assert.Single(second.Revisions);
+        Assert.Equal("The bill pays for rent aid.", copied.BillLine);
+        Assert.Equal(Assert.Single(first.Revisions).BillLineCitation, copied.BillLineCitation);
     }
 
     [Theory]

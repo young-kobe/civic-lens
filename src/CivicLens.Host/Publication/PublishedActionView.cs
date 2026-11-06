@@ -5,6 +5,7 @@ using CivicLens.Host.Collection;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicWeb.Components.Evidence;
 using CivicLens.PublicWeb.Components.Ui;
+using CivicLens.PublicWeb.Publication;
 
 namespace CivicLens.Host.Publication;
 
@@ -18,7 +19,7 @@ internal static class PublishedActionView
         .. PolicyArea(action, catalog),
         .. PublishedRecordView.Issues("Tracked issues", action.TrackedIssueIds, catalog),
         new("Published", $"From the official record, checked {Moment.Full(action.ApprovedAtUtc)}; first published {Moment.Full(action.FirstPublishedAtUtc)}"),
-        .. PublishedRecordLabels.Wording(action.TextOrigin),
+        .. PublishedRecordLabels.Wording(action.TextOrigin, action.BillText is null ? PublishedRecordLabels.ModelWording : BillTextWords.Label),
         .. IssueWording(action),
         new("Revision", action.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
@@ -49,6 +50,9 @@ internal static class PublishedActionView
     public static string SponsorshipAnchor(PublishedAction action, PublishedSponsorship sponsorship, int citationIndex) =>
         PublishedRecordView.CitationAnchor(action.Sponsorships.TakeWhile(item => !ReferenceEquals(item, sponsorship))
             .Sum(item => item.Citations.Length) + citationIndex);
+
+    public static string CitationAnchorOf(PublishedAction action, PublishedCitation citation) =>
+        PublishedRecordView.CitationAnchor(action.Citations().TakeWhile(item => !ReferenceEquals(item, citation)).Count());
 
     private static string PolicyAreaAnchor(PublishedAction action) => PublishedRecordView.CitationAnchor(SponsorshipCitationCount(action));
 

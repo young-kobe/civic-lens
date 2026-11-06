@@ -10,9 +10,13 @@ namespace CivicLens.Application.Actions;
 
 public static class ActionDraftResolver
 {
-    private readonly record struct TextSource(string? PackageId, string? WhyItMatters, ImmutableArray<ActionTextCitation> Citations, string? BillLine = null)
+    private readonly record struct TextSource(string? PackageId, string? WhyItMatters, ImmutableArray<ActionTextCitation> Citations, string? BillLine = null, SourceSpan? BillLineCitation = null)
     {
-        public static TextSource Of(ActionDraftRevision revision) => new(revision.TextPackageId, revision.WhyItMatters, revision.TextCitations, revision.BillLine);
+        public static TextSource Of(ActionDraftRevision revision) =>
+            new(revision.TextPackageId, revision.WhyItMatters, revision.TextCitations, revision.BillLine, revision.BillLineCitation);
+
+        public static TextSource ForBillLine((string Line, SourceSpan Citation)? line) =>
+            new(null, null, default, line?.Line, line?.Citation);
     }
 
     public static AnalysisResolution<ActionDraftRevision> Resolve(string outputJson, ActionDraftContext context, string runId,
@@ -35,7 +39,7 @@ public static class ActionDraftResolver
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
         return AnalysisResolution<ActionDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current,
             output.Headline.Text, output.Summary.Text, runId, snapshot.Fingerprint), issueIds, context.Issues.SubjectsHash,
-            snapshot.SummaryVersion, snapshot.SummaryCitation, new TextSource(null, null, default, ActionBillLineRule.Check(output.BillLine, snapshot.NewestSummary))));
+            snapshot.SummaryVersion, snapshot.SummaryCitation, TextSource.ForBillLine(ActionBillLineRule.Check(output.BillLine, snapshot.NewestSummary, snapshot.NewestSummaryTextCitation))));
     }
 
     public static AnalysisResolution<ActionDraftRevision> ResolveBillText(string outputJson, ActionDraftContext context, string runId,
@@ -149,8 +153,7 @@ public static class ActionDraftResolver
     private static string? PassageGradeError(ActionTextOutput output)
     {
         var pieces = PassageOf(output);
-        var grade = ReadingGrade.RoundedPassage(pieces);
-        if (grade <= ReadingGrade.MaximumGrade) return null;
+        if (ActionTextApproval.IsPassageReadable(pieces, out var grade)) return null;
         var hardest = pieces.MaxBy(ReadingGrade.Of)!;
         return $"The headline and the sentences read at grade {ReadingGrade.Format(grade)} as one passage. Write at grade {ReadingGrade.MaximumGrade} or below. The hardest sentence is \"{Shorten(hardest)}\" at grade {ReadingGrade.Format(ReadingGrade.Rounded(hardest))}. Use shorter words and shorter sentences. Keep the summary at {ActionDraftRevision.MinimumSummarySentences} to {ActionDraftRevision.MaximumSummarySentences} sentences.";
     }
@@ -179,7 +182,7 @@ public static class ActionDraftResolver
             snapshot.Fingerprint, summaryVersion, summaryCitation, snapshot.Bill.PolicyArea, snapshot.PolicyAreaCitation,
             policyAreaId, trackedIssueIds, issues.CandidateIds, issueRevisionId, snapshot.Sponsorships, snapshot.Bill.Title, subjectsHash,
             text.Origin == ReviewTextOrigin.Code ? snapshot.BillCitation : null, textSource.PackageId, textSource.WhyItMatters, textSource.Citations,
-            textSource.BillLine);
+            textSource.BillLine, textSource.BillLineCitation);
         revision.ValidateAsWorkerRevision(current);
         return revision;
     }
