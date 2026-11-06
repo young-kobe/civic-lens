@@ -116,6 +116,17 @@ public sealed class PresentationArchitectureTests
             Assert.DoesNotMatch(@"<table[\s>]", File.ReadAllText(file));
     }
 
+    [Fact]
+    public void OneRuleInTheSharedStylesheetTurnsOffEveryTransitionAndAnimationForReducedMotion()
+    {
+        var owners = new[] { "app.css", "public.css", "review.css", "theme.css" }
+            .Where(name => HostStyleSheets.Read(name).Contains("prefers-reduced-motion", StringComparison.Ordinal)).ToArray();
+
+        Assert.Equal(["app.css"], owners);
+        Assert.Matches(@"@media \(prefers-reduced-motion: reduce\)\s*\{\s*\*, \*::before, \*::after \{ animation: none !important; transition: none !important; \}\s*\}",
+            HostStyleSheets.Read("app.css"));
+    }
+
     private static IEnumerable<string> StyleSheets() =>
         Directory.GetFiles(Path.Combine(HostRoot, "wwwroot"), "*.css", SearchOption.AllDirectories);
 

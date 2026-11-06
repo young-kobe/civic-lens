@@ -25,7 +25,7 @@ public static class ActionCodeText
     public static ReviewText Of(ActionBillSnapshot snapshot)
     {
         var bill = snapshot.Bill;
-        var label = $"{LabelOf(bill.Type)} {bill.Number}";
+        var label = BillNumber(bill.Type, bill.Number);
         var names = snapshot.Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor)
             .Select(item => snapshot.OfficialNames[item.PersonId]).Distinct(StringComparer.Ordinal).ToArray();
         var sponsors = string.Join(", ", names);
@@ -37,7 +37,9 @@ public static class ActionCodeText
         return new(headline, summary, ReviewTextOrigin.Code, null);
     }
 
-    private static string LabelOf(string billType) => BillTypeLabels[billType.ToLowerInvariant()];
+    /// <summary>The official display style of a bill number, such as "H.R. 9576", "H.J.Res. 213" or "S. 2403". Display code uses this one owner. A type outside the table, which a published vote can hold, shows in upper case.</summary>
+    public static string BillNumber(string billType, int number) =>
+        $"{(BillTypeLabels.TryGetValue(billType.ToLowerInvariant(), out var label) ? label : billType.ToUpperInvariant())} {number}";
 
     private static string EndedSentence(string title)
     {
