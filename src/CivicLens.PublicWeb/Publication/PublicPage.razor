@@ -22,11 +22,8 @@
         <meta name="robots" content="noindex" />
     }
     <link rel="icon" type="image/svg+xml" href="@(RootPath + PublicAssets.Favicon)" />
-    <link rel="preload" href="@(RootPath + PublicAssets.SchibstedGroteskFont)" as="font" type="font/woff2" crossorigin />
-    @if (UsesRecordFont)
-    {
-        <link rel="preload" href="@(RootPath + PublicAssets.NewsreaderFont)" as="font" type="font/woff2" crossorigin />
-    }
+    <link rel="preload" href="@(RootPath + PublicAssets.ArchivoFont)" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="@(RootPath + PublicAssets.FigtreeFont)" as="font" type="font/woff2" crossorigin />
     @foreach (var stylesheet in PublicAssets.Stylesheets)
     {
         <link rel="stylesheet" href="@(RootPath + stylesheet)" />
@@ -80,7 +77,6 @@
     [Parameter] public int PageCount { get; set; } = 1;
     [Parameter] public PublicSection? Section { get; set; }
     [Parameter] public bool IsArticle { get; set; }
-    [Parameter] public bool UsesRecordFont { get; set; }
     [Parameter] public bool NoIndex { get; set; }
     [Parameter, EditorRequired] public string? CanonicalPath { get; set; }
     [Parameter] public string? ExternalScript { get; set; }
