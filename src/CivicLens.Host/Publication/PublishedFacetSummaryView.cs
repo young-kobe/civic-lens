@@ -36,7 +36,7 @@ public static class PublishedFacetSummaryView
         $"{summary.PartiesAgreedVotes} of them {(summary.PartiesAgreedVotes == 1 ? "was a vote" : "were votes")} where both parties agreed. {PublishedOfficialView.PartiesAgreedMeaning}";
 
     public static string OtherVotes(FacetSummary summary) =>
-        $"{summary.OtherVotes} of them {(summary.OtherVotes == 1 ? "is" : "are")} in neither group. Such a vote is procedural, is a vote for a candidate, has no Yea and Nay counts, has a party with no majority, or has no party row for the Democrats or the Republicans.";
+        $"{summary.OtherVotes} of them {(summary.OtherVotes == 1 ? "is" : "are")} in neither group. Such a vote is procedural, is a vote for a candidate, has no Yes and No counts, has a party with no majority, or has no party row for the Democrats or the Republicans.";
 
     public const string OtherVotesLinkText = "How the vote badges are chosen";
 

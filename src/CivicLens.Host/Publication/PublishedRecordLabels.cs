@@ -143,25 +143,6 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, "Vote source has no label.")
     };
 
-    public const string OtherQuestion = "Other question";
-
-    public static string VoteKind(PublishedVoteKind kind) => kind switch
-    {
-        PublishedVoteKind.Rule => "Rule",
-        PublishedVoteKind.PreviousQuestion => "Previous question",
-        PublishedVoteKind.MotionToRecommit => "Motion to recommit",
-        PublishedVoteKind.Amendment => "Amendment",
-        PublishedVoteKind.Suspension => "Suspension of the rules",
-        PublishedVoteKind.Passage => "Passage",
-        PublishedVoteKind.ConferenceReport => "Conference report",
-        PublishedVoteKind.VetoOverride => "Veto override",
-        PublishedVoteKind.Nomination => "Nomination",
-        PublishedVoteKind.Cloture => "Cloture",
-        PublishedVoteKind.MotionToProceed => "Motion to proceed",
-        PublishedVoteKind.Other => OtherQuestion,
-        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Vote kind has no label.")
-    };
-
     public static string? VoteKindTermKey(PublishedVoteKind kind) => kind switch
     {
         PublishedVoteKind.Rule => "house-rule",
@@ -214,7 +195,7 @@ public static class PublishedRecordLabels
 
     private static string CandidateTotal(string name, string members) => name switch
     {
-        PublishedOfficialVote.NotVoting => $"Not voting, all {members}",
+        PublishedOfficialVote.NotVoting => $"{PlainVoteWords.NotVoting}, all {members}",
         PublishedOfficialVote.Present => $"{PublishedOfficialVote.Present}, all {members}",
         _ => $"Votes for {name}, all {members}"
     };

@@ -203,6 +203,7 @@
             line.append(link);
             if (holder.party) line.append(`, ${holder.party}`);
             item.append(line);
+            item.append(element("span", holder.termEndsOn ? `Current term ends ${formatDay(holder.termEndsOn)}.` : "Our records show no end date for this term.", "muted small"));
             return item;
         };
         const show = (nodes, listed = false) => { panel.hidden = false; notes.hidden = !listed; body.replaceChildren(...nodes); };
