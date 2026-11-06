@@ -28,11 +28,26 @@ internal static class QueryValues
 
     public static string? Filter(IQueryCollection query, string name)
     {
-        var value = Value(query, name);
+        return FilterValue(Value(query, name), name);
+    }
+
+    private static string? FilterValue(string? value, string name)
+    {
         if (string.IsNullOrEmpty(value)) return null;
         return value.Length <= PublishedRecordEntry.MaximumFilterValueLength
             ? value
             : throw new ArgumentException($"{name} holds at most {PublishedRecordEntry.MaximumFilterValueLength} characters.", name);
+    }
+
+    /// <summary>Reads a parameter that can repeat. Each value follows the rule of <see cref="Filter"/>. A value must not repeat. Zero values give an empty array.</summary>
+    public static string[] Filters(IQueryCollection query, string name, int maximum)
+    {
+        if (!query.TryGetValue(name, out var values)) return [];
+        if (values.Count > maximum) throw new ArgumentException($"{name} holds at most {maximum} values.", name);
+        var filters = new string[values.Count];
+        for (var index = 0; index < filters.Length; index++)
+            filters[index] = FilterValue(values[index], name) ?? throw new ArgumentException($"{name} must not be empty.", name);
+        return filters.Distinct(StringComparer.Ordinal).Count() == filters.Length ? filters : throw new ArgumentException($"{name} must not repeat a value.", name);
     }
 
     public static ArgumentException InvalidCursor() => new("Page cursor is not valid.", "cursor");

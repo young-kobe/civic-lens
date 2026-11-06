@@ -369,6 +369,21 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task TheIssueIdsOfAMemberVoteAreTheTrackedIssuesOfTheVoteIssueViewBecauseTheIssueFilterMustAgreeWithTheIssueList()
+    {
+        await InsertActiveVoteAsync("tagged", ["Yea", "Nay"]);
+        await InsertActiveVoteAsync("plain", ["Yea"]);
+        await ExecuteAsync("""
+            INSERT INTO vote_revision_issues (record_id, revision_number, issue_id, position, is_tracked) VALUES
+              ('tagged', 1, 'tax', 0, true), ('tagged', 1, 'health', 1, true), ('tagged', 1, 'zoning', 2, false);
+            """);
+
+        Assert.Equal(["tagged p0 health,tax", "tagged p1 health,tax", "plain p0 none"],
+            await PublicAsync("SELECT record_id || ' ' || official_id || ' ' || coalesce((SELECT string_agg(x, ',' ORDER BY x) FROM unnest(issue_ids) x), 'none') FROM public_api.member_votes ORDER BY record_id DESC, official_id"));
+        Assert.Equal(["health,tax"], await PublicAsync("SELECT string_agg(issue_id, ',' ORDER BY issue_id) FROM public_api.vote_issues WHERE record_id = 'tagged'"));
+    }
+
+    [Fact]
     public async Task TheGrantsStepRunTwiceChangesNothingBecauseEveryDbMigrateRunsIt()
     {
         var store = PostgresCollectionAttemptStore.FromConnectionString(connectionString);

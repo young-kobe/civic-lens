@@ -25,8 +25,10 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
         return JsonDocument.Parse(body).RootElement.Clone();
     }
 
-    private static string[] Ids(JsonElement answer) =>
-        [.. answer.GetProperty("votes").EnumerateArray().Select(vote => vote.GetProperty("recordId").GetString()!)];
+    private static JsonElement Votes(JsonElement answer, int official = 0) => answer.GetProperty("officials")[official].GetProperty("votes");
+
+    private static string[] Ids(JsonElement answer, int official = 0) =>
+        [.. Votes(answer, official).EnumerateArray().Select(vote => vote.GetProperty("recordId").GetString()!)];
 
     [Fact]
     public async Task OnlySubstantiveKindsAreListedSoARuleVoteNewerThanAPassageVoteIsLeftOutAndTheRuleHasOneOwner()
@@ -73,7 +75,7 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
 
         Assert.Equal([("Nay", "No (Nay)"), ("Aye", "Yes (Aye)"), ("Yea", "Yes (Yea)")], Casts(first));
         Assert.Equal([("Yea", "Yes (Yea)"), ("No", "No"), ("Nay", "No (Nay)")], Casts(second));
-        var vote = first.GetProperty("votes")[1];
+        var vote = Votes(first)[1];
         Assert.Equal(("senate", 119, 1, 2, "passage", "hr", 1, "Headline b", "An AI summary of the official record", "Agreed to"),
             (vote.GetProperty("chamber").GetString(), vote.GetProperty("congress").GetInt32(), vote.GetProperty("session").GetInt32(), vote.GetProperty("rollCall").GetInt32(),
              vote.GetProperty("kind").GetString(), vote.GetProperty("billType").GetString(), vote.GetProperty("billNumber").GetInt32(), vote.GetProperty("headline").GetString(),
@@ -94,7 +96,7 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
 
         var answer = await GetAsync(host, "/v1/member-votes?official=p0");
 
-        var rows = answer.GetProperty("votes").EnumerateArray().Select(vote => (
+        var rows = Votes(answer).EnumerateArray().Select(vote => (
             vote.GetProperty("kind").GetString(), vote.GetProperty("kindWords").GetString(),
             vote.GetProperty("result").GetString(), vote.GetProperty("resultWords").GetString(),
             vote.GetProperty("cast").GetString(), vote.GetProperty("castWords").GetString()));
@@ -107,7 +109,7 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
     }
 
     private static (string, string)[] Casts(JsonElement answer) =>
-        [.. answer.GetProperty("votes").EnumerateArray().Select(vote => (vote.GetProperty("cast").GetString()!, vote.GetProperty("castWords").GetString()!))];
+        [.. Votes(answer).EnumerateArray().Select(vote => (vote.GetProperty("cast").GetString()!, vote.GetProperty("castWords").GetString()!))];
 
     [Fact]
     public async Task AnOfficialWithNoCastGetsAnEmptyListAndAVoteOutsideTheActiveReleaseIsLeftOut()
@@ -116,8 +118,8 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
 
         var answer = await GetAsync(host, "/v1/member-votes?official=nobody");
 
-        Assert.Empty(answer.GetProperty("votes").EnumerateArray());
-        Assert.Equal("nobody", answer.GetProperty("officialId").GetString());
+        Assert.Empty(Votes(answer).EnumerateArray());
+        Assert.Equal("nobody", answer.GetProperty("officials")[0].GetProperty("officialId").GetString());
         Assert.Equal(["a".PadRight(64, 'a')], Ids(await GetAsync(host, "/v1/member-votes?official=p0")));
     }
 
@@ -151,8 +153,11 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
     [Theory]
     [InlineData("/v1/member-votes")]
     [InlineData("/v1/member-votes?official=")]
-    [InlineData("/v1/member-votes?official=p0&official=p1")]
-    public async Task AMissingEmptyOrRepeatedOfficialIsRefusedWithNoCacheHeader(string path)
+    [InlineData("/v1/member-votes?official=p0&official=")]
+    [InlineData("/v1/member-votes?official=p0&official=p0")]
+    [InlineData("/v1/member-votes?official=p0&official=p1&official=p2&official=p3")]
+    [InlineData("/v1/member-votes?official=p0&issue=a&issue=b")]
+    public async Task AMissingEmptyDuplicateOrFourthOfficialAndARepeatedIssueAreRefusedWithNoCacheHeader(string path)
     {
         await using var host = await StartWithVotesAsync();
 
@@ -168,5 +173,70 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
         await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
 
         await GetAsync(host, "/v1/member-votes?official=p0", HttpStatusCode.ServiceUnavailable);
+    }
+
+    [Fact]
+    public async Task ThreeOfficialsGetOneListEachInTheOrderOfTheRequestAndAnOfficialWithNoCastKeepsAnEmptyEntry()
+    {
+        var votes = new[]
+        {
+            new SeededVote('a', "2026-03-01") { RollCall = 1, Casts = ["Yea", "Nay", "Present"] },
+            new SeededVote('b', "2026-03-02") { RollCall = 2, Casts = ["Nay"] },
+            new SeededVote('c', "2026-03-03") { RollCall = 3, Casts = ["Yea", "Yea"] }
+        };
+        await using var host = await StartWithVotesAsync(votes);
+
+        var answer = await GetAsync(host, "/v1/member-votes?official=p2&official=nobody&official=p0");
+
+        Assert.Equal(["p2", "nobody", "p0"], answer.GetProperty("officials").EnumerateArray().Select(entry => entry.GetProperty("officialId").GetString()));
+        Assert.Equal([votes[0].RecordId], Ids(answer, 0));
+        Assert.Empty(Ids(answer, 1));
+        Assert.Equal([votes[2].RecordId, votes[1].RecordId, votes[0].RecordId], Ids(answer, 2));
+    }
+
+    [Fact]
+    public async Task EachOfficialGetsItsOwnNewestTenSoABusyOfficialDoesNotCrowdOutAnotherWithOlderVotes()
+    {
+        var recent = Enumerable.Range(0, MemberVoteLimit + 2).Select(index => new SeededVote(Hex[index], $"2026-03-{index + 2:00}") { RollCall = index + 1, Casts = ["Yea"] });
+        var old = new SeededVote('f', "2026-01-01") { RollCall = 50, Casts = ["Yea", "Nay"] };
+        await using var host = await StartWithVotesAsync([.. recent, old]);
+
+        var answer = await GetAsync(host, "/v1/member-votes?official=p0&official=p1");
+
+        Assert.Equal(MemberVoteLimit, Ids(answer, 0).Length);
+        Assert.DoesNotContain(old.RecordId, Ids(answer, 0));
+        Assert.Equal([old.RecordId], Ids(answer, 1));
+    }
+
+    [Fact]
+    public async Task TheIssueFilterKeepsOnlyVotesTaggedWithTheTrackedIssueAndNeverUsesAnUntrackedTag()
+    {
+        var votes = new[]
+        {
+            new SeededVote('a', "2026-03-01") { RollCall = 1, Issues = ["health"] },
+            new SeededVote('b', "2026-03-02") { RollCall = 2, Issues = ["tax"] },
+            new SeededVote('c', "2026-03-03") { RollCall = 3, Issues = ["health", "tax"] },
+            new SeededVote('d', "2026-03-04") { RollCall = 4, UntrackedIssues = ["health"] },
+            new SeededVote('e', "2026-03-05") { RollCall = 5, Casts = ["Yea", "Yea"], Issues = ["health"] },
+            new SeededVote('f', "2026-03-06") { RollCall = 6, Issues = ["health"], Kind = "Rule" }
+        };
+        await using var host = await StartWithVotesAsync(votes);
+
+        var answer = await GetAsync(host, "/v1/member-votes?official=p0&official=p2&issue=health");
+
+        Assert.Equal([votes[4].RecordId, votes[2].RecordId, votes[0].RecordId], Ids(answer, 0));
+        Assert.Equal([votes[2].RecordId, votes[0].RecordId], Ids(answer, 1));
+        Assert.Empty(Ids(await GetAsync(host, "/v1/member-votes?official=p0&issue=unknown")));
+    }
+
+    [Fact]
+    public async Task TheIssueFilterUsesTheIssuesOfTheActiveRevisionOnly()
+    {
+        var retired = new SeededVote('a', "2026-03-01") { Issues = ["health"], FirstRelease = 2 };
+        await using var host = await StartWithVotesAsync(retired, new SeededVote('b', "2026-03-02") { RollCall = 2, Issues = ["health"] });
+
+        var answer = await GetAsync(host, "/v1/member-votes?official=p0&issue=health");
+
+        Assert.Equal([new string('b', 64)], Ids(answer));
     }
 }

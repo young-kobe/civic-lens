@@ -186,4 +186,56 @@ public sealed class VoteMembersEndpointsTests(PostgresCollection postgres)
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    [Fact]
+    public async Task TheOfficialFilterListsOnlyTheAskedMembersInPositionOrderWhateverTheOrderOfTheQuery()
+    {
+        await using var host = await StartWithVotesAsync(House);
+
+        using var page = await GetAsync(host, $"/v1/votes/{House.RecordId}/members?official=p100&official=p7&official=p63");
+
+        Assert.Equal([7, 63, 100], Positions(page));
+        Assert.Equal(["Yea", "Nay", "Yea"], page.RootElement.GetProperty("members").EnumerateArray().Select(member => member.GetProperty("cast").GetString()));
+        Assert.Null(NextCursor(page));
+    }
+
+    [Fact]
+    public async Task TheOfficialFilterMeetsTheCastFilterAndAnUnknownOfficialGivesAnEmptyPage()
+    {
+        await using var host = await StartWithVotesAsync(House);
+
+        using var nays = await GetAsync(host, $"/v1/votes/{House.RecordId}/members?official=p3&official=p4&cast=nay");
+        using var nobody = await GetAsync(host, $"/v1/votes/{House.RecordId}/members?official=nobody");
+
+        Assert.Equal([3], Positions(nays));
+        Assert.Empty(Positions(nobody));
+        Assert.Equal(1, nobody.RootElement.GetProperty("release").GetInt32());
+    }
+
+    [Fact]
+    public async Task TheOfficialFilterStaysOnALaterPageOfACursorWalk()
+    {
+        await using var host = await StartWithVotesAsync(House);
+
+        using var first = await GetAsync(host, $"/v1/votes/{House.RecordId}/members?limit=1&official=p5&official=p9");
+        using var second = await GetAsync(host, $"/v1/votes/{House.RecordId}/members?limit=1&official=p5&official=p9&cursor={NextCursor(first)}");
+
+        Assert.Equal([5], Positions(first));
+        Assert.Equal([9], Positions(second));
+        Assert.Null(NextCursor(second));
+    }
+
+    [Theory]
+    [InlineData("official=")]
+    [InlineData("official=p1&official=p1")]
+    [InlineData("official=p1&official=p2&official=p3&official=p4")]
+    public async Task AnEmptyDuplicateOrFourthOfficialAnswers400WithNoCacheHeaderBecauseTheFilterIsForTheThreeMembersOfOneReader(string query)
+    {
+        await using var host = await StartWithVotesAsync(Senate);
+
+        using var response = await host.Client.GetAsync($"/v1/votes/{Senate.RecordId}/members?{query}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(response.Headers.CacheControl);
+    }
 }
