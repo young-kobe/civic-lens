@@ -31,11 +31,11 @@ internal static class PublicApiGrants
         GRANT SELECT (release_number, published_at_utc_ticks, is_active) ON publication_releases TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, first_release, revision_number, last_release) ON publication_record_states TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, chamber, congress, session_number, roll_call_number, voted_on, kind,
-            bill_type, bill_number, headline, summary, text_origin, member_list_id, question, result) ON vote_revisions TO civic_lens_public_owner;
+            bill_type, bill_number, headline, summary, text_origin, member_list_id, question, result, alignment, democrat_majority, republican_majority) ON vote_revisions TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, revision_number, event_date, link_type, statement_kind, statement_record_id, target_kind, target_record_id, bill_line, document_type, approved_by)
             ON published_entries TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, revision_number, official_id) ON published_entry_officials TO civic_lens_public_owner;
-        GRANT SELECT (list_id, "position", person_id, vote_cast) ON vote_member_list_entries TO civic_lens_public_owner;
+        GRANT SELECT (list_id, "position", person_id, vote_cast, party) ON vote_member_list_entries TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, is_tracked) ON vote_revision_issues TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, congress, bill_type, bill_number, bill_title, headline, summary, text_origin,
             policy_area, policy_area_id, event_on, cosponsor_count) ON action_revisions TO civic_lens_public_owner;
@@ -51,7 +51,7 @@ internal static class PublicApiGrants
         GRANT SELECT (record_id, revision_number, "position", source_id, document_number) ON executive_action_revision_notices TO civic_lens_public_owner;
         GRANT SELECT (source_id, document_number, published_on, notice_url) ON executive_action_documents TO civic_lens_public_owner;
         GRANT SELECT (zcta, state, district, land_area_square_meters, attempt_id) ON zcta_districts TO civic_lens_public_owner;
-        GRANT SELECT (release_number, official_id, name, wikidata_id, website) ON release_officials TO civic_lens_public_owner;
+        GRANT SELECT (release_number, official_id, name, wikidata_id, website, photo_path) ON release_officials TO civic_lens_public_owner;
         GRANT SELECT (release_number, official_id, "position", office, kind, state, district, party, caucus, start_on, end_on)
             ON release_official_terms TO civic_lens_public_owner;
         GRANT SELECT (release_number, issue_id, name, definition) ON release_issues TO civic_lens_public_owner;

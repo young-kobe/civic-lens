@@ -17,7 +17,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
 
     private static readonly string[] SubstantiveKinds = [.. Enum.GetValues<PublishedVoteKind>().Where(kind => kind.IsSubstantive()).Select(kind => kind.ToString())];
 
-    private const string Columns = "o.official_id, o.name, o.kind, o.office, o.state, o.district, o.party, o.caucus, o.term_end_on, o.record_count";
+    private const string Columns = "o.official_id, o.name, o.kind, o.office, o.state, o.district, o.party, o.caucus, o.term_end_on, o.record_count, o.photo_path";
     private const string Order = "o.name, o.official_id";
 
     private const string DetailSql = $"""
@@ -213,6 +213,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         Party = ViewColumns.Text(reader, 7),
         Caucus = ViewColumns.Text(reader, 8),
         TermEndsOn = ViewColumns.Date(reader, 9),
-        RecordCount = ViewColumns.Number(reader, 10)!.Value
+        RecordCount = ViewColumns.Number(reader, 10)!.Value,
+        PhotoPath = ViewColumns.Text(reader, 11)
     };
 }

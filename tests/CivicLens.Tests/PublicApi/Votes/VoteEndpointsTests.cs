@@ -88,6 +88,19 @@ public sealed class VoteEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AStoredVoteAlignmentIsReturnedAndAnUnwrittenAlignmentStaysNull()
+    {
+        await using var host = await StartWithVotesAsync(E, A);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE vote_revisions SET alignment = 'Split', columns_written = true WHERE record_id = '{E.RecordId}';");
+
+        using var page = await GetAsync(host, "/v1/votes");
+
+        var votes = page.RootElement.GetProperty("votes").EnumerateArray().ToArray();
+        Assert.Equal("split", votes[0].GetProperty("alignment").GetString());
+        Assert.Equal(JsonValueKind.Null, votes[1].GetProperty("alignment").ValueKind);
+    }
+
+    [Fact]
     public async Task APersonTextHasNoLabelAndACandidateNameInTheCastsLeavesTheCountsNullBecauseTheViewGivesNoTotalsThen()
     {
         await using var host = await StartWithVotesAsync(C);
