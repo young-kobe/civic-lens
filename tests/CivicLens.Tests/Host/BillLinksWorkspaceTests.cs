@@ -48,7 +48,7 @@ public sealed class BillLinksWorkspaceTests(PostgresCollection postgres) : IAsyn
         Assert.Contains("Open concerns", rows[0].TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("0 open", rows[0].TextContent, StringComparison.Ordinal);
         Assert.Contains("House roll call 20, Congress 119, session 1", rows[1].TextContent, StringComparison.Ordinal);
-        Assert.Contains("Passage, 2025-05-01", rows[1].TextContent, StringComparison.Ordinal);
+        Assert.Contains("Vote to pass or agree to, 2025-05-01", rows[1].TextContent, StringComparison.Ordinal);
         Assert.Contains("Approved", rows[1].TextContent, StringComparison.Ordinal);
         Assert.Contains("House roll call 10, Congress 119, session 1", rows[2].TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("The newest", page.QuerySelector("[aria-labelledby='bill-votes']")!.TextContent, StringComparison.Ordinal);

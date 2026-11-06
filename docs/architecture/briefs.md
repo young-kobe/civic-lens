@@ -70,7 +70,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The prompt lists only the officials of the records sent. Enforced by `BriefDraftPrompt`. Test: `BriefDraftStepTests.ThePromptListsOnlyTheOfficialsOfTheRecordsSentAndNoOtherConfiguredPerson`.
 - A week with no new records makes no call and no revision. Enforced by `BriefDraftStep`. Tests: `BriefDraftStepTests.AWeekWithNoNewRecordsMakesNoModelCallAndNoRevisionAndSettlesWithABypassedRun` and `PostgresBriefDraftStoreTests.AWeekWithNoNewRecordsSettlesWithNoBriefAndABypassedRun`.
 - A week whose new records are all left out blocks as `noCitableRecords` and does not succeed. Enforced by `BriefDraftStep`. Test: `BriefDraftStepTests.AWeekWhoseConsideredRecordsAreAllLeftOutBlocksInsteadOfClaimingThatNothingWasPublished`.
-- The same fingerprint settles without a call. A new record or a new revision of a record makes a new revision. Enforced by `BriefDraftStep` and `BriefFingerprint`. Tests: `BriefDraftStepTests.TheSameRecordsAndCutoffSettleUnchangedWithoutACallBecauseTheFingerprintMatches`, `BriefDraftStepTests.ANewRecordOrANewRevisionOfARecordAppendsRevisionTwoWithANewFingerprint`, and `BriefSelectionTests.TheFingerprintIgnoresInputOrderAndChangesWithTheRevisionOrTheCutoff`.
+- The same fingerprint settles without a call, unless the newest drafted run of the week used an older task, prompt, or schema version. Then the step drafts again, so a stale redraft reaches the old text. `PostgresBriefDraftStore.ReadEvidenceAsync` sets `BriefDraftEvidence.HasStaleDraft` with the same check as `RequeueStaleAsync`. Both use `PostgresBriefDraftStore.StaleRecordIdsAsync`, which skips an approved or rejected week. A new record or a new revision of a record makes a new revision. Enforced by `BriefDraftStep`, `BriefFingerprint`, and `PostgresBriefDraftStore.StaleRecordIdsAsync`. Tests: `BriefDraftStepTests.TheSameRecordsAndCutoffSettleUnchangedWithoutACallBecauseTheFingerprintMatches`, `BriefDraftStepTests.AStaleDraftWithTheSameFingerprintDraftsAgainBecauseARedraftMustReachTextFromAnOlderVersion`, `PostgresBriefDraftStoreTests.AStaleWeekWithUnchangedRecordsDraftsAgainOnceAndTheNextRequeueMovesNothingBecauseTheRedraftMustReachOldText`, `PostgresBriefDraftStoreTests.TheEvidenceOfAStaleWeekWhoseBriefIsApprovedOrRejectedFlagsNoStaleDraftSoTheWorkerSpendsNoCallThatWouldBeRefused`, `BriefDraftStepTests.ANewRecordOrANewRevisionOfARecordAppendsRevisionTwoWithANewFingerprint`, and `BriefSelectionTests.TheFingerprintIgnoresInputOrderAndChangesWithTheRevisionOrTheCutoff`.
 - A group that alone exceeds the byte cap blocks the week as `overByteCap`. Enforced by `BriefDraftStep`. Test: `BriefDraftStepTests.AGroupThatAloneExceedsTheByteCapBlocksTheWeekWithoutACall`.
 - Model confidence never reaches a revision. Enforced by `BriefDraftStep`. Test: `BriefDraftStepTests.ConfidenceStaysInTheRunOutputAndNeverReachesTheRevision`.
 - A model revision never lands on an approved brief. The run keeps the outcome `DraftDiscarded` and the week settles as `unchanged`. Enforced by `BriefDraftRows.AppendAnalysisRevisionAsync` and `BriefDraftQueueMapping`. Test: `PostgresBriefDraftStoreTests.AnApprovalThatLandsWhileTheModelRunsLeavesTheApprovedRevisionAndSettlesTheWeekAsUnchanged`.
@@ -159,7 +159,7 @@ The step does these checks in order:
 2. No record is left to cite, because the selection left out every new record: Blocked as `noCitableRecords`.
 3. No new records: Succeeded as `noNewRecords`. The step writes a Bypassed run and no revision.
 4. The selection holds no group, because the first group alone exceeds the byte cap: Blocked as `overByteCap`.
-5. The current revision has the same fingerprint: Succeeded as `unchanged`, with a Bypassed run.
+5. The current revision has the same fingerprint and the week is not stale: Succeeded as `unchanged`, with a Bypassed run.
 6. Otherwise the step calls the model with the validation loop and appends a revision.
 
 The `noNewRecords` and `unchanged` outcomes write a Bypassed run with the reason as its code and the context of the selection. The queue refuses either code without its run.
@@ -324,6 +324,7 @@ Its required variables are in [operations](../operations.md#brief-drafting). A d
 
 | Command | Effect |
 |---|---|
+| `analyses redraft --stale briefs` | Moves each Succeeded week whose newest drafted run used an older task, prompt, or schema version back to Pending. It leaves a week with an approved or rejected brief. Needs no argument and calls no model itself |
 | `brief redraft --week <yyyy-MM-dd>` | Queues the week if it has no entry. Moves a Succeeded, Blocked, or Failed entry back to Pending. The date must be a Monday, and the week must have ended |
 | `brief revisions backfill <limit>` | Moves legacy revisions into columns and child rows. See [operations](../operations.md#brief-revision-backfill) |
 | `brief revisions verify` | Compares each moved revision to its JSON. See [operations](../operations.md#brief-revision-backfill) |

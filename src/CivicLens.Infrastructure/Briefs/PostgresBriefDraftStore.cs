@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using CivicLens.Application;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Publication;
+using CivicLens.Core.Analysis;
 using CivicLens.Core.Briefs;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Analysis;
@@ -91,8 +92,9 @@ public sealed class PostgresBriefDraftStore : PostgresAnalysisStore<BriefDraftRu
         var weekRecords = await ReadNewRecordsAsync(db, bounds, cancellationToken);
         var records = await BriefRecordReader.ReadAsync(db, await AtActiveRevisionsAsync(db, weekRecords, cancellationToken), cancellationToken);
         var current = await BriefDraftRows.ReadCurrentAsync(db, recordId, cancellationToken);
+        var hasStaleDraft = (await StaleRecordIdsAsync(db, [recordId], cancellationToken)).Contains(recordId);
         await transaction.CommitAsync(cancellationToken);
-        return new(window, records, weekRecords.Length - records.Length, current);
+        return new(window, records, weekRecords.Length - records.Length, current, hasStaleDraft);
     }
 
     public async Task EnqueueClosedWeeksAsync(CancellationToken cancellationToken)
@@ -120,6 +122,27 @@ public sealed class PostgresBriefDraftStore : PostgresAnalysisStore<BriefDraftRu
         foreach (var state in RedraftableStates)
             requeued += await queue.RequeueAsync(state, null, recordId, null, cancellationToken);
         return requeued;
+    }
+
+    public Task<int> RequeueStaleAsync(CancellationToken cancellationToken) =>
+        queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
+        {
+            var stale = await StaleRecordIdsAsync(db, settled.Select(row => row.RecordId).ToArray(), token);
+            return settled.Where(row => stale.Contains(row.RecordId));
+        }, cancellationToken);
+
+    private static async Task<HashSet<string>> StaleRecordIdsAsync(CollectionAttemptDbContext db, string[] recordIds,
+        CancellationToken cancellationToken)
+    {
+        var newest = await AnalysisRunLookup.Latest<BriefAnalysisRunRow>(db, BriefDraftTask.Task, nameof(BriefAnalysisRunRow.RecordId),
+            recordIds, AnalysisRunOutcome.Drafted).Select(run => new { run.RecordId, run.RunId }).ToArrayAsync(cancellationToken);
+        var staleRunIds = await StaleAnalysisRuns.FindStaleRunIdsAsync<BriefAnalysisRunRow>(db,
+            [.. newest.Select(run => run.RunId)], BriefDraftTask.CurrentVersions, cancellationToken);
+        var staleIds = newest.Where(run => staleRunIds.Contains(run.RunId)).Select(run => run.RecordId).ToArray();
+        var closed = await db.Set<BriefDraftRow>().AsNoTracking()
+            .Where(draft => staleIds.Contains(draft.RecordId) && (draft.ReviewStatus == ReviewStatus.Approved || draft.ReviewStatus == ReviewStatus.Rejected))
+            .Select(draft => draft.RecordId).ToArrayAsync(cancellationToken);
+        return staleIds.Except(closed, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
     }
 
     private static async Task<ImmutableArray<PublishedRevisionBinding>> ReadNewRecordsAsync(CollectionAttemptDbContext db, WindowRow bounds,

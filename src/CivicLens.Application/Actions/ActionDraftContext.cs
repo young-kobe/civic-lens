@@ -18,7 +18,7 @@ public sealed record ActionDraftContext(ActionDraftEvidence Evidence, ActionBill
     {
         if (Evidence.Current is not { } previous || SaysNoSummaryFalsely(previous)) return ActionChange.Other;
         var change = ChangeFrom(previous);
-        return change == ActionChange.None && Evidence.HasOlderPromptDraft ? ActionChange.OlderPromptOnly : change;
+        return change == ActionChange.None && Evidence.HasStaleDraft ? ActionChange.StaleOnly : change;
     }
 
     private bool SaysNoSummaryFalsely(ActionDraftRevision revision) => Snapshot.Bill.SummaryCount > 0 &&
@@ -40,4 +40,4 @@ public sealed record ActionDraftContext(ActionDraftEvidence Evidence, ActionBill
     }
 }
 
-public enum ActionChange { None, SponsorshipsOnly, OlderPromptOnly, Other }
+public enum ActionChange { None, SponsorshipsOnly, StaleOnly, Other }

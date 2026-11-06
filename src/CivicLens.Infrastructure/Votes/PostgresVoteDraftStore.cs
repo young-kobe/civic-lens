@@ -82,7 +82,7 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
             return settled.Where(row => refused.Contains(row.CandidateId));
         }, cancellationToken);
 
-    public Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken) =>
+    public Task<int> RequeueStaleAsync(CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
         {
             var ids = settled.Select(row => row.CandidateId).ToArray();
@@ -136,18 +136,21 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
     {
         var stale = await (from candidate in db.Set<VoteCandidateRow>().AsNoTracking()
                            where candidateIds.Contains(candidate.CandidateId) && candidate.BillType != null
-                           let newestDraftPrompt = (from run in db.Set<VoteAnalysisRunRow>()
-                                                    join sibling in db.Set<VoteCandidateRow>() on run.CandidateId equals sibling.CandidateId
-                                                    where run.Task == VoteDraftTask.Task && run.Outcome == AnalysisRunOutcome.Drafted &&
-                                                        sibling.SourceId == candidate.SourceId && sibling.Chamber == candidate.Chamber &&
-                                                        sibling.Congress == candidate.Congress && sibling.SessionNumber == candidate.SessionNumber &&
-                                                        sibling.RollCallNumber == candidate.RollCallNumber
-                                                    orderby run.StartedAtUtcTicks descending
-                                                    select run.PromptVersion).FirstOrDefault()
-                           where newestDraftPrompt != null && newestDraftPrompt != VoteDraftTask.PromptVersion
-                           select candidate.CandidateId).ToArrayAsync(cancellationToken);
-        var closed = await CandidatesThatCannotTakeNewTextAsync(db, stale, cancellationToken);
-        return stale.Except(closed, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
+                           let newestDraftRunId = (from run in db.Set<VoteAnalysisRunRow>()
+                                                   join sibling in db.Set<VoteCandidateRow>() on run.CandidateId equals sibling.CandidateId
+                                                   where run.Task == VoteDraftTask.Task && run.Outcome == AnalysisRunOutcome.Drafted &&
+                                                       sibling.SourceId == candidate.SourceId && sibling.Chamber == candidate.Chamber &&
+                                                       sibling.Congress == candidate.Congress && sibling.SessionNumber == candidate.SessionNumber &&
+                                                       sibling.RollCallNumber == candidate.RollCallNumber
+                                                   orderby run.StartedAtUtcTicks descending
+                                                   select run.RunId).FirstOrDefault()
+                           where newestDraftRunId != null
+                           select new { candidate.CandidateId, newestDraftRunId }).ToArrayAsync(cancellationToken);
+        var staleRunIds = await StaleAnalysisRuns.FindStaleRunIdsAsync<VoteAnalysisRunRow>(db,
+            [.. stale.Select(candidate => candidate.newestDraftRunId).Distinct()], VoteDraftTask.CurrentVersions, cancellationToken);
+        var staleIds = stale.Where(candidate => staleRunIds.Contains(candidate.newestDraftRunId)).Select(candidate => candidate.CandidateId).ToArray();
+        var closed = await CandidatesThatCannotTakeNewTextAsync(db, staleIds, cancellationToken);
+        return staleIds.Except(closed, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
     }
 
     // New model text would go to a person or stay held, so a redraft would spend tokens for nothing.

@@ -716,7 +716,7 @@ public sealed class VoteDraftStepTests
         var current = await FirstRevisionAsync(world);
         var model = new FakeHeadlineSummaryModel().Draft(Drafted);
 
-        var (redrafted, _) = await RunAsync(world, model, evidence: world.Evidence(current, draftedUnderOlderPrompt: true));
+        var (redrafted, _) = await RunAsync(world, model, evidence: world.Evidence(current, hasStaleDraft: true));
         var (rerun, _) = await RunAsync(world, model, redrafted.Revisions[0]);
 
         Assert.Single(model.Requests);
@@ -730,7 +730,7 @@ public sealed class VoteDraftStepTests
         var current = (await FirstRevisionAsync(world)) with { Kind = VoteKind.Rule };
         var model = new FakeHeadlineSummaryModel().Draft(Drafted);
 
-        await RunAsync(world, model, evidence: world.Evidence(current, UpdatedAt.AddDays(1), draftedUnderOlderPrompt: true));
+        await RunAsync(world, model, evidence: world.Evidence(current, UpdatedAt.AddDays(1), hasStaleDraft: true));
 
         Assert.Single(model.Requests);
     }
@@ -742,7 +742,7 @@ public sealed class VoteDraftStepTests
         var corrected = Create(members: [new(Aderholt, "Robert", "Aderholt", "Nay"), new(Auchincloss, "Jake", "Auchincloss", "Nay")]);
         var model = new FakeHeadlineSummaryModel().Draft(Drafted);
 
-        await RunAsync(corrected, model, evidence: corrected.Evidence(current, UpdatedAt.AddDays(1), draftedUnderOlderPrompt: true));
+        await RunAsync(corrected, model, evidence: corrected.Evidence(current, UpdatedAt.AddDays(1), hasStaleDraft: true));
 
         Assert.Single(model.Requests);
     }

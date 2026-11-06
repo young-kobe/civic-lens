@@ -22,7 +22,7 @@ internal sealed class FakeVoteDraftStore : FakeAnalysisQueue<VoteDraftRun>, IVot
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<int> RequeueOlderPromptAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<int> RequeueStaleAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<int> RequeueRefusedAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
 

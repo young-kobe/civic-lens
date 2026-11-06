@@ -64,10 +64,10 @@ case "$*" in
   "db migrate") "$compose" run --rm cli db migrate ;;
   # usage: worker health
   "worker health") "$compose" run --rm cli worker health ;;
-  # usage: votes draft redraft
-  "votes draft redraft") "$compose" run --rm cli votes draft redraft ;;
-  # usage: actions draft redraft
-  "actions draft redraft") "$compose" run --rm cli actions draft redraft ;;
+  # usage: analyses redraft --stale [actions|votes|briefs]
+  "analyses redraft --stale"|"analyses redraft --stale actions"|"analyses redraft --stale votes"|"analyses redraft --stale briefs")
+    "$compose" run --rm cli analyses redraft --stale "${@:4}"
+    ;;
   # usage: bills subjects backfill <count>
   "bills subjects backfill "*)
     [[ $# -eq 4 ]] || refuse

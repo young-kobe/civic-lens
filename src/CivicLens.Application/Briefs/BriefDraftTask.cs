@@ -16,4 +16,6 @@ public static class BriefDraftTask
     public const int RetryReasonReserveBytes = 4_096;
 
     public static readonly AnalysisTaskIdentity Identity = new(Task, TaskVersion, Model, PromptVersion, SchemaVersion);
+
+    public static readonly AnalysisCurrentVersions CurrentVersions = AnalysisCurrentVersions.Of(Identity);
 }

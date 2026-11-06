@@ -21,7 +21,8 @@ public static class ActionDraftTask
     public const int MaximumValidationPasses = 2;
     public const int MaximumSummaryPages = 20;
 
-    public static readonly string[] CurrentPromptVersions = [PromptVersion, IssuePromptVersion, TextPromptVersion];
+    public static readonly AnalysisCurrentVersions CurrentVersions = new(TaskVersion,
+        [PromptVersion, IssuePromptVersion, TextPromptVersion], [SchemaVersion, IssueSchemaVersion, TextSchemaVersion]);
 
     public static readonly AnalysisTaskIdentity Identity = new(Task, TaskVersion, Model, PromptVersion, SchemaVersion);
 }

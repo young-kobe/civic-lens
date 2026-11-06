@@ -56,7 +56,7 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         if (evidence?.BillText is not { } billText) return ActionTextMeasureBill.Skipped(billId, ActionTextMeasureReason.NoBillText);
 
         var attempt = new ActionTextMeasureAttempt(candidateId, tokenCap, spent);
-        await step.DraftAsync(attempt, evidence with { Current = null, HasOlderPromptDraft = false, IsRejected = false },
+        await step.DraftAsync(attempt, evidence with { Current = null, HasStaleDraft = false, IsRejected = false },
             cancellationToken);
         return Summarize(billId, evidence, billText, attempt);
     }

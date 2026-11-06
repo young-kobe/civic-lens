@@ -46,7 +46,7 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
         Assert.Contains("A: Yea", members, StringComparison.Ordinal);
         Assert.Contains("Member: A000001, A, R, AL, Yea", members, StringComparison.Ordinal);
         var evidence = page.QuerySelector("[aria-labelledby='evidence']")!.TextContent;
-        Assert.Contains("Vote kind: Passage", evidence, StringComparison.Ordinal);
+        Assert.Contains("Vote kind: Vote to pass or agree to", evidence, StringComparison.Ordinal);
         Assert.Contains("Question: On Passage", evidence, StringComparison.Ordinal);
     }
 
@@ -141,7 +141,7 @@ public sealed class VoteReviewWorkspaceTests(PostgresCollection postgres) : IAsy
         var link = page.QuerySelector("[aria-labelledby='evidence'] a")!;
         Assert.Equal(("Roll call on senate.gov", "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1191/vote_119_1_00005.htm"),
             (link.TextContent, link.GetAttribute("href")));
-        Assert.Contains("Vote kind: Motion to proceed", page.QuerySelector("[aria-labelledby='evidence']")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Vote kind: Vote to start debate", page.QuerySelector("[aria-labelledby='evidence']")!.TextContent, StringComparison.Ordinal);
         Assert.Contains("saved Senate vote text", page.QuerySelector("[aria-labelledby='evidence']")!.TextContent, StringComparison.Ordinal);
         Assert.Contains("Say what the Senate voted on.", page.Body!.InnerHtml, StringComparison.Ordinal);
     }

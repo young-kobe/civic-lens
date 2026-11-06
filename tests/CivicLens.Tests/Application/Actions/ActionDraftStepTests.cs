@@ -418,7 +418,7 @@ public sealed class ActionDraftStepTests
 
         var (unchanged, unchangedModel) = await RunAsync(world, new FakeHeadlineSummaryModel(), current);
         var (redrafted, model) = await RunAsync(world, new FakeHeadlineSummaryModel().Draft(Output(headline: "Warren filed a housing bill")), current,
-            hasOlderPromptDraft: true);
+            hasStaleDraft: true);
 
         Assert.Empty(unchanged.Revisions);
         Assert.Empty(unchangedModel.Requests);
@@ -437,14 +437,14 @@ public sealed class ActionDraftStepTests
             Summary = "Warren introduced a housing bill. Congress.gov has no summary of this bill yet."
         };
 
-        var (withIssues, issueModel) = await RunAsync(Bare(), new FakeHeadlineSummaryModel().Draft(IssueOutput("rent")), oldDraft, hasOlderPromptDraft: true);
+        var (withIssues, issueModel) = await RunAsync(Bare(), new FakeHeadlineSummaryModel().Draft(IssueOutput("rent")), oldDraft, hasStaleDraft: true);
         var (noIssues, plainModel) = await RunAsync(Bare(BillGateFixtures.UntrackedPolicyArea), new FakeHeadlineSummaryModel(), oldDraft with
         {
             PolicyArea = BillGateFixtures.UntrackedPolicyArea,
             PolicyAreaId = null,
             TrackedIssueIds = [],
             IssueCandidateIds = []
-        }, hasOlderPromptDraft: true);
+        }, hasStaleDraft: true);
 
         Assert.Single(issueModel.Requests);
         var converted = Assert.Single(withIssues.Revisions);
@@ -465,7 +465,7 @@ public sealed class ActionDraftStepTests
         var (kept, keptModel) = await RunAsync(Create(title: "A renamed bill"), new FakeHeadlineSummaryModel(), drafted, shape: withoutSummaryPages);
         var copy = Assert.Single(kept.Revisions);
         var (again, againModel) = await RunAsync(Create(title: "A renamed bill"), new FakeHeadlineSummaryModel(), copy, shape: withoutSummaryPages);
-        var (stale, staleModel) = await RunAsync(Create(title: "A renamed bill"), new FakeHeadlineSummaryModel(), copy, hasOlderPromptDraft: true,
+        var (stale, staleModel) = await RunAsync(Create(title: "A renamed bill"), new FakeHeadlineSummaryModel(), copy, hasStaleDraft: true,
             shape: withoutSummaryPages);
 
         Assert.Empty(keptModel.Requests);
@@ -555,7 +555,7 @@ public sealed class ActionDraftStepTests
         var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
 
         var (second, model) = await RunAsync(Create(cosponsorPages: [[MarkeyOriginal]]), new FakeHeadlineSummaryModel(), Assert.Single(first.Revisions),
-            hasOlderPromptDraft: true);
+            hasStaleDraft: true);
 
         Assert.Empty(model.Requests);
         var run = Assert.Single(second.Runs);
@@ -1304,7 +1304,7 @@ public sealed class ActionDraftStepTests
         var (first, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output()));
         var drafted = Assert.Single(first.Revisions);
 
-        var (rejected, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel(), drafted, hasOlderPromptDraft: olderPrompt,
+        var (rejected, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel(), drafted, hasStaleDraft: olderPrompt,
             shape: evidence => evidence with { IsRejected = true });
 
         Assert.Empty(model.Requests);
@@ -1313,10 +1313,10 @@ public sealed class ActionDraftStepTests
 
     private static async Task<(FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> RunAsync(ActionBillWorld world,
         FakeHeadlineSummaryModel model, ActionDraftRevision? current = null, DateTimeOffset? updatedAt = null, ActionDraftSettings? settings = null,
-        IssueConfigurationRevision? issues = null, bool hasNewerCandidate = false, bool hasOlderPromptDraft = false,
+        IssueConfigurationRevision? issues = null, bool hasNewerCandidate = false, bool hasStaleDraft = false,
         Func<ActionDraftEvidence, ActionDraftEvidence>? shape = null)
     {
-        var evidence = world.Evidence(current, updatedAt, hasNewerCandidate, hasOlderPromptDraft);
+        var evidence = world.Evidence(current, updatedAt, hasNewerCandidate, hasStaleDraft);
         var store = new FakeActionDraftStore(shape is null ? evidence : shape(evidence));
         await AnalysisWorkers.ActionDrafting(store, new FakeAnalysisStatusStore(), world.Reader(), model,
             settings ?? new ActionDraftSettings(10_000_000, concurrency: 1), issues ?? BillGateFixtures.Revision(), TimeProvider.System).ExecuteAsync(once: true);
