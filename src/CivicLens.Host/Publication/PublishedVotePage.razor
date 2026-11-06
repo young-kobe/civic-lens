@@ -5,6 +5,19 @@
 
 <PublishedRecordFrame Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedVoteView.Facts(Record, Catalog)"
                       Caveat="@PublishedVoteView.Caveat(Record)">
+    @if (PublishedVoteView.Meaning(Record) is { } meaning)
+    {
+        <Panel Title="What this vote meant" Id="meaning-title" Padded="true">
+            <p>@meaning.Yes</p>
+            <p>@meaning.No</p>
+            @if (PublishedVoteView.NextStepOf(Record) is { } next)
+            {
+                <h3>What happens next</h3>
+                <p>@next</p>
+            }
+        </Panel>
+    }
+
     @if (PublishedVoteView.Badge(Record) is { } badge)
     {
         <Panel Title="How the parties voted" Id="parties-title" Padded="true">
