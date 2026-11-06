@@ -32,7 +32,7 @@ internal static class PublicApiGrants
         GRANT SELECT (kind, record_id, first_release, revision_number, last_release) ON publication_record_states TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, chamber, congress, session_number, roll_call_number, voted_on, kind,
             bill_type, bill_number, headline, summary, text_origin, member_list_id, question, result) ON vote_revisions TO civic_lens_public_owner;
-        GRANT SELECT (kind, record_id, revision_number, event_date, link_type, statement_record_id, target_kind, target_record_id, bill_line)
+        GRANT SELECT (kind, record_id, revision_number, event_date, link_type, statement_kind, statement_record_id, target_kind, target_record_id, bill_line)
             ON published_entries TO civic_lens_public_owner;
         GRANT SELECT (list_id, "position", person_id, vote_cast) ON vote_member_list_entries TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, is_tracked) ON vote_revision_issues TO civic_lens_public_owner;

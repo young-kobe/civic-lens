@@ -12,6 +12,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         // bill_status takes the newest gate row of the bill and then drops a row with no text, as IActionReviewStore.ReadBillStatusesAsync does.
         // record_links gives each relationship two rows: one for the page of the statement and one for the page of the target.
         // Each branch starts from the link table l, so the filter on the statement or target ID uses the indexes of l.
+        // Each branch names the page record by a column of l, so the filter of the route reaches the indexes of l. The column l.statement_kind always holds 'statement'.
+        // The headline is a lateral lookup with OFFSET 0, so Postgres reads one record for each link row. Without it the planner scans all headlines and joins them.
         // record_headlines holds the current headline of an active statement, action, or vote, with its text origin and label. It is the one owner of that rule.
         // A statement has no origin column. The author kind Analysis means model text. Any other author kind means person text.
         // Both ends and the relationship must be active, so no row names a record that the release does not hold.
@@ -53,25 +55,25 @@ namespace CivicLens.Infrastructure.Collection.Migrations
              WHERE x.headline IS NOT NULL;
 
             CREATE VIEW public_api.record_links WITH (security_barrier = true) AS
-            SELECT s.record_id, 'statement' AS kind,
+            SELECT l.statement_record_id AS record_id, 'statement' AS kind,
                    t.kind AS related_kind, t.record_id AS related_record_id, h.headline AS related_headline, h.text_origin AS related_text_origin, h.label AS related_label,
                    l.link_type, l.event_date AS statement_date, l.record_id AS link_record_id
               FROM public.published_entries l
               JOIN public_api.active_records a ON a.kind = 'relationship' AND a.record_id = l.record_id AND a.revision_number = l.revision_number
-              JOIN public_api.active_records s ON s.kind = 'statement' AND s.record_id = l.statement_record_id
+              JOIN public_api.active_records s ON s.kind = l.statement_kind AND s.record_id = l.statement_record_id
               JOIN public_api.active_records t ON t.kind = l.target_kind AND t.record_id = l.target_record_id
-              JOIN public_api.record_headlines h ON h.kind = t.kind AND h.record_id = t.record_id
-             WHERE l.kind = 'relationship'
+              CROSS JOIN LATERAL (SELECT x.headline, x.text_origin, x.label FROM public_api.record_headlines x WHERE x.kind = t.kind AND x.record_id = t.record_id OFFSET 0) h
+             WHERE l.kind = 'relationship' AND l.statement_kind = 'statement'
             UNION ALL
-            SELECT t.record_id, t.kind,
+            SELECT l.target_record_id, l.target_kind,
                    'statement', s.record_id, h.headline, h.text_origin, h.label,
                    l.link_type, l.event_date, l.record_id
               FROM public.published_entries l
               JOIN public_api.active_records a ON a.kind = 'relationship' AND a.record_id = l.record_id AND a.revision_number = l.revision_number
-              JOIN public_api.active_records s ON s.kind = 'statement' AND s.record_id = l.statement_record_id
+              JOIN public_api.active_records s ON s.kind = l.statement_kind AND s.record_id = l.statement_record_id
               JOIN public_api.active_records t ON t.kind = l.target_kind AND t.record_id = l.target_record_id
-              JOIN public_api.record_headlines h ON h.kind = 'statement' AND h.record_id = s.record_id
-             WHERE l.kind = 'relationship';
+              CROSS JOIN LATERAL (SELECT x.headline, x.text_origin, x.label FROM public_api.record_headlines x WHERE x.kind = l.statement_kind AND x.record_id = l.statement_record_id OFFSET 0) h
+             WHERE l.kind = 'relationship' AND l.statement_kind = 'statement';
 
             CREATE VIEW public_api.vote_facts WITH (security_barrier = true) AS
             SELECT a.record_id, a.revision_number, f."position", f.fact_text
