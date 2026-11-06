@@ -11,7 +11,7 @@ using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Review;
 using CivicLens.Host.Collection;
-using CivicLens.Host.Components.Ui;
+using CivicLens.PublicWeb.Components.Ui;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Collection.Processing;
 using CivicLens.Tests.Fixtures;

@@ -11,6 +11,7 @@ using CivicLens.PublicApi;
 using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
+using CivicLens.PublicWeb.Publication;
 
 namespace CivicLens.Tests.Host;
 

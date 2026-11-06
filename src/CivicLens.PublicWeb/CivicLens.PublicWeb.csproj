@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../CivicLens.Publication.Contracts/CivicLens.Publication.Contracts.csproj" />
+  </ItemGroup>
+</Project>

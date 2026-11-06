@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Host is the composition root, the CLI, and the authenticated web workspace. It owns the shared Razor component library that both private pages and static releases render. This page also records the agreed production hosting plan.
+The Host is the composition root, the CLI, and the authenticated web workspace. The shared Razor component library that both private pages and static releases render lives in `CivicLens.PublicWeb`. Host keeps the review pages and the public page components that need Application types. This page also records the agreed production hosting plan.
 
 ## Decisions
 
@@ -69,13 +69,22 @@ Pages call Application handlers for editorial and collection actions. Evidence p
 
 Light and dark themes follow the system setting. A toggle on both surfaces stores an override for each browser. The review workspace uses a denser layout where the task needs it.
 
-The shared component library lives in `src/CivicLens.Host/Components`:
+The shared component library lives in two projects. `src/CivicLens.PublicWeb/Components` holds the components that published pages use. `src/CivicLens.Host/Components` holds the components that need Host types.
+
+Host holds these components:
 
 | Folder | Components |
 |---|---|
 | `Layout` | `WorkspaceLayout`, the app shell with a side rail and top bar |
-| `Ui` | General controls: `Button`, `Panel`, `PageHeader`, `StatStrip`, `DataTable`, `TableCell`, `Pager`, `FilterTabs` (all links from `FilterTab.Link`, or all buttons from `FilterTab.Button` that a script reads; a mixed list throws `ArgumentException`, tested by `FilterTabsTests`), `Notice`, `EmptyState`, `HealthList`, `ActivityFeed`, `Field`, `TabSet`, `Drawer`, `ThemeToggle`, `IconFrame` (owns the SVG tag), `Icon` (the closed `IconName` list), `IssueIcon` (draws the path that `IssueIcons` holds for an icon name, and the neutral default for no name), `InfoPopover` (a button with an accessible name that opens a short note; `Term` uses the same popover), `ContextLink` (a link whose hidden suffix names its target), `CellTitle` (a table title that is a link when it has an address, else plain text) |
-| `Evidence` | `DocumentComparisonView` (redline and side-by-side), `RecordView`, `StatementRecord`, `CitationQuote`, `DateEvidenceLine`, `SourceLineLink`, `SourceLinesNote`, `DocumentText` |
+| `Ui` | `IssueIcon` (draws the path that `IssueIcons` holds for an icon name, and the neutral default for no name) |
+| `Evidence` | `DocumentComparisonView` (redline and side-by-side), `Redline`, `RedlineExcerpt` |
+
+PublicWeb holds these components:
+
+| Folder | Components |
+|---|---|
+| `Ui` | General controls: `Button`, `Panel`, `PageHeader`, `StatStrip`, `DataTable`, `TableCell`, `Pager`, `FilterTabs` (all links from `FilterTab.Link`, or all buttons from `FilterTab.Button` that a script reads; a mixed list throws `ArgumentException`, tested by `FilterTabsTests`), `Notice`, `EmptyState`, `HealthList`, `ActivityFeed`, `Field`, `TabSet`, `Drawer`, `ThemeToggle`, `IconFrame` (owns the SVG tag), `Icon` (the closed `IconName` list), `InfoPopover` (a button with an accessible name that opens a short note; `Term` uses the same popover), `ContextLink` (a link whose hidden suffix names its target), `CellTitle` (a table title that is a link when it has an address, else plain text) |
+| `Evidence` | `RecordView`, `StatementRecord`, `CitationQuote`, `DateEvidenceLine`, `SourceLineLink`, `SourceLinesNote`, `DocumentText` |
 
 `StatementRecord` wraps `RecordView` for one statement revision. It shows the headline, the summary, and the statement date with its evidence quote. It also shows speakers by configured name, other speakers, issues, policy areas, bill numbers, and each quotation with its kind.
 
@@ -110,8 +119,8 @@ A systemd timer runs `deploy/scripts/check-health.sh` every 10 minutes on the ho
 | Entry point and commands | `src/CivicLens.Host/Program.cs` |
 | Owner command rules and JSON output | `src/CivicLens.Host/OwnerCommand.cs`, `src/CivicLens.Host/CommandOutput.cs` |
 | App shell and routes | `src/CivicLens.Host/Components/App.razor`, `src/CivicLens.Host/Components/Routes.razor`, `src/CivicLens.Host/Components/Layout/WorkspaceLayout.razor` |
-| Public portrait | `src/CivicLens.Host/Publication/OfficialPortrait.razor` |
-| Shared evidence components | `src/CivicLens.Host/Components/Evidence/DocumentComparisonView.razor`, `src/CivicLens.Host/Components/Evidence/RecordView.razor`, `src/CivicLens.Host/Components/Evidence/StatementRecord.razor` |
+| Public portrait | `src/CivicLens.PublicWeb/Publication/OfficialPortrait.razor` |
+| Shared evidence components | `src/CivicLens.Host/Components/Evidence/DocumentComparisonView.razor`, `src/CivicLens.PublicWeb/Components/Evidence/RecordView.razor`, `src/CivicLens.PublicWeb/Components/Evidence/StatementRecord.razor` |
 | Styles and scripts | `src/CivicLens.Host/wwwroot/css/theme.css`, `src/CivicLens.Host/wwwroot/css/app.css`, `src/CivicLens.Host/wwwroot/css/public.css`, `src/CivicLens.Host/wwwroot/css/review.css`, `src/CivicLens.Host/wwwroot/js/theme.js`, `src/CivicLens.Host/wwwroot/js/app.js`, `src/CivicLens.Host/wwwroot/js/public.js`, `src/CivicLens.Host/wwwroot/js/review.js` |
 | Workspace wiring | `src/CivicLens.Host/Review/ReviewWorkspace.cs` |
 | Sources page | `src/CivicLens.Host/Collection/SourcesPage.razor` |

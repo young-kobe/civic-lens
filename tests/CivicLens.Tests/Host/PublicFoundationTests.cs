@@ -7,6 +7,7 @@ using CivicLens.Application.Publication;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Components.Ui;
 using CivicLens.Tests.Fixtures;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;

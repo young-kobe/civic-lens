@@ -20,5 +20,6 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.14" />
     <ProjectReference Include="../CivicLens.Application/CivicLens.Application.csproj" />
     <ProjectReference Include="../CivicLens.Infrastructure/CivicLens.Infrastructure.csproj" />
+    <ProjectReference Include="../CivicLens.PublicWeb/CivicLens.PublicWeb.csproj" />
   </ItemGroup>
 </Project>

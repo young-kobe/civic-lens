@@ -4,8 +4,9 @@ using CivicLens.Application.Publication;
 using CivicLens.Application.Roster;
 using CivicLens.Core.Relationships;
 using CivicLens.Host.Actions;
-using CivicLens.Host.Components.Ui;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Components.Ui;
+using CivicLens.PublicWeb.Publication;
 
 namespace CivicLens.Host.Publication;
 

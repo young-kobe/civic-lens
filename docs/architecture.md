@@ -59,7 +59,7 @@ Pending: live Auth0 tenant verification, production deployment, AI classificatio
 
 ## Layers and dependency rules
 
-Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. Collection.Contracts and Publication.Contracts have no dependencies. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts only. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
+Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. PublicWeb holds the public Razor components and references Publication.Contracts only. Host references PublicWeb, and no production project references Host. Collection.Contracts and Publication.Contracts have no dependencies. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts only. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
 
 | Layer | Owns | Must not own |
 |---|---|---|
@@ -68,7 +68,8 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 | Application | Use cases, configuration policy, external ports and mapping into domain evidence | Process launching, SQL or storage compression |
 | Infrastructure | Process lifecycle, protocol decoding, actual capture verification, Postgres persistence | Independent definitions of contract or editorial validity |
 | Collector | Bounded source interaction and complete raw capture production | Durable scheduling, imports, officials registry or publication |
-| Host | Command parsing, composition, and web presentation | Collection algorithms or evidence invariants |
+| Host | Command parsing, composition, review pages, and the public page components that still need Application types | Collection algorithms or evidence invariants |
+| PublicWeb | The public Razor components: shared UI, evidence display, and the public pages that need only Publication.Contracts | Application, Infrastructure, or Host types, packages, and operational storage |
 | PublicApi | Release ingest, the search index, and the public read API | Operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence |
 
 `tools/render-architecture.py` generates the diagrams below. Run `python3 tools/render-architecture.py`, then open `artifacts/architecture.html` for the explorer. Planned components are labeled there; a diagram is not a claim that the pipeline exists.
@@ -109,15 +110,18 @@ flowchart LR
     core["Core"]
     cc["Collection.Contracts"]
     pc["Publication.Contracts"]
+    web["PublicWeb"]
     api["PublicApi"]
     collector["Collector"]
     host --> app
     host --> infra
+    host --> web
     infra --> app
     app --> core
     app --> cc
     app --> pc
     collector --> cc
+    web --> pc
     api --> pc
 ```
 
@@ -167,6 +171,7 @@ Package rules:
 - Infrastructure pins the official `Anthropic` C# SDK 12.50.0 for the model adapters only. An architecture test checks that no other project references its assembly.
 - Application pins one package, `Microsoft.Extensions.Logging.Abstractions` 10.0.14, so workers take `ILogger<T>`. The worker command builds a console provider in `Program.cs` that writes to stderr. The review workspace builds its own console provider with a Warning minimum. An architecture test allows no other Application package.
 - `CivicLens.PublicApi` pins Npgsql 10.0.3 and references `Publication.Contracts` only. It has no EF Core, no Application, and no operational storage beyond the `public_api` views. Only Host and PublicApi use the Web SDK. An architecture test checks the references.
+- `CivicLens.PublicWeb` uses the Razor SDK with the ASP.NET shared framework reference, and has no package. It references `Publication.Contracts` only. An architecture test checks its references and its assembly references.
 - No Rust, Go, Python analysis service, or React application is planned. Python's standard library serves only the development tools in `tools/`.
 
 ### Legacy reuse
@@ -230,6 +235,7 @@ These rules cross features. Each line gives the rule, what enforces it, and the 
 - Only the worker path approves by code. It approves actions, House votes, Senate votes, executive actions, and statements from the own office of their official. The reserved subject `civic-lens:code` is the actor. A person cannot act as it. It publishes any record kind through the `publishing` worker stage. Enforced by `ReviewAuthor.IsReserved`, `ReviewAuthorization`, `ReviewWriteRules`, `ReviewRecords.AppendCodeApprovedAsync`, and `PublishRelease`. Tests: `PostgresBillStreamTests.APersonCannotActAsTheCodeSubject`, `PostgresStatementDraftStoreTests.AStatementAiRevisionFromASourceThatIsNotTheOfficialsOwnOfficeWaitsForAPersonBecauseCoverageIsNotAuthorship`, and `PublishApprovedRecordsTests.TheCodeSubjectCanPublishAnyKindBecauseTheWorkerPublishesEveryApprovedRecord`.
 - A release holds the exact approved revision. Enforced by `PublishedRecordRules` and `PostgresPublicationStore`, which recheck the review state at commit. Test: `PostgresPublicationStoreTests.ASaveAfterTheBuildBlocksTheCommitBecauseTheServedRevisionWouldBeStale`.
 - The collector depends on Collection.Contracts only. Enforced by the dependency map in `ArchitectureTests`. Test: `ArchitectureTests.ProductionProjectsHaveOnlyApprovedDependencies`.
+- PublicWeb references Publication.Contracts only. Enforced by the dependency map in `ArchitectureTests`. Tests: `ArchitectureTests.ProductionProjectsHaveOnlyApprovedDependencies` and `ArchitectureTests.ThePublicWebReferencesOnlyThePublicationContracts`.
 - Only the current lease holder moves queue work. Each claim issues a new token and a higher fence, and a stale write fails. Enforced by `PostgresCollectionJobStore`, `EvidenceProcessingLifecycle`, and `AnalysisLifecycle`. Test: `PostgresDocumentChangeAnalysisStoreTests.AnExpiredLeaseIsRecoveredAsAnInterruptedRunAndTheStaleOwnerIsFenced`.
 
 ## Data flow
@@ -439,6 +445,7 @@ This is the only navigation index.
 | Related records on record pages | [Publication](architecture/publication.md#related-records) | `src/CivicLens.Application/Publication/ReleasePages.cs` |
 | Backups, retention, monitoring | [Publication](architecture/publication.md#limits-and-planned-work) | none |
 | Web host, security headers, components | [Host](architecture/host.md#behavior) | `src/CivicLens.Host/Program.cs` |
+| Public Razor component library | [Publication](architecture/publication.md#rendering) | `src/CivicLens.PublicWeb/CivicLens.PublicWeb.csproj` |
 | Production hosting plan | [Host](architecture/host.md#limits-and-planned-work) | none |
 | MCP plans | [Review](architecture/review.md#limits-and-planned-work), [Publication](architecture/publication.md#limits-and-planned-work) | none |
 | Public views, role, active release rule | [Publication](architecture/publication.md#public-api-views) | `src/CivicLens.Infrastructure/Collection/Migrations/20261103165431_PublicApiViews.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261104013000_PublicApiZipDistricts.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261104014700_PublicApiReleaseTime.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261105005544_VoteQuestionResultColumns.cs`, `src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs` |

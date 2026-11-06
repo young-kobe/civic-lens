@@ -17,9 +17,10 @@ public sealed class ArchitectureTests
         ["CivicLens.Publication.Contracts"] = [],
         ["CivicLens.Application"] = ["CivicLens.Core", "CivicLens.Collection.Contracts", "CivicLens.Publication.Contracts"],
         ["CivicLens.Infrastructure"] = ["CivicLens.Application"],
-        ["CivicLens.Host"] = ["CivicLens.Application", "CivicLens.Infrastructure"],
+        ["CivicLens.Host"] = ["CivicLens.Application", "CivicLens.Infrastructure", "CivicLens.PublicWeb"],
         ["CivicLens.Collector"] = ["CivicLens.Collection.Contracts"],
-        ["CivicLens.PublicApi"] = ["CivicLens.Publication.Contracts"]
+        ["CivicLens.PublicApi"] = ["CivicLens.Publication.Contracts"],
+        ["CivicLens.PublicWeb"] = ["CivicLens.Publication.Contracts"]
     };
 
     [Fact]
@@ -32,9 +33,12 @@ public sealed class ArchitectureTests
         {
             var name = Path.GetFileNameWithoutExtension(path);
             var xml = XDocument.Load(path);
-            Assert.Equal(name is "CivicLens.Host" or "CivicLens.PublicApi" ? "Microsoft.NET.Sdk.Web" : "Microsoft.NET.Sdk",
+            Assert.Equal(name is "CivicLens.Host" or "CivicLens.PublicApi" ? "Microsoft.NET.Sdk.Web"
+                : name == "CivicLens.PublicWeb" ? "Microsoft.NET.Sdk.Razor" : "Microsoft.NET.Sdk",
                 xml.Root!.Attribute("Sdk")!.Value);
-            Assert.Empty(xml.Descendants("FrameworkReference")); // Host and PublicApi alone receive ASP.NET through the Web SDK.
+            // Host and PublicApi receive ASP.NET through the Web SDK. PublicWeb names the shared framework for Razor components.
+            Assert.Equal(name == "CivicLens.PublicWeb" ? ["Microsoft.AspNetCore.App"] : [],
+                xml.Descendants("FrameworkReference").Select(element => element.Attribute("Include")!.Value));
             var references = xml.Descendants("ProjectReference")
                 .Select(element => Path.GetFileNameWithoutExtension(element.Attribute("Include")!.Value));
             Assert.Equal(Allowed[name].Order(), references.Order());
@@ -69,6 +73,14 @@ public sealed class ArchitectureTests
 
         Assert.Equal(["CivicLens.Publication.Contracts"], references.Where(name => name.StartsWith("CivicLens.", StringComparison.Ordinal)));
         Assert.DoesNotContain(references, name => name.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ThePublicWebReferencesOnlyThePublicationContracts()
+    {
+        var references = ReferencedAssemblies(Path.Combine(AppContext.BaseDirectory, "CivicLens.PublicWeb.dll"));
+
+        Assert.Equal(["CivicLens.Publication.Contracts"], references.Where(name => name.StartsWith("CivicLens.", StringComparison.Ordinal)));
     }
 
     [Fact]
