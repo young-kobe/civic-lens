@@ -17,8 +17,14 @@ public sealed class BuildIdTests
     [InlineData("1.0.0")]
     [InlineData("1.0.0+")]
     [InlineData("1.0.0+bad sha\"")]
-    public void ABuildWithNoUsableShaIsUnversionedAndNeverBreaksTheETagSyntax(string informationalVersion)
+    [InlineData("1.0.0+abcdef0")]
+    [InlineData("1.0.0+gggggggggggggggggggggggggggggggggggggggg")]
+    [InlineData("1.0.0+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")]
+    [InlineData("1.0.0+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    [InlineData("1.0.0+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    public void ABuildWithoutExactlyFortyLowercaseHexDigitsStopsServerPageStartup(string informationalVersion)
     {
-        Assert.Equal(BuildId.Unversioned, BuildId.FromAssembly(TestCodeVersion.AssemblyVersioned(informationalVersion)));
+        var failure = Assert.Throws<InvalidOperationException>(() => BuildId.FromAssembly(TestCodeVersion.AssemblyVersioned(informationalVersion)));
+        Assert.Contains("SourceRevisionId", failure.Message, StringComparison.Ordinal);
     }
 }

@@ -13,13 +13,19 @@ public sealed class PageCache(string buildId)
 
     public EntityTagHeaderValue ETag(int releaseNumber) => new($"\"r{releaseNumber}-{buildId}\"");
 
-    /// <summary>Sets the validators on the response. Returns true when the request already holds this page, so the caller answers 304.</summary>
-    public bool Apply(HttpContext context, int releaseNumber)
+    public bool IsNotModified(HttpContext context, int releaseNumber)
+    {
+        var tag = ETag(releaseNumber);
+        return context.Request.GetTypedHeaders().IfNoneMatch.Any(candidate =>
+            candidate.Equals(EntityTagHeaderValue.Any) || candidate.Compare(tag, useStrongComparison: false));
+    }
+
+    /// <summary>Sets validators after a successful render, or when a matching request skips a successful page's render.</summary>
+    public void Apply(HttpContext context, int releaseNumber)
     {
         var tag = ETag(releaseNumber);
         var response = context.Response.GetTypedHeaders();
         response.ETag = tag;
         context.Response.Headers.CacheControl = CacheControl;
-        return context.Request.GetTypedHeaders().IfNoneMatch.Any(candidate => candidate.Compare(tag, useStrongComparison: false));
     }
 }

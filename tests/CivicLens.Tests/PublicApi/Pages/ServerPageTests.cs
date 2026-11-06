@@ -2,10 +2,18 @@ using System.Net;
 using CivicLens.Host.Publication;
 using CivicLens.PublicApi;
 using CivicLens.PublicApi.Pages;
+using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
+using CivicLens.Tests.Fixtures;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Rendering;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Pages;
 
@@ -64,21 +72,60 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task ARequestWithTheCurrentETagGets304WithNoBodyAndAStaleTagGetsThePage()
+    public async Task ANotFoundPageIgnoresMatchingWeakAndWildcardValidatorsAndKeepsIts404Body()
     {
         await using var host = await StartAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 3, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
         var fresh = await host.Client.GetAsync(UnknownPage);
 
-        var revalidated = await Revalidate(host, fresh);
-        var stale = await Send(host, "\"r2-old\"");
+        foreach (var tag in new[] { fresh.Headers.ETag!.Tag, "W/" + fresh.Headers.ETag.Tag, "*", "\"r2-old\"" })
+        {
+            using var response = await Send(host, tag);
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+            Assert.NotEmpty(await response.Content.ReadAsStringAsync());
+        }
+    }
 
-        Assert.Equal(HttpStatusCode.NotModified, revalidated.StatusCode);
-        Assert.Equal(fresh.Headers.ETag, revalidated.Headers.ETag);
-        Assert.Empty(await revalidated.Content.ReadAsStringAsync());
-        Assert.Equal(HttpStatusCode.NotFound, stale.StatusCode);
-        Assert.NotEmpty(await stale.Content.ReadAsStringAsync());
+    [Fact]
+    public async Task ASuccessfulPageWithAMatchingStrongWeakOrWildcardValidatorSkipsItsRender()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 3, PublishedAt);
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
+        await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsReaderDatabase);
+        await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
+        var cache = new PageCache(TestCodeVersion.Sha);
+        var responder = new ServerPageResponder(new ActiveReleaseReader(views), cache, new PageRenderer(services, services.GetRequiredService<ILoggerFactory>()));
+        foreach (var tag in new[] { cache.ETag(3).ToString(), "W/" + cache.ETag(3), "*", "\"old\", W/" + cache.ETag(3) })
+        {
+            var context = new DefaultHttpContext();
+            context.Request.Headers.IfNoneMatch = tag;
+            var response = await responder.RespondAsync<BrokenPage>(context, StatusCodes.Status200OK, new Dictionary<string, object?>(), default);
+            Assert.Equal(StatusCodes.Status304NotModified, Assert.IsAssignableFrom<IStatusCodeHttpResult>(response).StatusCode);
+            Assert.Equal(cache.ETag(3).ToString(), context.Response.Headers.ETag);
+            Assert.Equal(PageCache.CacheControl, context.Response.Headers.CacheControl);
+        }
+    }
+
+    [Fact]
+    public async Task AFailedRenderWithAStaleValidatorLeavesNoCacheHeaders()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 3, PublishedAt);
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
+        await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsReaderDatabase);
+        await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
+        var responder = new ServerPageResponder(new ActiveReleaseReader(views), new PageCache(TestCodeVersion.Sha),
+            new PageRenderer(services, services.GetRequiredService<ILoggerFactory>()));
+        var context = new DefaultHttpContext();
+        context.Request.Headers.IfNoneMatch = "\"stale\"";
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => responder.RespondAsync<BrokenPage>(context, StatusCodes.Status200OK,
+            new Dictionary<string, object?>(), default));
+
+        Assert.False(context.Response.Headers.ContainsKey("ETag"));
+        Assert.False(context.Response.Headers.ContainsKey("Cache-Control"));
     }
 
     [Fact]
@@ -137,6 +184,13 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Null(response.Headers.ETag);
+        foreach (var path in PublicAssets.Paths)
+        {
+            using var asset = await host.Client.GetAsync("/" + path);
+            Assert.Equal(HttpStatusCode.NotFound, asset.StatusCode);
+            Assert.Null(asset.Headers.ETag);
+            Assert.False(asset.Headers.Contains("Cache-Control"));
+        }
     }
 
     [Fact]
@@ -170,6 +224,11 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     private const string MembersStripHtml = $"""<div class="members-strip" id="{MembersStripSlot.ElementId}" aria-live="polite"></div>""";
+
+    public sealed class BrokenPage : ComponentBase
+    {
+        protected override void BuildRenderTree(RenderTreeBuilder builder) => throw new InvalidOperationException("Render failed.");
+    }
 
     private static Task<HttpResponseMessage> Revalidate(ApiHost host, HttpResponseMessage fresh) => Send(host, fresh.Headers.ETag!.Tag);
 
