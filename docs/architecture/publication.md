@@ -28,7 +28,7 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - At launch, the Jetson serves releases through Caddy and the Cloudflare tunnel on civic-lens.info. See [Web server](../operations.md#web-server).
 - Publish stages and checks a release on the server. The active release changes only after the checks pass.
 - Locally, a Caddy container serves the release root with `file_server { precompressed br gzip }`.
-- Host renders the shared Razor components to static HTML, so publication needs no new project.
+- Host renders the Razor components of the PublicWeb project to static HTML. PublicWeb references Publication.Contracts only.
 - Each manifest entry carries filters, so the facet pages and the search filters need no record file reads. Each published record type owns the mapping in its `ToEntry` method. A filter that the kind has no fact for stays empty; publish never guesses it.
 - One loader owns each record kind: its ID shape, its ready list, and how publish loads and builds it. `PublishedRecordLoaders` lists them, and the publish and ready-list handlers go through that list. One loader owns the Application side of a kind. The other per-kind places are the `PublicationProtocol.IsRecordId` arm, the store state check, `PublishedRecordLabels.Kind`, the review link, and the `IReleaseRenderer` method.
 - The loader base class gives each kind one owner for its Application rules. A non-generic base exists only so `PublishedRecordLoaders` can hold all record kinds in one list. The seven kinds are real variation, with different IDs, stores, and records. The precedents are `PostgresAnalysisStore<TRun>` and `ReviewRecordPage`.

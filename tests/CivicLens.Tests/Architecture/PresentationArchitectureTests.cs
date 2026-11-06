@@ -122,7 +122,8 @@ public sealed class PresentationArchitectureTests
     }
 
     private static IEnumerable<string> StyleSheets() =>
-        Directory.GetFiles(Path.Combine(HostRoot, "wwwroot"), "*.css", SearchOption.AllDirectories);
+        new[] { HostRoot, PublicWebRoot }.Select(root => Path.Combine(root, "wwwroot")).Where(Directory.Exists)
+            .SelectMany(root => Directory.GetFiles(root, "*.css", SearchOption.AllDirectories));
 
     private static IEnumerable<string> Markup() =>
         new[] { HostRoot, PublicWebRoot }.SelectMany(root => Directory.GetFiles(root, "*.razor", SearchOption.AllDirectories))

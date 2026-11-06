@@ -4,15 +4,15 @@ using System.Text.RegularExpressions;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Publication;
-using CivicLens.PublicWeb.Components.Ui;
+using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Components.Ui;
 using CivicLens.Tests.Fixtures;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using CivicLens.Host.Components.Ui;
 
 namespace CivicLens.Tests.Host;
 

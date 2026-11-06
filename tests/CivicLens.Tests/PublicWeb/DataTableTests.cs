@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace CivicLens.Tests.Host;
+namespace CivicLens.Tests.PublicWeb;
 
 public sealed class DataTableTests
 {

@@ -4,7 +4,7 @@ using AngleSharp.Html.Parser;
 using CivicLens.Host.Publication;
 using CivicLens.PublicWeb.Publication;
 
-namespace CivicLens.Tests.Host;
+namespace CivicLens.Tests.PublicWeb;
 
 public sealed class GlossaryTests
 {
