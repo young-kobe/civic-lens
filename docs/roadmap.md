@@ -143,6 +143,7 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [ ] Agree the view design, active release rule, and role limits, with a test that fails when the role can read any other table
   - [x] Add the `public_api` schema, the role `civic_lens_public`, the active release view, the vote views, and the bill views ([public API views](architecture/publication.md#public-api-views))
   - [x] Serve the members of a vote and the bills through `PublicApi` ([search API](architecture/search.md#api))
+  - [x] Serve the latest action of a bill, the related records of a record, the facts of a vote, and executive actions through `PublicApi` ([search API](architecture/search.md#api)). Source quotes and source links of a record are not served yet
   - [ ] Measure traffic, query load, and worker effect on the shared database
   - [x] Move the public components to a Razor class library, `CivicLens.PublicWeb`, that references `CivicLens.Publication.Contracts` only. Host and `PublicApi` reference it. The static pages stay byte for byte the same
   - [ ] Add the views and endpoints that the pages need: officials and their summary figures, party boards, issue counts, the home highlights, bill status, related records, record bodies, and filters by official and issue

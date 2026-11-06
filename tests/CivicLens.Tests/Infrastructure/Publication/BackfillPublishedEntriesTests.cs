@@ -9,6 +9,7 @@ using CivicLens.Tests.Application.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi;
+using CivicLens.Tests.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
@@ -98,6 +99,24 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task TheBackfillPinsTheStatusFileOfEachKeptReleaseOnceAndAReleaseFromBeforeTheFilePinsNoneBecauseTheViewMustShowWhatTheReleaseShowed()
+    {
+        await AddReleasesAsync(2);
+        Keep(1);
+        Keep(2);
+        var status = new PublishedBillStatus { RecordId = new string('a', 64), Text = "Received in the Senate.", Date = new(2026, 2, 13), ObservedAtUtc = new DateTimeOffset(5, TimeSpan.Zero) };
+        releases.Directories[folders[1]][PublicationProtocol.BillStatusPath] =
+            JsonSerializer.SerializeToUtf8Bytes(new PublishedBillStatuses { Records = [status] }, PublicationProtocol.JsonOptions);
+
+        var first = await RunAsync(10);
+        var rerun = await RunAsync(10);
+
+        Assert.Equal((1, 0), (first.BillStatusesPinned, rerun.BillStatusesPinned));
+        Assert.Equal(["1|Received in the Senate.|2026-02-13|5"],
+            await ReadAsync("SELECT release_number || '|' || latest_action_text || '|' || latest_action_date || '|' || read_at_utc_ticks FROM release_bill_statuses"));
+    }
+
+    [Fact]
     public async Task ARerunAddsNothingReadsNoManifestAndCountsTheRowsAlreadyPresent()
     {
         var action = await SeedActionAsync('a');
@@ -105,12 +124,12 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
         await AddRangeAsync(action, 1, null);
         Keep(1, Listed(action, action.ToEntry() with { BillLine = Line }));
         await RunAsync(10);
-        var reads = releases.ReadPaths.Count;
+        var reads = ManifestAndRecordReads();
 
         var rerun = await RunAsync(10);
 
         Assert.Equal((0, 0, 1, 0, 0), (rerun.Examined, rerun.Added, rerun.AlreadyPresent, rerun.Skipped, rerun.OpenRangesWithoutRow));
-        Assert.Equal(reads, releases.ReadPaths.Count);
+        Assert.Equal(reads, ManifestAndRecordReads());
         Assert.Equal(["1"], await ReadAsync("SELECT count(*) FROM published_entries"));
     }
 
@@ -172,12 +191,12 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
         Keep(1, Listed(action, action.ToEntry() with { BillLine = Line }));
         await RunAsync(10);
         Keep(2, Listed(action, action.ToEntry() with { BillLine = "This bill funds school meals." }));
-        var reads = releases.ReadPaths.Count;
+        var reads = ManifestAndRecordReads();
 
         var result = await RunAsync(10);
 
         Assert.Equal((0, 0, 0), (result.Added, result.BillLinesFilled, result.Skipped));
-        Assert.Equal(reads, releases.ReadPaths.Count);
+        Assert.Equal(reads, ManifestAndRecordReads());
         Assert.Equal([Line], await ReadAsync("SELECT bill_line FROM published_entries"));
     }
 
@@ -463,6 +482,70 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
         Assert.Equal(["The commit headline"], await ReadAsync("SELECT headline FROM published_entries"));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StatementApproverBackfillReadsThePublishedFileAndNeverLaterReviewDecisionsOrOverwritesAPinnedValue(bool hasEntry)
+    {
+        var statement = PublishedStatementTests.Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Code };
+        await AddReleasesAsync(1);
+        await AddRangeAsync(statement.RecordId, "statement", 1, null);
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            {PublicRecordPageRows.Headline("statement", statement.RecordId, statement.Headline, "Model")}
+            DELETE FROM published_entries WHERE kind = 'statement' AND record_id = '{statement.RecordId}';
+            {PublicRecordPageRows.StatementApproval(statement.RecordId, 1, 1, "auth0|owner")}
+            """);
+        var oldEntry = statement.ToEntry() with { ApprovedBy = null };
+        await publications.AddFirstPublishedAsync([new(PublishedRecordKind.Statement, statement.RecordId, statement.FirstPublishedAtUtc)], default);
+        if (hasEntry)
+        {
+            await publications.AddEntriesAsync([oldEntry], default);
+            await Assert.ThrowsAsync<PublicationConflictException>(() => publications.AddEntriesAsync(
+                [oldEntry with { ApprovedBy = PublishedApprover.Person }], default));
+            Assert.Equal(["unknown"], await ReadAsync("SELECT coalesce(approved_by, 'unknown') FROM published_entries WHERE kind = 'statement'"));
+        }
+        var incoming = oldEntry with { ApprovedBy = PublishedApprover.Person };
+        var commit = new PublicationCommit(2, null, $"000002-{Guid.NewGuid():N}", [PublishedRevisionBinding.Of(incoming)], [])
+        {
+            Withdrawals = [],
+            AddedEntries = [incoming],
+            Names = new ReleaseNames([], new ReleaseFacets([], []))
+        };
+        var refused = await Assert.ThrowsAsync<PublicationConflictException>(() => publications.CommitAsync(
+            "auth0|owner", commit, "historical-statement", new string('0', 64), default));
+        Assert.Contains("releases entries backfill", refused.Message, StringComparison.Ordinal);
+        Keep(1, new FolderRecord(oldEntry, statement));
+
+        await RunAsync(10);
+
+        Assert.Equal(["Code"], await ReadAsync("SELECT approved_by FROM published_entries WHERE kind = 'statement'"));
+        await Assert.ThrowsAsync<PublicationConflictException>(() => publications.FillStatementApproversAsync(
+            [oldEntry with { ApprovedBy = PublishedApprover.Person }], default));
+        Assert.Equal(["Code"], await ReadAsync("SELECT approved_by FROM published_entries WHERE kind = 'statement'"));
+        Assert.False((await publications.ReadEntryCandidatesAsync(default)).Single().NeedsBackfill);
+    }
+
+    [Fact]
+    public async Task AnOpenStatementWithNoKeptManifestReportsItsMissingApproverSoTheBackfillCannotReportSuccess()
+    {
+        var statement = PublishedStatementTests.Statement();
+        await AddReleasesAsync(1);
+        await AddRangeAsync(statement.RecordId, "statement", 1, null);
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            {PublicRecordPageRows.Headline("statement", statement.RecordId, statement.Headline)}
+            DELETE FROM published_entries WHERE kind = 'statement' AND record_id = '{statement.RecordId}';
+            """);
+        await publications.AddFirstPublishedAsync([new(PublishedRecordKind.Statement, statement.RecordId, statement.FirstPublishedAtUtc)], default);
+        await publications.AddEntriesAsync([statement.ToEntry() with { ApprovedBy = null }], default);
+
+        var result = await RunAsync(10);
+
+        Assert.Equal(1, result.OpenStatementsWithoutApprover);
+        Assert.Equal(["unknown"], await ReadAsync("SELECT coalesce(approved_by, 'unknown') FROM published_entries WHERE kind = 'statement'"));
+    }
+
     private sealed record FolderRecord(PublishedRecordEntry Entry, object? File);
 
     private FolderRecord Listed(PublishedAction action, PublishedRecordEntry? entry = null, bool withFile = true, byte[]? file = null) =>
@@ -577,6 +660,9 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
             VALUES ('action', '{action.RecordId}', 1, 0, 'o1', false)
             """);
     }
+
+    // Each run reads the status file of every kept folder, so the reads of manifests and record files are the ones that a rerun must not repeat.
+    private int ManifestAndRecordReads() => releases.ReadPaths.Count(path => path != PublicationProtocol.BillStatusPath);
 
     private Task<PublishedEntriesBackfillResult> RunAsync(int limit) => new BackfillPublishedEntries(publications, releases).ExecuteAsync(Owner, limit);
 

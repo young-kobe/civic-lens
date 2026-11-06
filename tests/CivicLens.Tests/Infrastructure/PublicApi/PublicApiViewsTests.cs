@@ -30,7 +30,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     private static readonly string[] BaseTables =
         ["vote_revisions", "vote_revision_facts", "vote_member_list_entries", "vote_revision_issues", "publication_releases", "publication_record_states", "vote_drafts", "vote_member_lists",
          "action_revisions", "action_revision_sponsorships", "action_revision_issues", "action_drafts", "published_entries", "zcta_districts", "roster_snapshots", "collection_attempts",
-         "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas", "published_entry_officials"];
+         "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas", "published_entry_officials",
+         "release_bill_statuses", "statement_review_decisions", "executive_action_revisions", "executive_action_revision_notices", "executive_action_documents"];
 
     private string connectionString = null!;
     private string[] roleAfterMigration = null!;
@@ -60,6 +61,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await using (var lift = new NpgsqlCommand("SET default_transaction_read_only = off", connection)) await lift.ExecuteNonQueryAsync();
         foreach (var table in BaseTables)
             await AssertDeniedAsync(connection, $"SELECT * FROM public.{table}");
+        Assert.Equal(["false"], await QueryAsync($"SELECT has_any_column_privilege('{Owner}', 'public.statement_review_decisions', 'SELECT')::text", connectionString));
         await AssertDeniedAsync(connection, "SELECT count(*) FROM public.vote_revisions");
         await AssertDeniedAsync(connection, "INSERT INTO public.publication_releases (release_number) VALUES (9)");
         await AssertDeniedAsync(connection, "UPDATE public.vote_revisions SET headline = 'x'");
@@ -67,7 +69,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
-        foreach (var view in new[] { "active_records", "votes", "vote_members", "member_votes", "vote_issues", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas" })
+        foreach (var view in new[] { "active_records", "votes", "vote_members", "member_votes", "vote_issues", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas",
+            "bill_status", "record_headlines", "record_links", "vote_facts", "executive_actions", "executive_action_notices" })
         {
             // A view with a join or a group cannot take a write at all, so Postgres refuses with 55000 before it checks a privilege.
             await AssertDeniedAsync(connection, $"DELETE FROM public_api.{view}", "55000");
@@ -101,19 +104,25 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"active_records v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_sponsorships v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"bill_status v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bills v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"executive_action_notices v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"executive_actions v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"member_votes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_attendance v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_bill_counts v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_executive_actions v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_issue_counts v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"officials v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"record_headlines v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"record_links v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issue_excludes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issue_includes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_official_terms v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_officials v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_policy_areas v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"vote_facts v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_members v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"votes v {Owner} {Role}:SELECT {{security_barrier=true}}",

@@ -107,7 +107,7 @@ internal sealed class PreviousRelease
     }
 
     // A release from before the status line holds no status file. Every action then counts as having no earlier status.
-    private static async Task<Dictionary<string, PublishedBillStatus>> ReadBillStatusesAsync(IReleaseDirectory releases,
+    internal static async Task<Dictionary<string, PublishedBillStatus>> ReadBillStatusesAsync(IReleaseDirectory releases,
         string directoryName, CancellationToken cancellationToken)
     {
         byte[] bytes;
