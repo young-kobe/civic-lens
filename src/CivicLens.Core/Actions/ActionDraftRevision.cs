@@ -108,7 +108,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
             throw new ArgumentException("Code text states the bill title and date, so the revision cites the bill page.");
         ValidateTextSource();
         if ((BillLine is null) != (BillLineCitation is null) || BillLine is not null &&
-            (SummaryCitation is not { } lineSummary || !Covers(lineSummary, BillLineCitation!) || string.IsNullOrWhiteSpace(BillLine) || BillLine.Length > MaximumBillLineLength))
+            (SummaryCitation is not { } lineSummary || !lineSummary.Covers(BillLineCitation!) || string.IsNullOrWhiteSpace(BillLine) || BillLine.Length > MaximumBillLineLength))
             throw new ArgumentException($"A bill line has 1 to {MaximumBillLineLength} characters and needs its quote span inside the cited summary.");
         if ((SummaryVersion is null) != (SummaryCitation is null) || (PolicyArea is null) != (PolicyAreaCitation is null))
             throw new ArgumentException("A summary version and a policy area each need their citation.");
@@ -227,9 +227,6 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         BillLine == other.BillLine && BillLineCitation == other.BillLineCitation &&
         IssueCandidateIds.IsDefault == other.IssueCandidateIds.IsDefault &&
         (IssueCandidateIds.IsDefault || IssueCandidateIds.SequenceEqual(other.IssueCandidateIds));
-
-    private static bool Covers(SourceSpan outer, SourceSpan inner) =>
-        outer.ExtractionId == inner.ExtractionId && inner.Start >= outer.Start && (long)inner.Start + inner.Length <= (long)outer.Start + outer.Length;
 
     private static bool IsBounded(SourceSpan span) => span is { Start: >= 0, Length: > 0 } && LowercaseHex.Is(span.ExtractionId, 64);
 }
