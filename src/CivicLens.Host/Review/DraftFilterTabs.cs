@@ -1,5 +1,5 @@
 using CivicLens.Application.Review;
-using CivicLens.Host.Components.Ui;
+using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.Host.Review;
 

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Host is the composition root, the CLI, and the authenticated web workspace. It owns the shared Razor component library that both private pages and static releases render. This page also records the agreed production hosting plan.
+The Host is the composition root, the CLI, and the authenticated web workspace. The shared Razor component library that both private pages and static releases render lives in `CivicLens.PublicWeb`. Host keeps the review pages and the public page components that need Application types. This page also records the agreed production hosting plan.
 
 ## Decisions
 
@@ -11,7 +11,7 @@ The Host is the composition root, the CLI, and the authenticated web workspace. 
 - Razor components are the reusable presentation unit. Shared components take explicit display data and styling. They never read operational storage or decide editorial state.
 - Private pages and public release pages render the same components, so evidence looks the same on both surfaces.
 - Presentation choices must not move editorial rules into UI code.
-- The review UI keeps a restrained monochrome identity: charcoal, white, and gray give structure. Semantic color marks evidence changes, status, and keyboard focus. Published pages set `class="public"` on `body`. The `body.public` block of `theme.css` then replaces the shared tokens with the public palette. The palette has navy `#14213D`, cobalt `#2747D9`, marigold `#F5B301`, mist `#EEF1F8`, slate text `#4A5570`, and line `#D8DEEA`. Each token has one `light-dark()` value, so both themes come from one declaration. A browser without `light-dark()` gets a fallback copy of the light values. A second block sets the light scheme and the six tone tokens of insert, delete, and warning to their light values. The test checks that both copies equal the light side of the `light-dark()` values and the light tone tokens. Dark mode uses `data-theme` on `html` or the system setting. Invariant: every text and background pair of the public tokens reaches 4.5 to 1 in both themes. Enforced by `theme.css`. Test: `PublicFoundationTests.ThePublicTokensReachFourAndAHalfToOneInBothThemesOnTheSurfacesThatShowThem`.
+- The review UI keeps a restrained monochrome identity: charcoal, white, and gray give structure. Semantic color marks evidence changes, status, and keyboard focus. Published pages set `class="public"` on `body`. The `body.public` block of `theme.css` then replaces the shared tokens with the public palette. The palette has navy `#14213D`, cobalt `#2747D9`, marigold `#F5B301`, mist `#EEF1F8`, slate text `#4A5570`, and line `#D8DEEA`. Each token has one `light-dark()` value, so both themes come from one declaration. A browser without `light-dark()` gets a fallback copy of the light values. A second block sets the light scheme and the six tone tokens of insert, delete, and warning to their light values. The test checks that both copies equal the light side of the `light-dark()` values and the light tone tokens. Dark mode uses `data-theme` on `html` or the system setting. Invariant: every text and background pair of the public tokens reaches 4.5 to 1 in both themes. Enforced by `theme.css`. Test: `PublicFoundationTests.ThePublicTokensReachFourAndAHalfToOneInBothThemesOnTheSurfacesThatShowThem`. The same test checks two marks that carry no text. The against-party mark `--against` reaches 3 to 1 on the ground, the surface, and the raised surface. The header band edge `--bar-edge` reaches 3 to 1 on the ground. The dark header band is `#060b17`, darker than the dark ground, and its edge sets it apart.
 - Review interface text uses self-hosted Instrument Sans. Published pages use self-hosted Schibsted Grotesk for interface text and Newsreader for reading text. All three fonts use the OFL, and each license file sits beside its font in `wwwroot/fonts/`. `schibsted-grotesk.woff2` is the Latin variable file (weights 400 to 800) of `@fontsource-variable/schibsted-grotesk` 5.2.8. The release does not ship Instrument Sans.
 - `wwwroot/fonts/newsreader.woff2` is a Latin subset of Newsreader 16pt version 1.003 with axes `wght` and `opsz`. It is 132000 bytes. The OFL file names no Reserved Font Name. The release pages preload the fonts; see [publication](publication.md#rendering).
 - `OfficialPortrait` is the one component that shows the portrait of an official. It takes the profile and the release root path. It shows a figure with the image at its size, the alt text "Official portrait of {name}", and the credit. With no photo it shows an inline placeholder of the same frame. It adds the line "No portrait is shown for this official." A withheld photo gets the same line. The `Compact` option is for the cards of the officials list. It makes the figure small and loads the image lazily. It drops the placeholder line. The `ShowCredit` option hides the credit line of a photo. The frame is in `public.css`, with theme tokens only and no filter in dark mode. The current Congress page and the officials list use it.
@@ -37,6 +37,7 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - Only `worker health` defines a healthy worker. The host alert script uses its exit status and has no second rule. Enforced by `deploy/scripts/check-health.sh`. No test.
 - `worker health` exits 1 for a dead worker, and 3 (`WorkerHealthCommand.ReleaseFullExitCode`) when the worker is healthy and the release is full. A dead worker wins, so exit 1 also covers a full release. Enforced by `WorkerHealthCommand`. Tests: `WorkerHealthReleaseCapacityTests.ADeadWorkerWithAFullReleaseExitsOneAndStillPrintsTheCapLineBecauseTheDeadWorkerAlarmMustNotBeHidden` and `WorkerHealthReleaseCapacityTests.AHealthyWorkerWithAFullReleaseExitsWithTheReleaseFullCodeBecauseTheCapNeedsAnOwnerAndNotARestart`.
 - The alert script keeps one marker for each problem: `disk`, `worker`, and `release-full`. One alarm does not silence another, and a clear check removes only its own marker. Enforced by `deploy/scripts/check-health.sh`. No test.
+- One rule turns off every CSS transition and animation when the reader asks for reduced motion. Enforced by the `prefers-reduced-motion` block of `app.css`, which both shells load. No other stylesheet holds a motion guard. Test: `PresentationArchitectureTests.OneRuleInTheSharedStylesheetTurnsOffEveryTransitionAndAnimationForReducedMotion`.
 - Markup has no inline styles. Enforced by `PresentationArchitectureTests`. Test: `PresentationArchitectureTests.MarkupCannotStyleItselfSoComponentsStayTheOnlyStyleOwners`.
 
 ## Behavior
@@ -69,13 +70,22 @@ Pages call Application handlers for editorial and collection actions. Evidence p
 
 Light and dark themes follow the system setting. A toggle on both surfaces stores an override for each browser. The review workspace uses a denser layout where the task needs it.
 
-The shared component library lives in `src/CivicLens.Host/Components`:
+The shared component library lives in two projects. `src/CivicLens.PublicWeb/Components` holds the components that published pages use. `src/CivicLens.Host/Components` holds the components that need Host types.
+
+Host holds these components:
 
 | Folder | Components |
 |---|---|
 | `Layout` | `WorkspaceLayout`, the app shell with a side rail and top bar |
-| `Ui` | General controls: `Button`, `Panel`, `PageHeader`, `StatStrip`, `DataTable`, `TableCell`, `Pager`, `FilterTabs` (all links from `FilterTab.Link`, or all buttons from `FilterTab.Button` that a script reads; a mixed list throws `ArgumentException`, tested by `FilterTabsTests`), `Notice`, `EmptyState`, `HealthList`, `ActivityFeed`, `Field`, `TabSet`, `Drawer`, `ThemeToggle`, `IconFrame` (owns the SVG tag), `Icon` (the closed `IconName` list), `IssueIcon` (draws the path that `IssueIcons` holds for an icon name, and the neutral default for no name), `InfoPopover` (a button with an accessible name that opens a short note; `Term` uses the same popover), `ContextLink` (a link whose hidden suffix names its target), `CellTitle` (a table title that is a link when it has an address, else plain text) |
-| `Evidence` | `DocumentComparisonView` (redline and side-by-side), `RecordView`, `StatementRecord`, `CitationQuote`, `DateEvidenceLine`, `SourceLineLink`, `SourceLinesNote`, `DocumentText` |
+| `Ui` | `IssueIcon` (draws the path that `IssueIcons` holds for an icon name, and the neutral default for no name) |
+| `Evidence` | `DocumentComparisonView` (redline and side-by-side), `Redline`, `RedlineExcerpt` |
+
+PublicWeb holds these components:
+
+| Folder | Components |
+|---|---|
+| `Ui` | General controls: `Button`, `Panel`, `PageHeader`, `StatStrip`, `DataTable`, `TableCell`, `Pager`, `FilterTabs` (all links from `FilterTab.Link`, or all buttons from `FilterTab.Button` that a script reads; a mixed list throws `ArgumentException`, tested by `FilterTabsTests`), `Notice`, `EmptyState`, `HealthList`, `ActivityFeed`, `Field`, `TabSet`, `Drawer`, `ThemeToggle`, `IconFrame` (owns the SVG tag), `Icon` (the closed `IconName` list), `InfoPopover` (a button with an accessible name that opens a short note; `Term` uses the same popover), `ContextLink` (a link whose hidden suffix names its target), `CellTitle` (a table title that is a link when it has an address, else plain text) |
+| `Evidence` | `RecordView`, `StatementRecord`, `CitationQuote`, `DateEvidenceLine`, `SourceLineLink`, `SourceLinesNote`, `DocumentText` |
 
 `StatementRecord` wraps `RecordView` for one statement revision. It shows the headline, the summary, and the statement date with its evidence quote. It also shows speakers by configured name, other speakers, issues, policy areas, bill numbers, and each quotation with its kind.
 
@@ -110,8 +120,8 @@ A systemd timer runs `deploy/scripts/check-health.sh` every 10 minutes on the ho
 | Entry point and commands | `src/CivicLens.Host/Program.cs` |
 | Owner command rules and JSON output | `src/CivicLens.Host/OwnerCommand.cs`, `src/CivicLens.Host/CommandOutput.cs` |
 | App shell and routes | `src/CivicLens.Host/Components/App.razor`, `src/CivicLens.Host/Components/Routes.razor`, `src/CivicLens.Host/Components/Layout/WorkspaceLayout.razor` |
-| Public portrait | `src/CivicLens.Host/Publication/OfficialPortrait.razor` |
-| Shared evidence components | `src/CivicLens.Host/Components/Evidence/DocumentComparisonView.razor`, `src/CivicLens.Host/Components/Evidence/RecordView.razor`, `src/CivicLens.Host/Components/Evidence/StatementRecord.razor` |
+| Public portrait | `src/CivicLens.PublicWeb/Publication/OfficialPortrait.razor` |
+| Shared evidence components | `src/CivicLens.Host/Components/Evidence/DocumentComparisonView.razor`, `src/CivicLens.PublicWeb/Components/Evidence/RecordView.razor`, `src/CivicLens.PublicWeb/Components/Evidence/StatementRecord.razor` |
 | Styles and scripts | `src/CivicLens.Host/wwwroot/css/theme.css`, `src/CivicLens.Host/wwwroot/css/app.css`, `src/CivicLens.Host/wwwroot/css/public.css`, `src/CivicLens.Host/wwwroot/css/review.css`, `src/CivicLens.Host/wwwroot/js/theme.js`, `src/CivicLens.Host/wwwroot/js/app.js`, `src/CivicLens.Host/wwwroot/js/public.js`, `src/CivicLens.Host/wwwroot/js/review.js` |
 | Workspace wiring | `src/CivicLens.Host/Review/ReviewWorkspace.cs` |
 | Sources page | `src/CivicLens.Host/Collection/SourcesPage.razor` |
