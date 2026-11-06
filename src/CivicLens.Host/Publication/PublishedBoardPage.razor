@@ -18,6 +18,33 @@
             <p class="muted small">@PublishedBoardView.ClosestRule</p>
         </Panel>
     }
+    @if (Agreement is { } agreement)
+    {
+        <Panel Title="@PublishedBoardView.AgreementTitle(agreement)" Padded="true">
+            <p>@PublishedBoardView.AgreementLead(agreement)</p>
+            @if (agreement.Total > 0)
+            {
+                <DataTable Roles="true" Items="PublishedBoardView.AgreementRows(agreement)" Caption="@PublishedBoardView.AgreementCaption">
+                    <Head><TableCell Header>@PublishedBoardView.AgreementKindHeader</TableCell><TableCell Header>@PublishedVoteView.PartiesAgreedText</TableCell></Head>
+                    <Row Context="row">
+                        <TableCell Main>@row.Label</TableCell>
+                        <TableCell Label="@PublishedVoteView.PartiesAgreedText">@row.Count</TableCell>
+                    </Row>
+                </DataTable>
+                <p>@PublishedBoardView.AgreementSplit(agreement)</p>
+                @if (agreement.Mixed > 0)
+                {
+                    <p>@PublishedBoardView.AgreementMixed(agreement)</p>
+                }
+                @if (PublishedBoardView.ShowsNominationNote(agreement))
+                {
+                    <p class="muted small">@PublishedBoardView.NominationNote(agreement)</p>
+                }
+            }
+            <p class="muted small">@PublishedOfficialView.PartiesAgreedMeaning @PublishedBoardView.AgreementCaution</p>
+            <p class="muted small"><a href="@(PublicationProtocol.MethodPagePath + PublishedBoardView.AgreementAnchor)">@PublishedBoardView.AgreementLinkText</a></p>
+        </Panel>
+    }
     @if (Page.Congress is { } congress)
     {
         @if (Page.NewerCongress is { } newer)
@@ -76,6 +103,7 @@
 @code {
     [Parameter, EditorRequired] public OfficialBoardPage Page { get; set; } = default!;
     [Parameter] public ClosestVote? ClosestVote { get; set; }
+    [Parameter] public ChamberAgreement? Agreement { get; set; }
 
     private OfficialBoard Board => Page.Board;
 

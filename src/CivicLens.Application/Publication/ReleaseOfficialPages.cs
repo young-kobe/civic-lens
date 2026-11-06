@@ -51,7 +51,7 @@ internal sealed class ReleaseOfficialPages(ReleaseOfficialVotes votes, Publicati
         var boards = OfficialBoardPage.All(listings, summaries);
         var closestVote = ClosestVote.From(manifest) is { } closest ? closest with { BillLine = billLines.Of(closest.Entry) } : null;
         foreach (var board in boards)
-            await WriteAsync(staging, board.Board.PagePath, await renderer.RenderBoardAsync(board, closestVote, cancellationToken), cancellationToken);
+            await WriteAsync(staging, board.Board.PagePath, await renderer.RenderBoardAsync(board, closestVote, ChamberAgreement.From(manifest, board.Board.Chamber, board.Congress), cancellationToken), cancellationToken);
         await WriteAsync(staging, PublicationProtocol.OfficialsPagePath, await renderer.RenderOfficialsAsync(listings, manifest.PublishedAtUtc, cancellationToken),
             cancellationToken);
         return boards;
