@@ -1,9 +1,8 @@
-using CivicLens.Application.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicWeb.Components.Evidence;
 using CivicLens.PublicWeb.Components.Ui;
 
-namespace CivicLens.Host.Publication;
+namespace CivicLens.PublicWeb.Publication;
 
 public static class PublishedRecordLabels
 {

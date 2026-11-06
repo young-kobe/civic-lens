@@ -1,4 +1,4 @@
-namespace CivicLens.Application.Publication;
+namespace CivicLens.Publication.Contracts;
 
 public sealed class PublicBaseUrl
 {

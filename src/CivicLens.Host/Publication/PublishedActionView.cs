@@ -5,6 +5,7 @@ using CivicLens.Host.Collection;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicWeb.Components.Evidence;
 using CivicLens.PublicWeb.Components.Ui;
+using CivicLens.PublicWeb.Publication;
 
 namespace CivicLens.Host.Publication;
 

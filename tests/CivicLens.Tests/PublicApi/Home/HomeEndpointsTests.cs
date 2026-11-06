@@ -2,7 +2,7 @@ using System.Collections.Immutable;
 using System.Net;
 using System.Text.Json;
 using CivicLens.Application.Publication;
-using CivicLens.Host.Publication;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Home;
 using CivicLens.Tests.Infrastructure.Collection;

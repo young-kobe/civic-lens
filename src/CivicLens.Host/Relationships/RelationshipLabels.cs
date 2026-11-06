@@ -3,6 +3,7 @@ using CivicLens.Host.Actions;
 using CivicLens.Host.Publication;
 using CivicLens.Host.Votes;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Publication;
 
 namespace CivicLens.Host.Relationships;
 

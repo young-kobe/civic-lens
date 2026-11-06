@@ -9,7 +9,7 @@ using CivicLens.Core.Documents;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Districts;
 using CivicLens.Infrastructure.Roster;
-using CivicLens.Host.Publication;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Application.Publication;
 using CivicLens.Tests.Fixtures;

@@ -3,7 +3,7 @@ using System.Reflection;
 using CivicLens.Application.Actions;
 using CivicLens.Core.Review;
 using CivicLens.Application.Publication;
-using CivicLens.Host.Publication;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
