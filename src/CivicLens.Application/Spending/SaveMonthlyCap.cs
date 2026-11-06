@@ -8,7 +8,7 @@ public sealed class SaveMonthlyCap(IAiSpendingStore store)
     public Task ExecuteAsync(ReviewActor actor, decimal capDollars, CancellationToken cancellationToken = default)
     {
         ReviewAuthorization.RequireOwner(actor);
-        var capMicros = AiSpendingPolicy.ToMicros(capDollars, AiSpendingPolicy.MaximumCapDollars, "monthly cap");
+        var capMicros = AiSpendingPolicy.ToMicros(capDollars);
         return store.SaveCapAsync(actor.Subject, capMicros, cancellationToken);
     }
 }

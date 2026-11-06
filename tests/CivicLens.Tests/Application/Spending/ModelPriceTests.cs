@@ -15,6 +15,18 @@ public sealed class ModelPriceTests
     }
 
     [Fact]
+    public void EveryModelListsItsTiersFromSmallToLargeWithOnlyTheLastUnlimitedBecauseTheTierOfACallIsTheFirstThatFits()
+    {
+        Assert.All(AiSpendingPolicy.ModelsInUse, model =>
+        {
+            var limits = ModelPrices.For(model).Tiers.Select(tier => tier.PromptTokensUpTo).ToArray();
+            Assert.Null(limits[^1]);
+            Assert.Equal(limits[..^1].OrderBy(limit => limit), limits[..^1]);
+            Assert.All(limits[..^1], limit => Assert.NotNull(limit));
+        });
+    }
+
+    [Fact]
     public void AModelWithNoPriceIsAProgrammingErrorBecauseItsCostWouldBeUnknown()
     {
         Assert.Throws<InvalidOperationException>(() => ModelPrices.For("claude-unpriced"));

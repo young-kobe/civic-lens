@@ -293,6 +293,23 @@ public sealed class ActionTextMeasureTests
     }
 
     [Fact]
+    public async Task TheMeasureChargesEachBillAtItsOwnTierBecauseTwoSmallPromptsAreNotOneLargePrompt()
+    {
+        var tiered = new ModelPrice(ActionDraftTask.Model, [new(100_000, 1_000_000, 0, 0, 0), new(null, 2_000_000, 0, 0, 0)]);
+        Spending = new FakeAiSpendingStore(tiered);
+        var model = new FakeHeadlineSummaryModel();
+        Reply(model);
+        Reply(model);
+
+        await MeasureAsync(Cap, model, bills: [Bill, Bill]);
+
+        Assert.Equal([120_000L], Spending.Charges);
+
+        void Reply(FakeHeadlineSummaryModel fake) =>
+            fake.Reply(_ => Task.FromResult(new AnalysisModelResponse("end_turn", Output(), new(60_000, 0, 0, 0), "req_fixture")));
+    }
+
+    [Fact]
     public async Task TheMeasureRefusesACapBelowOneToken()
     {
         var (store, step) = Parts(ActionBillWorld.Create(summaries: []), new FakeHeadlineSummaryModel());

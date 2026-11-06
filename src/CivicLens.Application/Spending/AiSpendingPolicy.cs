@@ -9,7 +9,7 @@ namespace CivicLens.Application.Spending;
 
 public static class AiSpendingPolicy
 {
-    public const decimal MaximumCapDollars = 1_000_000m;
+    private const decimal MaximumCapDollars = 1_000_000m;
     private const decimal MicrosPerDollar = 1_000_000m;
 
     public static readonly IReadOnlyList<string> ModelsInUse =
@@ -23,11 +23,11 @@ public static class AiSpendingPolicy
 
     public static DateOnly MonthOf(DateOnly day) => new(day.Year, day.Month, 1);
 
-    public static long ToMicros(decimal dollars, decimal maximumDollars, string name)
+    public static long ToMicros(decimal capDollars)
     {
-        var micros = dollars * MicrosPerDollar;
-        if (dollars < 0 || dollars > maximumDollars || micros != decimal.Truncate(micros))
-            throw new ArgumentException($"The {name} must be 0 to {maximumDollars:0} dollars with at most 6 decimals.", nameof(dollars));
+        var micros = capDollars * MicrosPerDollar;
+        if (capDollars < 0 || capDollars > MaximumCapDollars || micros != decimal.Truncate(micros))
+            throw new ArgumentException($"The monthly cap must be 0 to {MaximumCapDollars:0} dollars with at most 6 decimals.", nameof(capDollars));
         return (long)micros;
     }
 
