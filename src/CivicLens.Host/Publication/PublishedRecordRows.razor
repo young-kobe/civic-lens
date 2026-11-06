@@ -22,7 +22,7 @@
             <TableCell Class="record-cast" Label="@PublicColumn.Cast">
                 @if (row.Cast is not null)
                 {
-                    <span class="@PublishedOfficialView.CastClass(row.Cast)">@row.Cast</span>
+                    <span class="@PublishedOfficialView.CastClass(row.Cast)">@PlainVoteWords.Cast(row.Cast)</span>
                 }
             </TableCell>
         }

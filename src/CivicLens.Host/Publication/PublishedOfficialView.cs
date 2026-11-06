@@ -219,7 +219,7 @@ internal static class PublishedOfficialView
 
     public const string NoStatementDate = "No date";
 
-    public static string TheirVote(LinkedPair pair) => pair.TargetKind == PublishedRecordKind.Vote ? pair.Cast ?? NoVoteOnRecord : NotAVote;
+    public static string TheirVote(LinkedPair pair) => pair.TargetKind == PublishedRecordKind.Vote ? pair.Cast is { } cast ? PlainVoteWords.Cast(cast) : NoVoteOnRecord : NotAVote;
 
     public static string StatementDay(LinkedPair pair) => pair.StatementDay is { } day ? Moment.Day(day) : NoStatementDate;
 
@@ -232,7 +232,7 @@ internal static class PublishedOfficialView
         return $"Missed {missed.Missed} of the {missed.Held} roll call {Noun(missed.Held, "vote")} of {ChamberName(missed.Chamber)} on this site{share}, {days} ({CongressCalendar.Ordinal(congress)} Congress).";
     }
 
-    private static readonly string BothMajorities = $"most {PublishedPartyMajority.Democrat}s and most {PublishedPartyMajority.Republican}s who cast Yea or Nay";
+    private static readonly string BothMajorities = $"most {PublishedPartyMajority.Democrat}s and most {PublishedPartyMajority.Republican}s who cast Yes or No";
 
     public static readonly string SplitVoteMeaning = $"A split vote is a substantive roll call vote where {BothMajorities} voted on opposite sides.";
 
