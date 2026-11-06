@@ -9,11 +9,11 @@ internal static class CursorFields
     public const string DateFormat = "yyyyMMdd";
     private const int MaximumLength = 200;
 
-    /// <summary>Returns the fields after the tag. The cursor must carry the tag and exactly <paramref name="fieldCount"/> fields.</summary>
-    public static string[] Split(string value, string tag, int fieldCount)
+    /// <summary>Returns the fields after the tag. The cursor must carry the tag and exactly <paramref name="fieldCount"/> fields, and at most <paramref name="maximumLength"/> characters.</summary>
+    public static string[] Split(string value, string tag, int fieldCount, int maximumLength = MaximumLength)
     {
         var parts = value.Split('.');
-        return value.Length <= MaximumLength && parts.Length == fieldCount + 1 && parts[0] == tag ? parts[1..] : throw QueryValues.InvalidCursor();
+        return value.Length <= maximumLength && parts.Length == fieldCount + 1 && parts[0] == tag ? parts[1..] : throw QueryValues.InvalidCursor();
     }
 
     public static int Number(string field) =>

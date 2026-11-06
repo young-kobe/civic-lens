@@ -699,6 +699,17 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Task<int> FillBillLinesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
+    public Task<int> FillStatementApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Dictionary<int, List<PublishedBillStatus>> BackfilledBillStatuses { get; } = [];
+
+    public Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses, CancellationToken cancellationToken)
+    {
+        BackfilledBillStatuses[releaseNumber] = [.. statuses];
+        return Task.FromResult(statuses.Count);
+    }
+
     public Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey,
         string payloadHash, CancellationToken cancellationToken)
     {

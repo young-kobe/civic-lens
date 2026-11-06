@@ -32,4 +32,5 @@ internal sealed class PublishedEntryRow
     public string? TargetRecordId { get; set; }
     public PublishedExecutiveActionKind? DocumentType { get; set; }
     public string? BillLine { get; set; }
+    public PublishedApprover? ApprovedBy { get; set; }
 }
