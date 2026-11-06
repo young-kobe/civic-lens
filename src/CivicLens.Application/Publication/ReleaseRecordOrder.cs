@@ -1,3 +1,4 @@
+using CivicLens.Core.Relationships;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -5,8 +6,16 @@ namespace CivicLens.Application.Publication;
 /// <summary>The one rule that lists dated rows: event day, else first publication day, newest first, then first publication time newest first, then record ID.</summary>
 public static class ReleaseRecordOrder
 {
-    public static DateOnly Day(PublishedRecordEntry entry) =>
-        entry.EventDate ?? DateOnly.FromDateTime(entry.FirstPublishedAtUtc.UtcDateTime);
+    public static DateOnly Day(PublishedRecordEntry entry) => Day(entry.EventDate, entry.FirstPublishedAtUtc);
+
+    public static DateOnly Day(DateOnly? eventDate, DateTimeOffset firstPublishedAtUtc) =>
+        eventDate ?? DateOnly.FromDateTime(firstPublishedAtUtc.UtcDateTime);
+
+    /// <summary>The Congress of the record day. The entry column <c>published_entries.congress</c> stores this value, and the profile counts use it.</summary>
+    public static int? CongressOf(PublishedRecordEntry entry) => CongressCalendar.CongressOn(Day(entry));
+
+    public static int? CongressOf(DateOnly? eventDate, DateTimeOffset firstPublishedAtUtc) =>
+        CongressCalendar.CongressOn(Day(eventDate, firstPublishedAtUtc));
 
     public static IEnumerable<T> NewestFirst<T>(IEnumerable<T> rows, Func<T, DateOnly> dayOf, Func<T, DateTimeOffset> publishedOf,
         Func<T, string> recordIdOf) =>

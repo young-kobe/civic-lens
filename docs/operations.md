@@ -1020,6 +1020,26 @@ The command prints JSON with these keys:
 
 The exit code is 0 only when `skipped`, `openRangesWithoutRow`, and `readyRangesWithoutRow` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
 
+### Stored columns backfill
+
+The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, and the Congress of each entry. This command fills them for rows that earlier releases wrote.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases columns backfill
+```
+
+The command reads each kept release folder. A vote revision takes its values from the vote file of the newest kept folder that holds that revision, so the parties are the ones that the release gave on the vote day. An official takes the photo path of the officials file of its release. An entry takes the Congress of its event date, or of its first publication day when it has no event date. The command writes in batches of 25 rows. It fills only a column that is null, so you can run it again at any time.
+
+The command prints JSON with these keys:
+
+- `voteRevisionsExamined`: the published vote revisions with a member list whose columns were unwritten or null at the start. A vote that the release gives null columns counts again in each run.
+- `voteRevisionsWritten`: the revisions that this run wrote.
+- `voteRevisionsWithoutKeptFile`: the revisions that no kept folder holds. They stay unwritten.
+- `voteRevisionsWithOtherParties`: the revisions whose member list already holds other parties. They stay unwritten, and a person must compare the roster terms with the stored parties.
+- `officialPhotoPathsFilled` and `entryCongressesFilled`: the rows that this run filled.
+
+The exit code is 0 only when `voteRevisionsWithoutKeptFile` and `voteRevisionsWithOtherParties` are both 0.
+
 ### Entries verify
 
 This command proves that the entry, state, first publication, and withdrawal tables hold what each kept `release.json` holds. Run it after `releases entries backfill` exits with 0. It writes nothing and takes no lock, so it is safe beside the worker. It needs the same three variables as the backfill.

@@ -35,6 +35,19 @@ public interface IPublicationStore
 
     Task<int> FillBillLinesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken);
 
+    /// <summary>Lists the published vote revisions with a member list whose stored vote columns are unwritten or null.</summary>
+    Task<IReadOnlyList<PublishedRevisionBinding>> ReadVoteColumnGapsAsync(CancellationToken cancellationToken);
+
+    /// <summary>Writes the vote columns of revisions that hold none. It returns the revisions whose member list already holds other parties. It writes nothing for those.</summary>
+    Task<IReadOnlyList<PublishedRevisionBinding>> WriteVoteColumnsAsync(IReadOnlyCollection<VoteStoredColumns> columns, CancellationToken cancellationToken);
+
+    Task<int> FillOfficialPhotoPathsAsync(int releaseNumber, IReadOnlyDictionary<string, string> photoPaths, CancellationToken cancellationToken);
+
+    /// <summary>Reads up to <paramref name="limit"/> entry rows with no Congress that follow <paramref name="after"/> in key order.</summary>
+    Task<IReadOnlyList<PublishedEntryDay>> ReadEntryDaysWithoutCongressAsync(PublishedEntryDay? after, int limit, CancellationToken cancellationToken);
+
+    Task<int> FillEntryCongressesAsync(IReadOnlyCollection<PublishedEntryDay> entries, CancellationToken cancellationToken);
+
     Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken);
 

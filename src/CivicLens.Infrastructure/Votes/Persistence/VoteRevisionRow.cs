@@ -1,3 +1,4 @@
+using CivicLens.Publication.Contracts;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Review.Persistence;
@@ -43,6 +44,9 @@ internal sealed class VoteRevisionRow : IReviewRevisionRow, IReviewTextRow
     public bool IssueCandidatesRecorded { get; set; }
     public string? Question { get; set; }
     public string Result { get; set; } = string.Empty;
+    public PublishedVoteAlignment? Alignment { get; set; }
+    public string? DemocratMajority { get; set; }
+    public string? RepublicanMajority { get; set; }
     public List<VoteRevisionFactRow> Facts { get; set; } = [];
     public List<VoteRevisionIssueRow> Issues { get; set; } = [];
 }

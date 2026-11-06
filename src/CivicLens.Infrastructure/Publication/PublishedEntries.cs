@@ -42,6 +42,22 @@ internal static class PublishedEntries
         WHERE e.kind = locked.kind AND e.record_id = locked.record_id AND e.revision_number = locked.revision_number
         """;
 
+    private const string ReadDaysWithoutCongress = """
+        SELECT e.kind AS "Kind", e.record_id AS "RecordId", e.revision_number AS "RevisionNumber", e.event_date AS "EventDate",
+            p.first_published_at_utc_ticks AS "FirstPublishedAtUtcTicks"
+        FROM published_entries e
+        JOIN published_records p ON p.kind = e.kind AND p.record_id = e.record_id
+        WHERE e.congress IS NULL AND (e.kind, e.record_id, e.revision_number) > ({0}, {1}, {2})
+        ORDER BY e.kind, e.record_id, e.revision_number
+        LIMIT {3}
+        """;
+
+    private const string FillCongresses = """
+        UPDATE published_entries e SET congress = k.congress
+        FROM unnest({0}::text[], {1}::text[], {2}::int[], {3}::int[]) AS k(kind, record_id, revision_number, congress)
+        WHERE e.kind = k.kind AND e.record_id = k.record_id AND e.revision_number = k.revision_number AND e.congress IS NULL
+        """;
+
     private static readonly string InsertEntries = BuildInsertEntries();
 
     private const string ReadCandidates = """
@@ -104,6 +120,23 @@ internal static class PublishedEntries
         return filled;
     }
 
+    public static async Task<IReadOnlyList<PublishedEntryDay>> ReadDaysWithoutCongressAsync(CollectionAttemptDbContext db, PublishedEntryDay? after, int limit,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.Database.SqlQueryRaw<EntryDayRow>(ReadDaysWithoutCongress, after?.Kind ?? "", after?.RecordId ?? "", after?.RevisionNumber ?? 0, limit)
+            .ToArrayAsync(cancellationToken);
+        return [.. rows.Select(row => new PublishedEntryDay(row.Kind, row.RecordId, row.RevisionNumber, row.EventDate,
+            new DateTimeOffset(row.FirstPublishedAtUtcTicks, TimeSpan.Zero)))];
+    }
+
+    public static Task<int> FillCongressesAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedEntryDay> entries, CancellationToken cancellationToken)
+    {
+        var dated = entries.Where(entry => entry.Congress is not null).ToArray();
+        return dated.Length == 0 ? Task.FromResult(0) : db.Database.ExecuteSqlRawAsync(FillCongresses, [dated.Select(entry => entry.Kind).ToArray(),
+            dated.Select(entry => entry.RecordId).ToArray(), dated.Select(entry => entry.RevisionNumber).ToArray(),
+            dated.Select(entry => entry.Congress!.Value).ToArray()], cancellationToken);
+    }
+
     private static string BuildInsertEntries()
     {
         var revisionColumns = Enum.GetValues<PublishedRecordKind>().Select(PublishedEntryRevisionColumns.For).ToArray();
@@ -112,13 +145,13 @@ internal static class PublishedEntries
         var values = kinds.SelectMany(kind => new[] { $"CASE WHEN k.kind = '{kind}' THEN k.record_id END", $"CASE WHEN k.kind = '{kind}' THEN k.revision_number END" });
         return $$"""
             INSERT INTO published_entries (kind, record_id, revision_number, {{string.Join(", ", columns)}}, headline, source_host, event_date, bill_title,
-                link_type, statement_record_id, target_kind, target_record_id, document_type, bill_line)
+                link_type, statement_record_id, target_kind, target_record_id, document_type, bill_line, congress)
             SELECT k.kind, k.record_id, k.revision_number, {{string.Join(", ", values)}}, k.headline, k.source_host, k.event_date, k.bill_title,
-                k.link_type, k.statement_record_id, k.target_kind, k.target_record_id, k.document_type, k.bill_line
+                k.link_type, k.statement_record_id, k.target_kind, k.target_record_id, k.document_type, k.bill_line, k.congress
             FROM unnest({0}::text[], {1}::text[], {2}::int[], {3}::text[], {4}::text[], {5}::date[], {6}::text[], {7}::text[], {8}::text[],
-                {9}::text[], {10}::text[], {11}::text[], {12}::text[])
+                {9}::text[], {10}::text[], {11}::text[], {12}::text[], {13}::int[])
                 AS k(kind, record_id, revision_number, headline, source_host, event_date, bill_title, link_type, statement_record_id, target_kind,
-                    target_record_id, document_type, bill_line)
+                    target_record_id, document_type, bill_line, congress)
             ON CONFLICT DO NOTHING
             RETURNING kind AS "Kind", record_id AS "RecordId", revision_number AS "RevisionNumber"
             """;
@@ -221,7 +254,7 @@ internal static class PublishedEntries
         entries.Select(entry => entry.StatementRecordId).ToArray(),
         entries.Select(entry => entry.TargetKind is { } target ? PublishedRecordReference.NameOf(target) : null).ToArray(),
         entries.Select(entry => entry.TargetRecordId).ToArray(), entries.Select(entry => entry.DocumentType?.ToString()).ToArray(),
-        entries.Select(entry => entry.BillLine).ToArray()
+        entries.Select(entry => entry.BillLine).ToArray(), entries.Select(ReleaseRecordOrder.CongressOf).ToArray()
     ];
 
     private static (string Kind, string RecordId, int RevisionNumber) KeyOf(PublishedRecordEntry entry) =>
@@ -254,6 +287,15 @@ internal static class PublishedEntries
         public int? LastRelease { get; set; }
         public bool HasEntry { get; set; }
         public bool LacksBillLine { get; set; }
+    }
+
+    private sealed class EntryDayRow
+    {
+        public string Kind { get; set; } = "";
+        public string RecordId { get; set; } = "";
+        public int RevisionNumber { get; set; }
+        public DateOnly? EventDate { get; set; }
+        public long FirstPublishedAtUtcTicks { get; set; }
     }
 
     private sealed class EntryKeyRow

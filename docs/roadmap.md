@@ -146,6 +146,7 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [ ] Agree the view design, active release rule, and role limits, with a test that fails when the role can read any other table
   - [x] Add the `public_api` schema, the role `civic_lens_public`, the active release view, the vote views, and the bill views ([public API views](architecture/publication.md#public-api-views))
   - [x] Serve the members of a vote and the bills through `PublicApi` ([search API](architecture/search.md#api))
+  - [x] Store the vote member parties, the vote alignment and party majorities, the official photo path, and the entry Congress as columns that C# writes at publication, with `releases columns backfill` ([storage](architecture/publication.md#storage-and-contracts)). The views that read them are still to add
   - [ ] Measure traffic, query load, and worker effect on the shared database
   - [ ] Render the official page from the API, then the home, issue, record, and list pages. The static official page already renders the vote strip and the key figures on the server, so the official page needs only the API client for its record list
   - [ ] Write `release.json` only as a public download on a schedule, or remove it
