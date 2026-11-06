@@ -23,6 +23,7 @@ internal sealed class PublishedEntryOfficialRowConfiguration : IEntityTypeConfig
         builder.Property(row => row.Position).HasColumnName("position");
         builder.Property(row => row.OfficialId).HasColumnName("official_id").HasMaxLength(PublishedRecordEntry.MaximumFilterValueLength);
         builder.Property(row => row.IsMatched).HasColumnName("is_matched").HasDefaultValue(false);
+        builder.HasIndex(row => row.OfficialId).HasDatabaseName("ix_published_entry_officials_official_id");
         builder.HasIndex(row => new { row.Kind, row.RecordId, row.RevisionNumber }, "ux_published_entry_officials_matched").IsUnique()
             .HasFilter("is_matched");
         builder.HasOne<PublishedEntryRow>().WithMany().HasForeignKey(row => new { row.Kind, row.RecordId, row.RevisionNumber })
