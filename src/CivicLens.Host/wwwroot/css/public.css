@@ -6,6 +6,8 @@ table[data-paged]:focus { outline: none; }
 .public .panel { box-shadow: 0 0 0 1px var(--line); }
 .public .panel > .table-wrap:first-child { border-top-left-radius: var(--r-panel); border-top-right-radius: var(--r-panel); }
 .public .panel > .table-wrap:last-child { border-bottom-left-radius: var(--r-panel); border-bottom-right-radius: var(--r-panel); }
+.public .panel > .panel-note { margin: 0; padding: var(--s3) var(--s4) var(--s4); }
+.report-subject { margin: 0 0 var(--s4); overflow-wrap: anywhere; }
 .public .page-header-lede { margin-top: var(--s3); }
 .public .record-headline { font-family: var(--ui); font-weight: 800; letter-spacing: -.03em; }
 .public .page-header h1 { font-size: var(--t-h1); line-height: 1.05; font-weight: 800; letter-spacing: -.03em; }
@@ -149,8 +151,6 @@ table[data-paged]:focus { outline: none; }
 .portrait-placeholder * { fill: var(--line-strong); }
 .portrait figcaption { color: var(--muted); font-size: var(--t-xs); }
 
-.public .panel > .panel-note { margin: 0; padding: var(--s3) var(--s4) var(--s4); }
-.report-subject { margin: 0; overflow-wrap: anywhere; }
 .portrait-compact { flex: none; width: 64px; }
 .portrait-compact img, .portrait-compact .portrait-placeholder { border-radius: var(--r-control); }
 
@@ -189,8 +189,8 @@ table[data-paged]:focus { outline: none; }
 @supports not selector(:popover-open) { .term-popover { display: none; } .term { border-bottom: 0; cursor: text; } }
 .term-popover:popover-open { display: grid; gap: var(--s2); }
 .term-means { font-weight: 600; }
-.glossary-index h3 { margin: var(--s4) 0 0; font-size: var(--t-sm); }
-.glossary-index h3:first-child { margin-top: 0; }
+.glossary-index-groups { display: grid; gap: var(--s4); margin: 0; padding: 0; list-style: none; }
+.glossary-index-groups > li > a { font-size: var(--t-sm); font-weight: 700; }
 .glossary-index-terms { display: flex; flex-wrap: wrap; gap: 0 var(--s4); margin: var(--s1) 0 0; padding: 0; list-style: none; }
 .glossary-index-terms a { display: inline-block; padding-block: var(--s1); font-size: var(--t-sm); }
 .glossary-term + .glossary-term { margin-top: var(--s5); }

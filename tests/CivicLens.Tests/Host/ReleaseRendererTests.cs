@@ -196,12 +196,12 @@ public sealed class ReleaseRendererTests
 
         var pages = new[]
         {
-            (record.RecordId, record.RevisionNumber, await renderer.RenderRecordAsync(record, PublicationCatalogs.None, CancellationToken.None)),
-            (vote.RecordId, vote.RevisionNumber, await renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None))
+            (record.RecordId, record.RevisionNumber, record.Headline, await renderer.RenderRecordAsync(record, PublicationCatalogs.None, CancellationToken.None)),
+            (vote.RecordId, vote.RevisionNumber, vote.Headline, await renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None))
         };
 
-        foreach (var (recordId, revision, html) in pages)
-            Assert.Equal($"../report.html?recordId={recordId}&revision={revision}",
+        foreach (var (recordId, revision, headline, html) in pages)
+            Assert.Equal($"../report.html?recordId={recordId}&revision={revision}&title={Uri.EscapeDataString(headline)}",
                 new HtmlParser().ParseDocument(html).QuerySelector("a[href^='../report.html']")!.GetAttribute("href"));
     }
 
@@ -246,8 +246,34 @@ public sealed class ReleaseRendererTests
         Assert.Equal(message, html.LastIndexOf("needs JavaScript", StringComparison.Ordinal));
         var form = new HtmlParser().ParseDocument(html).QuerySelector("[data-report-form-panel]")!;
         Assert.NotNull(form.QuerySelector("[data-report-subject]"));
+    }
+
+    [Fact]
+    public async Task TheReportPageGivesTheScriptTheTitleParameterAndLimitAndTheScriptNeverWritesHtml()
+    {
+        var html = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);
+
+        var form = new HtmlParser().ParseDocument(html).QuerySelector("[data-report-form-panel] form")!;
         var script = System.Text.Encoding.UTF8.GetString(new ReleaseRenderer(null, null).Assets.Single(asset => asset.RelativePath == "assets/js/public.js").Content);
-        Assert.Contains("[data-report-subject]\").textContent = `You are reporting the record with ID ${recordId}, version ${revision}.`", script, StringComparison.Ordinal);
+
+        Assert.Equal(ReaderReportProtocol.TitleParameter, form.GetAttribute("data-report-title-parameter"));
+        Assert.Equal(ReaderReportProtocol.MaximumTitleCharacters.ToString(), form.GetAttribute("data-report-title-limit"));
+        Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
+        Assert.Contains("[data-report-subject]\").textContent = ", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ARecordPageLinksToTheReportPageWithAnEncodedTitleThatMarkupCharactersCannotBreak()
+    {
+        var headline = "Rep. <b>Smith</b> & \"others\" vote on H.R. 1";
+        var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record() with { Headline = headline }, PublicationCatalogs.None, CancellationToken.None);
+
+        var href = new HtmlParser().ParseDocument(html).QuerySelector("main a[href^='../report.html']")!.GetAttribute("href")!;
+
+        var title = System.Web.HttpUtility.ParseQueryString(href[(href.IndexOf('?') + 1)..])[ReaderReportProtocol.TitleParameter];
+        Assert.Equal(headline, title);
+        Assert.DoesNotContain("<", href, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"", href, StringComparison.Ordinal);
     }
 
     private static void AssertMailtoPanelIsAlwaysShown(AngleSharp.Dom.IDocument document)

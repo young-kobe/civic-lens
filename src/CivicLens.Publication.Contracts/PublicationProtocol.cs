@@ -58,8 +58,25 @@ public static class PublicationProtocol
     public static int? CongressPageOf(string path) => CongressIn(path, "/", ".html");
     public static string RecordDataPath(string recordId) => $"records/{recordId}.json";
     public static string RecordPagePath(string recordId) => $"records/{recordId}.html";
-    public static string ReportPageLink(string recordId, int revision) =>
-        $"{ReportPagePath}?{ReaderReportProtocol.RecordIdField}={recordId}&{ReaderReportProtocol.RevisionField}={revision}";
+    /// <summary>The one builder of the report link. The title is for display only. It is cut on a word boundary to <see cref="ReaderReportProtocol.MaximumTitleCharacters"/> characters, with an ellipsis, and is percent-encoded.</summary>
+    public static string ReportPageLink(string recordId, int revision, string title)
+    {
+        var link = $"{ReportPagePath}?{ReaderReportProtocol.RecordIdField}={recordId}&{ReaderReportProtocol.RevisionField}={revision}";
+        var shortTitle = ShortTitle(title);
+        return shortTitle.Length == 0 ? link : $"{link}&{ReaderReportProtocol.TitleParameter}={Uri.EscapeDataString(shortTitle)}";
+    }
+
+    private static string ShortTitle(string title)
+    {
+        var text = title.Trim();
+        var limit = ReaderReportProtocol.MaximumTitleCharacters;
+        if (text.Length <= limit) return text;
+        var head = text[..(limit - 1)];
+        var space = head.LastIndexOf(' ');
+        if (text[limit - 1] != ' ' && space > 0) head = head[..space];
+        else if (char.IsHighSurrogate(head[^1])) head = head[..^1];
+        return head.TrimEnd() + "\u2026";
+    }
 
     private static int? CongressIn(string path, string prefix, string suffix)
     {

@@ -15,7 +15,7 @@
     {
         <Panel Label="Report form" Padded="true" hidden data-report-form-panel>
             <p class="report-subject" data-report-subject></p>
-            <form class="form" data-report-api="@(PublicApiUrl + ReaderReportProtocol.SubmitPath)" data-record-page="@PublicationProtocol.RecordPagePath("{id}")">
+            <form class="form" data-report-title-parameter="@ReaderReportProtocol.TitleParameter" data-report-title-limit="@ReaderReportProtocol.MaximumTitleCharacters" data-report-api="@(PublicApiUrl + ReaderReportProtocol.SubmitPath)" data-record-page="@PublicationProtocol.RecordPagePath("{id}")">
                 <input type="hidden" name="@ReaderReportProtocol.RecordIdField" data-report-query />
                 <input type="hidden" name="@ReaderReportProtocol.RevisionField" data-report-query />
                 <Field Label="What is wrong" For="report-category">

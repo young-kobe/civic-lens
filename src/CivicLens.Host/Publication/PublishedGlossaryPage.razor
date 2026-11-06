@@ -4,20 +4,24 @@
     <PageHeader Title="Glossary" />
     <Panel Title="Index of terms" Padded="true">
         <nav class="glossary-index" aria-label="@Glossary.IndexLabel">
-            @foreach (var group in Glossary.Groups)
-            {
-                <h3><a href="@($"#{group.AnchorId}")">@group.Title</a></h3>
-                <ul class="glossary-index-terms">
-                    @foreach (var term in group.Terms)
-                    {
-                        <li><a href="@($"#{term.AnchorId}")">@term.Name</a></li>
-                    }
-                    @if (group == Glossary.Groups[0])
-                    {
-                        <li><a href="@($"#{Glossary.PartyCountAnchorId}")">@Glossary.PartyCountHeading</a></li>
-                    }
-                </ul>
-            }
+            <ul class="glossary-index-groups">
+                @foreach (var group in Glossary.Groups)
+                {
+                    <li>
+                        <a href="@($"#{group.AnchorId}")">@group.Title</a>
+                        <ul class="glossary-index-terms">
+                            @foreach (var term in group.Terms)
+                            {
+                                <li><a href="@($"#{term.AnchorId}")">@term.Name</a></li>
+                            }
+                            @if (group == Glossary.PartyCountGroup)
+                            {
+                                <li><a href="@($"#{Glossary.PartyCountAnchorId}")">@Glossary.PartyCountHeading</a></li>
+                            }
+                        </ul>
+                    </li>
+                }
+            </ul>
         </nav>
     </Panel>
     @foreach (var group in Glossary.Groups)
@@ -41,7 +45,7 @@
                     }
                 </section>
             }
-            @if (group == Glossary.Groups[0])
+            @if (group == Glossary.PartyCountGroup)
             {
                 <section class="glossary-term" aria-labelledby="@Glossary.PartyCountAnchorId">
                     <h3 id="@Glossary.PartyCountAnchorId">@Glossary.PartyCountHeading</h3>
