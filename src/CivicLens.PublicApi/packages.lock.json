@@ -10,6 +10,12 @@
       },
       "civiclens.publication.contracts": {
         "type": "Project"
+      },
+      "civiclens.publicweb": {
+        "type": "Project",
+        "dependencies": {
+          "CivicLens.Publication.Contracts": "[1.0.0, )"
+        }
       }
     }
   }

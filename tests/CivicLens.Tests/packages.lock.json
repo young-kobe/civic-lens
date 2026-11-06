@@ -450,6 +450,7 @@
       "civiclens.publicapi": {
         "type": "Project",
         "dependencies": {
+          "CivicLens.PublicWeb": "[1.0.0, )",
           "CivicLens.Publication.Contracts": "[1.0.0, )",
           "Npgsql": "[10.0.3, )"
         }

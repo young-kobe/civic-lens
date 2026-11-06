@@ -19,7 +19,7 @@ public sealed class ArchitectureTests
         ["CivicLens.Infrastructure"] = ["CivicLens.Application"],
         ["CivicLens.Host"] = ["CivicLens.Application", "CivicLens.Infrastructure", "CivicLens.PublicWeb"],
         ["CivicLens.Collector"] = ["CivicLens.Collection.Contracts"],
-        ["CivicLens.PublicApi"] = ["CivicLens.Publication.Contracts"],
+        ["CivicLens.PublicApi"] = ["CivicLens.Publication.Contracts", "CivicLens.PublicWeb"],
         ["CivicLens.PublicWeb"] = ["CivicLens.Publication.Contracts"]
     };
 
@@ -71,7 +71,7 @@ public sealed class ArchitectureTests
     {
         var references = ReferencedAssemblies(Path.Combine(AppContext.BaseDirectory, "CivicLens.PublicApi.dll"));
 
-        Assert.Equal(["CivicLens.Publication.Contracts"], references.Where(name => name.StartsWith("CivicLens.", StringComparison.Ordinal)));
+        Assert.Equal(["CivicLens.Publication.Contracts", "CivicLens.PublicWeb"], references.Where(name => name.StartsWith("CivicLens.", StringComparison.Ordinal)).Order());
         Assert.DoesNotContain(references, name => name.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal));
     }
 

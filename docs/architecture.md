@@ -59,7 +59,7 @@ Pending: live Auth0 tenant verification, production deployment, AI classificatio
 
 ## Layers and dependency rules
 
-Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. PublicWeb holds the public Razor components and references Publication.Contracts only. Host references PublicWeb, and no production project references Host. Collection.Contracts and Publication.Contracts have no dependencies. Publication.Contracts also holds the pure public rules that Host and PublicApi share, such as `BillStatusMeaning`, so each rule has one owner. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts only. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
+Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. PublicWeb holds the public Razor components and references Publication.Contracts only. Host references PublicWeb, and no production project references Host. Collection.Contracts and Publication.Contracts have no dependencies. Publication.Contracts also holds pure public rules that Host and PublicApi share, such as `BillStatusMeaning`, so each rule has one owner. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts and PublicWeb and uses the Npgsql package. It renders PublicWeb components as static server pages. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
 
 | Layer | Owns | Must not own |
 |---|---|---|
@@ -70,7 +70,7 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 | Collector | Bounded source interaction and complete raw capture production | Durable scheduling, imports, officials registry or publication |
 | Host | Command parsing, composition, review pages, and the public page components that still need Application types | Collection algorithms or evidence invariants |
 | PublicWeb | The public Razor components: shared UI, evidence display, and the public pages that need only Publication.Contracts | Application, Infrastructure, or Host types, packages, and operational storage |
-| PublicApi | Release ingest, the search index, and the public read API | Operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence |
+| PublicApi | Release ingest, the search index, static server rendering, and the public read API | Operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence |
 
 `tools/render-architecture.py` generates the diagrams below. Run `python3 tools/render-architecture.py`, then open `artifacts/architecture.html` for the explorer. Planned components are labeled there; a diagram is not a claim that the pipeline exists.
 
@@ -123,6 +123,7 @@ flowchart LR
     collector --> cc
     web --> pc
     api --> pc
+    api --> web
 ```
 
 <!-- diagrams:end -->
@@ -170,7 +171,7 @@ Package rules:
 - EF Core Design is private tooling in Infrastructure. Other production projects must not reference database packages.
 - Infrastructure pins the official `Anthropic` C# SDK 12.50.0 for the model adapters only. An architecture test checks that no other project references its assembly.
 - Application pins one package, `Microsoft.Extensions.Logging.Abstractions` 10.0.14, so workers take `ILogger<T>`. The worker command builds a console provider in `Program.cs` that writes to stderr. The review workspace builds its own console provider with a Warning minimum. An architecture test allows no other Application package.
-- `CivicLens.PublicApi` pins Npgsql 10.0.3 and references `Publication.Contracts` only. It has no EF Core, no Application, and no operational storage beyond the `public_api` views. Only Host and PublicApi use the Web SDK. An architecture test checks the references.
+- `CivicLens.PublicApi` pins Npgsql 10.0.3 and references `Publication.Contracts` and `PublicWeb` only. It has no EF Core, no Application, and no operational storage beyond the `public_api` views. It renders Razor components with static server rendering: no interactivity, no SignalR, no WebAssembly. Only Host and PublicApi use the Web SDK. An architecture test checks the references and the assembly references. The owner chose this design on 2026-11-06.
 - `CivicLens.PublicWeb` uses the Razor SDK with the ASP.NET shared framework reference, and has no package. It references `Publication.Contracts` only. An architecture test checks its references and its assembly references.
 - No Rust, Go, Python analysis service, or React application is planned. Python's standard library serves only the development tools in `tools/`.
 
@@ -452,6 +453,7 @@ This is the only navigation index.
 | MCP plans | [Review](architecture/review.md#limits-and-planned-work), [Publication](architecture/publication.md#limits-and-planned-work) | none |
 | Public views, role, active release rule | [Publication](architecture/publication.md#public-api-views) | `src/CivicLens.Infrastructure/Collection/Migrations/20261103165431_PublicApiViews.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261104013000_PublicApiZipDistricts.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261104014700_PublicApiReleaseTime.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261105005544_VoteQuestionResultColumns.cs`, `src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs` |
 | Public search service: ingest, index, read API, rate limit | [Search](architecture/search.md#decisions) | `src/CivicLens.PublicApi/PublicApiApp.cs` |
+| Server pages: cache rule, render pipeline, shared files | [Search](architecture/search.md#server-pages) | `src/CivicLens.PublicApi/Pages/ServerPageResponder.cs`, `src/CivicLens.PublicApi/Pages/PageCache.cs` |
 | Public vote routes, vote cursor, views data source, `/v1/release` | [Search](architecture/search.md#api) | `src/CivicLens.PublicApi/Votes/VoteEndpoints.cs`, `src/CivicLens.PublicApi/ActiveRelease/ReleaseEndpoints.cs` |
 | Reader report queue: pull, dismiss, editor panel, close by approval | [Review](architecture/review.md#reader-reports), [Search](architecture/search.md#operational-pull) | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Infrastructure/Reports/PostgresReaderReportStore.cs` |
 | Search ingest of a release | [Search](architecture/search.md#ingest) | `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs` |
