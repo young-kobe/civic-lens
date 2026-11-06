@@ -1079,6 +1079,33 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task VotePageShowsWhatYesAndNoMeantAndWhatHappensNextUnderTheResultAndShowsNothingForAnOtherKind()
+    {
+        var vote = VoteWithResult("Passed") with { BillType = "hr", BillNumber = 1 };
+
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+        var other = await new ReleaseRenderer(null, null).RenderVoteAsync(vote with { Kind = PublishedVoteKind.Other }, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("#meaning-title")!.ParentElement!.ParentElement!;
+        Assert.Contains("A Yes vote was for passing the bill or agreeing to the measure.", panel.TextContent, StringComparison.Ordinal);
+        Assert.Contains("A No vote was against it.", panel.TextContent, StringComparison.Ordinal);
+        Assert.Contains("It usually goes to the Senate next.", panel.TextContent, StringComparison.Ordinal);
+        Assert.Null(new HtmlParser().ParseDocument(other).QuerySelector("#meaning-title"));
+    }
+
+    [Fact]
+    public async Task VotePageSaysItDoesNotShowTheNextStepWhenTheKindHasWordsButTheBillTypeGivesNoStep()
+    {
+        var vote = VoteWithResult("Passed") with { BillType = null, BillNumber = null };
+
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None);
+
+        var panel = new HtmlParser().ParseDocument(html).QuerySelector("#meaning-title")!.ParentElement!.ParentElement!;
+        Assert.Contains(NextStep.Heading, panel.TextContent, StringComparison.Ordinal);
+        Assert.Contains("This record does not show the next step.", panel.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AnOtherKindVoteWithAQuestionQuoteIsCalledAnOtherQuestionAndShowsTheQuestion()
     {
         var html = await new ReleaseRenderer(null, null).RenderVoteAsync(Vote() with { Kind = PublishedVoteKind.Other }, null, [], PublicationCatalogs.None, CancellationToken.None);
