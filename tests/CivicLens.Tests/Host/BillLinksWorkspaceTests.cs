@@ -3,7 +3,7 @@ using CivicLens.Application.Votes;
 using CivicLens.Application.Collection;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
-using CivicLens.Core.Relationships;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 

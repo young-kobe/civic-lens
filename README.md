@@ -55,7 +55,7 @@ No credentials, database, or paid services are required for the tracer. Tests ne
 | `src/CivicLens.Application` | Use cases and external interfaces |
 | `src/CivicLens.Infrastructure` | Postgres stores, process execution, parsers, and the Claude API adapter |
 | `src/CivicLens.Host` | CLI, worker, authenticated Blazor review workspace, and static release builder |
-| `src/CivicLens.PublicApi` | The public search service: release ingest, its own search index, the read API, and reader report intake. It references the publication contract only |
+| `src/CivicLens.PublicApi` | The public search service: release ingest, its own search index, the read API, reader report intake, and static server rendering through PublicWeb. It references Publication.Contracts and PublicWeb, and uses Npgsql |
 | `src/CivicLens.Collector` | `Http/` contains bounded collection and immutable capture production |
 | `tests/CivicLens.Tests` | Tests mirror their owning layer and feature; `Architecture/` checks dependencies |
 | `tools/render-architecture.py` | Shared diagram definitions and offline visual generator |

@@ -114,7 +114,7 @@ internal static class PublishedVoteView
         if (defineBadges && votes.Any(entry => entry.Alignment == PublishedVoteAlignment.Split)) yield return PublishedOfficialView.SplitVoteMeaning;
         if (defineBadges && votes.Any(entry => entry.Alignment == PublishedVoteAlignment.PartiesAgree)) yield return PublishedOfficialView.PartiesAgreedMeaning;
         if (votes.Any(entry => ListYeaNay(entry) is not null)) yield return $"Yes and No counts are casts {CountsWho}.";
-        if (billLines.AnyOf(entries)) yield return PublishedRecordLabels.BillLineSource;
+        if (billLines.AnyOf(entries)) yield return PublishedWording.BillLineSource;
     }
 
     public static VoteBadge? Badge(PublishedVote vote)

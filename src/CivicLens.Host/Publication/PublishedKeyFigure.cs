@@ -1,5 +1,5 @@
 using CivicLens.Application.Publication;
-using CivicLens.Core.Relationships;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Host.Publication;
 

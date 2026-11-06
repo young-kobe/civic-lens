@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Votes.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -29,6 +30,16 @@ internal static class VoteMemberLists
 
     public static string IdOf(ImmutableArray<MemberVote> members) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', members.Select(CanonicalLine).Prepend(Version)))));
+
+    /// <summary>Reads the stored party of each member, by Bioguide ID, for each list that holds stored parties. A list with none is absent from the result.</summary>
+    public static async Task<IReadOnlyDictionary<string, ImmutableDictionary<string, string>>> ReadPartiesAsync(CollectionAttemptDbContext db,
+        IReadOnlyCollection<string> listIds, CancellationToken cancellationToken)
+    {
+        var rows = await db.Set<VoteMemberListEntryRow>().AsNoTracking().Where(entry => listIds.Contains(entry.ListId) && entry.Party != null)
+            .Select(entry => new { entry.ListId, entry.BioguideId, entry.Party }).ToListAsync(cancellationToken);
+        return rows.GroupBy(row => row.ListId, StringComparer.Ordinal).ToDictionary(group => group.Key,
+            group => group.ToImmutableDictionary(row => row.BioguideId, row => row.Party!, StringComparer.Ordinal), StringComparer.Ordinal);
+    }
 
     /// <summary>Inserts the list and its entries when the list is new. Call it in the transaction that holds the vote review lock.</summary>
     public static Task EnsureAsync(CollectionAttemptDbContext db, VoteDraftRevision revision, CancellationToken cancellationToken)

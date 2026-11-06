@@ -7,4 +7,5 @@ internal sealed class ReleaseOfficialRow
     public string Name { get; set; } = string.Empty;
     public string? WikidataId { get; set; }
     public string? Website { get; set; }
+    public string? PhotoPath { get; set; }
 }

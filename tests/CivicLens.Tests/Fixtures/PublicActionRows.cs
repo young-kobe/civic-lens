@@ -5,7 +5,7 @@ internal static class PublicActionRows
 {
     // Run ID and code version satisfy the author checks. The Code row also carries the bill citation that the Code author needs.
     public static string ActionRevision(string record, int revision, string origin, string? eventOn, int? cosponsorCount,
-        int congress = 119, string billType = "hr", int billNumber = 7, string? policyAreaId = "health")
+        int congress = 119, string billType = "hr", int billNumber = 7, string? policyAreaId = "health", string? headline = null)
     {
         var authorKind = origin switch { "Model" => "Analysis", "Code" => "Code", _ => "Person" };
         var run = authorKind == "Person" ? "NULL" : $"'run-{record[^Math.Min(record.Length, 20)..]}'";
@@ -22,7 +22,7 @@ internal static class PublicActionRows
                 policy_area, policy_area_citation_extraction_id, policy_area_citation_start, policy_area_citation_length, policy_area_id,
                 suggestion_headline, suggestion_summary, suggestion_run_id, suggestion_fingerprint, event_on, cosponsor_count)
             VALUES ('{record}', {revision}, 'test', '{authorKind}', {run}, {codeVersion}, 'x', 1,
-                'Headline {record}', 'Summary {record}', '{origin}', 'src', {congress}, '{billType}', {billNumber}, '{new string('b', 64)}', 1,
+                '{headline ?? $"Headline {record}"}', 'Summary {record}', '{origin}', 'src', {congress}, '{billType}', {billNumber}, '{new string('b', 64)}', 1,
                 true, true, '{new string('d', 64)}', 'A housing bill', '{new string('e', 64)}', true,
                 {billCitation}, {policyArea},
                 'Model draft headline', 'Model draft summary', 'suggestion-run', '{new string('f', 64)}',
