@@ -8,8 +8,8 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Logging;
 using CivicLens.Application.Statements;
 using CivicLens.Host.Components.Layout;
-using CivicLens.Host.Components.Ui;
 using Microsoft.AspNetCore.Components;
+using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.Host.Statements;
 

@@ -116,6 +116,7 @@ body.public {
     --t-section: 2.25rem;
     --marigold: #f5b301;
     --bar: #14213d;
+    --bar-edge: #14213d;
     --bar-ink: #ffffff;
     --bar-muted: #c9d3ee;
     --bar-line: rgba(255, 255, 255, .28);
@@ -138,7 +139,7 @@ body.public {
     --focus-halo: rgba(39, 71, 217, .25);
     --info: #2747d9;
     --info-bg: #e7ecfc;
-    --against: #e08600;
+    --against: #b86300;
 }
 
 @media (max-width: 760px) {
@@ -147,7 +148,8 @@ body.public {
 
 @supports (color: light-dark(#000000, #ffffff)) {
     body.public {
-        --bar: light-dark(#14213d, #0a101f);
+        --bar: light-dark(#14213d, #060b17);
+        --bar-edge: light-dark(#14213d, #56669a);
         --ground: light-dark(#ffffff, #0d1424);
         --surface: light-dark(#ffffff, #141c30);
         --raised: light-dark(#eef1f8, #1b2540);
@@ -164,7 +166,7 @@ body.public {
         --focus-halo: light-dark(rgba(39, 71, 217, .25), rgba(245, 179, 1, .3));
         --info: light-dark(#2747d9, #9db2ff);
         --info-bg: light-dark(#e7ecfc, rgba(111, 140, 255, .16));
-        --against: light-dark(#e08600, #f5a623);
+        --against: light-dark(#b86300, #f5a623);
     }
 }
 

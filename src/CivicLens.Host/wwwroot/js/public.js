@@ -179,6 +179,10 @@
         const body = panel.querySelector("[data-zip-body]");
         const notes = panel.querySelector("[data-zip-notes]");
         const input = form.elements.namedItem("zip");
+        const submit = form.querySelector("[type=submit]");
+        const problem = form.querySelector("[data-zip-error]");
+        const heading = panel.querySelector("h2");
+        heading.tabIndex = -1;
         const houseOffices = JSON.parse(form.dataset.houseOffices);
         const stateName = code => states[code] ?? code;
         const element = (tag, text, className) => {
@@ -207,6 +211,11 @@
             return item;
         };
         const show = (nodes, listed = false) => { panel.hidden = false; notes.hidden = !listed; body.replaceChildren(...nodes); };
+        const showProblem = node => { panel.hidden = true; problem.replaceChildren(node); };
+        const reveal = () => {
+            panel.scrollIntoView({ block: "start", behavior: reducedMotion.matches ? "auto" : "smooth" });
+            heading.focus({ preventScroll: true });
+        };
         const showAnswer = answer => {
             const list = element("ul", undefined, "zip-seats");
             const nodes = [];
@@ -220,6 +229,7 @@
             }
             nodes.push(list);
             show(nodes, true);
+            reveal();
         };
         const failure = (zip, status) => {
             const texts = {
@@ -233,22 +243,29 @@
             message.append(link, ".");
             return message;
         };
-        let running = 0;
-        form.addEventListener("submit", async event => {
-            event.preventDefault();
-            const zip = input.value.trim();
-            const mine = ++running;
-            if (!/^[0-9]{5}$/.test(zip)) { show([element("p", "Enter a ZIP code with 5 digits.")]); return; }
-            show([element("p", "Looking up your officials.")]);
+        const look = async zip => {
             let answer;
             try {
                 const response = await fetch(`${api}/v1/zip-districts/${zip}`);
-                if (mine !== running) return;
-                if (!response.ok) { show([failure(zip, response.status)]); return; }
+                if (!response.ok) { showProblem(failure(zip, response.status)); return false; }
                 answer = await response.json();
             }
-            catch { if (mine === running) show([failure(zip, 0)]); return; }
-            if (mine === running) showAnswer(answer);
+            catch { showProblem(failure(zip, 0)); return false; }
+            showAnswer(answer);
+            return true;
+        };
+        form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const zip = input.value.trim();
+            problem.replaceChildren();
+            if (!/^[0-9]{5}$/.test(zip)) { showProblem(element("p", "Enter a ZIP code with 5 digits.")); return; }
+            submit.disabled = true;
+            body.setAttribute("aria-busy", "true");
+            show([element("p", "Looking up your officials.")]);
+            const found = await look(zip);
+            body.removeAttribute("aria-busy");
+            submit.disabled = false;
+            if (!found) input.focus();
         });
         form.hidden = false;
     };

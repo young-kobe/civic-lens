@@ -19,7 +19,7 @@ public sealed class ReleaseRenderer(string? publicApiUrl, string? turnstileSiteK
 
     private readonly ServiceProvider services = PageServices(publicBaseUrl);
 
-    public IReadOnlyList<ReleaseAsset> Assets { get; } = PublicAssets.Load();
+    public IReadOnlyList<ReleaseAsset> Assets { get; } = PublicAssetFiles.Load();
 
     public PublicBaseUrl? PublicBaseUrl => publicBaseUrl;
 

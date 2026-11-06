@@ -2,7 +2,7 @@
 @using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
 
-<PublicPage CanonicalPath="" HasSearch="true" Title="@PublicHead.SiteName" Description="@HomeDescription" UsesRecordFont="@(Brief is not null)">
+<PublicPage CanonicalPath="" Title="@PublicHead.SiteName" Description="@HomeDescription" UsesRecordFont="@(Brief is not null)">
     <Hero>
         <div class="home-hero">
             <div>
@@ -20,6 +20,7 @@
                             <input id="zip-code" name="zip" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="5" placeholder="5 digits" />
                         </Field>
                         <Button Type="submit">Find my officials</Button>
+                        <div class="zip-error" role="alert" data-zip-error></div>
                     </form>
                 }
                 <p class="home-browse">Or <a href="@PublicationProtocol.OfficialsPagePath">browse all @Highlights.OfficialCount officials</a></p>
