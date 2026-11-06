@@ -59,7 +59,7 @@ Pending: live Auth0 tenant verification, production deployment, AI classificatio
 
 ## Layers and dependency rules
 
-Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. PublicWeb holds the public Razor components and references Publication.Contracts only. Host references PublicWeb, and no production project references Host. Collection.Contracts and Publication.Contracts have no dependencies. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts only. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
+Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. PublicWeb holds the public Razor components and references Publication.Contracts only. Host references PublicWeb, and no production project references Host. Collection.Contracts and Publication.Contracts have no dependencies. Publication.Contracts also holds the pure public rules that Host and PublicApi share, such as `BillStatusMeaning`, so each rule has one owner. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts only. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
 
 | Layer | Owns | Must not own |
 |---|---|---|
@@ -410,7 +410,7 @@ This is the only navigation index.
 | Action tables: queue, runs, budget, drafts, revisions, decisions | [Actions](architecture/actions.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Actions/` |
 | Relationship pairs, bill number and title matching, the pair key | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Application/Relationships/RelationshipPairFinder.cs` |
 | Relationship drafting, fingerprint, staleness, and outcomes | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Application/Relationships/RelationshipDraftStep.cs` |
-| Relationship revisions and the Congress rule | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Core/Relationships/RelationshipRevision.cs` |
+| Relationship revisions | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Core/Relationships/RelationshipRevision.cs` |
 | Relationship review pages, person edits, approval gate, and changed-citation flag | [Statements](architecture/statements.md#relationship-review) | `src/CivicLens.Host/Relationships/RelationshipEditor.razor`, `src/CivicLens.Infrastructure/Relationships/PostgresRelationshipReviewStore.cs` |
 | Relationship commands | [Statements](architecture/statements.md#relationship-drafting) | `src/CivicLens.Host/Relationships/RelationshipCommand.cs` |
 | Relationship tables: queue, runs, budget, drafts, revisions, decisions | [Statements](architecture/statements.md#storage-and-contracts) | `src/CivicLens.Infrastructure/Relationships/` |
@@ -441,6 +441,7 @@ This is the only navigation index.
 | Approval check | [Review](architecture/review.md#approval-check) | `src/CivicLens.Application/Review/ApprovalCheck.cs` |
 | Releases, activation, rollback | [Publication](architecture/publication.md#publish) | `src/CivicLens.Application/Publication/PublishRelease.cs` |
 | Release record content and schema | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Publication.Contracts/PublicationRelease.cs` |
+| The Congress rule: day to Congress and session | [Publication](architecture/publication.md#invariants) | `src/CivicLens.Publication.Contracts/CongressCalendar.cs` |
 | Published vote record, builder, and page | [Publication](architecture/publication.md#vote-record) | `src/CivicLens.Publication.Contracts/PublishedVote.cs` |
 | Published relationship record, builder, and page | [Publication](architecture/publication.md#relationship-record) | `src/CivicLens.Publication.Contracts/PublishedRelationship.cs` |
 | Related records on record pages | [Publication](architecture/publication.md#related-records) | `src/CivicLens.Application/Publication/ReleasePages.cs` |
@@ -458,6 +459,8 @@ This is the only navigation index.
 | Issue panel and `method.html` | [Publication](architecture/publication.md#issue-panel) | `src/CivicLens.Application/Publication/TalkAndActionProfile.cs` |
 | Officials and catalog files of a release | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/PublicationOfficials.cs` |
 | Official pages, officials list, and vote files of an official | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseOfficialPages.cs` |
+| Public site theme, layout rules, and standing page rules | [Public site](architecture/public-site.md#decisions) | `src/CivicLens.PublicWeb/wwwroot/css/theme.css` |
+| Reader flow matrix and component inventory | [Public site](architecture/public-site.md#behavior) | `src/CivicLens.PublicWeb/Components/` |
 | Canonical addresses, sitemap, robots file, and not found page | [Publication](architecture/publication.md#public-base-url) | `src/CivicLens.Application/Publication/ReleaseSite.cs` |
 | Public filter pages | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseFacets.cs` |
 | Pending work, decisions, MVP criteria | [Roadmap](roadmap.md) | none |

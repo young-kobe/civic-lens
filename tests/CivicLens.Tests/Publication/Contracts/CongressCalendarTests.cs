@@ -1,6 +1,6 @@
-using CivicLens.Core.Relationships;
+using CivicLens.Publication.Contracts;
 
-namespace CivicLens.Tests.Core.Relationships;
+namespace CivicLens.Tests.Publication.Contracts;
 
 public sealed class CongressCalendarTests
 {

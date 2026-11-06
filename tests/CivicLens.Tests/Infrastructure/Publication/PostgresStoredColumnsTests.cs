@@ -162,14 +162,16 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         [
             PublishedEntryFixtures.Action(new string('a', 64), first) with { EventDate = new DateOnly(2024, 12, 31) },
             PublishedEntryFixtures.Action(new string('b', 64), first) with { EventDate = new DateOnly(2025, 1, 3) },
-            PublishedEntryFixtures.Action(new string('c', 64), first) with { EventDate = null }
+            PublishedEntryFixtures.Action(new string('c', 64), first) with { EventDate = null },
+            PublishedEntryFixtures.Action(new string('d', 64), first) with { Kind = PublishedRecordKind.Statement, BillTitle = null, ApprovedBy = PublishedApprover.Code }
         ];
 
         await ExecuteAsync("ALTER TABLE published_entries DISABLE TRIGGER ALL");
         await publications.CommitAsync("auth0|owner", EntriesCommit(entries), "key", new string('2', 64), default);
 
-        Assert.Equal(["a|118", "b|119", "c|119"], await ReadAsync("SELECT left(record_id, 1) || '|' || congress FROM published_entries ORDER BY record_id"));
+        Assert.Equal(["a|118", "b|119", "c|119", "d|119"], await ReadAsync("SELECT left(record_id, 1) || '|' || congress FROM published_entries ORDER BY record_id"));
         Assert.Equal(entries.Select(entry => entry.RecordId[..1] + "|" + ReleaseRecordOrder.CongressOf(entry)), await ReadAsync("SELECT left(record_id, 1) || '|' || congress FROM published_entries ORDER BY record_id"));
+        Assert.Equal(["a|", "b|", "c|", "d|Code"], await ReadAsync("SELECT left(record_id, 1) || '|' || coalesce(approved_by, '') FROM published_entries ORDER BY record_id"));
     }
 
     [Fact]

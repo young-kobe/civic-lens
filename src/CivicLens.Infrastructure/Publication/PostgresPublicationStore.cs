@@ -165,6 +165,23 @@ public sealed class PostgresPublicationStore : IPublicationStore
         return await PublishedEntries.FillCongressesAsync(db, entries, cancellationToken);
     }
 
+    public async Task<int> FillStatementApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var filled = await PublishedEntries.FillStatementApproversAsync(db, entries,
+            "The published statement approval differs from its kept record file.", cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return filled;
+    }
+
+    public async Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses,
+        CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await ReleaseBillStatusRows.InsertMissingAsync(db, releaseNumber, statuses, cancellationToken);
+    }
+
     public async Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, Func<string, CancellationToken, Task> requireFiles,
         CancellationToken cancellationToken)
     {
@@ -262,12 +279,14 @@ public sealed class PostgresPublicationStore : IPublicationStore
         await RequireUnchangedReleasesAsync(db, commit, cancellationToken);
         await RequireUnchangedReviewStateAsync(db, commit, cancellationToken);
         await RequireCurrentCitationsAsync(db, commit, cancellationToken);
+        await PublishedEntries.RequireHistoricalStatementApproversAsync(db, commit.AddedEntries, cancellationToken);
         await BriefStaleness.RequeueAfterPublicationAsync(briefQueue, db, commit, cancellationToken);
         await ClearActiveAsync(db, cancellationToken);
         var publishedAt = await DatabaseClock.ReadAsync(db, cancellationToken);
         var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName, publishedAt.Offset, commit.Records.Length);
         db.Add(ToRow(actorSubject, commit, publishedAt, codeVersion));
         ReleaseNameRows.Add(db, commit.ReleaseNumber, commit.Names);
+        ReleaseBillStatusRows.Add(db, commit.ReleaseNumber, commit.BillStatuses);
         ReviewIdempotency.Add(db, actorSubject, PublishOperation, idempotencyKey, payloadHash, ReviewJson.Serialize(summary));
         await SaveAsync(db, cancellationToken);
         await PublicationRecordStates.RecordAsync(db, commit, cancellationToken);

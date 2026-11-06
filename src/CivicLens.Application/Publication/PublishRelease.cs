@@ -107,7 +107,8 @@ public sealed class PublishRelease
             AddedEntries = [.. additions.Select(addition => addition.Entry)],
             RewrittenEntries = request.RewriteEntries ? [.. carried.Where(entry => entry.Kind == PublishedRecordKind.Action)] : [],
             VoteColumns = [.. additions.OfType<PendingRecord<PublishedVote>>().Select(addition => VoteStoredColumns.From(addition.Record))],
-            Names = names
+            Names = names,
+            BillStatuses = ReleaseBillStatuses.RowsOf(ReleaseBillStatuses.ActionIdsOf(entries), statuses)
         };
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
         await ServeActiveReleaseAsync(cancellationToken);
@@ -225,7 +226,7 @@ public sealed class PublishRelease
             Compress(manifestJson, stream => new BrotliStream(stream, CompressionLevel.Optimal)), cancellationToken);
         var facets = ReleaseFacets.From(manifest, catalog);
         await indexPages.WriteAsync(staging, manifest, facets, billLines, cancellationToken);
-        await ReleaseBillStatuses.WriteAsync(staging, ReleaseBillStatuses.ActionIdsOf(manifest.Records), statuses, cancellationToken);
+        await ReleaseBillStatuses.WriteAsync(staging, ReleaseBillStatuses.RowsOf(ReleaseBillStatuses.ActionIdsOf(manifest.Records), statuses), cancellationToken);
         var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, settings, photos, cancellationToken);
         if (additions.Count == 0 && removed.Count == 0 && !rewriteOfficials && !rewriteEntries && !rewritePages && !ReleaseOfficialPages.ChangesProfiles(previous, officials) &&
             !ReleaseBillStatuses.ChangedActionIds(ReleaseBillStatuses.ActionIdsOf(manifest.Records), previous, statuses).Any())

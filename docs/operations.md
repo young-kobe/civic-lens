@@ -250,6 +250,8 @@ The first full run drafts every roll call that has a tracked senator. Code appro
 
 ## Postgres adapter and migrations
 
+`PublishedStatementApprover` adds `published_entries.approved_by`. Run `releases entries backfill` before starting public serving after this migration. It reads the kept statement files and reports unresolved open classifiers. Statements with unknown classifiers stay hidden. New manifests include `approvedBy`; older images reject that field. Before rolling back an image, use the newer image to activate a kept release from before this field was written.
+
 Set `CIVIC_LENS_DATABASE` in your local environment to a Postgres connection string with Host and Database, and with authentication for your local server. Runtime commands need this variable and have no default database. Keep credentials out of committed files, command arguments, and captured output. The commands need a reachable Postgres server and enough database permissions. They do not install or start Postgres.
 
 After you set the variable, run:
@@ -1012,6 +1014,7 @@ The command prints JSON with these keys:
 - `examined`: the revision ranges without a row at the start.
 - `added`: the rows that this run inserted.
 - `billLinesFilled`: the action rows that had no bill line and got one in this run. The limit does not cap them.
+- `billStatusesPinned`: the bill status rows that this run wrote for kept releases, from the `bill-status.json` of each folder. A release that has its rows adds none.
 - `alreadyPresent`: the ranges that already had a row.
 - `skipped`, `skippedByReason`, and `skippedEntries`: the skipped rows, a count for each reason, and the first 50 rows. The reasons are `manifestInvalid`, `recordFileInvalid`, `recordFileDiffers`, `foldersDiffer`, and `firstPublishedMissing`.
 - `openRangesWithoutRow`: the open ranges that still have no row.

@@ -32,6 +32,16 @@ public sealed class PublicationReleaseTests
     }
 
     [Theory]
+    [InlineData(PublishedRecordKind.Statement, 99)]
+    [InlineData(PublishedRecordKind.DocumentChange, (int)PublishedApprover.Code)]
+    public void AnApproverClassificationMustBeKnownAndBelongToAStatement(PublishedRecordKind kind, int approver)
+    {
+        var entry = Entry(kind, kind == PublishedRecordKind.DocumentChange ? ChangeId : StatementId) with { ApprovedBy = (PublishedApprover)approver };
+
+        Assert.Throws<InvalidDataException>(entry.Validate);
+    }
+
+    [Theory]
     [InlineData("kind")]
     [InlineData("officials")]
     [InlineData("issueIds")]

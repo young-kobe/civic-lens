@@ -3119,9 +3119,9 @@ public sealed class ReleaseRendererTests
     [Fact]
     public async Task APublicPageNeverUsesAClassOnlyTheReviewStylesheetDefinesBecauseTheReleaseDoesNotShipIt()
     {
-        var shipped = HostStyleSheets.ClassNames(HostStyleSheets.Read("app.css"));
-        shipped.UnionWith(HostStyleSheets.ClassNames(HostStyleSheets.Read("public.css")));
-        var reviewOnly = HostStyleSheets.ClassNames(HostStyleSheets.Read("review.css")).Except(shipped).ToHashSet();
+        var shipped = WebStyleSheets.ClassNames(WebStyleSheets.Read("app.css"));
+        shipped.UnionWith(WebStyleSheets.ClassNames(WebStyleSheets.Read("public.css")));
+        var reviewOnly = WebStyleSheets.ClassNames(WebStyleSheets.Read("review.css")).Except(shipped).ToHashSet();
 
         var withForms = new ReleaseRenderer("https://api.example.test", "site-key-1");
         (string Name, string Html)[] formPages =

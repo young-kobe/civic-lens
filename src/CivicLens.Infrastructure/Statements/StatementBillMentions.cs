@@ -2,7 +2,7 @@ using System.Globalization;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Relationships;
 using CivicLens.Application.Votes;
-using CivicLens.Core.Relationships;
+using CivicLens.Publication.Contracts;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Analysis;

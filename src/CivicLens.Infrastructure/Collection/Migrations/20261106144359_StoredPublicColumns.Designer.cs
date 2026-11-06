@@ -4841,6 +4841,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasAlternateKey("Kind", "RecordId", "RevisionNumber", "OfficialId");
 
+                    b.HasIndex("OfficialId")
+                        .HasDatabaseName("ix_published_entry_officials_official_id");
+
                     b.HasIndex(new[] { "Kind", "RecordId", "RevisionNumber" }, "ux_published_entry_officials_matched")
                         .IsUnique()
                         .HasFilter("is_matched");

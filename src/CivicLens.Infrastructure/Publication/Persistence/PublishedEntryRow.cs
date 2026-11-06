@@ -33,4 +33,5 @@ internal sealed class PublishedEntryRow
     public PublishedExecutiveActionKind? DocumentType { get; set; }
     public string? BillLine { get; set; }
     public int? Congress { get; set; }
+    public PublishedApprover? ApprovedBy { get; set; }
 }

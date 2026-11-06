@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace CivicLens.Application.Publication;
+namespace CivicLens.Publication.Contracts;
 
 /// <summary>
 /// The one owner of the plain meaning of a latest action text of Congress.gov. Each rule matches a whole known shape of the text from its start, in order.
