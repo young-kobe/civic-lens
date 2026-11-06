@@ -2,7 +2,7 @@ namespace CivicLens.Publication.Contracts;
 
 /// <summary>
 /// The one owner of the plain words for a roll call: casts, vote kinds, results, and the format that puts the source words in brackets.
-/// The Host and the public API read these words. A page never keeps its own copy.
+/// The Host reads these words. A page never keeps its own copy.
 /// </summary>
 public static class PlainVoteWords
 {
