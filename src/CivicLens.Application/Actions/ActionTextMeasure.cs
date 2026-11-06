@@ -68,13 +68,13 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
             sum.OutputTokens + run.Usage.OutputTokens, sum.CacheReadTokens + run.Usage.CacheReadTokens, sum.CacheWriteTokens + run.Usage.CacheWriteTokens));
         var rejections = attempt.Runs.SelectMany(run => run.ValidationErrors).ToImmutableArray();
         var textFigures = BillFigures.Count(billText.Body);
-        ActionTextMeasureBill With(ActionTextMeasureOutcome outcome, string? reason, ImmutableArray<ActionTextMeasureSentence> sentences = default)
+        ActionTextMeasureBill With(ActionTextMeasureOutcome outcome, string? reason, ImmutableArray<ActionTextMeasureSentence> sentences = default, double? passageGrade = null)
         {
             var kept = sentences.IsDefault ? [] : sentences;
             return new(billId, TitleOf(evidence), outcome, reason, billText.CharsRead, billText.CharsTotal, attempt.Calls, usage,
                 attempt.Runs.Sum(run => run.ChargedTokens), kept, rejections,
                 [.. attempt.Runs.Where(run => run.OutputJson is not null).Select(run => new ActionTextMeasurePass(run.Outcome, run.OutputJson))],
-                textFigures, BillFigures.Count(string.Join('\n', kept.Select(sentence => sentence.Sentence))));
+                textFigures, BillFigures.Count(string.Join('\n', kept.Select(sentence => sentence.Sentence))), passageGrade);
         }
 
         if (attempt.RefusedOtherPrompt) return With(ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.NotTextPrompt);
@@ -85,7 +85,8 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         if (attempt.Revision is { TextPackageId: not null } revision)
             return With(ActionTextMeasureOutcome.Accepted, null,
                 [.. revision.TextCitations.Select(citation => new ActionTextMeasureSentence(citation.Part, citation.Sentence,
-                    billText.Text.Substring(citation.Span.Start, citation.Span.Length), ReadingGrade.Rounded(citation.Sentence)))]);
+                    billText.Text.Substring(citation.Span.Start, citation.Span.Length), ReadingGrade.Rounded(citation.Sentence)))],
+                ReadingGrade.RoundedPassage([revision.Headline, .. revision.TextCitations.Select(citation => citation.Sentence)]));
         if (attempt.Revision is not null) return With(ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.WrittenByCode);
         if (attempt.Calls == 0) return With(ActionTextMeasureOutcome.Skipped, attempt.ErrorCode);
         return With(IsResolverRefusal(attempt.Runs[^1].Outcome) ? ActionTextMeasureOutcome.Rejected : ActionTextMeasureOutcome.Failed, attempt.ErrorCode);

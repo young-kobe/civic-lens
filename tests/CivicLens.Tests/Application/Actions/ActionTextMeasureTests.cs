@@ -31,8 +31,9 @@ public sealed class ActionTextMeasureTests
             bill.Sentences.Select(sentence => (sentence.Part, sentence.Sentence, sentence.Quote)));
         var grades = new[] { FirstPlain, SecondPlain, WhyPlain }.Select(ReadingGrade.Rounded).ToArray();
         Assert.Equal(grades, bill.Sentences.Select(sentence => sentence.Grade));
-        Assert.Equal(Math.Round(grades.Average(), 1), bill.MeanGrade);
-        Assert.Equal(bill.MeanGrade, report.Totals.MeanGrade);
+        var passage = ReadingGrade.RoundedPassage(["H.R. 1 pays landlords for tenants with low income.", FirstPlain, SecondPlain, WhyPlain]);
+        Assert.Equal(passage, bill.PassageGrade);
+        Assert.Equal(passage, report.Totals.MeanGrade);
         Assert.Equal((new BillFigureCounts(0, 1), new BillFigureCounts(0, 1), false, 0),
             (bill.TextFigures, bill.SentenceFigures, bill.LosesFigures, report.Totals.BillsLosingFigures));
         Assert.Empty(bill.Rejections);

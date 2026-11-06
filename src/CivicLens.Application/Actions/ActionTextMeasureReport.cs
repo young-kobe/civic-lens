@@ -12,10 +12,8 @@ public sealed record ActionTextMeasurePass(AnalysisRunOutcome Outcome, string? O
 
 public sealed record ActionTextMeasureBill(string BillId, string? Title, ActionTextMeasureOutcome Outcome, string? Reason, int CharsRead, int CharsTotal,
     int Calls, AnalysisTokenUsage Usage, long ChargedTokens, ImmutableArray<ActionTextMeasureSentence> Sentences, ImmutableArray<string> Rejections,
-    ImmutableArray<ActionTextMeasurePass> Passes, BillFigureCounts TextFigures, BillFigureCounts SentenceFigures)
+    ImmutableArray<ActionTextMeasurePass> Passes, BillFigureCounts TextFigures, BillFigureCounts SentenceFigures, double? PassageGrade)
 {
-    public double? MeanGrade => ActionTextMeasureGrades.Mean(Sentences);
-
     /// <summary>True when the sent text has a dollar amount or a date and the accepted sentences have none of that kind. It is a measure only.
     /// A bill with no accepted sentence is not flagged.</summary>
     public bool LosesFigures => Outcome == ActionTextMeasureOutcome.Accepted &&
@@ -26,7 +24,7 @@ public sealed record ActionTextMeasureBill(string BillId, string? Title, ActionT
     public static ActionTextMeasureBill Skipped(string billId, string reason) => WithoutCall(billId, ActionTextMeasureOutcome.Skipped, reason);
 
     public static ActionTextMeasureBill WithoutCall(string billId, ActionTextMeasureOutcome outcome, string reason) =>
-        new(billId, null, outcome, reason, 0, 0, 0, AnalysisTokenUsage.None, 0, [], [], [], new(0, 0), new(0, 0));
+        new(billId, null, outcome, reason, 0, 0, 0, AnalysisTokenUsage.None, 0, [], [], [], new(0, 0), new(0, 0), null);
 }
 
 public sealed record ActionTextMeasureTotals(int Accepted, int Rejected, int Failed, int Skipped, int StoppedByCap, int StoppedByModel, int Calls,
@@ -38,7 +36,7 @@ public sealed record ActionTextMeasureReport(string PromptVersion, string Schema
     public ActionTextMeasureTotals Totals => new(Count(ActionTextMeasureOutcome.Accepted), Count(ActionTextMeasureOutcome.Rejected),
         Count(ActionTextMeasureOutcome.Failed), Count(ActionTextMeasureOutcome.Skipped), Count(ActionTextMeasureOutcome.StoppedByCap),
         Count(ActionTextMeasureOutcome.StoppedByModel), Bills.Sum(bill => bill.Calls), TotalUsage(), Bills.Sum(bill => bill.ChargedTokens),
-        ActionTextMeasureGrades.Mean(Bills.SelectMany(bill => bill.Sentences)), Bills.Count(bill => bill.LosesFigures));
+        ActionTextMeasureGrades.Mean(Bills.Select(bill => bill.PassageGrade)), Bills.Count(bill => bill.LosesFigures));
 
     private int Count(ActionTextMeasureOutcome outcome) => Bills.Count(bill => bill.Outcome == outcome);
 
@@ -56,9 +54,9 @@ public static class ActionTextMeasureReason
     public const string WrittenByCode = "step-wrote-the-text-by-code";
 }
 
-/// <summary>The mean grade of the accepted sentences, rounded to one decimal. It is null when no sentence was accepted.</summary>
+/// <summary>The mean passage grade of the accepted bills, rounded to one decimal. It is null when no bill was accepted.</summary>
 internal static class ActionTextMeasureGrades
 {
-    public static double? Mean(IEnumerable<ActionTextMeasureSentence> sentences) =>
-        sentences.Select(sentence => sentence.Grade).ToArray() is { Length: > 0 } grades ? Math.Round(grades.Average(), 1) : null;
+    public static double? Mean(IEnumerable<double?> passageGrades) =>
+        passageGrades.OfType<double>().ToArray() is { Length: > 0 } grades ? Math.Round(grades.Average(), 1) : null;
 }

@@ -68,8 +68,8 @@ public sealed class ReadingGradeTests
     {
         const string text = "Many tenants pay rent into local landlords under the new program.";
 
-        Assert.True(ReadingGrade.Of(text) > ReadingGrade.MaximumSentenceGrade);
-        Assert.Equal(ReadingGrade.MaximumSentenceGrade, ReadingGrade.Rounded(text));
+        Assert.True(ReadingGrade.Of(text) > ReadingGrade.MaximumGrade);
+        Assert.Equal(ReadingGrade.MaximumGrade, ReadingGrade.Rounded(text));
         Assert.Equal("8.0", ReadingGrade.Format(ReadingGrade.Rounded(text)));
     }
 
@@ -77,8 +77,28 @@ public sealed class ReadingGradeTests
     public void LongLegalWordsPassOnlyBelowTheLimitAndPlainWordsPass()
     {
         Assert.True(ReadingGrade.Of("Notwithstanding the aforementioned administrative requirements, eligible beneficiaries receive compensatory disbursements.") >
-            ReadingGrade.MaximumSentenceGrade);
-        Assert.True(ReadingGrade.Of("The bill pays rent for people with low pay.") <= ReadingGrade.MaximumSentenceGrade);
-        Assert.Equal("8.0", ReadingGrade.Format(ReadingGrade.MaximumSentenceGrade));
+            ReadingGrade.MaximumGrade);
+        Assert.True(ReadingGrade.Of("The bill pays rent for people with low pay.") <= ReadingGrade.MaximumGrade);
+        Assert.Equal("8.0", ReadingGrade.Format(ReadingGrade.MaximumGrade));
+    }
+
+    [Fact]
+    public void APassageCountsEachPieceAsASentenceEvenWithoutAFullStop()
+    {
+        var joined = ReadingGrade.Of("The cat sat. The dog ran.");
+
+        Assert.Equal(joined, ReadingGrade.OfPassage(["The cat sat", "The dog ran"]), 5);
+        Assert.Equal(joined, ReadingGrade.OfPassage(["The cat sat.", "The dog ran."]), 5);
+        Assert.Equal(ReadingGrade.Of("The cat sat."), ReadingGrade.OfPassage(["The cat sat"]), 5);
+    }
+
+    [Fact]
+    public void APassageGradesTheWordsOfAllItsPiecesTogether()
+    {
+        // 4 + 12 words in 2 sentences: the long sentence is averaged with the short one.
+        var passage = ReadingGrade.OfPassage(["The cat sat.", "Eligible tenants receive compensatory disbursements under administrative requirements."]);
+
+        Assert.True(passage < ReadingGrade.Of("Eligible tenants receive compensatory disbursements under administrative requirements."));
+        Assert.True(passage > ReadingGrade.Of("The cat sat."));
     }
 }

@@ -3,29 +3,42 @@ using CivicLens.Application.Analysis;
 
 namespace CivicLens.Application.Actions;
 
-/// <summary>The one owner of the reading grade of a piece of English text, such as a model sentence or a headline. The grade is the Flesch-Kincaid grade level,
+/// <summary>The one owner of the reading grade of English text, such as a model sentence, a headline or a passage of both. The grade is the Flesch-Kincaid grade level,
 /// 0.39 * (words / sentences) + 11.8 * (syllables / words) - 15.59. <see cref="SentenceEnds"/> owns where a sentence ends, so a full stop in
 /// "H.R." or "U.S." does not end one. A word is a run of characters between spaces. A number is one syllable. A word of letters has its groups of
 /// vowels (a, e, i, o, u, y), less one for a final silent e (a final "le" keeps it), for a final "es" and for a final "ed". A final "es" is silent
 /// unless the letter before it is s, x, z, c or g, or the word ends in "ches" or "shes". A final "ed" is silent unless the letter before it is t, d or
 /// a vowel (a vowel before "ed" already sits in a vowel group, as in "agreed"), or the "ed" follows an "l" that a consonant other than "l" precedes. That
-/// "led" is its own syllable, as in "settled", while "called" keeps a silent "ed". A word has at least one syllable.</summary>
+/// "led" is its own syllable, as in "settled", while "called" keeps a silent "ed". A word has at least one syllable.
+/// A passage is graded as one text: <see cref="OfPassage"/> adds the words, syllables and sentences of its pieces. Each piece counts at least one sentence,
+/// so a headline with no full stop is still one sentence.</summary>
 public static class ReadingGrade
 {
-    /// <summary>Text above this grade goes back to the model.</summary>
-    public const double MaximumSentenceGrade = 8;
+    /// <summary>A passage above this grade goes back to the model.</summary>
+    public const double MaximumGrade = 8;
 
     public static double Of(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        var words = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        return OfPassage([text]);
+    }
+
+    /// <summary>The grade of the pieces read as one passage. Each piece holds one or more sentences.</summary>
+    public static double OfPassage(IReadOnlyCollection<string> pieces)
+    {
+        ArgumentNullException.ThrowIfNull(pieces);
+        var words = pieces.SelectMany(piece => piece.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToArray();
         if (words.Length == 0) return 0;
         var syllables = words.Sum(Syllables);
-        return 0.39 * words.Length / Sentences(text) + 11.8 * syllables / words.Length - 15.59;
+        return 0.39 * words.Length / pieces.Sum(Sentences) + 11.8 * syllables / words.Length - 15.59;
     }
 
     /// <summary>The grade to one decimal. The limit check and the message both use this value, so a grade that prints as the limit never fails it.</summary>
-    public static double Rounded(string text) => Math.Round(Of(text), 1, MidpointRounding.AwayFromZero);
+    public static double Rounded(string text) => Round(Of(text));
+
+    public static double RoundedPassage(IReadOnlyCollection<string> pieces) => Round(OfPassage(pieces));
+
+    private static double Round(double grade) => Math.Round(grade, 1, MidpointRounding.AwayFromZero);
 
     public static string Format(double grade) => grade.ToString("0.0", CultureInfo.InvariantCulture);
 
