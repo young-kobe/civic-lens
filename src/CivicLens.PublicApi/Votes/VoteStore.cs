@@ -76,6 +76,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
         command.Parameters.AddWithValue("id", recordId);
         command.Parameters.AddWithValue("take", request.Limit + 1);
         if (request.Cast is not null) command.Parameters.AddWithValue("cast", request.Cast);
+        if (request.Officials.Length > 0) command.Parameters.AddWithValue("officials", request.Officials);
         if (request.Cursor is { } cursor) command.Parameters.AddWithValue("after", cursor.Position);
         var rows = new List<VoteMember>();
         int? release = null;
@@ -93,6 +94,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
 
     private static string MemberFilters(VoteMemberRequest request) =>
         (request.Cast is null ? "" : " AND m.vote_cast = @cast") +
+        (request.Officials.Length == 0 ? "" : " AND m.official_id = ANY(@officials)") +
         (request.Cursor is null ? "" : " AND m.\"position\" > @after");
 
     private static string ListSql(VoteRequest request) => $"""
