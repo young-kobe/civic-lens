@@ -8,10 +8,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
     public partial class PublicApiOfficials : Migration
     {
         // Every view joins base tables and public_api.active_records. No view reads another security_barrier view except active_records,
-        // because Postgres does not flatten a stacked security_barrier view. A filter on official_id reaches the person index.
+        // because Postgres does not flatten a stacked security_barrier view. A filter on official_id reaches ix_published_entry_officials_official_id, ix_vote_member_list_entries_person, and ix_action_revision_sponsorships_person.
         // The latest term is the newest term that started on or before the day of the release, as PublishedOfficialView.LatestTerm picks it.
         // 864000000000 is the number of ticks in one day.
         private const string UpSql = """
+            CREATE INDEX ix_published_entry_officials_official_id ON public.published_entry_officials (official_id);
+
             CREATE VIEW public_api.officials WITH (security_barrier = true) AS
             SELECT r.release_number, o.official_id, o.name, t.kind, t.office, t.state, t.district, t.party, t.caucus, t.end_on AS term_end_on,
                    COALESCE(c.record_count, 0) AS record_count
@@ -27,7 +29,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                    SELECT e.official_id, count(*) AS record_count
                      FROM public_api.active_records a
                      JOIN public.published_entry_officials e ON e.kind = a.kind AND e.record_id = a.record_id AND e.revision_number = a.revision_number
-                    WHERE a.kind <> 'vote'
                     GROUP BY e.official_id) c ON c.official_id = o.official_id
              WHERE r.is_active;
 
@@ -87,6 +88,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             """;
 
         private const string DownSql = """
+            DROP INDEX public.ix_published_entry_officials_official_id;
             DROP VIEW public_api.officials, public_api.official_attendance, public_api.official_bill_counts,
                 public_api.official_issue_counts, public_api.official_executive_actions;
             """;

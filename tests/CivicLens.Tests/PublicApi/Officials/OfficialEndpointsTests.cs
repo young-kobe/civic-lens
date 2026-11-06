@@ -120,6 +120,28 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AWalkOverOfficialsWithNamesAndIdsOfTheFullColumnLengthFollowsEveryCursorTheServerWrites()
+    {
+        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        string[] ids = [.. "abc".Select(letter => new string(letter, 256))];
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, [.. ids.Select(id => new SeededOfficial(id, new string(id[0], 255) + "é"))]);
+        await OfficialsSeed.AddEntriesAsync(host.OperationalDatabase, new SeededEntry("statement", 'a', ids[0]));
+        var seen = new List<string>();
+        string? cursor = null;
+        do
+        {
+            using var page = await GetAsync(host, "/v1/officials?limit=1" + (cursor is null ? "" : "&cursor=" + Uri.EscapeDataString(cursor)));
+            seen.AddRange(Ids(page));
+            cursor = page.RootElement.GetProperty("nextCursor").GetString();
+            Assert.True(cursor is null || cursor.Length > 200);
+        }
+        while (cursor is not null);
+
+        Assert.Equal(ids, seen);
+    }
+
+    [Fact]
     public async Task ThePageSizeIsAtMostFiftyAndALimitAboveItIsRefused()
     {
         await using var host = await StartAsync();
@@ -186,6 +208,10 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
         var bills = root.GetProperty("bills");
         Assert.Equal([2, 0, 2], [bills.GetProperty("sponsored").GetInt32(), bills.GetProperty("cosponsored").GetInt32(), bills.GetProperty("billsInCongress").GetInt32()]);
         Assert.Contains("Congress 119", bills.GetProperty("scope").GetString(), StringComparison.Ordinal);
+        Assert.Contains("counts once, as sponsored", bills.GetProperty("scope").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Congress of its bill number", bills.GetProperty("scope").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Statements are not counted.", root.GetProperty("issues").GetProperty("scope").GetString(), StringComparison.Ordinal);
+        Assert.Contains("have an entry row", root.GetProperty("recordCountScope").GetString(), StringComparison.Ordinal);
         var issues = root.GetProperty("issues").GetProperty("issues").EnumerateArray().Select(row => $"{row.GetProperty("issueId").GetString()} {row.GetProperty("sponsoredBills").GetInt32()} {row.GetProperty("votesCast").GetInt32()}").ToArray();
         Assert.Equal(["health 2 1", "tax 1 1"], issues);
         Assert.Equal(JsonValueKind.Null, root.GetProperty("executiveActions").ValueKind);

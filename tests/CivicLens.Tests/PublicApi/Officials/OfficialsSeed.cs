@@ -53,7 +53,6 @@ internal static class OfficialsSeed
     {
         "statement" => $"statement_candidate_id, statement_revision_number) VALUES ('statement', '{entry.RecordId}', 1, 'H', '{entry.RecordId}', 1",
         "executiveAction" => $"executive_action_record_id, executive_action_revision_number, document_type) VALUES ('executiveAction', '{entry.RecordId}', 1, 'H', '{entry.RecordId}', 1, '{entry.DocumentType}'",
-        "vote" => $"vote_record_id, vote_revision_number) VALUES ('vote', '{entry.RecordId}', 1, 'H', '{entry.RecordId}', 1",
         _ => throw new ArgumentException($"The seed does not write the entry kind {entry.Kind}.")
     };
 

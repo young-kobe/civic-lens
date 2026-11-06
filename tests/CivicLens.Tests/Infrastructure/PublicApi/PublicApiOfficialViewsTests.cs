@@ -111,20 +111,33 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
     }
 
     [Fact]
-    public async Task RecordCountEqualsTheEntriesThatNameTheOfficialAndCountsNoVoteAndNoOtherRelease()
+    public async Task RecordCountEqualsTheEntriesThatNameTheOfficialAndCountsNoRecordOfAnotherRelease()
     {
         await OfficialsSeed.AddOfficialsAsync(database, new SeededOfficial("p0", "Ann Able"), new SeededOfficial("p1", "Ben Baker"), new SeededOfficial("p2", "Cy Cole"));
         SeededEntry[] entries =
         [
             new("statement", 'a', "p0", "p1"), new("statement", 'b', "p0"), new("executiveAction", 'c', "p0") { DocumentType = "ExecutiveOrder" },
-            new("vote", 'd', "p0", "p1"), new("statement", 'e', "p1") { FirstRelease = 2 }
+            new("statement", 'e', "p1") { FirstRelease = 2 }
         ];
         await OfficialsSeed.AddEntriesAsync(database, entries);
-        PublishedRecordEntry[] manifest = [.. entries.Where(entry => entry is { FirstRelease: 1, LastRelease: null } && entry.Kind != "vote").Select(ManifestEntry)];
+        PublishedRecordEntry[] manifest = [.. entries.Where(entry => entry is { FirstRelease: 1, LastRelease: null }).Select(ManifestEntry)];
         var expected = new[] { "p0", "p1", "p2" }.Select(id => $"{id} {manifest.Count(entry => entry.Officials.Any(official => official.Id == id))}").ToArray();
 
         Assert.Equal(expected, await QueryAsync("SELECT official_id || ' ' || record_count FROM public_api.officials ORDER BY official_id"));
         Assert.Equal(["p0 3", "p1 1", "p2 0"], expected);
+    }
+
+    // The static page counts a sponsored bill in the Congress of its last event date. The view counts it in the Congress of the bill number, so it equals billsInCongress.
+    [Fact]
+    public async Task ABillCountsInTheCongressOfItsBillNumberAndNotInTheCongressOfItsLastSponsorshipEvent()
+    {
+        await BillsSeed.AddBillsAsync(database,
+            new SeededBill('1', "2025-03-01") { BillNumber = 1, Congress = 118, Issues = ["health"], Sponsorships = [new("p0", "Sponsor", "2023-02-01"), new("p1", "Cosponsor", "2023-02-02")] },
+            new SeededBill('2', "2026-03-01") { BillNumber = 2, Congress = 119, Sponsorships = [new("p0", "Sponsor", "2026-01-10")] });
+
+        Assert.Equal(["118 1 0", "119 1 0"], await QueryAsync("SELECT congress || ' ' || sponsored || ' ' || cosponsored FROM public_api.official_bill_counts WHERE official_id = 'p0' ORDER BY congress"));
+        Assert.Equal(["118 0 1"], await QueryAsync("SELECT congress || ' ' || sponsored || ' ' || cosponsored FROM public_api.official_bill_counts WHERE official_id = 'p1'"));
+        Assert.Equal(["118 health 1"], await QueryAsync("SELECT congress || ' ' || issue_id || ' ' || records FROM public_api.official_issue_counts WHERE official_id = 'p0' AND source = 'bill'"));
     }
 
     // The page picks the term. The test renders the officials page with the real renderer and reads the card, so the page rule stays the one owner.
