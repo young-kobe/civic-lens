@@ -7,9 +7,10 @@ namespace CivicLens.Application.Publication;
 
 /// <summary>
 /// Fills the stored columns that C# writes at publication, for rows that earlier releases wrote. Each fill calls the rule of the commit writer.
-/// A vote revision takes <see cref="VoteStoredColumns.From"/> of the vote record file that the newest kept folder holds for that revision, so a member whose
-/// roster term changed keeps the party that the release gave on the vote day. An official takes the photo path of the officials file of its release. An entry takes
-/// <see cref="ReleaseRecordOrder.CongressOf(DateOnly?, DateTimeOffset)"/>. Every write fills only a column that holds none, so a second run changes nothing.
+/// A vote revision takes <see cref="VoteStoredColumns.From"/> of its own vote record file, which the newest kept folder in its release range holds. Its columns
+/// and its written marker go in together. A member list pins the parties of its earliest published revision that has a kept file, so a later revision of the
+/// list never changes them. A revision with no kept file stays unwritten. An official takes the photo path of the officials file of its release. An entry takes
+/// <see cref="ReleaseRecordOrder.CongressOf(DateOnly?, DateTimeOffset)"/>. Every write fills only what is not filled yet, so a second run changes nothing.
 /// Work runs in batches of <see cref="BatchSize"/> rows.
 /// </summary>
 public sealed class BackfillStoredColumns(IPublicationStore publications, IReleaseDirectory releases)
@@ -19,44 +20,49 @@ public sealed class BackfillStoredColumns(IPublicationStore publications, IRelea
     public async Task<StoredColumnsBackfillResult> ExecuteAsync(ReviewActor actor, CancellationToken cancellationToken = default)
     {
         ReviewAuthorization.RequireOwner(actor);
-        var keptReleases = (await publications.ListAllAsync(cancellationToken)).OrderByDescending(release => release.ReleaseNumber).ToArray();
-        var votes = await BackfillVotesAsync(keptReleases, cancellationToken);
-        var photos = await BackfillPhotoPathsAsync(keptReleases, cancellationToken);
+        var releaseRows = (await publications.ListAllAsync(cancellationToken)).OrderByDescending(release => release.ReleaseNumber).ToArray();
+        var votes = await BackfillVotesAsync(releaseRows, cancellationToken);
+        var photos = await BackfillPhotoPathsAsync(releaseRows, cancellationToken);
         var congresses = await BackfillCongressesAsync(cancellationToken);
-        return new(votes.Examined, votes.Written, votes.WithoutFile, votes.OtherParties, photos, congresses);
+        return new(votes.Examined, votes.Written, votes.OpenWithoutFile, votes.ClosedWithoutFile, photos, congresses);
     }
 
-    private async Task<(int Examined, int Written, int WithoutFile, int OtherParties)> BackfillVotesAsync(PublicationReleaseSummary[] keptReleases,
+    private async Task<(int Examined, int Written, int OpenWithoutFile, int ClosedWithoutFile)> BackfillVotesAsync(PublicationReleaseSummary[] releaseRows,
         CancellationToken cancellationToken)
     {
-        var gaps = (await publications.ReadVoteColumnGapsAsync(cancellationToken)).Distinct().ToArray();
-        int written = 0, withoutFile = 0, otherParties = 0;
+        var gaps = await publications.ReadVoteColumnGapsAsync(cancellationToken);
+        var pinnedLists = new HashSet<string>(StringComparer.Ordinal);
+        int written = 0, openWithoutFile = 0, closedWithoutFile = 0;
         foreach (var batch in gaps.Chunk(BatchSize))
         {
             var columns = new List<VoteStoredColumns>();
             foreach (var gap in batch)
             {
-                if (await ReadColumnsAsync(keptReleases, gap, cancellationToken) is { } found) columns.Add(found);
-                else withoutFile++;
+                if (await ReadColumnsAsync(releaseRows, gap, cancellationToken) is not { } found)
+                {
+                    if (gap.IsOpen) openWithoutFile++;
+                    else closedWithoutFile++;
+                    continue;
+                }
+                // The gaps come in revision order for each list, so the first revision with a file owns the parties of the list.
+                columns.Add(pinnedLists.Add(gap.ListId) ? found : found with { MemberParties = [] });
             }
-            var conflicts = await publications.WriteVoteColumnsAsync(columns, cancellationToken);
-            otherParties += conflicts.Count;
-            written += columns.Count - conflicts.Count;
+            await publications.WriteVoteColumnsAsync(columns, cancellationToken);
+            written += columns.Count;
         }
-        return (gaps.Length, written, withoutFile, otherParties);
+        return (gaps.Count, written, openWithoutFile, closedWithoutFile);
     }
 
-    private async Task<VoteStoredColumns?> ReadColumnsAsync(PublicationReleaseSummary[] keptReleases, PublishedRevisionBinding gap,
-        CancellationToken cancellationToken)
+    private async Task<VoteStoredColumns?> ReadColumnsAsync(PublicationReleaseSummary[] releaseRows, VoteColumnGap gap, CancellationToken cancellationToken)
     {
-        foreach (var release in keptReleases)
+        foreach (var release in releaseRows.Where(release => gap.Covers(release.ReleaseNumber)))
         {
             if (await ReadVoteAsync(release, gap, cancellationToken) is { } vote) return VoteStoredColumns.From(vote);
         }
         return null;
     }
 
-    private async Task<PublishedVote?> ReadVoteAsync(PublicationReleaseSummary release, PublishedRevisionBinding gap, CancellationToken cancellationToken)
+    private async Task<PublishedVote?> ReadVoteAsync(PublicationReleaseSummary release, VoteColumnGap gap, CancellationToken cancellationToken)
     {
         try
         {
@@ -70,10 +76,10 @@ public sealed class BackfillStoredColumns(IPublicationStore publications, IRelea
         }
     }
 
-    private async Task<int> BackfillPhotoPathsAsync(PublicationReleaseSummary[] keptReleases, CancellationToken cancellationToken)
+    private async Task<int> BackfillPhotoPathsAsync(PublicationReleaseSummary[] releaseRows, CancellationToken cancellationToken)
     {
         var filled = 0;
-        foreach (var release in keptReleases)
+        foreach (var release in releaseRows)
         {
             Dictionary<string, PublishedOfficialProfile> officials;
             try

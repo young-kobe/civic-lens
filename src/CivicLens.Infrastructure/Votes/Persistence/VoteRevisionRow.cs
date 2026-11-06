@@ -44,6 +44,7 @@ internal sealed class VoteRevisionRow : IReviewRevisionRow, IReviewTextRow
     public bool IssueCandidatesRecorded { get; set; }
     public string? Question { get; set; }
     public string Result { get; set; } = string.Empty;
+    public bool ColumnsWritten { get; set; }
     public PublishedVoteAlignment? Alignment { get; set; }
     public string? DemocratMajority { get; set; }
     public string? RepublicanMajority { get; set; }

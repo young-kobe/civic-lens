@@ -133,20 +133,18 @@ public sealed class PostgresPublicationStore : IPublicationStore
         return filled;
     }
 
-    public async Task<IReadOnlyList<PublishedRevisionBinding>> ReadVoteColumnGapsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<VoteColumnGap>> ReadVoteColumnGapsAsync(CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await VoteStoredColumnRows.ReadGapsAsync(db, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<PublishedRevisionBinding>> WriteVoteColumnsAsync(IReadOnlyCollection<VoteStoredColumns> columns,
-        CancellationToken cancellationToken)
+    public async Task WriteVoteColumnsAsync(IReadOnlyCollection<VoteStoredColumns> columns, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysBeforeBriefs, cancellationToken);
-        var conflicts = await VoteStoredColumnRows.WriteAsync(db, columns, cancellationToken);
+        await VoteStoredColumnRows.WriteAsync(db, columns, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return conflicts;
     }
 
     public async Task<int> FillOfficialPhotoPathsAsync(int releaseNumber, IReadOnlyDictionary<string, string> photoPaths, CancellationToken cancellationToken)
@@ -279,9 +277,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         await PublishedEntries.InsertAsync(db, commit.AddedEntries, "Rebuild the release.", cancellationToken);
         await PublishedEntries.FillBillLinesAsync(db, commit.RewrittenEntries,
             "A carried action has no entry row or holds another bill line. Run releases entries backfill, then publish again.", cancellationToken);
-        var conflicts = await VoteStoredColumnRows.WriteAsync(db, commit.VoteColumns, cancellationToken);
-        if (conflicts.Count > 0)
-            throw new PublicationConflictException($"The member list of vote {conflicts[0].RecordId} revision {conflicts[0].RevisionNumber} holds other parties than this release. Compare the roster terms with the stored parties.");
+        await VoteStoredColumnRows.WriteAsync(db, commit.VoteColumns, cancellationToken);
         await PublicationWithdrawalRows.RecordAsync(db, commit, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return summary;

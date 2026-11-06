@@ -35,11 +35,14 @@ public interface IPublicationStore
 
     Task<int> FillBillLinesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken);
 
-    /// <summary>Lists the published vote revisions with a member list whose stored vote columns are unwritten or null.</summary>
-    Task<IReadOnlyList<PublishedRevisionBinding>> ReadVoteColumnGapsAsync(CancellationToken cancellationToken);
+    /// <summary>Lists the published vote revisions with a member list whose stored vote columns are not written yet.</summary>
+    Task<IReadOnlyList<VoteColumnGap>> ReadVoteColumnGapsAsync(CancellationToken cancellationToken);
 
-    /// <summary>Writes the vote columns of revisions that hold none. It returns the revisions whose member list already holds other parties. It writes nothing for those.</summary>
-    Task<IReadOnlyList<PublishedRevisionBinding>> WriteVoteColumnsAsync(IReadOnlyCollection<VoteStoredColumns> columns, CancellationToken cancellationToken);
+    /// <summary>
+    /// Writes the vote columns of revisions that are not written yet. A member list keeps the parties it already holds. A call that pins two different party sets
+    /// on one list fails, and it writes nothing.
+    /// </summary>
+    Task WriteVoteColumnsAsync(IReadOnlyCollection<VoteStoredColumns> columns, CancellationToken cancellationToken);
 
     Task<int> FillOfficialPhotoPathsAsync(int releaseNumber, IReadOnlyDictionary<string, string> photoPaths, CancellationToken cancellationToken);
 

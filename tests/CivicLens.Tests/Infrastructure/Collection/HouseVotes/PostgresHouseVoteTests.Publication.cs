@@ -65,6 +65,20 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
+    public async Task PublicationReadGivesTheStoredPartiesOfTheMemberListByBioguideIdAndNoneWhenTheListHoldsNoneBecauseTheBuilderPinsThem()
+    {
+        var recordId = await ApprovedVoteAsync();
+        var before = (await VoteReviews().GetForPublicationAsync([recordId], default))[recordId];
+        await ExecuteAsync("UPDATE vote_member_list_entries SET party = 'Democrat'");
+
+        var after = (await VoteReviews().GetForPublicationAsync([recordId], default))[recordId];
+
+        Assert.Empty(before.StoredParties);
+        var member = Assert.Single(after.Review.CurrentRevision!.Members);
+        Assert.Equal([KeyValuePair.Create(member.BioguideId, "Democrat")], after.StoredParties);
+    }
+
+    [Fact]
     public async Task PublicationReadHoldsOnlyTheLastApprovedAndTheCurrentRevisionSoTheReplacedPublishedRevisionComesFromTheReleaseFile()
     {
         var first = await PendingCandidateAsync();

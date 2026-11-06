@@ -50,7 +50,7 @@ public static class ReleaseCommand
                     case ["releases", "columns", "backfill"]:
                         var filled = await columns.ExecuteAsync(owner, cancellationToken);
                         CommandOutput.Write(output, filled);
-                        return filled.VoteRevisionsWithoutKeptFile == 0 && filled.VoteRevisionsWithOtherParties == 0 ? 0 : 1;
+                        return filled.OpenVoteRevisionsWithoutKeptFile == 0 ? 0 : 1;
                     case ["releases", "entries", "verify"]:
                         var verification = await verify.ExecuteAsync(owner, cancellationToken);
                         CommandOutput.Write(output, verification);

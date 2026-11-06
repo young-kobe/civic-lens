@@ -1028,17 +1028,17 @@ The release commit writes some columns once, from the records that the release b
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases columns backfill
 ```
 
-The command reads each kept release folder. A vote revision takes its values from the vote file of the newest kept folder that holds that revision, so the parties are the ones that the release gave on the vote day. An official takes the photo path of the officials file of its release. An entry takes the Congress of its event date, or of its first publication day when it has no event date. The command writes in batches of 25 rows. It fills only a column that is null, so you can run it again at any time.
+The command reads the kept release folders. A vote revision takes its values from its own vote file, which the newest kept folder in its release range holds. The parties are the ones that the release gave on the vote day. A member list that holds no parties takes them from its earliest published revision that has a kept file. A later revision of the list never changes them. An official takes the photo path of the officials file of its release. An entry takes the Congress of its event date, or of its first publication day when it has no event date. The command writes in batches of 25 rows. It fills only what is not filled yet, so you can run it again at any time. A written vote revision has `columns_written` set.
 
 The command prints JSON with these keys:
 
-- `voteRevisionsExamined`: the published vote revisions with a member list whose columns were unwritten or null at the start. A vote that the release gives null columns counts again in each run.
-- `voteRevisionsWritten`: the revisions that this run wrote.
-- `voteRevisionsWithoutKeptFile`: the revisions that no kept folder holds. They stay unwritten.
-- `voteRevisionsWithOtherParties`: the revisions whose member list already holds other parties. They stay unwritten, and a person must compare the roster terms with the stored parties.
+- `voteRevisionsExamined`: the published vote revisions with a member list whose columns were not written at the start.
+- `voteRevisionsWritten`: the revisions that this run wrote. A revision that the release gives null columns counts as written.
+- `openVoteRevisionsWithoutKeptFile`: the revisions in the active release range that no kept folder holds. They stay unwritten.
+- `closedVoteRevisionsWithoutKeptFile`: the revisions that left the active release and that no kept folder holds. They stay unwritten. This is expected after a prune.
 - `officialPhotoPathsFilled` and `entryCongressesFilled`: the rows that this run filled.
 
-The exit code is 0 only when `voteRevisionsWithoutKeptFile` and `voteRevisionsWithOtherParties` are both 0.
+The exit code is 0 only when `openVoteRevisionsWithoutKeptFile` is 0. Otherwise it is 1.
 
 ### Entries verify
 

@@ -31,9 +31,9 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
     public Task<int> FillBillLinesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         inner.FillBillLinesAsync(entries, cancellationToken);
 
-    public Task<IReadOnlyList<PublishedRevisionBinding>> ReadVoteColumnGapsAsync(CancellationToken cancellationToken) => inner.ReadVoteColumnGapsAsync(cancellationToken);
+    public Task<IReadOnlyList<VoteColumnGap>> ReadVoteColumnGapsAsync(CancellationToken cancellationToken) => inner.ReadVoteColumnGapsAsync(cancellationToken);
 
-    public Task<IReadOnlyList<PublishedRevisionBinding>> WriteVoteColumnsAsync(IReadOnlyCollection<VoteStoredColumns> columns, CancellationToken cancellationToken) =>
+    public Task WriteVoteColumnsAsync(IReadOnlyCollection<VoteStoredColumns> columns, CancellationToken cancellationToken) =>
         inner.WriteVoteColumnsAsync(columns, cancellationToken);
 
     public Task<int> FillOfficialPhotoPathsAsync(int releaseNumber, IReadOnlyDictionary<string, string> photoPaths, CancellationToken cancellationToken) =>

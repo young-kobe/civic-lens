@@ -3,6 +3,7 @@ using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Roster;
 using CivicLens.Core.Votes;
+using CivicLens.Host.Publication;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Publication.Contracts;
@@ -39,10 +40,11 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
 
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
+    // The roster holds two term rows for the switch. Real legislators data puts an in-term switch inside one term, which the parser does not split. See the roster Limits.
     [Theory]
     [InlineData("Democrat", "2025-03-31", "Republican", "Republican")]
     [InlineData("Republican", "2025-06-30", "Democrat", "Republican")]
-    public async Task AMemberWhoChangedPartyMidCongressStoresThePartyOfTheTermThatCoversTheVoteDayBecauseTheReleaseUsesThatTerm(string before, string lastDay,
+    public async Task ATermSplitAtAPartyChangeStoresThePartyOfTheTermThatCoversTheVoteDayBecauseTheReleaseUsesThatTerm(string before, string lastDay,
         string after, string expected)
     {
         var next = DateOnly.Parse(lastDay).AddDays(1).ToString("yyyy-MM-dd");
@@ -92,19 +94,51 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
     }
 
     [Fact]
-    public async Task AMemberListThatAnotherRevisionFilledKeepsItsPartiesAndRefusesDifferentOnesBecauseAListHasOneParty()
+    public async Task AWriteNeverChangesThePartiesOfAListThatHoldsThemAndStillWritesTheColumnsOfItsRevisionBecauseThePartyOfAVoteDayIsFixed()
     {
         RosterMember[] roster = [Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat")), Member(Second, Term(0, "2025-01-03", "2027-01-03", "Republican"))];
         var published = await PublishVoteAsync(roster);
         await SeedAsync(published, published.Vote.RevisionNumber, extraRevision: 2);
         var columns = VoteStoredColumns.From(published.Vote);
-        Assert.Empty(await publications.WriteVoteColumnsAsync([columns], default));
+        await publications.WriteVoteColumnsAsync([columns], default);
 
-        var refused = await publications.WriteVoteColumnsAsync([columns with { RevisionNumber = 2, MemberParties = ["Republican"] }], default);
+        await publications.WriteVoteColumnsAsync([columns with { Alignment = PublishedVoteAlignment.Mixed, DemocratMajority = "Nay" }], default);
+        await publications.WriteVoteColumnsAsync([columns with { RevisionNumber = 2, Alignment = PublishedVoteAlignment.PartiesAgree, MemberParties = ["Republican"] }], default);
 
-        Assert.Equal([2], refused.Select(binding => binding.RevisionNumber));
         Assert.Equal(["Democrat"], await StoredPartiesAsync(published));
-        Assert.Equal(["||"], await ReadAsync("SELECT coalesce(alignment, '') || '|' || coalesce(democrat_majority, '') || '|' || coalesce(republican_majority, '') FROM vote_revisions WHERE revision_number = 2"));
+        Assert.Equal(["Split|Yea|Nay", "PartiesAgree|Yea|Nay"], await ReadAsync("SELECT coalesce(alignment, '') || '|' || coalesce(democrat_majority, '') || '|' || coalesce(republican_majority, '') FROM vote_revisions ORDER BY revision_number"));
+        Assert.Equal(["true", "true"], await ReadAsync("SELECT columns_written::text FROM vote_revisions ORDER BY revision_number"));
+    }
+
+    [Fact]
+    public async Task AWriteThatPinsTwoDifferentPartySetsOnOneListFailsAndWritesNothingBecauseTheTwoWouldRaceInOneUpdate()
+    {
+        RosterMember[] roster = [Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat")), Member(Second, Term(0, "2025-01-03", "2027-01-03", "Republican"))];
+        var published = await PublishVoteAsync(roster);
+        await SeedAsync(published, published.Vote.RevisionNumber, extraRevision: 2);
+        var columns = VoteStoredColumns.From(published.Vote);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => publications.WriteVoteColumnsAsync([columns, columns with { RevisionNumber = 2, MemberParties = ["Republican"] }], default));
+
+        Assert.Equal([""], await StoredPartiesAsync(published));
+        Assert.Equal(["false", "false"], await ReadAsync("SELECT columns_written::text FROM vote_revisions ORDER BY revision_number"));
+    }
+
+    [Fact]
+    public async Task TheCommitWritesTheVoteColumnsInTheTransactionOfTheReleaseSoAFailureAfterThemLeavesNoColumnsBehind()
+    {
+        var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat")), Member(Second, Term(0, "2025-01-03", "2027-01-03", "Republican"))]);
+        await SeedAsync(published, published.Vote.RevisionNumber);
+        var withdrawal = new PublishedWithdrawal { Kind = PublishedRecordKind.Vote, RecordId = new string('f', 64), WithdrawnRevisionNumber = 1, FirstPublishedAtUtc = DateTimeOffset.UnixEpoch, WithdrawnAtUtc = DateTimeOffset.UnixEpoch, Note = "Withdrawn.", Corrections = [] };
+        var failing = new PublicationCommit(1, null, $"000001-{Guid.NewGuid():N}", [], []) { Withdrawals = [withdrawal], Names = ReleaseNameFixtures.None, VoteColumns = published.Commit.VoteColumns };
+        var good = new PublicationCommit(1, null, $"000001-{Guid.NewGuid():N}", [], []) { Withdrawals = [], Names = ReleaseNameFixtures.None, VoteColumns = published.Commit.VoteColumns };
+
+        await Assert.ThrowsAnyAsync<Exception>(() => publications.CommitAsync("auth0|owner", failing, "key", new string('6', 64), default));
+        var afterFailure = (await ReadAsync("SELECT columns_written::text || '|' || (SELECT count(*) FROM publication_releases) FROM vote_revisions"))[0];
+        await publications.CommitAsync("auth0|owner", good, "key2", new string('7', 64), default);
+
+        Assert.Equal("false|0", afterFailure);
+        Assert.Equal("true|1", (await ReadAsync("SELECT columns_written::text || '|' || (SELECT count(*) FROM publication_releases) FROM vote_revisions"))[0]);
     }
 
     [Fact]
@@ -157,8 +191,8 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         Assert.Equal(ExpectedRevisionColumns(published.Vote), columns);
         Assert.Equal(stored, await StoredPartiesAsync(published));
         Assert.Equal(columns, await StoredRevisionColumnsAsync(published));
-        Assert.Equal(0, second.VoteRevisionsWithOtherParties);
-        Assert.Equal(0, second.VoteRevisionsWithoutKeptFile);
+        Assert.Equal(0, second.VoteRevisionsExamined);
+        Assert.Equal(0, second.OpenVoteRevisionsWithoutKeptFile);
     }
 
     [Fact]
@@ -170,9 +204,59 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
 
         var result = await new BackfillStoredColumns(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
-        Assert.Equal(1, result.VoteRevisionsWithoutKeptFile);
-        Assert.Equal(0, result.VoteRevisionsWritten);
+        Assert.Equal((1, 0, 0), (result.OpenVoteRevisionsWithoutKeptFile, result.VoteRevisionsWritten, result.ClosedVoteRevisionsWithoutKeptFile));
         Assert.Equal([""], await StoredPartiesAsync(published));
+        Assert.Equal(["false"], await ReadAsync("SELECT columns_written::text FROM vote_revisions"));
+        Assert.Equal(1, await ExitOfBackfillAsync(published.Scenario.Releases));
+    }
+
+    [Fact]
+    public async Task TwoRevisionsThatShareAListGetTheirOwnColumnsFromTheirOwnFilesAndTheListKeepsThePartiesOfTheEarlierRevisionInOneCall()
+    {
+        var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat")), Member(Second, Term(0, "2025-01-03", "2027-01-03", "Republican"))]);
+        await SeedAsync(published, 1, extraRevision: 2);
+        var first = FileOf(published, 1, "Democrat");
+        var second = FileOf(published, 2, "Republican");
+        await SeedReleasesAsync(published, (1, first, 1), (2, second, null));
+
+        var result = await new BackfillStoredColumns(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Equal((2, 2), (result.VoteRevisionsExamined, result.VoteRevisionsWritten));
+        Assert.Equal(["Democrat"], await ReadAsync("SELECT coalesce(party, '') FROM vote_member_list_entries"));
+        Assert.Equal([ExpectedRevisionColumns(first), ExpectedRevisionColumns(second)], await ReadAsync(
+            "SELECT coalesce(alignment, '') || '|' || coalesce(democrat_majority, '') || '|' || coalesce(republican_majority, '') FROM vote_revisions ORDER BY revision_number"));
+        Assert.NotEqual(ExpectedRevisionColumns(first), ExpectedRevisionColumns(second));
+    }
+
+    [Fact]
+    public async Task TheListTakesThePartiesOfTheEarliestRevisionThatHasAKeptFileAndAClosedRevisionWithNoFileIsReportedButDoesNotFailTheCommand()
+    {
+        var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat")), Member(Second, Term(0, "2025-01-03", "2027-01-03", "Republican"))]);
+        await SeedAsync(published, 1, extraRevision: 2);
+        var second = FileOf(published, 2, "Republican");
+        await SeedReleasesAsync(published, (1, null, 1), (2, second, null));
+        var releases = published.Scenario.Releases;
+
+        var result = await new BackfillStoredColumns(publications, releases).ExecuteAsync(PublicationScenario.Owner);
+        var exit = await ExitOfBackfillAsync(releases);
+
+        Assert.Equal((2, 1, 0, 1), (result.VoteRevisionsExamined, result.VoteRevisionsWritten, result.OpenVoteRevisionsWithoutKeptFile, result.ClosedVoteRevisionsWithoutKeptFile));
+        Assert.Equal(["Republican"], await ReadAsync("SELECT coalesce(party, '') FROM vote_member_list_entries"));
+        Assert.Equal(["false", "true"], await ReadAsync("SELECT columns_written::text FROM vote_revisions ORDER BY revision_number"));
+        Assert.Equal(0, exit);
+    }
+
+    [Fact]
+    public async Task TheBackfillReadsOnlyTheFoldersOfTheReleaseRangeOfEachRevisionSoAFileOutsideTheRangeDoesNotFillIt()
+    {
+        var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat")), Member(Second, Term(0, "2025-01-03", "2027-01-03", "Republican"))]);
+        await SeedAsync(published, 1, extraRevision: 2);
+        await SeedReleasesAsync(published, (1, null, 1), (2, FileOf(published, 1, "Democrat"), null));
+
+        var result = await new BackfillStoredColumns(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Equal((0, 1, 1), (result.VoteRevisionsWritten, result.OpenVoteRevisionsWithoutKeptFile, result.ClosedVoteRevisionsWithoutKeptFile));
+        Assert.Equal(["false", "false"], await ReadAsync("SELECT columns_written::text FROM vote_revisions ORDER BY revision_number"));
     }
 
     [Fact]
@@ -305,6 +389,38 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
 
     private static RosterTerm Term(int index, string start, string end, string party) =>
         new(index, "rep", DateOnly.Parse(start), DateOnly.Parse(end), "MA", 1, null, party, null);
+
+    // A vote file of a revision. The revision number and the member parties differ. A later revision swaps the Yea and Nay counts of the parties, so its columns differ too.
+    private static PublishedVote FileOf(PublishedVoteRun published, int revision, string party) =>
+        published.Vote with
+        {
+            RevisionNumber = revision,
+            Members = [.. published.Vote.Members.Select(member => member with { Party = party })],
+            PartyMajorities = [.. published.Vote.PartyMajorities.Select(majority => revision == 1 ? majority : PublishedPartyMajority.Of(majority.Party, majority.NayCount, majority.YeaCount))]
+        };
+
+    // Revision n sits in release n. A null file leaves the folder of that release without the record file. A null last release leaves the range open.
+    private async Task SeedReleasesAsync(PublishedVoteRun published, params (int Revision, PublishedVote? File, int? LastRelease)[] revisions)
+    {
+        foreach (var (revision, file, last) in revisions)
+        {
+            var directory = $"{revision:D6}-{Guid.NewGuid():N}";
+            published.Scenario.Releases.Directories[directory] = file is null ? [] : new()
+            {
+                [PublicationProtocol.RecordDataPath(file.RecordId)] = JsonSerializer.SerializeToUtf8Bytes(file, PublicationProtocol.JsonOptions)
+            };
+            await ExecuteAsync($"""
+                SET session_replication_role = replica;
+                INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+                VALUES ({revision}, '{directory}', 'test', 1, 1, {(last is null ? "true" : "false")});
+                INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
+                VALUES ('vote', '{published.Vote.RecordId}', {revision}, {revision}, {(last is null ? "NULL" : last.ToString())});
+                """);
+        }
+    }
+
+    private async Task<int> ExitOfBackfillAsync(FakeReleaseDirectory releases) => await ReleaseCommand.ExecuteAsync(["releases", "columns", "backfill"], null!, null!, null!, null!, null!,
+        null!, new BackfillStoredColumns(publications, releases), null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
     private async Task ExecuteAsync(string sql)
     {

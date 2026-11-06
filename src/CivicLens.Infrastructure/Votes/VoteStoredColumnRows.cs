@@ -6,17 +6,16 @@ using Microsoft.EntityFrameworkCore;
 namespace CivicLens.Infrastructure.Votes;
 
 /// <summary>
-/// Writes the vote values that <see cref="VoteStoredColumns"/> holds. A shared member list keeps one party for each member. The first write fills it,
-/// and a later revision of the same list must name the same parties, or the write refuses it. The revision columns follow from the list parties and casts,
-/// so the same parties give the same columns.
+/// Writes the vote values that <see cref="VoteStoredColumns"/> holds. A shared member list keeps one party for each member, and the first write pins them.
+/// A later write never changes them, because the party of a member on the vote day is a fixed fact. The revision columns and the written marker go in one update,
+/// and only for a revision that is not written yet.
 /// </summary>
 internal static class VoteStoredColumnRows
 {
-    private const string ReadParties = """
-        SELECT r.record_id AS "RecordId", r.revision_number AS "RevisionNumber", e.position AS "Position", e.party AS "Party"
+    private const string ReadLists = """
+        SELECT r.record_id AS "RecordId", r.revision_number AS "RevisionNumber", r.member_list_id AS "ListId"
         FROM vote_revisions r
         JOIN unnest({0}::text[], {1}::int[]) AS k(record_id, revision_number) ON r.record_id = k.record_id AND r.revision_number = k.revision_number
-        JOIN vote_member_list_entries e ON e.list_id = r.member_list_id
         """;
 
     private const string FillParties = """
@@ -27,66 +26,69 @@ internal static class VoteStoredColumnRows
         """;
 
     private const string FillRevisions = """
-        UPDATE vote_revisions r SET alignment = k.alignment, democrat_majority = k.democrat_majority, republican_majority = k.republican_majority
+        UPDATE vote_revisions r SET alignment = k.alignment, democrat_majority = k.democrat_majority, republican_majority = k.republican_majority, columns_written = true
         FROM unnest({0}::text[], {1}::int[], {2}::text[], {3}::text[], {4}::text[]) AS k(record_id, revision_number, alignment, democrat_majority, republican_majority)
-        WHERE r.record_id = k.record_id AND r.revision_number = k.revision_number
+        WHERE r.record_id = k.record_id AND r.revision_number = k.revision_number AND NOT r.columns_written
         """;
 
+    // A revision counts as published when any record state row names it. The release range of the revision comes from all its state rows.
     private const string ReadGaps = """
-        SELECT r.record_id AS "RecordId", r.revision_number AS "RevisionNumber"
+        SELECT r.record_id AS "RecordId", r.revision_number AS "RevisionNumber", r.member_list_id AS "ListId",
+            min(s.first_release) AS "FirstRelease", CASE WHEN bool_or(s.last_release IS NULL) THEN NULL ELSE max(s.last_release) END AS "LastRelease"
         FROM vote_revisions r
-        WHERE r.member_list_id IS NOT NULL
-            AND EXISTS (SELECT 1 FROM publication_record_states s WHERE s.kind = 'vote' AND s.record_id = r.record_id AND s.revision_number = r.revision_number)
-            AND ((r.alignment IS NULL AND r.democrat_majority IS NULL AND r.republican_majority IS NULL)
-                OR EXISTS (SELECT 1 FROM vote_member_list_entries e WHERE e.list_id = r.member_list_id AND e.party IS NULL))
-        ORDER BY r.record_id, r.revision_number
+        JOIN publication_record_states s ON s.kind = 'vote' AND s.record_id = r.record_id AND s.revision_number = r.revision_number
+        WHERE r.member_list_id IS NOT NULL AND NOT r.columns_written
+        GROUP BY r.record_id, r.revision_number, r.member_list_id
+        ORDER BY r.member_list_id, r.record_id, r.revision_number
         """;
 
-    public static async Task<IReadOnlyList<PublishedRevisionBinding>> ReadGapsAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
-        [.. (await db.Database.SqlQueryRaw<KeyRow>(ReadGaps).ToArrayAsync(cancellationToken))
-            .Select(row => new PublishedRevisionBinding(PublishedRecordKind.Vote, row.RecordId, row.RevisionNumber))];
+    public static async Task<IReadOnlyList<VoteColumnGap>> ReadGapsAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
+        [.. (await db.Database.SqlQueryRaw<GapRow>(ReadGaps).ToArrayAsync(cancellationToken))
+            .Select(row => new VoteColumnGap(row.RecordId, row.RevisionNumber, row.ListId, row.FirstRelease, row.LastRelease))];
 
-    public static async Task<IReadOnlyList<PublishedRevisionBinding>> WriteAsync(CollectionAttemptDbContext db, IReadOnlyCollection<VoteStoredColumns> columns,
-        CancellationToken cancellationToken)
+    public static async Task WriteAsync(CollectionAttemptDbContext db, IReadOnlyCollection<VoteStoredColumns> columns, CancellationToken cancellationToken)
     {
-        if (columns.Count == 0) return [];
-        var stored = (await db.Database.SqlQueryRaw<PartyRow>(ReadParties, columns.Select(column => column.RecordId).ToArray(),
-            columns.Select(column => column.RevisionNumber).ToArray()).ToArrayAsync(cancellationToken)).ToLookup(row => (row.RecordId, row.RevisionNumber));
-        var listed = columns.Where(column => stored[(column.RecordId, column.RevisionNumber)].Any()).ToArray();
-        var conflicts = listed.Where(column => HoldsOtherParties(column, stored[(column.RecordId, column.RevisionNumber)])).ToArray();
-        var writable = listed.Except(conflicts).ToArray();
-        await FillPartiesAsync(db, writable, cancellationToken);
-        await db.Database.ExecuteSqlRawAsync(FillRevisions, [writable.Select(column => column.RecordId).ToArray(), writable.Select(column => column.RevisionNumber).ToArray(),
-            writable.Select(column => column.Alignment?.ToString()).ToArray(), writable.Select(column => column.DemocratMajority).ToArray(),
-            writable.Select(column => column.RepublicanMajority).ToArray()], cancellationToken);
-        return [.. conflicts.Select(column => new PublishedRevisionBinding(PublishedRecordKind.Vote, column.RecordId, column.RevisionNumber))];
+        if (columns.Count == 0) return;
+        var pins = columns.Where(column => !column.MemberParties.IsEmpty).ToArray();
+        await RequireOnePartySetForEachListAsync(db, pins, cancellationToken);
+        await FillPartiesAsync(db, pins, cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(FillRevisions, [columns.Select(column => column.RecordId).ToArray(), columns.Select(column => column.RevisionNumber).ToArray(),
+            columns.Select(column => column.Alignment?.ToString()).ToArray(), columns.Select(column => column.DemocratMajority).ToArray(),
+            columns.Select(column => column.RepublicanMajority).ToArray()], cancellationToken);
     }
 
-    private static bool HoldsOtherParties(VoteStoredColumns column, IEnumerable<PartyRow> stored)
+    // Two party sets for one list in one call would race inside one UPDATE. The caller chooses the one revision that owns the list.
+    private static async Task RequireOnePartySetForEachListAsync(CollectionAttemptDbContext db, VoteStoredColumns[] pins, CancellationToken cancellationToken)
     {
-        var rows = stored.ToArray();
-        return rows.Length != column.MemberParties.Length ||
-            rows.Any(row => row.Party is not null && row.Party != column.MemberParties[row.Position]);
+        if (pins.Length < 2) return;
+        var lists = (await db.Database.SqlQueryRaw<ListRow>(ReadLists, pins.Select(pin => pin.RecordId).ToArray(), pins.Select(pin => pin.RevisionNumber).ToArray())
+            .ToArrayAsync(cancellationToken)).ToDictionary(row => (row.RecordId, row.RevisionNumber), row => row.ListId);
+        var conflicting = pins.Where(pin => lists.ContainsKey((pin.RecordId, pin.RevisionNumber))).GroupBy(pin => lists[(pin.RecordId, pin.RevisionNumber)], StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Select(pin => string.Join('\n', pin.MemberParties)).Distinct(StringComparer.Ordinal).Count() > 1);
+        if (conflicting is not null)
+            throw new InvalidOperationException($"The write pins two different party sets on member list {conflicting.Key}.");
     }
 
-    private static Task FillPartiesAsync(CollectionAttemptDbContext db, VoteStoredColumns[] writable, CancellationToken cancellationToken)
+    private static Task FillPartiesAsync(CollectionAttemptDbContext db, VoteStoredColumns[] pins, CancellationToken cancellationToken)
     {
-        var rows = writable.SelectMany(column => column.MemberParties.Select((party, position) => (column.RecordId, column.RevisionNumber, Position: (short)position, Party: party))).ToArray();
+        var rows = pins.SelectMany(column => column.MemberParties.Select((party, position) => (column.RecordId, column.RevisionNumber, Position: (short)position, Party: party))).ToArray();
         return db.Database.ExecuteSqlRawAsync(FillParties, [rows.Select(row => row.RecordId).ToArray(), rows.Select(row => row.RevisionNumber).ToArray(),
             rows.Select(row => row.Position).ToArray(), rows.Select(row => row.Party).ToArray()], cancellationToken);
     }
 
-    private sealed class KeyRow
+    private sealed class GapRow
     {
         public string RecordId { get; set; } = "";
         public int RevisionNumber { get; set; }
+        public string ListId { get; set; } = "";
+        public int FirstRelease { get; set; }
+        public int? LastRelease { get; set; }
     }
 
-    private sealed class PartyRow
+    private sealed class ListRow
     {
         public string RecordId { get; set; } = "";
         public int RevisionNumber { get; set; }
-        public short Position { get; set; }
-        public string? Party { get; set; }
+        public string ListId { get; set; } = "";
     }
 }

@@ -17,6 +17,13 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 maxLength: 16,
                 nullable: true);
 
+            migrationBuilder.AddColumn<bool>(
+                name: "columns_written",
+                table: "vote_revisions",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
             migrationBuilder.AddColumn<string>(
                 name: "democrat_majority",
                 table: "vote_revisions",
@@ -51,30 +58,20 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 type: "integer",
                 nullable: true);
 
-            migrationBuilder.AddCheckConstraint(
-                name: "ck_vote_revisions_alignment",
-                table: "vote_revisions",
-                sql: "alignment IS NULL OR alignment IN ('Split', 'PartiesAgree', 'Mixed')");
-
-            migrationBuilder.AddCheckConstraint(
-                name: "ck_vote_revisions_majorities",
-                table: "vote_revisions",
-                sql: "(democrat_majority IS NULL OR democrat_majority IN ('Yea', 'Nay')) AND (republican_majority IS NULL OR republican_majority IN ('Yea', 'Nay'))");
-
-            migrationBuilder.AddCheckConstraint(
-                name: "ck_vote_member_list_entries_party",
-                table: "vote_member_list_entries",
-                sql: "party IS NULL OR length(btrim(party)) > 0");
-
-            migrationBuilder.AddCheckConstraint(
-                name: "ck_release_officials_photo_path",
-                table: "release_officials",
-                sql: "photo_path IS NULL OR length(btrim(photo_path)) > 0");
-
-            migrationBuilder.AddCheckConstraint(
-                name: "ck_published_entries_congress",
-                table: "published_entries",
-                sql: "congress IS NULL OR congress >= 1");
+            // A check constraint added the usual way takes an ACCESS EXCLUSIVE lock and scans the table. vote_member_list_entries holds about 500,000 rows.
+            // So each check goes in as NOT VALID, which scans nothing, and VALIDATE CONSTRAINT then scans the table under a lighter lock in a separate statement.
+            migrationBuilder.Sql("ALTER TABLE vote_revisions ADD CONSTRAINT ck_vote_revisions_alignment CHECK (alignment IS NULL OR alignment IN ('Split', 'PartiesAgree', 'Mixed')) NOT VALID;");
+            migrationBuilder.Sql("ALTER TABLE vote_revisions VALIDATE CONSTRAINT ck_vote_revisions_alignment;");
+            migrationBuilder.Sql("ALTER TABLE vote_revisions ADD CONSTRAINT ck_vote_revisions_columns_written CHECK (columns_written OR (alignment IS NULL AND democrat_majority IS NULL AND republican_majority IS NULL)) NOT VALID;");
+            migrationBuilder.Sql("ALTER TABLE vote_revisions VALIDATE CONSTRAINT ck_vote_revisions_columns_written;");
+            migrationBuilder.Sql("ALTER TABLE vote_revisions ADD CONSTRAINT ck_vote_revisions_majorities CHECK ((democrat_majority IS NULL OR democrat_majority IN ('Yea', 'Nay')) AND (republican_majority IS NULL OR republican_majority IN ('Yea', 'Nay'))) NOT VALID;");
+            migrationBuilder.Sql("ALTER TABLE vote_revisions VALIDATE CONSTRAINT ck_vote_revisions_majorities;");
+            migrationBuilder.Sql("ALTER TABLE vote_member_list_entries ADD CONSTRAINT ck_vote_member_list_entries_party CHECK (party IS NULL OR length(btrim(party)) > 0) NOT VALID;");
+            migrationBuilder.Sql("ALTER TABLE vote_member_list_entries VALIDATE CONSTRAINT ck_vote_member_list_entries_party;");
+            migrationBuilder.Sql("ALTER TABLE release_officials ADD CONSTRAINT ck_release_officials_photo_path CHECK (photo_path IS NULL OR length(btrim(photo_path)) > 0) NOT VALID;");
+            migrationBuilder.Sql("ALTER TABLE release_officials VALIDATE CONSTRAINT ck_release_officials_photo_path;");
+            migrationBuilder.Sql("ALTER TABLE published_entries ADD CONSTRAINT ck_published_entries_congress CHECK (congress IS NULL OR congress >= 1) NOT VALID;");
+            migrationBuilder.Sql("ALTER TABLE published_entries VALIDATE CONSTRAINT ck_published_entries_congress;");
         }
 
         /// <inheritdoc />
@@ -82,6 +79,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         {
             migrationBuilder.DropCheckConstraint(
                 name: "ck_vote_revisions_alignment",
+                table: "vote_revisions");
+
+            migrationBuilder.DropCheckConstraint(
+                name: "ck_vote_revisions_columns_written",
                 table: "vote_revisions");
 
             migrationBuilder.DropCheckConstraint(
@@ -102,6 +103,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             migrationBuilder.DropColumn(
                 name: "alignment",
+                table: "vote_revisions");
+
+            migrationBuilder.DropColumn(
+                name: "columns_written",
                 table: "vote_revisions");
 
             migrationBuilder.DropColumn(
