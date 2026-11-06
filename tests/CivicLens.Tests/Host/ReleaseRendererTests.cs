@@ -3319,7 +3319,7 @@ public sealed class ReleaseRendererTests
     {
         var full = TextAction();
         var whole = full with { BillText = full.BillText! with { CharsRead = 40_000, CharsTotal = 40_000 } };
-        var person = full with { TextOrigin = PublishedTextOrigin.Person };
+        var person = full with { TextOrigin = PublishedTextOrigin.Person, Summary = "A person changed the summary." };
 
         var wholeHtml = await new ReleaseRenderer(null, null).RenderActionAsync(whole, null, [], PublicationCatalogs.None, CancellationToken.None);
         var personHtml = await new ReleaseRenderer(null, null).RenderActionAsync(person, null, [], PublicationCatalogs.None, CancellationToken.None);
@@ -3327,8 +3327,16 @@ public sealed class ReleaseRendererTests
         Assert.DoesNotContain("Later sections are not covered", wholeHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("AI summary", personHtml, StringComparison.Ordinal);
         Assert.DoesNotContain(BillTextWords.WhyItMattersHeading, personHtml, StringComparison.Ordinal);
+        Assert.Contains("A person changed the summary.", personHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("The bill pays landlords for tenants.", personHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("A tenant needs a low income.", personHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("Aid stops in 2030.", personHtml, StringComparison.Ordinal);
-        Assert.Contains("pay landlords on behalf of tenants", personHtml, StringComparison.Ordinal);
+        var personDocument = new HtmlParser().ParseDocument(personHtml);
+        var personPanel = personDocument.QuerySelector("[aria-labelledby='bill-text-title']")!;
+        var personQuotes = personPanel.QuerySelectorAll("blockquote.quote").Select(item => item.TextContent).ToArray();
+        Assert.Equal(["pay landlords on behalf of tenants", "household income is under 50 percent", "program ends on December 31, 2030"], personQuotes);
+        var personLinks = personPanel.QuerySelectorAll("a[href^='#cite-']").ToArray();
+        Assert.Equal(personQuotes, personLinks.Select(link => personDocument.QuerySelector(link.GetAttribute("href")!)!.TextContent));
     }
 
     [Fact]
