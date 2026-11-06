@@ -38,6 +38,9 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     private static string[] Ids(JsonElement answer) =>
         [.. answer.GetProperty("votes").EnumerateArray().Select(vote => vote.GetProperty("recordId").GetString()!)];
 
+    private static string? FeaturedId(JsonElement answer) =>
+        answer.GetProperty("featuredVote").ValueKind == JsonValueKind.Null ? null : answer.GetProperty("featuredVote").GetProperty("recordId").GetString();
+
     private static SeededVote House(char id, string day, int rollCall) => new(id, day) { RollCall = rollCall };
 
     private static SeededVote Senate(char id, string day, int rollCall) => new(id, day) { Chamber = "Senate", RollCall = rollCall, Result = "Agreed to" };
@@ -77,7 +80,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         [.. HomeHighlights.From(ReleaseOf(entries), [], 0).Votes.Select(entry => entry.RecordId)];
 
     [Fact]
-    public async Task WhenEveryVoteWithCountsHasAnAlignmentTheVotesAreTheStaticHomeHighlightsPick()
+    public async Task TheFeaturedVoteIsSeparateFromTwoRecentVotesPerChamber()
     {
         var votes = new[]
         {
@@ -85,14 +88,44 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
             Senate('5', "2026-05-04", 5), Senate('6', "2026-05-06", 6), Senate('7', "2026-04-01", 7),
             // Newer than the picks but not substantive, and newer with candidate names only: neither may appear.
             new SeededVote('8', "2026-05-30") { Kind = "Rule", RollCall = 8 },
-            new SeededVote('9', "2026-05-31") { RollCall = 9, Casts = ["Smith", "Jones"] }
+            new SeededVote('9', "2026-05-31") { RollCall = 9, Kind = "Other", Casts = ["Smith", "Jones"] }
         };
         await using var host = await StartAsync(votes);
 
         var answer = await GetAsync(host);
 
-        Assert.Equal(StaticVotePick(votes.Select(vote => EntryOf(vote))), Ids(answer));
+        Assert.Equal(votes[5].RecordId, FeaturedId(answer));
+        Assert.Equal([votes[3].RecordId, votes[4].RecordId, votes[2].RecordId, votes[6].RecordId], Ids(answer));
         Assert.Equal(4, Ids(answer).Length);
+    }
+
+    [Fact]
+    public async Task FeaturedVoteUsesLatestPassageOnBillTieOrderAndCarriesItsSummaryAndSourceLabelWithoutCountsFabricated()
+    {
+        var votes = new[]
+        {
+            House('a', "2026-05-01", 1), House('b', "2026-05-02", 2),
+            new SeededVote('c', "2026-05-03") { RollCall = 3, Casts = ["Unknown"], TextOrigin = "Model" },
+            new SeededVote('d', "2026-05-03") { RollCall = 4, Casts = ["Yea", "Nay"], Chamber = "Senate", Result = "Agreed to", TextOrigin = "Model" },
+            new SeededVote('e', "2026-05-04") { RollCall = 5, Kind = "Rule" },
+            new SeededVote('f', "2026-05-05") { RollCall = 6, BillType = null, BillNumber = null }
+        };
+        var bills = [new SeededBill('x', "2026-03-01") { BillNumber = 1, BillLine = "Current line." }];
+        await using var host = await StartAsync(votes, bills);
+
+        var answer = await GetAsync(host);
+        var featured = answer.GetProperty("featuredVote");
+
+        Assert.Equal(votes[2].RecordId, featured.GetProperty("recordId").GetString());
+        Assert.Equal("Summary c", featured.GetProperty("summary").GetString());
+        Assert.Equal("model", featured.GetProperty("textOrigin").GetString());
+        Assert.Equal(PublishedRecordLabels.ModelWording, featured.GetProperty("label").GetString());
+        Assert.Equal("Current line.", featured.GetProperty("billLine").GetString());
+        Assert.Equal(PublishedWording.BillLineSource, featured.GetProperty("billLineSource").GetString());
+        Assert.Equal(JsonValueKind.Null, featured.GetProperty("yea").ValueKind);
+        Assert.DoesNotContain(votes[2].RecordId, Ids(answer));
+        Assert.Contains(votes[3].RecordId, Ids(answer));
+        Assert.Equal([votes[5].RecordId, votes[3].RecordId, votes[1].RecordId], Ids(answer));
     }
 
     [Fact]
@@ -110,12 +143,14 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
 
         var entries = votes.Select(vote => EntryOf(vote, bothParties: vote.Id != 'a'));
         Assert.Equal([votes[3].RecordId, votes[1].RecordId, votes[2].RecordId, votes[0].RecordId], StaticVotePick(entries));
-        Assert.Equal([votes[4].RecordId, votes[3].RecordId, votes[1].RecordId, votes[2].RecordId], Ids(answer));
+        Assert.Equal([votes[3].RecordId, votes[1].RecordId, votes[2].RecordId, votes[0].RecordId], Ids(answer));
         // Two House votes of one day: the static pick orders them by record ID, the route by later roll call.
         var sameDay = new[] { House('c', "2026-04-20", 10), House('d', "2026-04-20", 11) };
         await using var tie = await StartAsync(sameDay);
         Assert.Equal([sameDay[0].RecordId, sameDay[1].RecordId], StaticVotePick(sameDay.Select(vote => EntryOf(vote))));
-        Assert.Equal([sameDay[1].RecordId, sameDay[0].RecordId], Ids(await GetAsync(tie)));
+        var tieAnswer = await GetAsync(tie);
+        Assert.Equal(sameDay[1].RecordId, FeaturedId(tieAnswer));
+        Assert.Equal([sameDay[0].RecordId], Ids(tieAnswer));
     }
 
     [Fact]
@@ -138,7 +173,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(JsonValueKind.Null, senate.GetProperty("label").ValueKind);
         Assert.Equal(JsonValueKind.Null, senate.GetProperty("billLine").ValueKind);
         Assert.Equal(JsonValueKind.Null, senate.GetProperty("billLineSource").ValueKind);
-        var house = answer.GetProperty("votes")[1];
+        var house = answer.GetProperty("featuredVote");
         Assert.Equal(PublishedRecordLabels.ModelWording, house.GetProperty("label").GetString());
         Assert.Equal("First bill line.", house.GetProperty("billLine").GetString());
         Assert.Equal(PublishedWording.BillLineSource, house.GetProperty("billLineSource").GetString());
@@ -178,10 +213,10 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         var actionIdsByVote = votes.ToDictionary(vote => vote.RecordId,
             vote => bills.Where(bill => bill.BillNumber == vote.BillNumber).Select(bill => bill.RecordId).Order(StringComparer.Ordinal).ToImmutableArray());
         var lines = ReleaseBillLines.From(actions, actionIdsByVote);
-        var expected = votes.Reverse().Select(vote => lines.Of(EntryOf(vote))).ToArray();
+        var expected = votes.Take(2).Reverse().Select(vote => lines.Of(EntryOf(vote))).ToArray();
         var served = answer.GetProperty("votes").EnumerateArray().Select(vote => vote.GetProperty("billLine").GetString()).ToArray();
         Assert.Equal(expected, served);
-        Assert.Equal(new string?[] { null, "Line c.", null }, served);
+        Assert.Equal(new string?[] { null, "Line c." }, served);
     }
 
     [Fact]
@@ -192,7 +227,8 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
 
         var answer = await GetAsync(host);
 
-        Assert.Equal([votes[2].RecordId, votes[1].RecordId, votes[3].RecordId], Ids(answer));
+        Assert.Equal(votes[2].RecordId, FeaturedId(answer));
+        Assert.Equal([votes[1].RecordId, votes[0].RecordId, votes[3].RecordId], Ids(answer));
     }
 
     [Fact]
@@ -298,6 +334,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         var answer = await GetAsync(host);
 
         Assert.Equal(1, answer.GetProperty("release").GetInt32());
+        Assert.Equal(JsonValueKind.Null, answer.GetProperty("featuredVote").ValueKind);
         Assert.Equal(0, answer.GetProperty("votes").GetArrayLength());
     }
 }
