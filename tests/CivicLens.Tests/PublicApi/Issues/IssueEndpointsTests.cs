@@ -65,7 +65,7 @@ public sealed class IssueEndpointsTests(PostgresCollection postgres)
         new(id, "2026-03-01") { BillNumber = id, Issues = issues, Sponsorships = [.. sponsors.Select(person => new SeededSponsorship(person, "Sponsor", "2026-01-10"))] };
 
     [Fact]
-    public async Task TheVoteAndBillCountsEqualTheFacetSummaryOfTheStaticIssuePageBecauseOneRuleMustGiveBothAnswers()
+    public async Task TheBillCountEqualsTheFacetSummaryOfTheStaticIssuePageBecauseOneRuleMustGiveBothAnswers()
     {
         var votes = new[] { Vote('1', "Passage", "tax"), Vote('2', "Rule", "tax"), Vote('3', "Cloture", "tax", "health"), Vote('4', "Passage", "health") };
         var bills = new[] { Bill('a', "tax"), Bill('b', "tax", "health"), Bill('c', "health") };
@@ -75,7 +75,7 @@ public sealed class IssueEndpointsTests(PostgresCollection postgres)
 
         var entries = votes.Select(VoteEntry).Concat(bills.Select(BillEntry)).Where(entry => entry.IssueIds.Contains("tax"));
         var summary = FacetSummary.From(entries);
-        Assert.Equal((summary.Votes, summary.Bills), (answer.GetProperty("votes").GetInt32(), answer.GetProperty("bills").GetInt32()));
+        Assert.Equal(summary.Bills, answer.GetProperty("bills").GetInt32());
         Assert.Equal(1, answer.GetProperty("release").GetInt32());
         Assert.Equal("tax", answer.GetProperty("issueId").GetString());
     }
@@ -90,8 +90,8 @@ public sealed class IssueEndpointsTests(PostgresCollection postgres)
         var answer = await GetAsync(host, "tax");
 
         Assert.Equal(kinds.Count(kind => kind.IsSubstantive()), answer.GetProperty("substantiveVotes").GetInt32());
-        Assert.Equal(kinds.Length, answer.GetProperty("votes").GetInt32());
         Assert.NotEqual(kinds.Length, answer.GetProperty("substantiveVotes").GetInt32());
+        Assert.False(answer.TryGetProperty("votes", out _));
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public sealed class IssueEndpointsTests(PostgresCollection postgres)
 
         var answer = await GetAsync(host, "tax");
 
-        Assert.Equal((1, 1), (answer.GetProperty("votes").GetInt32(), answer.GetProperty("bills").GetInt32()));
+        Assert.Equal((1, 1), (answer.GetProperty("substantiveVotes").GetInt32(), answer.GetProperty("bills").GetInt32()));
     }
 
     [Fact]
@@ -128,6 +128,45 @@ public sealed class IssueEndpointsTests(PostgresCollection postgres)
         var sponsors = answer.GetProperty("topSponsors").EnumerateArray()
             .Select(item => (item.GetProperty("officialId").GetString(), item.GetProperty("sponsoredBills").GetInt32(), item.GetProperty("base").GetInt32())).ToArray();
         Assert.Equal([("p1", 2, 5), ("p2", 2, 5), ("p3", 1, 5)], sponsors);
+    }
+
+    private static SeededBill BillOn(char id, string day, string sponsor) =>
+        new(id, day) { BillNumber = id, Issues = ["tax"], Sponsorships = [new(sponsor, "Sponsor", "2025-02-01")] };
+
+    private static PublishedRecordEntry SponsoredEntry(SeededBill bill) => new()
+    {
+        Kind = PublishedRecordKind.Action,
+        RecordId = bill.RecordId,
+        RevisionNumber = 1,
+        Headline = "H",
+        FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
+        Officials = [.. bill.Sponsorships.Where(sponsorship => sponsorship.Role == "Sponsor").Select(sponsorship => new PublishedOfficial { Id = sponsorship.Person, Name = sponsorship.Person })],
+        IssueIds = bill.Issues,
+        PolicyAreaIds = [],
+        EventDate = DateOnly.Parse(bill.EventOn, System.Globalization.CultureInfo.InvariantCulture)
+    };
+
+    [Fact]
+    public async Task SponsoredBillsCountOnlyTheCurrentCongressAsTheStaticIssuePaneDoesAndTheEdgeDaysDecideTheCongress()
+    {
+        // The release is from 2 June 2026, in the 119th Congress, which runs from 3 January 2025 to 2 January 2027.
+        var bills = new[]
+        {
+            BillOn('a', "2025-01-02", "p1"), BillOn('b', "2025-01-03", "p1"), BillOn('c', "2026-03-01", "p1"), BillOn('d', "2027-01-02", "p1"),
+            BillOn('e', "2027-01-03", "p1"), BillOn('f', "2023-05-01", "p2"), BillOn('g', "2026-04-01", "p2")
+        };
+        await using var host = await StartAsync([], bills, "tax");
+
+        var answer = await GetAsync(host, "tax");
+
+        var served = answer.GetProperty("topSponsors").EnumerateArray()
+            .ToDictionary(item => item.GetProperty("officialId").GetString()!, item => item.GetProperty("sponsoredBills").GetInt32());
+        var entries = bills.Select(SponsoredEntry).ToArray();
+        var expected = new[] { "p1", "p2" }.ToDictionary(official => official,
+            official => TalkAndActionProfile.Of(119, entries.Where(entry => entry.Officials.Any(person => person.Id == official)), []).SponsoredOn("tax").Length);
+        Assert.Equal(expected, served);
+        Assert.Equal((3, 1), (served["p1"], served["p2"]));
+        Assert.All(answer.GetProperty("topSponsors").EnumerateArray(), item => Assert.Equal(bills.Length, item.GetProperty("base").GetInt32()));
     }
 
     [Fact]
@@ -151,7 +190,6 @@ public sealed class IssueEndpointsTests(PostgresCollection postgres)
         var quiet = await GetAsync(host, "quiet");
         await GetAsync(host, "nothing", HttpStatusCode.NotFound);
 
-        Assert.Equal((0, 0, 0, 0), (quiet.GetProperty("votes").GetInt32(), quiet.GetProperty("substantiveVotes").GetInt32(), quiet.GetProperty("bills").GetInt32(),
-            quiet.GetProperty("topSponsors").GetArrayLength()));
+        Assert.Equal((0, 0, 0), (quiet.GetProperty("substantiveVotes").GetInt32(), quiet.GetProperty("bills").GetInt32(), quiet.GetProperty("topSponsors").GetArrayLength()));
     }
 }

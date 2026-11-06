@@ -6,12 +6,10 @@ using Npgsql;
 namespace CivicLens.PublicApi.Home;
 
 /// <summary>Reads the views <c>public_api.votes</c>, <c>public_api.bills</c>, and <c>public_api.briefs</c> for the home card. One statement reads the release, the votes, and the brief, so all three come from one release.
-/// The kind rule is <see cref="PublishedVoteKindExtensions.IsSubstantive"/>.</summary>
+/// The kind rule is <see cref="PublishedVoteKindExtensions.SubstantiveNames"/>.</summary>
 public sealed class HomeStore(NpgsqlDataSource views)
 {
-    public const int VotesPerChamber = 2;
-
-    private static readonly string[] SubstantiveKinds = [.. Enum.GetValues<PublishedVoteKind>().Where(kind => kind.IsSubstantive()).Select(kind => kind.ToString())];
+    private const int VotesPerChamber = 2;
 
     private const string Sql = $"""
         SELECT a.release_number, b.record_id, b.week_start, b.headline, b.label,
@@ -36,7 +34,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
     {
         await using var command = views.CreateCommand(Sql);
         command.Parameters.AddWithValue("chambers", Enum.GetNames<PublishedChamber>());
-        command.Parameters.AddWithValue("kinds", SubstantiveKinds);
+        command.Parameters.AddWithValue("kinds", PublishedVoteKindExtensions.SubstantiveNames());
         command.Parameters.AddWithValue("take", VotesPerChamber);
         var votes = new List<HomeVote>();
         HomeBrief? brief = null;
@@ -54,8 +52,9 @@ public sealed class HomeStore(NpgsqlDataSource views)
     private static HomeVote ReadVote(NpgsqlDataReader reader)
     {
         var result = reader.GetString(13);
+        var billLine = ViewColumns.Text(reader, 18);
         return new(reader.GetString(5), reader.GetFieldValue<DateOnly>(6), ViewColumns.Enum<PublishedChamber>(reader, 7), reader.GetInt32(8), reader.GetInt32(9),
             reader.GetInt32(10), reader.GetString(11), ViewColumns.Text(reader, 12), result, PlainVoteWords.Result(result), ViewColumns.Number(reader, 14)!.Value,
-            ViewColumns.Number(reader, 15)!.Value, ViewColumns.Text(reader, 16), ViewColumns.Number(reader, 17), ViewColumns.Text(reader, 18));
+            ViewColumns.Number(reader, 15)!.Value, ViewColumns.Text(reader, 16), ViewColumns.Number(reader, 17), billLine, billLine is null ? null : PublishedWording.BillLineSource);
     }
 }

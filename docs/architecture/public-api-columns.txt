@@ -43,6 +43,7 @@ briefs text_origin
 briefs label
 issue_sponsors issue_id
 issue_sponsors official_id
+issue_sponsors event_date
 issue_votes issue_id
 issue_votes kind
 member_votes official_id

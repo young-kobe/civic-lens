@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace CivicLens.Core.Relationships;
+namespace CivicLens.Publication.Contracts;
 
 public static class CongressCalendar
 {

@@ -438,17 +438,18 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     {
         await SeedBillsAsync();
 
-        var sponsors = await PublicAsync("SELECT issue_id || ' ' || official_id FROM public_api.issue_sponsors ORDER BY 1");
+        var sponsors = await PublicAsync("SELECT issue_id || ' ' || official_id || ' ' || event_date FROM public_api.issue_sponsors ORDER BY 1");
 
         Assert.NotEmpty(sponsors);
         Assert.Equal(await PublicAsync("""
-            SELECT x.issue_id || ' ' || p.official_id FROM public_api.bill_issues x
+            SELECT x.issue_id || ' ' || p.official_id || ' ' || b.event_date FROM public_api.bill_issues x
+              JOIN public_api.bills b ON b.record_id = x.record_id AND b.revision_number = x.revision_number
               JOIN public_api.bill_sponsorships p ON p.record_id = x.record_id AND p.revision_number = x.revision_number AND p.role = 'Sponsor' ORDER BY 1
             """), sponsors);
     }
 
     [Fact]
-    public async Task BriefsShowOnlyTheActiveReleaseAndOnlyRevisionsWithTheirColumnsAndEveryAiOrCodeRowHasItsLabel()
+    public async Task BriefsShowOnlyTheActiveReleaseAndOnlyRevisionsWithTheirColumnsAndOnlyAModelBriefHasTheLabelOfThePublishedWording()
     {
         await ExecuteAsync("""
             SET session_replication_role = replica;
@@ -470,7 +471,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
 
         Assert.Equal(
         [
-            $"A Code {PublishedRecordLabels.CodeWording}", $"M Model {PublishedRecordLabels.ModelWording}", "P Person none"
+            "A Code none", $"M Model {PublishedWording.ModelBrief}", "P Person none"
         ], await PublicAsync("SELECT record_id || ' ' || text_origin || ' ' || coalesce(label, 'none') FROM public_api.briefs ORDER BY 1"));
         Assert.Equal(["1"], await PublicAsync("SELECT DISTINCT release_number::text FROM public_api.briefs"));
         Assert.Equal(["2026-05-04"], await PublicAsync("SELECT DISTINCT week_start::text FROM public_api.briefs"));

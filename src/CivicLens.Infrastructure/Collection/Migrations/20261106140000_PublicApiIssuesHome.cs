@@ -8,16 +8,14 @@ namespace CivicLens.Infrastructure.Collection.Migrations
     public partial class PublicApiIssuesHome : Migration
     {
         // Each view joins the base tables itself, as member_votes does, because Postgres does not flatten a security_barrier view into another one.
-        // A join of vote_issues with votes or of bill_issues with bill_sponsorships ran over the 2 second limit on 1,600 votes and 3,000 bills.
-        // The label wording of briefs repeats the one of public_api.votes. PublicApiGrants owns the grants.
+        // On 1,600 votes, 495,000 member rows, and 3,000 bills, a join of vote_issues with votes took about 220 ms for one issue. A join of bill_issues with bill_sponsorships ran over the 2 second limit.
+        // The brief label repeats PublishedWording.ModelBrief, and a test compares the two. PublicApiGrants owns the grants.
         // An older brief revision holds revision_json and no columns, so it shows no row. The two issue views repeat the filters of vote_issues and bill_issues.
+        // Only a model brief has a label. A brief with person text has none. A brief never has the text origin Code.
         private const string UpSql = """
             CREATE VIEW public_api.briefs WITH (security_barrier = true) AS
             SELECT a.record_id, a.revision_number, a.release_number, r.week_start, r.headline, r.text_origin,
-                   CASE r.text_origin
-                     WHEN 'Model' THEN 'An AI summary of the official record'
-                     WHEN 'Code' THEN 'Written automatically from Congress.gov data, with no AI'
-                   END AS label
+                   CASE r.text_origin WHEN 'Model' THEN 'Drafted by an AI model from reviewed records. A person checked it before publication.' END AS label
               FROM public_api.active_records a
               JOIN public.brief_revisions r ON r.record_id = a.record_id AND r.revision_number = a.revision_number
              WHERE a.kind = 'brief' AND r.week_start IS NOT NULL AND r.headline IS NOT NULL AND r.text_origin IS NOT NULL;
@@ -30,7 +28,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
              WHERE a.kind = 'vote' AND v.member_list_id IS NOT NULL AND i.is_tracked;
 
             CREATE VIEW public_api.issue_sponsors WITH (security_barrier = true) AS
-            SELECT i.issue_id, p.person_id AS official_id
+            SELECT i.issue_id, p.person_id AS official_id, r.event_on AS event_date
               FROM public_api.active_records a
               JOIN public.action_revisions r ON r.record_id = a.record_id AND r.revision_number = a.revision_number
               JOIN public.action_revision_issues i ON i.record_id = r.record_id AND i.revision_number = r.revision_number

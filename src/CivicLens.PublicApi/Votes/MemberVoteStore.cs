@@ -4,13 +4,11 @@ using Npgsql;
 
 namespace CivicLens.PublicApi.Votes;
 
-/// <summary>Reads the view <c>public_api.member_votes</c> for the votes of one official, and <c>public_api.active_records</c> for the release. The kind rule is <see cref="PublishedVoteKindExtensions.IsSubstantive"/>.</summary>
+/// <summary>Reads the view <c>public_api.member_votes</c> for the votes of one official, and <c>public_api.active_records</c> for the release. The kind rule is <see cref="PublishedVoteKindExtensions.SubstantiveNames"/>.</summary>
 public sealed class MemberVoteStore(NpgsqlDataSource views)
 {
     /// <summary>The most votes in one answer. The list is a short recent view, not a history. The vote list route pages through all votes.</summary>
     public const int MaximumVotes = 10;
-
-    private static readonly string[] SubstantiveKinds = [.. Enum.GetValues<PublishedVoteKind>().Where(kind => kind.IsSubstantive()).Select(kind => kind.ToString())];
 
     private const string Sql = $"""
         SELECT a.release_number, v.record_id, v.chamber, v.congress, v.session_number, v.roll_call_number, v.voted_on, v.kind,
@@ -29,7 +27,7 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
     {
         await using var command = views.CreateCommand(Sql);
         command.Parameters.AddWithValue("official", request.Official);
-        command.Parameters.AddWithValue("kinds", SubstantiveKinds);
+        command.Parameters.AddWithValue("kinds", PublishedVoteKindExtensions.SubstantiveNames());
         command.Parameters.AddWithValue("take", MaximumVotes);
         var votes = new List<MemberVote>();
         int? release = null;

@@ -2,7 +2,6 @@ using System.Globalization;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Roster;
-using CivicLens.Core.Relationships;
 using CivicLens.Host.Actions;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Publication.Contracts;
