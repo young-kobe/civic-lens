@@ -22,7 +22,7 @@ Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 th
 
 ### Theme (planned)
 
-- The theme is Mosaic v2. The prototype tokens are in the `mosaic2` block of the prototype skin file. The code tokens will go in `src/CivicLens.Host/wwwroot/css/theme.css`.
+- The theme is Mosaic v2. The prototype tokens are in the `mosaic2` block of the prototype skin file. The code tokens will go in `src/CivicLens.PublicWeb/wwwroot/css/theme.css`.
 - Color follows a 60-30-10 split. The page is a warm off-white in light mode and a deep ink in dark mode. Navy `#14213d` is the second color. Civic yellow `#f5b301` is the accent.
 - Yellow marks primary buttons, the current navigation item, and key highlights. Yellow is never text on a white background.
 - Four record types have four colors: vote teal, bill green, statement brown, and executive slate. The four colors have equal OKLCH lightness and chroma. A record color marks only the icon square, a thin edge, and the tint.
@@ -186,7 +186,7 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 | Public page components, today | `src/CivicLens.Host/Publication` |
 | Static render of pages | `src/CivicLens.Host/Publication/ReleaseRenderer.cs` |
 | Public API and its views | `src/CivicLens.PublicApi` |
-| Style files | `src/CivicLens.Host/wwwroot/css/theme.css`, `src/CivicLens.Host/wwwroot/css/app.css`, `src/CivicLens.Host/wwwroot/css/public.css` |
+| Style files | `src/CivicLens.PublicWeb/wwwroot/css/theme.css`, `src/CivicLens.PublicWeb/wwwroot/css/app.css`, `src/CivicLens.PublicWeb/wwwroot/css/public.css` |
 | Presentation rules test | `tests/CivicLens.Tests/Architecture/PresentationArchitectureTests.cs` |
 
 `PublicApi` renders no page yet. The page components move there, and into `CivicLens.PublicWeb` where they need `Publication.Contracts` only, during R-68.
