@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace CivicLens.Tests.Fixtures;
 
-internal static class HostStyleSheets
+internal static class WebStyleSheets
 {
     private static readonly string[] Owners = ["CivicLens.PublicWeb", "CivicLens.Host"];
 

@@ -123,7 +123,7 @@ public sealed class PublicFoundationTests
     [Fact]
     public void ThePublicTokensReachFourAndAHalfToOneInBothThemesOnTheSurfacesThatShowThem()
     {
-        var theme = HostStyleSheets.Read("theme.css");
+        var theme = WebStyleSheets.Read("theme.css");
         var supports = theme[theme.IndexOf("@supports (color: light-dark", StringComparison.Ordinal)..];
         var noSupport = supports[supports.IndexOf("@supports not", StringComparison.Ordinal)..supports.IndexOf("@media", StringComparison.Ordinal)];
         supports = supports[..supports.IndexOf("@supports not", StringComparison.Ordinal)];

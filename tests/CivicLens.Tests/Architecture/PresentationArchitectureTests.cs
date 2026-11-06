@@ -50,7 +50,7 @@ public sealed class PresentationArchitectureTests
     public void RestingFieldStylesNeverOutrankTheFocusRuleSoEveryFieldControlShowsItsFocusRing()
     {
         var control = new Regex(@"^\.field .*\b(?:input|textarea|select)\b");
-        var resting = HostStyleSheets.Selectors(HostStyleSheets.Read("app.css"))
+        var resting = WebStyleSheets.Selectors(WebStyleSheets.Read("app.css"))
             .Where(selector => control.IsMatch(selector) && !selector.Contains(":focus-visible", StringComparison.Ordinal)
                 && (selector.Contains(":not(", StringComparison.Ordinal) || selector.Contains(":hover", StringComparison.Ordinal)));
 
@@ -60,7 +60,7 @@ public sealed class PresentationArchitectureTests
     [Fact]
     public void EveryDarkThemeTokenAlsoHasALightDefault()
     {
-        var theme = HostStyleSheets.Read("theme.css");
+        var theme = WebStyleSheets.Read("theme.css");
         var lightBlock = theme[..theme.IndexOf("@media (prefers-color-scheme: dark)", StringComparison.Ordinal)];
         var light = Tokens(lightBlock);
         foreach (var token in Tokens(theme[lightBlock.Length..]))
@@ -118,7 +118,7 @@ public sealed class PresentationArchitectureTests
         var owners = new Dictionary<string, string>();
         foreach (var name in new[] { "app.css", "public.css", "review.css" })
         {
-            foreach (var selector in HostStyleSheets.Selectors(HostStyleSheets.Read(name)).Distinct())
+            foreach (var selector in WebStyleSheets.Selectors(WebStyleSheets.Read(name)).Distinct())
             {
                 Assert.True(owners.TryAdd(selector, name), $"'{selector}' is in {owners.GetValueOrDefault(selector)} and {name}.");
                 Assert.True(name == "public.css" || !selector.Contains(".public-", StringComparison.Ordinal), $"'{selector}' must live in public.css.");
@@ -148,11 +148,11 @@ public sealed class PresentationArchitectureTests
     public void OneRuleInTheSharedStylesheetTurnsOffEveryTransitionAndAnimationForReducedMotion()
     {
         var owners = new[] { "app.css", "public.css", "review.css", "theme.css" }
-            .Where(name => HostStyleSheets.Read(name).Contains("prefers-reduced-motion", StringComparison.Ordinal)).ToArray();
+            .Where(name => WebStyleSheets.Read(name).Contains("prefers-reduced-motion", StringComparison.Ordinal)).ToArray();
 
         Assert.Equal(["app.css"], owners);
         Assert.Matches(@"@media \(prefers-reduced-motion: reduce\)\s*\{\s*\*, \*::before, \*::after \{ animation: none !important; transition: none !important; \}\s*\}",
-            HostStyleSheets.Read("app.css"));
+            WebStyleSheets.Read("app.css"));
     }
 
     private static string[] RelativeFiles(string projectRoot)
