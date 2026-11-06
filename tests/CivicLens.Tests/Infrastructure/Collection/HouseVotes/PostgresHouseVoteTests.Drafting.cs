@@ -11,6 +11,7 @@ using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Votes;
 using CivicLens.Tests.Application.Actions;
 using CivicLens.Tests.Application.Analysis;
@@ -86,7 +87,7 @@ public sealed partial class PostgresHouseVoteTests
         var model = new FakeHeadlineSummaryModel().Draft("not json").Draft(HeadlineSummaryOutputs.Output("The House voted on a concurrent resolution",
             "The House decided whether to agree to a Senate amendment."));
         var reader = new VoteReader(store, new ApiResponseReader(PostgresCollectionAttemptStore.FromConnectionString(connectionString),
-            new CaptureBodyReader()), captureRoot);
+            new CaptureBodyReader()), new CaptureDocumentTextExtractor(), captureRoot);
 
         await AnalysisWorkers.VoteDrafting(VoteStore(), new FakeAnalysisStatusStore(), reader, model, new VoteDraftSettings(10_000_000, concurrency: 1),
             BillGateFixtures.Revision(), TimeProvider.System).ExecuteAsync(once: true);

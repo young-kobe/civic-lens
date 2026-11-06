@@ -23,7 +23,8 @@ public sealed partial class PostgresHouseVoteTests
             Members = [basis.Members[0], new("with-id-b", "B000002", "Nay", memberSpan), new("with-id-c", "C000003", "Not Voting", span)],
             IssueCandidateIds = ["issue-a", "issue-b", "issue-c"],
             TrackedIssueIds = ["issue-b"],
-            SubjectsHash = new string('5', 64)
+            SubjectsHash = new string('5', 64),
+            Decides = new VoteDecides("The bill gives money for rent aid.", "gives money for rent aid in the year", new string('6', 64))
         };
 
         await SettleAsync(candidate, full);
@@ -187,6 +188,23 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal(constraint, failure.ConstraintName);
     }
 
+    [Theory]
+    [InlineData("decides_text_origin = 'Person'", "ck_vote_revisions_decides_origin")]
+    [InlineData("decides_source_hash = 'abc'", "ck_vote_revisions_decides_hash")]
+    [InlineData("decides_quote = NULL", "ck_vote_revisions_decides")]
+    [InlineData("decides_label = NULL", "ck_vote_revisions_decides")]
+    [InlineData("bill_type = NULL, bill_number = NULL", "ck_vote_revisions_decides_bill")]
+    public async Task TheDatabaseRefusesDecidesColumnsThatBreakTheRuleOfTheTextBecauseOnlyACheckedModelTextOnABillMayStand(string assignment, string constraint)
+    {
+        var candidate = await PendingCandidateAsync();
+        await SettleAsync(candidate, (await RevisionAsync(candidate, 1)) with { Decides = new("The bill gives money.", "gives money for rent aid", new string('6', 64)) });
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"UPDATE vote_revisions SET {assignment}"));
+
+        Assert.Equal(PostgresErrorCodes.CheckViolation, failure.SqlState);
+        Assert.Equal(constraint, failure.ConstraintName);
+    }
+
     [Fact]
     public async Task ARevisionCannotNameAnotherRollCallThanItsRecordBecauseTheRollIdentityIsAForeignKey()
     {
@@ -243,6 +261,11 @@ public sealed partial class PostgresHouseVoteTests
             ["kind_citation_length"] = revision.KindCitation?.Length,
             ["issue_revision_id"] = revision.IssueRevisionId,
             ["subjects_hash"] = revision.SubjectsHash,
+            ["decides_summary"] = revision.Decides?.Text,
+            ["decides_quote"] = revision.Decides?.Quote,
+            ["decides_text_origin"] = revision.Decides?.TextOrigin.ToString(),
+            ["decides_label"] = revision.Decides is null ? null : VoteDecides.Label,
+            ["decides_source_hash"] = revision.Decides?.SourceHash,
             ["issue_candidates_recorded"] = !revision.IssueCandidateIds.IsDefault,
             ["question"] = revision.Facts.FirstOrDefault(fact => fact.Text.StartsWith("Question: ", StringComparison.Ordinal))?.Text["Question: ".Length..],
             ["result"] = revision.Facts.First(fact => fact.Text.StartsWith("Result: ", StringComparison.Ordinal)).Text["Result: ".Length..]

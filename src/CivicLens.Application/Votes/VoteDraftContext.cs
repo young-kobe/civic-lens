@@ -17,7 +17,7 @@ public sealed record VoteDraftContext(VoteDraftEvidence Evidence, VoteSnapshot S
     {
         if (previous is null || previous.Source != Snapshot.Source || !previous.Facts.Select(fact => fact.Text).SequenceEqual(Snapshot.Facts.Select(fact => fact.Text)) ||
             previous.IssueCandidateIds.IsDefault || !previous.IssueCandidateIds.SequenceEqual(Issues.CandidateIds) || previous.IssueRevisionId != IssueRevisionId ||
-            previous.SubjectsHash != Issues.SubjectsHash)
+            previous.SubjectsHash != Issues.SubjectsHash || previous.Decides?.SourceHash != Snapshot.Decides?.SourceHash)
             return VoteChange.Other;
         if (!previous.Members.Select(VoteOf).SequenceEqual(Snapshot.Members.Select(VoteOf))) return VoteChange.MemberVotesOnly;
         return previous.Kind == Snapshot.Kind ? VoteChange.None : VoteChange.KindOnly;

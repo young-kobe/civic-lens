@@ -18,7 +18,8 @@ internal static partial class BillLine
 
     private static string? Of(PublishedAction action) => action.SummaryCitation is { } summary ? FromSummaryQuote(summary.Quote) : null;
 
-    private static string? FromSummaryQuote(string quote)
+    /// <summary>The line of one summary block of the bill summaries page, as the vote drafting reads it.</summary>
+    internal static string? FromSummaryQuote(string quote)
     {
         var lines = quote.Split('\n');
         var marker = Array.IndexOf(lines, CongressBillRenderer.SummaryTextLabel);

@@ -7,12 +7,13 @@ using CivicLens.Application.Collection.Processing;
 using CivicLens.Application.Collection.Votes;
 using CivicLens.Application.Collection.VoteviewVotes;
 using CivicLens.Application.Documents;
+using CivicLens.Application.Publication;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Votes;
 
 namespace CivicLens.Application.Votes;
 
-public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader responses, string artifactRoot)
+public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader responses, IDocumentTextExtractor textExtractor, string artifactRoot)
 {
     private sealed record ChamberRead(DateOnly Day, string[] DetailPrefixes, ImmutableArray<MemberVote> Members);
 
@@ -30,7 +31,9 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
         }
         var (subjects, subjectsError) = await ReadSubjectsAsync(evidence.BillSubjects, cancellationToken);
         if (subjectsError is not null) return new(null, subjectsError);
-        return new(Assemble(evidence, chamberRead, bill?.PolicyArea, subjects), null);
+        var (summary, summaryError) = await ReadSummaryAsync(evidence.BillSummaries, cancellationToken);
+        if (summaryError is not null) return new(null, summaryError);
+        return new(Assemble(evidence, chamberRead, bill?.PolicyArea, subjects, summary), null);
     }
 
     private Task<(ChamberRead?, string? Error)> ReadChamberAsync(VoteDraftEvidence evidence, CancellationToken cancellationToken) =>
@@ -83,7 +86,8 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
     private static PersonConfiguration[] TrackedOn(VoteDraftEvidence evidence, DateOnly day) =>
         evidence.ConfigurationRevision.Configuration.CoveredBioguidePeopleOf(SourceOf(evidence), day);
 
-    private static VoteSnapshot Assemble(VoteDraftEvidence evidence, ChamberRead read, string? policyArea, ImmutableArray<string> subjects)
+    private static VoteSnapshot Assemble(VoteDraftEvidence evidence, ChamberRead read, string? policyArea, ImmutableArray<string> subjects,
+        VoteBillSummary? summary)
     {
         var configuredPeople = evidence.ConfigurationRevision.Configuration.People;
         var facts = FactsOf(evidence.Detail, read.DetailPrefixes);
@@ -95,7 +99,7 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
         return new(chamber, VoteSources.Of(SourceOf(evidence)), facts, votedOnCitation, kind, kindCitation, read.Members, VoteFingerprint.Compute(facts, read.Members),
             policyArea, subjects, read.Day,
             configuredPeople.Where(person => involved.Contains(person.Id)).ToImmutableDictionary(person => person.Id, person => person.Name),
-            [.. configuredPeople.Select(person => person.Name)]);
+            [.. configuredPeople.Select(person => person.Name)], VoteDecidesInput.Of(kind, facts, evidence.Candidate.BillNumber, summary));
     }
 
     private static string? BillError(VoteDraftEvidence evidence)
@@ -138,6 +142,22 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
             subjects.AddRange(parsed.Subjects);
         }
         return (subjects.ToImmutable(), null);
+    }
+
+    /// <summary>The newest summary of all saved summaries pages, with the bill line that <see cref="BillLine"/> takes from its block. A bill with no summary or no line has none.</summary>
+    private async Task<(VoteBillSummary? Summary, string? Error)> ReadSummaryAsync(IReadOnlyList<VoteDraftPage> pages, CancellationToken cancellationToken)
+    {
+        var texts = new List<CongressBillSummaryText>();
+        foreach (var page in pages)
+        {
+            if (page.ExtractionVersion != CongressBillSummariesParser.ExtractionVersion(textExtractor)) return (null, VoteDraftErrorCodes.ExtractionVersionChanged);
+            var job = await jobs.GetAsync(page.JobId, cancellationToken) ?? throw new InvalidDataException("A bill summaries job is missing.");
+            var (bill, parsed) = await CongressBillSummariesJob.ParseAsync(job, await responses.ReadAsync(job, artifactRoot, cancellationToken), textExtractor, cancellationToken);
+            if (TextError(page, CongressBillRenderer.RenderSummaries(bill, parsed)) is { } error) return (null, error);
+            texts.AddRange(parsed);
+        }
+        if (BillSummarySelection.Newest(texts) is not { } newest) return (null, null);
+        return (BillLine.FromSummaryQuote(CongressBillRenderer.SummaryBlock(newest)) is { } line ? new(newest.Text, line) : null, null);
     }
 
     private async Task<CongressBill> LoadBillAsync(VoteDraftPage page, CancellationToken cancellationToken)

@@ -57,14 +57,14 @@ internal sealed class VoteviewVoteWorld
     public static VoteviewVoteWorld Create() =>
         new(VoteviewVoteFixtures.DefaultRollCalls, VoteviewVoteFixtures.DefaultMembers, VoteviewVoteFixtures.DefaultVotes);
 
-    public VoteReader Reader() => new(Stores, new ApiResponseReader(Stores, Stores), "artifacts");
+    public VoteReader Reader() => new(Stores, new ApiResponseReader(Stores, Stores), new ActionBillWorld.FragmentExtractor(), "artifacts");
 
     public VoteDraftEvidence Evidence(string? savedText = null, string extractionVersion = VoteviewParser.ExtractionVersion, string? rosterJobId = MembersJob,
         int rollCall = 60)
     {
         var page = Page(VotesJob, savedText ?? Text, extractionVersion);
         return new(new VoteDraftCandidate(CandidateId, RecordId, VoteviewVoteFixtures.SourceId, Chamber.Senate, 119, 1, rollCall, null, null, UpdatedAt, rosterJobId),
-            Revision, page with { JobId = RollCallsJob }, page, null, [], null, false, false, false);
+            Revision, page with { JobId = RollCallsJob }, page, null, [], [], null, false, false, false);
     }
 
     public string Quote(SourceSpan span) => Text.Substring(span.Start, span.Length);

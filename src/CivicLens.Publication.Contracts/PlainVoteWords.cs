@@ -24,6 +24,10 @@ public static class PlainVoteWords
         ("Rejected", "Failed")
     ];
 
+    /// <summary>Every plain result word, longest first, so a search finds "Not confirmed" before "Confirmed".</summary>
+    public static IReadOnlyList<string> AllResultWords { get; } =
+        [.. ResultByEnding.Select(row => row.Words).Distinct(StringComparer.Ordinal).OrderByDescending(words => words.Length)];
+
     /// <summary>The plain word for a source cast, or null for a cast with none, such as a vote for a candidate.</summary>
     public static string? CastWord(string cast) => cast switch
     {

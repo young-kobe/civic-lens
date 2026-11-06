@@ -20,6 +20,10 @@ internal sealed class FakeVoteDraftStore : FakeAnalysisQueue<VoteDraftRun>, IVot
     public Task<VoteDraftEvidence?> ReadEvidenceAsync(string candidateId, CancellationToken cancellationToken) =>
         Task.FromResult<VoteDraftEvidence?>(Evidence);
 
+    public Task<string?> NewestCandidateIdAsync(VoteMeasureRoll roll, CancellationToken cancellationToken) =>
+        Task.FromResult<string?>((roll.Chamber, roll.Congress, roll.SessionNumber, roll.RollCallNumber) ==
+            (Evidence.Candidate.Chamber, Evidence.Candidate.Congress, Evidence.Candidate.SessionNumber, Evidence.Candidate.RollCallNumber) ? Evidence.Candidate.CandidateId : null);
+
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<int> RequeueStaleAsync(CancellationToken cancellationToken) => throw new NotSupportedException();

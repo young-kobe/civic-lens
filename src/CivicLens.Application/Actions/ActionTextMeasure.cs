@@ -36,9 +36,9 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         new(ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model, tokenCap, results.ToImmutable());
 
     private static ActionTextMeasureBill NotRun(CongressBillListItem bill, IEnumerable<ActionTextMeasureBill> earlier) =>
-        earlier.Any(item => item.Outcome == ActionTextMeasureOutcome.StoppedByModel)
-            ? ActionTextMeasureBill.WithoutCall(IdOf(bill), ActionTextMeasureOutcome.StoppedByModel, ActionTextMeasureReason.ModelFailure)
-            : ActionTextMeasureBill.WithoutCall(IdOf(bill), ActionTextMeasureOutcome.StoppedByCap, ActionTextMeasureReason.SpendCap);
+        earlier.Any(item => item.Outcome == AnalysisMeasureOutcome.StoppedByModel)
+            ? ActionTextMeasureBill.WithoutCall(IdOf(bill), AnalysisMeasureOutcome.StoppedByModel, ActionTextMeasureReason.ModelFailure)
+            : ActionTextMeasureBill.WithoutCall(IdOf(bill), AnalysisMeasureOutcome.StoppedByCap, ActionTextMeasureReason.SpendCap);
 
     public static string IdOf(CongressBillListItem bill) => $"{bill.Congress}-{bill.Type}-{bill.Number}";
 
@@ -55,43 +55,44 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         var evidence = await store.ReadEvidenceAsync(candidateId, withBillText: true, cancellationToken);
         if (evidence?.BillText is not { } billText) return ActionTextMeasureBill.Skipped(billId, ActionTextMeasureReason.NoBillText);
 
-        var attempt = new ActionTextMeasureAttempt(candidateId, tokenCap, spent);
+        var attempt = new AnalysisMeasureAttempt<ActionDraftRun, ActionDraftRevision>(candidateId, tokenCap, spent, ActionDraftTask.Identity, run => run.Run,
+            checkpoint => (checkpoint as ActionDraftCheckpoint)?.Revision, ActionDraftTask.TextPromptVersion);
         await step.DraftAsync(attempt, evidence with { Current = null, HasStaleDraft = false, IsRejected = false },
             cancellationToken);
         return Summarize(billId, evidence, billText, attempt);
     }
 
     private static ActionTextMeasureBill Summarize(string billId, ActionDraftEvidence evidence, ActionDraftBillText billText,
-        ActionTextMeasureAttempt attempt)
+        AnalysisMeasureAttempt<ActionDraftRun, ActionDraftRevision> attempt)
     {
         var usage = attempt.Runs.Aggregate(AnalysisTokenUsage.None, (sum, run) => new(sum.InputTokens + run.Usage.InputTokens,
             sum.OutputTokens + run.Usage.OutputTokens, sum.CacheReadTokens + run.Usage.CacheReadTokens, sum.CacheWriteTokens + run.Usage.CacheWriteTokens));
         var rejections = attempt.Runs.SelectMany(run => run.ValidationErrors).ToImmutableArray();
         var textFigures = BillFigures.Count(billText.Body);
-        ActionTextMeasureBill With(ActionTextMeasureOutcome outcome, string? reason, ImmutableArray<ActionTextMeasureSentence> sentences = default, double? passageGrade = null)
+        ActionTextMeasureBill With(AnalysisMeasureOutcome outcome, string? reason, ImmutableArray<ActionTextMeasureSentence> sentences = default, double? passageGrade = null)
         {
             var kept = sentences.IsDefault ? [] : sentences;
             var sentenceText = string.Join('\n', kept.Select(sentence => sentence.Sentence));
             var bill = new ActionTextMeasureBill(billId, TitleOf(evidence), outcome, reason, billText.CharsRead, billText.CharsTotal, attempt.Calls, usage,
                 attempt.Runs.Sum(run => run.ChargedTokens), kept, rejections,
-                [.. attempt.Runs.Where(run => run.OutputJson is not null).Select(run => new ActionTextMeasurePass(run.Outcome, run.OutputJson))],
+                [.. attempt.Runs.Where(run => run.OutputJson is not null).Select(run => new AnalysisMeasurePass(run.Outcome, run.OutputJson))],
                 textFigures, BillFigures.Count(sentenceText), passageGrade, []);
             return bill.LosesFigures ? bill with { MissingDates = [.. BillFigures.MissingDates(billText.Body, sentenceText)] } : bill;
         }
 
-        if (attempt.RefusedOtherPrompt) return With(ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.NotTextPrompt);
+        if (attempt.RefusedOtherPrompt) return With(AnalysisMeasureOutcome.Skipped, ActionTextMeasureReason.NotTextPrompt);
         if (attempt.Failure is { } failure)
-            return With(AnalysisFailureRules.NeedsPerson(failure) ? ActionTextMeasureOutcome.StoppedByModel : ActionTextMeasureOutcome.Failed,
+            return With(AnalysisFailureRules.NeedsPerson(failure) ? AnalysisMeasureOutcome.StoppedByModel : AnalysisMeasureOutcome.Failed,
                 attempt.ErrorCode);
-        if (attempt.StoppedByCap) return With(ActionTextMeasureOutcome.StoppedByCap, ActionTextMeasureReason.SpendCap);
+        if (attempt.StoppedByCap) return With(AnalysisMeasureOutcome.StoppedByCap, ActionTextMeasureReason.SpendCap);
         if (attempt.Revision is { TextPackageId: not null } revision)
-            return With(ActionTextMeasureOutcome.Accepted, null,
+            return With(AnalysisMeasureOutcome.Accepted, null,
                 [.. revision.TextCitations.Select(citation => new ActionTextMeasureSentence(citation.Part, citation.Sentence,
                     billText.Text.Substring(citation.Span.Start, citation.Span.Length), ReadingGrade.Rounded(citation.Sentence)))],
                 ReadingGrade.RoundedPassage([revision.Headline, .. revision.TextCitations.Select(citation => citation.Sentence)]));
-        if (attempt.Revision is not null) return With(ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.WrittenByCode);
-        if (attempt.Calls == 0) return With(ActionTextMeasureOutcome.Skipped, attempt.ErrorCode);
-        return With(IsResolverRefusal(attempt.Runs[^1].Outcome) ? ActionTextMeasureOutcome.Rejected : ActionTextMeasureOutcome.Failed, attempt.ErrorCode);
+        if (attempt.Revision is not null) return With(AnalysisMeasureOutcome.Skipped, ActionTextMeasureReason.WrittenByCode);
+        if (attempt.Calls == 0) return With(AnalysisMeasureOutcome.Skipped, attempt.ErrorCode);
+        return With(IsResolverRefusal(attempt.Runs[^1].Outcome) ? AnalysisMeasureOutcome.Rejected : AnalysisMeasureOutcome.Failed, attempt.ErrorCode);
     }
 
     private static bool IsResolverRefusal(AnalysisRunOutcome outcome) =>

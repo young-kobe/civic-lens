@@ -41,6 +41,11 @@ internal sealed class VoteRevisionRow : IReviewRevisionRow, IReviewTextRow
     public string IssueRevisionId { get; set; } = string.Empty;
     public string? SubjectsHash { get; set; }
     public bool IssueCandidatesRecorded { get; set; }
+    public string? DecidesSummary { get; set; }
+    public string? DecidesQuote { get; set; }
+    public ReviewTextOrigin? DecidesTextOrigin { get; set; }
+    public string? DecidesLabel { get; set; }
+    public string? DecidesSourceHash { get; set; }
     public string? Question { get; set; }
     public string Result { get; set; } = string.Empty;
     public List<VoteRevisionFactRow> Facts { get; set; } = [];

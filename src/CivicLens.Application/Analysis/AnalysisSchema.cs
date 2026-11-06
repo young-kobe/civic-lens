@@ -19,10 +19,15 @@ public static class AnalysisSchema
         return id;
     }
 
-    public static string HeadlineAndSummary(JsonObject? issueIds = null)
+    public static string HeadlineAndSummary(JsonObject? issueIds = null, bool withDecides = false)
     {
         var properties = new JsonObject { ["headline"] = TextWithConfidence(), ["summary"] = TextWithConfidence() };
         var required = new JsonArray("headline", "summary");
+        if (withDecides)
+        {
+            properties["decides"] = QuotedTextWithConfidence();
+            required.Add("decides");
+        }
         if (issueIds is not null)
         {
             properties["issueIds"] = issueIds;
@@ -74,6 +79,19 @@ public static class AnalysisSchema
         ["properties"] = new JsonObject
         {
             ["sentences"] = new JsonObject { ["type"] = "array", ["items"] = QuotedSentence() },
+            ["confidence"] = Number()
+        }
+    };
+
+    private static JsonObject QuotedTextWithConfidence() => new()
+    {
+        ["type"] = "object",
+        ["additionalProperties"] = false,
+        ["required"] = new JsonArray("text", "quote", "confidence"),
+        ["properties"] = new JsonObject
+        {
+            ["text"] = new JsonObject { ["type"] = "string" },
+            ["quote"] = new JsonObject { ["type"] = "string" },
             ["confidence"] = Number()
         }
     };
