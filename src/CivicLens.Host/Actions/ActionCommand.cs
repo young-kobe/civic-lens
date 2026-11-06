@@ -6,11 +6,11 @@ using CivicLens.Host.Analysis;
 namespace CivicLens.Host.Actions;
 
 internal sealed class ActionCommand(AnalysisQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem> drafts,
-    RequeueBlockedActionDrafts requeueBlocked, RequeueRefusedActionDrafts requeueRefused, RedraftActionDrafts redraft,
+    RequeueBlockedActionDrafts requeueBlocked, RequeueRefusedActionDrafts requeueRefused,
     BackfillRevisions backfill, VerifyRevisions verify, ReviewActor owner)
 {
     private const string Usage = "Use actions draft status, actions draft list [drafted|unchanged|superseded|no-official|pending|failed] [limit], " +
-        "actions draft requeue <candidate-id|--all>, actions draft requeue --blocked --code <block-code>, actions draft requeue --refused, actions draft redraft, actions revisions backfill <limit>, or actions revisions verify.";
+        "actions draft requeue <candidate-id|--all>, actions draft requeue --blocked --code <block-code>, actions draft requeue --refused, actions revisions backfill <limit>, or actions revisions verify.";
     private const int DefaultListLimit = 100;
 
     public static bool Matches(string[] args) => args is ["actions", ..];
@@ -40,9 +40,6 @@ internal sealed class ActionCommand(AnalysisQueueCommands<ActionDraftRun, Action
                     return 0;
                 case ["actions", "draft", "requeue", "--refused"]:
                     CommandOutput.Write(new { requeued = await requeueRefused.ExecuteAsync(owner, cancellationToken) });
-                    return 0;
-                case ["actions", "draft", "redraft"]:
-                    CommandOutput.Write(new { requeued = await redraft.ExecuteAsync(owner, cancellationToken) });
                     return 0;
                 case ["actions", "revisions", "backfill", var limit]:
                     return await OwnerCommand.BackfillRevisionsAsync(backfill, owner, limit, Usage, cancellationToken);

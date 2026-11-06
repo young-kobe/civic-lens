@@ -91,6 +91,17 @@ public sealed class BriefDraftStepTests
     }
 
     [Fact]
+    public async Task AStaleDraftWithTheSameFingerprintDraftsAgainBecauseARedraftMustReachTextFromAnOlderVersion()
+    {
+        var (first, _) = await RunAsync(Records, new FakeBriefDraftModel().Draft(Output()));
+
+        var (second, model) = await RunAsync(Records, new FakeBriefDraftModel().Draft(Output()), Assert.Single(first.Revisions), hasStaleDraft: true);
+
+        Assert.Single(model.Requests);
+        Assert.Equal(State.Succeeded, second.Entries[0].Status);
+    }
+
+    [Fact]
     public async Task ANewRecordOrANewRevisionOfARecordAppendsRevisionTwoWithANewFingerprint()
     {
         var (first, _) = await RunAsync(Records, new FakeBriefDraftModel().Draft(Output()));
@@ -181,9 +192,9 @@ public sealed class BriefDraftStepTests
     }
 
     private static async Task<(FakeBriefDraftStore Store, FakeBriefDraftModel Model)> RunAsync(IEnumerable<BriefRecord> records,
-        FakeBriefDraftModel model, BriefRevision? current = null, BriefDraftSettings? settings = null, int leftOut = 0)
+        FakeBriefDraftModel model, BriefRevision? current = null, BriefDraftSettings? settings = null, int leftOut = 0, bool hasStaleDraft = false)
     {
-        var store = new FakeBriefDraftStore(Evidence(records, current, leftOut: leftOut));
+        var store = new FakeBriefDraftStore(Evidence(records, current, leftOut: leftOut, hasStaleDraft: hasStaleDraft));
         await AnalysisWorkers.BriefDrafting(store, new FakeAnalysisStatusStore(), model, settings ?? new BriefDraftSettings(10_000_000, concurrency: 1),
             Officials, TimeProvider.System).ExecuteAsync(once: true);
         return (store, model);
