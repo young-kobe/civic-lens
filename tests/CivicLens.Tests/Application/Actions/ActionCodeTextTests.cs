@@ -23,6 +23,23 @@ public sealed class ActionCodeTextTests
             new string('b', 64), [], null, null, null, null, Names, [], span);
     }
 
+    [Theory]
+    [InlineData("hr", 9576, "H.R. 9576")]
+    [InlineData("HR", 9340, "H.R. 9340")]
+    [InlineData("hjres", 213, "H.J.Res. 213")]
+    [InlineData("s", 2403, "S. 2403")]
+    [InlineData("sconres", 5, "S.Con.Res. 5")]
+    [InlineData("hamdt", 7, "HAMDT 7")]
+    public void ABillNumberShowsInTheOfficialStyleWhateverTheCaseOfItsStoredType(string type, int number, string expected) =>
+        Assert.Equal(expected, ActionCodeText.BillNumber(type, number));
+
+    [Fact]
+    public void ABillTypeOutsideTheTableFailsInTheStoredTextAndFallsBackToUpperCaseInDisplay()
+    {
+        Assert.Throws<KeyNotFoundException>(() => ActionCodeText.Of(Snapshot("A bill.", "hamdt")));
+        Assert.Equal("HAMDT 7", ActionCodeText.BillNumber("hamdt", 7));
+    }
+
     [Fact]
     public void ABillWithOneTrackedSponsorNamesTheSponsorInTheHeadlineAndTheSummary()
     {

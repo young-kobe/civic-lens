@@ -4,12 +4,12 @@ using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 using CivicLens.Host.Components.Layout;
-using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Documents;
 using CivicLens.Host.Review;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Logging;
+using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.Host.Collection;
 

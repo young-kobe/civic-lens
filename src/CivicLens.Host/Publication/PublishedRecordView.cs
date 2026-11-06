@@ -1,8 +1,8 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Documents;
-using CivicLens.Host.Components.Evidence;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Components.Evidence;
 
 namespace CivicLens.Host.Publication;
 

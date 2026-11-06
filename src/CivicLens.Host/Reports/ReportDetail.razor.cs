@@ -1,10 +1,10 @@
 using CivicLens.Application.Reports;
-using CivicLens.Host.Components.Evidence;
 using CivicLens.Host.Components.Layout;
-using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Publication;
 using CivicLens.Host.Review;
 using Microsoft.AspNetCore.Components;
+using CivicLens.PublicWeb.Components.Evidence;
+using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.Host.Reports;
 

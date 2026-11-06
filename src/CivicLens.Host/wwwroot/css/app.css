@@ -110,8 +110,8 @@ a.cell-title:hover { text-decoration: underline; }
 .field-optional { color: var(--muted); font-weight: 400; }
 .field-hint { color: var(--muted); font-size: var(--t-xs); }
 .field-error { color: var(--del); font-size: var(--t-xs); }
-.field input:not([type="checkbox"]):not([type="radio"]), .field textarea, .field select { width: 100%; padding: 8px 10px; border: 0; border-radius: var(--r-control); background: var(--surface); box-shadow: inset 0 0 0 1px var(--control-line); font-size: var(--t-base); transition: box-shadow var(--fast); }
-.field input:not([type="checkbox"]):not([type="radio"]):hover, .field textarea:hover, .field select:hover { box-shadow: inset 0 0 0 1px var(--muted); }
+.field :where(input:not([type="checkbox"]):not([type="radio"]), textarea, select) { width: 100%; padding: 8px 10px; border: 0; border-radius: var(--r-control); background: var(--surface); box-shadow: inset 0 0 0 1px var(--control-line); font-size: var(--t-base); transition: box-shadow var(--fast); }
+.field :where(input:not([type="checkbox"]):not([type="radio"]), textarea, select):hover { box-shadow: inset 0 0 0 1px var(--muted); }
 .field input:focus-visible, .field textarea:focus-visible, .field select:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--focus), 0 0 0 3px var(--focus-halo); }
 .field textarea { min-height: 96px; resize: vertical; font-family: var(--read); font-size: var(--t-md); line-height: 1.6; }
 .chip input, .choice input { accent-color: var(--ink); }
