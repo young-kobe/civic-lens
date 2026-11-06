@@ -35,7 +35,7 @@ internal static class ActionDraftComposition
         return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<ActionDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<ActionDraftRun>>(), beat, wakeup), wakeup);
     }
 
-    public static ActionTextMeasure CreateMeasure(CodeVersion codeVersion)
+    public static ActionTextMeasure CreateMeasure(CodeVersion codeVersion, ActionMeasuredPrompt prompt)
     {
         var (connectionString, _) = OwnerCommand.ReadEnvironment();
         var apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
@@ -46,6 +46,6 @@ internal static class ActionDraftComposition
             new CaptureDocumentTextExtractor(), PublicationComposition.RequireArtifactRoot());
         var store = new PostgresActionDraftStore(AnalysisDbContextFactory.Create(connectionString), codeVersion);
         var settings = new ActionDraftSettings(AnalysisSettings.DefaultCallTokenLimit, draftsFromBillText: true);
-        return new(store, new ActionDraftStep(store, reader, new AnthropicActionDraftModel(apiKey), settings, issues));
+        return new(store, new ActionDraftStep(store, reader, new AnthropicActionDraftModel(apiKey), settings, issues), prompt);
     }
 }

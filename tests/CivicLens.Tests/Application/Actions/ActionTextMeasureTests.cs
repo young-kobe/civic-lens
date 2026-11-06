@@ -319,6 +319,92 @@ public sealed class ActionTextMeasureTests
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => new ActionTextMeasure(store, step).RunAsync([Bill], 0, default));
     }
 
+    private const string LineQuote = "funds rent aid for tenants";
+    private const string LineText = "The bill pays for rent aid.";
+
+    [Fact]
+    public async Task TheLineMeasureReportsTheLineTheQuoteTheLengthAndTheGradeAndCountsTheKeptLine()
+    {
+        var (report, store, model) = await MeasureLineAsync(new FakeHeadlineSummaryModel().Draft(LineOutput(LineText, LineQuote)));
+
+        var bill = Assert.Single(report.Bills);
+        Assert.Equal((ActionTextMeasureOutcome.Accepted, 1), (bill.Outcome, bill.Calls));
+        Assert.Equal(new ActionTextMeasureLine(LineText, LineQuote, true, LineText.Length, ReadingGrade.Rounded(LineText)), bill.BillLine);
+        Assert.Equal(bill.BillLine!.Grade, bill.PassageGrade);
+        Assert.Equal((ActionDraftTask.PromptVersion, ActionDraftTask.SchemaVersion, 1), (report.PromptVersion, report.SchemaVersion, report.Totals.LinesKept));
+        Assert.Equal(ActionDraftTask.PromptVersion, Assert.Single(model.Requests).PromptVersion);
+        Assert.Empty(store.Revisions);
+    }
+
+    [Theory]
+    [InlineData("funds rent aid for landlords", "the quote is not in the summary")]
+    [InlineData("funds rent aid", "the quote is too short")]
+    public async Task TheLineMeasureShowsALineThatTheChecksDropAsNotKeptWithTheTextThatTheModelWrote(string quote, string because)
+    {
+        var (report, _, _) = await MeasureLineAsync(new FakeHeadlineSummaryModel().Draft(LineOutput(LineText, quote)));
+
+        var line = Assert.Single(report.Bills).BillLine!;
+        Assert.False(line.Kept, because);
+        Assert.Equal((LineText, quote, 0), (line.Line, line.Quote, report.Totals.LinesKept));
+    }
+
+    [Fact]
+    public async Task AStopAtTheOutputLimitOnTheLineCallIsAFailureNotARejectionOfTheOutput()
+    {
+        var model = new FakeHeadlineSummaryModel().Reply(_ =>
+            Task.FromResult(new AnalysisModelResponse("max_tokens", null, new(900, 100, 0, 0), "req_fixture")));
+
+        var (report, _, _) = await MeasureLineAsync(model);
+
+        var bill = Assert.Single(report.Bills);
+        Assert.Equal((ActionTextMeasureOutcome.Failed, null), (bill.Outcome, bill.BillLine));
+        Assert.Equal(AnalysisErrorCodes.ForOutcome(AnalysisRunOutcome.OutputLimitReached), bill.Reason);
+    }
+
+    [Fact]
+    public async Task ARefusalOnTheLineCallIsAFailureNotARejectionOfTheOutput()
+    {
+        var model = new FakeHeadlineSummaryModel().Reply(_ =>
+            Task.FromResult(new AnalysisModelResponse("refusal", null, new(900, 100, 0, 0), "req_fixture")));
+
+        var (report, _, _) = await MeasureLineAsync(model);
+
+        Assert.Equal((ActionTextMeasureOutcome.Failed, AnalysisErrorCodes.ForOutcome(AnalysisRunOutcome.Refused)),
+            (Assert.Single(report.Bills).Outcome, Assert.Single(report.Bills).Reason));
+    }
+
+    [Fact]
+    public async Task ABillWithNoSummaryIsSkippedByTheLineMeasureWithNoCallBecauseTheStepWouldNotUseTheSummaryPrompt()
+    {
+        var world = ActionBillWorld.Create(summaries: []);
+        var model = new FakeHeadlineSummaryModel().Draft(LineOutput(LineText, LineQuote));
+
+        var (report, _, _) = await MeasureLineAsync(model, world);
+
+        var bill = Assert.Single(report.Bills);
+        Assert.Equal((ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.NotSummaryPrompt, 0), (bill.Outcome, bill.Reason, bill.Calls));
+        Assert.Empty(model.Requests);
+    }
+
+    [Fact]
+    public async Task TheLineMeasureStopsBeforeACallThatCouldPassTheCapLikeTheTextMeasure()
+    {
+        var (report, _, model) = await MeasureLineAsync(new FakeHeadlineSummaryModel().Draft(LineOutput(LineText, LineQuote)), cap: 1);
+
+        Assert.Equal(ActionTextMeasureOutcome.StoppedByCap, Assert.Single(report.Bills).Outcome);
+        Assert.Empty(model.Requests);
+    }
+
+    private static string LineOutput(string line, string quote) => HeadlineSummaryOutputs.Output(issueIds: ["rent"], billLine: (line, quote));
+
+    private static async Task<(ActionTextMeasureReport Report, FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> MeasureLineAsync(
+        FakeHeadlineSummaryModel model, ActionBillWorld? world = null, long cap = Cap)
+    {
+        world ??= ActionBillWorld.Create(summaries: [new("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>It funds rent aid for tenants with low income.</p>")]);
+        var (store, step) = Parts(world, model, world.Evidence());
+        return (await new ActionTextMeasure(store, step, ActionMeasuredPrompt.BillLine).RunAsync([Bill], cap, default), store, model);
+    }
+
     private static async Task<(ActionTextMeasureReport Report, FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> MeasureAsync(long cap,
         FakeHeadlineSummaryModel model, bool withText = true, CongressBillListItem[]? bills = null, ActionDraftBillText? text = null)
     {

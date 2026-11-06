@@ -6,8 +6,8 @@ using CivicLens.Core.Analysis;
 namespace CivicLens.Application.Actions;
 
 /// <summary>An attempt that keeps everything in memory, so the step runs with no queue and no database write.
-/// It charges the spend cap with the same reservation rule that the worker uses, and it sends only the text prompt.</summary>
-internal sealed class ActionTextMeasureAttempt(string candidateId, long tokenCap, long spentBefore) : IAnalysisAttempt<ActionDraftRun>
+/// It charges the spend cap with the same reservation rule that the worker uses, and it sends only the prompt that it measures.</summary>
+internal sealed class ActionTextMeasureAttempt(string candidateId, long tokenCap, long spentBefore, string measuredPromptVersion) : IAnalysisAttempt<ActionDraftRun>
 {
     private readonly List<AnalysisRun> runs = [];
     private AnalysisModelRequest? request;
@@ -28,7 +28,7 @@ internal sealed class ActionTextMeasureAttempt(string candidateId, long tokenCap
     public async Task<AnalysisCall> CallModelAsync(AnalysisModelRequest modelRequest, string? previous,
         Func<AnalysisModelRequest, CancellationToken, Task<AnalysisModelResponse>> send, CancellationToken cancellationToken)
     {
-        RefusedOtherPrompt = modelRequest.PromptVersion != ActionDraftTask.TextPromptVersion;
+        RefusedOtherPrompt = modelRequest.PromptVersion != measuredPromptVersion;
         StoppedByCap = !RefusedOtherPrompt && SpentTokens + modelRequest.ReservedTokens > tokenCap;
         if (RefusedOtherPrompt || StoppedByCap) return new(null, false);
         (RunId, previousRunId, request) = (Guid.NewGuid().ToString("N"), previous, modelRequest);
