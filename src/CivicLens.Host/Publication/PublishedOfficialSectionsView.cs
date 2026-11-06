@@ -46,6 +46,10 @@ internal static class PublishedOfficialSectionsView
             sections.Add(Latest(page, "votes", "How they voted recently", rows.Where(row => row.Kind == PublishedRecordKind.Vote).ToList(),
                 PublishedOfficialView.KindClass(PublishedRecordKind.Vote), count => $"See all {PublishedOfficialView.Counted(count, "vote")}", NoVotes));
         }
+        var executiveActions = rows.Where(row => row.Kind == PublishedRecordKind.ExecutiveAction).ToList();
+        if (executiveActions.Count > 0)
+            sections.Add(Latest(page, "executive-actions", "Executive actions", executiveActions, PublishedOfficialView.KindClass(PublishedRecordKind.ExecutiveAction),
+                count => $"See all {PublishedOfficialView.Counted(count, "executive action")} signed by {page.Profile.Name} in this release", ""));
         sections.Add(Latest(page, "statements", "What they said", rows.Where(row => row.Kind == PublishedRecordKind.Statement).ToList(),
             PublishedOfficialView.KindClass(PublishedRecordKind.Statement), count => $"See all {PublishedOfficialView.Counted(count, "statement")}", NoStatements));
         return sections;
