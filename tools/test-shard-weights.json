@@ -190,7 +190,7 @@
   "CivicLens.Tests.Core.Documents.DocumentExtractionTests": 0.0,
   "CivicLens.Tests.Core.Registry.DateRangeTests": 0.0,
   "CivicLens.Tests.Core.Relationships.BillTitleMatcherTests": 0.0,
-  "CivicLens.Tests.Core.Relationships.CongressCalendarTests": 0.0,
+  "CivicLens.Tests.Publication.Contracts.CongressCalendarTests": 0.0,
   "CivicLens.Tests.Core.Relationships.RelationshipRevisionTests": 0.0,
   "CivicLens.Tests.Core.Review.DocumentChangeDraftRevisionTests": 0.0,
   "CivicLens.Tests.Core.Review.ReviewAuthorTests": 0.0,

@@ -12,6 +12,10 @@ public static class ReleaseRecordOrder
         Func<T, string> recordIdOf) =>
         rows.OrderByDescending(dayOf).ThenByDescending(publishedOf).ThenBy(recordIdOf, StringComparer.Ordinal);
 
+    /// <summary>The brief entries of a release, newest week first. The home page shows the first one.</summary>
+    public static PublishedRecordEntry[] BriefsNewestFirst(IEnumerable<PublishedRecordEntry> records) =>
+        [.. NewestFirst(records.Where(entry => entry.Kind == PublishedRecordKind.Brief), Day, entry => entry.FirstPublishedAtUtc, entry => entry.RecordId)];
+
     public static IEnumerable<PublishedWithdrawal> WithdrawalsNewestFirst(IEnumerable<PublishedWithdrawal> withdrawals) =>
         withdrawals.OrderByDescending(withdrawal => withdrawal.WithdrawnAtUtc).ThenBy(withdrawal => withdrawal.RecordId, StringComparer.Ordinal);
 

@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using CivicLens.Core.Relationships;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
