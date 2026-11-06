@@ -30,6 +30,8 @@ After the first deploy:
 
 Each item gives its outcome, what it depends on, and where the design lives. Present the design choices before building R-22 only.
 
+The top priority is R-68, the public web redesign, end to end (owner, 2026-11-06). Every reader flow of the UX review must be complete. R-61, R-70, and R-71 come after it, unless one blocks it.
+
 The first deploy is a complete product within the product direction. Its path is R-24. R-25, R-38, R-21, and R-18 come after R-24.
 
 ### Accepted plans
@@ -87,6 +89,14 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [x] Build the first opt-in measure, `actions text measure`, for the bill text prompt (#373)
   - [ ] Agree one opt-in eval command. Later prompt measures extend `actions text measure` or replace it with one command
   - [ ] Measure the other prompts, one PR for each
+- R-70: Bill line from the model, option B (owner choice, 2026-11-05). The issue call also gets the CRS summary and returns one plain line and a supporting quote. Code checks that the quote is in the summary and that the line holds 200 characters or fewer. A failed check gives no line. The label is "AI summary of the Congressional Research Service summary.", with a link "Read the full summary" to Congress.gov. Depends on: R-67 for the measure. [Publication](architecture/publication.md#limits-and-planned-work)
+  - [ ] Bump the prompt and run a live, budgeted measure on fixed bills
+  - [ ] Delete the code first-sentence rule of `BillLine` in the same PR: its tests, its doc invariant, the old label string, and any rewrite path that served only it
+  - [ ] Redraft every bill. Lines leave at deploy and return bill by bill during the redraft
+- R-71: Plain language in AI text and page text. Page text reads at grade 12 or below, and keeps the exact terms of the source with a plain explanation (owner choice, 2026-11-06). `ReadingGrade` is the one owner of the limit. Depends on: none. [Analysis](architecture/analysis.md#limits-and-planned-work)
+  - [x] Grade the bill text summary at 12 or below (#387)
+  - [ ] Give the vote and action prompts the plain vote words table as input, the specifics rule (who, what changes, key amounts and dates), and the grade limit, with a measure
+  - [ ] Add one test that grades every fixed page string at 12 or below, unless the glossary explains the term
 
 **Coverage**
 
