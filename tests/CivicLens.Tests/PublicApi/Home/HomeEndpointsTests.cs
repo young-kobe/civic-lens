@@ -44,9 +44,9 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
 
     private static bool HasCounts(SeededVote vote) => vote.Casts.Any(cast => cast is "Yea" or "Aye" or "Nay" or "No");
 
-    /// <summary>The entry as the publisher writes it. <c>PublishedVote</c> gives an alignment only to a substantive vote with counts, and <paramref name="bothPartyMajorities"/> says
-    /// whether the vote also has both party majorities. Another vote has none, so the entry carries no counts and no alignment.</summary>
-    private static PublishedRecordEntry EntryOf(SeededVote vote, bool bothPartyMajorities = true) => new()
+    /// <summary>The entry as the publisher writes it. <c>PublishedVote</c> gives an alignment only to a substantive vote with counts, and <paramref name="bothParties"/> says
+    /// whether the vote also has a Democrat row and a Republican row. A party with no majority still gets the mixed alignment. Another vote has none, so the entry carries no counts and no alignment.</summary>
+    private static PublishedRecordEntry EntryOf(SeededVote vote, bool bothParties = true) => new()
     {
         Kind = PublishedRecordKind.Vote,
         RecordId = vote.RecordId,
@@ -59,7 +59,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         EventDate = DateOnly.Parse(vote.VotedOn, System.Globalization.CultureInfo.InvariantCulture),
         YeaCount = HasCounts(vote) ? vote.Casts.Count(cast => cast is "Yea" or "Aye") : null,
         NayCount = HasCounts(vote) ? vote.Casts.Count(cast => cast is "Nay" or "No") : null,
-        Alignment = Enum.Parse<PublishedVoteKind>(vote.Kind).IsSubstantive() && HasCounts(vote) && bothPartyMajorities ? PublishedVoteAlignment.PartiesAgree : null,
+        Alignment = Enum.Parse<PublishedVoteKind>(vote.Kind).IsSubstantive() && HasCounts(vote) && bothParties ? PublishedVoteAlignment.PartiesAgree : null,
         Chamber = Enum.Parse<PublishedChamber>(vote.Chamber),
         VoteKind = Enum.Parse<PublishedVoteKind>(vote.Kind)
     };
@@ -101,14 +101,14 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         var votes = new[]
         {
             House('1', "2026-05-03", 3), House('2', "2026-05-05", 4), Senate('3', "2026-05-04", 5), Senate('4', "2026-05-06", 6),
-            // Substantive with counts, but no party majority, so the entry has no alignment.
+            // Substantive with counts, but no Democrat row and no Republican row, so the entry has no alignment.
             House('a', "2026-06-01", 8)
         };
         await using var host = await StartAsync(votes);
 
         var answer = await GetAsync(host);
 
-        var entries = votes.Select(vote => EntryOf(vote, bothPartyMajorities: vote.Id != 'a'));
+        var entries = votes.Select(vote => EntryOf(vote, bothParties: vote.Id != 'a'));
         Assert.Equal([votes[3].RecordId, votes[1].RecordId, votes[2].RecordId, votes[0].RecordId], StaticVotePick(entries));
         Assert.Equal([votes[4].RecordId, votes[3].RecordId, votes[1].RecordId, votes[2].RecordId], Ids(answer));
         // Two House votes of one day: the static pick orders them by record ID, the route by later roll call.

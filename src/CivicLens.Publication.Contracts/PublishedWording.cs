@@ -1,6 +1,6 @@
 namespace CivicLens.Publication.Contracts;
 
-/// <summary>The one owner of public wording that the Host pages and the public API both show. A page or a view never keeps its own copy.</summary>
+/// <summary>The one owner of public wording that the Host pages and the public API both show. A page never keeps its own copy. A view repeats it only under a comparison test.</summary>
 public static class PublishedWording
 {
     /// <summary>The label of a weekly brief that a model drafted. A person checked the brief before it was published.</summary>
