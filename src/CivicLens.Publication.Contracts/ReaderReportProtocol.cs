@@ -7,6 +7,7 @@ public static class ReaderReportProtocol
     public const string PullPath = "/internal/v1/reports";
     public const string RecordIdField = "recordId";
     public const string RevisionField = "revision";
+    public const string TitleParameter = "title";
     public const string CategoryField = "category";
     public const string TextField = "text";
     public const string TurnstileField = "cf-turnstile-response";
@@ -18,6 +19,8 @@ public static class ReaderReportProtocol
     public const string MissingContextCategory = "missing-context";
     public const string BrokenSourceLinkCategory = "broken-source-link";
     public const string OtherCategory = "other";
+    /// <summary>The most UTF-16 characters of a record title in the report link. A headline holds up to 256, and most are under 100.</summary>
+    public const int MaximumTitleCharacters = 120;
     public const int MaximumTextCharacters = 2000;
     public const int MaximumRequestBytes = 32 * 1024;
     public const int DefaultBatchSize = 100;
