@@ -2732,21 +2732,18 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task OnlyTheHomePageHasASearchBoxSoOtherPagesStayFocusedOnTheirOwnContent()
+    public async Task EveryPageTypeHasTheHeaderSearchSoAReaderCanSearchFromAnyPage()
     {
-        var renderer = new ReleaseRenderer(null, null);
-        var release = ReleaseWithFilters();
-        var home = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(release, null, SearchFacets(), NoHighlights(release), CancellationToken.None));
-        var allRecordsHtml = await renderer.RenderAllRecordsAsync(release, 1, ReleaseBillLines.None, CancellationToken.None);
-        var allRecords = new HtmlParser().ParseDocument(allRecordsHtml);
+        foreach (var (name, pagePath, html, _) in await RenderEveryPageTypeAsync())
+        {
+            var form = new HtmlParser().ParseDocument(html).QuerySelector("header form[role='search']")!;
 
-        var form = home.QuerySelector("header form[role='search']")!;
-        Assert.Equal("search.html", form.GetAttribute("action"));
-        Assert.Equal("q", form.QuerySelector("input[type='search']")!.GetAttribute("name"));
-        Assert.Equal("Search bills, votes, people", form.QuerySelector("input")!.GetAttribute("placeholder"));
-        Assert.Equal("Search records", form.QuerySelector("label[for='site-search']")!.TextContent);
-        Assert.Null(allRecords.QuerySelector("header form[role='search']"));
-        Assert.DoesNotContain("data-release-search", allRecordsHtml, StringComparison.Ordinal);
+            Assert.NotNull(form);
+            Assert.Equal("search.html", ReleasePath(pagePath, form.GetAttribute("action")!));
+            Assert.Equal("q", form.QuerySelector("input[type='search']")!.GetAttribute("name"));
+            Assert.Equal("Search bills, votes, people", form.QuerySelector("input")!.GetAttribute("placeholder"));
+            Assert.Equal("Search records", form.QuerySelector("label[for='site-search']")!.TextContent);
+        }
     }
 
     [Fact]

@@ -318,6 +318,28 @@ public sealed class PublishedHomePageTests
     }
 
     [Fact]
+    public async Task TheZipFormHoldsAnAlertRegionNextToTheFieldSoAnErrorIsAnnounced()
+    {
+        var document = new HtmlParser().ParseDocument(await HomeHtmlAsync("https://api.example.test"));
+
+        var alert = document.QuerySelector("form[data-zip-api] [data-zip-error]")!;
+        Assert.Equal("alert", alert.GetAttribute("role"));
+        Assert.Equal("", alert.TextContent);
+    }
+
+    [Fact]
+    public void TheZipLookupShowsABusyStateThenBringsTheAnswerIntoViewAndMovesFocusToItsHeading()
+    {
+        var script = System.Text.Encoding.UTF8.GetString(new ReleaseRenderer(null, null).Assets.Single(asset => asset.RelativePath == "assets/js/public.js").Content);
+
+        Assert.Contains("submit.disabled = true;", script, StringComparison.Ordinal);
+        Assert.Contains("body.setAttribute(\"aria-busy\", \"true\");", script, StringComparison.Ordinal);
+        Assert.Contains("panel.scrollIntoView({ block: \"start\", behavior: reducedMotion.matches ? \"auto\" : \"smooth\" });", script, StringComparison.Ordinal);
+        Assert.Contains("heading.tabIndex = -1;", script, StringComparison.Ordinal);
+        Assert.Contains("heading.focus({ preventScroll: true });", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task WithoutAServiceAddressTheHomePageHasNoZipFormNoResultPanelAndNoNotice()
     {
         var html = await HomeHtmlAsync(null);

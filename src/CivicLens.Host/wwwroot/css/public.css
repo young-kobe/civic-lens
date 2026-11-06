@@ -52,6 +52,8 @@ table[data-paged]:focus { outline: none; }
 .zip-form .field { flex: 1 1 10rem; max-width: 16rem; }
 .zip-form .field input:not([type="checkbox"]):not([type="radio"]) { height: 56px; padding: 0 var(--s4); border-radius: var(--r-panel); background: var(--bar-ink); color: var(--bar); font-size: var(--t-lg); }
 .zip-form .btn { min-height: 56px; padding: 0 var(--s5); border-radius: var(--r-panel); background: var(--marigold); color: var(--bar); font-size: var(--t-base); font-weight: 700; }
+.zip-error { flex-basis: 100%; font-size: var(--t-base); }
+.zip-error:empty { display: none; }
 .zip-form .btn, .zip-form .btn:hover { box-shadow: none; }
 .zip-form .btn:hover { filter: brightness(1.08); }
 .home-hero .notice { --warn-bg: var(--bar-field); --warn: var(--bar-ink); margin-bottom: var(--s4); }
