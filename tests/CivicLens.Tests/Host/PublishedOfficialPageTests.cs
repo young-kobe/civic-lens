@@ -918,7 +918,7 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal(["Executive order, 7 Jan 2026", "Proclamation, 6 Jan 2026", "Executive order, 5 Jan 2026", "Proclamation, 4 Jan 2026", "Executive order, 3 Jan 2026"],
             section.QuerySelectorAll("tbody .record-kind").Select(line => line.TextContent.Trim()));
         var seeAll = section.QuerySelector(".see-all a")!;
-        Assert.Equal(("See all 7 executive actions signed by Mayor Example in this release", "../officials/mayor/record.html?tab=kind-executiveAction"), (seeAll.TextContent, seeAll.GetAttribute("href")));
+        Assert.Equal(("See all 7 executive actions", "../officials/mayor/record.html"), (seeAll.TextContent, seeAll.GetAttribute("href")));
         Assert.Contains(document.QuerySelectorAll("nav.jump-links a"), link => link.GetAttribute("href") == "#executive-actions");
     }
 
@@ -942,6 +942,21 @@ public sealed class PublishedOfficialPageTests
         Assert.Null(plain.QuerySelector("#executive-actions"));
         var tabs = record.QuerySelectorAll("[data-record-filters] [data-filter-value]").Select(tab => tab.GetAttribute("data-filter-value"));
         Assert.Contains(wanted, tabs);
+    }
+
+    [Fact]
+    public async Task ASeeAllLinkLeavesOutTheTabWhenTheRecordPageHasNoTabForItBecauseTheListHoldsOneKind()
+    {
+        var presidentOnly = PageWithExecutiveActions(2);
+        var billsOnly = Current([Entry('1', PublishedRecordKind.Action, new DateOnly(2026, 3, 1))], []);
+
+        foreach (var (page, section) in new[] { (presidentOnly, "executive-actions"), (billsOnly, "bills") })
+        {
+            var href = (await OfficialDocumentAsync(page)).QuerySelector($"#{section} .see-all a")!.GetAttribute("href");
+            var tabs = (await RecordDocumentAsync(page)).QuerySelectorAll("[data-record-filters] [data-filter-value]");
+            Assert.Equal("../officials/mayor/record.html", href);
+            Assert.Empty(tabs);
+        }
     }
 
     [Fact]
