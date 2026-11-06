@@ -13,7 +13,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
         v.record_id, v.revision_number, v.chamber, v.congress, v.session_number, v.roll_call_number, v.voted_on, v.kind, v.bill_type, v.bill_number,
         v.headline, v.summary, v.text_origin, v.label, v.question, v.result, v.yea, v.nay, v.present, v.not_voting
         """;
-    private const string Order = "v.voted_on DESC, v.chamber, v.session_number DESC, v.roll_call_number DESC, v.record_id";
+    internal const string Order = "v.voted_on DESC, v.chamber, v.session_number DESC, v.roll_call_number DESC, v.record_id";
     // The tuple comparison cannot mix directions, so the chain follows the ORDER BY key by key.
     private const string AfterCursor = """
          AND (v.voted_on < @cursor_date
