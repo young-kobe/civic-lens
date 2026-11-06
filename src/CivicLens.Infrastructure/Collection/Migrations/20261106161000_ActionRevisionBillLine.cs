@@ -71,7 +71,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             migrationBuilder.AddCheckConstraint(name: "ck_action_revisions_bill_line_citation", table: "action_revisions",
                 sql: "(bill_line_citation_extraction_id IS NULL) = (bill_line_citation_start IS NULL) AND (bill_line_citation_extraction_id IS NULL) = (bill_line_citation_length IS NULL) AND bill_line_citation_start >= 0 AND bill_line_citation_length > 0");
             migrationBuilder.AddCheckConstraint(name: "ck_action_revisions_bill_line", table: "action_revisions",
-                sql: "(bill_line IS NULL) = (bill_line_citation_extraction_id IS NULL) AND (bill_line IS NULL OR (summary_citation_extraction_id IS NOT NULL AND bill_line_citation_extraction_id = summary_citation_extraction_id AND bill_line_citation_start >= summary_citation_start AND bill_line_citation_length <= summary_citation_length AND bill_line_citation_start - summary_citation_start <= summary_citation_length - bill_line_citation_length AND length(btrim(bill_line)) >= 1 AND length(bill_line) <= 200)");
+                sql: "(bill_line IS NULL) = (bill_line_citation_extraction_id IS NULL) AND (bill_line IS NULL OR (summary_citation_extraction_id IS NOT NULL AND bill_line_citation_extraction_id = summary_citation_extraction_id AND bill_line_citation_start >= summary_citation_start AND bill_line_citation_length <= summary_citation_length AND bill_line_citation_start - summary_citation_start <= summary_citation_length - bill_line_citation_length AND length(btrim(bill_line)) >= 1 AND length(bill_line) <= 200))");
 
             migrationBuilder.Sql(UpViewSql);
         }
