@@ -19,11 +19,13 @@ jobs:
       - run: dotnet restore --locked-mode
       - run: dotnet build --no-restore --configuration Release
       - name: Record the compiled source tree
-        run: git rev-parse HEAD^{tree} > tests/CivicLens.Tests/bin/Release/net10.0/build-source-tree.txt
+        run: |
+          git rev-parse HEAD > tests/CivicLens.Tests/bin/Release/net10.0/build-source-commit.txt
+          git rev-parse HEAD^{tree} > tests/CivicLens.Tests/bin/Release/net10.0/build-source-tree.txt
       - name: Share compiled tests for focused local verification
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: focused-tests-${{ github.event.pull_request.head.sha || github.sha }}
+          name: focused-tests-${{ github.sha }}
           path: tests/CivicLens.Tests/bin/Release/net10.0/
           retention-days: 1
           if-no-files-found: error
