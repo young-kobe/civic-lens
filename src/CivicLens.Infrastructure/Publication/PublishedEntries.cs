@@ -43,10 +43,8 @@ internal static class PublishedEntries
         """;
 
     private const string ReadDaysWithoutCongress = """
-        SELECT e.kind AS "Kind", e.record_id AS "RecordId", e.revision_number AS "RevisionNumber", e.event_date AS "EventDate",
-            p.first_published_at_utc_ticks AS "FirstPublishedAtUtcTicks"
+        SELECT e.kind AS "Kind", e.record_id AS "RecordId", e.revision_number AS "RevisionNumber", e.event_date AS "EventDate"
         FROM published_entries e
-        JOIN published_records p ON p.kind = e.kind AND p.record_id = e.record_id
         WHERE e.congress IS NULL AND (e.kind, e.record_id, e.revision_number) > ({0}, {1}, {2})
         ORDER BY e.kind, e.record_id, e.revision_number
         LIMIT {3}
@@ -125,8 +123,10 @@ internal static class PublishedEntries
     {
         var rows = await db.Database.SqlQueryRaw<EntryDayRow>(ReadDaysWithoutCongress, after?.Kind ?? "", after?.RecordId ?? "", after?.RevisionNumber ?? 0, limit)
             .ToArrayAsync(cancellationToken);
+        var firstPublished = await PublishedRecords.ReadAsync(db, [.. rows.Select(row => new PublishedRecordReference(KindOf(row.Kind), row.RecordId)).Distinct()],
+            cancellationToken);
         return [.. rows.Select(row => new PublishedEntryDay(row.Kind, row.RecordId, row.RevisionNumber, row.EventDate,
-            new DateTimeOffset(row.FirstPublishedAtUtcTicks, TimeSpan.Zero)))];
+            firstPublished[new(KindOf(row.Kind), row.RecordId)]))];
     }
 
     public static Task<int> FillCongressesAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedEntryDay> entries, CancellationToken cancellationToken)
@@ -295,7 +295,6 @@ internal static class PublishedEntries
         public string RecordId { get; set; } = "";
         public int RevisionNumber { get; set; }
         public DateOnly? EventDate { get; set; }
-        public long FirstPublishedAtUtcTicks { get; set; }
     }
 
     private sealed class EntryKeyRow
