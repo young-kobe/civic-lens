@@ -118,8 +118,7 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [ ] Move release entries to a table: one immutable row for each record revision, with a foreign key to that revision. `publication_record_states` gives the release membership. The code of `releases entries backfill <limit>` and `releases entries verify` is done. Open: the production runs, the foreign key from `publication_record_states`, and the move of the publish path off the manifest.
   - [ ] Write `release.json` from the tables, and stop reading the previous manifest in a publish
 - R-27: Officials, sources, and discovery in tables. People data lives in tables, not in the configuration file. Sources and coverage move to tables too, and the owner commands and the worker write them. Check cadence then follows measured change rates, and discovery finds official sources. Plans: the git branches `survey-officials-in-tables` and `survey-source-discovery`. Depends on: none stated. [Roster](architecture/roster.md#officials-in-tables), [Configuration](architecture/configuration.md#limits-and-planned-work)
-  - [ ] Officials in tables, PR 1: the people tables and the one-time import
-  - [ ] Officials in tables, PRs 2 to 8: owner settings, minting members, bindings, pinned readers, live readers, coverage from `officeOf`, justices and gaps
+  - [ ] Officials in tables, PRs 3 to 8: minting members, bindings, pinned readers, live readers, coverage from `officeOf`, justices and gaps
   - [ ] Sources and coverage in tables
   - [ ] Check cadence from measured change rates
   - [ ] Discovery of official sources

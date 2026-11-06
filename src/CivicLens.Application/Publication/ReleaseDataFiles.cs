@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CivicLens.Application.People;
 using CivicLens.Application.Roster;
 using CivicLens.Application.Votes;
 using CivicLens.Publication.Contracts;
@@ -13,7 +14,7 @@ internal sealed class ReleaseDataFiles(IReleaseDirectory releases, VoteRecordLoa
 {
     public async Task<PublishedOfficials> WriteAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets,
         IReadOnlyList<PendingRecord> additions, PreviousRelease previous, IReadOnlyList<RosterMember> roster,
-        IReadOnlyList<OfficialPhoto> photoRows, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, PersonSetting> settings, IReadOnlyList<OfficialPhoto> photoRows, CancellationToken cancellationToken)
     {
         var members = await votes.MembersAsync(manifest.Records, cancellationToken);
         var entryNames = manifest.Records.SelectMany(entry => entry.Officials).DistinctBy(official => official.Id)
@@ -21,7 +22,7 @@ internal sealed class ReleaseDataFiles(IReleaseDirectory releases, VoteRecordLoa
         var ids = entryNames.Keys.Concat(members.Select(member => member.PersonId)).ToHashSet(StringComparer.Ordinal);
         var recordNames = await RecordNamesAsync(manifest, ids, entryNames, members, additions, previous, cancellationToken);
         var photoFiles = await photos.LoadAsync([.. photoRows.Where(row => ids.Contains(row.PersonId))], previous, cancellationToken);
-        var published = await officials.ResolveAsync(ids, recordNames, roster, photoFiles.Profiles, cancellationToken);
+        var published = await officials.ResolveAsync(ids, recordNames, roster, settings, photoFiles.Profiles, cancellationToken);
         var officialsJson = JsonSerializer.SerializeToUtf8Bytes(published, PublicationProtocol.JsonOptions);
         if (officialsJson.Length > PublishedOfficials.MaximumBytes)
             throw new ArgumentException("The officials file would exceed its size limit.", nameof(manifest));

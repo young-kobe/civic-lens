@@ -11,6 +11,7 @@ using CivicLens.Infrastructure.Publication;
 using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Briefs;
 using CivicLens.Infrastructure.Actions;
+using CivicLens.Infrastructure.People;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Roster;
 using CivicLens.Infrastructure.Statements;
@@ -51,7 +52,8 @@ internal static class PublicationComposition
         var publish = new PublishRelease(publications, releases, ReleaseRenderer.FromEnvironment(), loaders,
             new PublicationCatalog(ReviewOfficials.From(collection).Names, issues, icons),
             new PublicationOfficials(collection, PostgresMemberRosterStore.FromConnectionString(connectionString),
-                PostgresExecutiveRosterStore.FromConnectionString(connectionString)),
+                PostgresExecutiveRosterStore.FromConnectionString(connectionString),
+                PostgresPersonRegistryStore.FromConnectionString(connectionString)),
             new ReleasePhotos(PostgresCollectionAttemptStore.FromConnectionString(connectionString), new CaptureBodyReader(), artifactRoot,
                 loggers.CreateLogger<ReleasePhotos>()),
             TimeProvider.System, new PruneReleases(publications, releases, loggers.CreateLogger<PruneReleases>()));
