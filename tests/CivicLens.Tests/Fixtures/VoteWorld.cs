@@ -24,6 +24,8 @@ internal sealed class VoteWorld
     public const string Amodei = "A000369";
     public const string SourceId = HouseVoteFixtures.SourceId;
     public const string BillTitle = "A concurrent resolution on rent";
+    public const string SummaryVersion = "00";
+    private static readonly string SummariesVersion = CongressBillSummariesParser.ExtractionVersion(new ActionBillWorld.FragmentExtractor());
     private static readonly DateTimeOffset BillUpdatedAt = new(2025, 3, 3, 12, 0, 0, TimeSpan.Zero);
     private static readonly CollectionConfigurationRevision BillRevision =
         CollectionConfigurationRevision.Create(ActionBillWorld.Configuration());
@@ -43,6 +45,8 @@ internal sealed class VoteWorld
     private readonly Dictionary<string, CollectionJobRecord> jobs = [];
     private readonly Dictionary<string, string> texts = [];
     private bool hasSubjects;
+    private bool hasSummaries;
+    private bool hasOlderSummary;
 
     private VoteWorld(CollectionConfigurationRevision revision) => Revision = revision;
 
@@ -61,7 +65,7 @@ internal sealed class VoteWorld
 
     public static VoteWorld Create(MemberSpec[]? members = null, string result = "Passed", string? question = null,
         string legislation = HouseVoteFixtures.Legislation, DateOnly? backfillFrom = null, string? totals = null,
-        string billTitle = BillTitle, string? policyArea = BillGateFixtures.TrackedPolicyArea, bool withStartDate = true, string[]? subjects = null)
+        string billTitle = BillTitle, string? policyArea = BillGateFixtures.TrackedPolicyArea, bool withStartDate = true, string[]? subjects = null, string? summaryHtml = null, string? olderSummaryHtml = null)
     {
         var configuration = Configuration();
         if (backfillFrom is { } from)
@@ -94,19 +98,38 @@ internal sealed class VoteWorld
                 ActionBillWorld.Backfill);
             world.hasSubjects = true;
         }
+        if (olderSummaryHtml is not null)
+        {
+            var olderBody = ActionBillWorld.SummaryBody(new("00", "2024-12-01", "2024-12-02T10:00:00Z", olderSummaryHtml), null);
+            var olderUrl = BillPageUrl.FirstPage(ActionBillWorld.SourceUrl, ApiResource.BillSummaries, new(119, "hconres", 14, default));
+            world.Add("summaries-old", ApiResource.BillSummaries, olderUrl, olderBody,
+                ActionBillWorld.RenderedText(ApiResource.BillSummaries, olderUrl, olderBody), BillRevision, ActionBillWorld.SourceId,
+                ActionBillWorld.Backfill);
+            world.hasOlderSummary = true;
+        }
+        if (summaryHtml is not null)
+        {
+            var summaryBody = ActionBillWorld.SummaryBody(new(SummaryVersion, "2025-01-03", "2025-01-04T10:00:00Z", summaryHtml), null);
+            var summaryUrl = BillPageUrl.FirstPage(ActionBillWorld.SourceUrl, ApiResource.BillSummaries, new(119, "hconres", 14, default));
+            world.Add("summaries", ApiResource.BillSummaries, summaryUrl, summaryBody,
+                ActionBillWorld.RenderedText(ApiResource.BillSummaries, summaryUrl, summaryBody), BillRevision, ActionBillWorld.SourceId,
+                ActionBillWorld.Backfill);
+            world.hasSummaries = true;
+        }
         world.Stores = new ActionBillWorld.FixtureStores(world.jobs, world.bodies);
         return world;
     }
 
     public ActionBillWorld.FixtureStores Stores { get; private set; } = null!;
 
-    public VoteReader Reader() => new(Stores, new ApiResponseReader(Stores, Stores), "artifacts");
+    public VoteReader Reader() => new(Stores, new ApiResponseReader(Stores, Stores), new ActionBillWorld.FragmentExtractor(), "artifacts");
 
     public VoteDraftEvidence Evidence(VoteDraftRevision? current = null, DateTimeOffset? updatedAt = null, bool hasNewerCandidate = false,
         bool hasStaleDraft = false) =>
         new(new VoteDraftCandidate(CandidateId, RecordId, SourceId, Chamber.House, 119, 1, 100, "hconres", 14, updatedAt ?? UpdatedAt, null), Revision,
             Page("detail", HouseVoteParser.ExtractionVersion), Page("members", HouseVoteMembersParser.ExtractionVersion), BillPage(),
-            hasSubjects ? [Page("subjects", CongressBillSubjectsParser.ExtractionVersion)] : [], current, hasNewerCandidate, hasStaleDraft, IsRejected: false);
+            hasSubjects ? [Page("subjects", CongressBillSubjectsParser.ExtractionVersion)] : [],
+            SummaryPages(), current, hasNewerCandidate, hasStaleDraft, IsRejected: false);
 
     public static string ExtractionIdOf(string jobId) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(jobId)));
 
@@ -121,6 +144,14 @@ internal sealed class VoteWorld
     public void TamperWithSavedText(string jobId, string text) => texts[jobId] = text;
 
     public void ReplaceCapturedBody(string jobId, string body) => bodies["attempt-" + jobId] = body;
+
+    private List<VoteDraftPage> SummaryPages()
+    {
+        var pages = new List<VoteDraftPage>();
+        if (hasOlderSummary) pages.Add(Page("summaries-old", SummariesVersion));
+        if (hasSummaries) pages.Add(Page("summaries", SummariesVersion));
+        return pages;
+    }
 
     private VoteDraftPage BillPage() =>
         new("bill", ExtractionIdOf("bill"), versionOverrides.GetValueOrDefault("bill") ?? CongressBillParser.ExtractionVersion,

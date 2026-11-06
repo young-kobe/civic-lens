@@ -23,7 +23,7 @@ public sealed class ActionTextMeasureTests
 
         var bill = Assert.Single(report.Bills);
         var text = Of();
-        Assert.Equal(("119-hr-1", ActionTextMeasureOutcome.Accepted, null, text.CharsRead, text.CharsTotal, 1),
+        Assert.Equal(("119-hr-1", AnalysisMeasureOutcome.Accepted, null, text.CharsRead, text.CharsTotal, 1),
             (bill.BillId, bill.Outcome, bill.Reason, bill.CharsRead, bill.CharsTotal, bill.Calls));
         Assert.Equal((900, 100), (bill.Usage.InputTokens, bill.Usage.OutputTokens));
         Assert.Equal([(ActionTextPart.Summary, FirstPlain, FirstQuote), (ActionTextPart.Summary, SecondPlain, SecondQuote),
@@ -103,7 +103,7 @@ public sealed class ActionTextMeasureTests
         var (report, _, _) = await MeasureAsync(Cap, new FakeHeadlineSummaryModel().Draft(invented).Draft(invented));
 
         var bill = Assert.Single(report.Bills);
-        Assert.Equal((ActionTextMeasureOutcome.Rejected, false, 0), (bill.Outcome, bill.LosesFigures, report.Totals.BillsLosingFigures));
+        Assert.Equal((AnalysisMeasureOutcome.Rejected, false, 0), (bill.Outcome, bill.LosesFigures, report.Totals.BillsLosingFigures));
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public sealed class ActionTextMeasureTests
         var (report, _, model) = await MeasureAsync(Cap, new FakeHeadlineSummaryModel(), withText: false);
 
         var bill = Assert.Single(report.Bills);
-        Assert.Equal((ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.NoBillText, 0), (bill.Outcome, bill.Reason, bill.Calls));
+        Assert.Equal((AnalysisMeasureOutcome.Skipped, ActionTextMeasureReason.NoBillText, 0), (bill.Outcome, bill.Reason, bill.Calls));
         Assert.Empty(model.Requests);
     }
 
@@ -121,7 +121,7 @@ public sealed class ActionTextMeasureTests
     {
         var (report, _, model) = await MeasureAsync(Cap, new FakeHeadlineSummaryModel().Draft(Output()), bills: [OtherBill, Bill]);
 
-        Assert.Equal([(ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.NoCandidate), (ActionTextMeasureOutcome.Accepted, null)],
+        Assert.Equal([(AnalysisMeasureOutcome.Skipped, ActionTextMeasureReason.NoCandidate), (AnalysisMeasureOutcome.Accepted, null)],
             report.Bills.Select(bill => (bill.Outcome, bill.Reason)));
         Assert.Single(model.Requests);
     }
@@ -131,7 +131,7 @@ public sealed class ActionTextMeasureTests
     {
         var (report, _, model) = await MeasureAsync(1, new FakeHeadlineSummaryModel().Draft(Output()), bills: [Bill, OtherBill]);
 
-        Assert.Equal([ActionTextMeasureOutcome.StoppedByCap, ActionTextMeasureOutcome.StoppedByCap], report.Bills.Select(bill => bill.Outcome));
+        Assert.Equal([AnalysisMeasureOutcome.StoppedByCap, AnalysisMeasureOutcome.StoppedByCap], report.Bills.Select(bill => bill.Outcome));
         Assert.All(report.Bills, bill => Assert.Equal((ActionTextMeasureReason.SpendCap, 0), (bill.Reason, bill.Calls)));
         Assert.Empty(model.Requests);
     }
@@ -145,7 +145,7 @@ public sealed class ActionTextMeasureTests
         var (report, _, model) = await MeasureAsync(cap, new FakeHeadlineSummaryModel().Draft(Output()).Draft(Output()),
             bills: [Bill, Bill]);
 
-        Assert.Equal([ActionTextMeasureOutcome.Accepted, ActionTextMeasureOutcome.StoppedByCap], report.Bills.Select(bill => bill.Outcome));
+        Assert.Equal([AnalysisMeasureOutcome.Accepted, AnalysisMeasureOutcome.StoppedByCap], report.Bills.Select(bill => bill.Outcome));
         Assert.Single(model.Requests);
         Assert.True(report.Totals.Usage.Total <= cap);
     }
@@ -158,7 +158,7 @@ public sealed class ActionTextMeasureTests
         var (report, _, model) = await MeasureAsync(Cap, new FakeHeadlineSummaryModel().Draft(invented).Draft(invented));
 
         var bill = Assert.Single(report.Bills);
-        Assert.Equal((ActionTextMeasureOutcome.Rejected, 2), (bill.Outcome, bill.Calls));
+        Assert.Equal((AnalysisMeasureOutcome.Rejected, 2), (bill.Outcome, bill.Calls));
         Assert.Equal(2, model.Requests.Count);
         Assert.Equal(2, bill.Rejections.Length);
         Assert.Contains(bill.Rejections, reason => reason.Contains("quote", StringComparison.OrdinalIgnoreCase));
@@ -176,7 +176,7 @@ public sealed class ActionTextMeasureTests
 
         var (report, _, _) = await MeasureAsync(reservation + 1, model, bills: [Bill, Bill]);
 
-        Assert.Equal([ActionTextMeasureOutcome.Failed, ActionTextMeasureOutcome.StoppedByCap], report.Bills.Select(bill => bill.Outcome));
+        Assert.Equal([AnalysisMeasureOutcome.Failed, AnalysisMeasureOutcome.StoppedByCap], report.Bills.Select(bill => bill.Outcome));
         Assert.Equal((1, reservation, AnalysisErrorCodes.ForOutcome(AnalysisRunOutcome.ConnectionFailed)),
             (report.Bills[0].Calls, report.Bills[0].ChargedTokens, report.Bills[0].Reason));
         Assert.Equal(reservation, report.Totals.ChargedTokens);
@@ -190,7 +190,7 @@ public sealed class ActionTextMeasureTests
         var (report, _, _) = await MeasureAsync(Cap, model);
 
         var bill = Assert.Single(report.Bills);
-        Assert.Equal((ActionTextMeasureOutcome.Failed, 340L, 340L), (bill.Outcome, bill.ChargedTokens, bill.Usage.Total));
+        Assert.Equal((AnalysisMeasureOutcome.Failed, 340L, 340L), (bill.Outcome, bill.ChargedTokens, bill.Usage.Total));
     }
 
     [Fact]
@@ -202,7 +202,7 @@ public sealed class ActionTextMeasureTests
         var (report, _, _) = await MeasureAsync(Cap, model);
 
         var bill = Assert.Single(report.Bills);
-        Assert.Equal((ActionTextMeasureOutcome.Failed, 1), (bill.Outcome, bill.Calls));
+        Assert.Equal((AnalysisMeasureOutcome.Failed, 1), (bill.Outcome, bill.Calls));
         Assert.Equal(AnalysisErrorCodes.ForOutcome(AnalysisRunOutcome.OutputLimitReached), bill.Reason);
     }
 
@@ -214,7 +214,7 @@ public sealed class ActionTextMeasureTests
 
         var (report, _, _) = await MeasureAsync(reservation + 339, model, bills: [Bill, Bill]);
 
-        Assert.Equal([ActionTextMeasureOutcome.Failed, ActionTextMeasureOutcome.StoppedByCap], report.Bills.Select(bill => bill.Outcome));
+        Assert.Equal([AnalysisMeasureOutcome.Failed, AnalysisMeasureOutcome.StoppedByCap], report.Bills.Select(bill => bill.Outcome));
         Assert.Equal(340L, report.Totals.ChargedTokens);
     }
 
@@ -225,7 +225,7 @@ public sealed class ActionTextMeasureTests
 
         var (report, _, _) = await MeasureAsync(Cap, model, bills: [Bill, Bill]);
 
-        Assert.Equal([ActionTextMeasureOutcome.Failed, ActionTextMeasureOutcome.Accepted], report.Bills.Select(bill => bill.Outcome));
+        Assert.Equal([AnalysisMeasureOutcome.Failed, AnalysisMeasureOutcome.Accepted], report.Bills.Select(bill => bill.Outcome));
         Assert.Equal(0, report.Bills[0].ChargedTokens);
     }
 
@@ -239,7 +239,7 @@ public sealed class ActionTextMeasureTests
 
         var (report, _, fake) = await MeasureAsync(Cap, model, bills: [Bill, Bill]);
 
-        Assert.Equal([ActionTextMeasureOutcome.StoppedByModel, ActionTextMeasureOutcome.StoppedByModel], report.Bills.Select(bill => bill.Outcome));
+        Assert.Equal([AnalysisMeasureOutcome.StoppedByModel, AnalysisMeasureOutcome.StoppedByModel], report.Bills.Select(bill => bill.Outcome));
         Assert.Equal(ActionTextMeasureReason.ModelFailure, report.Bills[1].Reason);
         Assert.Single(fake.Requests);
     }
@@ -252,7 +252,7 @@ public sealed class ActionTextMeasureTests
         var thrown = await Assert.ThrowsAsync<ActionTextMeasureCanceledException>(() => MeasureAsync(Cap, model, bills: [Bill, Bill]));
 
         var bill = Assert.Single(thrown.Report.Bills);
-        Assert.Equal(ActionTextMeasureOutcome.Accepted, bill.Outcome);
+        Assert.Equal(AnalysisMeasureOutcome.Accepted, bill.Outcome);
     }
 
     [Fact]
@@ -265,7 +265,7 @@ public sealed class ActionTextMeasureTests
         var report = await RunAsync(world, evidence, Cap, model, [Bill]);
 
         var bill = Assert.Single(report.Bills);
-        Assert.Equal((ActionTextMeasureOutcome.Skipped, ActionDraftErrorCodes.SupersededByNewerCandidate), (bill.Outcome, bill.Reason));
+        Assert.Equal((AnalysisMeasureOutcome.Skipped, ActionDraftErrorCodes.SupersededByNewerCandidate), (bill.Outcome, bill.Reason));
         Assert.Empty(model.Requests);
     }
 
@@ -279,7 +279,7 @@ public sealed class ActionTextMeasureTests
         var report = await RunAsync(world, evidence, Cap, model, [Bill]);
 
         var bill = Assert.Single(report.Bills);
-        Assert.Equal((ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.NotTextPrompt), (bill.Outcome, bill.Reason));
+        Assert.Equal((AnalysisMeasureOutcome.Skipped, ActionTextMeasureReason.NotTextPrompt), (bill.Outcome, bill.Reason));
         Assert.Empty(model.Requests);
     }
 
@@ -296,7 +296,7 @@ public sealed class ActionTextMeasureTests
 
         var report = await RunAsync(world, evidence, Cap, model, [Bill]);
 
-        Assert.Equal(ActionTextMeasureOutcome.Accepted, Assert.Single(report.Bills).Outcome);
+        Assert.Equal(AnalysisMeasureOutcome.Accepted, Assert.Single(report.Bills).Outcome);
         Assert.Single(model.Requests);
     }
 

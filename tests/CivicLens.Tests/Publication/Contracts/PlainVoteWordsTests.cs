@@ -23,6 +23,17 @@ public sealed class PlainVoteWordsTests
     }
 
     [Fact]
+    public void EveryPlainResultWordComesOnceAndALongerWordComesBeforeAWordItEndsWithSoASearchFindsNotConfirmedBeforeConfirmed()
+    {
+        var words = PlainVoteWords.AllResultWords;
+
+        Assert.Equal(words.Count, words.Distinct().Count());
+        Assert.Equal(words.OrderByDescending(word => word.Length), words);
+        Assert.True(words.ToList().IndexOf("Not confirmed") < words.ToList().IndexOf("Confirmed"));
+        Assert.All(words, word => Assert.Equal(word, PlainVoteWords.ResultWord(word)));
+    }
+
+    [Fact]
     public void EachVoteKindHasOneDistinctPlainNameSoNoNameReadsLikeAnother()
     {
         var kinds = Enum.GetValues<PublishedVoteKind>();

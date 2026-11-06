@@ -43,6 +43,12 @@ internal static class VoteDraftRows
     public static Task<bool> IsRejectedAsync(CollectionAttemptDbContext db, string recordId, CancellationToken cancellationToken) =>
         db.Set<VoteDraftRow>().AsNoTracking().AnyAsync(draft => draft.RecordId == recordId && draft.ReviewStatus == ReviewStatus.Rejected, cancellationToken);
 
+    /// <summary>The candidate of a roll call with the newest update date. A tie goes to the lowest ID, so the answer does not change between calls.</summary>
+    public static Task<string?> NewestCandidateIdAsync(CollectionAttemptDbContext db, VoteMeasureRoll roll, CancellationToken cancellationToken) =>
+        db.Set<VoteCandidateRow>().AsNoTracking().Where(row => row.Chamber == roll.Chamber && row.Congress == roll.Congress &&
+                row.SessionNumber == roll.SessionNumber && row.RollCallNumber == roll.RollCallNumber)
+            .OrderByDescending(row => row.UpdateDateUtcTicks).ThenBy(row => row.CandidateId).Select(row => row.CandidateId).FirstOrDefaultAsync(cancellationToken);
+
     public static Task<bool> HasNewerCandidateAsync(CollectionAttemptDbContext db, string sourceId, Chamber chamber, int congress,
         int sessionNumber, int rollCallNumber, long updateDateUtcTicks, CancellationToken cancellationToken) =>
         NewerCandidates(db, sourceId, chamber, congress, sessionNumber, rollCallNumber, updateDateUtcTicks).AnyAsync(cancellationToken);

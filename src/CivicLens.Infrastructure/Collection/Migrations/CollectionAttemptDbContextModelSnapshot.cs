@@ -8495,6 +8495,31 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
 
+                    b.Property<string>("DecidesLabel")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("decides_label");
+
+                    b.Property<string>("DecidesQuote")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("decides_quote");
+
+                    b.Property<string>("DecidesSourceHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("decides_source_hash");
+
+                    b.Property<string>("DecidesSummary")
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)")
+                        .HasColumnName("decides_summary");
+
+                    b.Property<string>("DecidesTextOrigin")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("decides_text_origin");
+
                     b.Property<string>("Headline")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -8655,6 +8680,14 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_vote_revisions_chamber_source", "(chamber = 'House') = (vote_source = 'CongressGov')");
 
                             t.HasCheckConstraint("ck_vote_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_vote_revisions_decides", "(decides_summary IS NULL) = (decides_quote IS NULL) AND (decides_summary IS NULL) = (decides_text_origin IS NULL) AND (decides_summary IS NULL) = (decides_label IS NULL) AND (decides_summary IS NULL) = (decides_source_hash IS NULL)");
+
+                            t.HasCheckConstraint("ck_vote_revisions_decides_bill", "decides_summary IS NULL OR bill_type IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_vote_revisions_decides_hash", "decides_source_hash ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_vote_revisions_decides_origin", "decides_text_origin = 'Model'");
 
                             t.HasCheckConstraint("ck_vote_revisions_headline", "length(btrim(headline)) BETWEEN 1 AND 256");
 

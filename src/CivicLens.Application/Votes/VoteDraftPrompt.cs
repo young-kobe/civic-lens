@@ -1,8 +1,10 @@
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
+using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Issues;
+using CivicLens.Core.Actions;
 using CivicLens.Core.Votes;
 
 namespace CivicLens.Application.Votes;
@@ -30,6 +32,24 @@ public static class VoteDraftPrompt
         Never write a vote count, a total, or a party split in the headline or the summary. Code shows the exact counts beside your text. Say whether the question passed or failed, and what that means.
         """;
 
+    private static readonly string CommonDecidesInstructions = $"""
+
+
+        The field decides says what this vote decides, for a reader who has never heard of the bill. The user message has a section called decides. It holds the question of the vote in plain words, the result, and the bill line. The bill line is the first sentence of the Congressional Research Service summary of the bill. Say what the question decides in one to three short sentences of at most {VoteDecides.MaximumTextLength} characters. Write at reading grade {ReadingGrade.MaximumGrade:0} or below. Use short sentences and common words.
+        The decides field has a text, a quote, and a confidence. The quote is one exact part of the text in the decides section, with the same words, numbers, punctuation, and spacing. It has at least {ActionDraftRevision.MinimumTextQuoteWords} words, at most {VoteDecides.MaximumQuoteLength} characters, and no line break. It is the evidence for the text. Never change, join, or shorten the words of a quote.
+        Code rejects a quote that is not an exact part of the summary. Code also rejects text that has a number equal to a vote count, a person's name, a word for the result that is not the result in the section, or a reading grade above {ReadingGrade.MaximumGrade:0}. Code also rejects an amount or a year that the text in the section does not hold, so copy each figure from that text. "$50 million" and "$50,000,000" are the same amount. Write no vote count, no party split, and no name of a person. If you write a result word, such as passed or failed, it must be the result in the section.
+        """;
+
+    private static readonly string ContentDecidesInstructions = CommonDecidesInstructions + """
+
+        This question decides what the bill does. The decides section holds the summary. Say what the bill does, who it affects, and each amount that is central to it, from the summary only. Use the result to say whether the question passed or failed, and not what that means for the law. Do not state a judgment, a motive, or a prediction.
+        """;
+
+    private static readonly string ProcedureDecidesInstructions = CommonDecidesInstructions + """
+
+        This question decides a step in the process and not what the bill does. The decides section holds only the bill line. Name the bill by its number and say what the question decides in plain words. Add no detail about what the bill does beyond the bill line. The quote must come from the bill line.
+        """;
+
     public static long MinimumReservation =>
         Math.Max(Encoding.UTF8.GetByteCount(HouseInstructions), Encoding.UTF8.GetByteCount(SenateInstructions)) + VoteDraftTask.MaximumOutputTokens;
 
@@ -40,9 +60,10 @@ public static class VoteDraftPrompt
         ArgumentNullException.ThrowIfNull(issues);
         var issueSchema = issues.AnswerSchema();
         var instructions = snapshot.Chamber == Chamber.Senate ? SenateInstructions : HouseInstructions;
+        if (snapshot.Decides is { } decides) instructions += decides.Mode == VoteDecidesMode.Content ? ContentDecidesInstructions : ProcedureDecidesInstructions;
         var system = issueSchema is null ? instructions : instructions + issues.Instructions("the title of the measure");
         var user = BuildUserPrompt(snapshot, issues, previousErrors);
-        var schema = AnalysisSchema.HeadlineAndSummary(issueSchema);
+        var schema = AnalysisSchema.HeadlineAndSummary(issueSchema, withDecides: snapshot.Decides is not null);
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
         return AnalysisModelRequest.Create(VoteDraftTask.Model, VoteDraftTask.MaximumOutputTokens, system, user, schema, bytes, cacheSystemPrompt: true);
@@ -54,14 +75,24 @@ public static class VoteDraftPrompt
             officials = snapshot.Members.Select(item => new { id = item.PersonId, name = snapshot.OfficialNames[item.PersonId] }),
             issueCandidateIds = issues.CandidateIds,
             issueRevisionId,
+            decidesMode = snapshot.Decides?.Mode.ToString(),
             fingerprint = snapshot.Fingerprint
         }, AnalysisPromptText.CompactJson);
+
+    private static object? DecidesSection(VoteDecidesInput? input) => input is null ? null : new
+    {
+        question = input.Question,
+        result = input.Result,
+        billLine = input.BillLine,
+        summary = input.Mode == VoteDecidesMode.Content ? input.SummaryText : null
+    };
 
     private static string BuildUserPrompt(VoteSnapshot snapshot, BillIssueChoice issues, ImmutableArray<string> previousErrors)
     {
         var document = new
         {
             lines = snapshot.Facts.Select(fact => fact.Text),
+            decides = DecidesSection(snapshot.Decides),
             candidateIssues = issues.PromptSection(),
             subjects = issues.SubjectsSection()
         };

@@ -49,6 +49,11 @@ internal static class VoteRevisionRows
         row.IssueRevisionId = revision.IssueRevisionId;
         row.SubjectsHash = revision.SubjectsHash;
         row.IssueCandidatesRecorded = !revision.IssueCandidateIds.IsDefault;
+        row.DecidesSummary = revision.Decides?.Text;
+        row.DecidesQuote = revision.Decides?.Quote;
+        row.DecidesTextOrigin = revision.Decides?.TextOrigin;
+        row.DecidesLabel = revision.Decides is null ? null : VoteDecides.Label;
+        row.DecidesSourceHash = revision.Decides?.SourceHash;
         row.Question = VoteFacts.QuestionOf(revision.Facts);
         row.Result = VoteFacts.ResultOf(revision.RecordId, revision.Facts);
         row.Facts = [.. revision.Facts.Select((fact, position) => FactRow(revision, fact, position))];
@@ -114,7 +119,8 @@ internal static class VoteRevisionRows
             row.VotedOn, new(row.VotedOnCitationExtractionId, row.VotedOnCitationStart, row.VotedOnCitationLength), row.Kind,
             row.KindCitationExtractionId is null ? null : new(row.KindCitationExtractionId, row.KindCitationStart!.Value, row.KindCitationLength!.Value), members,
             [.. recorded ? tracked.Order(StringComparer.Ordinal) : tracked],
-            recorded ? [.. issues.Select(issue => issue.IssueId)] : default, row.IssueRevisionId, row.SubjectsHash);
+            recorded ? [.. issues.Select(issue => issue.IssueId)] : default, row.IssueRevisionId, row.SubjectsHash,
+            row.DecidesSummary is null ? null : new(row.DecidesSummary, row.DecidesQuote!, row.DecidesSourceHash!));
     }
 
     private static VoteRevisionFactRow FactRow(VoteDraftRevision revision, VoteFact fact, int position) => new()

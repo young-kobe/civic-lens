@@ -39,7 +39,7 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
         var summaries = new List<(ActionDraftPage Page, CongressBillSummaryText Text)>();
         foreach (var page in evidence.Pages.Where(page => page.Resource == ApiResource.BillSummaries))
         {
-            var read = await ReadSummaryPageAsync(page, candidate, cancellationToken);
+            var read = await ReadSummaryPageAsync(page, cancellationToken);
             if (read.ErrorCode is not null) return new(null, read.ErrorCode);
             summaries.AddRange(read.Summaries.Select(text => (page, text)));
         }
@@ -98,15 +98,10 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
     }
 
     private async Task<(string? ErrorCode, IReadOnlyList<CongressBillSummaryText> Summaries)> ReadSummaryPageAsync(ActionDraftPage page,
-        ActionDraftCandidate candidate, CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         var (job, response) = await LoadAsync(page, cancellationToken);
-        var source = SourceOf(job, candidate);
-        var bill = PageBillOf(source, ApiResource.BillSummaries, job);
-        var parsed = CongressBillSummariesParser.Parse(response.Body, response.Request, source.SourceUrl, bill);
-        var texts = new List<CongressBillSummaryText>();
-        foreach (var summary in parsed.Summaries)
-            texts.Add(new CongressBillSummaryText(summary, await textExtractor.ExtractHtmlFragmentAsync(summary.Html, cancellationToken)));
+        var (bill, texts) = await CongressBillSummariesJob.ParseAsync(job, response, textExtractor, cancellationToken);
         return (TextError(page, CongressBillRenderer.RenderSummaries(bill, texts)), texts);
     }
 

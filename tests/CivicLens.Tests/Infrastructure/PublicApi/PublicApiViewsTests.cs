@@ -324,6 +324,21 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task TheVoteViewServesTheDecidesTextWithItsOriginAndLabelAndNothingElseOfIt()
+    {
+        await SeedAsync();
+        await ExecuteAsync($"""
+            UPDATE vote_revisions SET decides_summary = 'The bill gives money for rent aid.', decides_quote = 'gives money for rent aid in the year',
+                decides_text_origin = 'Model', decides_label = '{VoteDecides.Label}', decides_source_hash = '{new string('b', 64)}'
+             WHERE record_id = 'a'
+            """);
+
+        Assert.Equal([$"a The bill gives money for rent aid.|Model|{VoteDecides.Label}", "c none|none|none", "d none|none|none"],
+            await PublicAsync("SELECT record_id || ' ' || coalesce(decides_summary, 'none') || '|' || coalesce(decides_text_origin, 'none') || '|' || coalesce(decides_label, 'none') FROM public_api.votes ORDER BY 1"));
+        Assert.Empty(await PublicAsync("SELECT 1 FROM information_schema.columns WHERE table_schema = 'public_api' AND column_name IN ('decides_quote', 'decides_source_hash')"));
+    }
+
+    [Fact]
     public async Task VoteCountsEqualTheTotalsOfTheVoteTallyAndAreNullWhenTheCastsAreCandidateNamesBecauseOneRuleMustGiveBothAnswers()
     {
         string[] plain = ["Yea", "Aye", "Nay", "No", "Present", "Not Voting", "Not Voting"];

@@ -24,6 +24,12 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
     {
         var evidence = await store.ReadEvidenceAsync(attempt.Claim.Record.SubjectId, cancellationToken);
         if (evidence is null) return await attempt.CompleteAsync(State.Blocked, VoteDraftErrorCodes.EvidenceUnavailable, cancellationToken);
+        return await ProcessAsync(attempt, evidence, cancellationToken);
+    }
+
+    /// <summary>Drafts from the evidence that the caller read. The owner measure calls it with evidence that holds no current revision.</summary>
+    public async Task<bool> ProcessAsync(IAnalysisAttempt<VoteDraftRun> attempt, VoteDraftEvidence evidence, CancellationToken cancellationToken)
+    {
         if (evidence.HasNewerCandidate)
             return await attempt.CompleteAsync(State.Succeeded, VoteDraftErrorCodes.SupersededByNewerCandidate, cancellationToken);
 

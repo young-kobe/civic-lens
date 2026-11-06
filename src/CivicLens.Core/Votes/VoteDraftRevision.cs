@@ -11,7 +11,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
     string SourceId, VoteSource Source, Chamber Chamber, int Congress, int SessionNumber, int RollCallNumber, string? BillType, int? BillNumber,
     string CandidateId, DateTimeOffset CandidateUpdateDate, ImmutableArray<VoteFact> Facts, DateOnly VotedOn, SourceSpan VotedOnCitation, VoteKind Kind, SourceSpan? KindCitation, ImmutableArray<MemberVote> Members,
     ImmutableArray<string> TrackedIssueIds, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<string> IssueCandidateIds, string IssueRevisionId,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SubjectsHash = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SubjectsHash = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] VoteDecides? Decides = null)
     : IHeadlineSummaryRevision
 {
     public const int MaximumHeadlineLength = 256;
@@ -56,6 +57,8 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
         if (!IssueCandidateIds.IsDefault && !TrackedIssueIds.All(IssueCandidateIds.Contains))
             throw new ArgumentException("The tracked issues of a vote revision must come from its issue candidates.");
         ReviewTextRules.ValidateHeadlineAndSummary(this, MaximumHeadlineLength, MaximumSummaryLength);
+        Decides?.ValidateShape();
+        if (Decides is not null && BillType is null) throw new ArgumentException("Only a vote on a bill can say what it decides.");
         if (Facts.IsDefault || Facts.Length > MaximumFacts || Facts.Any(fact => !IsBounded(fact.Citation)))
             throw new ArgumentException($"A vote revision needs at most {MaximumFacts} facts with bounded citations.");
         foreach (var fact in Facts) ReviewTextRules.ValidateText(fact.Text, MaximumFactLength, nameof(Facts));
@@ -111,7 +114,7 @@ public sealed record VoteDraftRevision(string RecordId, int RevisionNumber, stri
         Kind == other.Kind && KindCitation == other.KindCitation && Members.SequenceEqual(other.Members) &&
         TrackedIssueIds.SequenceEqual(other.TrackedIssueIds) && IssueCandidateIds.IsDefault == other.IssueCandidateIds.IsDefault &&
         (IssueCandidateIds.IsDefault || IssueCandidateIds.SequenceEqual(other.IssueCandidateIds)) && IssueRevisionId == other.IssueRevisionId &&
-        SubjectsHash == other.SubjectsHash;
+        SubjectsHash == other.SubjectsHash && Decides == other.Decides;
 
     private static bool IsValid(MemberVote member) =>
         IsTextOfAtMost(member.PersonId, MaximumPersonIdLength) && IsTextOfAtMost(member.BioguideId, MaximumBioguideIdLength) &&

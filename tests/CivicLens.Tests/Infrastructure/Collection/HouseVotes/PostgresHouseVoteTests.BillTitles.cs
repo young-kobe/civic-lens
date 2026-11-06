@@ -3,6 +3,8 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.HouseVotes;
+using CivicLens.Application.Votes;
+using CivicLens.Core.Votes;
 using CivicLens.Tests.Application.Collection.Bills;
 using CivicLens.Tests.Fixtures;
 
@@ -246,6 +248,47 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal(["Subject: Newer first", "Subject: Newer second"], whenClosed.Select(page => page.Text.Split('\n')[1]));
     }
 
+    [Fact]
+    public async Task EvidenceHoldsTheSummaryPagesOfTheNewestBillVersionWhoseSummariesChainIsClosedBecauseTheDecidesTextReadsOneVersion()
+    {
+        await AdmitBillDetailAsync(Updated);
+        var withBill = await PendingCandidateAsync();
+        Assert.Empty((await VoteStore().ReadEvidenceAsync(withBill, default))!.BillSummaries);
+
+        var older = await AdmitBillDetailAsync(Updated.AddDays(1), hasTrackedIssue: true, summaries: 1);
+        await AdmitSummaryPageAsync(older, "Older summary.", next: null);
+        var newer = await AdmitBillDetailAsync(Updated.AddDays(2), hasTrackedIssue: true, summaries: 2);
+        var openChain = await AdmitSummaryPageAsync(newer, "Newer first.", next: SummariesNext);
+        var whileOpen = (await VoteStore().ReadEvidenceAsync(withBill, default))!.BillSummaries;
+        await AdmitSummaryPageAsync(newer, "Newer second.", next: null, pageJobId: openChain.Jobs.Single().JobId);
+        var whenClosed = (await VoteStore().ReadEvidenceAsync(withBill, default))!.BillSummaries;
+
+        Assert.Equal(["Summary: Older summary."], whileOpen.Select(page => page.Text));
+        Assert.Equal(["Summary: Newer first.", "Summary: Newer second."], whenClosed.Select(page => page.Text));
+    }
+
+    [Fact]
+    public async Task TheNewestCandidateOfARollCallIsTheOneWithTheNewestUpdateAndAnUnknownRollCallHasNone()
+    {
+        var older = await PendingCandidateAsync();
+        var roll = new VoteMeasureRoll(Chamber.House, 119, 1, 100);
+
+        Assert.Equal(older, await VoteStore().NewestCandidateIdAsync(roll, default));
+        Assert.Null(await VoteStore().NewestCandidateIdAsync(roll with { RollCallNumber = 999 }, default));
+        Assert.Null(await VoteStore().NewestCandidateIdAsync(roll with { Chamber = Chamber.Senate }, default));
+    }
+
+    private const string SummariesNext = "https://api.congress.gov/v3/bill/119/hconres/14/summaries?offset=1&limit=1&format=json";
+
+    private async Task<DiscoveryAdmissionResult> AdmitSummaryPageAsync(PreparedBillDetail bill, string text, string? next, string? pageJobId = null)
+    {
+        pageJobId ??= bill.SummariesJobId!;
+        var rendered = $"Summary: {text}";
+        var extractionId = await extractions.SaveAsync(pageJobId, rendered, rendered, "extraction");
+        var summary = new CongressBillSummary("00", new DateOnly(2025, 1, 3), "Introduced", Updated, text);
+        return await store.AdmitSummariesPageAsync(bill.Source, pageJobId, new CongressBillSummariesPage([summary], next), extractionId, default);
+    }
+
     private const string SubjectsNext = "https://api.congress.gov/v3/bill/119/hconres/14/subjects?offset=250&limit=250&format=json";
 
     private async Task<DiscoveryAdmissionResult> AdmitSubjectPageAsync(PreparedBillDetail bill, string[] subjects, string? next, string? pageJobId = null)
@@ -257,15 +300,19 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     private async Task<PreparedBillDetail> AdmitBillDetailAsync(DateTimeOffset? updatedAt = null, int congress = 119, int number = 14,
-        bool hasTrackedIssue = false, int subjects = 0, bool readable = false)
+        bool hasTrackedIssue = false, int subjects = 0, bool readable = false, int summaries = 0)
     {
-        var bill = await PrepareBillDetailAsync(updatedAt, congress, number, subjects, readable);
+        var bill = await PrepareBillDetailAsync(updatedAt, congress, number, subjects, readable, summaries);
         var result = await AdmitPreparedBillDetailAsync(bill, hasTrackedIssue);
-        return bill with { SubjectsJobId = result.Jobs.SingleOrDefault(job => job.Url.Contains("/subjects?"))?.JobId };
+        return bill with
+        {
+            SubjectsJobId = result.Jobs.SingleOrDefault(job => job.Url.Contains("/subjects?"))?.JobId,
+            SummariesJobId = result.Jobs.SingleOrDefault(job => job.Url.Contains("/summaries?"))?.JobId
+        };
     }
 
     private async Task<PreparedBillDetail> PrepareBillDetailAsync(DateTimeOffset? updatedAt = null, int congress = 119, int number = 14,
-        int subjects = 0, bool readable = false)
+        int subjects = 0, bool readable = false, int summaries = 0)
     {
         var configuration = CongressBillSourceConfigurationTests.Configuration();
         configuration = configuration with
@@ -278,7 +325,7 @@ public sealed partial class PostgresHouseVoteTests
         var jobId = await SucceededJobs.BillDetailAsync(store, connectionString, source, listJob,
             new CongressBillListItem(congress, "hconres", number, Backfill.AddDays(++billListSequence)));
         var bill = new CongressBill(congress, "hconres", number, "A concurrent resolution", Backfill, updatedAt ?? Updated,
-            BillGateFixtures.UntrackedPolicyArea, [], 0, 1, 0, subjects, null);
+            BillGateFixtures.UntrackedPolicyArea, [], 0, 1, summaries, subjects, null);
         var extractionId = readable ? await ReadableBillExtractionAsync(jobId, bill) : await FakeBillExtractionAsync(jobId, bill);
         return new(source, jobId, bill, extractionId);
     }
@@ -303,5 +350,5 @@ public sealed partial class PostgresHouseVoteTests
                 : BillGateOutcome.NotRelevant(BillGateReason.UntrackedPolicyArea),
             BillGateFixtures.Revision().Id, prepared.ExtractionId, default);
 
-    private sealed record PreparedBillDetail(ConfiguredCollectionSource Source, string JobId, CongressBill Bill, string ExtractionId, string? SubjectsJobId = null);
+    private sealed record PreparedBillDetail(ConfiguredCollectionSource Source, string JobId, CongressBill Bill, string ExtractionId, string? SubjectsJobId = null, string? SummariesJobId = null);
 }

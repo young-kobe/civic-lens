@@ -245,7 +245,7 @@ try
         var actionDrafting = ActionDraftComposition.Create(analysisContexts, connectionString, codeVersion, jobs, apiResponses, textExtractor, issues,
             artifactRoot, BeatOf(WorkerLoopNames.ActionDrafting), loggers);
         await using var actionDraftingWakeup = actionDrafting.Wakeup;
-        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, issues, artifactRoot, BeatOf(WorkerLoopNames.VoteDrafting), loggers);
+        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, textExtractor, issues, artifactRoot, BeatOf(WorkerLoopNames.VoteDrafting), loggers);
         await using var voteDraftingWakeup = voteDrafting.Wakeup;
         var relationshipDrafting = RelationshipDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, BeatOf(WorkerLoopNames.RelationshipDrafting), loggers);
         await using var relationshipDraftingWakeup = relationshipDrafting.Wakeup;
@@ -347,6 +347,13 @@ try
     {
         executing = true;
         return await ActionTextMeasureCommand.ExecuteAsync(args, () => ActionDraftComposition.CreateMeasure(codeVersion), Path.GetFullPath("artifacts"), Console.Out, TimeProvider.System,
+            cancellation.Token);
+    }
+
+    if (VoteDecidesMeasureCommand.Matches(args))
+    {
+        executing = true;
+        return await VoteDecidesMeasureCommand.ExecuteAsync(args, () => VoteDraftComposition.CreateMeasure(codeVersion), Path.GetFullPath("artifacts"), Console.Out, TimeProvider.System,
             cancellation.Token);
     }
 

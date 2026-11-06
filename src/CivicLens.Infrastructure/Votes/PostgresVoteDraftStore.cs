@@ -65,10 +65,18 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
             await ReadPageAsync(db, row.DetailJobId, row.DetailExtractionId, cancellationToken),
             await ReadPageAsync(db, row.MembersJobId, row.MembersExtractionId, cancellationToken),
             await ReadBillDetailAsync(db, row, cancellationToken),
-            hasNewerCandidate ? [] : await ReadBillSubjectsAsync(db, row, cancellationToken),
+            hasNewerCandidate ? [] : await ReadBillChainAsync(db, row, BillPageRole.Subjects, cancellationToken),
+            hasNewerCandidate ? [] : await ReadBillChainAsync(db, row, BillPageRole.Summaries, cancellationToken),
             await VoteDraftRows.ReadCurrentAsync(db, recordId, cancellationToken), hasNewerCandidate,
             !hasNewerCandidate && (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId),
             await VoteDraftRows.IsRejectedAsync(db, recordId, cancellationToken));
+    }
+
+    public async Task<string?> NewestCandidateIdAsync(VoteMeasureRoll roll, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(roll);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await VoteDraftRows.NewestCandidateIdAsync(db, roll, cancellationToken);
     }
 
     public Task<int> RequeueBlockedAsync(string errorCode, CancellationToken cancellationToken) =>
@@ -184,11 +192,11 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
         return page is null ? null : await ReadPageAsync(db, page.JobId, page.ExtractionId, cancellationToken);
     }
 
-    private static async Task<IReadOnlyList<VoteDraftPage>> ReadBillSubjectsAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate,
-        CancellationToken cancellationToken)
+    private static async Task<IReadOnlyList<VoteDraftPage>> ReadBillChainAsync(CollectionAttemptDbContext db, VoteCandidateRow candidate,
+        BillPageRole role, CancellationToken cancellationToken)
     {
         if (candidate.BillType is null) return [];
-        var pages = await (from page in BillDetailRows.SubjectPagesOfNewestVersion(db, candidate.Congress, candidate.BillType, candidate.BillNumber!.Value)
+        var pages = await (from page in BillDetailRows.PagesOfNewestClosedChain(db, role, candidate.Congress, candidate.BillType, candidate.BillNumber!.Value)
                            join extraction in db.Set<DocumentExtractionRow>().AsNoTracking() on page.ExtractionId equals extraction.ExtractionId
                            orderby page.PageOrder
                            select new { page.JobId, page.ExtractionId, extraction.ExtractionVersion, extraction.Text }).ToArrayAsync(cancellationToken);

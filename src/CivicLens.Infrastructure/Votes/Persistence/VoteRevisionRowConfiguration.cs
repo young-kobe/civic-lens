@@ -24,6 +24,12 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
             table.HasCheckConstraint("ck_vote_revisions_kind", EnumChecks.InList("kind", Enum.GetNames<VoteKind>()));
             table.HasCheckConstraint("ck_vote_revisions_issue_revision", "issue_revision_id ~ '^[0-9a-f]{64}$'");
             table.HasCheckConstraint("ck_vote_revisions_subjects_hash", "subjects_hash ~ '^[0-9a-f]{64}$'");
+            table.HasCheckConstraint("ck_vote_revisions_decides",
+                "(decides_summary IS NULL) = (decides_quote IS NULL) AND (decides_summary IS NULL) = (decides_text_origin IS NULL) AND " +
+                "(decides_summary IS NULL) = (decides_label IS NULL) AND (decides_summary IS NULL) = (decides_source_hash IS NULL)");
+            table.HasCheckConstraint("ck_vote_revisions_decides_origin", "decides_text_origin = 'Model'");
+            table.HasCheckConstraint("ck_vote_revisions_decides_hash", "decides_source_hash ~ '^[0-9a-f]{64}$'");
+            table.HasCheckConstraint("ck_vote_revisions_decides_bill", "decides_summary IS NULL OR bill_type IS NOT NULL");
         });
         builder.HasKey(row => new { row.RecordId, row.RevisionNumber });
         builder.Property(row => row.RecordId).HasColumnName("record_id").HasMaxLength(64);
@@ -48,6 +54,11 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
         builder.Property(row => row.IssueRevisionId).HasColumnName("issue_revision_id").HasMaxLength(64);
         builder.Property(row => row.SubjectsHash).HasColumnName("subjects_hash").HasMaxLength(64);
         builder.Property(row => row.IssueCandidatesRecorded).HasColumnName("issue_candidates_recorded");
+        builder.Property(row => row.DecidesSummary).HasColumnName("decides_summary").HasMaxLength(VoteDecides.MaximumTextLength);
+        builder.Property(row => row.DecidesQuote).HasColumnName("decides_quote").HasMaxLength(VoteDecides.MaximumQuoteLength);
+        builder.Property(row => row.DecidesTextOrigin).HasColumnName("decides_text_origin").HasConversion<string>().HasMaxLength(16);
+        builder.Property(row => row.DecidesLabel).HasColumnName("decides_label").HasMaxLength(128);
+        builder.Property(row => row.DecidesSourceHash).HasColumnName("decides_source_hash").HasMaxLength(64);
         builder.Property(row => row.Question).HasColumnName("question").HasMaxLength(VoteDraftRevision.MaximumFactLength);
         builder.Property(row => row.Result).HasColumnName("result").HasMaxLength(VoteDraftRevision.MaximumFactLength).IsRequired();
         ReviewTextColumns.Configure(builder, "vote_revisions", VoteDraftRevision.MaximumHeadlineLength, VoteDraftRevision.MaximumSummaryLength);

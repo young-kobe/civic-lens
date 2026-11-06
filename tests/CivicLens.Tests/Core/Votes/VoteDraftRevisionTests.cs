@@ -181,6 +181,24 @@ public sealed class VoteDraftRevisionTests
     }
 
     [Fact]
+    public void TheDecidesTextNeedsABillAndAValidHashAndAPersonEditCannotChangeItBecauseOnlyTheCheckedModelTextMayStand()
+    {
+        var decides = new VoteDecides("The bill gives money.", "gives money for rent aid", new string('a', 64));
+        var withBill = Revision() with { BillType = "hr", BillNumber = 1, Decides = decides };
+        withBill.ValidateShape();
+
+        Assert.DoesNotContain("ecides", JsonSerializer.Serialize(Revision(), new JsonSerializerOptions(JsonSerializerDefaults.Web)), StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => (withBill with { BillType = null, BillNumber = null }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (withBill with { Decides = decides with { SourceHash = "x" } }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (withBill with { Decides = decides with { Quote = " " } }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (withBill with { Decides = decides with { Text = new string('x', VoteDecides.MaximumTextLength + 1) } }).ValidateShape());
+        var edit = PersonEditOf(withBill, "A better headline", "A better summary.");
+        edit.ValidatePersonEditOf(withBill);
+        Assert.Throws<ArgumentException>(() => (edit with { Decides = decides with { Text = "Other." } }).ValidatePersonEditOf(withBill));
+        Assert.Throws<ArgumentException>(() => (edit with { Decides = null }).ValidatePersonEditOf(withBill));
+    }
+
+    [Fact]
     public void AVoteReviewerEditsOnlyTheHeadlineAndTheSummaryBecauseCodeOwnsTheDayTheKindTheFactsAndTheMemberVotes()
     {
         var previous = Revision();

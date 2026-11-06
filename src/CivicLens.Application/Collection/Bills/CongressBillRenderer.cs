@@ -84,7 +84,7 @@ public static class CongressBillRenderer
         throw new InvalidDataException("Bill text has no whitespace inside the window.");
     }
 
-    private static string SummaryBlock(CongressBillSummaryText item)
+    internal static string SummaryBlock(CongressBillSummaryText item)
     {
         var summary = item.Summary;
         if (item.Text.Contains("\n\n", StringComparison.Ordinal) || item.Text.Contains('\r'))
