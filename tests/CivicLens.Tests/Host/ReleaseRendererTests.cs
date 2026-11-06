@@ -11,6 +11,7 @@ using CivicLens.PublicApi;
 using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
+using CivicLens.PublicWeb.Publication;
 
 namespace CivicLens.Tests.Host;
 
@@ -723,7 +724,7 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         var facts = document.QuerySelectorAll(".facts dt").Zip(document.QuerySelectorAll(".facts dd"))
             .ToDictionary(pair => pair.First.TextContent, pair => pair.Second.ShownText());
-        Assert.Equal("HR 7, Congress 119", facts["Bill"]);
+        Assert.Equal("H.R. 7, Congress 119", facts["Bill"]);
         Assert.Equal("A <housing> bill", facts["Title"]);
         Assert.Equal("Housing and Community Development", facts["Policy area"]);
         Assert.Equal("Housing costs", facts["Tracked issues"]);
@@ -1496,9 +1497,9 @@ public sealed class ReleaseRendererTests
         var plain = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None));
 
         var link = Assert.Single(linked.QuerySelectorAll("[aria-labelledby='bill-title'] a"));
-        Assert.Equal(($"../records/{actionId}.html", "HR 7, Congress 119"), (link.GetAttribute("href"), link.TextContent));
+        Assert.Equal(($"../records/{actionId}.html", "H.R. 7, Congress 119"), (link.GetAttribute("href"), link.TextContent));
         Assert.Empty(plain.QuerySelectorAll("[aria-labelledby='bill-title'] a"));
-        Assert.Contains("HR 7, Congress 119", plain.QuerySelector("[aria-labelledby='bill-title']")!.TextContent, StringComparison.Ordinal);
+        Assert.Contains("H.R. 7, Congress 119", plain.QuerySelector("[aria-labelledby='bill-title']")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2732,21 +2733,18 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task OnlyTheHomePageHasASearchBoxSoOtherPagesStayFocusedOnTheirOwnContent()
+    public async Task EveryPageTypeHasTheHeaderSearchSoAReaderCanSearchFromAnyPage()
     {
-        var renderer = new ReleaseRenderer(null, null);
-        var release = ReleaseWithFilters();
-        var home = new HtmlParser().ParseDocument(await renderer.RenderHomeAsync(release, null, SearchFacets(), NoHighlights(release), CancellationToken.None));
-        var allRecordsHtml = await renderer.RenderAllRecordsAsync(release, 1, ReleaseBillLines.None, CancellationToken.None);
-        var allRecords = new HtmlParser().ParseDocument(allRecordsHtml);
+        foreach (var (name, pagePath, html, _) in await RenderEveryPageTypeAsync())
+        {
+            var form = new HtmlParser().ParseDocument(html).QuerySelector("header form[role='search']")!;
 
-        var form = home.QuerySelector("header form[role='search']")!;
-        Assert.Equal("search.html", form.GetAttribute("action"));
-        Assert.Equal("q", form.QuerySelector("input[type='search']")!.GetAttribute("name"));
-        Assert.Equal("Search bills, votes, people", form.QuerySelector("input")!.GetAttribute("placeholder"));
-        Assert.Equal("Search records", form.QuerySelector("label[for='site-search']")!.TextContent);
-        Assert.Null(allRecords.QuerySelector("header form[role='search']"));
-        Assert.DoesNotContain("data-release-search", allRecordsHtml, StringComparison.Ordinal);
+            Assert.NotNull(form);
+            Assert.Equal("search.html", ReleasePath(pagePath, form.GetAttribute("action")!));
+            Assert.Equal("q", form.QuerySelector("input[type='search']")!.GetAttribute("name"));
+            Assert.Equal("Search bills, votes, people", form.QuerySelector("input")!.GetAttribute("placeholder"));
+            Assert.Equal("Search the site", form.QuerySelector("label[for='site-search']")!.TextContent);
+        }
     }
 
     [Fact]

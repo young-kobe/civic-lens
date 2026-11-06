@@ -1,8 +1,8 @@
 using CivicLens.Application.Publication;
 using CivicLens.Application.Review;
-using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Relationships;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.Host.Review;
 
@@ -10,7 +10,7 @@ internal sealed record QueueRow(PublishedRecordKind Kind, string RecordId, strin
     DateTimeOffset? RevisedAtUtc)
 {
     public static QueueRow Of(ReviewQueueItem item) => item.IsUnreadable
-        ? new(item.Kind, item.RecordId, item.Headline, "Cannot read", Components.Ui.Tone.Bad, item.Reason, item.LastRevisedAtUtc)
+        ? new(item.Kind, item.RecordId, item.Headline, "Cannot read", Tone.Bad, item.Reason, item.LastRevisedAtUtc)
         : new(item.Kind, item.RecordId, item.LinkType is { } type ? RelationshipLabels.Title(type, item.Headline) : item.Headline,
             DraftStatusDisplay.Label(item.Status, item.OpenConcerns), DraftStatusDisplay.Tone(item.Status), item.Reason, item.LastRevisedAtUtc);
 
@@ -22,9 +22,9 @@ internal sealed record QueueRow(PublishedRecordKind Kind, string RecordId, strin
 
     public static QueueRow OfUnmatchedApproved(ReviewQueueItem item) => item.IsUnreadable
         ? Of(item)
-        : new(item.Kind, item.RecordId, RelationshipLabels.Title(item.LinkType!.Value, item.Headline), "Approved", Components.Ui.Tone.Warn,
+        : new(item.Kind, item.RecordId, RelationshipLabels.Title(item.LinkType!.Value, item.Headline), "Approved", Tone.Warn,
             RelationshipLabels.NoLongerMatches + " " + RelationshipLabels.CheckApprovedLink, null);
 
     public static QueueRow Of(BlockedPublishedRecord record, string stuckText) =>
-        new(record.Kind, record.RecordId, record.Headline, "Cannot publish", Components.Ui.Tone.Warn, stuckText, null);
+        new(record.Kind, record.RecordId, record.Headline, "Cannot publish", Tone.Warn, stuckText, null);
 }
