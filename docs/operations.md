@@ -30,6 +30,8 @@ Run `dotnet run --project src/CivicLens.Host -- --help` to list the host command
 
 Generate the self-contained architecture explorer with `python3 tools/render-architecture.py`, then open artifacts/architecture.html in a browser. The HTML needs no remote assets or network access. The same script updates the Mermaid blocks in architecture.md. `--check` detects diagram drift without changing files. `python3 tools/check-docs.py --check` checks repository paths, local links, and sentence length in the core docs.
 
+For RAM-limited local verification, download the `focused-tests-<head-sha>` artifact from the matching CI run with `gh run download`. Extract it into `tests/CivicLens.Tests/bin/Release/net10.0/` of that checkout. Before running it, compare `build-source-tree.txt` with `git rev-parse HEAD^{tree}`. Refuse a mismatch or a checkout with source edits. Run one class with `dotnet test tests/CivicLens.Tests --configuration Release --no-build --no-restore --filter FullyQualifiedName~<Class>`. This uses the CI compile and the local source tree. CI retains the artifact for one day and still runs the full suite. The SDK, locked restore, and Docker remain local prerequisites.
+
 ## Local development
 
 The Makefile wraps the local commands. Run `make help` to list them. It reads `.runtime/database/connection.env`, `.runtime/database/postgres.env`, and `.runtime/review/connection.env`. Only the worker reads `.runtime/congress/api.env`, which sets `CIVIC_LENS_CONGRESS_API_KEY`, when that file exists. The Makefile uses the Caddy binary in `.runtime/tools/caddy`. These files are local and ignored by Git. `make review` builds, starts Postgres, applies migrations, and runs the HTTPS proxy, review workspace, and worker. Set `DOTNET` when the SDK is not on `PATH`.
