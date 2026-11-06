@@ -132,6 +132,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         IEnumerable<ActionDraftRevision> revisions, CancellationToken cancellationToken)
     {
         var texts = revisions.Where(revision => revision.TextPackageId is not null).ToArray();
+        if (texts.Length == 0) return new(StringComparer.Ordinal);
         var packageIds = texts.Select(revision => revision.TextPackageId!).Distinct(StringComparer.Ordinal).ToArray();
         var rows = await db.Set<BillTextVersionRow>().AsNoTracking().Where(row => packageIds.Contains(row.PackageId)).ToArrayAsync(cancellationToken);
         return texts.ToDictionary(revision => revision.RecordId, revision =>
