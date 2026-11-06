@@ -1,6 +1,6 @@
 using System.Net;
 using System.Text.Json;
-using CivicLens.Host.Publication;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
