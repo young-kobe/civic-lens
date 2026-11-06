@@ -6,6 +6,7 @@ public enum IconName
     Sources,
     Statements,
     Labels,
+    Spending,
     Reports,
     Light,
     Dark,

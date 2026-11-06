@@ -282,6 +282,10 @@ The editor shows the saved account and its exact selected passages as the approv
 
 The workspace keeps conflicting edits. It disables the decision panel for unsaved, failed, or conflicting forms. Every mutation uses an antiforgery token. The reader preview updates on the server render after an explicit save.
 
+### AI spending page
+
+`/Review/Spending` is an owner page. It uses the same owner check and the same `ReviewCommand` mapping as the other owner pages. [Analysis](analysis.md#ai-spending-page) holds its rules.
+
 ### Evidence verification
 
 The New changes list is the one read that does not verify full evidence. One query reads each stored comparison result, source, requested URL, and observation time into `NewDocumentChange`. That type holds the passage count and the first passage. The query loads no extraction text and does not compute the comparison again, so a page of 100 rows stays cheap. A list row is only a pointer.

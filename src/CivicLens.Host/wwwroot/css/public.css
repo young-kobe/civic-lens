@@ -200,16 +200,6 @@ table[data-paged]:focus { outline: none; }
     .public-search { grid-area: search; margin-left: 0; }
     .public-header .topbar-tools { grid-area: tools; }
     .public-nav { grid-area: nav; margin-inline: calc(-1 * var(--s2)); }
-    .public-main .table thead, .public-main .table td:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-    .public-main .table, .public-main .table tbody { display: block; }
-    .public-main .table tbody { display: grid; gap: var(--s2); }
-    .public-main .table tr { display: flex; flex-direction: column; gap: 2px; padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--surface); }
-    .public-main .table tr:hover { background: var(--raised); }
-    .public-main .panel .table-wrap { padding: var(--s3); }
-    .public-main .table td { display: block; width: auto; max-width: none; padding: 0; border: 0; text-align: left; white-space: normal; }
-    .public-main .table td[data-label]::before { content: attr(data-label) ": "; content: attr(data-label) ": " / ""; color: var(--muted); font-weight: 600; font-variant-numeric: normal; }
-    .public-main .table .cell-main { order: -1; }
-    .public-main .table td:empty::before { content: none; }
     .record-list .cell-icon { flex-wrap: wrap; }
     .record-list .record-row-text { flex-basis: calc(100% - 30px); }
     .record-list .badge { margin-left: 30px; }

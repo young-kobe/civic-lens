@@ -58,7 +58,7 @@ internal abstract class FakeAnalysisQueue<TRun> : IAnalysisQueue<TRun> where TRu
     public Task<bool> RenewAsync(AnalysisClaim claim, TimeSpan leaseDuration, CancellationToken cancellationToken) =>
         Task.FromResult(true);
 
-    public Task<AnalysisReservation> ReserveAsync(AnalysisClaim claim, string runId, string inputHash, long tokens,
+    public Task<AnalysisReservation> ReserveAsync(AnalysisClaim claim, string runId, string inputHash, string model, long tokens,
         long dailyTokenLimit, CancellationToken cancellationToken)
     {
         lock (gate)

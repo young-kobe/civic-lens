@@ -1,34 +1,78 @@
 using System.Collections.Immutable;
+using System.Runtime.ExceptionServices;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Spending;
 using CivicLens.Core.Analysis;
 
 namespace CivicLens.Application.Actions;
 
 /// <summary>Drafts the bill text summary of fixed bills through the real step, and keeps nothing. It reads evidence and sends model calls only.
-/// It clears the draft history of each bill, so a bill with a current record is drafted again as a new bill.</summary>
-public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep step)
+/// It clears the draft history of each bill, so a bill with a current record is drafted again as a new bill.
+/// It has its own token cap and never waits on the monthly dollar cap. When the run ends for any reason, it hands the report to the caller,
+/// then adds its real cost to the month once. A call that a cancel stopped counts at its whole reservation, as an interrupted worker call does.</summary>
+public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep step, IAiSpendingStore spending)
 {
-    public async Task<ActionTextMeasureReport> RunAsync(IReadOnlyList<CongressBillListItem> bills, long tokenCap, CancellationToken cancellationToken)
+    public async Task RunAsync(IReadOnlyList<CongressBillListItem> bills, long tokenCap, Func<ActionTextMeasureReport, Task> keepReportAsync,
+        CancellationToken cancellationToken)
     {
         if (tokenCap < 1) throw new ArgumentOutOfRangeException(nameof(tokenCap), tokenCap, "The spend cap must be at least 1 token.");
         var results = ImmutableArray.CreateBuilder<ActionTextMeasureBill>();
-        var spent = 0L;
+        ActionTextMeasureAttempt? unfinished = null;
+        Exception? failure = null;
         try
         {
+            var spent = 0L;
             foreach (var bill in bills)
             {
-                var result = results.Any(item => item.EndsRun) ? NotRun(bill, results) : await MeasureAsync(bill, tokenCap, spent, cancellationToken);
-                spent += result.ChargedTokens;
+                var result = results.Any(item => item.EndsRun) ? NotRun(bill, results)
+                    : await MeasureAsync(bill, tokenCap, spent, attempt => unfinished = attempt, cancellationToken);
+                (spent, unfinished) = (spent + result.ChargedTokens, null);
                 results.Add(result);
             }
         }
-        catch (OperationCanceledException exception)
+        catch (Exception exception)
         {
-            throw new ActionTextMeasureCanceledException(ReportOf(tokenCap, results), exception);
+            failure = exception;
         }
-        return ReportOf(tokenCap, results);
+        await FinishAsync(ReportOf(tokenCap, results), unfinished, keepReportAsync, failure);
+    }
+
+    private async Task FinishAsync(ActionTextMeasureReport report, ActionTextMeasureAttempt? unfinished,
+        Func<ActionTextMeasureReport, Task> keepReportAsync, Exception? failure)
+    {
+        Exception? chargeFailure = null;
+        try
+        {
+            await keepReportAsync(report);
+        }
+        finally
+        {
+            chargeFailure = await TryChargeMonthAsync(report, unfinished);
+        }
+        if (failure is not null) ExceptionDispatchInfo.Throw(Outcome(failure, chargeFailure));
+        if (chargeFailure is not null) ExceptionDispatchInfo.Throw(chargeFailure);
+    }
+
+    private static Exception Outcome(Exception failure, Exception? chargeFailure) =>
+        failure is OperationCanceledException canceled ? new ActionTextMeasureCanceledException(canceled, chargeFailure)
+        : chargeFailure is null ? failure
+        : new AggregateException(failure, chargeFailure);
+
+    private async Task<Exception?> TryChargeMonthAsync(ActionTextMeasureReport report, ActionTextMeasureAttempt? unfinished)
+    {
+        var calls = report.Bills.Select(bill => bill.Usage).Concat(unfinished is null ? [] : [unfinished.Usage]).ToArray();
+        var chargedTokens = report.Totals.ChargedTokens + (unfinished is null ? 0 : unfinished.ChargedTokens + unfinished.InFlightTokens);
+        try
+        {
+            await spending.AddChargeAsync(ActionDraftTask.Model, calls, chargedTokens, CancellationToken.None);
+            return null;
+        }
+        catch (Exception exception)
+        {
+            return exception;
+        }
     }
 
     private static ActionTextMeasureReport ReportOf(long tokenCap, ImmutableArray<ActionTextMeasureBill>.Builder results) =>
@@ -46,7 +90,8 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         id.Split('-') is [var congress, var type, var number] && CongressBillListItem.TryReadIdentity(congress, type, number) is { } bill &&
         IdOf(bill) == id ? bill : null;
 
-    private async Task<ActionTextMeasureBill> MeasureAsync(CongressBillListItem bill, long tokenCap, long spent, CancellationToken cancellationToken)
+    private async Task<ActionTextMeasureBill> MeasureAsync(CongressBillListItem bill, long tokenCap, long spent,
+        Action<ActionTextMeasureAttempt> started, CancellationToken cancellationToken)
     {
         var billId = IdOf(bill);
         if (await store.NewestCandidateIdAsync(bill, cancellationToken) is not { } candidateId)
@@ -55,6 +100,7 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         if (evidence?.BillText is not { } billText) return ActionTextMeasureBill.Skipped(billId, ActionTextMeasureReason.NoBillText);
 
         var attempt = new ActionTextMeasureAttempt(candidateId, tokenCap, spent);
+        started(attempt);
         await step.DraftAsync(attempt, evidence with { Current = null, HasStaleDraft = false, IsRejected = false },
             cancellationToken);
         return Summarize(billId, evidence, billText, attempt);
@@ -63,12 +109,10 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
     private static ActionTextMeasureBill Summarize(string billId, ActionDraftEvidence evidence, ActionDraftBillText billText,
         ActionTextMeasureAttempt attempt)
     {
-        var usage = attempt.Runs.Aggregate(AnalysisTokenUsage.None, (sum, run) => new(sum.InputTokens + run.Usage.InputTokens,
-            sum.OutputTokens + run.Usage.OutputTokens, sum.CacheReadTokens + run.Usage.CacheReadTokens, sum.CacheWriteTokens + run.Usage.CacheWriteTokens));
         var rejections = attempt.Runs.SelectMany(run => run.ValidationErrors).ToImmutableArray();
         ActionTextMeasureBill With(ActionTextMeasureOutcome outcome, string? reason, ImmutableArray<ActionTextMeasureSentence> sentences = default) =>
-            new(billId, TitleOf(evidence), outcome, reason, billText.CharsRead, billText.CharsTotal, attempt.Calls, usage,
-                attempt.Runs.Sum(run => run.ChargedTokens), sentences.IsDefault ? [] : sentences, rejections,
+            new(billId, TitleOf(evidence), outcome, reason, billText.CharsRead, billText.CharsTotal, attempt.Calls, attempt.Usage,
+                attempt.ChargedTokens, sentences.IsDefault ? [] : sentences, rejections,
                 [.. attempt.Runs.Where(run => run.OutputJson is not null).Select(run => new ActionTextMeasurePass(run.Outcome, run.OutputJson))]);
 
         if (attempt.RefusedOtherPrompt) return With(ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.NotTextPrompt);

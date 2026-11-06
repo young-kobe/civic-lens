@@ -595,6 +595,7 @@ public sealed class PostgresCollection : IAsyncLifetime
         await container.StartAsync();
         await ExecuteAsync($"CREATE DATABASE {TemplateDatabase}");
         await PostgresCollectionAttemptStore.FromConnectionString(ConnectionString(TemplateDatabase)).MigrateAsync();
+        await SeedSpendingAsync();
     }
 
     public Task DisposeAsync() => container.DisposeAsync().AsTask();
@@ -620,6 +621,18 @@ public sealed class PostgresCollection : IAsyncLifetime
     // Pooling is off so that no idle session blocks a template copy or a database drop.
     private string ConnectionString(string database) =>
         new NpgsqlConnectionStringBuilder(container.GetConnectionString()) { Database = database, Pooling = false }.ConnectionString;
+
+    // AI calls wait without a cap, so every test database starts with a cap that no test reaches.
+    private async Task SeedSpendingAsync()
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString(TemplateDatabase));
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+            INSERT INTO ai_monthly_cap_revisions (revision_number, cap_micros, author_subject, created_at_utc_ticks)
+            VALUES (1, 1000000000000, 'auth0|owner', 0)
+            """, connection);
+        await command.ExecuteNonQueryAsync();
+    }
 
     private async Task ExecuteAsync(string sql)
     {

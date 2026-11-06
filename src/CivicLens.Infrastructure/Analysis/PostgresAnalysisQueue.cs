@@ -3,10 +3,13 @@ using CivicLens.Application.Analysis;
 using CivicLens.Core.Analysis;
 using CivicLens.Infrastructure.Analysis.Persistence;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Spending;
 using Microsoft.EntityFrameworkCore;
 using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Infrastructure.Analysis;
+
+internal readonly record struct PendingSpend(DateOnly Day, AnalysisRun Run, long ReservedMicros);
 
 internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
     IAnalysisQueueMapping<TRow, TRun> mapping) : IAnalysisQueue<TRun>
@@ -129,8 +132,8 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
         return true;
     }
 
-    public async Task<AnalysisReservation> ReserveAsync(AnalysisClaim claim, string runId, string inputHash, long tokens,
-        long dailyTokenLimit, CancellationToken cancellationToken)
+    public async Task<AnalysisReservation> ReserveAsync(AnalysisClaim claim, string runId, string inputHash, string model,
+        long tokens, long dailyTokenLimit, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(claim);
         if (tokens < 1 || dailyTokenLimit < tokens) throw new ArgumentOutOfRangeException(nameof(tokens));
@@ -142,11 +145,15 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
         var clock = await DatabaseClock.ReadAsync(db, cancellationToken);
         var day = await LockDayAsync(db, clock.Day, cancellationToken);
         var result = AnalysisReservation.WaitingForBudget;
-        if (day.ChargedTokens + tokens > dailyTokenLimit) _ = Transition(row, wait, clock);
+        var spend = day.ChargedTokens + tokens > dailyTokenLimit
+            ? new SpendReservation(0, AnalysisErrorCodes.DailyTokenLimit)
+            : await AiSpendLedger.ReserveAsync(db, model, tokens, clock.Day, cancellationToken);
+        if (spend.WaitCode is { } waitCode) _ = Transition(row, AnalysisCheckpoint.From(claim, State.WaitingForBudget, waitCode), clock);
         else
         {
             day.ChargedTokens += tokens;
             row.ReservedTokens = tokens;
+            row.ReservedMicros = spend.Micros;
             row.BudgetDay = clock.Day;
             row.ReservedAtUtcTicks = clock.Ticks;
             row.PendingRunId = runId;
@@ -168,14 +175,19 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
         if (row is null || !mapping.CanTransition(ToRecord(row), checkpoint)) return false;
         var clock = await DatabaseClock.ReadAsync(db, cancellationToken);
         (checkpoint, run) = await mapping.PrepareSettlementAsync(db, row, new(checkpoint, run), cancellationToken);
-        if (run is not null) await SettleRunAsync(db, row, run, clock.Ticks, cancellationToken);
-        else if (row.ReservedTokens != 0)
+        var spend = run is null ? null : await SettleRunAsync(db, row, run, clock.Ticks, cancellationToken);
+        if (run is null && row.ReservedTokens != 0)
             throw new InvalidOperationException("An analysis run must settle the reservation that it was made under.");
         if (checkpoint.Status == State.Running && run is not null) row.RetryOfRunId = mapping.RunOf(run).RunId;
         if (checkpoint.Status is State.Succeeded or State.Blocked or State.Failed) row.RetryOfRunId = null;
         if (!Transition(row, checkpoint, clock)) throw new InvalidOperationException("Analysis checkpoint is not valid.");
         await mapping.AfterTransitionAsync(db, row, checkpoint, clock.Ticks, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        if (spend is { } settled)
+        {
+            await AiSpendLedger.SettleAsync(db, settled.Day, settled.Run, settled.ReservedMicros, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+        }
         await transaction.CommitAsync(cancellationToken);
         return true;
     }
@@ -222,10 +234,11 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
     private static AnalysisRecord ToRecord(TRow row) => new(row.SubjectId, row.Task, row.Status, row.LeaseToken, row.Fence, row.Attempts,
         row.RetryAt is { } retry ? new DateTimeOffset(retry, TimeSpan.Zero) : null, row.ErrorCode, row.RetryOfRunId);
 
-    private async Task SettleRunAsync(CollectionAttemptDbContext db, TRow row, TRun wrapped, long nowTicks,
+    private async Task<PendingSpend?> SettleRunAsync(CollectionAttemptDbContext db, TRow row, TRun wrapped, long nowTicks,
         CancellationToken cancellationToken)
     {
         var run = mapping.RunOf(wrapped);
+        PendingSpend? spend = null;
         if (run.ComparisonId != row.SubjectId) throw new InvalidOperationException("An analysis run must belong to its subject.");
         if (run.Outcome == AnalysisRunOutcome.Bypassed)
         {
@@ -238,11 +251,13 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
                 throw new InvalidOperationException("An analysis run must settle the reservation that it was made under.");
             var day = await LockDayAsync(db, row.BudgetDay!.Value, cancellationToken);
             day.ChargedTokens += run.ChargedTokens - row.ReservedTokens;
+            spend = new PendingSpend(row.BudgetDay!.Value, run, row.ReservedMicros);
             ClearReservation(row);
         }
         if (run.Input is not null) await AnalysisPromptTexts.EnsureAsync(db, run.Input, nowTicks, cancellationToken);
         mapping.AddRun(db, row, wrapped);
         if (run.Outcome is AnalysisRunOutcome.CitationRejected or AnalysisRunOutcome.OutputRejected) row.Attempts++;
+        return spend;
     }
 
     private bool Transition(TRow row, AnalysisCheckpoint update, DatabaseTime clock, TimeSpan? newLease = null)
@@ -253,6 +268,8 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
         row.RetryAt = update.Status switch
         {
             State.RetryWaiting => clock.Ticks + update.RetryDelay!.Value.Ticks,
+            State.WaitingForBudget when update.ErrorCode is AnalysisErrorCodes.MonthlyCapNotSet =>
+                clock.Ticks + AnalysisPolicy.InitialOutagePause.Ticks,
             State.WaitingForBudget => new DateTime(clock.Day.AddDays(1), TimeOnly.MinValue, DateTimeKind.Utc).Ticks,
             _ => null
         };
@@ -285,6 +302,7 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
     private static void ClearReservation(TRow row)
     {
         row.ReservedTokens = 0;
+        row.ReservedMicros = 0;
         row.BudgetDay = null;
         row.ReservedAtUtcTicks = null;
         row.PendingRunId = null;

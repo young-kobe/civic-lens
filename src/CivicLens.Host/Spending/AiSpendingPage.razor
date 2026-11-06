@@ -1,0 +1,83 @@
+@page "/Review/Spending"
+@using CivicLens.Application.Spending
+
+<TopBarTitle Crumbs="Crumbs" />
+
+<div class="content">
+    <PageHeader Title="AI spending" Lede="Set the most that AI calls can cost in one UTC month. A call that could pass the cap waits. A call with no cap retries every 5 minutes. A raised cap takes effect at the next UTC midnight, or when the worker restarts." />
+    @if (StatusMessage is not null)
+    {
+        <Notice Tone="Tone.Ok" Dismissible="true">@StatusMessage</Notice>
+    }
+    @if (error is not null)
+    {
+        <Notice Tone="Tone.Bad">@error</Notice>
+    }
+
+    @if (view is not null)
+    {
+        @if (view.CurrentCap is null)
+        {
+            <Notice Tone="Tone.Warn">No cap is set. AI calls wait until you set one.</Notice>
+        }
+
+        <Panel Title="This month" Id="month" Padded="true">
+            <p>
+                <strong>@Dollars(view.ChargedMicros)</strong> spent or reserved since @Moment.Day(view.Month).
+                @if (view.CurrentCap is { } cap)
+                {
+                    <text>The cap is <strong>@Dollars(cap.CapMicros)</strong>.</text>
+                }
+            </p>
+            <form id="cap-form" class="form" method="post" @formname="cap" @onsubmit="SaveCapAsync">
+                <AntiforgeryToken />
+                <Field Label="Monthly cap in US dollars" For="Cap_Dollars" Hint="The cap counts from the first day of each UTC month. Enter 0 to stop all AI calls.">
+                    <input id="Cap_Dollars" name="Cap.Dollars" type="text" inputmode="decimal" value="@Cap?.Dollars" aria-describedby="Cap_Dollars-hint" />
+                </Field>
+                <div class="actions"><Button Variant="ButtonVariant.Primary" Type="submit">Save cap</Button></div>
+            </form>
+        </Panel>
+
+        <Panel Title="Model prices" Id="prices">
+            <Aside>US dollars for one million tokens. Prices are set in code from the Anthropic price list.</Aside>
+            <ChildContent>
+                <DataTable Items="PriceRows" Caption="Model prices" Stack="true">
+                    <Head>
+                        <th>Model</th>
+                        <th>Input</th>
+                        <th>Output</th>
+                        <th>Cache read</th>
+                        <th>Cache write</th>
+                    </Head>
+                    <Row Context="item">
+                        <TableCell Label="Model" Main>@item.Name</TableCell>
+                        <TableCell Label="Input">@Dollars(item.Tier.InputMicros)</TableCell>
+                        <TableCell Label="Output">@Dollars(item.Tier.OutputMicros)</TableCell>
+                        <TableCell Label="Cache read">@Dollars(item.Tier.CacheReadMicros)</TableCell>
+                        <TableCell Label="Cache write">@Dollars(item.Tier.CacheWriteMicros)</TableCell>
+                    </Row>
+                </DataTable>
+            </ChildContent>
+        </Panel>
+
+        <Panel Title="Last changes" Id="changes">
+            <ChildContent>
+                <DataTable Items="Changes" Caption="Last changes" Stack="true">
+                    <Head>
+                        <th>Change</th>
+                        <th>Saved by</th>
+                        <th>When</th>
+                    </Head>
+                    <Row Context="item">
+                        <TableCell Label="Change" Main>@item.Text</TableCell>
+                        <TableCell Label="Saved by">@item.AuthorSubject</TableCell>
+                        <TableCell Label="When"><Timestamp Value="item.RecordedAt" /></TableCell>
+                    </Row>
+                    <Empty>
+                        <EmptyState Title="No changes yet" Text="A saved cap shows here." />
+                    </Empty>
+                </DataTable>
+            </ChildContent>
+        </Panel>
+    }
+</div>

@@ -538,13 +538,21 @@ Without the collection configuration, the Sources page reports that source check
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- review 5081
 ```
 
-Open `/Review` through the configured HTTPS origin. Keep the separate `worker` running, because it collects, extracts, and compares automatically. `/Review/Sources` is the owner Sources page. `/Review/GateLabels` is the owner page for gate labels. `/Review/Statements` lists statements, and `/Review/Statements/{candidate-id}` shows one statement for editing and decisions. `/Review/Actions/{record-id}` and `/Review/Votes/{record-id}` show one action or vote. The Review home page links to the records that need action.
+Open `/Review` through the configured HTTPS origin. Keep the separate `worker` running, because it collects, extracts, and compares automatically. `/Review/Sources` is the owner Sources page. `/Review/GateLabels` is the owner page for gate labels. `/Review/Spending` is the owner page for the [AI spending cap](#ai-spending-cap). `/Review/Statements` lists statements, and `/Review/Statements/{candidate-id}` shows one statement for editing and decisions. `/Review/Actions/{record-id}` and `/Review/Votes/{record-id}` show one action or vote. The Review home page links to the records that need action.
 
 A record allows at most 64 open concerns. An approval resolves them and starts a new cycle. When a limit rejects a write, do not discard history to continue. Browsing comparisons may return an empty batch with a continuation when the batch holds only unchanged, incompatible, or limited results. Use the continuation; the empty batch does not prove that no changes exist.
 
 An AI draft is revision 1 by the AI drafter. Check every sentence and citation against the evidence. If the editor flags an unverified change date, check it, tick Date checked, and press Save and approve. The press saves your revision and approves it. Approved accounts publish about 1 minute after the approval, and at least 10 minutes after the last release, when the stage `publishing` runs. A lost notification delays the publish to the next full hour. A failed tick or a tick that ends on a conflict delays it for at least 10 minutes, to the next approval or the next full hour.
 
 Code approves a worker revision of an action or a vote after it checks the citations. The decision history shows the actor "Code check". A record shows as Needs action only if code did not approve it. A concern is open, a person wrote the text, or an approval check failed. A person can edit or withdraw any record.
+
+## AI spending cap
+
+Every AI call needs a monthly dollar cap. With no cap, AI calls wait with the code `monthlyCapNotSet`, and no paid call runs. Deploy the new image first, because the page exists only in it. Then set the cap on `/Review/Spending`. Calls that wait for a missing cap retry every 5 minutes, so they start by themselves. Until then, AI calls wait. The per-stage `CIVIC_LENS_*_DAILY_TOKENS` limits stay and work with the cap.
+
+Open `/Review/Spending` as the owner. Type the cap in US dollars, and press Save cap. Each save adds a revision with your subject and the time. The page shows the last 10 cap changes. The price table is read only. Model prices are code in `ModelPrices`, from the Anthropic price list. A price change is a code change, with a deploy. Do not type prices anywhere. [Analysis](architecture/analysis.md#monthly-dollar-cap) holds the rules.
+
+The cap counts each UTC month. A call that could pass it waits with the code `monthlyDollarCap`. The check prices each call at the highest price of the model, in any tier, before it runs. The reservation can therefore be higher than the real cost, until the call settles. A waiting entry returns to Pending at the next UTC midnight, or when the worker restarts. After you raise the cap, restart the worker to resume at once. After you save a first cap, wait up to 5 minutes. A cap of 0 stops all AI calls.
 
 ## AI drafting of document-change accounts
 
@@ -675,7 +683,7 @@ The owner measures the text prompt before the setting goes on. The command calls
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions text measure 1500000 config/action-text-measure-bills.json
 ```
 
-The first argument is the spend cap in tokens. The command refuses to start without it. It stops before a call that could pass the cap. Each call of a 60,000 character text reserves about 65,000 tokens, so 20 bills can reserve 1,300,000 tokens. The command writes no database row. It writes the report to `artifacts/action-text-measure/<time>.json`. A bill with no stored text is skipped with its reason. Read each sentence and its quote in the report. Put the totals and your reading of the sample on the pull request, before the publish pull request. See [text measure](architecture/actions.md#text-measure).
+The first argument is the spend cap in tokens. The command refuses to start without it. It stops before a call that could pass the cap. Each call of a 60,000 character text reserves about 65,000 tokens, so 20 bills can reserve 1,300,000 tokens. The command writes no draft, run, or job row. It adds its real cost to the month on `/Review/Spending`, and it does not wait on the monthly cap. It writes the report to `artifacts/action-text-measure/<time>.json`. A bill with no stored text is skipped with its reason. Read each sentence and its quote in the report. Put the totals and your reading of the sample on the pull request, before the publish pull request. See [text measure](architecture/actions.md#text-measure).
 
 Drafting uses Claude Haiku 5.5. The first run can spend up to the daily limit on queued candidates. Start with a low limit. A bill version whose summaries or subjects have closed has up to three queued candidates. Each older one settles as `supersededByNewerCandidate` with no call, also when the newest candidate blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
 

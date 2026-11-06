@@ -34,7 +34,7 @@
     </Panel>
     <Panel Title="Privacy" Padded="true">
         <p>You do not need an account. We set no cookies. We use no analytics and no ad trackers. We never sell data.</p>
-        <DataTable Roles="true" Items="PrivacyRows" Caption="What we keep and who else sees it">
+        <DataTable Stack="true" Roles="true" Items="PrivacyRows" Caption="What we keep and who else sees it">
             <Head><TableCell Header>When you</TableCell><TableCell Header>What we keep</TableCell><TableCell Header>Who else sees it</TableCell></Head>
             <Row Context="row">
                 <TableCell Main>@row.Action</TableCell>
@@ -48,7 +48,7 @@
     </Panel>
     <Panel Title="Using our records" Padded="true">
         <p>You may copy, share and build on our records. Please credit us and link to the record.</p>
-        <DataTable Roles="true" Items="ReuseRows" Caption="Terms for each kind of material">
+        <DataTable Stack="true" Roles="true" Items="ReuseRows" Caption="Terms for each kind of material">
             <Head><TableCell Header>What</TableCell><TableCell Header>Terms</TableCell><TableCell Header>Credit</TableCell></Head>
             <Row Context="row">
                 <TableCell Main>@row.What</TableCell>

@@ -12,7 +12,7 @@
     </div>
 }
 <div class="record-list">
-<DataTable Roles="true" Items="Records" Caption="@Caption" DefaultOrder="@(Sort is null ? null : PublishedRecordLabels.NewestFirst)" data-sort-source="@SortSource">
+<DataTable Stack="true" Roles="true" Items="Records" Caption="@Caption" DefaultOrder="@(Sort is null ? null : PublishedRecordLabels.NewestFirst)" data-sort-source="@SortSource">
     <Head>
         <TableCell Header Sort="@Sortable(SortKind.Text)" SortKey="@Key("headline")">Record</TableCell>
         @switch (Columns)

@@ -12,6 +12,7 @@ using CivicLens.Application.Relationships;
 using CivicLens.Application.Reports;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Review;
+using CivicLens.Application.Spending;
 using CivicLens.Application.Statements;
 using CivicLens.Application.Votes;
 using CivicLens.Infrastructure.Actions;
@@ -25,6 +26,7 @@ using CivicLens.Infrastructure.Publication;
 using CivicLens.Infrastructure.Relationships;
 using CivicLens.Infrastructure.Reports;
 using CivicLens.Infrastructure.Roster;
+using CivicLens.Infrastructure.Spending;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Statements;
 using CivicLens.Infrastructure.Votes;
@@ -246,6 +248,7 @@ internal static class ReviewWorkspace
         ConfigureRelationshipReview(services, contexts);
         ConfigureBriefReview(services, contexts);
         ConfigureReportReview(services, contexts);
+        ConfigureSpending(services, contexts);
         services.AddSingleton<IRecordKindStore>(new PostgresRecordKindStore(contexts));
         services.AddSingleton<IReviewQueueStore>(new PostgresReviewQueueStore(contexts));
         services.AddScoped<ListReviewQueue>();
@@ -293,6 +296,13 @@ internal static class ReviewWorkspace
         services.AddScoped<SaveGateLabel>();
         services.AddScoped<ListGateLabelQueue>();
         services.AddScoped<GetGateLabelTask>();
+    }
+
+    private static void ConfigureSpending(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)
+    {
+        services.AddSingleton<IAiSpendingStore>(new PostgresAiSpendingStore(contexts));
+        services.AddScoped<GetAiSpending>();
+        services.AddScoped<SaveMonthlyCap>();
     }
 
     private static void ConfigureActionReview(IServiceCollection services, IDbContextFactory<CollectionAttemptDbContext> contexts)

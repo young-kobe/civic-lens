@@ -13,6 +13,7 @@ internal interface IAnalysisRow
     int Attempts { get; set; }
     long? RetryAt { get; set; }
     long ReservedTokens { get; set; }
+    long ReservedMicros { get; set; }
     DateOnly? BudgetDay { get; set; }
     long? ReservedAtUtcTicks { get; set; }
     string? PendingRunId { get; set; }

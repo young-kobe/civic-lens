@@ -22,9 +22,9 @@ public abstract class PostgresAnalysisStore<TRun> : IAnalysisQueue<TRun> where T
     public Task<bool> RenewAsync(AnalysisClaim claim, TimeSpan leaseDuration, CancellationToken cancellationToken) =>
         queue.RenewAsync(claim, leaseDuration, cancellationToken);
 
-    public Task<AnalysisReservation> ReserveAsync(AnalysisClaim claim, string runId, string inputHash, long tokens,
+    public Task<AnalysisReservation> ReserveAsync(AnalysisClaim claim, string runId, string inputHash, string model, long tokens,
         long dailyTokenLimit, CancellationToken cancellationToken) =>
-        queue.ReserveAsync(claim, runId, inputHash, tokens, dailyTokenLimit, cancellationToken);
+        queue.ReserveAsync(claim, runId, inputHash, model, tokens, dailyTokenLimit, cancellationToken);
 
     public Task<bool> CheckpointAsync(AnalysisCheckpoint checkpoint, TRun? run, CancellationToken cancellationToken) =>
         queue.CheckpointAsync(checkpoint, run, cancellationToken);

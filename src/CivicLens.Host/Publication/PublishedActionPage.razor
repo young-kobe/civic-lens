@@ -9,7 +9,7 @@
     <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
 
     <Panel Title="Sponsorships" Id="sponsorships-title" Padded="true">
-        <DataTable Roles="true" Items="Record.Sponsorships" Caption="Sponsorships of tracked officials">
+        <DataTable Stack="true" Roles="true" Items="Record.Sponsorships" Caption="Sponsorships of tracked officials">
             <Head><TableCell Header>Official</TableCell><TableCell Header>@PublicColumn.Role</TableCell><TableCell Header>@PublicColumn.Original</TableCell><TableCell Header Class="fit num">@PublicColumn.Sponsored</TableCell><TableCell Header Class="fit num">@PublicColumn.Withdrawn</TableCell><TableCell Header>@PublicColumn.Source</TableCell></Head>
             <Row Context="sponsorship">
                 <TableCell Main><PublishedOfficialName Official="sponsorship.Official" Linked="@(sponsorship.Role == PublishedSponsorshipRole.Sponsor)" /></TableCell>

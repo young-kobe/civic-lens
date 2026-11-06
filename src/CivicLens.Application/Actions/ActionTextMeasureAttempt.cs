@@ -24,6 +24,11 @@ internal sealed class ActionTextMeasureAttempt(string candidateId, long tokenCap
     public string? ErrorCode { get; private set; }
     public AnalysisModelFailure? Failure { get; private set; }
     public ImmutableArray<AnalysisRun> Runs => [.. runs];
+    public AnalysisTokenUsage Usage => runs.Aggregate(AnalysisTokenUsage.None, (sum, run) => sum + run.Usage);
+    public long ChargedTokens => runs.Sum(run => run.ChargedTokens);
+
+    /// <summary>The tokens of the call that a cancel or a fault stopped before it settled. The call may have used all of them.</summary>
+    public long InFlightTokens { get; private set; }
 
     public async Task<AnalysisCall> CallModelAsync(AnalysisModelRequest modelRequest, string? previous,
         Func<AnalysisModelRequest, CancellationToken, Task<AnalysisModelResponse>> send, CancellationToken cancellationToken)
@@ -31,7 +36,7 @@ internal sealed class ActionTextMeasureAttempt(string candidateId, long tokenCap
         RefusedOtherPrompt = modelRequest.PromptVersion != ActionDraftTask.TextPromptVersion;
         StoppedByCap = !RefusedOtherPrompt && SpentTokens + modelRequest.ReservedTokens > tokenCap;
         if (RefusedOtherPrompt || StoppedByCap) return new(null, false);
-        (RunId, previousRunId, request) = (Guid.NewGuid().ToString("N"), previous, modelRequest);
+        (RunId, previousRunId, request, InFlightTokens) = (Guid.NewGuid().ToString("N"), previous, modelRequest, modelRequest.ReservedTokens);
         try
         {
             var response = await send(modelRequest, cancellationToken);
@@ -44,6 +49,7 @@ internal sealed class ActionTextMeasureAttempt(string candidateId, long tokenCap
             var charged = AnalysisFailureRules.ChargeFor(exception, modelRequest.ReservedTokens);
             var run = Run(outcome, exception.Usage ?? AnalysisTokenUsage.None, charged, null, null, null);
             runs.Add(run);
+            InFlightTokens = 0;
             (Calls, SpentTokens, ErrorCode, Failure) = (Calls + 1, SpentTokens + run.ChargedTokens, AnalysisErrorCodes.ForOutcome(outcome), exception.Kind);
             return new(null, false);
         }
@@ -60,6 +66,7 @@ internal sealed class ActionTextMeasureAttempt(string candidateId, long tokenCap
     public Task<bool> SettleAsync(ActionDraftRun run, AnalysisCheckpoint checkpoint, CancellationToken cancellationToken)
     {
         runs.Add(run.Run);
+        InFlightTokens = 0;
         if (checkpoint is ActionDraftCheckpoint { Revision: { } revision }) Revision = revision;
         ErrorCode = checkpoint.ErrorCode;
         return Task.FromResult(true);
@@ -68,6 +75,7 @@ internal sealed class ActionTextMeasureAttempt(string candidateId, long tokenCap
     public Task<bool> SettleAsync(ActionDraftRun run, AnalysisState state, string? errorCode, CancellationToken cancellationToken)
     {
         runs.Add(run.Run);
+        InFlightTokens = 0;
         ErrorCode = errorCode;
         return Task.FromResult(true);
     }
