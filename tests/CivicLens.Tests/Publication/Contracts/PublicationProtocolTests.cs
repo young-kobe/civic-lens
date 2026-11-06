@@ -44,12 +44,12 @@ public sealed class PublicationProtocolTests
     [Fact]
     public void TheReportLinkCutsALongTitleOnAWordBoundaryWithinTheLimitSoTheLinkStaysShort()
     {
-        var title = string.Join(' ', Enumerable.Repeat("housing", 40));
+        var words = string.Join(' ', Enumerable.Repeat("housing", 14));
+        var title = $"{words} {new string('x', 30)}";
 
         var shown = TitleOf(PublicationProtocol.ReportPageLink("a", 1, title));
 
-        Assert.InRange(shown.Length, 1, ReaderReportProtocol.MaximumTitleCharacters);
-        Assert.EndsWith("housing\u2026", shown, StringComparison.Ordinal);
+        Assert.Equal($"{words}\u2026", shown);
     }
 
     [Fact]

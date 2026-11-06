@@ -236,7 +236,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task TheReportPageShowsTheNoScriptMessageOnlyInsideNoScriptAndNamesTheRecordFromTheScript()
+    public async Task TheReportPageShowsTheNoScriptMessageOnlyInsideNoScriptAndHasTheRecordLineElementForTheScript()
     {
         var html = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);
 
