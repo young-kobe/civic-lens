@@ -34,6 +34,13 @@ public sealed class ActionCodeTextTests
         Assert.Equal(expected, ActionCodeText.BillNumber(type, number));
 
     [Fact]
+    public void ABillTypeOutsideTheTableFailsInTheStoredTextAndFallsBackToUpperCaseInDisplay()
+    {
+        Assert.Throws<KeyNotFoundException>(() => ActionCodeText.Of(Snapshot("A bill.", "hamdt")));
+        Assert.Equal("HAMDT 7", ActionCodeText.BillNumber("hamdt", 7));
+    }
+
+    [Fact]
     public void ABillWithOneTrackedSponsorNamesTheSponsorInTheHeadlineAndTheSummary()
     {
         var text = ActionCodeText.Of(Snapshot("Put School Counselors Where They're Needed Act", "hr", 0, ("warren", ActionSponsorshipRole.Sponsor)));

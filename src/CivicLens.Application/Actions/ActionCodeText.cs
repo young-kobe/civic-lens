@@ -25,7 +25,7 @@ public static class ActionCodeText
     public static ReviewText Of(ActionBillSnapshot snapshot)
     {
         var bill = snapshot.Bill;
-        var label = BillNumber(bill.Type, bill.Number);
+        var label = $"{LabelOf(bill.Type)} {bill.Number}";
         var names = snapshot.Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor)
             .Select(item => snapshot.OfficialNames[item.PersonId]).Distinct(StringComparer.Ordinal).ToArray();
         var sponsors = string.Join(", ", names);
@@ -37,9 +37,12 @@ public static class ActionCodeText
         return new(headline, summary, ReviewTextOrigin.Code, null);
     }
 
-    /// <summary>The official display style of a bill number, such as "H.R. 9576", "H.J.Res. 213" or "S. 2403". Display code uses this one owner. A type outside the table, which a published vote can hold, shows in upper case.</summary>
+    /// <summary>The official display style of a bill number, such as "H.R. 9576", "H.J.Res. 213" or "S. 2403". Display code uses this owner, and it reads the same table as the stored text of <see cref="Of"/>. A type outside the table, which a published vote can hold, shows in upper case. Stored text never takes this fallback.</summary>
     public static string BillNumber(string billType, int number) =>
         $"{(BillTypeLabels.TryGetValue(billType.ToLowerInvariant(), out var label) ? label : billType.ToUpperInvariant())} {number}";
+
+    /// <summary>The label of a bill type for stored, code approved text. A type outside the table throws, so no unreviewed label reaches a stored headline.</summary>
+    private static string LabelOf(string billType) => BillTypeLabels[billType.ToLowerInvariant()];
 
     private static string EndedSentence(string title)
     {
