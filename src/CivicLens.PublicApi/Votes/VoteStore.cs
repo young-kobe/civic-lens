@@ -55,7 +55,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
             """);
         command.Parameters.AddWithValue("id", recordId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken) ? new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(21), reader.GetFieldValue<string[]>(22)) : null;
+        return await reader.ReadAsync(cancellationToken) ? new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(22), reader.GetFieldValue<string[]>(23)) : null;
     }
 
     /// <summary>Reads one page of members. Null means that the active release holds no such vote. The caller compares the release of the page with the release of the cursor.</summary>
