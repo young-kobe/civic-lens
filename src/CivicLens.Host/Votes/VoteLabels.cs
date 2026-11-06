@@ -1,7 +1,7 @@
 using CivicLens.Application.Publication;
 using CivicLens.Core.Votes;
 using CivicLens.Host.Actions;
-using CivicLens.Host.Publication;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Host.Votes;
 
@@ -18,5 +18,5 @@ internal static class VoteLabels
     public static string Bill(VoteDraftRevision revision) =>
         revision.BillType is null ? "None" : ActionLabels.Bill(revision.Congress, revision.BillType, revision.BillNumber!.Value);
 
-    public static string Kind(VoteKind kind) => PublishedRecordLabels.VoteKind(PublishedVoteKinds.Of(kind));
+    public static string Kind(VoteKind kind) => PlainVoteWords.Kind(PublishedVoteKinds.Of(kind));
 }
