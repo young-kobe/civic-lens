@@ -3,8 +3,9 @@ using CivicLens.Application.Actions;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Roster;
 using CivicLens.Host.Actions;
-using CivicLens.Host.Components.Ui;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Components.Ui;
+using CivicLens.PublicWeb.Publication;
 
 namespace CivicLens.Host.Publication;
 
@@ -268,6 +269,6 @@ internal static class PublishedOfficialView
     public static string RollCall(PublishedOfficialVote vote)
     {
         var roll = $"{vote.Chamber} roll call {vote.RollCallNumber}, Congress {vote.Congress}, session {vote.Session}";
-        return vote.BillType is null ? roll : $"{roll}, {ActionLabels.BillNumber(vote.BillType, vote.BillNumber!.Value)}";
+        return vote.BillType is null ? roll : $"{roll}, {ActionCodeText.BillNumber(vote.BillType, vote.BillNumber!.Value)}";
     }
 }

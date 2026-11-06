@@ -3,10 +3,11 @@ using CivicLens.Application.Publication;
 using CivicLens.Core.Votes;
 using CivicLens.Host.Actions;
 using CivicLens.Host.Collection;
-using CivicLens.Host.Components.Evidence;
-using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Votes;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Components.Evidence;
+using CivicLens.PublicWeb.Publication;
+using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.Host.Publication;
 

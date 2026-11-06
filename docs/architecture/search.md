@@ -294,7 +294,7 @@ The poll interval is 30 seconds and the statement timeout is 2 seconds. Both are
 | ZIP districts | `src/CivicLens.PublicApi/ZipDistricts/ZipDistrictEndpoints.cs`, `src/CivicLens.PublicApi/ZipDistricts/ZipDistrictRequest.cs`, `src/CivicLens.PublicApi/ZipDistricts/ZipDistrictStore.cs`, `src/CivicLens.PublicApi/ZipDistricts/ZipDistrictAnswer.cs`, `src/CivicLens.PublicApi/ZipDistricts/ZipLookup.cs` |
 | Issues | `src/CivicLens.PublicApi/Issues/IssueEndpoints.cs`, `src/CivicLens.PublicApi/Issues/IssueStore.cs`, `src/CivicLens.PublicApi/Issues/IssueCounts.cs`, `src/CivicLens.PublicApi/Issues/IssueSponsor.cs` |
 | Home | `src/CivicLens.PublicApi/Home/HomeEndpoints.cs`, `src/CivicLens.PublicApi/Home/HomeStore.cs`, `src/CivicLens.PublicApi/Home/HomeAnswer.cs`, `src/CivicLens.PublicApi/Home/HomeVote.cs`, `src/CivicLens.PublicApi/Home/HomeBrief.cs` |
-| Home ZIP lookup | `src/CivicLens.Host/Publication/PublishedHomePage.razor`, `src/CivicLens.Host/Publication/UsStates.cs`, `src/CivicLens.Host/wwwroot/js/public.js` |
+| Home ZIP lookup | `src/CivicLens.Host/Publication/PublishedHomePage.razor`, `src/CivicLens.PublicWeb/Publication/UsStates.cs`, `src/CivicLens.Host/wwwroot/js/public.js` |
 | Shared readers | `src/CivicLens.PublicApi/Http/CursorFields.cs`, `src/CivicLens.PublicApi/Http/ViewColumns.cs` |
 | Rate limit | `src/CivicLens.PublicApi/Http/ClientAddress.cs` |
 | HTTP helpers | `src/CivicLens.PublicApi/Http/ApiResults.cs`, `src/CivicLens.PublicApi/Http/QueryValues.cs` |
