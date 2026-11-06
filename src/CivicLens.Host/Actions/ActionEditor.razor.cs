@@ -12,6 +12,7 @@ using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
 using CivicLens.PublicWeb.Components.Evidence;
 using CivicLens.PublicWeb.Components.Ui;
+using CivicLens.PublicWeb.Publication;
 
 namespace CivicLens.Host.Actions;
 

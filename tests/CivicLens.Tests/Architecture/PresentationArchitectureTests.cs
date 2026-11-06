@@ -14,7 +14,7 @@ public sealed class PresentationArchitectureTests
     private static readonly string[] DocumentShells =
     [
         Path.Combine(ComponentsRoot, "App.razor"),
-        Path.Combine(HostRoot, "Publication", "PublicPage.razor")
+        Path.Combine(PublicWebRoot, "Publication", "PublicPage.razor")
     ];
 
     [Fact]
@@ -76,7 +76,7 @@ public sealed class PresentationArchitectureTests
     [Fact]
     public void ShellsLoadTheSameThemeSoTheWorkspaceAndPublishedPagesMatch()
     {
-        Assert.Contains("PublicThemeMenu", File.ReadAllText(Path.Combine(HostRoot, "Publication", "PublicPage.razor")), StringComparison.Ordinal);
+        Assert.Contains("PublicThemeMenu", File.ReadAllText(Path.Combine(PublicWebRoot, "Publication", "PublicPage.razor")), StringComparison.Ordinal);
         Assert.Contains("ThemeToggle", File.ReadAllText(Path.Combine(ComponentsRoot, "Layout", "WorkspaceLayout.razor")), StringComparison.Ordinal);
         Assert.Contains("css/theme.css", File.ReadAllText(DocumentShells[0]), StringComparison.Ordinal);
         Assert.Contains("assets/css/theme.css", File.ReadAllText(Path.Combine(PublicWebRoot, "Publication", "PublicAssets.cs")), StringComparison.Ordinal);
@@ -95,7 +95,7 @@ public sealed class PresentationArchitectureTests
         Assert.InRange(publicAssets.IndexOf("assets/css/app.css", StringComparison.Ordinal), 0, publicAssets.IndexOf("assets/css/public.css", StringComparison.Ordinal) - 1);
         Assert.DoesNotContain("review.css", publicAssets, StringComparison.Ordinal);
         Assert.DoesNotContain("review.js", publicAssets, StringComparison.Ordinal);
-        var publicPage = File.ReadAllText(Path.Combine(HostRoot, "Publication", "PublicPage.razor"));
+        var publicPage = File.ReadAllText(Path.Combine(PublicWebRoot, "Publication", "PublicPage.razor"));
         Assert.InRange(publicPage.IndexOf("PublicAssets.Script", StringComparison.Ordinal), 0, publicPage.IndexOf("PublicAssets.PublicScript", StringComparison.Ordinal) - 1);
         Assert.DoesNotContain("review.js", publicPage, StringComparison.Ordinal);
     }
