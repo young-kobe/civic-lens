@@ -53,6 +53,40 @@ public sealed class GlossaryTests
     }
 
     [Fact]
+    public async Task TheGlossaryPageStartsWithAnIndexThatLinksEveryGroupAndTermToItsAnchor()
+    {
+        var document = new HtmlParser().ParseDocument(await Renderer.RenderGlossaryAsync(CancellationToken.None));
+        var main = document.QuerySelector("main")!;
+        var index = main.QuerySelector($"nav[aria-label='{Glossary.IndexLabel}']")!;
+
+        var expected = Glossary.Groups.Select(group => group.AnchorId)
+            .Concat(AllTerms.Select(term => term.AnchorId))
+            .Append(Glossary.PartyCountAnchorId);
+        var links = index.QuerySelectorAll("a").ToList();
+
+        Assert.Equal(expected.Order(), links.Select(link => link.GetAttribute("href")!.TrimStart('#')).Order());
+        Assert.All(links, link => Assert.NotNull(main.QuerySelector($"[id='{link.GetAttribute("href")!.TrimStart('#')}']")));
+        Assert.True(index.CompareDocumentPosition(main.QuerySelector("section.glossary-term")!).HasFlag(AngleSharp.Dom.DocumentPositions.Following));
+        Assert.Empty(index.QuerySelectorAll("h1, h2, h3, h4, h5, h6"));
+    }
+
+    [Fact]
+    public async Task ThePartyCountNoteSitsInTheSameGroupInTheIndexAndInTheBody()
+    {
+        var document = new HtmlParser().ParseDocument(await Renderer.RenderGlossaryAsync(CancellationToken.None));
+        var main = document.QuerySelector("main")!;
+        var expected = Glossary.PartyCountGroup.AnchorId;
+
+        var indexLink = main.QuerySelector($"nav a[href='#{Glossary.PartyCountAnchorId}']")!;
+        var indexGroup = indexLink.Closest("ul.glossary-index-groups > li")!.QuerySelector("a")!;
+        var bodyPanel = main.QuerySelectorAll("section[aria-labelledby^='glossary-group-']")
+            .Single(panel => panel.QuerySelector($"#{Glossary.PartyCountAnchorId}") is not null);
+
+        Assert.Equal($"#{expected}", indexGroup.GetAttribute("href"));
+        Assert.Equal(expected, bodyPanel.GetAttribute("aria-labelledby"));
+    }
+
+    [Fact]
     public async Task ATermIsAPopoverOnItsFirstUseOnlyAndPlainTextAfterThat()
     {
         var document = new HtmlParser().ParseDocument(await Renderer.RenderMethodAsync(CancellationToken.None));
