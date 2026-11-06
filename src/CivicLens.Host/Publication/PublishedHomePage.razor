@@ -15,7 +15,7 @@
                             <span>The ZIP lookup needs JavaScript. Without it, browse <a href="@PublicationProtocol.OfficialsPagePath">all officials</a>.</span>
                         </div>
                     </noscript>
-                    <form class="zip-form" hidden data-zip-api="@PublicApiUrl" data-official-page="@PublicationProtocol.OfficialPagePath("{id}")" data-officials-page="@PublicationProtocol.OfficialsPagePath" data-states="@StateNames" data-house-offices="@HouseOffices">
+                    <form class="zip-form" hidden data-zip-api="@PublicApiUrl" data-official-page="@PublicationProtocol.OfficialPagePath("{id}")" data-officials-page="@PublicationProtocol.OfficialsPagePath" data-record-page="@PublicationProtocol.RecordPagePath("{id}")" data-states="@StateNames" data-house-offices="@HouseOffices">
                         <Field Label="Your ZIP code" For="zip-code">
                             <input id="zip-code" name="zip" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="5" placeholder="5 digits" />
                         </Field>
@@ -35,6 +35,12 @@
                 <div data-zip-notes hidden>
                     <p class="muted small">Source: U.S. Census Bureau</p>
                     <p class="muted small">A ZIP Code Tabulation Area is a Census Bureau area. It is not a USPS ZIP code. Near a border, check your address with your House office.</p>
+                </div>
+                <div data-zip-vote-notes hidden>
+                    <p class="muted small">Each list shows votes on a bill, on a change to a bill, or on a <Term Key="nomination">nomination</Term>. It leaves out votes on steps such as the rules for debate.</p>
+                    <p class="muted small">"No vote on record" means this site has no vote by that member on that question. The member may not have been in office yet.</p>
+                    <p class="muted small">A vote title can be an AI summary of the official record. The vote page says so.</p>
+                    <p class="muted small"><a href="@PublicationProtocol.MethodPagePath#your-officials">How we pick these votes</a></p>
                 </div>
             </Panel>
         }

@@ -273,6 +273,19 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task TheMethodPageExplainsHowTheHomePageListsTheVotesOfYourOfficialsAndNamesTheKindsFromTheirOwner()
+    {
+        var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None));
+
+        var heading = document.QuerySelector("h2#your-officials")!;
+        var text = heading.Closest("section")!.ShownText();
+        Assert.Equal("Your officials", heading.TextContent);
+        Assert.Contains("A vote is listed when its kind is one of these: \"Vote to change the text\", \"Vote to pass with limited debate\", \"Vote to pass or agree to\", \"Vote to accept the final text from both chambers\", \"Vote to override the veto\", \"Vote to confirm\".", text, StringComparison.Ordinal);
+        Assert.Contains("A member who has no vote on one of them shows \"No vote on record\".", text, StringComparison.Ordinal);
+        Assert.Contains("No model picks them.", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheMethodPageGivesAWorkedExampleOfTheVotesWithTheirPartyCountAndEveryPageLinksItByItsTitle()
     {
         var renderer = new ReleaseRenderer(null, null);

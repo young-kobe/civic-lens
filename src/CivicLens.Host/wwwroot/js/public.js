@@ -178,6 +178,7 @@
         const panel = document.querySelector("[data-zip-results]");
         const body = panel.querySelector("[data-zip-body]");
         const notes = panel.querySelector("[data-zip-notes]");
+        const voteNotes = panel.querySelector("[data-zip-vote-notes]");
         const input = form.elements.namedItem("zip");
         const houseOffices = JSON.parse(form.dataset.houseOffices);
         const stateName = code => states[code] ?? code;
@@ -205,20 +206,110 @@
             item.append(line);
             return item;
         };
-        const show = (nodes, listed = false) => { panel.hidden = false; notes.hidden = !listed; body.replaceChildren(...nodes); };
-        const showAnswer = answer => {
+        const show = (nodes, listed = false) => { panel.hidden = false; notes.hidden = !listed; voteNotes.hidden = true; body.replaceChildren(...nodes); };
+        const seatList = answer => {
             const list = element("ul", undefined, "zip-seats");
-            const nodes = [];
-            if (answer.districts.length > 1)
-                nodes.push(element("p", `Your ZIP area lies in ${answer.districts.length} districts. The district with the most land is first.`, "zip-count"));
             for (const district of answer.districts)
                 list.append(seat(seatTitle(district), district.representative));
             for (const state of answer.states) {
                 if (state.senators.length === 0) { list.append(element("li", `${stateName(state.state)} has no senators.`, "zip-seat")); continue; }
                 for (const senator of state.senators) list.append(seat(`Senator for ${stateName(state.state)}`, senator));
             }
-            nodes.push(list);
-            show(nodes, true);
+            return list;
+        };
+        const seatNodes = answer => {
+            const nodes = [];
+            if (answer.districts.length > 1)
+                nodes.push(element("p", `Your ZIP area lies in ${answer.districts.length} districts. The district with the most land is first.`, "zip-count"));
+            nodes.push(seatList(answer));
+            return nodes;
+        };
+        const membersOf = (answer, chamber) => {
+            const holders = chamber === "house"
+                ? answer.districts.map(district => district.representative)
+                : answer.states.flatMap(state => state.senators);
+            return holders.filter(holder => holder !== null);
+        };
+        const votesPerChamber = 4;
+        const newestFirst = (a, b) => b.votedOn.localeCompare(a.votedOn) || b.session - a.session || b.rollCall - a.rollCall || a.recordId.localeCompare(b.recordId);
+        const listedVotes = (answers, chamber) => {
+            const byId = new Map();
+            for (const answer of answers)
+                for (const vote of answer.votes) if (vote.chamber === chamber) byId.set(vote.recordId, vote);
+            return Array.from(byId.values()).sort(newestFirst).slice(0, votesPerChamber);
+        };
+        const chamberHeading = (chamber, count, memberCount) => {
+            const name = chamber === "house" ? "House" : "Senate";
+            const who = memberCount === 1 ? "your member" : "your members";
+            return count === 1 ? `${name}: the newest vote that ${who} voted on` : `${name}: the ${count} newest votes that ${who} voted on`;
+        };
+        const voteRow = (vote, members, answers) => {
+            const row = element("tr");
+            const main = element("td", undefined, "cell-main");
+            const link = element("a", vote.headline, "cell-title");
+            link.href = form.dataset.recordPage.replace("{id}", encodeURIComponent(vote.recordId));
+            main.append(link, element("span", `${vote.kindWords}, ${formatDay(vote.votedOn)}. ${vote.resultWords}.`, "cell-note"));
+            row.append(main);
+            members.forEach((member, index) => {
+                const cast = answers[index].votes.find(own => own.recordId === vote.recordId);
+                const cell = element("td", cast ? cast.castWords : "No vote on record");
+                cell.dataset.label = member.name;
+                row.append(cell);
+            });
+            return row;
+        };
+        const voteTable = (votes, members, answers) => {
+            const head = element("tr", undefined);
+            head.append(element("th", "Vote"), ...members.map(member => element("th", member.name)));
+            const table = element("table", undefined, "table");
+            table.append(element("thead"), element("tbody"));
+            table.tHead.append(head);
+            table.tBodies[0].append(...votes.map(vote => voteRow(vote, members, answers)));
+            const wrap = element("div", undefined, "table-wrap");
+            wrap.append(table);
+            return wrap;
+        };
+        const voteSection = (chamber, answer, answersById) => {
+            const members = membersOf(answer, chamber);
+            if (members.length === 0) return [];
+            const answers = members.map(member => answersById.get(member.officialId));
+            const votes = listedVotes(answers, chamber);
+            const name = chamber === "house" ? "House" : "Senate";
+            if (votes.length === 0) return [element("h4", name), element("p", `This site has no vote on record yet for your ${name} ${members.length === 1 ? "member" : "members"}.`)];
+            return [element("h4", chamberHeading(chamber, votes.length, members.length)), voteTable(votes, members, answers)];
+        };
+        const fetchJson = async url => {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Status ${response.status}`);
+            return response.json();
+        };
+        const fetchVotes = async answer => {
+            const holders = [...membersOf(answer, "house"), ...membersOf(answer, "senate")];
+            const answers = await Promise.all(holders.map(holder => fetchJson(`${api}/v1/member-votes?official=${encodeURIComponent(holder.officialId)}`)));
+            return new Map(answers.map(own => [own.officialId, own]));
+        };
+        const showVotes = async (answer, mine) => {
+            const section = element("div", undefined, "zip-votes");
+            section.append(element("h3", "How they voted"), element("p", "Loading votes."));
+            body.append(section);
+            try {
+                let votes = await fetchVotes(answer);
+                if (mine !== running) return;
+                if (Array.from(votes.values()).some(own => own.release !== answer.release)) {
+                    answer = await fetchJson(`${api}/v1/zip-districts/${answer.zcta}`);
+                    if (mine !== running) return;
+                    votes = await fetchVotes(answer);
+                    if (mine !== running) return;
+                    body.replaceChildren(...seatNodes(answer), section);
+                }
+                section.replaceChildren(element("h3", "How they voted"), ...voteSection("house", answer, votes), ...voteSection("senate", answer, votes));
+                voteNotes.hidden = false;
+            }
+            catch { if (mine === running) section.replaceChildren(element("h3", "How they voted"), element("p", "The votes did not load. Try again later.")); }
+        };
+        const showAnswer = (answer, mine) => {
+            show(seatNodes(answer), true);
+            showVotes(answer, mine);
         };
         const failure = (zip, status) => {
             const texts = {
@@ -247,7 +338,7 @@
                 answer = await response.json();
             }
             catch { if (mine === running) show([failure(zip, 0)]); return; }
-            if (mine === running) showAnswer(answer);
+            if (mine === running) showAnswer(answer, mine);
         });
         form.hidden = false;
     };

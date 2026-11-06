@@ -61,6 +61,9 @@ table[data-paged]:focus { outline: none; }
 .zip-seat { display: grid; gap: 2px; }
 .zip-seat a { font-weight: 600; }
 .zip-count { margin: 0 0 var(--s3); }
+.zip-votes { display: grid; gap: var(--s3); margin-top: var(--s5); }
+.zip-votes h3, .zip-votes h4, .zip-votes p { margin: 0; }
+[data-zip-vote-notes] { display: grid; gap: var(--s3); margin-top: var(--s4); }
 .home-browse { margin: 0; color: var(--bar-muted); }
 .home-browse a { color: var(--bar-ink); }
 .home-browse a:hover { color: var(--marigold); }

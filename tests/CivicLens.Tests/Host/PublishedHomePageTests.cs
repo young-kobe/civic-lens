@@ -268,6 +268,7 @@ public sealed class PublishedHomePageTests
         Assert.True(form.HasAttribute("hidden"));
         Assert.Equal("officials/{id}.html", form.GetAttribute("data-official-page"));
         Assert.Equal("officials.html", form.GetAttribute("data-officials-page"));
+        Assert.Equal("records/{id}.html", form.GetAttribute("data-record-page"));
         Assert.Equal("District of Columbia", System.Text.Json.JsonDocument.Parse(form.GetAttribute("data-states")!).RootElement.GetProperty("DC").GetString());
         var offices = System.Text.Json.JsonDocument.Parse(form.GetAttribute("data-house-offices")!).RootElement;
         Assert.Equal("Resident Commissioner", offices.GetProperty("PR").GetString());
@@ -307,6 +308,38 @@ public sealed class PublishedHomePageTests
         Assert.Equal(["Source: U.S. Census Bureau", "A ZIP Code Tabulation Area is a Census Bureau area. It is not a USPS ZIP code. Near a border, check your address with your House office."],
             notes.QuerySelectorAll("p").Select(note => note.TextContent));
         Assert.Single(panel.QuerySelectorAll("[data-zip-notes]"));
+    }
+
+    [Fact]
+    public async Task TheVoteNotesStayHiddenUntilTheVotesLoadAndSayWhatTheListLeavesOutAndWhatNoVoteOnRecordMeans()
+    {
+        var document = new HtmlParser().ParseDocument(await HomeHtmlAsync("https://api.example.test"));
+
+        var notes = document.QuerySelector("[data-zip-results] [data-zip-vote-notes]")!;
+        Assert.True(notes.HasAttribute("hidden"));
+        var paragraphs = notes.QuerySelectorAll("p").ToList();
+        Assert.StartsWith("Each list shows votes on a bill, on a change to a ", paragraphs[0].TextContent, StringComparison.Ordinal);
+        Assert.Equal("nomination", paragraphs[0].QuerySelector(".term")!.TextContent);
+        Assert.EndsWith(". It leaves out votes on steps such as the rules for debate.", paragraphs[0].TextContent, StringComparison.Ordinal);
+        Assert.Equal(["\"No vote on record\" means this site has no vote by that member on that question. The member may not have been in office yet.",
+            "A vote title can be an AI summary of the official record. The vote page says so.", "How we pick these votes"], paragraphs.Skip(1).Select(note => note.TextContent));
+        Assert.Equal("method.html#your-officials", notes.QuerySelector("a[href]:not(.term)")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task TheHomePageGivesTheScriptNoWordListSoPlainVoteWordsStaysTheOnlyOwnerOfTheWords()
+    {
+        var document = new HtmlParser().ParseDocument(await HomeHtmlAsync("https://api.example.test"));
+        var script = System.Text.Encoding.UTF8.GetString(new ReleaseRenderer(null, null).Assets.Single(asset => asset.RelativePath == "assets/js/public.js").Content);
+
+        var attributes = document.QuerySelector("form[data-zip-api]")!.Attributes.Select(attribute => attribute.Name).Order();
+        Assert.Equal(["class", "data-house-offices", "data-official-page", "data-officials-page", "data-record-page", "data-states", "data-zip-api", "hidden"], attributes);
+        string[] words =
+        [
+            .. Enum.GetValues<PublishedVoteKind>().Select(PlainVoteWords.Kind),
+            PlainVoteWords.Yes, PlainVoteWords.Present, PlainVoteWords.NotVoting, "Yea", "Aye", "Nay", "Passed", "Confirmed", "Not confirmed", "Failed"
+        ];
+        foreach (var word in words) Assert.DoesNotContain(word, script, StringComparison.Ordinal);
     }
 
     [Fact]
