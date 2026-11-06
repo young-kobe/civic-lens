@@ -138,6 +138,8 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         {
             var row = rows.Single(row => row.Congress == revision.Congress && row.BillType == revision.BillType &&
                 row.BillNumber == revision.BillNumber && row.PackageId == revision.TextPackageId);
+            if (revision.TextCitations.Any(citation => citation.Span.ExtractionId != row.ExtractionId))
+                throw new InvalidDataException("Bill text citations do not name the extraction of their stored text version.");
             return new ActionTextVersion(row.PackageId, row.VersionType, row.VersionDate, row.CharsRead, row.CharsTotal);
         }, StringComparer.Ordinal);
     }

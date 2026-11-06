@@ -84,6 +84,19 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task PublicationRefusesBillTextCitationsFromAnExtractionOtherThanTheOneForTheStoredTextVersion()
+    {
+        var candidate = await ReadableCandidateAsync("A000001", withSummary: false);
+        var stored = await StoreBillTextAsync(candidate, ActionBillTexts.Body);
+        await SettleTextRevisionAsync(candidate, TextRevision(candidate, stored));
+        var otherJob = await EnqueueDetailAsync("other-text-extraction");
+        var otherExtraction = await ExtractionAsync(otherJob, stored.Reading.Text, stored.Reading.Text, ActionBillTexts.ExtractionVersion);
+        await ExecuteAsync(connectionString, $"UPDATE action_revision_text_citations SET citation_extraction_id = '{otherExtraction}'");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => ActionReviews().GetForPublicationAsync([RecordId], default));
+    }
+
+    [Fact]
     public async Task ATextDraftAboveTheGradeLimitWaitsForAPersonWithTheReasonKeptBecauseCodeApprovesOnlyReadableText()
     {
         var candidate = await ReadableCandidateAsync("A000001", withSummary: false);
