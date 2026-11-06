@@ -432,6 +432,7 @@
         "dependencies": {
           "CivicLens.Application": "[1.0.0, )",
           "CivicLens.Infrastructure": "[1.0.0, )",
+          "CivicLens.PublicWeb": "[1.0.0, )",
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.14, )"
         }
       },
@@ -455,6 +456,12 @@
       },
       "civiclens.publication.contracts": {
         "type": "Project"
+      },
+      "civiclens.publicweb": {
+        "type": "Project",
+        "dependencies": {
+          "CivicLens.Publication.Contracts": "[1.0.0, )"
+        }
       }
     }
   }

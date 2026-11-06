@@ -1,5 +1,5 @@
 using CivicLens.Core.Review;
-using CivicLens.Host.Components.Ui;
+using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.Host.Review;
 
@@ -21,9 +21,9 @@ internal static class DraftStatusDisplay
 
     public static Tone Tone(ReviewStatus status) => status switch
     {
-        ReviewStatus.Approved => Components.Ui.Tone.Ok,
-        ReviewStatus.AwaitingReview or ReviewStatus.NotDrafted or ReviewStatus.Rejected => Components.Ui.Tone.Neutral,
-        _ => Components.Ui.Tone.Warn
+        ReviewStatus.Approved => PublicWeb.Components.Ui.Tone.Ok,
+        ReviewStatus.AwaitingReview or ReviewStatus.NotDrafted or ReviewStatus.Rejected => PublicWeb.Components.Ui.Tone.Neutral,
+        _ => PublicWeb.Components.Ui.Tone.Warn
     };
 
     public static string Label(ReviewDecisionKind kind) => kind switch
@@ -48,9 +48,9 @@ internal static class DraftStatusDisplay
 
     public static Tone Tone(ReviewDecisionKind kind) => kind switch
     {
-        ReviewDecisionKind.Approve => Components.Ui.Tone.Ok,
+        ReviewDecisionKind.Approve => PublicWeb.Components.Ui.Tone.Ok,
         ReviewDecisionKind.Reject => Tone(ReviewStatus.Rejected),
-        _ => Components.Ui.Tone.Warn
+        _ => PublicWeb.Components.Ui.Tone.Warn
     };
 
     public static string DraftName(string headline) =>

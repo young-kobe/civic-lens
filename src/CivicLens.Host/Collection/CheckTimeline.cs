@@ -3,7 +3,7 @@ using CivicLens.Application.Collection.Discovery;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
-using CivicLens.Host.Components.Ui;
+using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.Host.Collection;
 

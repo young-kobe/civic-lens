@@ -7,6 +7,7 @@ using CivicLens.Application.Publication;
 using CivicLens.Host.Components.Ui;
 using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Components.Ui;
 using CivicLens.Tests.Fixtures;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
@@ -172,6 +173,16 @@ public sealed class PublicFoundationTests
                 var field = Color.Parse(Value("--bar-field"), bar);
                 Assert.True(Color.Parse(Value(text), field).ContrastWith(field) >= 4.5, $"{text} on --bar-field, theme {dark}");
             }
+
+            // Marks that carry no text need 3 to 1 (WCAG 1.4.11): the against-party mark, and the edge that sets the header band apart from the page.
+            foreach (var background in new[] { "--ground", "--surface", "--raised" })
+            {
+                var back = Color.Parse(Value(background), null);
+                Assert.True(Color.Parse(Value("--against"), back).ContrastWith(back) >= 3, $"--against on {background}, theme {dark}");
+            }
+
+            var ground = Color.Parse(Value("--ground"), null);
+            Assert.True(Color.Parse(Value("--bar-edge"), ground).ContrastWith(ground) >= 3, $"--bar-edge on --ground, theme {dark}");
         }
     }
 

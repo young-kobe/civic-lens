@@ -1,5 +1,6 @@
-using CivicLens.Host.Components.Ui;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Publication;
+using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.Host.Publication;
 

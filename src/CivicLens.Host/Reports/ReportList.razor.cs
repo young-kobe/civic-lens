@@ -3,9 +3,9 @@ using Microsoft.Extensions.Logging;
 using CivicLens.Application.Reports;
 using CivicLens.Core.Review;
 using CivicLens.Host.Components.Layout;
-using CivicLens.Host.Components.Ui;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.Host.Reports;
 
