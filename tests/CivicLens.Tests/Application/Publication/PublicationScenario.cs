@@ -3,6 +3,7 @@ using CivicLens.Application.ExecutiveActions;
 using CivicLens.Core.ExecutiveActions;
 using CivicLens.Tests.Application.ExecutiveActions;
 using CivicLens.Application.Collection;
+using CivicLens.Application.People;
 using CivicLens.Application.Roster;
 using CivicLens.Application.Paging;
 using System.Collections.Immutable;
@@ -64,6 +65,7 @@ internal sealed class PublicationScenario
     public OfficialPhoto[] Photos { get; set; } = [];
     public PhotoCaptures Captures { get; } = new();
     public int PhotoReads { get; private set; }
+    public int SettingReads { get; private set; }
 
     private CollectionConfiguration Collection() => RosterFixtures.Configuration() with
     {
@@ -73,12 +75,13 @@ internal sealed class PublicationScenario
             Name = name.Value,
             BioguideId = ExternalIds.GetValueOrDefault(name.Key).BioguideId,
             WikidataId = ExternalIds.GetValueOrDefault(name.Key).WikidataId,
-            Offices = Offices.GetValueOrDefault(name.Key),
-            Website = Websites.GetValueOrDefault(name.Key),
-            WithholdPhoto = WithheldPhotos.Contains(name.Key)
+            Offices = Offices.GetValueOrDefault(name.Key)
         })],
         Sources = [RosterFixtures.Source(), ExecutiveFixtures.Source()]
     };
+
+    private FixedPersonRegistry Settings() => new(OfficialNames.Keys.Where(id => Websites.ContainsKey(id) || WithheldPhotos.Contains(id))
+        .ToDictionary(id => id, id => new PersonSetting(WithheldPhotos.Contains(id), Websites.GetValueOrDefault(id))), () => SettingReads++);
 
     public PublicationScenario() => Releases = new() { Events = Events };
 
@@ -95,7 +98,7 @@ internal sealed class PublicationScenario
     public HomeHighlights? Highlights { get; private set; }
 
     public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, Layout = PageLayout, FailOnStatement = RenderFailureOfStatement, OfficialPages = OfficialPages, PublicBaseUrl = BaseUrl, HomeSeen = seen => Highlights = seen }, Loaders(),
-        new PublicationCatalog(OfficialNames, Issues, IssueIconConfiguration.None), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials)),
+        new PublicationCatalog(OfficialNames, Issues, IssueIconConfiguration.None), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials), Settings()),
         Captures.Photos("artifacts"), Clock, new PruneReleases(Publications, Releases, NullLogger<PruneReleases>.Instance));
 
     public BlockedPublishedRecords Blocked() => new(Publications, Releases);

@@ -79,7 +79,7 @@ if (args is [] or ["--help"] or ["help"])
           documents compare <before-extraction-id> <after-extraction-id>
           documents comparison <comparison-id>
           analyses requeue <comparison-id|--all>
-          analyses redraft --stale [actions|votes|statements|briefs]
+          analyses redraft --stale [actions|votes|statements|document-changes|briefs]
           statements status
           statements list [passed|skipped|failed-open|over-cap|pending|failed] [limit]
           statements run <run-id>
@@ -318,6 +318,7 @@ try
             new("actions", new PostgresActionDraftStore(contexts, codeVersion)),
             new("votes", new PostgresVoteDraftStore(contexts)),
             new("statements", new PostgresStatementDraftStore(contexts)),
+            new("document-changes", new PostgresDocumentChangeAnalysisStore(contexts)),
             new("briefs", new PostgresBriefDraftStore(contexts))]);
         executing = true;
         return await AnalysisCommand.ExecuteAsync(args, requeue, redraftStale, owner, cancellation.Token);
@@ -445,8 +446,11 @@ try
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var people = PostgresPersonRegistryStore.FromConnectionString(connectionString);
+        var peopleConfiguration = args is ["people", "website", "set", ..] ? ConfigurationFile.ReadCollectionFromEnvironment() : null;
+        var memberRoster = peopleConfiguration is null ? null
+            : new MemberRoster(peopleConfiguration, PostgresMemberRosterStore.FromConnectionString(connectionString));
         executing = true;
-        return await PeopleCommand.ExecuteAsync(args, people, owner.Subject, cancellation.Token);
+        return await PeopleCommand.ExecuteAsync(args, people, memberRoster, owner, cancellation.Token);
     }
 
     if (ReleaseCommand.Matches(args))

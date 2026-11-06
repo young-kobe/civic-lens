@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Data;
 using System.Text.Json;
+using CivicLens.Application.Analysis;
 using CivicLens.Application.Briefs;
 using CivicLens.Application.Paging;
 using CivicLens.Application.Publication;
@@ -297,16 +298,28 @@ public sealed class PostgresDocumentChangeReviewStore : IDocumentChangeReviewSto
             .Where(row => row.ComparisonId == comparisonId).OrderBy(row => row.CreatedAtUtcTicks).ThenBy(row => row.DraftId)
             .Select(row => row.DraftId).FirstOrDefaultAsync(cancellationToken);
 
-    internal static async Task<bool> TryAddAnalysisDraftAsync(CollectionAttemptDbContext db,
+    /// <summary>Appends a model revision under the review lock. Revision 1 creates the draft. A later revision needs the current revision
+    /// to be the one before it and the draft to hold no decision. Otherwise a person acted first. It returns the refusal code, or null when it appended.</summary>
+    internal static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db,
         DocumentChangeDraftRevision revision, CancellationToken cancellationToken)
     {
-        if (revision.RevisionNumber != 1 || !ReviewAuthor.IsAnalysis(revision.AuthorSubject))
-            throw new InvalidOperationException("An analysis draft must be revision 1 by the analysis author.");
+        if (!ReviewAuthor.IsAnalysis(revision.AuthorSubject)) throw new InvalidOperationException("An analysis revision needs the analysis author.");
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.DocumentChangeReview, cancellationToken);
-        if (await ReadDraftIdForComparisonAsync(db, revision.ComparisonId, cancellationToken) is not null) return false;
+        var draftId = await ReadDraftIdForComparisonAsync(db, revision.ComparisonId, cancellationToken);
+        var draft = draftId is null ? null : await db.Set<DocumentChangeDraftRow>().SingleAsync(row => row.DraftId == draftId, cancellationToken);
+        if (revision.RevisionNumber == 1)
+        {
+            if (draft is not null) return DocumentChangeDraftErrorCodes.DraftDiscarded;
+            await ValidateRevisionAgainstEvidenceAsync(db, revision, cancellationToken);
+            AddDraft(db, revision);
+            return null;
+        }
+        if (draft is null || draft.DraftId != revision.DraftId || draft.CurrentRevisionNumber != revision.RevisionNumber - 1)
+            return DocumentChangeDraftErrorCodes.RevisionConflict;
+        if (draft.ReviewStateVersion != 0) return DocumentChangeDraftErrorCodes.DraftDiscarded;
         await ValidateRevisionAgainstEvidenceAsync(db, revision, cancellationToken);
-        AddDraft(db, revision);
-        return true;
+        Records.AppendRevision(db, draft, revision, DocumentChangeRevisionRows.Create(revision), []);
+        return null;
     }
 
     private static void AddDraft(CollectionAttemptDbContext db, DocumentChangeDraftRevision revision)

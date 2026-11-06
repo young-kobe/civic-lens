@@ -6,7 +6,7 @@ namespace CivicLens.Host.Analysis;
 
 public static class AnalysisCommand
 {
-    private const string Usage = "Use analyses requeue <comparison-id>, analyses requeue --all, or analyses redraft --stale [actions|votes|statements|briefs].";
+    private const string Usage = "Use analyses requeue <comparison-id>, analyses requeue --all, or analyses redraft --stale [actions|votes|statements|document-changes|briefs].";
 
     public static bool Matches(string[] args) => args is ["analyses", ..];
 

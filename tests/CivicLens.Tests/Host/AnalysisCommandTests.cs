@@ -30,9 +30,11 @@ public sealed class AnalysisCommandTests(PostgresCollection postgres) : IAsyncLi
     {
         var all = await RunAsync("auth0|owner", "analyses", "redraft", "--stale");
         var votes = await RunAsync("auth0|owner", "analyses", "redraft", "--stale", "votes");
+        var documents = await RunAsync("auth0|owner", "analyses", "redraft", "--stale", "document-changes");
 
-        Assert.Equal((0, """{"requeued":{"actions":0,"votes":0,"statements":0,"briefs":0}}"""), (all.ExitCode, all.Output.Trim()));
+        Assert.Equal((0, """{"requeued":{"actions":0,"votes":0,"statements":0,"document-changes":0,"briefs":0}}"""), (all.ExitCode, all.Output.Trim()));
         Assert.Equal((0, """{"requeued":{"votes":0}}"""), (votes.ExitCode, votes.Output.Trim()));
+        Assert.Equal((0, """{"requeued":{"document-changes":0}}"""), (documents.ExitCode, documents.Output.Trim()));
     }
 
     [Fact]

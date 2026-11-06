@@ -10,6 +10,7 @@ internal sealed class DocumentChangeAnalysisRowConfiguration : IEntityTypeConfig
         AnalysisTableConfiguration.ConfigureQueue<DocumentChangeAnalysisRow, DocumentChangeAnalysisRunRow>(builder, "document_change_analysis", nameof(DocumentChangeAnalysisRow.ComparisonId),
             "comparison_id");
         builder.Property(row => row.DraftId).HasColumnName("draft_id").HasMaxLength(32);
+        builder.Ignore(row => row.AppendedRevision);
         builder.HasOne<Documents.Persistence.DocumentComparisonRow>().WithMany()
             .HasForeignKey(row => row.ComparisonId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Review.Persistence.DocumentChangeDraftRow>().WithMany()

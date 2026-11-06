@@ -118,8 +118,7 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [ ] Move release entries to a table: one immutable row for each record revision, with a foreign key to that revision. `publication_record_states` gives the release membership. The code of `releases entries backfill <limit>` and `releases entries verify` is done. Open: the production runs, the foreign key from `publication_record_states`, and the move of the publish path off the manifest.
   - [ ] Write `release.json` from the tables, and stop reading the previous manifest in a publish
 - R-27: Officials, sources, and discovery in tables. People data lives in tables, not in the configuration file. Sources and coverage move to tables too, and the owner commands and the worker write them. Check cadence then follows measured change rates, and discovery finds official sources. Plans: the git branches `survey-officials-in-tables` and `survey-source-discovery`. Depends on: none stated. [Roster](architecture/roster.md#officials-in-tables), [Configuration](architecture/configuration.md#limits-and-planned-work)
-  - [ ] Officials in tables, PR 1: the people tables and the one-time import
-  - [ ] Officials in tables, PRs 2 to 8: owner settings, minting members, bindings, pinned readers, live readers, coverage from `officeOf`, justices and gaps
+  - [ ] Officials in tables, PRs 3 to 8: minting members, bindings, pinned readers, live readers, coverage from `officeOf`, justices and gaps
   - [ ] Sources and coverage in tables
   - [ ] Check cadence from measured change rates
   - [ ] Discovery of official sources
@@ -131,10 +130,6 @@ The owner accepted these designs. Each item holds its choices until the code and
 
 ### Next
 
-- R-39: An `analyses redraft --stale` owner command requeues finished drafts whose last run used an older task, prompt, or schema version. Statements and document changes each get their own stale redraft. Statements are done. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
-  - [x] Actions, votes, and briefs
-  - [x] Statement stale redraft
-  - [ ] Document change stale redraft
 - R-17: Congressional Record articles as a statement connector, Senate only at first. Each granule and speaker gives one candidate, and the extraction holds only the turns of that speaker. Code filters by class, title, covered member, and about 100 words. The public link is the GovInfo details page. A new quotation kind "Congressional Record text" is a contract change. Backfill to 2025-01-03. The PRs are collection to a ledger table with no model spend, then candidates, then the backfill, then removal of the 62 dead senate.gov listings and the 29 dead sources that fail a 7 day health check. Depends on: none. [Actions](architecture/actions.md#limits-and-planned-work)
 - R-29: Check each policy area name against the Congress.gov API. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
 - R-30: Fix the remaining format and parser limits that the federal coverage found. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)

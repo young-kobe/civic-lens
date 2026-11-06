@@ -1,6 +1,12 @@
+using System.Data.Common;
 using CivicLens.Application.Collection;
+using CivicLens.Application.People;
+using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.People;
 using CivicLens.Tests.Infrastructure.Collection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.People;
@@ -46,13 +52,80 @@ public sealed class PostgresPersonRegistryStoreTests(PostgresCollection postgres
     }
 
     [Fact]
-    public async Task ASettingRowExistsOnlyForAPersonWhoSetsAWebsiteOrWithholdsThePhoto()
+    public async Task EachChangeAddsOneRevisionAndTheNewestWinsSoARestoreBringsBackThePhotoAndHistoryKeepsEveryRow()
     {
         await people.ImportAsync(Shipped(), Owner, default);
 
-        Assert.Equal([("maria-cantwell", true, "https://cantwell.senate.gov/")],
-            await QueryAsync("SELECT person_id, withhold_photo, website FROM person_setting_revisions",
-                reader => (reader.GetString(0), reader.GetBoolean(1), reader.GetString(2))));
+        var withheld = await people.AppendSettingAsync("maria-cantwell", setting => setting with { WithholdPhoto = true }, "Takedown.", Owner, default);
+        var website = await people.AppendSettingAsync("maria-cantwell", setting => setting with { Website = "https://cantwell.senate.gov/" }, "Site.", "other-owner", default);
+        var restored = await people.AppendSettingAsync("maria-cantwell", setting => setting with { WithholdPhoto = false }, "Back.", Owner, default);
+
+        Assert.Equal([1, 2, 3], new[] { withheld.RevisionNumber, website.RevisionNumber, restored.RevisionNumber });
+        Assert.Equal((false, "https://cantwell.senate.gov/"), (restored.WithholdPhoto, restored.Website));
+        Assert.Equal(new PersonSetting(false, "https://cantwell.senate.gov/"),
+            (await people.ReadNewestSettingsAsync(["maria-cantwell"], default))["maria-cantwell"]);
+        Assert.Equal([(1, true, null, Owner, "Takedown."), (2, true, "https://cantwell.senate.gov/", "other-owner", "Site."),
+                (3, false, "https://cantwell.senate.gov/", Owner, "Back.")],
+            await QueryAsync("SELECT revision_number, withhold_photo, website, actor_subject, note FROM person_setting_revisions ORDER BY revision_number",
+                reader => (reader.GetInt32(0), reader.GetBoolean(1), reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetString(3), reader.GetString(4))));
+        Assert.All(await QueryAsync("SELECT recorded_at_utc_ticks FROM person_setting_revisions", reader => reader.GetInt64(0)), ticks => Assert.True(ticks > 0));
+    }
+
+    [Fact]
+    public async Task TwoChangesOfOnePersonAtTheSameTimeLetOneWinAndWriteNothingForTheOther()
+    {
+        await people.ImportAsync(Shipped(), Owner, default);
+
+        var loser = await Assert.ThrowsAsync<DbUpdateException>(() => people.AppendSettingAsync("maria-cantwell", setting =>
+        {
+            people.AppendSettingAsync("maria-cantwell", other => other with { Website = "https://cantwell.senate.gov/" }, "Winner.", Owner, default)
+                .GetAwaiter().GetResult();
+            return setting with { WithholdPhoto = true };
+        }, "Loser.", Owner, default));
+
+        Assert.Equal("PK_person_setting_revisions", ((PostgresException)loser.InnerException!).ConstraintName);
+        Assert.Equal([(1, "Winner.")],
+            await QueryAsync("SELECT revision_number, note FROM person_setting_revisions", reader => (reader.GetInt32(0), reader.GetString(1))));
+    }
+
+    [Fact]
+    public async Task APersonWithNoRevisionIsAbsentFromTheNewestSettingsSoTheReaderUsesNoSetting()
+    {
+        await people.ImportAsync(Shipped(), Owner, default);
+        await people.AppendSettingAsync("president", setting => setting with { WithholdPhoto = true }, "Takedown.", Owner, default);
+
+        var newest = await people.ReadNewestSettingsAsync(["president", "jd-vance", "stranger"], default);
+
+        Assert.Equal(["president"], newest.Keys);
+    }
+
+    [Fact]
+    public async Task APersonThatDoesNotExistIsRefusedAndWritesNoRevision()
+    {
+        await people.ImportAsync(Shipped(), Owner, default);
+
+        var failure = await Assert.ThrowsAsync<ArgumentException>(() =>
+            people.AppendSettingAsync("stranger", setting => setting with { WithholdPhoto = true }, "Takedown.", Owner, default));
+
+        Assert.Contains("stranger", failure.Message, StringComparison.Ordinal);
+        Assert.Equal([0L], await QueryAsync("SELECT count(*) FROM person_setting_revisions", reader => reader.GetInt64(0)));
+    }
+
+    [Fact]
+    public async Task TheNewestSettingsOfManyPeopleCostOneQuery()
+    {
+        await people.ImportAsync(Shipped(), Owner, default);
+        foreach (var id in new[] { "president", "jd-vance", "maria-cantwell" })
+            await people.AppendSettingAsync(id, setting => setting with { WithholdPhoto = true }, "Takedown.", Owner, default);
+        await people.AppendSettingAsync("president", setting => setting with { WithholdPhoto = false }, "Back.", Owner, default);
+        var counter = new ReadCounter();
+        var counted = new PostgresPersonRegistryStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(counter).Options));
+
+        var newest = await counted.ReadNewestSettingsAsync(["president", "jd-vance", "maria-cantwell"], default);
+
+        Assert.Equal(1, counter.Reads);
+        Assert.Equal([false, true, true], [newest["president"].WithholdPhoto, newest["jd-vance"].WithholdPhoto, newest["maria-cantwell"].WithholdPhoto]);
     }
 
     [Fact]
@@ -149,7 +222,7 @@ public sealed class PostgresPersonRegistryStoreTests(PostgresCollection postgres
             """, reader => reader.GetInt64(0));
 
         Assert.Equal(numbers.Count, numbers.Distinct().Count());
-        Assert.Equal(4, numbers.Count);
+        Assert.Equal(3, numbers.Count);
     }
 
     [Theory]
@@ -179,6 +252,18 @@ public sealed class PostgresPersonRegistryStoreTests(PostgresCollection postgres
             $"INSERT INTO person_office_revision_terms (person_id, revision_number, position, title, kind, starts_on, ends_on) VALUES ('someone', 1, 0, {values})"));
 
         Assert.Equal(constraint, failure.ConstraintName);
+    }
+
+    private sealed class ReadCounter : DbCommandInterceptor
+    {
+        public int Reads { get; private set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            Reads++;
+            return ValueTask.FromResult(result);
+        }
     }
 
     private static PersonConfiguration Person(string id, string? bioguideId = null, string? wikidataId = null) =>
@@ -213,9 +298,7 @@ public sealed class PostgresPersonRegistryStoreTests(PostgresCollection postgres
         {
             Id = "maria-cantwell",
             Name = "Maria Cantwell",
-            BioguideId = "C000127",
-            Website = "https://cantwell.senate.gov/",
-            WithholdPhoto = true
+            BioguideId = "C000127"
         }
     ];
 
