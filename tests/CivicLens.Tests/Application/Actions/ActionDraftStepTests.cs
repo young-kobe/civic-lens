@@ -1344,7 +1344,8 @@ public sealed class ActionDraftStepTests
         Assert.Equal(LineQuote, world.Quote(quote));
         var page = Assert.Single(world.Pages, item => item.Resource == ApiResource.BillSummaries);
         Assert.Equal(page.Text.LastIndexOf(LineQuote, StringComparison.Ordinal), quote.Start);
-        Assert.True(revision.SummaryCitation.Covers(quote));
+        var summaryCitation = Assert.IsType<CivicLens.Core.Documents.SourceSpan>(revision.SummaryCitation);
+        Assert.True(summaryCitation.Covers(quote));
     }
 
     [Theory]
