@@ -38,14 +38,14 @@ internal static class PublicApiGrants
         GRANT SELECT (list_id, "position", person_id, vote_cast) ON vote_member_list_entries TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, is_tracked) ON vote_revision_issues TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, congress, bill_type, bill_number, bill_title, headline, summary, text_origin,
-            policy_area, policy_area_id, event_on, cosponsor_count, source_id) ON action_revisions TO civic_lens_public_owner;
+            policy_area, policy_area_id, event_on, cosponsor_count) ON action_revisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", person_id, role, is_original, sponsored_on, withdrawn_on)
             ON action_revision_sponsorships TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, "position", is_tracked) ON action_revision_issues TO civic_lens_public_owner;
         GRANT SELECT (candidate_id, revision_number, author_kind, headline) ON statement_revisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", fact_text) ON vote_revision_facts TO civic_lens_public_owner;
-        GRANT SELECT (source_id, congress, bill_type, bill_number, update_date_utc_ticks, latest_action_text, latest_action_date, created_at_utc_ticks)
-            ON bill_gates TO civic_lens_public_owner;
+        GRANT SELECT (release_number, record_id, latest_action_text, latest_action_date, read_at_utc_ticks) ON release_bill_statuses TO civic_lens_public_owner;
+        GRANT SELECT (candidate_id, revision_number, review_state_version, kind, actor_subject) ON statement_review_decisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, kind, document_number, signed_on, published_on, federal_register_citation, document_url,
             person_id, president_name, title) ON executive_action_revisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", source_id, document_number) ON executive_action_revision_notices TO civic_lens_public_owner;

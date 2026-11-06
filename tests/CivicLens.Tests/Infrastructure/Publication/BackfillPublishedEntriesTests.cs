@@ -98,6 +98,24 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task TheBackfillPinsTheStatusFileOfEachKeptReleaseOnceAndAReleaseFromBeforeTheFilePinsNoneBecauseTheViewMustShowWhatTheReleaseShowed()
+    {
+        await AddReleasesAsync(2);
+        Keep(1);
+        Keep(2);
+        var status = new PublishedBillStatus { RecordId = new string('a', 64), Text = "Received in the Senate.", Date = new(2026, 2, 13), ObservedAtUtc = new DateTimeOffset(5, TimeSpan.Zero) };
+        releases.Directories[folders[1]][PublicationProtocol.BillStatusPath] =
+            JsonSerializer.SerializeToUtf8Bytes(new PublishedBillStatuses { Records = [status] }, PublicationProtocol.JsonOptions);
+
+        var first = await RunAsync(10);
+        var rerun = await RunAsync(10);
+
+        Assert.Equal((1, 0), (first.BillStatusesPinned, rerun.BillStatusesPinned));
+        Assert.Equal(["1|Received in the Senate.|2026-02-13|5"],
+            await ReadAsync("SELECT release_number || '|' || latest_action_text || '|' || latest_action_date || '|' || read_at_utc_ticks FROM release_bill_statuses"));
+    }
+
+    [Fact]
     public async Task ARerunAddsNothingReadsNoManifestAndCountsTheRowsAlreadyPresent()
     {
         var action = await SeedActionAsync('a');
@@ -105,12 +123,12 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
         await AddRangeAsync(action, 1, null);
         Keep(1, Listed(action, action.ToEntry() with { BillLine = Line }));
         await RunAsync(10);
-        var reads = releases.ReadPaths.Count;
+        var reads = ManifestAndRecordReads();
 
         var rerun = await RunAsync(10);
 
         Assert.Equal((0, 0, 1, 0, 0), (rerun.Examined, rerun.Added, rerun.AlreadyPresent, rerun.Skipped, rerun.OpenRangesWithoutRow));
-        Assert.Equal(reads, releases.ReadPaths.Count);
+        Assert.Equal(reads, ManifestAndRecordReads());
         Assert.Equal(["1"], await ReadAsync("SELECT count(*) FROM published_entries"));
     }
 
@@ -172,12 +190,12 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
         Keep(1, Listed(action, action.ToEntry() with { BillLine = Line }));
         await RunAsync(10);
         Keep(2, Listed(action, action.ToEntry() with { BillLine = "This bill funds school meals." }));
-        var reads = releases.ReadPaths.Count;
+        var reads = ManifestAndRecordReads();
 
         var result = await RunAsync(10);
 
         Assert.Equal((0, 0, 0), (result.Added, result.BillLinesFilled, result.Skipped));
-        Assert.Equal(reads, releases.ReadPaths.Count);
+        Assert.Equal(reads, ManifestAndRecordReads());
         Assert.Equal([Line], await ReadAsync("SELECT bill_line FROM published_entries"));
     }
 
@@ -577,6 +595,9 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
             VALUES ('action', '{action.RecordId}', 1, 0, 'o1', false)
             """);
     }
+
+    // Each run reads the status file of every kept folder, so the reads of manifests and record files are the ones that a rerun must not repeat.
+    private int ManifestAndRecordReads() => releases.ReadPaths.Count(path => path != PublicationProtocol.BillStatusPath);
 
     private Task<PublishedEntriesBackfillResult> RunAsync(int limit) => new BackfillPublishedEntries(publications, releases).ExecuteAsync(Owner, limit);
 

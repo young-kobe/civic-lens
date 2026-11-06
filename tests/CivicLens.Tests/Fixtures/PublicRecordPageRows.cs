@@ -18,10 +18,19 @@ internal static class PublicRecordPageRows
                   {createdTicks}, {createdTicks}, true, {(text is null ? "NULL" : $"'{text}'")}, {(date is null ? "NULL" : $"'{date}'")});
         """;
 
-    /// <summary>The draft row that <c>ReadBillStatusesAsync</c> joins to the gate rows of a bill.</summary>
-    public static string ActionDraft(string record, int billNumber) => $"""
-        INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks, last_revised_at_utc_ticks, review_state_version, review_status)
-          VALUES ('{record}', 'src', 119, 'hr', {billNumber}, 1, 0, 0, 0, 'AwaitingReview');
+    /// <summary>The status that a release pinned for an action record. Release 2 is a release that is not active. Run it with <c>session_replication_role = replica</c>.</summary>
+    public static string PinnedStatus(int release, string record, string text, string date, long readTicks) => $"""
+        {ActiveRelease}
+        INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+          VALUES (2, '000002-00000000000000000000000000000002', 'test', 2, 1, false) ON CONFLICT DO NOTHING;
+        INSERT INTO release_bill_statuses (release_number, record_id, latest_action_text, latest_action_date, read_at_utc_ticks)
+          VALUES ({release}, '{record}', '{text}', '{date}', {readTicks});
+        """;
+
+    /// <summary>One approval of a statement revision by an actor. The latest review state version names the approver.</summary>
+    public static string StatementApproval(string record, int revision, int version, string actor) => $"""
+        INSERT INTO statement_review_decisions (decision_id, candidate_id, revision_number, review_state_version, kind, created_at_utc_ticks, actor_subject)
+          VALUES ('{record[..30]}{version:00}', '{record}', {revision}, {version}, 'Approve', {version}, '{actor}');
         """;
 
     /// <summary>One relationship with its entry row and the record states of the relationship and of both ends. A first release of 2 keeps a record out of the active release 1.

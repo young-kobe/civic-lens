@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using CivicLens.Host.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
@@ -77,15 +78,14 @@ public sealed class RecordPagesEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task ABillShowsItsLatestActionFromTheNewestGateRowAndNullWhenNoGateHoldsOne()
+    public async Task ABillShowsTheLatestActionThatTheActiveReleasePinnedAndNullWhenTheReleasePinnedNone()
     {
         await using var host = await StartAsync();
         await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('a', "2026-03-02") { BillNumber = 101 }, new SeededBill('b', "2026-03-02") { BillNumber = 102 });
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
             SET session_replication_role = replica;
-            {PublicRecordPageRows.Gate(101, 1, 100, "Referred to the Committee on Ways and Means.", "2026-01-12", 500)}
-            {PublicRecordPageRows.Gate(101, 2, 200, "Received in the Senate.", "2026-02-13", new DateTimeOffset(2026, 2, 14, 8, 0, 0, TimeSpan.Zero).UtcTicks)}
-            {PublicRecordPageRows.Gate(102, 1, 100, null, null, 700)}
+            {PublicRecordPageRows.PinnedStatus(1, new string('a', 64), "Received in the Senate.", "2026-02-13", new DateTimeOffset(2026, 2, 14, 8, 0, 0, TimeSpan.Zero).UtcTicks)}
+            {PublicRecordPageRows.Gate(101, 2, 200, "Presented to the President.", "2026-03-20", 800)}
             """);
 
         using var withStatus = await GetAsync(host, $"/v1/bills/{new string('a', 64)}");
@@ -105,8 +105,8 @@ public sealed class RecordPagesEndpointsTests(PostgresCollection postgres)
         string[] actions = [new('a', 64), new('b', 64)];
         await using var host = await StartAsync($"""
             {PublicRecordPageRows.Headline("statement", Statement, "Doe on rent")}
-            {PublicRecordPageRows.Headline("action", actions[0], "Housing bill")}
-            {PublicRecordPageRows.Headline("action", actions[1], "Tax bill")}
+            {PublicRecordPageRows.Headline("action", actions[0], "Housing bill", "Model")}
+            {PublicRecordPageRows.Headline("action", actions[1], "Tax bill", "Code")}
             {PublicRecordPageRows.Headline("vote", Vote, "Vote on housing")}
             {PublicRecordPageRows.Link(links[0], Statement, actions[0], "action", "DescribesOwnBill", "2026-05-02")}
             {PublicRecordPageRows.Link(links[1], Statement, actions[1], "action", "ClaimsCreditFor", "2026-05-01")}
@@ -118,10 +118,10 @@ public sealed class RecordPagesEndpointsTests(PostgresCollection postgres)
         using var second = await GetAsync(host, $"/v1/records/statement/{Statement}/related?limit=2&cursor={cursor}");
         using var fromAction = await GetAsync(host, $"/v1/records/action/{actions[0]}/related");
 
-        Assert.Equal(["Tax bill|action|claimsCreditFor|2026-05-01", "Housing bill|action|describesOwnBill|2026-05-02"], Describe(first));
-        Assert.Equal(["Vote on housing|vote|statementAboutVote|none"], Describe(second));
+        Assert.Equal([$"Tax bill|action|claimsCreditFor|2026-05-01|code|{PublishedRecordLabels.CodeWording}", $"Housing bill|action|describesOwnBill|2026-05-02|model|{PublishedRecordLabels.ModelWording}"], Describe(first));
+        Assert.Equal(["Vote on housing|vote|statementAboutVote|none|person|none"], Describe(second));
         Assert.Equal(JsonValueKind.Null, second.RootElement.GetProperty("nextCursor").ValueKind);
-        Assert.Equal(["Doe on rent|statement|describesOwnBill|2026-05-02"], Describe(fromAction));
+        Assert.Equal(["Doe on rent|statement|describesOwnBill|2026-05-02|person|none"], Describe(fromAction));
         Assert.Equal(links[1], first.RootElement.GetProperty("related")[0].GetProperty("linkRecordId").GetString());
     }
 
@@ -163,5 +163,6 @@ public sealed class RecordPagesEndpointsTests(PostgresCollection postgres)
 
     private static string[] Describe(JsonDocument page) => [.. page.RootElement.GetProperty("related").EnumerateArray().Select(link =>
         $"{link.GetProperty("headline").GetString()}|{link.GetProperty("kind").GetString()}|{link.GetProperty("linkType").GetString()}|" +
-        (link.GetProperty("statementDate").ValueKind == JsonValueKind.Null ? "none" : link.GetProperty("statementDate").GetString()))];
+        (link.GetProperty("statementDate").ValueKind == JsonValueKind.Null ? "none" : link.GetProperty("statementDate").GetString()) +
+        $"|{link.GetProperty("textOrigin").GetString()}|{(link.GetProperty("label").ValueKind == JsonValueKind.Null ? "none" : link.GetProperty("label").GetString())}")];
 }

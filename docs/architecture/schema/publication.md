@@ -128,6 +128,15 @@ END
 - check ck_published_records_kind: kind in ('documentChange', 'statement', 'action', 'brief', 'vote', 'relationship', 'executiveAction')
 - check ck_published_records_record_id: record_id ~ '^([0-9a-f]{32}|[0-9a-f]{64})$'
 
+## release_bill_statuses
+
+- pk (release_number, record_id)
+- fk (release_number) -> publication_releases (release_number) on delete restrict
+- cols release_number integer, record_id varchar(64), latest_action_text varchar(1000), latest_action_date date, read_at_utc_ticks bigint
+- check ck_release_bill_statuses_latest_action_text: length(btrim(latest_action_text)) > 0 AND length(latest_action_text) <= 1000
+- check ck_release_bill_statuses_read_at_utc_ticks: read_at_utc_ticks >= 0 AND read_at_utc_ticks <= '3155378975999999999'
+- check ck_release_bill_statuses_record_id: record_id ~ '^[0-9a-f]{64}$'
+
 ## release_issue_excludes
 
 - pk (release_number, issue_id, "position")

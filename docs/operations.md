@@ -1012,6 +1012,7 @@ The command prints JSON with these keys:
 - `examined`: the revision ranges without a row at the start.
 - `added`: the rows that this run inserted.
 - `billLinesFilled`: the action rows that had no bill line and got one in this run. The limit does not cap them.
+- `billStatusesPinned`: the bill status rows that this run wrote for kept releases, from the `bill-status.json` of each folder. A release that has its rows adds none.
 - `alreadyPresent`: the ranges that already had a row.
 - `skipped`, `skippedByReason`, and `skippedEntries`: the skipped rows, a count for each reason, and the first 50 rows. The reasons are `manifestInvalid`, `recordFileInvalid`, `recordFileDiffers`, `foldersDiffer`, and `firstPublishedMissing`.
 - `openRangesWithoutRow`: the open ranges that still have no row.

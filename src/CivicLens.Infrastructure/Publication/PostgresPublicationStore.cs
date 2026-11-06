@@ -132,6 +132,13 @@ public sealed class PostgresPublicationStore : IPublicationStore
         return filled;
     }
 
+    public async Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses,
+        CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await ReleaseBillStatusRows.InsertMissingAsync(db, releaseNumber, statuses, cancellationToken);
+    }
+
     public async Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, Func<string, CancellationToken, Task> requireFiles,
         CancellationToken cancellationToken)
     {
@@ -235,6 +242,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName, publishedAt.Offset, commit.Records.Length);
         db.Add(ToRow(actorSubject, commit, publishedAt, codeVersion));
         ReleaseNameRows.Add(db, commit.ReleaseNumber, commit.Names);
+        ReleaseBillStatusRows.Add(db, commit.ReleaseNumber, commit.BillStatuses);
         ReviewIdempotency.Add(db, actorSubject, PublishOperation, idempotencyKey, payloadHash, ReviewJson.Serialize(summary));
         await SaveAsync(db, cancellationToken);
         await PublicationRecordStates.RecordAsync(db, commit, cancellationToken);

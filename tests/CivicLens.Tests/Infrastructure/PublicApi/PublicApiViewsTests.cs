@@ -31,7 +31,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         ["vote_revisions", "vote_revision_facts", "vote_member_list_entries", "vote_revision_issues", "publication_releases", "publication_record_states", "vote_drafts", "vote_member_lists",
          "action_revisions", "action_revision_sponsorships", "action_revision_issues", "action_drafts", "published_entries", "zcta_districts", "roster_snapshots", "collection_attempts",
          "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas", "published_entry_officials",
-         "bill_gates", "executive_action_revisions", "executive_action_revision_notices", "executive_action_documents"];
+         "release_bill_statuses", "statement_review_decisions", "executive_action_revisions", "executive_action_revision_notices", "executive_action_documents"];
 
     private string connectionString = null!;
     private string[] roleAfterMigration = null!;

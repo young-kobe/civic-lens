@@ -9,13 +9,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
     {
         // Each view joins public_api.active_records and the base tables itself, as public_api.member_votes does.
         // bill_status shows the same bills as public_api.bills, so a child view never shows a record that bills hides.
-        // bill_status takes the newest gate row of the bill and then drops a row with no text, as IActionReviewStore.ReadBillStatusesAsync does.
+        // ReleaseBillStatuses replaces the body of bill_status in a later migration, because the status is pinned for each release.
         // record_links gives each relationship two rows: one for the page of the statement and one for the page of the target.
         // Each branch starts from the link table l, so the filter on the statement or target ID uses the indexes of l.
         // Each branch names the page record by a column of l, so the filter of the route reaches the indexes of l. The column l.statement_kind always holds 'statement'.
         // The headline is a lateral lookup with OFFSET 0, so Postgres reads one record for each link row. Without it the planner scans all headlines and joins them.
-        // record_headlines holds the current headline of an active statement, action, or vote, with its text origin and label. It is the one owner of that rule.
-        // A statement has no origin column. The author kind Analysis means model text. Any other author kind means person text.
+        // record_headlines holds the current headline of an active statement, action, or vote, with its text origin and label.
+        // A statement has no origin column. The view repeats the rule of PublishedStatementBuilder: the author kind Analysis means model text, and any other author kind means person text.
+        // The test PublicApiRecordPageViewsTests.RecordHeadlinesGiveTheOriginAndLabelThatTheCSharpRulesGiveForEveryCase keeps the view equal to that rule and to PublishedRecordLabels.
+        // The later migration ReleaseBillStatuses gives the label of a statement the rule of PublishedRecordLabels.StatementWording.
         // Both ends and the relationship must be active, so no row names a record that the release does not hold.
         private const string UpSql = """
             CREATE VIEW public_api.bill_status WITH (security_barrier = true) AS
