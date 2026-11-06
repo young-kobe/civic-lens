@@ -12,8 +12,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         // The latest term is the newest term that started on or before the day of the release, as PublishedOfficialView.LatestTerm picks it.
         // 864000000000 is the number of ticks in one day.
         private const string UpSql = """
-            CREATE INDEX ix_published_entry_officials_official_id ON public.published_entry_officials (official_id);
-
             CREATE VIEW public_api.officials WITH (security_barrier = true) AS
             SELECT r.release_number, o.official_id, o.name, t.kind, t.office, t.state, t.district, t.party, t.caucus, t.end_on AS term_end_on,
                    COALESCE(c.record_count, 0) AS record_count
@@ -88,15 +86,27 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             """;
 
         private const string DownSql = """
-            DROP INDEX public.ix_published_entry_officials_official_id;
             DROP VIEW public_api.officials, public_api.official_attendance, public_api.official_bill_counts,
                 public_api.official_issue_counts, public_api.official_executive_actions;
             """;
 
         /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.Sql(UpSql);
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.CreateIndex(
+                name: "ix_published_entry_officials_official_id",
+                table: "published_entry_officials",
+                column: "official_id");
+            migrationBuilder.Sql(UpSql);
+        }
 
         /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder) => migrationBuilder.Sql(DownSql);
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.Sql(DownSql);
+            migrationBuilder.DropIndex(
+                name: "ix_published_entry_officials_official_id",
+                table: "published_entry_officials");
+        }
     }
 }

@@ -132,11 +132,12 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
     public async Task ABillCountsInTheCongressOfItsBillNumberAndNotInTheCongressOfItsLastSponsorshipEvent()
     {
         await BillsSeed.AddBillsAsync(database,
-            new SeededBill('1', "2025-03-01") { BillNumber = 1, Congress = 118, Issues = ["health"], Sponsorships = [new("p0", "Sponsor", "2023-02-01"), new("p1", "Cosponsor", "2023-02-02")] },
+            new SeededBill('1', "2025-03-01") { BillNumber = 1, Congress = 118, Issues = ["health"], Sponsorships = [new("p0", "Sponsor", "2023-02-01"), new("p1", "Cosponsor", "2023-02-02"), new("p2", "Cosponsor", "2025-03-01")] },
             new SeededBill('2', "2026-03-01") { BillNumber = 2, Congress = 119, Sponsorships = [new("p0", "Sponsor", "2026-01-10")] });
 
         Assert.Equal(["118 1 0", "119 1 0"], await QueryAsync("SELECT congress || ' ' || sponsored || ' ' || cosponsored FROM public_api.official_bill_counts WHERE official_id = 'p0' ORDER BY congress"));
         Assert.Equal(["118 0 1"], await QueryAsync("SELECT congress || ' ' || sponsored || ' ' || cosponsored FROM public_api.official_bill_counts WHERE official_id = 'p1'"));
+        Assert.Equal(["118 0 1"], await QueryAsync("SELECT congress || ' ' || sponsored || ' ' || cosponsored FROM public_api.official_bill_counts WHERE official_id = 'p2'"));
         Assert.Equal(["118 health 1"], await QueryAsync("SELECT congress || ' ' || issue_id || ' ' || records FROM public_api.official_issue_counts WHERE official_id = 'p0' AND source = 'bill'"));
     }
 
