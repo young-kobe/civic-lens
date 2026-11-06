@@ -5,6 +5,10 @@ public static class Glossary
 {
     public const string BillsAndCongress = "Bills and Congress";
 
+    public const string IndexLabel = "Terms in the glossary";
+
+    public const string PartyCountAnchorId = "glossary-party-count";
+
     public static readonly IReadOnlyList<GlossaryGroup> Groups =
     [
         new("How members vote",
@@ -180,6 +184,9 @@ public static class Glossary
                 "1 CFR 18.15; our action editor")
         ])
     ];
+
+    /// <summary>The group whose entries are followed by the party count note, in the index and in the body.</summary>
+    public static GlossaryGroup PartyCountGroup => Groups[0];
 
     public static readonly string PartyCountHeading = "How we count party votes";
 

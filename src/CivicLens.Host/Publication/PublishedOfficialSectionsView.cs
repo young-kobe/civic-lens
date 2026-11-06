@@ -1,4 +1,5 @@
 using CivicLens.Application.Publication;
+using CivicLens.PublicWeb.Components.Ui;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Host.Publication;
@@ -31,27 +32,32 @@ internal static class PublishedOfficialSectionsView
     {
         var profile = page.TalkAndAction;
         var bills = rows.Where(row => row.Kind == PublishedRecordKind.Action).ToList();
+        var recordTabs = PublishedOfficialView.RecordTabs(rows, profile is not null);
         var sections = new List<OfficialSection>();
         if (profile is not null && profile.WithPartyByChamber.Any(votes => votes.Cast > 0))
-            sections.Add(Latest(page, "break", "Where they break from their party", rows.Where(row => row.AgainstParty).ToList(), PublishedOfficialView.AgainstPartyClass,
+            sections.Add(Latest(page, recordTabs, "break", "Where they break from their party", rows.Where(row => row.AgainstParty).ToList(), PublishedOfficialView.AgainstPartyClass,
                 count => $"See all {PublishedOfficialView.Counted(count, "vote")} against their party", NoBreaks));
         if (profile is not null || bills.Count > 0)
-            sections.Add(Latest(page, "bills", "Bills they introduced", bills, PublishedOfficialView.KindClass(PublishedRecordKind.Action),
+            sections.Add(Latest(page, recordTabs, "bills", "Bills they introduced", bills, PublishedOfficialView.KindClass(PublishedRecordKind.Action),
                 count => $"See all {PublishedOfficialView.Counted(count, "bill")} they introduced", NoBills));
         if (profile is not null)
         {
             sections.Add(new(IssuesId, PublishedOfficialView.IssuesTabLabel, [],
                 profile.IssueIds.IsEmpty ? null : $"See the counts for all {PublishedOfficialView.Counted(profile.IssueIds.Length, "issue")}",
                 RecordPageLink(page, PublishedOfficialView.IssuesPane), PublishedOfficialView.NoTrackedIssue));
-            sections.Add(Latest(page, "votes", "How they voted recently", rows.Where(row => row.Kind == PublishedRecordKind.Vote).ToList(),
+            sections.Add(Latest(page, recordTabs, "votes", "How they voted recently", rows.Where(row => row.Kind == PublishedRecordKind.Vote).ToList(),
                 PublishedOfficialView.KindClass(PublishedRecordKind.Vote), count => $"See all {PublishedOfficialView.Counted(count, "vote")}", NoVotes));
         }
-        sections.Add(Latest(page, "statements", "What they said", rows.Where(row => row.Kind == PublishedRecordKind.Statement).ToList(),
+        var executiveActions = rows.Where(row => row.Kind == PublishedRecordKind.ExecutiveAction).ToList();
+        if (executiveActions.Count > 0)
+            sections.Add(Latest(page, recordTabs, "executive-actions", "Executive actions", executiveActions, PublishedOfficialView.KindClass(PublishedRecordKind.ExecutiveAction),
+                count => $"See all {PublishedOfficialView.Counted(count, "executive action")}"));
+        sections.Add(Latest(page, recordTabs, "statements", "What they said", rows.Where(row => row.Kind == PublishedRecordKind.Statement).ToList(),
             PublishedOfficialView.KindClass(PublishedRecordKind.Statement), count => $"See all {PublishedOfficialView.Counted(count, "statement")}", NoStatements));
         return sections;
     }
 
-    private static OfficialSection Latest(ReleaseOfficialPage page, string id, string title, List<PublishedOfficialRow> matching, string tab,
-        Func<int, string> seeAll, string empty) =>
-        new(id, title, [.. matching.Take(ItemCount)], matching.Count == 0 ? null : seeAll(matching.Count), RecordPageLink(page, tab), empty);
+    private static OfficialSection Latest(ReleaseOfficialPage page, IReadOnlyList<FilterTab> recordTabs, string id, string title, List<PublishedOfficialRow> matching, string tab,
+        Func<int, string> seeAll, string empty = "") =>
+        new(id, title, [.. matching.Take(ItemCount)], matching.Count == 0 ? null : seeAll(matching.Count), RecordPageLink(page, recordTabs.Any(recordTab => recordTab.Value == tab) ? tab : null), empty);
 }
