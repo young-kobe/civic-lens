@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Reflection;
 using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Roster;
@@ -98,7 +99,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
     {
         RosterMember[] roster = [Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat")), Member(Second, Term(0, "2025-01-03", "2027-01-03", "Republican"))];
         var published = await PublishVoteAsync(roster);
-        await SeedAsync(published, published.Vote.RevisionNumber, extraRevision: 2);
+        await SeedAsync(published, published.Vote.RevisionNumber, throughRevision: 2);
         var columns = VoteStoredColumns.From(published.Vote);
         await publications.WriteVoteColumnsAsync([columns], default);
 
@@ -115,7 +116,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
     {
         RosterMember[] roster = [Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat")), Member(Second, Term(0, "2025-01-03", "2027-01-03", "Republican"))];
         var published = await PublishVoteAsync(roster);
-        await SeedAsync(published, published.Vote.RevisionNumber, extraRevision: 2);
+        await SeedAsync(published, published.Vote.RevisionNumber, throughRevision: 2);
         var columns = VoteStoredColumns.From(published.Vote);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => publications.WriteVoteColumnsAsync([columns, columns with { RevisionNumber = 2, MemberParties = ["Republican"] }], default));
@@ -214,7 +215,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
     public async Task TwoRevisionsThatShareAListGetTheirOwnColumnsFromTheirOwnFilesAndTheListKeepsThePartiesOfTheEarlierRevisionInOneCall()
     {
         var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat")), Member(Second, Term(0, "2025-01-03", "2027-01-03", "Republican"))]);
-        await SeedAsync(published, 1, extraRevision: 2);
+        await SeedAsync(published, 1, throughRevision: 2);
         var first = FileOf(published, 1, "Democrat");
         var second = FileOf(published, 2, "Republican");
         await SeedReleasesAsync(published, (1, first, 1), (2, second, null));
@@ -232,7 +233,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
     public async Task TheListTakesThePartiesOfTheEarliestRevisionThatHasAKeptFileAndAClosedRevisionWithNoFileIsReportedButDoesNotFailTheCommand()
     {
         var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat")), Member(Second, Term(0, "2025-01-03", "2027-01-03", "Republican"))]);
-        await SeedAsync(published, 1, extraRevision: 2);
+        await SeedAsync(published, 1, throughRevision: 2);
         var second = FileOf(published, 2, "Republican");
         await SeedReleasesAsync(published, (1, null, 1), (2, second, null));
         var releases = published.Scenario.Releases;
@@ -247,10 +248,45 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
     }
 
     [Fact]
+    public async Task OneSharedListThatCrossesABatchOfTwentyFivePinsItsPartiesInTheFirstBatchOnlyBecauseTheBatchesShareOneSetOfPinnedLists()
+    {
+        const int revisions = 27;
+        var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat")), Member(Second, Term(0, "2025-01-03", "2027-01-03", "Republican"))]);
+        await SeedAsync(published, 1, throughRevision: revisions);
+        await SeedReleasesAsync(published, [.. Enumerable.Range(1, revisions).Select(revision => (revision, (PublishedVote?)FileOf(published, revision, revision == 1 ? "Democrat" : "Republican"),
+            revision == revisions ? (int?)null : revision))]);
+        var writes = new List<VoteStoredColumns[]>();
+        var recording = DispatchProxy.Create<IPublicationStore, RecordingStore>();
+        ((RecordingStore)recording).Start(publications, writes);
+
+        var result = await new BackfillStoredColumns(recording, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Equal((revisions, revisions), (result.VoteRevisionsExamined, result.VoteRevisionsWritten));
+        Assert.Equal([25, 2], writes.Select(write => write.Length));
+        Assert.Equal([1], writes.SelectMany(write => write).Where(column => !column.MemberParties.IsEmpty).Select(column => column.RevisionNumber));
+        Assert.Equal(["Democrat"], await ReadAsync("SELECT coalesce(party, '') FROM vote_member_list_entries"));
+    }
+
+    // Forwards every call to the real store and records the vote column batches that the backfill writes.
+    public class RecordingStore : DispatchProxy
+    {
+        private IPublicationStore inner = null!;
+        private List<VoteStoredColumns[]> writes = null!;
+
+        public void Start(IPublicationStore store, List<VoteStoredColumns[]> sink) => (inner, writes) = (store, sink);
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            if (targetMethod!.Name == nameof(IPublicationStore.WriteVoteColumnsAsync)) writes.Add([.. (IReadOnlyCollection<VoteStoredColumns>)args![0]!]);
+            return targetMethod.Invoke(inner, args);
+        }
+    }
+
+    [Fact]
     public async Task TheBackfillReadsOnlyTheFoldersOfTheReleaseRangeOfEachRevisionSoAFileOutsideTheRangeDoesNotFillIt()
     {
         var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat")), Member(Second, Term(0, "2025-01-03", "2027-01-03", "Republican"))]);
-        await SeedAsync(published, 1, extraRevision: 2);
+        await SeedAsync(published, 1, throughRevision: 2);
         await SeedReleasesAsync(published, (1, null, 1), (2, FileOf(published, 1, "Democrat"), null));
 
         var result = await new BackfillStoredColumns(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
@@ -333,7 +369,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         $"SELECT coalesce(alignment, '') || '|' || coalesce(democrat_majority, '') || '|' || coalesce(republican_majority, '') FROM vote_revisions WHERE revision_number = {published.Vote.RevisionNumber}"))[0];
 
     // The rows skip the foreign keys, as the view tests do, because only the columns under test matter here.
-    private async Task SeedAsync(PublishedVoteRun published, int revision, bool inRelease = false, int? extraRevision = null)
+    private async Task SeedAsync(PublishedVoteRun published, int revision, bool inRelease = false, int? throughRevision = null)
     {
         var list = new string('c', 64);
         var vote = published.Vote;
@@ -348,7 +384,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
             INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, created_at_utc_ticks, headline, summary, text_origin, source_id, vote_source,
                 chamber, congress, session_number, roll_call_number, candidate_id, candidate_update_utc_ticks, voted_on, voted_on_citation_extraction_id, voted_on_citation_start,
                 voted_on_citation_length, kind, member_list_id, issue_revision_id, subjects_hash, issue_candidates_recorded, result)
-            VALUES {string.Join(", ", new[] { revision }.Concat(extraRevision is { } extra ? [extra] : []).Select(number => $"""
+            VALUES {string.Join(", ", Enumerable.Range(revision, (throughRevision ?? revision) - revision + 1).Select(number => $"""
                 ('{vote.RecordId}', {number}, 'test', 'Person', 1, 'Headline', 'Summary', 'Person', 'src', 'CongressGov', 'House', {vote.Congress}, 1, 100, 'cand', 1,
                 '{vote.VotedOn:yyyy-MM-dd}', 'ext', 0, 1, 'Passage', '{list}', '{new string('a', 64)}', '{new string('b', 64)}', true, 'Passed')
                 """))};

@@ -8,7 +8,7 @@ namespace CivicLens.Application.Publication;
 /// <summary>
 /// Fills the stored columns that C# writes at publication, for rows that earlier releases wrote. Each fill calls the rule of the commit writer.
 /// A vote revision takes <see cref="VoteStoredColumns.From"/> of its own vote record file, which the newest kept folder in its release range holds. Its columns
-/// and its written marker go in together. A member list pins the parties of its earliest published revision that has a kept file, so a later revision of the
+/// and its written marker go in together. A member list pins the parties of its published revision with the lowest revision number that has a kept file, so a later revision of the
 /// list never changes them. A revision with no kept file stays unwritten. An official takes the photo path of the officials file of its release. An entry takes
 /// <see cref="ReleaseRecordOrder.CongressOf(DateOnly?, DateTimeOffset)"/>. Every write fills only what is not filled yet, so a second run changes nothing.
 /// Work runs in batches of <see cref="BatchSize"/> rows.
