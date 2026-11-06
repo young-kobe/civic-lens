@@ -80,7 +80,7 @@ public sealed partial class PostgresBillStreamTests
 
         Assert.Equal("Approved", await ScalarAsync("SELECT review_status FROM action_drafts"));
         Assert.Equal("civic-lens:code", await ScalarAsync("SELECT actor_subject FROM action_review_decisions"));
-        Assert.Null(await ScalarAsync("SELECT held_reason FROM action_drafts"));
+        Assert.Equal(DBNull.Value, await ScalarAsync("SELECT held_reason FROM action_drafts"));
     }
 
     [Fact]
