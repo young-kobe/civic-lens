@@ -147,7 +147,7 @@ public sealed class ActionBillTextDraftTests
         var error = Assert.Single(refused.Errors);
         Assert.True(passage > ReadingGrade.MaximumGrade);
         Assert.Contains($"read at grade {ReadingGrade.Format(passage)} as one passage", error, StringComparison.Ordinal);
-        Assert.Contains("Write at grade 8 or below", error, StringComparison.Ordinal);
+        Assert.Contains("Write at grade 12 or below", error, StringComparison.Ordinal);
         Assert.Contains("The hardest sentence is \"Notwithstanding", error, StringComparison.Ordinal);
         Assert.Contains($"at grade {ReadingGrade.Format(ReadingGrade.Rounded(Legal))}", error, StringComparison.Ordinal);
         Assert.Contains("shorter words and shorter sentences", error, StringComparison.Ordinal);
@@ -165,22 +165,26 @@ public sealed class ActionBillTextDraftTests
     [Fact]
     public async Task ThePassageGradeRoundsToTheLimitAndPrintsTheSameValueThatItCompares()
     {
-        var pieces = new[] { "H.R. 1 pays landlords for tenants with low income.", FirstPlain, SecondPlain, WhyPlain, EightPoint };
-        var accepted = ActionDraftResolver.ResolveBillText(Output([(FirstPlain, FirstQuote), (EightPoint, SecondQuote)]), await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+        var json = Output([(AtLimitSummary, FirstQuote), (AtLimitSummary, SecondQuote)], [(AtLimitWhy, WhyQuote)])
+            .Replace("H.R. 1 pays landlords for tenants with low income.", AtLimitHeadline, StringComparison.Ordinal);
+        var pieces = new[] { AtLimitHeadline, AtLimitSummary, AtLimitSummary, AtLimitWhy };
 
-        Assert.True(ReadingGrade.Of(EightPoint) > ReadingGrade.MaximumGrade);
-        Assert.Equal(ReadingGrade.MaximumGrade, ReadingGrade.Rounded(EightPoint));
-        Assert.True(ReadingGrade.RoundedPassage(pieces) <= ReadingGrade.MaximumGrade);
+        var accepted = ActionDraftResolver.ResolveBillText(json, await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+
+        Assert.True(ReadingGrade.OfPassage(pieces) > ReadingGrade.MaximumGrade);
+        Assert.Equal(ReadingGrade.MaximumGrade, ReadingGrade.RoundedPassage(pieces));
         Assert.True(accepted.IsAccepted);
     }
 
-    private const string EightPoint = "Many tenants pay rent into local landlords under the new program.";
+    private const string AtLimitHeadline = "H.R. 1 pays rent for tenants with low income.";
+    private const string AtLimitSummary = "Eligible tenants receive administrative compensation under the program.";
+    private const string AtLimitWhy = "The Secretary pays landlords for tenants with low income.";
 
     [Fact]
     public async Task TheHeadlineIsPartOfThePassage()
     {
         var plainPassage = new[] { FirstPlain, SecondPlain, WhyPlain };
-        var legal = "H.R. 1 provides compensatory disbursements notwithstanding aforementioned administrative requirements.";
+        var legal = "H.R. 1 authorizes supplementary reimbursements notwithstanding aforementioned administrative eligibility determinations regarding extraordinarily complicated circumstances.";
         var json = Output().Replace("H.R. 1 pays landlords for tenants with low income.", legal, StringComparison.Ordinal);
 
         var refused = ActionDraftResolver.ResolveBillText(json, await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
@@ -188,7 +192,7 @@ public sealed class ActionBillTextDraftTests
         Assert.True(ReadingGrade.RoundedPassage(plainPassage) <= ReadingGrade.MaximumGrade);
         var error = Assert.Single(refused.Errors);
         Assert.Contains("as one passage", error, StringComparison.Ordinal);
-        Assert.Contains("The hardest sentence is \"H.R. 1 provides", error, StringComparison.Ordinal);
+        Assert.Contains("The hardest sentence is \"H.R. 1 authorizes", error, StringComparison.Ordinal);
         Assert.True(ActionDraftResolver.ResolveBillText(Output(), await ContextAsync(), "run", DateTimeOffset.UnixEpoch).IsAccepted);
     }
 

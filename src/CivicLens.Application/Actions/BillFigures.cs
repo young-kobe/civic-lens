@@ -33,6 +33,7 @@ public static partial class BillFigures
     /// the text is listed once.</summary>
     public static IReadOnlyList<string> MissingDates(string text, string sentences)
     {
+        ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(sentences);
         var held = Dates(sentences).ToHashSet(StringComparer.OrdinalIgnoreCase);
         return [.. Dates(text).Where(date => !held.Contains(date)).Distinct(StringComparer.OrdinalIgnoreCase)];

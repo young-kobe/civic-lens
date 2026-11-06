@@ -7,9 +7,9 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionTextPromptGoldenTests
 {
-    private const string SystemSha256 = "c91a66f3431c59d3fbe93f12659e09a7e5a61c81c681d01e1de096576de84030";
+    private const string SystemSha256 = "24ad3f4f1833a60613a2af9b467526f300635ef721f8c54e26e9eb168acf7372";
     private const string SchemaSha256 = "1842aea9479adba4bd6244a32833f17e655bb8083b18fb5c87380619258bc9e8";
-    private const string InputHash = "a04b90e40575fb47c74f9554c970bda667b36f508b1860b0406c54089bb69782";
+    private const string InputHash = "57116b358ea1c1f64fbcac68872d92c4b3ca5ce194e73f6b89ce1c9057b9e605";
 
     [Fact]
     public async Task TheTextPromptAndSchemaMatchTheirPinnedVersions()
@@ -21,7 +21,7 @@ public sealed class ActionTextPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(ActionDraftTask.TextPromptVersion)} ({ActionDraftTask.TextPromptVersion}) or " +
             $"{nameof(ActionDraftTask.TextSchemaVersion)} ({ActionDraftTask.TextSchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("action-text-prompt-v5", "action-text-schema-v1", "claude-haiku-5-5"),
+        Assert.Equal(("action-text-prompt-v6", "action-text-schema-v1", "claude-haiku-5-5"),
             (ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model));
         Assert.Equal((ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion), (request.PromptVersion, request.SchemaVersion));
         Assert.Contains(ActionDraftTask.TextPromptVersion, ActionDraftTask.CurrentVersions.PromptVersions);
@@ -47,6 +47,11 @@ public sealed class ActionTextPromptGoldenTests
         Assert.Contains("Name who the bill affects, what it changes, and each dollar amount in the bill text that is central to a change.", system, StringComparison.Ordinal);
         Assert.Contains("Name each date that the text sets for a change to start, end, or be due, for example a deadline or a fiscal year range, in the sentence that states the change.", system, StringComparison.Ordinal);
         Assert.Contains("helps, supports, addresses, or improves", system, StringComparison.Ordinal);
+        Assert.Contains("reading grade 12 or below", system, StringComparison.Ordinal);
+        Assert.Contains("Keep the exact term that the bill uses when the term carries the meaning, for example \"ceased operations\", \"loan guarantee\", or \"appropriations\". Explain the term in plain words in the same sentence or the next sentence.", system, StringComparison.Ordinal);
+        Assert.Contains("Never turn \"shall be considered\" into \"is not treated as\". Never reverse a condition", system, StringComparison.Ordinal);
+        Assert.DoesNotContain("A long name in a sentence is fine", system, StringComparison.Ordinal);
+        Assert.DoesNotContain("short words", system, StringComparison.Ordinal);
     }
 
     [Fact]

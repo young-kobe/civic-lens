@@ -15,7 +15,7 @@ namespace CivicLens.Application.Actions;
 public static class ReadingGrade
 {
     /// <summary>A passage above this grade goes back to the model.</summary>
-    public const double MaximumGrade = 8;
+    public const double MaximumGrade = 12;
 
     public static double Of(string text)
     {

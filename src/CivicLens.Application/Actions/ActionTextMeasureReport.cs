@@ -10,7 +10,7 @@ public sealed record ActionTextMeasureSentence(ActionTextPart Part, string Sente
 
 public sealed record ActionTextMeasurePass(AnalysisRunOutcome Outcome, string? OutputJson);
 
-/// <summary><see cref="MissingDates"/> lists the dates of the sent text that no accepted sentence holds. It is filled for a flagged bill only. It is a measure only.</summary>
+/// <summary><see cref="MissingDates"/> lists the dates of the sent text that no accepted sentence writes the same way (string match, case ignored). It is filled for a flagged bill only. It is a measure only.</summary>
 public sealed record ActionTextMeasureBill(string BillId, string? Title, ActionTextMeasureOutcome Outcome, string? Reason, int CharsRead, int CharsTotal,
     int Calls, AnalysisTokenUsage Usage, long ChargedTokens, ImmutableArray<ActionTextMeasureSentence> Sentences, ImmutableArray<string> Rejections,
     ImmutableArray<ActionTextMeasurePass> Passes, BillFigureCounts TextFigures, BillFigureCounts SentenceFigures, double? PassageGrade,

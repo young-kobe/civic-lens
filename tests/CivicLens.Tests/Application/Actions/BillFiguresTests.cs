@@ -52,5 +52,6 @@ public sealed class BillFiguresTests
         Assert.Equal(["September 30, 2027"], BillFigures.MissingDates(text, "It covers Fiscal Year 2026 and starts before 2028."));
         Assert.Empty(BillFigures.MissingDates(text, "By September 30, 2027, fiscal year 2026 and after 2028."));
         Assert.Equal(4, BillFigures.Count(text).Dates);
+        Assert.Equal("text", Assert.Throws<ArgumentNullException>(() => BillFigures.MissingDates(null!, string.Empty)).ParamName);
     }
 }

@@ -67,8 +67,7 @@ public sealed class ActionTextMeasureTests
 
         var bill = Assert.Single(report.Bills);
         Assert.Equal((new BillFigureCounts(0, 1), new BillFigureCounts(0, 0), true), (bill.TextFigures, bill.SentenceFigures, bill.LosesFigures));
-        Assert.Equal(BillFigures.MissingDates(Of().Body, string.Empty), bill.MissingDates);
-        Assert.Single(bill.MissingDates);
+        Assert.Equal<IEnumerable<string>>(["December 31, 2030"], bill.MissingDates);
     }
 
     [Fact]

@@ -66,11 +66,11 @@ public sealed class ReadingGradeTests
     [Fact]
     public void TheRoundedGradeIsTheValueThatTheLimitAndTheMessageUse()
     {
-        const string text = "Many tenants pay rent into local landlords under the new program.";
+        const string text = "Eligible tenants receive compensation. The Secretary pays landlords for tenants with low income. The program ends on December 31, 2030. Eligible tenants receive administrative compensation under the program.";
 
         Assert.True(ReadingGrade.Of(text) > ReadingGrade.MaximumGrade);
         Assert.Equal(ReadingGrade.MaximumGrade, ReadingGrade.Rounded(text));
-        Assert.Equal("8.0", ReadingGrade.Format(ReadingGrade.Rounded(text)));
+        Assert.Equal("12.0", ReadingGrade.Format(ReadingGrade.Rounded(text)));
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public sealed class ReadingGradeTests
         Assert.True(ReadingGrade.Of("Notwithstanding the aforementioned administrative requirements, eligible beneficiaries receive compensatory disbursements.") >
             ReadingGrade.MaximumGrade);
         Assert.True(ReadingGrade.Of("The bill pays rent for people with low pay.") <= ReadingGrade.MaximumGrade);
-        Assert.Equal("8.0", ReadingGrade.Format(ReadingGrade.MaximumGrade));
+        Assert.Equal("12.0", ReadingGrade.Format(ReadingGrade.MaximumGrade));
     }
 
     [Fact]
