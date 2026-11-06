@@ -101,7 +101,7 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
 
         var attempt = new ActionTextMeasureAttempt(candidateId, tokenCap, spent);
         started(attempt);
-        await step.DraftAsync(attempt, evidence with { Current = null, HasOlderPromptDraft = false, IsRejected = false },
+        await step.DraftAsync(attempt, evidence with { Current = null, HasStaleDraft = false, IsRejected = false },
             cancellationToken);
         return Summarize(billId, evidence, billText, attempt);
     }

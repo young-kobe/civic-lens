@@ -15,7 +15,7 @@ namespace CivicLens.Infrastructure.Actions;
 internal static class ActionDraftRows
 {
     public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, ActionDraftRevision revision, string runId,
-        CodeVersion codeVersion, CancellationToken cancellationToken)
+        CodeVersion codeVersion, int readStateVersion, CancellationToken cancellationToken)
     {
         revision.ValidateShape();
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.ActionReview, cancellationToken);
@@ -29,12 +29,37 @@ internal static class ActionDraftRows
             if (revision.CandidateId != draft.CandidateId) draft.RefusedCandidateId = revision.CandidateId;
             return ActionDraftErrorCodes.RecordRejected;
         }
+        if (draft is not null && revision.CandidateId == draft.CandidateId && await HasPersonDecisionAfterAsync(db, draft, readStateVersion, cancellationToken))
+            return ActionDraftErrorCodes.RecordRejected;
         if (draft is null) db.Add(draft = NewDraft(revision));
         var records = PostgresActionReviewStore.Records;
         await records.AppendCodeApprovedAsync(db, draft, revision, ActionRevisionRows.Create(revision, runId, codeVersion), await records.ReadCycleAsync(db, draft, cancellationToken),
             () => ApprovalCheck.OfAsync(() => PostgresActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)));
         return null;
     }
+
+    /// <summary>The drafts with a person final decision on the current revision. A later revision supersedes the decision, so the draft is not listed then.
+    /// The stale query reads this rule.</summary>
+    internal static IQueryable<ActionDraftRow> DraftsWithPersonDecision(CollectionAttemptDbContext db)
+    {
+        var decisions = PersonDecisionsAsNoTracking(db);
+        return db.Set<ActionDraftRow>().AsNoTracking().Where(draft => decisions.Any(decision =>
+            decision.RecordId == draft.RecordId && decision.RevisionNumber == draft.CurrentRevisionNumber));
+    }
+
+    /// <summary>True when a person final decision on the current revision came after the step read the draft. Decision rows hold the state version
+    /// that the decision made, so a later version means the person decided after the read. A withdrawal does not count.</summary>
+    private static Task<bool> HasPersonDecisionAfterAsync(CollectionAttemptDbContext db, ActionDraftRow draft, int readStateVersion,
+        CancellationToken cancellationToken) =>
+        PersonDecisionsAsNoTracking(db).AnyAsync(decision => decision.RecordId == draft.RecordId &&
+            decision.RevisionNumber == draft.CurrentRevisionNumber && decision.ReviewStateVersion > readStateVersion, cancellationToken);
+
+    private static IQueryable<ActionReviewDecisionRow> PersonDecisionsAsNoTracking(CollectionAttemptDbContext db) =>
+        db.Set<ActionReviewDecisionRow>().AsNoTracking().Where(PersonFinalDecisions.Match<ActionReviewDecisionRow>());
+
+    public static Task<int> ReadStateVersionAsync(CollectionAttemptDbContext db, string recordId, CancellationToken cancellationToken) =>
+        db.Set<ActionDraftRow>().AsNoTracking().Where(draft => draft.RecordId == recordId).Select(draft => draft.ReviewStateVersion)
+            .SingleOrDefaultAsync(cancellationToken);
 
     public static Task<bool> IsRejectedAsync(CollectionAttemptDbContext db, string recordId, CancellationToken cancellationToken) =>
         db.Set<ActionDraftRow>().AsNoTracking().AnyAsync(draft => draft.RecordId == recordId && draft.ReviewStatus == ReviewStatus.Rejected, cancellationToken);

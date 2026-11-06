@@ -14,7 +14,7 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
     private const string CurrentTerm = "t.start_on <= current_date AND (t.end_on IS NULL OR t.end_on >= current_date)";
 
     private const string DistrictsSql = $"""
-        SELECT a.release_number, d.congress, d.state, d.district, h.official_id, h.name, h.party,
+        SELECT a.release_number, d.congress, d.state, d.district, h.official_id, h.name, h.party, h.end_on,
                EXISTS (SELECT 1 FROM public_api.release_officials) AS has_names
           FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
           LEFT JOIN LATERAL (
@@ -22,7 +22,7 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
                 WHERE z.zcta = @zcta AND z.congress = COALESCE(@congress, (SELECT max(m.congress) FROM public_api.zip_districts m WHERE m.zcta = @zcta))) d
             ON TRUE
           LEFT JOIN LATERAL (
-               SELECT t.official_id, o.name, t.party FROM public_api.release_official_terms t
+               SELECT t.official_id, o.name, t.party, t.end_on FROM public_api.release_official_terms t
                  JOIN public_api.release_officials o ON o.release_number = t.release_number AND o.official_id = t.official_id
                 WHERE t.kind = 'Representative' AND t.state = d.state AND t.district = d.district AND {CurrentTerm}
                 ORDER BY t.start_on DESC, t.official_id LIMIT 1) h
@@ -31,8 +31,8 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         """;
 
     private const string SenatorsSql = $"""
-        SELECT state, official_id, name, party FROM (
-            SELECT l.state, l.official_id, o.name, l.party, l.start_on,
+        SELECT state, official_id, name, party, end_on FROM (
+            SELECT l.state, l.official_id, o.name, l.party, l.end_on, l.start_on,
                    row_number() OVER (PARTITION BY l.state ORDER BY (l.end_on IS NULL OR l.end_on > current_date) DESC, l.start_on DESC, l.official_id) AS newest
               FROM (SELECT DISTINCT ON (t.state, t.official_id) t.release_number, t.state, t.official_id, t.party, t.start_on, t.end_on
                       FROM public_api.release_official_terms t
@@ -81,7 +81,7 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         while (await reader.ReadAsync(cancellationToken))
         {
             release = reader.GetInt32(0);
-            hasNames = reader.GetBoolean(7);
+            hasNames = reader.GetBoolean(8);
             if (reader.IsDBNull(1)) continue;
             congress = reader.GetInt32(1);
             rows.Add(new(reader.GetString(2), reader.GetInt32(3), ReadHolder(reader, 4)));
@@ -106,7 +106,7 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
     }
 
     private static SeatHolder? ReadHolder(NpgsqlDataReader reader, int first) =>
-        reader.IsDBNull(first) ? null : new(reader.GetString(first), reader.GetString(first + 1), ViewColumns.Text(reader, first + 2));
+        reader.IsDBNull(first) ? null : new(reader.GetString(first), reader.GetString(first + 1), ViewColumns.Text(reader, first + 2), ViewColumns.Date(reader, first + 3));
 
     private sealed record DistrictRow(string State, int District, SeatHolder? Representative);
 

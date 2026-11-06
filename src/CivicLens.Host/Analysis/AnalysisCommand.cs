@@ -6,12 +6,12 @@ namespace CivicLens.Host.Analysis;
 
 public static class AnalysisCommand
 {
-    private const string Usage = "Use analyses requeue <comparison-id> or analyses requeue --all.";
+    private const string Usage = "Use analyses requeue <comparison-id>, analyses requeue --all, or analyses redraft --stale [actions|votes|briefs].";
 
     public static bool Matches(string[] args) => args is ["analyses", ..];
 
     public static Task<int> ExecuteAsync(string[] args, RequeueAnalyses<AnalysisRun> requeue,
-        ReviewActor owner, CancellationToken cancellationToken) =>
+        RedraftStaleAnalyses redraftStale, ReviewActor owner, CancellationToken cancellationToken) =>
         OwnerCommand.RunAsync(async () =>
         {
             switch (args)
@@ -21,6 +21,12 @@ public static class AnalysisCommand
                     return 0;
                 case ["analyses", "requeue", var comparisonId]:
                     CommandOutput.Write(new { requeued = await requeue.ExecuteAsync(owner, comparisonId, cancellationToken) });
+                    return 0;
+                case ["analyses", "redraft", "--stale"]:
+                    CommandOutput.Write(new { requeued = await redraftStale.ExecuteAsync(owner, null, cancellationToken) });
+                    return 0;
+                case ["analyses", "redraft", "--stale", var stage]:
+                    CommandOutput.Write(new { requeued = await redraftStale.ExecuteAsync(owner, stage, cancellationToken) });
                     return 0;
                 default:
                     Console.Error.WriteLine(Usage);

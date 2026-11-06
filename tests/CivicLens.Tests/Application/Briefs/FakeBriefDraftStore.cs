@@ -36,6 +36,8 @@ internal sealed class FakeBriefDraftStore : FakeAnalysisQueue<BriefDraftRun>, IB
         return Task.FromResult(1);
     }
 
+    public Task<int> RequeueStaleAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+
     protected override bool CanTransition(AnalysisRecord record, AnalysisCheckpoint checkpoint) =>
         BriefDraftLifecycle.CanTransition(record, checkpoint);
 

@@ -68,12 +68,11 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [ ] Move to the next item after a decision
 - R-52: Approve factual links by code. The types are "statement about a vote" and "describes own bill". The types "states position on" and "claims credit for" stay with a person. The public wording "a reviewer approved each link" must change with it. Depends on: R-51. [Review](architecture/review.md#limits-and-planned-work)
   - [ ] Code approval of factual links, and new public wording
-- R-54: Finish bill issue narrowing. The model gets the Congress.gov legislative subjects when a bill has them, and the redraft commands exist. Still open: run the subjects backfill and the redraft commands on the live site. Then check on a sample that a bill with no fitting issue publishes with no issue. Depends on: none. [Actions](architecture/actions.md#limits-and-planned-work)
+- R-54: Finish bill issue narrowing. The model gets the Congress.gov legislative subjects when a bill has them, and the redraft command exists. Still open: run the subjects backfill and the redraft command on the live site. Then check on a sample that a bill with no fitting issue publishes with no issue. Depends on: none. [Actions](architecture/actions.md#limits-and-planned-work)
   - [x] Vote issue narrowing
-  - [x] `actions draft redraft`
-  - [x] `votes draft redraft`
+  - [x] `analyses redraft --stale`
   - [x] Read Congress.gov subjects in drafts
-  - [ ] Run the subjects backfill and the redraft commands
+  - [ ] Run the subjects backfill and the redraft command
   - [x] Write action text in code when no summary text reaches the model, and move summary bills to the new prompt
   - [ ] Draft the action backlog, and spot check the issue tags after it
   - [ ] Publish the bill text summary, after the owner reads the measured sample
@@ -132,8 +131,11 @@ The owner accepted these designs. Each item holds its choices until the code and
 
 ### Next
 
+- R-39: An `analyses redraft --stale` owner command requeues finished drafts whose last run used an older task, prompt, or schema version. Statements and document changes each get their own stale redraft. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
+  - [x] Actions, votes, and briefs
+  - [ ] Statement stale redraft
+  - [ ] Document change stale redraft
 - R-17: Congressional Record articles as a statement connector, Senate only at first. Each granule and speaker gives one candidate, and the extraction holds only the turns of that speaker. Code filters by class, title, covered member, and about 100 words. The public link is the GovInfo details page. A new quotation kind "Congressional Record text" is a contract change. Backfill to 2025-01-03. The PRs are collection to a ledger table with no model spend, then candidates, then the backfill, then removal of the 62 dead senate.gov listings and the 29 dead sources that fail a 7 day health check. Depends on: none. [Actions](architecture/actions.md#limits-and-planned-work)
-- R-39: An `analyses redraft --stale` owner command requeues finished drafts whose last run used an older task, prompt, or schema version. It covers document changes, statements, actions, votes, and briefs. Depends on: none stated. [Analysis](architecture/analysis.md#limits-and-planned-work)
 - R-29: Check each policy area name against the Congress.gov API. Depends on: none stated. [Configuration](architecture/configuration.md#limits-and-planned-work)
 - R-30: Fix the remaining format and parser limits that the federal coverage found. Depends on: none stated. [Collection](architecture/collection.md#limits-and-planned-work)
 

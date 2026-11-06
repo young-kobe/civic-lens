@@ -336,7 +336,7 @@ public sealed partial class PostgresBillStreamTests
         var candidate = await ThreeCandidatesWithSubjectsAsync();
         var claim = (await ActionStore().TryClaimAsync(candidate, Lease, default))!;
         var run = await ReserveAsync(ActionStore(), claim);
-        Assert.True(await ActionStore().CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1, includesSummaries: true, includesSubjects: true))),
+        Assert.True(await ActionStore().CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1, includesSummaries: true, includesSubjects: true)), 0),
             DraftedRun(run, candidate), default));
 
         var exception = await Assert.ThrowsAnyAsync<Exception>(RollBackAsync);
@@ -409,7 +409,7 @@ public sealed partial class PostgresBillStreamTests
         var olderRun = await ReserveAsync(store, olderClaim);
         await AdmitSummariesAsync(bill.Summaries!, new CongressBillSummariesPage([], null));
 
-        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(olderClaim, Revision(older, 1)),
+        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(olderClaim, Revision(older, 1), 0),
             DraftedRun(olderRun, older), default);
 
         Assert.True(settled);
@@ -575,7 +575,7 @@ public sealed partial class PostgresBillStreamTests
         await InsertRunAsync(older, "action-draft-prompt-v1", 1);
         await InsertRunAsync(newer, "action-draft-prompt-v1", 2);
 
-        Assert.Equal(1, await ActionStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(1, await ActionStore().RequeueStaleAsync(default));
 
         var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => (row.Status, row.Attempts));
         Assert.Equal(("Succeeded", 2), queue[older]);
@@ -589,7 +589,7 @@ public sealed partial class PostgresBillStreamTests
         await InsertRunAsync(older, "action-draft-prompt-v1", 1);
         await InsertRunAsync(newer, ActionDraftTask.PromptVersion, 2);
 
-        Assert.Equal(0, await ActionStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(0, await ActionStore().RequeueStaleAsync(default));
 
         Assert.All(await QueueAsync(), row => Assert.Equal(("Succeeded", 2), (row.Status, row.Attempts)));
     }
@@ -603,7 +603,7 @@ public sealed partial class PostgresBillStreamTests
         await InsertRunAsync(newer, "action-draft-prompt-v1", 1);
         await InsertRunAsync(newer, ActionDraftTask.PromptVersion, 2, "Bypassed");
 
-        Assert.Equal(1, await ActionStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(1, await ActionStore().RequeueStaleAsync(default));
 
         var queue = (await QueueAsync()).ToDictionary(row => row.CandidateId, row => row.Status);
         Assert.Equal("Pending", queue[newer]);
@@ -616,11 +616,11 @@ public sealed partial class PostgresBillStreamTests
         var candidate = await CandidateWithoutSummariesAsync();
         await SettleAsync(candidate, Revision(candidate, 1));
         _ = await InsertRunAsync(candidate, ActionDraftTask.PromptVersion, DateTimeOffset.UnixEpoch.UtcTicks + 1);
-        Assert.False((await ActionStore().ReadEvidenceAsync(candidate, false, default))!.HasOlderPromptDraft);
+        Assert.False((await ActionStore().ReadEvidenceAsync(candidate, false, default))!.HasStaleDraft);
 
         _ = await InsertRunAsync(candidate, "action-draft-prompt-v1", DateTimeOffset.UnixEpoch.UtcTicks + 2);
 
-        Assert.True((await ActionStore().ReadEvidenceAsync(candidate, false, default))!.HasOlderPromptDraft);
+        Assert.True((await ActionStore().ReadEvidenceAsync(candidate, false, default))!.HasStaleDraft);
     }
 
     [Theory]
@@ -634,7 +634,20 @@ public sealed partial class PostgresBillStreamTests
         await InsertRunAsync(older, "action-draft-prompt-v1", 1);
         await InsertRunAsync(newer, newestDraftPrompt, 2);
 
-        Assert.Equal(requeued, await ActionStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(requeued, await ActionStore().RequeueStaleAsync(default));
+    }
+
+    [Theory]
+    [InlineData("action-draft-v0", ActionDraftTask.SchemaVersion, 1)]
+    [InlineData(ActionDraftTask.TaskVersion, "action-draft-schema-v1", 1)]
+    [InlineData(ActionDraftTask.TaskVersion, ActionDraftTask.SchemaVersion, 0)]
+    public async Task RedraftTreatsADraftRunWithAnOlderTaskOrSchemaVersionAsStaleEvenWhenItsPromptIsCurrent(string taskVersion, string schemaVersion, int requeued)
+    {
+        var (older, newer) = await TwoSettledCandidatesAsync(ActionDraftErrorCodes.SupersededByNewerCandidate, null);
+        await InsertRunAsync(older, ActionDraftTask.PromptVersion, 1);
+        await InsertRunAsync(newer, ActionDraftTask.PromptVersion, 2, taskVersion: taskVersion, schemaVersion: schemaVersion);
+
+        Assert.Equal(requeued, await ActionStore().RequeueStaleAsync(default));
     }
 
     [Fact]
@@ -645,7 +658,7 @@ public sealed partial class PostgresBillStreamTests
         var issueRun = await InsertRunAsync(newer, "action-issue-prompt-v3", 2);
         await InsertDraftAndRevisionAsync("Code", "civic-lens:code", issueRun);
 
-        Assert.Equal(0, await ActionStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(0, await ActionStore().RequeueStaleAsync(default));
     }
 
     [Fact]
@@ -656,7 +669,7 @@ public sealed partial class PostgresBillStreamTests
         var codeRun = await InsertRunAsync(newer, ActionDraftTask.PromptVersion, 2, "Bypassed", ActionDraftErrorCodes.CodeWritten);
         await InsertDraftAndRevisionAsync("Code", "civic-lens:code", codeRun);
 
-        Assert.Equal(0, await ActionStore().RequeueOlderPromptAsync(default));
+        Assert.Equal(0, await ActionStore().RequeueStaleAsync(default));
     }
 
     [Fact]
@@ -715,14 +728,15 @@ public sealed partial class PostgresBillStreamTests
 
     private static string SqlLiteral(string? value) => value is null ? "NULL" : $"'{value}'";
 
-    private async Task<string> InsertRunAsync(string candidate, string promptVersion, long startedAtTicks, string outcome = "Drafted", string? reason = null)
+    private async Task<string> InsertRunAsync(string candidate, string promptVersion, long startedAtTicks, string outcome = "Drafted", string? reason = null,
+        string taskVersion = ActionDraftTask.TaskVersion, string schemaVersion = ActionDraftTask.SchemaVersion)
     {
         var runId = Guid.NewGuid().ToString("N");
         await ExecuteAsync(connectionString, $"""
         INSERT INTO action_analysis_runs (run_id, candidate_id, task, task_version, model, prompt_version, schema_version, input_hash, outcome,
             input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, charged_tokens, started_at_utc_ticks, finished_at_utc_ticks, reason)
-        VALUES ('{runId}', '{candidate}', '{ActionDraftTask.Task}', '{ActionDraftTask.TaskVersion}', '{ActionDraftTask.Model}', '{promptVersion}',
-            '{ActionDraftTask.SchemaVersion}', '{new string('1', 64)}', '{outcome}', 0, 0, 0, 0, 0, {startedAtTicks}, {startedAtTicks}, {SqlLiteral(reason)})
+        VALUES ('{runId}', '{candidate}', '{ActionDraftTask.Task}', '{taskVersion}', '{ActionDraftTask.Model}', '{promptVersion}',
+            '{schemaVersion}', '{new string('1', 64)}', '{outcome}', 0, 0, 0, 0, 0, {startedAtTicks}, {startedAtTicks}, {SqlLiteral(reason)})
         """);
         return runId;
     }
@@ -735,7 +749,7 @@ public sealed partial class PostgresBillStreamTests
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
         var runId = await ReserveAsync(store, claim);
 
-        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1))),
+        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1)), 0),
             DraftedRun(runId, candidate), default);
 
         Assert.True(settled);
@@ -754,7 +768,7 @@ public sealed partial class PostgresBillStreamTests
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
         var runId = await ReserveAsync(store, claim);
 
-        await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1))), DraftedRun(runId, candidate), default);
+        await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1)), 0), DraftedRun(runId, candidate), default);
 
         Assert.Equal(("Analysis", "none"), await TupleAsync($"SELECT author_kind, coalesce(code_version, 'none') FROM action_revisions WHERE record_id = '{RecordId}'"));
     }
@@ -778,7 +792,7 @@ public sealed partial class PostgresBillStreamTests
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            store.CheckpointAsync(ActionDraftCheckpoint.From(claim, CodeRevision(candidate)), CodeRun(candidate), default));
+            store.CheckpointAsync(ActionDraftCheckpoint.From(claim, CodeRevision(candidate), 0), CodeRun(candidate), default));
 
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
     }
@@ -834,7 +848,7 @@ public sealed partial class PostgresBillStreamTests
             VALUES ('{RecordId}', 1, 'auth0|editor', 'Person', NULL, 'x', 0)
             """);
 
-        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1))),
+        var settled = await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1)), 0),
             DraftedRun(runId, candidate), default);
 
         Assert.True(settled);
@@ -863,7 +877,7 @@ public sealed partial class PostgresBillStreamTests
         var bypassed = new ActionDraftRun(run.Run with { Outcome = AnalysisRunOutcome.Bypassed, Usage = AnalysisTokenUsage.None, ChargedTokens = 0, Input = null },
             ActionDraftErrorCodes.SponsorshipsChanged);
 
-        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1))), bypassed, default));
+        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1)), 0), bypassed, default));
 
         var row = Assert.Single(await QueueAsync());
         Assert.Equal(("RetryWaiting", ActionDraftErrorCodes.RevisionConflict), (row.Status, row.ErrorCode));
@@ -881,7 +895,7 @@ public sealed partial class PostgresBillStreamTests
         Task<bool> settling;
         await using (var holder = await HeldAdvisoryLock.AcquireAsync(connectionString, "civic-lens-action-review"))
         {
-            settling = store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1))),
+            settling = store.CheckpointAsync(ActionDraftCheckpoint.From(claim, await CitingStoredTextAsync(Revision(candidate, 1)), 0),
                 DraftedRun(runId, candidate), default);
             await HeldAdvisoryLock.WaitForWaiterAsync(connectionString, "civic-lens-action-review");
             Assert.False(settling.IsCompleted);
@@ -1037,7 +1051,8 @@ public sealed partial class PostgresBillStreamTests
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
         var runId = await ReserveAsync(store, claim);
         var stored = await CitingStoredTextAsync(revision);
-        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, stored), DraftedRun(runId, candidate), default));
+        var readVersion = Convert.ToInt32(await ScalarAsync($"SELECT coalesce(max(review_state_version), 0) FROM action_drafts WHERE record_id = '{RecordId}'"));
+        Assert.True(await store.CheckpointAsync(ActionDraftCheckpoint.From(claim, stored, readVersion), DraftedRun(runId, candidate), default));
         return stored;
     }
 
