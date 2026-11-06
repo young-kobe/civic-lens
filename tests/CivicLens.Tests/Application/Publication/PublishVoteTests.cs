@@ -434,6 +434,51 @@ public sealed class PublishVoteTests
         Assert.Equal("Republican", Assert.Single(ReadVote(scenario, summary, vote).Members).Party);
     }
 
+    // The stored parties pin the member list, so the file, the list parties, and the alignment all follow them and not the roster of today.
+    // Without the pin the roster gives M000001 the Republican term. Republican would then tie, and the vote would have no alignment.
+    [Fact]
+    public async Task AMemberListThatStoresPartiesPinsThemSoTheFileTheListPartiesAndTheAlignmentIgnoreTheRoster()
+    {
+        var scenario = PinnedScenario(out var vote, out _);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        var file = ReadVote(scenario, summary, vote);
+        var columns = Assert.Single(scenario.Publications.LastCommit!.VoteColumns);
+        Assert.Equal(["Democrat"], file.Members.Select(member => member.Party));
+        Assert.Equal(["Democrat"], columns.MemberParties.ToArray());
+        Assert.Equal((PublishedVoteAlignment.Split, "Yea", "Nay"), (file.AlignmentOfParties(), file.MajorityOf(PublishedPartyMajority.Democrat), file.MajorityOf(PublishedPartyMajority.Republican)));
+        Assert.Equal((file.AlignmentOfParties(), file.MajorityOf(PublishedPartyMajority.Democrat), file.MajorityOf(PublishedPartyMajority.Republican)),
+            (columns.Alignment, columns.DemocratMajority, columns.RepublicanMajority));
+    }
+
+    [Fact]
+    public async Task ARevisionWithPinnedPartiesNeverStopsTheOtherRecordsOfTheSameBatch()
+    {
+        var scenario = PinnedScenario(out var vote, out var other);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", new PublishedRecordReference(PublishedRecordKind.Vote, vote), new PublishedRecordReference(PublishedRecordKind.Vote, other)));
+
+        Assert.Equal(2, summary.RecordCount);
+        Assert.Equal(["Democrat"], ReadVote(scenario, summary, vote).Members.Select(member => member.Party));
+        Assert.Equal(["Democrat"], ReadVote(scenario, summary, other).Members.Select(member => member.Party));
+    }
+
+    private static PublicationScenario PinnedScenario(out string vote, out string other)
+    {
+        var scenario = new PublicationScenario
+        {
+            RosterMembers = [Member("M000001", Term("Republican")), Member("D1", Term("Democrat")), Member("R1", Term("Republican"))]
+        };
+        string[] totals = ["Party total D: Yea 2, Nay 0, Present 0, Not voting 0", "Party total R: Yea 0, Nay 1, Present 0, Not voting 0"];
+        string[] lines = ["Member: D1, A, D, AL, Yea", "Member: R1, A, R, AL, Nay"];
+        vote = scenario.AddVote('d', totalLines: totals, otherMemberLines: lines);
+        other = scenario.AddVote('e', totalLines: totals, otherMemberLines: lines);
+        scenario.Votes.Publishable[vote] = scenario.Votes.Publishable[vote] with { StoredParties = ImmutableDictionary<string, string>.Empty.Add("M000001", "Democrat") };
+        scenario.Votes.Publishable[other] = scenario.Votes.Publishable[other] with { StoredParties = ImmutableDictionary<string, string>.Empty.Add("M000001", "Democrat") };
+        return scenario;
+    }
+
     // The two terms share 2025-04-10. The term that starts that day wins, because a new term replaces the old one on its first day.
     [Fact]
     public async Task OnTheDayOneTermEndsAndTheNextStartsTheNewTermWins()

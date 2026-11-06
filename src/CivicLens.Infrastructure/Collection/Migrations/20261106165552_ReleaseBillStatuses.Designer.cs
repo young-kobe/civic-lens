@@ -4939,6 +4939,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("brief_revision_number");
 
+                    b.Property<int?>("Congress")
+                        .HasColumnType("integer")
+                        .HasColumnName("congress");
+
                     b.Property<string>("DocumentChangeDraftId")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
@@ -5055,6 +5059,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_published_entries_bill_line", "bill_line IS NULL OR (kind = 'action' AND length(btrim(bill_line)) >= 1 AND length(bill_line) <= 200)");
 
                             t.HasCheckConstraint("ck_published_entries_bill_title", "(kind = 'action') = (bill_title IS NOT NULL) AND (bill_title IS NULL OR length(btrim(bill_title)) > 0)");
+
+                            t.HasCheckConstraint("ck_published_entries_congress", "congress IS NULL OR congress >= 1");
 
                             t.HasCheckConstraint("ck_published_entries_document_type", "(kind = 'executiveAction') = (document_type IS NOT NULL) AND (document_type IS NULL OR document_type IN ('ExecutiveOrder', 'Proclamation', 'Notice', 'Memorandum'))");
 
@@ -5251,6 +5257,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("name");
 
+                    b.Property<string>("PhotoPath")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("photo_path");
+
                     b.Property<string>("Website")
                         .HasColumnType("text")
                         .HasColumnName("website");
@@ -5267,6 +5278,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_release_officials_name", "length(btrim(name)) > 0");
 
                             t.HasCheckConstraint("ck_release_officials_official_id", "length(btrim(official_id)) > 0");
+
+                            t.HasCheckConstraint("ck_release_officials_photo_path", "photo_path IS NULL OR length(btrim(photo_path)) > 0");
                         });
                 });
 
@@ -8270,6 +8283,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("citation_start");
 
+                    b.Property<string>("Party")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("party");
+
                     b.Property<string>("PersonId")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -8294,6 +8312,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_vote_member_list_entries_citation", "citation_start >= 0 AND citation_length > 0");
 
                             t.HasCheckConstraint("ck_vote_member_list_entries_member", "length(btrim(person_id)) > 0 AND length(btrim(bioguide_id)) > 0 AND length(btrim(vote_cast)) > 0");
+
+                            t.HasCheckConstraint("ck_vote_member_list_entries_party", "party IS NULL OR length(btrim(party)) > 0");
 
                             t.HasCheckConstraint("ck_vote_member_list_entries_position", "position >= 0");
                         });
@@ -8490,6 +8510,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("revision_number");
 
+                    b.Property<string>("Alignment")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("alignment");
+
                     b.Property<string>("AuthorKind")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -8527,6 +8552,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("chamber");
 
+                    b.Property<bool>("ColumnsWritten")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("columns_written");
+
                     b.Property<int>("Congress")
                         .HasColumnType("integer")
                         .HasColumnName("congress");
@@ -8534,6 +8565,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("CreatedAtUtcTicks")
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<string>("DemocratMajority")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("democrat_majority");
 
                     b.Property<string>("Headline")
                         .IsRequired()
@@ -8580,6 +8616,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("question");
+
+                    b.Property<string>("RepublicanMajority")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("republican_majority");
 
                     b.Property<string>("Result")
                         .IsRequired()
@@ -8684,6 +8725,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("vote_revisions", null, t =>
                         {
+                            t.HasCheckConstraint("ck_vote_revisions_alignment", "alignment IS NULL OR alignment IN ('Split', 'PartiesAgree', 'Mixed')");
+
                             t.HasCheckConstraint("ck_vote_revisions_author_kind", "author_kind IN ('Person','Analysis')");
 
                             t.HasCheckConstraint("ck_vote_revisions_bill", "(bill_type IS NULL) = (bill_number IS NULL) AND bill_number >= 1");
@@ -8694,6 +8737,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_vote_revisions_chamber_source", "(chamber = 'House') = (vote_source = 'CongressGov')");
 
+                            t.HasCheckConstraint("ck_vote_revisions_columns_written", "columns_written OR (alignment IS NULL AND democrat_majority IS NULL AND republican_majority IS NULL)");
+
                             t.HasCheckConstraint("ck_vote_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_vote_revisions_headline", "length(btrim(headline)) BETWEEN 1 AND 256");
@@ -8703,6 +8748,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_vote_revisions_kind", "kind IN ('Rule', 'PreviousQuestion', 'MotionToRecommit', 'Amendment', 'Suspension', 'Passage', 'ConferenceReport', 'VetoOverride', 'Nomination', 'Cloture', 'MotionToProceed', 'Other')");
 
                             t.HasCheckConstraint("ck_vote_revisions_kind_citation", "(kind_citation_extraction_id IS NULL) = (kind_citation_start IS NULL) AND (kind_citation_extraction_id IS NULL) = (kind_citation_length IS NULL) AND kind_citation_start >= 0 AND kind_citation_length > 0");
+
+                            t.HasCheckConstraint("ck_vote_revisions_majorities", "(democrat_majority IS NULL OR democrat_majority IN ('Yea', 'Nay')) AND (republican_majority IS NULL OR republican_majority IN ('Yea', 'Nay'))");
 
                             t.HasCheckConstraint("ck_vote_revisions_number", "revision_number >= 1");
 

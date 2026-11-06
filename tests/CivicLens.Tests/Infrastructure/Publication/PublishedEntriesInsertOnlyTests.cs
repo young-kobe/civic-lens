@@ -6,7 +6,7 @@ namespace CivicLens.Tests.Infrastructure.Publication;
 public sealed class PublishedEntriesInsertOnlyTests
 {
     [Fact]
-    public void OnlyTheWriterTouchesTheEntryTablesAndItsOnlyUpdatesFillANullBillLineOrANullStatementApprover()
+    public void OnlyTheWriterTouchesTheEntryTablesAndItsOnlyUpdatesFillMissingFacts()
     {
         var source = Path.Combine(RepositoryRoot.FullName, "src");
         var files = Directory.EnumerateFiles(source, "*.cs", SearchOption.AllDirectories)
@@ -17,7 +17,10 @@ public sealed class PublishedEntriesInsertOnlyTests
         const string writer = "CivicLens.Infrastructure/Publication/PublishedEntries.cs";
         var writes = new Regex(@"\b(UPDATE|DELETE\s+FROM|TRUNCATE(\s+TABLE)?)\s+(ONLY\s+)?(public\.)?published_entr(ies|y_\w+)\b(\s+e\s+SET\s+\w+)?", RegexOptions.IgnoreCase);
         var found = files.SelectMany(file => writes.Matches(file.Value).Select(match => (file.Key, match.Value))).ToList();
-        Assert.Equal([(writer, "UPDATE published_entries e SET bill_line"), (writer, "UPDATE published_entries e SET approved_by")], found);
+        Assert.Equal([(writer, "UPDATE published_entries e SET bill_line"), (writer, "UPDATE published_entries e SET congress"), (writer, "UPDATE published_entries e SET approved_by")], found);
+        var congress = Regex.Match(files[writer], "FillCongresses = \"\"\"(.*?)\"\"\"", RegexOptions.Singleline).Groups[1].Value;
+        Assert.Contains("AND e.congress IS NULL", congress);
+        Assert.Matches(@"SET congress = k\.congress\s+FROM unnest", congress);
         var fill = Regex.Match(files[writer], "FillBillLines = \"\"\"(.*?)\"\"\"", RegexOptions.Singleline).Groups[1].Value;
         Assert.Matches(@"SET bill_line = locked\.bill_line\s+FROM locked", fill);
         Assert.Contains("WHERE e.bill_line IS NULL", fill);

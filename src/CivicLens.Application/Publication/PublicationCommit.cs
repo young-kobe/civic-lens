@@ -15,6 +15,8 @@ public sealed record PublicationCommit(int ReleaseNumber, int? BaseReleaseNumber
     public ImmutableArray<PublishedRecordEntry> AddedEntries { get; init; } = [];
     public ImmutableArray<PublishedRecordEntry> RewrittenEntries { get; init; } = [];
 
+    public ImmutableArray<VoteStoredColumns> VoteColumns { get; init; } = [];
+
     public required ReleaseNames Names { get; init; }
 
     /// <summary>The bill statuses that the release pins. They equal the rows of the status file of the release.</summary>

@@ -75,7 +75,7 @@ internal sealed class PreviousRelease
         }
     }
 
-    private static async Task<Dictionary<string, PublishedOfficialProfile>> ReadOfficialsAsync(IReleaseDirectory releases,
+    internal static async Task<Dictionary<string, PublishedOfficialProfile>> ReadOfficialsAsync(IReleaseDirectory releases,
         string directoryName, CancellationToken cancellationToken)
     {
         var bytes = await releases.ReadFileAsync(directoryName, PublicationProtocol.OfficialsPath, PublishedOfficials.MaximumBytes,

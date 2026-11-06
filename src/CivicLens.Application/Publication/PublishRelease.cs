@@ -106,6 +106,7 @@ public sealed class PublishRelease
             Withdrawals = [.. withdrawals],
             AddedEntries = [.. additions.Select(addition => addition.Entry)],
             RewrittenEntries = request.RewriteEntries ? [.. carried.Where(entry => entry.Kind == PublishedRecordKind.Action)] : [],
+            VoteColumns = [.. additions.OfType<PendingRecord<PublishedVote>>().Select(addition => VoteStoredColumns.From(addition.Record))],
             Names = names,
             BillStatuses = ReleaseBillStatuses.RowsOf(ReleaseBillStatuses.ActionIdsOf(entries), statuses)
         };
