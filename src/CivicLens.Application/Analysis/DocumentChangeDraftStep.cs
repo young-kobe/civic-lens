@@ -24,7 +24,7 @@ public sealed class DocumentChangeDraftStep(IDocumentChangeAnalysisStore store, 
     {
         var evidence = await store.ReadEvidenceAsync(attempt.Claim.Record.SubjectId, cancellationToken);
         if (evidence is null) return await attempt.CompleteAsync(State.Blocked, Codes.ComparisonUnavailable, cancellationToken);
-        if (evidence.ExistingDraftId is not null)
+        if (evidence.ExistingDraftId is not null && evidence.StaleModelDraft is null)
             return await attempt.CompleteAsync(State.Succeeded, Codes.HumanDraftExists, cancellationToken);
         var catalog = new DocumentChangeDraftCatalog(roster.OfficialsOn(evidence.ConfigurationRevision, evidence.Comparison.SourceId,
             DateOnly.FromDateTime(evidence.Comparison.AfterObservedAtUtc.UtcDateTime)), issueIds);
@@ -49,8 +49,9 @@ public sealed class DocumentChangeDraftStep(IDocumentChangeAnalysisStore store, 
     private static AnalysisResolution<DocumentChangeDraftRevision> Resolve(string outputJson, DocumentChangeDraftEvidence evidence,
         DocumentChangeDraftCatalog catalog, AnalysisRun run)
     {
-        var resolution = DocumentChangeDraftResolver.Resolve(outputJson, evidence, catalog, Guid.NewGuid().ToString("N"),
-            run.FinishedAtUtc);
+        var (draftId, revisionNumber) = evidence.StaleModelDraft is { } stale ? (stale.DraftId, stale.RevisionNumber + 1)
+            : (Guid.NewGuid().ToString("N"), 1);
+        var resolution = DocumentChangeDraftResolver.Resolve(outputJson, evidence, catalog, draftId, revisionNumber, run.FinishedAtUtc);
         return resolution.Revision is { } revision ? AnalysisResolution<DocumentChangeDraftRevision>.Accept(revision)
             : AnalysisResolution<DocumentChangeDraftRevision>.Reject(resolution.Errors, resolution.HasCitationErrors);
     }

@@ -24,7 +24,7 @@ public sealed class AnthropicDocumentChangeDraftLiveTests
 
         Assert.Equal("end_turn", response.StopReason);
         Assert.InRange(response.Usage.Total, 1, request.ReservedTokens);
-        var resolution = DocumentChangeDraftResolver.Resolve(response.OutputJson!, evidence, catalog, Guid.NewGuid().ToString("N"),
+        var resolution = DocumentChangeDraftResolver.Resolve(response.OutputJson!, evidence, catalog, Guid.NewGuid().ToString("N"), 1,
             DateTimeOffset.UtcNow);
         Assert.True(resolution.Revision is not null, string.Join(" ", resolution.Errors));
     }

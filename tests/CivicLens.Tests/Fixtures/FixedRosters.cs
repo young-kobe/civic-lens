@@ -39,9 +39,9 @@ internal sealed class FixedExecutiveRoster(ExecutiveOfficial[] officials) : IExe
 
 internal static class FixedRosters
 {
-    public static PublicationOfficials NoOfficials() => new(RosterFixtures.Configuration(), new FixedMemberRoster([]), new FixedExecutiveRoster([]));
+    public static PublicationOfficials NoOfficials() => new(RosterFixtures.Configuration(), new FixedMemberRoster([]), new FixedExecutiveRoster([]), new FixedPersonRegistry());
 
     public static PublicationOfficials NamedOnly(IEnumerable<string> ids) => new(
         RosterFixtures.Configuration() with { People = [.. ids.Select(id => new PersonConfiguration { Id = id, Name = id })] },
-        new FixedMemberRoster([]), new FixedExecutiveRoster([]));
+        new FixedMemberRoster([]), new FixedExecutiveRoster([]), new FixedPersonRegistry());
 }

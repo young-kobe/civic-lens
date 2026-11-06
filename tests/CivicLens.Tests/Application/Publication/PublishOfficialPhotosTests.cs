@@ -41,6 +41,23 @@ public sealed class PublishOfficialPhotosTests
     }
 
     [Fact]
+    public async Task APublishReadsTheOwnerSettingsOnceSoThePhotoChoiceAndTheWebsiteOfOnePublishAgree()
+    {
+        var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"), ("chair", "attempt-2", SecondHash, "second"));
+        scenario.Websites["chair"] = "https://chair.example.gov/";
+        scenario.WithheldPhotos.Add("mayor");
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", Vote(scenario, 'a'),
+            new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('b', speakerIds: ["chair"]))));
+
+        Assert.Equal(1, scenario.SettingReads);
+        var officials = Officials(scenario.Releases.Directories[summary.DirectoryName]).Officials;
+        Assert.Null(officials.Single(profile => profile.Id == "mayor").Photo);
+        Assert.NotNull(officials.Single(profile => profile.Id == "chair").Photo);
+        Assert.Equal("https://chair.example.gov/", officials.Single(profile => profile.Id == "chair").Website);
+    }
+
+    [Fact]
     public async Task AnOfficialWithNoPhotoRowGetsNoPhotoSoNoFileIsWritten()
     {
         var scenario = ScenarioWith();

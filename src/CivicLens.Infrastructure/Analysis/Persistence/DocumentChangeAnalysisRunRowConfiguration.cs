@@ -13,7 +13,7 @@ internal sealed class DocumentChangeAnalysisRunRowConfiguration : IEntityTypeCon
                 table.HasCheckConstraint("ck_document_change_analysis_runs_ids",
                     "run_id ~ '^[0-9a-f]{32}$' AND input_hash ~ '^[0-9a-f]{64}$' AND (previous_run_id IS NULL OR previous_run_id ~ '^[0-9a-f]{32}$')");
                 table.HasCheckConstraint("ck_document_change_analysis_runs_draft",
-                    "(draft_id IS NULL AND revision_number IS NULL) OR (draft_id IS NOT NULL AND revision_number = 1)");
+                    "(draft_id IS NULL AND revision_number IS NULL) OR (draft_id IS NOT NULL AND revision_number >= 1)");
                 table.HasCheckConstraint("ck_document_change_analysis_runs_outcome",
                     "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted')");
             });
