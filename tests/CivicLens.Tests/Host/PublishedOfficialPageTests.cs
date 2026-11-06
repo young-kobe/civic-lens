@@ -1780,4 +1780,15 @@ public sealed class PublishedOfficialPageTests
         Kind = PublishedVoteKind.Passage,
         IssueIds = []
     };
+
+    [Fact]
+    public async Task TheOfficesNoteAndTheHeroPortraitCarryTheClassesThatTheLayoutRulesUse()
+    {
+        var page = Current([], []) with { Profile = Profile("sen", "Sam Sen", Term("sen", "MA", "Democratic")) };
+
+        var document = await OfficialDocumentAsync(page);
+
+        Assert.Contains("panel-note", document.QuerySelector("main section:has(table) > p")!.ClassList);
+        Assert.NotNull(document.QuerySelector(".official-hero .page-header-portrait .portrait, .official-hero .page-header-portrait .portrait-placeholder"));
+    }
 }
