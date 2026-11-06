@@ -699,6 +699,30 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Task<int> FillBillLinesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
+    public Task<IReadOnlyList<VoteColumnGap>> ReadVoteColumnGapsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task WriteVoteColumnsAsync(IReadOnlyCollection<VoteStoredColumns> columns, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<int> FillOfficialPhotoPathsAsync(int releaseNumber, IReadOnlyDictionary<string, string> photoPaths, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<IReadOnlyList<PublishedEntryDay>> ReadEntryDaysWithoutCongressAsync(PublishedEntryDay? after, int limit, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<int> FillEntryCongressesAsync(IReadOnlyCollection<PublishedEntryDay> entries, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<int> FillStatementApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Dictionary<int, List<PublishedBillStatus>> BackfilledBillStatuses { get; } = [];
+
+    public Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses, CancellationToken cancellationToken)
+    {
+        BackfilledBillStatuses[releaseNumber] = [.. statuses];
+        return Task.FromResult(statuses.Count);
+    }
+
     public Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey,
         string payloadHash, CancellationToken cancellationToken)
     {

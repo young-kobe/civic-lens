@@ -1,6 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Core.Documents;
-using CivicLens.Core.Relationships;
+using CivicLens.Publication.Contracts;
 using CivicLens.Core.Statements;
 
 namespace CivicLens.Application.Relationships;

@@ -1,6 +1,6 @@
 using System.Globalization;
 using CivicLens.Application.Collection.Votes;
-using CivicLens.Core.Relationships;
+using CivicLens.Publication.Contracts;
 using CivicLens.Core.Votes;
 
 namespace CivicLens.Host.Collection;

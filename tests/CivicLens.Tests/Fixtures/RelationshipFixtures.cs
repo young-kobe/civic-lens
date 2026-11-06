@@ -4,6 +4,7 @@ using CivicLens.Application.Relationships;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Relationships;
+using CivicLens.Publication.Contracts;
 using CivicLens.Core.Statements;
 using CivicLens.Core.Votes;
 

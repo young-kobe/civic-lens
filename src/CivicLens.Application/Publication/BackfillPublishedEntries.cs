@@ -11,6 +11,8 @@ namespace CivicLens.Application.Publication;
 /// A range that fails a check gets a skip reason and no row.
 /// It also fills the bill line of action rows that hold none. The line is the one that the kept folders of the range hold. Folders from before the
 /// line hold none, and two folders that hold different lines fail the check. A row that holds a line is never changed.
+/// It also pins the bill statuses of each kept release that lacks them, from the status file of its folder. A release from before the file pins none.
+/// A row that exists is never changed.
 /// The release list is read before the candidates, so a commit between the two reads leaves a range that no listed folder covers.
 /// Each kept manifest is read once, from the oldest folder to the newest. Rows go in only through the store insert.
 /// </summary>
@@ -35,7 +37,13 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
             await ReadFolderAsync(release, [.. pending.Where(entry => entry.Candidate.Covers(release.ReleaseNumber))], cancellationToken);
         var (added, racedIn) = await WriteRowsAsync([.. pending.Where(entry => entry.WritesRow)], limit, cancellationToken);
         var filled = await FillBillLinesAsync([.. pending.Where(entry => !entry.WritesRow)], cancellationToken);
-        return Report(added, filled, candidates.Count(candidate => candidate.HasEntry) + racedIn, pending);
+        foreach (var batch in pending.Where(entry => !entry.WritesRow && entry.IsReady && entry.Entry!.ApprovedBy is not null).Chunk(BatchSize))
+        {
+            await publications.FillStatementApproversAsync([.. batch.Select(entry => entry.EntryToInsert!)], cancellationToken);
+            foreach (var entry in batch) entry.ApproverFilled = true;
+        }
+        var statusesPinned = await PinBillStatusesAsync(keptReleases, cancellationToken);
+        return Report(added, filled, statusesPinned, candidates.Count(candidate => candidate.HasEntry) + racedIn, pending);
     }
 
     private async Task ReadFolderAsync(PublicationReleaseSummary release, List<PendingPublishedEntry> covered, CancellationToken cancellationToken)
@@ -70,14 +78,15 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
             pending.Block(FoldersDiffer);
         else if (pending.Entry is null)
             await ReadFirstEntryAsync(release, entry, pending, cancellationToken);
-        else if (!ReleaseEntryComparison.SameOutsideNewFields(pending.Entry, entry))
+        else if (entry.ApprovedBy is { } approver && pending.Entry.ApprovedBy != approver ||
+                 !ReleaseEntryComparison.SameOutsideNewFields(pending.Entry, entry))
             pending.Block(FoldersDiffer);
     }
 
     private async Task ReadFirstEntryAsync(PublicationReleaseSummary release, PublishedRecordEntry entry, PendingPublishedEntry pending,
         CancellationToken cancellationToken)
     {
-        if (pending.Candidate.HasEntry)
+        if (pending.Candidate.HasEntry && !pending.Candidate.LacksStatementApprover)
         {
             pending.Entry = entry;
             return;
@@ -93,7 +102,9 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
             pending.Block(RecordFileInvalid);
             return;
         }
-        if (ReleaseEntryComparison.SameOutsideNewFields(entry, fromFile)) pending.Entry = entry;
+        if (ReleaseEntryComparison.SameOutsideNewFields(entry, fromFile) &&
+            (entry.ApprovedBy is null || entry.ApprovedBy == fromFile.ApprovedBy))
+            pending.Entry = entry with { ApprovedBy = fromFile.ApprovedBy };
         else pending.Block(RecordFileDiffers);
     }
 
@@ -104,6 +115,17 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
         foreach (var batch in ready.Chunk(BatchSize))
             filled += await publications.FillBillLinesAsync([.. batch.Select(entry => entry.EntryToInsert!)], cancellationToken);
         return filled;
+    }
+
+    private async Task<int> PinBillStatusesAsync(IReadOnlyList<PublicationReleaseSummary> keptReleases, CancellationToken cancellationToken)
+    {
+        var pinned = 0;
+        foreach (var release in keptReleases)
+        {
+            var statuses = await PreviousRelease.ReadBillStatusesAsync(releases, release.DirectoryName, cancellationToken);
+            pinned += await publications.AddBillStatusesAsync(release.ReleaseNumber, [.. statuses.Values], cancellationToken);
+        }
+        return pinned;
     }
 
     private async Task<(int Added, int RacedIn)> WriteRowsAsync(List<PendingPublishedEntry> pending, int limit, CancellationToken cancellationToken)
@@ -136,16 +158,19 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
     private static IEnumerable<PublishedRecordReference> FirstPublicationsNeededBy(PublishedRecordEntry entry) =>
         PublishedRecordReference.LinkedBy(entry).Prepend(new(entry.Kind, entry.RecordId));
 
-    private static PublishedEntriesBackfillResult Report(int added, int filled, int alreadyPresent, List<PendingPublishedEntry> all)
+    private static PublishedEntriesBackfillResult Report(int added, int filled, int statusesPinned, int alreadyPresent, List<PendingPublishedEntry> all)
     {
         var pending = all.Where(entry => entry.WritesRow).ToList();
         var skipped = all.Where(entry => entry.IsBlocked).ToList();
         var byReason = skipped.GroupBy(entry => entry.SkipReason!).ToDictionary(group => group.Key, group => group.Count());
         var first = skipped.Take(ReportedSkips).Select(entry => new SkippedPublishedEntry(PublishedRecordReference.NameOf(entry.Candidate.Kind),
             entry.Candidate.RecordId, entry.Candidate.RevisionNumber, entry.SkipReason!)).ToList();
-        return new(pending.Count, added, filled, alreadyPresent, skipped.Count, byReason, first,
+        return new(pending.Count, added, filled, statusesPinned, alreadyPresent, skipped.Count, byReason, first,
             pending.Count(entry => entry.Candidate.IsOpen && !entry.HasRow),
             pending.Count(entry => !entry.Candidate.IsOpen && entry.Entry is null && !entry.IsBlocked),
-            pending.Count(entry => entry.IsReady && !entry.HasRow));
+            pending.Count(entry => entry.IsReady && !entry.HasRow))
+        {
+            OpenStatementsWithoutApprover = all.Count(entry => entry.Candidate.IsOpen && entry.Candidate.LacksStatementApprover && !entry.ApproverFilled)
+        };
     }
 }

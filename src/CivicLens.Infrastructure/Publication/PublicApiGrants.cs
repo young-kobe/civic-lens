@@ -32,7 +32,8 @@ internal static class PublicApiGrants
         GRANT SELECT (kind, record_id, first_release, revision_number, last_release) ON publication_record_states TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, chamber, congress, session_number, roll_call_number, voted_on, kind,
             bill_type, bill_number, headline, summary, text_origin, member_list_id, question, result) ON vote_revisions TO civic_lens_public_owner;
-        GRANT SELECT (kind, record_id, revision_number, bill_line, document_type) ON published_entries TO civic_lens_public_owner;
+        GRANT SELECT (kind, record_id, revision_number, event_date, link_type, statement_kind, statement_record_id, target_kind, target_record_id, bill_line, document_type, approved_by)
+            ON published_entries TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, revision_number, official_id) ON published_entry_officials TO civic_lens_public_owner;
         GRANT SELECT (list_id, "position", person_id, vote_cast) ON vote_member_list_entries TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, is_tracked) ON vote_revision_issues TO civic_lens_public_owner;
@@ -41,6 +42,14 @@ internal static class PublicApiGrants
         GRANT SELECT (record_id, revision_number, "position", person_id, role, is_original, sponsored_on, withdrawn_on)
             ON action_revision_sponsorships TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, "position", is_tracked) ON action_revision_issues TO civic_lens_public_owner;
+        GRANT SELECT (record_id, revision_number, week_start, headline, text_origin) ON brief_revisions TO civic_lens_public_owner;
+        GRANT SELECT (candidate_id, revision_number, author_kind, headline) ON statement_revisions TO civic_lens_public_owner;
+        GRANT SELECT (record_id, revision_number, "position", fact_text) ON vote_revision_facts TO civic_lens_public_owner;
+        GRANT SELECT (release_number, record_id, latest_action_text, latest_action_date, read_at_utc_ticks) ON release_bill_statuses TO civic_lens_public_owner;
+        GRANT SELECT (record_id, revision_number, kind, document_number, signed_on, published_on, federal_register_citation, document_url,
+            person_id, president_name, title) ON executive_action_revisions TO civic_lens_public_owner;
+        GRANT SELECT (record_id, revision_number, "position", source_id, document_number) ON executive_action_revision_notices TO civic_lens_public_owner;
+        GRANT SELECT (source_id, document_number, published_on, notice_url) ON executive_action_documents TO civic_lens_public_owner;
         GRANT SELECT (zcta, state, district, land_area_square_meters, attempt_id) ON zcta_districts TO civic_lens_public_owner;
         GRANT SELECT (release_number, official_id, name, wikidata_id, website) ON release_officials TO civic_lens_public_owner;
         GRANT SELECT (release_number, official_id, "position", office, kind, state, district, party, caucus, start_on, end_on)
@@ -54,10 +63,12 @@ internal static class PublicApiGrants
 
         GRANT USAGE ON SCHEMA public_api TO civic_lens_public;
         GRANT SELECT ON public_api.active_records, public_api.votes, public_api.vote_members, public_api.member_votes, public_api.vote_issues,
-            public_api.bills, public_api.bill_sponsorships, public_api.bill_issues, public_api.zip_districts,
+            public_api.bills, public_api.bill_sponsorships, public_api.briefs, public_api.issue_votes, public_api.issue_sponsors, public_api.bill_issues, public_api.zip_districts,
             public_api.release_officials, public_api.release_official_terms, public_api.release_issues, public_api.release_issue_includes,
             public_api.release_issue_excludes, public_api.release_policy_areas, public_api.officials, public_api.official_attendance,
-            public_api.official_bill_counts, public_api.official_issue_counts, public_api.official_executive_actions TO civic_lens_public;
+            public_api.official_bill_counts, public_api.official_issue_counts, public_api.official_executive_actions,
+            public_api.bill_status, public_api.record_headlines, public_api.record_links, public_api.vote_facts,
+            public_api.executive_actions, public_api.executive_action_notices TO civic_lens_public;
         """;
 
     public static Task ApplyAsync(DbContext db, CancellationToken cancellationToken) =>

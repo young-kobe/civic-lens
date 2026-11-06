@@ -5,7 +5,7 @@ namespace CivicLens.Application.Publication;
 
 /// <summary>
 /// Builds a manifest from the tables and takes from the file only what the tables leave out: the names of officials, the five optional entry fields
-/// that the tables do not hold, the time of the build, and the withdrawals of a release that no withdrawal row covers. The bill line comes from the
+/// that the tables do not hold, the time of the build, and the withdrawals of a release that no withdrawal row covers. The bill line and statement approver come from the
 /// table. A file with no bill line keeps none, because a release from before the line has none for any revision.
 /// </summary>
 internal static class ReleaseSplice
@@ -51,6 +51,7 @@ internal static class ReleaseSplice
             IssueIds = facts.IssueIds,
             PolicyAreaIds = facts.PolicyAreaIds,
             SourceHost = facts.SourceHost,
+            ApprovedBy = fromFile.ApprovedBy is null ? null : facts.ApprovedBy,
             EventDate = facts.EventDate,
             BillTitle = facts.BillTitle,
             LinkType = facts.LinkType,

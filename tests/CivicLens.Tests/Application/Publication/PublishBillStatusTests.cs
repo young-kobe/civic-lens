@@ -28,6 +28,21 @@ public sealed class PublishBillStatusTests
     }
 
     [Fact]
+    public async Task TheCommitPinsExactlyTheRowsOfTheStatusFileSoTheTableAndTheFileNeverDisagree()
+    {
+        var scenario = new PublicationScenario();
+        var withStatus = scenario.AddAction('c');
+        var without = scenario.AddAction('d');
+        scenario.Actions.BillStatuses[withStatus] = Status(withStatus, "Passed House.", new DateOnly(2026, 1, 28));
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", withStatus, without));
+
+        var fileRows = ReadStatuses(scenario.Releases.Directories[summary.DirectoryName]).Records;
+        Assert.Single(fileRows);
+        Assert.Equal(fileRows, scenario.Publications.LastCommit!.BillStatuses);
+    }
+
+    [Fact]
     public async Task ACarriedActionPageIsWrittenAgainOnlyWhenTheLatestActionOrItsDateChangesSoACheckAloneRewritesNoPageAndTheFileKeepsTheTimeThePageShows()
     {
         var scenario = new PublicationScenario();

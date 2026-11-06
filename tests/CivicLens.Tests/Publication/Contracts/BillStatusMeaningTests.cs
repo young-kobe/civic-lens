@@ -1,6 +1,6 @@
-using CivicLens.Application.Publication;
+using CivicLens.Publication.Contracts;
 
-namespace CivicLens.Tests.Application.Publication;
+namespace CivicLens.Tests.Publication.Contracts;
 
 public sealed class BillStatusMeaningTests
 {
