@@ -59,7 +59,7 @@ Pending: live Auth0 tenant verification, production deployment, AI classificatio
 
 ## Layers and dependency rules
 
-Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. PublicWeb holds the public Razor components and references Publication.Contracts only. Host references PublicWeb, and no production project references Host. Collection.Contracts and Publication.Contracts have no dependencies. Publication.Contracts also holds pure shared public rules, such as `BillStatusMeaning`, so each rule has one owner. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts and PublicWeb only. It renders PublicWeb components as static server pages. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
+Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. PublicWeb holds the public Razor components and references Publication.Contracts only. Host references PublicWeb, and no production project references Host. Collection.Contracts and Publication.Contracts have no dependencies. Publication.Contracts also holds pure public rules that Host and PublicApi share, such as `BillStatusMeaning`, so each rule has one owner. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts and PublicWeb and uses the Npgsql package. It renders PublicWeb components as static server pages. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
 
 | Layer | Owns | Must not own |
 |---|---|---|
@@ -70,7 +70,7 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 | Collector | Bounded source interaction and complete raw capture production | Durable scheduling, imports, officials registry or publication |
 | Host | Command parsing, composition, review pages, and the public page components that still need Application types | Collection algorithms or evidence invariants |
 | PublicWeb | The public Razor components: shared UI, evidence display, and the public pages that need only Publication.Contracts | Application, Infrastructure, or Host types, packages, and operational storage |
-| PublicApi | Release ingest, the search index, and the public read API | Operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence |
+| PublicApi | Release ingest, the search index, static server rendering, and the public read API | Operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence |
 
 `tools/render-architecture.py` generates the diagrams below. Run `python3 tools/render-architecture.py`, then open `artifacts/architecture.html` for the explorer. Planned components are labeled there; a diagram is not a claim that the pipeline exists.
 

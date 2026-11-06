@@ -2,20 +2,20 @@ using System.Net;
 using System.Threading.RateLimiting;
 using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicApi.Bills;
-using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.ExecutiveActions;
-using CivicLens.PublicApi.Records;
-using CivicLens.PublicApi.Officials;
+using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Ingest;
-using CivicLens.PublicApi.Pages;
-using CivicLens.PublicWeb.Publication;
 using CivicLens.PublicApi.Issues;
+using CivicLens.PublicApi.Officials;
+using CivicLens.PublicApi.Pages;
+using CivicLens.PublicApi.Records;
 using CivicLens.PublicApi.Reports;
 using CivicLens.PublicApi.Schema;
 using CivicLens.PublicApi.Search;
 using CivicLens.PublicApi.Votes;
 using CivicLens.PublicApi.ZipDistricts;
+using CivicLens.PublicWeb.Publication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
@@ -55,6 +55,10 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new MemberVoteStore(views));
         builder.Services.AddSingleton(new BillStore(views));
         builder.Services.AddSingleton(new ZipDistrictStore(views));
+        builder.Services.AddSingleton(new IssueStore(views));
+        builder.Services.AddSingleton(new HomeStore(views));
+        builder.Services.AddSingleton(new RelatedStore(views));
+        builder.Services.AddSingleton(new ExecutiveActionStore(views));
         if (options.PublicBaseUrl is { } baseUrl)
         {
             builder.Services.AddSingleton(baseUrl);
@@ -63,10 +67,6 @@ public static class PublicApiApp
             builder.Services.AddSingleton<PageRenderer>();
             builder.Services.AddSingleton<ServerPageResponder>();
         }
-        builder.Services.AddSingleton(new IssueStore(views));
-        builder.Services.AddSingleton(new HomeStore(views));
-        builder.Services.AddSingleton(new RelatedStore(views));
-        builder.Services.AddSingleton(new ExecutiveActionStore(views));
         builder.Services.AddSingleton(new OfficialStore(views));
         builder.Services.AddSingleton(new ReportStore(writer, options));
         if (options.Turnstile is { } turnstile)
