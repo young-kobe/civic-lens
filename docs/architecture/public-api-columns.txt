@@ -53,6 +53,7 @@ member_votes headline
 member_votes label
 member_votes result
 member_votes vote_cast
+member_votes issue_ids
 vote_issues record_id
 vote_issues revision_number
 vote_issues issue_id
