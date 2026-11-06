@@ -303,14 +303,14 @@ The poll interval is 30 seconds and the statement timeout is 2 seconds. Both are
 | Related records | `src/CivicLens.PublicApi/Records/RelatedEndpoints.cs`, `src/CivicLens.PublicApi/Records/RelatedRequest.cs`, `src/CivicLens.PublicApi/Records/RelatedCursor.cs`, `src/CivicLens.PublicApi/Records/RelatedStore.cs`, `src/CivicLens.PublicApi/Records/RelatedRecord.cs`, `src/CivicLens.PublicApi/Records/RelatedPage.cs` |
 | Executive actions | `src/CivicLens.PublicApi/ExecutiveActions/ExecutiveActionEndpoints.cs`, `src/CivicLens.PublicApi/ExecutiveActions/ExecutiveActionStore.cs`, `src/CivicLens.PublicApi/ExecutiveActions/ExecutiveActionRow.cs`, `src/CivicLens.PublicApi/ExecutiveActions/ExecutiveActionNoticeRow.cs`, `src/CivicLens.PublicApi/ExecutiveActions/ExecutiveActionDetail.cs` |
 | ZIP districts | `src/CivicLens.PublicApi/ZipDistricts/ZipDistrictEndpoints.cs`, `src/CivicLens.PublicApi/ZipDistricts/ZipDistrictRequest.cs`, `src/CivicLens.PublicApi/ZipDistricts/ZipDistrictStore.cs`, `src/CivicLens.PublicApi/ZipDistricts/ZipDistrictAnswer.cs`, `src/CivicLens.PublicApi/ZipDistricts/ZipLookup.cs` |
-| Home ZIP lookup | `src/CivicLens.Host/Publication/PublishedHomePage.razor`, `src/CivicLens.PublicWeb/Publication/UsStates.cs`, `src/CivicLens.Host/wwwroot/js/public.js` |
+| Home ZIP lookup | `src/CivicLens.Host/Publication/PublishedHomePage.razor`, `src/CivicLens.PublicWeb/Publication/UsStates.cs`, `src/CivicLens.PublicWeb/wwwroot/js/public.js` |
 | Shared readers | `src/CivicLens.PublicApi/Http/CursorFields.cs`, `src/CivicLens.PublicApi/Http/ViewColumns.cs` |
 | Rate limit | `src/CivicLens.PublicApi/Http/ClientAddress.cs` |
 | HTTP helpers | `src/CivicLens.PublicApi/Http/ApiResults.cs`, `src/CivicLens.PublicApi/Http/QueryValues.cs` |
 | Reader reports | `src/CivicLens.PublicApi/Reports/ReportEndpoints.cs`, `src/CivicLens.PublicApi/Reports/ReportSubmission.cs`, `src/CivicLens.PublicApi/Reports/ReportStore.cs`, `src/CivicLens.PublicApi/Reports/ReportCursor.cs`, `src/CivicLens.PublicApi/Reports/ReportReceipt.cs`, `src/CivicLens.PublicApi/Reports/TurnstileVerifier.cs`, `src/CivicLens.PublicApi/Reports/TurnstileSettings.cs`, `src/CivicLens.PublicApi/Schema/002_reader_reports.sql` |
 | Report wire types | `src/CivicLens.Publication.Contracts/ReaderReportProtocol.cs`, `src/CivicLens.Publication.Contracts/PulledReport.cs`, `src/CivicLens.Publication.Contracts/PulledReportBatch.cs` |
 | Operational pull | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Application/Reports/IReaderReportSource.cs`, `src/CivicLens.Application/StageWorker.cs`, `src/CivicLens.Infrastructure/Reports/HttpReportPuller.cs`, `src/CivicLens.Infrastructure/PostgresIntervalWakeup.cs`, `src/CivicLens.Host/Reports/ReportPullComposition.cs` |
-| Search page | `src/CivicLens.Host/Publication/PublishedSearchPage.razor`, `src/CivicLens.Host/Publication/ReleaseRenderer.cs`, `src/CivicLens.Host/wwwroot/js/public.js` |
+| Search page | `src/CivicLens.Host/Publication/PublishedSearchPage.razor`, `src/CivicLens.Host/Publication/ReleaseRenderer.cs`, `src/CivicLens.PublicWeb/wwwroot/js/public.js` |
 | Tests | `tests/CivicLens.Tests/PublicApi/`, `tests/CivicLens.Tests/Infrastructure/Reports/`, `tests/CivicLens.Tests/Application/Reports/` |
 
 Run commands are in [operations](../operations.md#run-the-search-service).
