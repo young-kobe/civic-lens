@@ -2,8 +2,10 @@ using System.Net;
 using System.Threading.RateLimiting;
 using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicApi.Bills;
+using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Ingest;
+using CivicLens.PublicApi.Issues;
 using CivicLens.PublicApi.Reports;
 using CivicLens.PublicApi.Schema;
 using CivicLens.PublicApi.Search;
@@ -47,6 +49,8 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new MemberVoteStore(views));
         builder.Services.AddSingleton(new BillStore(views));
         builder.Services.AddSingleton(new ZipDistrictStore(views));
+        builder.Services.AddSingleton(new IssueStore(views));
+        builder.Services.AddSingleton(new HomeStore(views));
         builder.Services.AddSingleton(new ReportStore(writer, options));
         if (options.Turnstile is { } turnstile)
             builder.Services.AddSingleton(new TurnstileVerifier(
@@ -81,6 +85,8 @@ public static class PublicApiApp
         app.MapMemberVotes();
         app.MapBills();
         app.MapZipDistricts();
+        app.MapIssues();
+        app.MapHome();
         app.MapSearch();
         app.MapReports(options);
         return app;
