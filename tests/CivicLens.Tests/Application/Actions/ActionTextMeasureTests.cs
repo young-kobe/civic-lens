@@ -29,12 +29,81 @@ public sealed class ActionTextMeasureTests
         Assert.Equal([(ActionTextPart.Summary, FirstPlain, FirstQuote), (ActionTextPart.Summary, SecondPlain, SecondQuote),
                 (ActionTextPart.WhyItMatters, WhyPlain, WhyQuote)],
             bill.Sentences.Select(sentence => (sentence.Part, sentence.Sentence, sentence.Quote)));
+        var grades = new[] { FirstPlain, SecondPlain, WhyPlain }.Select(ReadingGrade.Rounded).ToArray();
+        Assert.Equal(grades, bill.Sentences.Select(sentence => sentence.Grade));
+        var passage = ReadingGrade.RoundedPassage(["H.R. 1 pays landlords for tenants with low income.", FirstPlain, SecondPlain, WhyPlain]);
+        Assert.Equal(passage, bill.PassageGrade);
+        Assert.Equal(passage, report.Totals.MeanGrade);
+        Assert.Equal((new BillFigureCounts(0, 1), new BillFigureCounts(0, 1), false, 0),
+            (bill.TextFigures, bill.SentenceFigures, bill.LosesFigures, report.Totals.BillsLosingFigures));
+        Assert.Empty(bill.MissingDates);
         Assert.Empty(bill.Rejections);
         Assert.False(string.IsNullOrWhiteSpace(bill.Title));
         Assert.Equal(Output(), Assert.Single(bill.Passes).OutputJson);
         Assert.Equal((ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, 1, 1000L),
             (report.PromptVersion, report.SchemaVersion, report.Totals.Accepted, report.Totals.Usage.Total));
         Assert.Equal(ActionDraftTask.TextPromptVersion, Assert.Single(model.Requests).PromptVersion);
+    }
+
+    [Fact]
+    public async Task ABillWhoseTextHasAnAmountAndADateButWhoseSentencesHaveNoAmountIsFlaggedAndCountedInTheTotal()
+    {
+        var text = Of(Body + " The grant is $2,000,000.");
+        var plain = Output([(FirstPlain, FirstQuote), (SecondPlain, SecondQuote)]);
+
+        var (report, _, _) = await MeasureAsync(Cap, new FakeHeadlineSummaryModel().Draft(plain), text: text);
+
+        var bill = Assert.Single(report.Bills);
+        Assert.Equal((new BillFigureCounts(1, 1), new BillFigureCounts(0, 1), true, 1),
+            (bill.TextFigures, bill.SentenceFigures, bill.LosesFigures, report.Totals.BillsLosingFigures));
+    }
+
+    [Fact]
+    public async Task ABillWhoseTextHasADateButWhoseSentencesHaveNoDateIsFlaggedEvenWithNoAmount()
+    {
+        var plain = Output([(FirstPlain, FirstQuote), (SecondPlain, SecondQuote)], [(FirstPlain, FirstQuote)]);
+
+        var (report, _, _) = await MeasureAsync(Cap, new FakeHeadlineSummaryModel().Draft(plain));
+
+        var bill = Assert.Single(report.Bills);
+        Assert.Equal((new BillFigureCounts(0, 1), new BillFigureCounts(0, 0), true), (bill.TextFigures, bill.SentenceFigures, bill.LosesFigures));
+        Assert.Equal<IEnumerable<string>>(["December 31, 2030"], bill.MissingDates);
+    }
+
+    [Fact]
+    public async Task ABillThatKeepsOneDateOfTwoIsNotFlaggedAndListsNoMissingDateBecauseTheListIsForFlaggedBillsOnly()
+    {
+        var text = Of(Body + " The grant ends by June 1, 2031.");
+
+        var (report, _, _) = await MeasureAsync(Cap, new FakeHeadlineSummaryModel().Draft(Output()), text: text);
+
+        var bill = Assert.Single(report.Bills);
+        Assert.Equal((2, false), (BillFigures.Count(text.Body).Dates, bill.LosesFigures));
+        Assert.Empty(bill.MissingDates);
+    }
+
+    [Fact]
+    public async Task TheFigureCountIgnoresTheHeaderLinesAndAnUnflaggedBillKeepsTheTotalAtZero()
+    {
+        var text = Of("Section 1. This Act may be cited as the Rent Aid Act. " + FirstSummary + " " + SecondSummary);
+        var plain = Output([(FirstPlain, FirstQuote), (SecondPlain, SecondQuote)], [(FirstPlain, FirstQuote)]);
+
+        var (report, _, _) = await MeasureAsync(Cap, new FakeHeadlineSummaryModel().Draft(plain), text: text);
+
+        var bill = Assert.Single(report.Bills);
+        Assert.Contains("Version date: ", text.Text, StringComparison.Ordinal);
+        Assert.Equal((new BillFigureCounts(0, 0), false, 0), (bill.TextFigures, bill.LosesFigures, report.Totals.BillsLosingFigures));
+    }
+
+    [Fact]
+    public async Task ARejectedBillIsNeverFlaggedBecauseItHasNoAcceptedSentence()
+    {
+        var invented = Output([(FirstPlain, FirstQuote), ("The bill will pay every landlord.", "pay every landlord in the country")]);
+
+        var (report, _, _) = await MeasureAsync(Cap, new FakeHeadlineSummaryModel().Draft(invented).Draft(invented));
+
+        var bill = Assert.Single(report.Bills);
+        Assert.Equal((ActionTextMeasureOutcome.Rejected, false, 0), (bill.Outcome, bill.LosesFigures, report.Totals.BillsLosingFigures));
     }
 
     [Fact]
@@ -251,10 +320,10 @@ public sealed class ActionTextMeasureTests
     }
 
     private static async Task<(ActionTextMeasureReport Report, FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> MeasureAsync(long cap,
-        FakeHeadlineSummaryModel model, bool withText = true, CongressBillListItem[]? bills = null)
+        FakeHeadlineSummaryModel model, bool withText = true, CongressBillListItem[]? bills = null, ActionDraftBillText? text = null)
     {
         var world = ActionBillWorld.Create(summaries: []);
-        var evidence = world.Evidence() with { BillText = withText ? Of() : null };
+        var evidence = world.Evidence() with { BillText = withText ? text ?? Of() : null };
         var (store, step) = Parts(world, model, evidence);
         return (await new ActionTextMeasure(store, step).RunAsync(bills ?? [Bill], cap, default), store, model);
     }

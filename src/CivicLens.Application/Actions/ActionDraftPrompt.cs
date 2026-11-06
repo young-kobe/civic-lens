@@ -71,17 +71,26 @@ public static class ActionDraftPrompt
             sponsors = snapshot.Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor)
                 .Select(item => snapshot.OfficialNames[item.PersonId]),
             summary = !withSummary || snapshot.NewestSummary is not { } newest ? null : new { text = newest.Text },
-            billText = billText is null ? null : new
-            {
-                version = billText.VersionType,
-                versionDate = billText.VersionDate is { } date ? Date(date) : null,
-                charactersRead = billText.CharsRead,
-                charactersTotal = billText.CharsTotal,
-                text = billText.Body
-            }
+            billText = billText is null ? null : BillTextSection(billText)
         };
         var builder = new StringBuilder("Facts:\n").Append(JsonSerializer.Serialize(document, AnalysisPromptText.EvidenceJson));
         return AnalysisPromptText.WithRejectionReasons(builder, previousErrors);
+    }
+
+    /// <summary>The text is the normalized body. Both counts use that normalized text: the characters read are the length of the text that is
+    /// sent, and the total is the stored total less what the normalization removed from the part that is sent. A whole text then reads as whole.</summary>
+    private static object BillTextSection(ActionDraftBillText billText)
+    {
+        var text = BillTextQuotes.Normalize(billText.Body);
+        var removedByNormalizing = billText.Body.Length - text.Length;
+        return new
+        {
+            version = billText.VersionType,
+            versionDate = billText.VersionDate is { } date ? Date(date) : null,
+            charactersRead = text.Length,
+            charactersTotal = billText.CharsTotal - removedByNormalizing,
+            text
+        };
     }
 
     private static string Date(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);

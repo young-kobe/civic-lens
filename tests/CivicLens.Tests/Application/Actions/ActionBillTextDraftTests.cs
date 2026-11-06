@@ -39,7 +39,7 @@ public sealed class ActionBillTextDraftTests
     }
 
     [Fact]
-    public async Task ARevisionWhoseSentencesContainTheirQuotesPassesTheApprovalCheckAndTextThatBreaksThatRuleFailsIt()
+    public async Task ARevisionWhoseTextIsTheJoinOfItsSentencesPassesTheApprovalCheckAndTextThatBreaksThatRuleFailsIt()
     {
         var (store, _) = await RunAsync(ActionBillWorld.Create(summaries: []), new FakeHeadlineSummaryModel().Draft(Output()), On);
         var revision = Assert.Single(store.Revisions);
@@ -54,8 +54,7 @@ public sealed class ActionBillTextDraftTests
 
         Assert.Throws<ArgumentException>(() => (revision with { Summary = "Rent aid is paid to landlords." }).ValidateAgainst(extractions));
         Assert.Throws<ArgumentException>(() => (revision with { WhyItMatters = "The program is bad." }).ValidateAgainst(extractions));
-        Assert.Throws<ArgumentException>(() => WithSentence("The bill pays landlords for tenants.").ValidateAgainst(extractions));
-        WithSentence("Landlords are paid: pay landlords on behalf of tenants with low income.").ValidateAgainst(extractions);
+        WithSentence("The bill pays landlords for tenants.").ValidateAgainst(extractions);
     }
 
     [Fact]
@@ -112,15 +111,171 @@ public sealed class ActionBillTextDraftTests
     }
 
     [Fact]
-    public async Task TheResolverRefusesASentenceThatDoesNotContainItsQuote()
+    public async Task ASentenceNeedNotContainItsQuoteBecauseTheQuoteIsOnlyTheEvidence()
     {
         var context = await ContextAsync();
         var apart = Output([(FirstPlain, FirstQuote), ("A tenant can get help from the bill.", SecondQuote)]);
 
-        var refused = ActionDraftResolver.ResolveBillText(apart, context, "run", DateTimeOffset.UnixEpoch);
+        var result = ActionDraftResolver.ResolveBillText(apart, context, "run", DateTimeOffset.UnixEpoch);
 
-        Assert.False(refused.IsAccepted);
-        Assert.Contains(refused.Errors, error => error.Contains("does not contain its quote", StringComparison.Ordinal));
+        Assert.True(result.IsAccepted);
+        Assert.Equal("A tenant can get help from the bill.", result.Accepted!.TextCitations[1].Sentence);
+    }
+
+    private const string Hard = "Eligible tenants receive compensation.";
+    private const string Legal = "Notwithstanding the aforementioned administrative requirements, eligible beneficiaries receive compensatory disbursements.";
+    private const string Medium = "Eligible tenants receive administrative compensation under the program.";
+
+    [Fact]
+    public async Task ThePassageIsAcceptedAtTheLimitOrBelowEvenWhenOneSentenceIsAboveIt()
+    {
+        var accepted = ActionDraftResolver.ResolveBillText(Output([(FirstPlain, FirstQuote), (Hard, SecondQuote)]), await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+
+        Assert.True(ReadingGrade.Rounded(Hard) > ReadingGrade.MaximumGrade);
+        Assert.True(ReadingGrade.RoundedPassage(["H.R. 1 pays landlords for tenants with low income.", FirstPlain, Hard, WhyPlain]) <= ReadingGrade.MaximumGrade);
+        Assert.True(accepted.IsAccepted);
+    }
+
+    [Fact]
+    public async Task ThePassageAboveTheLimitIsRefusedWithOneMessageThatGivesTheGradeAndNamesTheHardestSentence()
+    {
+        var json = Output([(Medium, FirstQuote), (Legal, SecondQuote)]);
+
+        var refused = ActionDraftResolver.ResolveBillText(json, await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+
+        var passage = ReadingGrade.RoundedPassage(["H.R. 1 pays landlords for tenants with low income.", Medium, Legal, WhyPlain]);
+        var error = Assert.Single(refused.Errors);
+        Assert.True(passage > ReadingGrade.MaximumGrade);
+        Assert.Contains($"read at grade {ReadingGrade.Format(passage)} as one passage", error, StringComparison.Ordinal);
+        Assert.Contains("Write at grade 12 or below", error, StringComparison.Ordinal);
+        Assert.Contains("The hardest sentence is \"Notwithstanding", error, StringComparison.Ordinal);
+        Assert.Contains($"at grade {ReadingGrade.Format(ReadingGrade.Rounded(Legal))}", error, StringComparison.Ordinal);
+        Assert.Contains("shorter words and shorter sentences", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ThePassageGradeMessageKeepsTheSummaryAtTwoToThreeSentencesSoARepairDoesNotAddAFourth()
+    {
+        var refused = ActionDraftResolver.ResolveBillText(Output([(Medium, FirstQuote), (Legal, SecondQuote)]), await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+
+        var error = Assert.Single(refused.Errors);
+        Assert.EndsWith("Keep the summary at 2 to 3 sentences.", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ThePassageGradeRoundsToTheLimitAndPrintsTheSameValueThatItCompares()
+    {
+        var json = Output([(AtLimitSummary, FirstQuote), (AtLimitSummary, SecondQuote)], [(AtLimitWhy, WhyQuote)])
+            .Replace("H.R. 1 pays landlords for tenants with low income.", AtLimitHeadline, StringComparison.Ordinal);
+        var pieces = new[] { AtLimitHeadline, AtLimitSummary, AtLimitSummary, AtLimitWhy };
+
+        var accepted = ActionDraftResolver.ResolveBillText(json, await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+
+        Assert.True(ReadingGrade.OfPassage(pieces) > ReadingGrade.MaximumGrade);
+        Assert.Equal(ReadingGrade.MaximumGrade, ReadingGrade.RoundedPassage(pieces));
+        Assert.True(accepted.IsAccepted);
+    }
+
+    private const string AtLimitHeadline = "H.R. 1 pays rent for tenants with low income.";
+    private const string AtLimitSummary = "Eligible tenants receive administrative compensation under the program.";
+    private const string AtLimitWhy = "The Secretary pays landlords for tenants with low income.";
+
+    [Fact]
+    public async Task TheHeadlineIsPartOfThePassage()
+    {
+        var plainPassage = new[] { FirstPlain, SecondPlain, WhyPlain };
+        var legal = "H.R. 1 authorizes supplementary reimbursements notwithstanding aforementioned administrative eligibility determinations regarding extraordinarily complicated circumstances.";
+        var json = Output().Replace("H.R. 1 pays landlords for tenants with low income.", legal, StringComparison.Ordinal);
+
+        var refused = ActionDraftResolver.ResolveBillText(json, await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+
+        Assert.True(ReadingGrade.RoundedPassage(plainPassage) <= ReadingGrade.MaximumGrade);
+        var error = Assert.Single(refused.Errors);
+        Assert.Contains("as one passage", error, StringComparison.Ordinal);
+        Assert.Contains("The hardest sentence is \"H.R. 1 authorizes", error, StringComparison.Ordinal);
+        Assert.True(ActionDraftResolver.ResolveBillText(Output(), await ContextAsync(), "run", DateTimeOffset.UnixEpoch).IsAccepted);
+    }
+
+    [Theory]
+    [InlineData("The bill gives $5 million for rent aid.", false)]
+    [InlineData("The bill gives $50 million for rent aid.", true)]
+    [InlineData("The bill gives $50,000,000 for rent aid.", true)]
+    [InlineData("The bill gives rent aid in fiscal year 2027.", true)]
+    [InlineData("The bill gives rent aid in fiscal year 2028.", false)]
+    public async Task TheResolverRefusesAnAmountOrYearOfASentenceThatTheBillTextLacksAndComparesAmountsAsValues(string sentence, bool accepted)
+    {
+        var text = Of($"Section 1. {FirstSummary} The grant is $50,000,000 for fiscal year 2027. {SecondSummary} {WhyItMatters}");
+        var whole = await ContextAsync();
+        var context = whole with { Evidence = whole.Evidence with { BillText = text } };
+
+        var result = ActionDraftResolver.ResolveBillText(Output([(FirstPlain, FirstQuote), (sentence, SecondQuote)]), context, "run", DateTimeOffset.UnixEpoch);
+
+        Assert.Equal(accepted, result.IsAccepted);
+        if (!accepted) Assert.Contains(result.Errors, error => error.Contains("is not in the bill text", StringComparison.Ordinal) && error.Contains("summary", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task TheResolverChecksTheFiguresOfTheWhyItMattersSentencesAndOfTheHeadlineAndNamesTheFigure()
+    {
+        var context = await ContextAsync();
+        var json = Output(whyItMatters: [("Aid stops on December 31, 2031.", WhyQuote)])
+            .Replace("tenants with low income.", "tenants with $9 million.", StringComparison.Ordinal);
+
+        var refused = ActionDraftResolver.ResolveBillText(json, context, "run", DateTimeOffset.UnixEpoch);
+
+        Assert.Contains(refused.Errors, error => error.Contains("whyItMatters has the figure \"2031\"", StringComparison.Ordinal));
+        Assert.Contains(refused.Errors, error => error.Contains("headline has the figure \"$9 million\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AGpoQuoteMarkReachesTheModelAsAPlainQuoteAndAQuoteOfThatMarkCitesTheStoredCharacters()
+    {
+        const string stored = "The term ``eligible tenant'' means a tenant with low income who rents a home.";
+        const string plain = "The term \"eligible tenant\" means a tenant with low income who rents a home.";
+        var text = Of($"Section 1. {stored} {SecondSummary} {WhyItMatters}");
+        var world = ActionBillWorld.Create(summaries: []);
+        var snapshot = (await world.Reader().ReadAsync(world.Evidence() with { BillText = text }, default)).Snapshot!;
+        var whole = await ContextAsync();
+        var context = whole with { Evidence = whole.Evidence with { BillText = text } };
+
+        var request = ActionTextPrompt.Build(snapshot, text, BillGateFixtures.HousingChoice(), ActionDraftTask.MaximumPromptBytes)!;
+        var resolved = ActionDraftResolver.ResolveBillText(Output([(FirstPlain, plain), (SecondPlain, SecondQuote)]), context, "run", DateTimeOffset.UnixEpoch);
+
+        Assert.DoesNotContain("``", request.UserPrompt, StringComparison.Ordinal);
+        Assert.Contains("eligible tenant\\\" means", request.UserPrompt, StringComparison.Ordinal);
+        Assert.True(text.CharsRead > BillTextQuotes.Normalize(text.Body).Length);
+        using var facts = JsonDocument.Parse(request.UserPrompt["Facts:\n".Length..]);
+        var counts = facts.RootElement.GetProperty("billText");
+        Assert.Equal(BillTextQuotes.Normalize(text.Body).Length, counts.GetProperty("charactersRead").GetInt32());
+        Assert.Equal(counts.GetProperty("charactersRead").GetInt32(), counts.GetProperty("charactersTotal").GetInt32());
+        var citation = resolved.Accepted!.TextCitations[0];
+        Assert.Equal(stored, text.Text.Substring(citation.Span.Start, citation.Span.Length));
+        var later = resolved.Accepted.TextCitations[1];
+        Assert.Equal(SecondQuote, text.Text.Substring(later.Span.Start, later.Span.Length));
+    }
+
+    [Theory]
+    [InlineData("``a'' and ``b''", "\"a\" and \"b\"")]
+    [InlineData("it's ''quoted''", "it's \"quoted\"")]
+    [InlineData("`one' 'two`", "`one' 'two`")]
+    [InlineData("```x", "\"`x")]
+    public void TheMarkRuleTurnsEachPairIntoOnePlainQuoteAndLeavesSingleMarksAlone(string text, string expected) =>
+        Assert.Equal(expected, BillTextQuotes.Normalize(text));
+
+    [Fact]
+    public async Task AQuoteThatLiesInTheStoredTextWithManyMarksNeverPassesTheQuoteLength()
+    {
+        var marks = string.Concat(Enumerable.Repeat("``a'' ", 60));
+        var text = Of($"Section 1. {marks}{SecondSummary} {WhyItMatters}");
+        var whole = await ContextAsync();
+        var context = whole with { Evidence = whole.Evidence with { BillText = text } };
+        var quote = BillTextQuotes.Normalize(marks.TrimEnd());
+
+        var result = ActionDraftResolver.ResolveBillText(Output([(FirstPlain, FirstQuote), (SecondPlain, quote)]), context, "run", DateTimeOffset.UnixEpoch);
+
+        Assert.True(quote.Length <= ActionDraftRevision.MaximumTextQuoteLength);
+        Assert.False(result.IsAccepted);
+        Assert.Contains(result.Errors, error => error.Contains("characters of the stored text", StringComparison.Ordinal));
     }
 
     [Theory]

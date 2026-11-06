@@ -18,7 +18,7 @@ internal static class ActionBillTexts
     public const string SecondQuote = "when the household income is under 50 percent of the area median";
     public const string WhyQuote = "program ends on December 31, 2030";
     public const string FirstPlain = "The bill lets the Secretary pay landlords on behalf of tenants with low income.";
-    public const string SecondPlain = "A tenant can get help when the household income is under 50 percent of the area median.";
+    public const string SecondPlain = "A tenant can get help when the home earns less than half of the area median.";
     public const string WhyPlain = "Aid under the bill stops when the program ends on December 31, 2030.";
     public const string ExtractionVersion = "congress-bill-text-v1+fake-extraction";
 

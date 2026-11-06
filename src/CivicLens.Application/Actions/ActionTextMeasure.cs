@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Core.Actions;
 using CivicLens.Core.Analysis;
 
 namespace CivicLens.Application.Actions;
@@ -66,10 +67,17 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         var usage = attempt.Runs.Aggregate(AnalysisTokenUsage.None, (sum, run) => new(sum.InputTokens + run.Usage.InputTokens,
             sum.OutputTokens + run.Usage.OutputTokens, sum.CacheReadTokens + run.Usage.CacheReadTokens, sum.CacheWriteTokens + run.Usage.CacheWriteTokens));
         var rejections = attempt.Runs.SelectMany(run => run.ValidationErrors).ToImmutableArray();
-        ActionTextMeasureBill With(ActionTextMeasureOutcome outcome, string? reason, ImmutableArray<ActionTextMeasureSentence> sentences = default) =>
-            new(billId, TitleOf(evidence), outcome, reason, billText.CharsRead, billText.CharsTotal, attempt.Calls, usage,
-                attempt.Runs.Sum(run => run.ChargedTokens), sentences.IsDefault ? [] : sentences, rejections,
-                [.. attempt.Runs.Where(run => run.OutputJson is not null).Select(run => new ActionTextMeasurePass(run.Outcome, run.OutputJson))]);
+        var textFigures = BillFigures.Count(billText.Body);
+        ActionTextMeasureBill With(ActionTextMeasureOutcome outcome, string? reason, ImmutableArray<ActionTextMeasureSentence> sentences = default, double? passageGrade = null)
+        {
+            var kept = sentences.IsDefault ? [] : sentences;
+            var sentenceText = string.Join('\n', kept.Select(sentence => sentence.Sentence));
+            var bill = new ActionTextMeasureBill(billId, TitleOf(evidence), outcome, reason, billText.CharsRead, billText.CharsTotal, attempt.Calls, usage,
+                attempt.Runs.Sum(run => run.ChargedTokens), kept, rejections,
+                [.. attempt.Runs.Where(run => run.OutputJson is not null).Select(run => new ActionTextMeasurePass(run.Outcome, run.OutputJson))],
+                textFigures, BillFigures.Count(sentenceText), passageGrade, []);
+            return bill.LosesFigures ? bill with { MissingDates = [.. BillFigures.MissingDates(billText.Body, sentenceText)] } : bill;
+        }
 
         if (attempt.RefusedOtherPrompt) return With(ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.NotTextPrompt);
         if (attempt.Failure is { } failure)
@@ -79,7 +87,8 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         if (attempt.Revision is { TextPackageId: not null } revision)
             return With(ActionTextMeasureOutcome.Accepted, null,
                 [.. revision.TextCitations.Select(citation => new ActionTextMeasureSentence(citation.Part, citation.Sentence,
-                    billText.Text.Substring(citation.Span.Start, citation.Span.Length)))]);
+                    billText.Text.Substring(citation.Span.Start, citation.Span.Length), ReadingGrade.Rounded(citation.Sentence)))],
+                ReadingGrade.RoundedPassage([revision.Headline, .. revision.TextCitations.Select(citation => citation.Sentence)]));
         if (attempt.Revision is not null) return With(ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.WrittenByCode);
         if (attempt.Calls == 0) return With(ActionTextMeasureOutcome.Skipped, attempt.ErrorCode);
         return With(IsResolverRefusal(attempt.Runs[^1].Outcome) ? ActionTextMeasureOutcome.Rejected : ActionTextMeasureOutcome.Failed, attempt.ErrorCode);
