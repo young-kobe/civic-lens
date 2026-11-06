@@ -144,6 +144,7 @@ public sealed class PublishEntryRewriteTests
         var action = scenario.AddAction('b', summaryText: "This resolution informs the Senate that Rep. Steve Scalise was elected Speaker.");
         var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
+        Assert.Equal("This resolution informs the Senate that Rep. Steve Scalise was elected Speaker.", Assert.Single(Manifest(scenario, first).Records).BillLine);
         WithBillLine(scenario, first, "This resolution informs the Senate that Rep.");
 
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true });
