@@ -13,13 +13,19 @@ public sealed class ServerPageResponder(ActiveReleaseReader releases, PageCache 
         CancellationToken cancellationToken) where TComponent : IComponent
     {
         if (await releases.FindAsync(cancellationToken) is not { } release) return ApiResults.NoRelease();
-        if (statusCode is >= 200 and < 300 && cache.IsNotModified(context, release.ReleaseNumber))
+        return await RespondAsync<TComponent>(context, statusCode, release.ReleaseNumber, parameters, cancellationToken);
+    }
+
+    public async Task<IResult> RespondAsync<TComponent>(HttpContext context, int statusCode, int releaseNumber,
+        IReadOnlyDictionary<string, object?> parameters, CancellationToken cancellationToken) where TComponent : IComponent
+    {
+        if (statusCode is >= 200 and < 300 && cache.IsNotModified(context, releaseNumber))
         {
-            cache.Apply(context, release.ReleaseNumber);
+            cache.Apply(context, releaseNumber);
             return Results.StatusCode(StatusCodes.Status304NotModified);
         }
         var html = await renderer.RenderAsync<TComponent>(parameters);
-        cache.Apply(context, release.ReleaseNumber);
+        cache.Apply(context, releaseNumber);
         return Results.Content(html, "text/html; charset=utf-8", statusCode: statusCode);
     }
 }

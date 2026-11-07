@@ -35,4 +35,28 @@ public sealed class PageCacheTests
 
         Assert.True(equivalent.IsNotModified(context, 7));
     }
+
+    [Fact]
+    public void AChangedBrowserApiOriginInvalidatesTheHomePageValidator()
+    {
+        var original = new PageCache(Build, Origin, PublicBaseUrl.Parse("https://api.civic-lens.test", "test"));
+        var changed = new PageCache(Build, Origin, PublicBaseUrl.Parse("https://api2.civic-lens.test", "test"));
+        var context = new DefaultHttpContext();
+        context.Request.Headers.IfNoneMatch = original.ETag(7).ToString();
+
+        Assert.False(changed.IsNotModified(context, 7));
+    }
+
+    [Theory]
+    [InlineData("https://API.civic-lens.test/")]
+    [InlineData("https://api.civic-lens.test:443")]
+    public void EquivalentNormalizedBrowserApiOriginsKeepTheSamePageValidator(string equivalentOrigin)
+    {
+        var original = new PageCache(Build, Origin, PublicBaseUrl.Parse("https://api.civic-lens.test", "test"));
+        var equivalent = new PageCache(Build, Origin, PublicBaseUrl.Parse(equivalentOrigin, "test"));
+        var context = new DefaultHttpContext();
+        context.Request.Headers.IfNoneMatch = original.ETag(7).ToString();
+
+        Assert.True(equivalent.IsNotModified(context, 7));
+    }
 }

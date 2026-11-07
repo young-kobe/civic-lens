@@ -1,4 +1,5 @@
 using System.Net;
+using AngleSharp.Html.Parser;
 using CivicLens.Host.Publication;
 using CivicLens.PublicApi;
 using CivicLens.PublicApi.Pages;
@@ -28,6 +29,13 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
     private Task<ApiHost> StartAsync(bool withBaseUrl = true) =>
         ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = withBaseUrl ? BaseUrl : null });
+
+    private Task<ApiHost> StartWithBrowserApiAsync() =>
+        ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with
+        {
+            PublicBaseUrl = BaseUrl,
+            BrowserApiUrl = PublicBaseUrl.Parse("https://api.civic-lens.test", PublicApiOptions.BrowserApiUrlVariable)
+        });
 
     [Fact]
     public async Task AnUnknownServerPageAnswers404WithTheETagOfTheActiveReleaseAndBuild()
@@ -88,7 +96,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task ASuccessfulPageWithAMatchingStrongWeakOrWildcardValidatorSkipsItsRender()
+    public async Task TheSuppliedSnapshotReleaseControlsSuccessfulRevalidationWithoutAnotherReleaseRead()
     {
         await using var host = await StartAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 3, PublishedAt);
@@ -97,13 +105,13 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
         var cache = new PageCache(TestCodeVersion.Sha, BaseUrl);
         var responder = new ServerPageResponder(new ActiveReleaseReader(views), cache, new PageRenderer(services, services.GetRequiredService<ILoggerFactory>()));
-        foreach (var tag in new[] { cache.ETag(3).ToString(), "W/" + cache.ETag(3), "*", "\"old\", W/" + cache.ETag(3) })
+        foreach (var tag in new[] { cache.ETag(9).ToString(), "W/" + cache.ETag(9), "*", "\"old\", W/" + cache.ETag(9) })
         {
             var context = new DefaultHttpContext();
             context.Request.Headers.IfNoneMatch = tag;
-            var response = await responder.RespondAsync<BrokenPage>(context, StatusCodes.Status200OK, new Dictionary<string, object?>(), default);
+            var response = await responder.RespondAsync<BrokenPage>(context, StatusCodes.Status200OK, 9, new Dictionary<string, object?>(), default);
             Assert.Equal(StatusCodes.Status304NotModified, Assert.IsAssignableFrom<IStatusCodeHttpResult>(response).StatusCode);
-            Assert.Equal(cache.ETag(3).ToString(), context.Response.Headers.ETag);
+            Assert.Equal(cache.ETag(9).ToString(), context.Response.Headers.ETag);
             Assert.Equal(PageCache.CacheControl, context.Response.Headers.CacheControl);
         }
     }
@@ -138,6 +146,91 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.Null(response.Headers.ETag);
         Assert.False(response.Headers.Contains("Cache-Control"));
+    }
+
+    [Fact]
+    public async Task TheHomeRouteUsesTheHomeSnapshotReleaseAndAnswers503WithoutCacheWhenItIsMissing()
+    {
+        await using var host = await StartAsync();
+        var empty = await host.Client.GetAsync(ServerPageEndpoints.Prefix);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, empty.StatusCode);
+        Assert.Null(empty.Headers.ETag);
+        Assert.False(empty.Headers.Contains("Cache-Control"));
+
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 9, PublishedAt);
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
+        using var request = new HttpRequestMessage(HttpMethod.Get, ServerPageEndpoints.Prefix + "?zip=55401");
+        request.Headers.Add("Cookie", "session=reader");
+        var response = await host.Client.SendAsync(request);
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("\"r9-", response.Headers.ETag!.Tag);
+        Assert.Contains("Headline e", html);
+        Assert.Contains("Summary e", html);
+        Assert.DoesNotContain("data-zip-api", html);
+        Assert.DoesNotContain("55401", html);
+        Assert.False(response.Headers.Contains("Set-Cookie"));
+        Assert.DoesNotContain(response.Headers.Vary, name => name.Equals("Cookie", StringComparison.OrdinalIgnoreCase));
+
+        using var revalidation = new HttpRequestMessage(HttpMethod.Get, ServerPageEndpoints.Prefix + "/");
+        revalidation.Headers.IfNoneMatch.Add(response.Headers.ETag!);
+        using var cached = await host.Client.SendAsync(revalidation);
+        Assert.Equal(HttpStatusCode.NotModified, cached.StatusCode);
+        Assert.Equal(response.Headers.ETag, cached.Headers.ETag);
+        Assert.Equal(response.Headers.CacheControl, cached.Headers.CacheControl);
+    }
+
+    [Theory]
+    [InlineData("Model", PublishedRecordLabels.ModelWording)]
+    [InlineData("Code", PublishedRecordLabels.CodeWording)]
+    [InlineData("Person", null)]
+    public async Task RecentHeadlinesKeepTheirOwnPublishedWordingLabel(string origin, string? expectedLabel)
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote,
+            new SeededVote('f', "2026-03-02") { Kind = "Amendment", TextOrigin = origin });
+
+        var response = await host.Client.GetAsync(ServerPageEndpoints.Prefix);
+        var page = await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
+        var row = Assert.Single(page.QuerySelectorAll(".latest-rows li"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Headline f", row.TextContent);
+        if (expectedLabel is not null) Assert.Contains(expectedLabel, row.TextContent);
+        else
+        {
+            Assert.DoesNotContain(PublishedRecordLabels.ModelWording, row.TextContent);
+            Assert.DoesNotContain(PublishedRecordLabels.CodeWording, row.TextContent);
+        }
+    }
+
+    [Fact]
+    public async Task TheHomePreviewDoesNotClaimTheLiveRootRoute()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
+
+        using var response = await host.Client.GetAsync("/");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Null(response.Headers.ETag);
+    }
+
+    [Fact]
+    public async Task TheHomeRouteEmbedsTheConfiguredBrowserApiOriginForTheExistingZipFlow()
+    {
+        await using var host = await StartWithBrowserApiAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
+
+        var html = await (await host.Client.GetAsync(ServerPageEndpoints.Prefix)).Content.ReadAsStringAsync();
+
+        Assert.Contains("data-zip-api=\"https://api.civic-lens.test\"", html);
+        Assert.Contains("Find my officials", html);
+        Assert.Contains("browse all officials", html);
     }
 
     [Fact]
@@ -181,9 +274,12 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
 
         var response = await host.Client.GetAsync(UnknownPage);
+        var home = await host.Client.GetAsync(ServerPageEndpoints.Prefix);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, home.StatusCode);
         Assert.Null(response.Headers.ETag);
+        Assert.Null(home.Headers.ETag);
         foreach (var path in PublicAssets.Paths)
         {
             using var asset = await host.Client.GetAsync("/" + path);
