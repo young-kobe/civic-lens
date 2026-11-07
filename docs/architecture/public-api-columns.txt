@@ -5,6 +5,17 @@ active_records record_id
 active_records revision_number
 active_records release_number
 active_records published_at_utc_ticks
+bill_actions release_number
+bill_actions record_id
+bill_actions revision_number
+bill_actions position
+bill_actions action_date
+bill_actions action_time
+bill_actions text
+bill_actions type
+bill_actions action_code
+bill_actions source_system_code
+bill_actions source_system_name
 bill_issues issue_id
 bill_issues position
 bill_issues record_id
@@ -39,6 +50,9 @@ bills text_origin
 bills text_version_date
 bills text_version_name
 bills why_it_matters
+bills public_law
+bills history_observed_at_utc_ticks
+bills history_action_count
 briefs record_id
 briefs revision_number
 briefs release_number

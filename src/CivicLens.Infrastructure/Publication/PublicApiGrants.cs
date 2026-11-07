@@ -63,9 +63,14 @@ internal static class PublicApiGrants
         GRANT SELECT (attempt_id) ON roster_snapshots TO civic_lens_public_owner;
         GRANT SELECT (attempt_id, source_id, capture_sha256, observed_at_utc_ticks) ON collection_attempts TO civic_lens_public_owner;
 
+        GRANT SELECT (detail_job_id, public_law, observed_at_utc_ticks, action_count) ON published_bill_histories TO civic_lens_public_owner;
+        GRANT SELECT (release_number, record_id, detail_job_id) ON release_bill_histories TO civic_lens_public_owner;
+        GRANT SELECT (detail_job_id, position, action_date, action_time, text, type, action_code, source_system_code, source_system_name)
+            ON published_bill_history_actions TO civic_lens_public_owner;
+
         GRANT USAGE ON SCHEMA public_api TO civic_lens_public;
         GRANT SELECT ON public_api.active_records, public_api.votes, public_api.vote_members, public_api.member_votes, public_api.vote_issues,
-            public_api.bills, public_api.bill_sponsorships, public_api.briefs, public_api.issue_votes, public_api.issue_sponsors, public_api.bill_issues, public_api.zip_districts,
+            public_api.bills, public_api.bill_actions, public_api.bill_sponsorships, public_api.briefs, public_api.issue_votes, public_api.issue_sponsors, public_api.bill_issues, public_api.zip_districts,
             public_api.release_officials, public_api.release_official_terms, public_api.release_issues, public_api.release_issue_includes,
             public_api.release_issue_excludes, public_api.release_policy_areas, public_api.officials, public_api.official_attendance,
             public_api.official_bill_counts, public_api.official_issue_counts, public_api.official_executive_actions,

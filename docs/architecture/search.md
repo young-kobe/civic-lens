@@ -206,6 +206,9 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 ## Behavior
 
+`GET /v1/bills/{recordId}/actions` pages the completed history pinned by the active release. It returns release, optional history metadata, actions, and next cursor. Metadata contains the capture observation time and action count. Actions retain official position, date, optional time, text, type, action code, and source-system fields. The cursor is `ba.<release>.<position>`, with the existing default 20 and maximum 50 rows. A stale cursor returns 409 for a published bill. An absent bill returns 404 first, following sponsorship paging. `BillDetail` adds nullable history metadata, and bill rows add nullable `publicLaw`. Tests: `ActionHistoryEndpointsTests` and `ActionHistoryCursorTests`.
+
+
 ### Ingest
 
 `IngestWorker` runs `ReleaseIngest` when the service starts and then every 30 seconds. A failed run logs the error and waits for the next interval. A run that lasts longer than the interval starts the next run at once.

@@ -28,7 +28,7 @@ using Npgsql;
 
 namespace CivicLens.Infrastructure.Publication;
 
-public sealed class PostgresPublicationStore : IPublicationStore
+public sealed partial class PostgresPublicationStore : IPublicationStore
 {
     private const string PublishOperation = "publish-release";
     private const int MaximumPageSize = 100;
@@ -279,6 +279,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         await RequireUnchangedReleasesAsync(db, commit, cancellationToken);
         await RequireUnchangedReviewStateAsync(db, commit, cancellationToken);
         await RequireCurrentCitationsAsync(db, commit, cancellationToken);
+        await ReleaseBillHistories.RequireAndAddAsync(db, commit, cancellationToken);
         await PublishedEntries.RequireHistoricalStatementApproversAsync(db, commit.AddedEntries, cancellationToken);
         await BriefStaleness.RequeueAfterPublicationAsync(briefQueue, db, commit, cancellationToken);
         await ClearActiveAsync(db, cancellationToken);
@@ -555,7 +556,7 @@ public sealed class PostgresPublicationStore : IPublicationStore
         ReleasePaths.RequireDirectoryName(commit.DirectoryName);
         if (!commit.DirectoryName.StartsWith($"{commit.ReleaseNumber:D6}-", StringComparison.Ordinal))
             throw new ArgumentException("Release directory name does not match the release number.", nameof(commit));
-        if (commit.Records.IsDefault || commit.AddedRecords.IsDefault || commit.WithdrawnRecords.IsDefault || commit.Withdrawals.IsDefault || commit.AddedEntries.IsDefault || commit.RewrittenEntries.IsDefault || commit.VoteColumns.IsDefault)
+        if (commit.Records.IsDefault || commit.AddedRecords.IsDefault || commit.WithdrawnRecords.IsDefault || commit.Withdrawals.IsDefault || commit.AddedEntries.IsDefault || commit.RewrittenEntries.IsDefault || commit.VoteColumns.IsDefault || commit.BillHistories.IsDefault)
             throw new ArgumentException("Release records are required.", nameof(commit));
     }
 }

@@ -12,7 +12,7 @@ public sealed class BillStore(NpgsqlDataSource views)
     private const string Columns = """
         b.record_id, b.revision_number, b.congress, b.bill_type, b.bill_number, b.bill_title, b.headline, b.summary, b.text_origin, b.label,
         b.policy_area, b.policy_area_id, b.event_date, b.sponsor_count, b.cosponsor_count, b.bill_line,
-        b.why_it_matters, b.text_version_name, b.text_version_date, b.text_chars_read, b.text_chars_total
+        b.why_it_matters, b.text_version_name, b.text_version_date, b.text_chars_read, b.text_chars_total, b.public_law
         """;
     private const string Order = "b.event_date DESC, b.record_id";
     private const string AfterCursor = " AND (b.event_date < @cursor_date OR (b.event_date = @cursor_date AND b.record_id > @cursor_id))";
@@ -40,6 +40,7 @@ public sealed class BillStore(NpgsqlDataSource views)
     {
         await using var command = views.CreateCommand($"""
             SELECT b.release_number, {Columns},
+                   b.history_observed_at_utc_ticks, b.history_action_count,
                    ARRAY(SELECT i.issue_id FROM public_api.bill_issues i
                           WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number ORDER BY i."position"),
                    s.latest_action_text, s.latest_action_date, s.read_at_utc_ticks
@@ -49,7 +50,8 @@ public sealed class BillStore(NpgsqlDataSource views)
             """);
         command.Parameters.AddWithValue("id", recordId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken) ? new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(22), ReadLatestAction(reader)) : null;
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+        return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(25), ReadLatestAction(reader), ReadHistory(reader, 23, 24));
     }
 
     /// <summary>Reads one page of the sponsorships of a bill. Null means that no release is active or that the active release holds no such bill.</summary>
@@ -74,6 +76,29 @@ public sealed class BillStore(NpgsqlDataSource views)
         var page = rows.Take(request.Limit).ToArray();
         var next = rows.Count > request.Limit ? SponsorshipCursor.Of(active, page[^1]).Encode() : null;
         return new(active, page, next);
+    }
+
+    /// <summary>Reads one page of the completed history snapshot of a bill in one statement.</summary>
+    public async Task<ActionHistoryPage?> ListActionsAsync(ActionHistoryRequest request, CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand(ActionHistorySql(request));
+        command.Parameters.AddWithValue("id", request.RecordId);
+        command.Parameters.AddWithValue("take", request.Limit + 1);
+        if (request.Cursor is { } cursor) command.Parameters.AddWithValue("cursor_position", cursor.Position);
+        var rows = new List<BillActionRow>();
+        int? release = null;
+        BillHistory? history = null;
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                release = reader.GetInt32(0);
+                history ??= ReadHistory(reader, 1, 2);
+                if (!reader.IsDBNull(3)) rows.Add(ReadAction(reader));
+            }
+        if (release is not { } active) return null;
+        var page = rows.Take(request.Limit).ToArray();
+        var next = rows.Count > request.Limit ? ActionHistoryCursor.Of(active, page[^1]).Encode() : null;
+        return new(active, history, page, next);
     }
 
     private static string ListSql(BillRequest request) => $"""
@@ -156,13 +181,18 @@ public sealed class BillStore(NpgsqlDataSource views)
         TextVersionName = ViewColumns.Text(reader, 18),
         TextVersionDate = ViewColumns.Date(reader, 19),
         TextCharsRead = ViewColumns.Number(reader, 20),
-        TextCharsTotal = ViewColumns.Number(reader, 21)
+        TextCharsTotal = ViewColumns.Number(reader, 21),
+        PublicLaw = ViewColumns.Text(reader, 22)
     };
 
-    // Columns 23 to 25 hold the status. The view holds no row for a bill with no latest action.
-    private static BillLatestAction? ReadLatestAction(DbDataReader reader) => reader.IsDBNull(23)
+    private static BillHistory? ReadHistory(DbDataReader reader, int observedAtIndex, int actionCountIndex) => reader.IsDBNull(observedAtIndex) || reader.IsDBNull(actionCountIndex)
         ? null
-        : new(reader.GetString(23), reader.GetFieldValue<DateOnly>(24), new DateTimeOffset(reader.GetInt64(25), TimeSpan.Zero));
+        : new(new DateTimeOffset(reader.GetInt64(observedAtIndex), TimeSpan.Zero), reader.GetInt32(actionCountIndex));
+
+    // Columns 26 to 28 hold the status. The view holds no row for a bill with no latest action.
+    private static BillLatestAction? ReadLatestAction(DbDataReader reader) => reader.IsDBNull(26)
+        ? null
+        : new(reader.GetString(26), reader.GetFieldValue<DateOnly>(27), new DateTimeOffset(reader.GetInt64(28), TimeSpan.Zero));
 
     // Column 0 holds the release and column 1 holds whether the bill exists. The row starts at column 2.
     private static SponsorshipRow ReadSponsorship(DbDataReader reader) => new()
@@ -173,5 +203,30 @@ public sealed class BillStore(NpgsqlDataSource views)
         IsOriginal = reader.GetBoolean(5),
         SponsoredOn = reader.GetFieldValue<DateOnly>(6),
         WithdrawnOn = ViewColumns.Date(reader, 7)
+    };
+
+    private static string ActionHistorySql(ActionHistoryRequest request) => $"""
+        SELECT a.release_number, b.history_observed_at_utc_ticks, b.history_action_count,
+               h."position", h.action_date, h.action_time, h.text, h.type, h.action_code, h.source_system_code, h.source_system_name
+          FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+          JOIN public_api.bills b ON b.record_id = @id
+          LEFT JOIN LATERAL (
+               SELECT h.* FROM public_api.bill_actions h
+                WHERE h.release_number = a.release_number AND h.record_id = b.record_id AND h.revision_number = b.revision_number
+                  {(request.Cursor is null ? "" : "AND h.\"position\" > @cursor_position")}
+                ORDER BY h."position" LIMIT @take) h ON TRUE
+         ORDER BY h."position"
+        """;
+
+    private static BillActionRow ReadAction(DbDataReader reader) => new()
+    {
+        Position = reader.GetInt32(3),
+        ActionDate = reader.GetFieldValue<DateOnly>(4),
+        ActionTime = reader.IsDBNull(5) ? null : reader.GetFieldValue<TimeOnly>(5),
+        Text = reader.GetString(6),
+        Type = ViewColumns.Text(reader, 7),
+        ActionCode = ViewColumns.Text(reader, 8),
+        SourceSystemCode = ViewColumns.Number(reader, 9),
+        SourceSystemName = ViewColumns.Text(reader, 10)
     };
 }

@@ -19,10 +19,10 @@ public sealed class PublishOfficialPagesTests
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('c');
         var statement = scenario.AddStatement('b', speakerIds: ["chair"]);
-        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        scenario.Publications.BillStatuses[action] = Status(action, "Passed House.");
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
             new PublishedRecordReference(PublishedRecordKind.Action, action), new PublishedRecordReference(PublishedRecordKind.Statement, statement)));
-        scenario.Actions.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.");
+        scenario.Publications.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.");
         scenario.OfficialPages.Clear();
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
@@ -39,9 +39,9 @@ public sealed class PublishOfficialPagesTests
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('c');
         var other = scenario.AddAction('d', sponsorId: "chair");
-        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        scenario.Publications.BillStatuses[action] = Status(action, "Passed House.");
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
-        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.") with { ObservedAtUtc = Observed.AddDays(2) };
+        scenario.Publications.BillStatuses[action] = Status(action, "Passed House.") with { ObservedAtUtc = Observed.AddDays(2) };
         scenario.OfficialPages.Clear();
 
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", new PublishedRecordReference(PublishedRecordKind.Action, other)));
@@ -54,9 +54,9 @@ public sealed class PublishOfficialPagesTests
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('c', cosponsorWithdrawn: false, chairSponsors: true);
-        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        scenario.Publications.BillStatuses[action] = Status(action, "Passed House.");
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
-        scenario.Actions.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.");
+        scenario.Publications.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.");
         scenario.OfficialPages.Clear();
 
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
@@ -70,12 +70,12 @@ public sealed class PublishOfficialPagesTests
         var scenario = new PublicationScenario();
         var moved = scenario.AddAction('c');
         var steady = scenario.AddAction('d');
-        scenario.Actions.BillStatuses[moved] = Status(moved, "Passed House.");
-        scenario.Actions.BillStatuses[steady] = Status(steady, "Passed House.");
+        scenario.Publications.BillStatuses[moved] = Status(moved, "Passed House.");
+        scenario.Publications.BillStatuses[steady] = Status(steady, "Passed House.");
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
             new PublishedRecordReference(PublishedRecordKind.Action, moved), new PublishedRecordReference(PublishedRecordKind.Action, steady)));
-        scenario.Actions.BillStatuses[moved] = Status(moved, "Became Public Law No: 119-1.") with { ObservedAtUtc = Observed.AddDays(3) };
-        scenario.Actions.BillStatuses[steady] = Status(steady, "Passed House.") with { ObservedAtUtc = Observed.AddDays(3) };
+        scenario.Publications.BillStatuses[moved] = Status(moved, "Became Public Law No: 119-1.") with { ObservedAtUtc = Observed.AddDays(3) };
+        scenario.Publications.BillStatuses[steady] = Status(steady, "Passed House.") with { ObservedAtUtc = Observed.AddDays(3) };
         scenario.OfficialPages.Clear();
 
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));

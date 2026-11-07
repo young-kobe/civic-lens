@@ -716,6 +716,24 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Task<int> FillStatementApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
+    public Dictionary<string, PublishedBillStatus> BillStatuses { get; } = [];
+    public Dictionary<string, BillHistoryCapture> BillHistories { get; } = [];
+    public List<BillHistoryCapture> PreparedHistories { get; } = [];
+    public Action? BeforePreparingHistories { get; set; }
+    private readonly Dictionary<int, BillHistoryBinding[]> historyBindings = [];
+
+    public Task<IReadOnlyList<BillPublicationInput>> ReadBillInputsAsync(int? previousReleaseNumber, ImmutableArray<string> recordIds,
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<BillPublicationInput>>([.. recordIds.Select(id =>
+            new BillPublicationInput(id, BillStatuses.TryGetValue(id, out var status) ? new(status, "hr") : null,
+                BillHistories.GetValueOrDefault(id), historyBindings.GetValueOrDefault(previousReleaseNumber ?? 0)?.SingleOrDefault(binding => binding.RecordId == id)?.DetailJobId))]);
+
+    public Task PrepareBillHistoriesAsync(IReadOnlyCollection<BillHistoryCapture> histories, CancellationToken cancellationToken)
+    {
+        BeforePreparingHistories?.Invoke();
+        PreparedHistories.AddRange(histories);
+        return Task.CompletedTask;
+    }
+
     public Dictionary<int, List<PublishedBillStatus>> BackfilledBillStatuses { get; } = [];
 
     public Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses, CancellationToken cancellationToken)
@@ -749,6 +767,7 @@ internal sealed class FakePublicationStore : IPublicationStore
         if (FailOnCommit is not null) throw FailOnCommit;
         if (ConcurrentWinner is not null) return Task.FromResult(ConcurrentWinner);
         LastCommit = commit;
+        historyBindings[commit.ReleaseNumber] = [.. commit.BillHistories];
         foreach (var entry in commit.AddedEntries) FirstPublished.TryAdd(new(entry.Kind, entry.RecordId), entry.FirstPublishedAtUtc);
         var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName, DateTimeOffset.UnixEpoch, commit.Records.Length);
         Committed.Add(summary);
