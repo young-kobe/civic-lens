@@ -194,12 +194,16 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
 
         var listed = page.RootElement.GetProperty("bills").EnumerateArray()
             .ToDictionary(bill => bill.GetProperty("recordId").GetString()![0]);
-        Assert.Equal("  The enacted law funds housing.\n", listed['a'].GetProperty("crsSummaryText").GetString());
-        Assert.Equal("crs-v1@2026-06-01T12:00:00Z", listed['a'].GetProperty("crsSummaryVersion").GetString());
-        Assert.Equal("  The enacted law funds housing.\n", detail.RootElement.GetProperty("bill").GetProperty("crsSummaryText").GetString());
-        Assert.Equal("crs-v1@2026-06-01T12:00:00Z", detail.RootElement.GetProperty("bill").GetProperty("crsSummaryVersion").GetString());
-        Assert.Equal(JsonValueKind.Null, listed['b'].GetProperty("crsSummaryText").ValueKind);
-        Assert.Equal(JsonValueKind.Null, listed['b'].GetProperty("crsSummaryVersion").ValueKind);
+        Assert.False(listed['a'].TryGetProperty("crsSummaryText", out _));
+        Assert.False(listed['a'].TryGetProperty("crsSummaryVersion", out _));
+        Assert.False(listed['a'].GetRawText().Contains("The enacted law funds housing.", StringComparison.Ordinal));
+        Assert.Equal("  The enacted law funds housing.\n", detail.RootElement.GetProperty("crsSummaryText").GetString());
+        Assert.Equal("crs-v1@2026-06-01T12:00:00Z", detail.RootElement.GetProperty("crsSummaryVersion").GetString());
+        Assert.False(listed['b'].TryGetProperty("crsSummaryText", out _));
+        Assert.False(listed['b'].TryGetProperty("crsSummaryVersion", out _));
+        using var emptyDetail = await GetAsync(host, $"/v1/bills/{B.RecordId}");
+        Assert.Equal(JsonValueKind.Null, emptyDetail.RootElement.GetProperty("crsSummaryText").ValueKind);
+        Assert.Equal(JsonValueKind.Null, emptyDetail.RootElement.GetProperty("crsSummaryVersion").ValueKind);
         Assert.Equal($"Summary {A.RecordId}", listed['a'].GetProperty("summary").GetString());
         Assert.Equal(["health"], detail.RootElement.GetProperty("issueIds").EnumerateArray().Select(issue => issue.GetString()));
     }

@@ -22,8 +22,6 @@ public sealed record BillRow
     public required int CosponsorCount { get; init; }
     public string? BillLine { get; init; }
     public string? PublicLaw { get; init; }
-    public string? CrsSummaryText { get; init; }
-    public string? CrsSummaryVersion { get; init; }
 
     /// <summary>The "why it matters" text of an AI summary of the bill text. It is null unless <see cref="TextOrigin"/> is Model and the bill has a text summary.</summary>
     public string? WhyItMatters { get; init; }

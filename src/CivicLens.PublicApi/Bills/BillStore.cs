@@ -12,8 +12,7 @@ public sealed class BillStore(NpgsqlDataSource views)
     private const string Columns = """
         b.record_id, b.revision_number, b.congress, b.bill_type, b.bill_number, b.bill_title, b.headline, b.summary, b.text_origin, b.label,
         b.policy_area, b.policy_area_id, b.event_date, b.sponsor_count, b.cosponsor_count, b.bill_line,
-        b.why_it_matters, b.text_version_name, b.text_version_date, b.text_chars_read, b.text_chars_total, b.public_law,
-        b.crs_summary_text, b.crs_summary_version
+        b.why_it_matters, b.text_version_name, b.text_version_date, b.text_chars_read, b.text_chars_total, b.public_law
         """;
     private const string Order = "b.event_date DESC, b.record_id";
     private const string AfterCursor = " AND (b.event_date < @cursor_date OR (b.event_date = @cursor_date AND b.record_id > @cursor_id))";
@@ -40,7 +39,7 @@ public sealed class BillStore(NpgsqlDataSource views)
     public async Task<BillDetail?> FindAsync(string recordId, CancellationToken cancellationToken)
     {
         await using var command = views.CreateCommand($"""
-            SELECT b.release_number, {Columns},
+            SELECT b.release_number, {Columns}, b.crs_summary_text, b.crs_summary_version,
                    b.history_observed_at_utc_ticks, b.history_action_count,
                    ARRAY(SELECT i.issue_id FROM public_api.bill_issues i
                           WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number ORDER BY i."position"),
@@ -52,7 +51,8 @@ public sealed class BillStore(NpgsqlDataSource views)
         command.Parameters.AddWithValue("id", recordId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
-        return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(27), ReadLatestAction(reader), ReadHistory(reader, 25, 26));
+        return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(27), ReadLatestAction(reader), ReadHistory(reader, 25, 26),
+            ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24));
     }
 
     /// <summary>Reads one page of the sponsorships of a bill. Null means that no release is active or that the active release holds no such bill.</summary>
@@ -183,9 +183,7 @@ public sealed class BillStore(NpgsqlDataSource views)
         TextVersionDate = ViewColumns.Date(reader, 19),
         TextCharsRead = ViewColumns.Number(reader, 20),
         TextCharsTotal = ViewColumns.Number(reader, 21),
-        PublicLaw = ViewColumns.Text(reader, 22),
-        CrsSummaryText = ViewColumns.Text(reader, 23),
-        CrsSummaryVersion = ViewColumns.Text(reader, 24)
+        PublicLaw = ViewColumns.Text(reader, 22)
     };
 
     private static BillHistory? ReadHistory(DbDataReader reader, int observedAtIndex, int actionCountIndex) => reader.IsDBNull(observedAtIndex) || reader.IsDBNull(actionCountIndex)
