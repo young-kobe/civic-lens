@@ -35,7 +35,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
          "brief_revision_paragraphs", "brief_revision_citations", "brief_revision_paragraph_citations", "document_change_revisions",
          "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas", "published_entry_officials",
          "published_bill_histories", "published_bill_history_actions", "release_bill_histories",
-         "release_bill_statuses", "statement_review_decisions", "executive_action_revisions", "executive_action_revision_notices", "executive_action_documents"];
+         "release_bill_statuses", "statement_review_decisions", "executive_action_revisions", "executive_action_revision_notices", "executive_action_documents",
+         "publication_withdrawals", "publication_withdrawal_corrections", "published_records"];
 
     private string connectionString = null!;
     private string[] roleAfterMigration = null!;
@@ -74,7 +75,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
         foreach (var view in new[] { "active_records", "votes", "vote_members", "member_votes", "vote_issues", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas",
-            "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "executive_actions", "executive_action_notices" })
+            "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "executive_actions", "executive_action_notices", "withdrawals", "withdrawal_corrections" })
         {
             // A view with a join or a group cannot take a write at all, so Postgres refuses with 55000 before it checks a privilege.
             await AssertDeniedAsync(connection, $"DELETE FROM public_api.{view}", "55000");
@@ -136,6 +137,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"vote_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_members v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"votes v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"withdrawal_corrections v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"withdrawals v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"zip_districts v {Owner} {Role}:SELECT {{security_barrier=true}}"
         ], objects);
         Assert.Empty(await QueryAsync("SELECT proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public_api'", connectionString));
