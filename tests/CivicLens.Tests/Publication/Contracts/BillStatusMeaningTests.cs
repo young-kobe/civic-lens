@@ -107,6 +107,25 @@ public sealed class BillStatusMeaningTests
     }
 
     [Theory]
+    [InlineData("Became Public Law No: 119-21.", "119-21")]
+    [InlineData("Became Public Law No: 119-21", "119-21")]
+    [InlineData("Became Public Law No: 119-21\n", null)]
+    [InlineData("Became Public Law No: ١١٩-٢١.", null)]
+    [InlineData("Became Public Law No: 119-21. Signed by the President.", null)]
+    [InlineData("Became Private Law No: 119-2.", null)]
+    [InlineData("Became Public Law No. 119-21.", null)]
+    public void PublicLawNumberRequiresTheCompleteKnownOfficialAction(string text, string? expected)
+    {
+        Assert.Equal(expected, BillStatusMeaning.PublicLawNumberOf(text));
+    }
+
+    [Fact]
+    public void PublicLawNumberRejectsBlankText()
+    {
+        Assert.Throws<ArgumentException>(() => BillStatusMeaning.PublicLawNumberOf(" "));
+    }
+
+    [Theory]
     [InlineData("Motion to reconsider laid on the table.")]
     [InlineData("Passed House.")]
     [InlineData("The measure was Referred to the Committee on Finance.")]

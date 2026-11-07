@@ -602,7 +602,7 @@ The page shows three facts: "Latest action on Congress.gov", "Status read on", a
 | "Became Public Law No: 119-21." | "Became law: Public Law 119-21." |
 | Any other text, such as "Motion to reconsider laid on the table." | "Latest official action: " and the raw text |
 
-The rules run in the order of the table. A rule matches the whole text from its start. Any other ending, such as "Unfavorably", "Adversely", or "read the third time, and passed", shows the raw text.
+The rules run in the order of the table. A rule matches the whole text from its start. Any other ending, such as "Unfavorably", "Adversely", or "read the third time, and passed", shows the raw text. `PublicLawNumberOf` shares the public-law matcher with the meaning rule. It accepts ASCII digits and an optional final period, and rejects trailing text or a newline. Other action text returns no law number.
 
 The committee name stops at the first ". " or " (". A committee rule accepts only these tails. One is the final period. One is a citation in the form ". (text: ...)", ". (consideration: ...)", or ". (Sponsor introductory remarks on measure: ...)". The last is the House form with a second committee, and its fixed Speaker clause, shown below.
 
