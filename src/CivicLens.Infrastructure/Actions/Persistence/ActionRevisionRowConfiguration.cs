@@ -76,6 +76,9 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
         SourceSpanColumns.Configure(builder, "action_revisions", "BillCitation", "bill_citation", optional: true);
         builder.HasIndex(row => row.RunId).IsUnique();
         builder.HasIndex(row => row.EventOn).HasDatabaseName("ix_action_revisions_event_on");
+        builder.HasIndex(row => new { row.Congress, row.BillNumber, row.BillType, row.RecordId, row.RevisionNumber })
+            .HasDatabaseName("ix_action_revisions_bill_identity")
+            .HasFilter("headline IS NOT NULL AND event_on IS NOT NULL");
         builder.HasOne<ActionDraftRow>().WithMany().HasForeignKey(row => row.RecordId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<ActionAnalysisRunRow>().WithMany().HasForeignKey(row => row.RunId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<ActionAnalysisRunRow>().WithMany().HasForeignKey(row => row.SuggestionRunId).OnDelete(DeleteBehavior.Restrict);

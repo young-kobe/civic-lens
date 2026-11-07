@@ -27,5 +27,8 @@ internal sealed class VoteMemberListEntryRowConfiguration : IEntityTypeConfigura
         SourceSpanColumns.Configure(builder, "vote_member_list_entries", "Citation", "citation", optional: false);
         builder.HasOne<VoteMemberListRow>().WithMany().HasForeignKey(row => row.ListId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(row => new { row.PersonId, row.ListId }).HasDatabaseName("ix_vote_member_list_entries_person");
+        builder.HasIndex(row => row.ListId)
+            .HasDatabaseName("ix_vote_member_list_entries_tallies")
+            .IncludeProperties(row => row.VoteCast);
     }
 }
