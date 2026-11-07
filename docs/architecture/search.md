@@ -204,6 +204,9 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 ## Behavior
 
+`GET /v1/briefs/{recordId}` returns the active brief, its paragraphs, and its citations in one database statement. It reads public views only. Paragraph citation IDs preserve their order, and citation headlines come from the exact cited revisions. `PublishedBrief.ValidateContent` owns the shared content checks. Missing or invalid IDs and no active release return 404, following the existing bill-detail route. Tests: `BriefEndpointsTests.EndpointReturnsOrderedTextWithPinnedTargetHeadlinesAndRollbackRestoresAWithdrawnBrief` and `PublicApiBriefContentViewsTests`.
+
+
 ### Ingest
 
 `IngestWorker` runs `ReleaseIngest` when the service starts and then every 30 seconds. A failed run logs the error and waits for the next interval. A run that lasts longer than the interval starts the next run at once.

@@ -153,7 +153,7 @@ The owner accepted these designs. Each item holds its choices until the code and
     - [ ] View PR 3: add #400 `issue_votes` and `issue_sponsors`, and the issue party line-up from them and from PR 1
     - [ ] View PR 4, statements: add `statements`, `statement_speakers`, `statement_quotations`, and `record_links` with a `reason` column
     - [ ] View PR 5: add `document_changes` with a changed-region child view, `record_corrections`, and `withdrawals`
-    - [ ] View PR 6: add `briefs` paragraphs and citations, `brief_paragraphs` and `brief_citations`
+    - [x] View PR 6: add `briefs` paragraphs and citations, `brief_paragraphs` and `brief_citations`
     - [ ] View PR 7, executive actions: add #402 `executive_actions` and `executive_action_notices`, then `executive_action_links` for amends and revoked-by
     - [ ] View PR 8: add `official_party_lines` and `party_agreement`, and the party-break and party-line boards from them
   - [ ] Render pages in `PublicApi` with static server rendering from the views. Cloudflare caches each page for each release: the ETag names the release, build, and normalized public base URL, and `stale-if-error` keeps a copy for 24 hours. Personal parts are HTML fragments after a ZIP, and the ZIP stays on the device
