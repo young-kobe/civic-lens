@@ -5,6 +5,7 @@ internal static class PublishedEvidenceRules
     public static void RequireVersion(PublishedDocumentVersion? version)
     {
         if (version is null || !PublicationProtocol.IsSha256(version.ExtractionId) || version.Text is null ||
+            version.Text.Length > PublishedDocumentVersion.MaximumTextLength ||
             !IsWebUrl(version.Url))
             throw new InvalidDataException("Published document version is invalid.");
     }
