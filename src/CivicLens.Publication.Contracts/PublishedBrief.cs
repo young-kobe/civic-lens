@@ -41,34 +41,39 @@ public sealed partial record PublishedBrief
             WeekStart.DayOfWeek != DayOfWeek.Monday || CutoffReleaseNumber < 1)
             throw new InvalidDataException("Published brief identity or week is invalid.");
         RequireText(Headline, MaximumHeadlineLength);
-        ValidateCitations();
-        ValidateParagraphs();
+        ValidateContent(Paragraphs, Citations);
         if (Coverage is null || Coverage.Cited != Citations.Length || Coverage.Considered < Coverage.SentToModel)
             throw new InvalidDataException("Published brief coverage must count the listed citations.");
     }
 
-    private void ValidateCitations()
+    public static void ValidateContent(PublishedBriefParagraph[] paragraphs, PublishedBriefCitation[] citations)
     {
-        if (Citations is null || Citations.Length is 0 or > MaximumCitations)
+        ValidateCitations(citations);
+        ValidateParagraphs(paragraphs, citations);
+    }
+
+    private static void ValidateCitations(PublishedBriefCitation[] citations)
+    {
+        if (citations is null || citations.Length is 0 or > MaximumCitations)
             throw new InvalidDataException($"Published brief requires 1 to {MaximumCitations} citations.");
-        foreach (var citation in Citations)
+        foreach (var citation in citations)
         {
             if (citation is null || !CitationId().IsMatch(citation.Id) || citation.Kind == PublishedRecordKind.Brief ||
                 !PublicationProtocol.IsRecordId(citation.Kind, citation.RecordId) || citation.RevisionNumber < 1)
                 throw new InvalidDataException("Published brief citation needs an ID, a cited kind, a record, and a revision.");
             RequireText(citation.Headline, MaximumHeadlineLength);
         }
-        if (Citations.Select(citation => citation.Id).Distinct(StringComparer.Ordinal).Count() != Citations.Length ||
-            Citations.Select(citation => (citation.Kind, citation.RecordId)).Distinct().Count() != Citations.Length)
+        if (citations.Select(citation => citation.Id).Distinct(StringComparer.Ordinal).Count() != citations.Length ||
+            citations.Select(citation => (citation.Kind, citation.RecordId)).Distinct().Count() != citations.Length)
             throw new InvalidDataException("Published brief cites each record once, under its own ID.");
     }
 
-    private void ValidateParagraphs()
+    private static void ValidateParagraphs(PublishedBriefParagraph[] paragraphs, PublishedBriefCitation[] citations)
     {
-        if (Paragraphs is null || Paragraphs.Length is 0 or > MaximumParagraphs)
+        if (paragraphs is null || paragraphs.Length is 0 or > MaximumParagraphs)
             throw new InvalidDataException($"Published brief requires 1 to {MaximumParagraphs} paragraphs.");
-        var listed = Citations.Select(citation => citation.Id).ToHashSet(StringComparer.Ordinal);
-        foreach (var paragraph in Paragraphs)
+        var listed = citations.Select(citation => citation.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var paragraph in paragraphs)
         {
             if (paragraph is null) throw new InvalidDataException("Published brief paragraph is missing.");
             RequireText(paragraph.Text, MaximumParagraphLength);
@@ -77,7 +82,7 @@ public sealed partial record PublishedBrief
             if (!ids.All(listed.Contains))
                 throw new InvalidDataException("A published brief paragraph cites an ID that the brief does not list.");
         }
-        var used = Paragraphs.SelectMany(paragraph => paragraph.CitationIds).ToHashSet(StringComparer.Ordinal);
+        var used = paragraphs.SelectMany(paragraph => paragraph.CitationIds).ToHashSet(StringComparer.Ordinal);
         if (!listed.All(used.Contains))
             throw new InvalidDataException("Every published brief citation is cited in a paragraph.");
     }

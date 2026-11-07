@@ -32,6 +32,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     private static readonly string[] BaseTables =
         ["vote_revisions", "vote_revision_facts", "vote_member_list_entries", "vote_revision_issues", "publication_releases", "publication_record_states", "vote_drafts", "vote_member_lists",
          "brief_revisions", "action_revisions", "action_revision_sponsorships", "action_revision_issues", "action_drafts", "published_entries", "zcta_districts", "roster_snapshots", "collection_attempts",
+         "brief_revision_paragraphs", "brief_revision_citations", "brief_revision_paragraph_citations", "document_change_revisions",
          "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas", "published_entry_officials",
          "release_bill_statuses", "statement_review_decisions", "executive_action_revisions", "executive_action_revision_notices", "executive_action_documents"];
 
@@ -108,6 +109,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"bill_sponsorships v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_status v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bills v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"brief_citations v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"brief_paragraphs v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"briefs v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"executive_action_notices v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"executive_actions v {Owner} {Role}:SELECT {{security_barrier=true}}",

@@ -2,6 +2,7 @@ using System.Net;
 using System.Threading.RateLimiting;
 using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicApi.Bills;
+using CivicLens.PublicApi.Briefs;
 using CivicLens.PublicApi.ExecutiveActions;
 using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.Http;
@@ -54,6 +55,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new VoteStore(views));
         builder.Services.AddSingleton(new MemberVoteStore(views));
         builder.Services.AddSingleton(new BillStore(views));
+        builder.Services.AddSingleton(new BriefStore(views));
         builder.Services.AddSingleton(new ZipDistrictStore(views));
         builder.Services.AddSingleton(new IssueStore(views));
         builder.Services.AddSingleton(new HomeStore(views));
@@ -102,6 +104,7 @@ public static class PublicApiApp
         app.MapVotes();
         app.MapMemberVotes();
         app.MapBills();
+        app.MapBriefs();
         app.MapZipDistricts();
         app.MapIssues();
         app.MapHome();
