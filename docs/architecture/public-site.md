@@ -97,6 +97,8 @@ These decisions come from the component audit. The owner accepted every recommen
 - The browser remembers only a validated five-digit ZIP after its current lookup answer renders. It stores no member details; the home page re-queries published current data. Enforcer: `initRememberedMembers` and `initZipLookup`. No automated test.
 - Shared page HTML contains no remembered ZIP or personal lookup results. Enforcer: `PublicPage` emits empty hooks and browser code reads device storage. Tests: `HomePageTests.TheRememberedMembersLinkTargetsTheLookupHeadingInSharedMarkup` and `PublishedHomePageTests.TheResultPanelIsHiddenUntilALookupAndCreditsTheCensusBureauAndSaysAZctaIsNotAZipCode`.
 
+- The glossary index lists each approved term and the party-count note once, in alphabetical order. Letter links reach focusable index headings. Enforcer: `PublishedGlossaryPage`. Test: `GlossaryTests.TheGlossaryIndexGroupsEveryTermAlphabeticallyAndLinksPopulatedLettersAndDefinitions`.
+
 ## Behavior
 
 Implemented today: the static pages that [publication](publication.md#public-reader-experience) describes. PublicApi also serves `/web` as the first gated server-rendered route when `CIVIC_LENS_PUBLIC_BASE_URL` is configured. It uses one `HomeAnswer` snapshot and its release number for the page validator. A missing active release returns 503 without cache headers. The browser ZIP form appears only when `CIVIC_LENS_PUBLIC_API_URL` is configured; configure that origin before a future live ZIP cutover. The existing static home remains the live route. After a successful current ZIP lookup, the browser stores the five-digit ZIP on this device. The header then shows "Your members" and a Forget control. Returning to the home fragment re-queries the configured ZIP endpoint against current published data. Personal lookup results are added only in the browser. Other pages move to PublicApi one route at a time in R-68. Rows marked "planned" describe accepted design that is not implemented.
@@ -117,7 +119,7 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 | 10 | Check a source | "Check the source" fold with an official link first | Partial. Planned: plain labels, raw text one click further (DR3) |
 | 11 | Search a name or a bill | Header search on every page, results page | Partial. Planned: official first, bill number pin, filters after results |
 | 12 | See a search with no results | Results page empty state | Partial. Planned: message and next steps at the top |
-| 13 | Learn a term | `Term` popover, glossary page | Implemented. Planned: letter index and approved text for every term |
+| 13 | Learn a term | `Term` popover, glossary page | Implemented: first-use popovers and alphabetical index with letter shortcuts. Planned: approved definitions for remaining prototype terms |
 | 14 | Read the method and the about page | Method page, about page | Implemented |
 | 15 | Report a problem | Footer and record report links | Partial. Planned: the footer link names the record |
 | 16 | Reach a useful 404 | Not found page | Implemented |
