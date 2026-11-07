@@ -1,0 +1,120 @@
+@using System.Text.Json
+@using CivicLens.Publication.Contracts
+
+<PublicPage CanonicalPath="" Title="Civic Lens" Description="Civic Lens collects what officials say and do, with the sources and the exact text that each record cites." RootPath="@RootPath">
+    <Hero>
+        <div class="home-hero home-preview-hero">
+            <div>
+                <h1>Who represents you?</h1>
+                <p class="home-lead">See how your representative and senators voted and which bills they introduced. Each fact links to its official source.</p>
+                @if (BrowserApiUrl is not null)
+                {
+                    <noscript><div class="notice notice-warn"><span>The ZIP lookup needs JavaScript. Without it, browse <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">all officials</a>.</span></div></noscript>
+                    <form class="zip-form" hidden data-zip-api="@BrowserApiUrl" data-official-page="@(RootPath + PublicationProtocol.OfficialPagePath("{id}"))" data-officials-page="@(RootPath + PublicationProtocol.OfficialsPagePath)" data-states="@StateNames" data-house-offices="@HouseOffices">
+                        <Field Label="Your ZIP code" For="zip-code">
+                            <input id="zip-code" name="zip" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="5" placeholder="5 digits" />
+                        </Field>
+                        <Button Type="submit">Find my officials</Button>
+                        <div class="zip-error" role="alert" data-zip-error></div>
+                    </form>
+                }
+                <p class="home-browse">Or <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">browse all officials</a></p>
+            </div>
+            @if (Data.FeaturedVote is { } featured)
+            {
+                <section class="panel panel-padded home-featured" aria-labelledby="home-featured-title">
+                    <h2 id="home-featured-title"><a href="@(RootPath + PublicationProtocol.RecordPagePath(featured.RecordId))">@featured.Headline</a></h2>
+                    <p class="home-featured-meta muted small"><span>@featured.Chamber</span><span>@featured.VotedOn.ToString("d MMM yyyy")</span></p>
+                    <div class="home-featured-summary">
+                        @if (featured.Label is not null)
+                        {
+                            <span class="muted small">@featured.Label</span>
+                        }
+                        else if (featured.TextOrigin is PublishedTextOrigin.Model or PublishedTextOrigin.Code)
+                        {
+                            <span class="muted small">@PublishedRecordLabels.Wording(featured.TextOrigin).First().Value</span>
+                        }
+                        <p>@featured.Summary</p>
+                    </div>
+                    @if (featured.Yea is { } yea && featured.Nay is { } nay)
+                    {
+                        <p class="home-vote-counts"><span><b>@yea</b> Yea</span><span><b>@nay</b> Nay</span></p>
+                    }
+                    <p class="home-featured-result">@featured.ResultWords</p>
+                    @if (featured.BillLine is not null)
+                    {
+                        <p class="small muted">
+                            @featured.BillLine
+                            @if (featured.BillLineSource is not null)
+                            {
+                                <span>@featured.BillLineSource</span>
+                            }
+                        </p>
+                    }
+                </section>
+            }
+        </div>
+    </Hero>
+    <ChildContent>
+        @if (BrowserApiUrl is not null)
+        {
+            <Panel Title="Your officials" Padded="true" hidden data-zip-results>
+                <div role="status" data-zip-body></div>
+                <div data-zip-notes hidden>
+                    <p class="muted small">Source: U.S. Census Bureau</p>
+                    <p class="muted small">A ZIP Code Tabulation Area is a Census Bureau area. It is not a USPS ZIP code. Near a border, check your address with your House office.</p>
+                </div>
+            </Panel>
+        }
+        @if (Data.Votes.Length > 0)
+        {
+            <section class="home-preview-section" aria-labelledby="home-recent-title">
+                <h2 id="home-recent-title">Latest votes in Congress</h2>
+                <ul class="latest-rows" role="list">
+                    @foreach (var vote in Data.Votes)
+                    {
+                        <li>
+                            <div>
+                                <a href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))">
+                                    <span>@vote.Headline</span>
+                                    <span class="muted small">@vote.Chamber, @vote.VotedOn.ToString("d MMM yyyy")</span>
+                                </a>
+                                <p class="home-vote-counts"><span><b>@vote.Yea</b> Yea</span><span><b>@vote.Nay</b> Nay</span><span>@vote.ResultWords</span></p>
+                                @if (vote.BillLine is not null)
+                                {
+                                    <p class="small muted">
+                                        @vote.BillLine
+                                        @if (vote.BillLineSource is not null)
+                                        {
+                                            <span>@vote.BillLineSource</span>
+                                        }
+                                    </p>
+                                }
+                            </div>
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+        @if (Data.Brief is { } brief)
+        {
+            <p class="home-brief-line">
+                <span>This week:</span>
+                <a href="@(RootPath + PublicationProtocol.RecordPagePath(brief.RecordId))">@brief.Headline</a>
+                @if (brief.Label is not null)
+                {
+                    <span class="muted small">@brief.Label</span>
+                }
+            </p>
+        }
+    </ChildContent>
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public HomePageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+    [Parameter] public string? BrowserApiUrl { get; set; }
+
+    private static readonly string StateNames = JsonSerializer.Serialize(UsStates.NameByCode);
+    private static readonly string HouseOffices = JsonSerializer.Serialize(UsStates.HouseOfficeByNonStateCode);
+}

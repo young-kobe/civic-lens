@@ -7,12 +7,13 @@ using Microsoft.Net.Http.Headers;
 
 namespace CivicLens.PublicApi.Pages;
 
-/// <summary>The one owner of the cache rule of server pages. A page of one release, build, and public origin never changes. Its validator includes all three.
+/// <summary>The one owner of the cache rule of server pages. A page of one release, build, site origin, and browser API origin never changes.
 /// The edge keeps the page for 60 seconds, revalidates in the background for 10 minutes, and serves a kept copy for 24 hours when this service fails.
 /// The rule holds no reader data: a page never varies by cookie or by query.</summary>
-public sealed class PageCache(string buildId, PublicBaseUrl baseUrl)
+public sealed class PageCache(string buildId, PublicBaseUrl baseUrl, PublicBaseUrl? browserApiUrl = null)
 {
-    private readonly string originHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(baseUrl.Join(string.Empty))));
+    private readonly string originHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
+        $"{baseUrl.Join(string.Empty)}\n{browserApiUrl?.Join(string.Empty) ?? string.Empty}")));
 
     public const string CacheControl = "public, s-maxage=60, stale-while-revalidate=600, stale-if-error=86400";
 

@@ -57,13 +57,14 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new ZipDistrictStore(views));
         builder.Services.AddSingleton(new IssueStore(views));
         builder.Services.AddSingleton(new HomeStore(views));
+        builder.Services.AddSingleton(provider => new HomePageReader(provider.GetRequiredService<HomeStore>(), options.BrowserApiUrl));
         builder.Services.AddSingleton(new RelatedStore(views));
         builder.Services.AddSingleton(new ExecutiveActionStore(views));
         if (options.PublicBaseUrl is { } baseUrl)
         {
             builder.Services.AddSingleton(baseUrl);
             builder.Services.AddSingleton(new MembersStripSlot());
-            builder.Services.AddSingleton(new PageCache(buildId!, baseUrl));
+            builder.Services.AddSingleton(new PageCache(buildId!, baseUrl, options.BrowserApiUrl));
             builder.Services.AddSingleton<PageRenderer>();
             builder.Services.AddSingleton<ServerPageResponder>();
         }

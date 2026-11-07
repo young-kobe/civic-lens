@@ -16,7 +16,7 @@ Every page and component must pass seven owner tests:
 
 This page holds the design rules and the plan for the reader flows. [Publication](publication.md) owns the release data, the page text rules, and the `public_api` views. [Host](host.md) owns the component library rules. The [roadmap](../roadmap.md#later) step R-68 owns the order of the work.
 
-Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 palette, type foundation, focus colors, and reduced-motion behavior are implemented. The home bento layout, featured vote, and page-specific layouts remain planned. Each row below says what is implemented and what is planned.
+Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 palette, type foundation, focus colors, and reduced-motion behavior are implemented. The `/web` home route is a gated PublicApi server-rendered preview of the current published featured vote, recent votes, and optional brief. The existing static home remains live. The full home bento layout and page-specific layouts remain planned. Each row below says what is implemented and what is planned.
 
 ## Decisions
 
@@ -90,16 +90,18 @@ These decisions come from the component audit. The owner accepted every recommen
 - A fixed rule in code picks featured content. Enforcer: the featured vote rule, planned with the home step. Test: No test.
 - Every UI pull request has screenshots at 360 px and 1280 px, light and dark. Enforcer: pull request review. Test: No test.
 - Public pages read published data only, through `Publication.Contracts` and the `public_api` views. Enforcer: the project references and the view role. Test: `ArchitectureTests` and the `PublicApiViewsTests` role test.
+- The SSR home HTML and its ETag use the same `HomeAnswer` release snapshot. Enforcer: `HomePageReader` passes `HomePageData.Release` to the release-number responder overload. Test: `ServerPageTests.TheHomeRouteUsesTheHomeSnapshotReleaseAndAnswers503WithoutCacheWhenItIsMissing`.
+- Shared home HTML does not vary by cookie or ZIP query. Enforcer: the home component has no reader-specific input and the page cache is shared. Test: the same home route test.
 
 ## Behavior
 
-Implemented today: the static pages that [publication](publication.md#public-reader-experience) describes. The pages move to `PublicApi` server rendering one route at a time in R-68. Rows marked "planned" describe the accepted design, not code on main.
+Implemented today: the static pages that [publication](publication.md#public-reader-experience) describes. PublicApi also serves `/web` as the first gated server-rendered route when `CIVIC_LENS_PUBLIC_BASE_URL` is configured. It uses one `HomeAnswer` snapshot and its release number for the page validator. A missing active release returns 503 without cache headers. The browser ZIP form appears only when `CIVIC_LENS_PUBLIC_API_URL` is configured; configure that origin before a future live ZIP cutover. The existing static home remains the live route. Other pages move to PublicApi one route at a time in R-68. Rows marked "planned" describe accepted design that is not implemented.
 
 ### Reader flow matrix
 
 | # | Reader goal | Pages and components | Status |
 |---|---|---|---|
-| 1 | Find my members and what they did | Home ZIP form, member cards after a ZIP | Partial. Planned: the answer scrolls into view, cards show attendance and party-line counts (DR1) |
+| 1 | Find my members and what they did | Home ZIP form, member cards after a ZIP | Partial. Gated SSR home includes the existing ZIP flow when its browser API origin is configured. Planned: the answer scrolls into view, cards show attendance and party-line counts (DR1) |
 | 2 | See my member on an issue, from the member | Official page, issue chips, vote strip | Partial. Planned: strip marks link to the votes (DR2) |
 | 3 | See my member on an issue, from the issue | Issue page, "your members" section | Planned: each issue vote shows my members' casts |
 | 4 | Understand one vote | Vote page: AI summary, result card, "what a Yes meant", party bars, source fold | Partial. Planned: answer first, one fold (DR3) |
@@ -127,9 +129,9 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Site header, split nav, header search | All | Where can I go? | Fixed links, search service | Partial. Planned: split nav and search on every page, R-68 route steps |
 | Freshness line | All | How current is this? | `active_records`, newest `votes.voted_on` per chamber | Partial. Planned: newest vote day per chamber |
 | ZIP form and notices | Home | Who represents me? | `zip_districts`, `officials` | Implemented. Planned: busy state, scroll, focus |
-| Featured vote tile | Home | What did Congress just decide? | `votes`, `vote_members` | Planned: home step |
+| Featured vote tile | Home | What did Congress just decide? | `votes` | Partial. Gated SSR preview shows the published summary, wording label, result, and Yea/Nay counts. Planned: map and party bars |
 | Party tally bar | Home, vote, bill | How did the chamber split? | `votes` counts, `vote_members.party` | Planned: needs the party column |
-| Latest votes list | Home | What was voted on lately? | `votes` | Implemented. Planned: one AI label, no repeat of the featured vote |
+| Latest votes list | Home | What was voted on lately? | `votes` | Partial. Gated SSR preview shows up to two recent substantive votes per chamber, excluding the featured vote. Planned: one AI label |
 | Issue tiles | Home | Where do I start? | `issue_votes`, `issue_sponsors` | Planned: counts need #400 |
 | Break board | Home, boards | Who breaks from their party? | `official_party_lines` | Planned: view needed |
 | Latest executive actions | Home | What did the President sign? | `executive_actions` | Planned: needs #402 |
@@ -164,6 +166,8 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 
 The public pages read these `public_api` views today. They are `active_records`, `votes`, `vote_issues`, `vote_members`, `member_votes`, `bills`, `bill_sponsorships`, `bill_issues`, `officials`, `official_attendance`, `official_bill_counts`, `official_issue_counts`, `official_executive_actions`, `zip_districts`, and the six release name views. [Publication](publication.md#public-api-views) lists the columns.
 
+The home route reads `HomeAnswer` from one statement and maps it into presentation records beside the PublicWeb component. These are page inputs, not durable publication contracts. `CIVIC_LENS_PUBLIC_API_URL` is an optional bare origin for the browser ZIP lookup. The page cache validator includes the normalized public site and browser API origins because both affect the HTML.
+
 The views expose the stored member party and vote alignment, normalized member-vote side, party-majority cast, and official photo path. Member caucus comes from the matching chamber term in the active release on the vote date.
 
 Planned view columns and views, in the order that R-68 builds them:
@@ -187,10 +191,11 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 | Public page components, today | `src/CivicLens.Host/Publication` |
 | Static render of pages | `src/CivicLens.Host/Publication/ReleaseRenderer.cs` |
 | Public API and its views | `src/CivicLens.PublicApi` |
+| Gated SSR home page and inputs | `src/CivicLens.PublicWeb/Publication/HomePage.razor`, `HomePageData.cs`, `src/CivicLens.PublicApi/Home/HomePageReader.cs` |
 | Style files | `src/CivicLens.PublicWeb/wwwroot/css/theme.css`, `src/CivicLens.PublicWeb/wwwroot/css/app.css`, `src/CivicLens.PublicWeb/wwwroot/css/public.css` |
 | Presentation rules test | `tests/CivicLens.Tests/Architecture/PresentationArchitectureTests.cs` |
 
-`PublicApi` renders an opt-in not-found shell under `/web`. Successful reader routes still use static pages. Shared presentation components use `CivicLens.PublicWeb`, which references `Publication.Contracts` only.
+`PublicApi` renders the gated `/web` home route and the not-found shell under `/web`. Other successful reader routes still use static pages. Shared presentation components use `CivicLens.PublicWeb`, which references `Publication.Contracts` only.
 
 ## Limits and planned work
 
