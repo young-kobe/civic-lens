@@ -171,9 +171,9 @@ public sealed class PublishApprovedRecordsTests
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('a', ApprovedByCode('a'));
-        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        scenario.Publications.BillStatuses[action] = Status(action, "Passed House.");
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
-        scenario.Actions.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.");
+        scenario.Publications.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.");
 
         Assert.Equal(0, await Publisher(scenario).ExecuteAsync(default));
         Assert.Equal(0, await Publisher(scenario).ExecuteAsync(default));
@@ -189,7 +189,7 @@ public sealed class PublishApprovedRecordsTests
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('a', ApprovedByCode('a'));
-        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        scenario.Publications.BillStatuses[action] = Status(action, "Passed House.");
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
         var begun = scenario.Releases.BeginCount;
 
@@ -290,7 +290,7 @@ public sealed class PublishApprovedRecordsTests
         var replaced = scenario.Actions.Publishable.Keys.Single();
         var waiting = scenario.AddAction('b', ApprovedByCode('b'));
         AddUnpublished(scenario, waiting);
-        scenario.Actions.BillStatuses[replaced] = Status(replaced, "Became Public Law No: 119-1.");
+        scenario.Publications.BillStatuses[replaced] = Status(replaced, "Became Public Law No: 119-1.");
         var logger = new CapturingLogger<PublishApprovedRecords>();
 
         Assert.Equal(0, await Publisher(scenario, logger).ExecuteAsync(default));
@@ -306,7 +306,7 @@ public sealed class PublishApprovedRecordsTests
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('a', ApprovedByCode('a'));
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
-        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        scenario.Publications.BillStatuses[action] = Status(action, "Passed House.");
 
         await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(Code, new([], "k2")));
         var summary = await scenario.Publisher().ExecuteAsync(Code, new([], "k3") { StatusOnly = true });
@@ -675,9 +675,9 @@ public sealed class PublishApprovedRecordsTests
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('a', ApprovedByCode('a'));
-        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        scenario.Publications.BillStatuses[action] = Status(action, "Passed House.");
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
-        scenario.Actions.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.");
+        scenario.Publications.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.");
         return scenario;
     }
 
@@ -685,7 +685,7 @@ public sealed class PublishApprovedRecordsTests
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('a', ApprovedByCode('a'));
-        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.");
+        scenario.Publications.BillStatuses[action] = Status(action, "Passed House.");
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
         scenario.FillActiveReleaseToTheCap(freeSlots);
         return scenario;

@@ -86,10 +86,10 @@ public sealed class PublishApprovedRecords(PublishRelease publish, IPublicationS
         }
     }
 
-    // A bill can move while no record is ready. One release then shows the new status. The key names the release it builds on.
+    // A bill can move while no record is ready. One release then pins its new status or completed history. The key names the release it builds on.
     private async Task PublishStatusChangesAsync(PublicationState state, CancellationToken cancellationToken)
     {
-        if (!await publish.HasBillStatusChangeAsync(cancellationToken)) return;
+        if (!await publish.HasBillInputChangeAsync(cancellationToken)) return;
         try
         {
             _ = await publish.ExecuteAsync(Actor, new([], $"status-after-{state.LatestReleaseNumber}") { StatusOnly = true }, cancellationToken);

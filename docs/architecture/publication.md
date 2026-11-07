@@ -582,9 +582,19 @@ A statement, action, or vote page lists the relationships of the new release tha
 
 A record page that no new link cites, and that the publish does not add or replace, stays a hard link. A later publish that replaces a cited record lists its carried links.
 
+### Bill history snapshots
+
+Each release binds the newest completed Actions chain for each bill, independently of its newest status. A newer unfinished chain keeps the prior completed history. `PostgresPublicationStore.ReadBillInputsAsync` selects both inputs in one statement. A chain starts at zero, has no missing pages, and closes exactly once on its last page. Its observation time is the latest capture observation across those pages, through their exact extractions. Gate updates and job settlement times do not date the history.
+
+Publication prepares missing immutable copies before taking final review locks. `PublishedBillHistories` streams the copied actions inside Postgres with one atomic insert per capture. It loads no action object graph. A completed capture is copied once; later releases reuse it without reading or copying its body. A concurrent insert can cause a publication conflict, which the existing publication retry path handles. The final commit checks that each copy belongs to the exact published bill revision, then inserts its release binding. A capture completed after selection belongs to the next release. Older releases have no history binding; no current history is written into them.
+
+The number of a public law comes only from a whole official action matching `BillStatusMeaning.PublicLawNumberOf`. Missing evidence stays null. History is served through the API, with no new static history file. Completed empty history has an observation time and count zero; absent history has neither.
+
+Invariant: a release reads its immutable completed capture, never growing operational action rows. Enforcers: `BillHistoryCaptures`, `PublishedBillHistories`, and `ReleaseBillHistories`. Tests: `PostgresBillStreamTests.PreparingHistoryCopiesTypedActionsOnceAndReusesTheImmutableCopy`, `PublishBillHistoryTests.AHistoryCompletedAfterSelectionWaitsForTheNextRelease`, and `ActionHistoryEndpointsTests.PagesKeepTheSnapshotMetadataOrderAndNullableOfficialFieldsAndRejectAChangedRelease`.
+
 ### Bill status line
 
-An action page shows where the bill stands on Congress.gov. The status is not part of the record. A [bill gate](bills.md) stores the `latestAction` of each bill version that Civic Lens fetched. Each publish reads the status of every action record of the release in one query, `IActionReviewStore.ReadBillStatusesAsync`. The query joins the record to its bill and takes the newest version. It takes the read time from the creation time of the gate row. `ReleaseBillStatuses` writes the rows to `bill-status.json`, sorted by record ID. The commit of the release writes the same rows to the table `release_bill_statuses`, with the release number. The table has the columns `release_number`, `record_id`, `latest_action_text`, `latest_action_date`, and `read_at_utc_ticks`. The key is the release number and the record ID. The API view `bill_status` reads this table and not the gate, so the API shows the status that the active release pinned.
+An action page shows where the bill stands on Congress.gov. The status is not part of the record. A [bill gate](bills.md) stores the `latestAction` of each bill version that Civic Lens fetched. Each publish reads the status of every action record of the release in one snapshot query, `IPublicationStore.ReadBillInputsAsync`. The query joins the record to its bill and takes the newest version. It takes the read time from the creation time of the gate row. `ReleaseBillStatuses` writes the rows to `bill-status.json`, sorted by record ID. The commit of the release writes the same rows to the table `release_bill_statuses`, with the release number. The table has the columns `release_number`, `record_id`, `latest_action_text`, `latest_action_date`, and `read_at_utc_ticks`. The key is the release number and the record ID. The API view `bill_status` reads this table and not the gate, so the API shows the status that the active release pinned.
 
 The renderer receives the row of each action record. A carried action page is written again in three cases. Its text or date differs from the row of the previous release. The previous release has no row. Or the row is gone. The record file stays the same hard link. The store also returns the bill type of each action, as `ActionBillStatus`, because the meaning of "Received in the Senate" depends on it. The published row holds no bill type. The status refreshes in the database on the normal bill update path. It reaches the site in the next publish that rewrites the page. The worker publishes a status-only release when no record is ready; see [automatic publication](#automatic-publication).
 
@@ -602,7 +612,7 @@ The page shows three facts: "Latest action on Congress.gov", "Status read on", a
 | "Became Public Law No: 119-21." | "Became law: Public Law 119-21." |
 | Any other text, such as "Motion to reconsider laid on the table." | "Latest official action: " and the raw text |
 
-The rules run in the order of the table. A rule matches the whole text from its start. Any other ending, such as "Unfavorably", "Adversely", or "read the third time, and passed", shows the raw text.
+The rules run in the order of the table. A rule matches the whole text from its start. Any other ending, such as "Unfavorably", "Adversely", or "read the third time, and passed", shows the raw text. `PublicLawNumberOf` shares the public-law matcher with the meaning rule. It accepts ASCII digits and an optional final period, and rejects trailing text or a newline. Other action text returns no law number.
 
 The committee name stops at the first ". " or " (". A committee rule accepts only these tails. One is the final period. One is a citation in the form ". (text: ...)", ". (consideration: ...)", or ". (Sponsor introductory remarks on measure: ...)". The last is the House form with a second committee, and its fixed Speaker clause, shown below.
 
@@ -701,6 +711,8 @@ R-68 plans to serve public data from tables. The schema `public_api` holds reada
 - Tradeoff: the views live in the operational database. An outage of that database stops the live API, while the cached pages stay up.
 
 ## Storage and contracts
+
+`published_bill_histories` holds one completed capture identity, bill identity, observation time, action count, and optional public-law number. `published_bill_history_actions` holds its ordered typed actions. `release_bill_histories` binds a release and bill record to that copy. These tables are publication-owned. Operational job IDs stay internal. `public_api.bills` appends the public-law number and history metadata; `public_api.bill_actions` exposes only actions of the active published bills.
 
 The public views expose stored vote alignment, member party, normalized member-vote side, party-majority cast, and official photo paths. Member caucus comes from the matching chamber term in the active release on the vote date. Missing values remain null. The [API reference](search.md#api) lists the response fields.
 

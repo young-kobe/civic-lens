@@ -206,6 +206,8 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 
 ## Behavior
 
+`GET /v1/bills/{recordId}/actions` pages the completed history pinned by the active release. It returns release, optional history metadata, actions, and next cursor. Metadata contains the capture observation time and action count. Actions retain official position, date, optional time, text, type, action code, and source-system fields. The cursor is `ba.<release>.<position>`, with the existing default 20 and maximum 50 rows. A stale cursor returns 409 for a published bill. An absent bill returns 404 first, following sponsorship paging. `BillDetail` adds nullable history metadata, and bill rows add nullable `publicLaw`. Tests: `ActionHistoryEndpointsTests` and `ActionHistoryCursorTests`.
+
 `GET /v1/briefs/{recordId}` returns the active brief, its paragraphs, and its citations in one database statement. It reads public views only. Paragraph citation IDs preserve their order, and citation headlines come from the exact cited revisions. `PublishedBrief.ValidateContent` owns the shared content checks. Missing or invalid IDs and no active release return 404, following the existing bill-detail route. Tests: `BriefEndpointsTests.EndpointReturnsOrderedTextWithPinnedTargetHeadlinesAndRollbackRestoresAWithdrawnBrief` and `PublicApiBriefContentViewsTests`.
 
 

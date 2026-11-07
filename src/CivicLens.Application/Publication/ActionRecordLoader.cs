@@ -33,8 +33,6 @@ internal sealed class ActionRecordLoader(IActionReviewStore actions)
             (related, _, cancellationToken) => build.Renderer.RenderActionAsync(record, build.BillStatuses.GetValueOrDefault(recordId)?.Status, related, build.Catalog, cancellationToken));
     }
 
-    public Task<IReadOnlyList<ActionBillStatus>> BillStatusesAsync(ImmutableArray<string> recordIds, CancellationToken cancellationToken) =>
-        actions.ReadBillStatusesAsync(recordIds, cancellationToken);
 
     public override Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
         CancellationToken cancellationToken) =>

@@ -15,7 +15,7 @@ public sealed class PublishBillStatusTests
         var scenario = new PublicationScenario();
         var withStatus = scenario.AddAction('c');
         var without = scenario.AddAction('d');
-        scenario.Actions.BillStatuses[withStatus] = Status(withStatus, "Passed House.", new DateOnly(2026, 1, 28));
+        scenario.Publications.BillStatuses[withStatus] = Status(withStatus, "Passed House.", new DateOnly(2026, 1, 28));
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", withStatus, without));
 
@@ -33,7 +33,7 @@ public sealed class PublishBillStatusTests
         var scenario = new PublicationScenario();
         var withStatus = scenario.AddAction('c');
         var without = scenario.AddAction('d');
-        scenario.Actions.BillStatuses[withStatus] = Status(withStatus, "Passed House.", new DateOnly(2026, 1, 28));
+        scenario.Publications.BillStatuses[withStatus] = Status(withStatus, "Passed House.", new DateOnly(2026, 1, 28));
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", withStatus, without));
 
@@ -48,16 +48,16 @@ public sealed class PublishBillStatusTests
         var scenario = new PublicationScenario();
         var first = scenario.AddAction('c');
         var second = scenario.AddAction('d');
-        scenario.Actions.BillStatuses[first] = Status(first, "Passed House.", new DateOnly(2026, 1, 28));
+        scenario.Publications.BillStatuses[first] = Status(first, "Passed House.", new DateOnly(2026, 1, 28));
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", first));
         scenario.Events.Clear();
 
-        scenario.Actions.BillStatuses[first] = Status(first, "Passed House.", new DateOnly(2026, 1, 28), Observed.AddDays(3));
+        scenario.Publications.BillStatuses[first] = Status(first, "Passed House.", new DateOnly(2026, 1, 28), Observed.AddDays(3));
         var checkedOnly = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", second));
         var renderedAfterCheck = scenario.Events.Count(entry => entry == "render c");
         scenario.Events.Clear();
 
-        scenario.Actions.BillStatuses[first] = Status(first, "Became Public Law No: 119-1.", new DateOnly(2026, 2, 1));
+        scenario.Publications.BillStatuses[first] = Status(first, "Became Public Law No: 119-1.", new DateOnly(2026, 2, 1));
         var moved = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3"));
 
         Assert.Equal(0, renderedAfterCheck);
@@ -74,7 +74,7 @@ public sealed class PublishBillStatusTests
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", action));
 
         await Assert.ThrowsAsync<ArgumentException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2")));
-        scenario.Actions.BillStatuses[action] = Status(action, "Introduced in House", new DateOnly(2026, 1, 3));
+        scenario.Publications.BillStatuses[action] = Status(action, "Introduced in House", new DateOnly(2026, 1, 3));
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3"));
 
         Assert.Equal(action, Assert.Single(ReadStatuses(scenario.Releases.Directories[summary.DirectoryName]).Records).RecordId);
@@ -88,7 +88,7 @@ public sealed class PublishBillStatusTests
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", action));
         var first = scenario.Publications.LastCommit!.DirectoryName;
         scenario.Releases.Directories[first].Remove(PublicationProtocol.BillStatusPath);
-        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.", new DateOnly(2026, 1, 28));
+        scenario.Publications.BillStatuses[action] = Status(action, "Passed House.", new DateOnly(2026, 1, 28));
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
 
@@ -113,12 +113,12 @@ public sealed class PublishBillStatusTests
         var scenario = new PublicationScenario();
         var statement = scenario.AddStatement('b');
         var action = scenario.AddAction('d');
-        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.", new DateOnly(2026, 1, 28));
+        scenario.Publications.BillStatuses[action] = Status(action, "Passed House.", new DateOnly(2026, 1, 28));
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest(
             [new(PublishedRecordKind.Statement, statement), new(PublishedRecordKind.Action, action)], "k1"));
         var link = scenario.AddRelationship('e', statement, action);
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([new(PublishedRecordKind.Relationship, link)], "k2"));
-        scenario.Actions.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.", new DateOnly(2026, 2, 1));
+        scenario.Publications.BillStatuses[action] = Status(action, "Became Public Law No: 119-1.", new DateOnly(2026, 2, 1));
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3"));
 
@@ -134,7 +134,7 @@ public sealed class PublishBillStatusTests
         var first = scenario.AddAction('c');
         var second = scenario.AddAction('d');
         var kept = scenario.AddAction('f');
-        foreach (var id in new[] { first, second, kept }) scenario.Actions.BillStatuses[id] = Status(id, "Passed House.", new DateOnly(2026, 1, 28));
+        foreach (var id in new[] { first, second, kept }) scenario.Publications.BillStatuses[id] = Status(id, "Passed House.", new DateOnly(2026, 1, 28));
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", first, second, kept));
 
         var inThisPublish = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", first));
@@ -153,9 +153,9 @@ public sealed class PublishBillStatusTests
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('c');
-        scenario.Actions.BillStatuses[action] = Status(action, "Passed House.", new DateOnly(2026, 1, 28));
+        scenario.Publications.BillStatuses[action] = Status(action, "Passed House.", new DateOnly(2026, 1, 28));
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", action));
-        scenario.Actions.BillStatuses.Clear();
+        scenario.Publications.BillStatuses.Clear();
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
 

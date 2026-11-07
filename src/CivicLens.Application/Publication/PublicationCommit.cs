@@ -21,4 +21,6 @@ public sealed record PublicationCommit(int ReleaseNumber, int? BaseReleaseNumber
 
     /// <summary>The bill statuses that the release pins. They equal the rows of the status file of the release.</summary>
     public ImmutableArray<PublishedBillStatus> BillStatuses { get; init; } = [];
+
+    public ImmutableArray<BillHistoryBinding> BillHistories { get; init; } = [];
 }
