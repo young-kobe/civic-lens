@@ -31,9 +31,9 @@ public sealed class OfficialStore(NpgsqlDataSource views)
           FROM public_api.release_official_terms WHERE official_id = @id ORDER BY "position"
         """;
 
-    private const string AttendanceSql = """
+    private const string AttendanceSql = $"""
         SELECT chamber, congress, held, missed, first_voted_on, last_voted_on
-          FROM public_api.official_attendance WHERE official_id = @id ORDER BY congress DESC, chamber
+          FROM ({OfficialAttendanceReader.LatestSql}) latest ORDER BY chamber
         """;
 
     private const string BillsSql = """
@@ -88,7 +88,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         var terms = await ReadTermsAsync(connection, officialId, cancellationToken);
         var attendance = await ReadAttendanceAsync(connection, officialId, cancellationToken);
         var congress = attendance.Count == 0 ? (int?)null : attendance[0].Congress;
-        var missed = attendance.Where(figure => figure.Congress == congress).ToArray();
+        var missed = attendance.ToArray();
         var bills = congress is { } current ? await ReadBillsAsync(connection, officialId, current, cancellationToken) : null;
         var issues = congress is { } newest ? await ReadIssuesAsync(connection, officialId, newest, cancellationToken) : null;
         var executive = official.Kind == PublishedOfficeKind.Executive ? await ReadExecutiveActionsAsync(connection, officialId, cancellationToken) : null;
@@ -149,15 +149,12 @@ public sealed class OfficialStore(NpgsqlDataSource views)
     private static async Task<List<MissedVotesFigure>> ReadAttendanceAsync(NpgsqlConnection connection, string officialId, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(AttendanceSql, connection);
-        command.Parameters.AddWithValue("id", officialId);
+        command.Parameters.AddWithValue("attendanceIds", new[] { officialId });
         var figures = new List<MissedVotesFigure>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var chamber = ViewColumns.Enum<PublishedChamber>(reader, 0);
-            var congress = reader.GetInt32(1);
-            figures.Add(new(chamber, congress, ViewColumns.Number(reader, 3)!.Value, ViewColumns.Number(reader, 2)!.Value,
-                reader.GetFieldValue<DateOnly>(4), reader.GetFieldValue<DateOnly>(5), OfficialScopes.MissedVotes(chamber, congress)));
+            figures.Add(OfficialAttendanceReader.ReadFigure(reader, 0));
         }
         return figures;
     }

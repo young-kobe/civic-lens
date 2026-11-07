@@ -233,6 +233,24 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task DetailKeepsBothChambersAtTheNewestAttendanceCongressAndOmitsOlderCongresses()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('a', "2026-01-01") { Congress = 118, Casts = ["Not Voting"] },
+            new SeededVote('b', "2026-02-01") { Congress = 120, Casts = ["Not Voting"] },
+            new SeededVote('c', "2026-02-02") { Congress = 120, Chamber = "Senate", Casts = ["Yea"] });
+
+        using var detail = await GetAsync(host, "/v1/officials/p0");
+
+        Assert.Equal(120, detail.RootElement.GetProperty("congress").GetInt32());
+        var figures = detail.RootElement.GetProperty("missedVotes");
+        Assert.Equal(["house", "senate"], figures.EnumerateArray().Select(figure => figure.GetProperty("chamber").GetString()));
+        Assert.All(figures.EnumerateArray(), figure => Assert.Equal(120, figure.GetProperty("congress").GetInt32()));
+        Assert.Equal(1, figures[0].GetProperty("missed").GetInt32());
+    }
+
+    [Fact]
     public async Task MissedVotesAndCosponsoredBillsFollowTheCastsAndTheWithdrawnCosponsorshipsOfTheNewestCongress()
     {
         await using var host = await StartAsync(withVotesAndBills: true);
