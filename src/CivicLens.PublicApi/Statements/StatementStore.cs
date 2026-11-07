@@ -64,8 +64,14 @@ public sealed class StatementStore(NpgsqlDataSource views)
 
     private static StatementRow ReadRow(DbDataReader reader) => new()
     {
-        RecordId = reader.GetString(1), RevisionNumber = reader.GetInt32(2), StatementDate = ViewColumns.Date(reader, 3),
-        Headline = reader.GetString(4), Summary = reader.GetString(5), TextOrigin = ViewColumns.Enum<PublishedTextOrigin>(reader, 6),
-        Label = ViewColumns.Text(reader, 7), SpeakerIds = reader.GetFieldValue<string[]>(8), IssueIds = reader.GetFieldValue<string[]>(9)
+        RecordId = reader.GetString(1),
+        RevisionNumber = reader.GetInt32(2),
+        StatementDate = ViewColumns.Date(reader, 3),
+        Headline = reader.GetString(4),
+        Summary = reader.GetString(5),
+        TextOrigin = ViewColumns.Enum<PublishedTextOrigin>(reader, 6),
+        Label = ViewColumns.Text(reader, 7),
+        SpeakerIds = reader.GetFieldValue<string[]>(8),
+        IssueIds = reader.GetFieldValue<string[]>(9)
     };
 }
