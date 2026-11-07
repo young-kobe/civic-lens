@@ -181,9 +181,10 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
             INSERT INTO release_issues (release_number, issue_id, name, definition)
             VALUES (1, 'health', 'Health before', 'Health policy'),
                    (2, 'health', 'Health after', 'Health policy');
-            CREATE FUNCTION wait_for_home_issues() RETURNS boolean LANGUAGE plpgsql AS $function$
+            CREATE FUNCTION wait_for_home_issues() RETURNS boolean LANGUAGE plpgsql
+                SECURITY DEFINER SET search_path = pg_catalog AS $function$
             BEGIN
-                PERFORM pg_advisory_xact_lock(hashtextextended('home-issue-snapshot', 0));
+                PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('home-issue-snapshot', 0));
                 RETURN true;
             END;
             $function$;
