@@ -110,7 +110,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
             new SeededVote('e', "2026-05-04") { RollCall = 5, Kind = "Rule" },
             new SeededVote('f', "2026-05-05") { RollCall = 6, BillType = null, BillNumber = null }
         };
-        SeededBill[] bills = [new SeededBill('x', "2026-03-01") { BillNumber = 1, BillLine = "Current line." }];
+        SeededBill[] bills = [new SeededBill('0', "2026-03-01") { BillNumber = 1, BillLine = "Current line." }];
         await using var host = await StartAsync(votes, bills);
 
         var answer = await GetAsync(host);
@@ -216,7 +216,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         var expected = votes.Take(2).Reverse().Select(vote => lines.Of(EntryOf(vote))).ToArray();
         var served = answer.GetProperty("votes").EnumerateArray().Select(vote => vote.GetProperty("billLine").GetString()).ToArray();
         Assert.Equal(expected, served);
-        Assert.Equal(new string?[] { null, "Line c." }, served);
+        Assert.Equal(new string?[] { "Line c.", null }, served);
     }
 
     [Fact]
