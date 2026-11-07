@@ -75,7 +75,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
-        foreach (var view in new[] { "active_records", "votes", "vote_members", "member_votes", "vote_issues", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas",
+        foreach (var view in new[] { "active_records", "votes", "vote_members", "member_votes", "vote_issues", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas",
             "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "statement_speakers", "statements", "executive_actions", "executive_action_notices", "withdrawals", "withdrawal_corrections" })
         {
             // A view with a join or a group cannot take a write at all, so Postgres refuses with 55000 before it checks a privilege.
@@ -125,6 +125,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"official_bill_counts v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_executive_actions v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_issue_counts v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"official_party_lines v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"officials v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"record_headlines v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"record_links v {Owner} {Role}:SELECT {{security_barrier=true}}",

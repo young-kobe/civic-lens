@@ -1,5 +1,7 @@
 using System.Net;
 using System.Text.Json;
+using CivicLens.Application.Publication;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
@@ -59,6 +61,24 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
 
     private static string[] Ids(JsonDocument page) =>
         [.. page.RootElement.GetProperty("officials").EnumerateArray().Select(row => row.GetProperty("officialId").GetString()!)];
+
+    private static PublishedOfficialVote PartyVote(char id, PublishedChamber chamber, int congress, string votedOn, string cast, string party, string partyMajority) => new()
+    {
+        RecordId = new(id, 64),
+        Chamber = chamber,
+        Congress = congress,
+        Session = 1,
+        RollCallNumber = id,
+        VotedOn = DateOnly.Parse(votedOn),
+        Cast = cast,
+        Party = party,
+        PartyMajority = partyMajority,
+        Result = "Passed",
+        SplitVote = true,
+        Headline = "Vote",
+        Kind = PublishedVoteKind.Passage,
+        IssueIds = []
+    };
 
     [Fact]
     public async Task OfficialsComeInNameOrderWithTheLatestTermTheRecordCountAndTheScopeOfTheCount()
@@ -248,6 +268,7 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
         Assert.Equal(["house", "senate"], figures.EnumerateArray().Select(figure => figure.GetProperty("chamber").GetString()));
         Assert.All(figures.EnumerateArray(), figure => Assert.Equal(120, figure.GetProperty("congress").GetInt32()));
         Assert.Equal(1, figures[0].GetProperty("missed").GetInt32());
+        Assert.Empty(detail.RootElement.GetProperty("partyLines").EnumerateArray());
     }
 
     [Fact]
@@ -263,6 +284,57 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
         using var other = await GetAsync(host, "/v1/officials/p3");
         Assert.Equal(["house 0/2", "senate 1/1"], other.RootElement.GetProperty("missedVotes").EnumerateArray().Select(row => $"{row.GetProperty("chamber").GetString()} {row.GetProperty("missed").GetInt32()}/{row.GetProperty("held").GetInt32()}"));
         Assert.Equal(0, other.RootElement.GetProperty("bills").GetProperty("cosponsored").GetInt32());
+    }
+
+    [Fact]
+    public async Task PartyLinesUsePinnedPartiesAndOnlyCastSubstantiveSplitVotesOfTheAttendanceCongress()
+    {
+        await using var host = await StartAsync(withVotesAndBills: true);
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, new SeededVote('e', "2026-02-07")
+        {
+            Casts = ["Yea", "Not Voting", "Yea", "Present", "Nay"],
+            RollCall = 5
+        }, new SeededVote('f', "2026-02-08")
+        {
+            Casts = ["Yea", "Not Voting", "No", "Present", "Nay"],
+            RollCall = 6
+        });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            UPDATE vote_member_list_entries SET party = CASE person_id
+                WHEN 'p0' THEN 'Democrat' WHEN 'p1' THEN 'Republican' WHEN 'p2' THEN 'Republican' WHEN 'p3' THEN 'Democrat' ELSE 'Unknown' END;
+            UPDATE vote_member_list_entries SET party = 'Democrat' WHERE list_id IN ('{new string('e', 64)}', '{new string('f', 64)}') AND person_id = 'p2';
+            UPDATE vote_revisions SET columns_written = true, alignment = 'Split', democrat_majority = 'Yea', republican_majority = 'Nay'
+              WHERE record_id IN ('{new string('a', 64)}', '{new string('c', 64)}', '{new string('d', 64)}', '{new string('e', 64)}', '{new string('f', 64)}');
+            """);
+
+        using var detail = await GetAsync(host, "/v1/officials/p1");
+        var root = detail.RootElement;
+
+        var partyLines = root.GetProperty("partyLines").EnumerateArray().ToArray();
+        Assert.Single(partyLines);
+        Assert.Equal("senate", partyLines[0].GetProperty("chamber").GetString());
+        Assert.Equal("Republican", partyLines[0].GetProperty("party").GetString());
+        Assert.Equal([0, 1, 1], [partyLines[0].GetProperty("withParty").GetInt32(), partyLines[0].GetProperty("againstParty").GetInt32(), partyLines[0].GetProperty("cast").GetInt32()]);
+        Assert.Equal("2026-02-05", partyLines[0].GetProperty("firstVotedOn").GetString());
+        Assert.Contains("Congress 119", partyLines[0].GetProperty("scope").GetString(), StringComparison.Ordinal);
+        using var switched = await GetAsync(host, "/v1/officials/p2");
+        var switchedLines = switched.RootElement.GetProperty("partyLines").EnumerateArray().ToArray();
+        PublishedOfficialVote[] expectedVotes =
+        [
+            PartyVote('a', PublishedChamber.House, 119, "2026-02-01", "Nay", "Republican", "Nay"),
+            PartyVote('c', PublishedChamber.Senate, 119, "2026-02-05", "Yea", "Republican", "Nay"),
+            PartyVote('d', PublishedChamber.House, 118, "2024-05-01", "Yea", "Republican", "Nay"),
+            PartyVote('e', PublishedChamber.House, 119, "2026-02-07", "Yea", "Democrat", "Yea"),
+            PartyVote('f', PublishedChamber.House, 119, "2026-02-08", "No", "Democrat", "Yea")
+        ];
+        var expectedPartyLines = VotesWithParty.Of(expectedVotes.Where(vote => vote.Congress == 119));
+        Assert.Equal(expectedPartyLines.Select(row => $"{row.Chamber.ToString().ToLowerInvariant()} {row.Party} {row.Matched} {row.Breaks.Length} {row.Cast}"), switchedLines.Select(row =>
+            $"{row.GetProperty("chamber").GetString()} {row.GetProperty("party").GetString()} {row.GetProperty("withParty").GetInt32()} {row.GetProperty("againstParty").GetInt32()} {row.GetProperty("cast").GetInt32()}"));
+        Assert.Equal(["2026-02-07", "2026-02-01", "2026-02-05"], switchedLines.Select(row => row.GetProperty("firstVotedOn").GetString()));
+        Assert.Equal(["2026-02-08", "2026-02-01", "2026-02-05"], switchedLines.Select(row => row.GetProperty("lastVotedOn").GetString()));
+        using var other = await GetAsync(host, "/v1/officials/p3");
+        Assert.Empty(other.RootElement.GetProperty("partyLines").EnumerateArray());
     }
 
     [Fact]

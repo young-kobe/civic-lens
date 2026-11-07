@@ -156,7 +156,8 @@ The owner accepted these designs. Each item holds its choices until the code and
       - [x] `withdrawals` and ordered `withdrawal_corrections` views plus `GET /v1/records/{kind}/{recordId}/withdrawal`
     - [x] View PR 6: add `briefs` paragraphs and citations, `brief_paragraphs` and `brief_citations`
     - [ ] View PR 7, executive actions: `executive_actions`, `executive_action_notices`, and their API endpoint are implemented. Add `executive_action_links` for amends and revoked-by
-    - [ ] View PR 8: add `official_party_lines` and `party_agreement`, and the party-break and party-line boards from them
+    - [x] View PR 8: add `official_party_lines` to the official detail API for the newest Congress, grouped by chamber and pinned member party
+    - [ ] View PR 8: add `party_agreement` and the party-break and party-line boards
   - [ ] Render pages in `PublicApi` with static server rendering from the views. Cloudflare caches each page for each release: the ETag names the release, build, and normalized public base URL, and `stale-if-error` keeps a copy for 24 hours. Personal parts are HTML fragments after a ZIP, and the ZIP stays on the device
   - [ ] Move the routes one at a time, in the order of the reader flows: home and members, the members strip, votes, bills, official and President, issues, other kinds, then lists, boards, search, and the fixed pages
     - [ ] Shell: split nav (Votes, Bills, Executive actions, Statements, Issues), current-section mark, breadcrumbs on inner pages, footer report link that names the record, and the yellow, ink, and record-type tokens of the [public site](architecture/public-site.md#decisions) theme. The shared `PublicPage` already provides header search to all its existing callers

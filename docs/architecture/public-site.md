@@ -44,7 +44,7 @@ Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 pa
 
 These decisions come from the component audit. The owner accepted every recommendation, the top 10 changes, and every strengthen and merge verdict.
 
-- DR1: Member cards show attendance and party-line counts with their bases. They show no bare Yes and No totals. Until the party-line view exists, the card drops that line.
+- DR1: Member cards show attendance and party-line counts with their bases. They show no bare Yes and No totals. The view is available; the card figure remains planned until its UI integration.
 - DR2: The official vote strip marks only a vote against most of the party and a missed vote. Each mark is a link. The caption names the scope.
 - DR3: A vote page puts the answer first. The fact rows and the source texts go into one "Check the source" fold on the same page.
 - DR4: The first map layer colors by cast only. The party layer waits for its own step. Then the owner picks the party colors.
@@ -139,12 +139,12 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Party tally bar | Home, vote, bill | How did the chamber split? | `votes` counts, `vote_members.party` | Planned: bars; the party column is available |
 | Latest votes list | Home | What was voted on lately? | `votes` | Partial. Gated SSR preview shows up to two recent substantive votes per chamber, excluding the featured vote. Planned: one AI label |
 | Issue tiles | Home | Where do I start? | `issue_votes`, `issue_sponsors` | Planned: page content and counts; the views and issue data endpoint are implemented |
-| Break board | Home, boards | Who breaks from their party? | `official_party_lines` | Planned: view needed |
+| Break board | Home, boards | Who breaks from their party? | `official_party_lines` | Official figure served. Board endpoint and UI planned |
 | Latest executive actions | Home | What did the President sign? | `executive_actions` | Planned: grouped home rows; executive action data is served by the API |
-| Member card | After a ZIP | Who is my member? | `officials`, `official_attendance`, `official_bill_counts` | Portrait, seat, party, term end, and scoped attendance implemented. Party-line figure remains planned |
+| Member card | After a ZIP | Who is my member? | `officials`, `official_attendance`, `official_party_lines`, `official_bill_counts` | Portrait, seat, party, term end, and scoped attendance implemented. Official party-line data is available; card figure remains planned |
 | Member votes list | After a ZIP, official | How did my members vote? | `member_votes` | Implemented. Planned: issue filter chips |
 | Compare members | Compare page | How do my members differ? | `official_*` views, `member_votes` | Planned |
-| Profile header, key figures | Official | Who is this? | `officials`, `official_attendance` | Implemented. Planned: merged party figures |
+| Profile header, key figures | Official | Who is this? | `officials`, `official_attendance`, `official_party_lines` | API data implemented. Profile UI integration remains planned. |
 | Vote strip | Official | What is their voting pattern? | `member_votes.side` | Planned: marks only breaks and missed votes |
 | Statement and vote pairs | Official, vote | Did words match votes? | `record_links` | Planned: page content; related-record data is served by the API |
 | Vote header and AI summary | Vote | What was this vote? | `votes` headline, summary, label | Implemented. Planned: "what this vote decides" |
@@ -170,7 +170,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 
 ## Storage and contracts
 
-The public read API and the gated SSR home read `public_api` views. Implemented data covers votes, bills, officials, attendance, ZIP districts, issues, related records, executive actions, and briefs. It includes bill status and action history, public-law numbers, vote-to-bill links, relationship reasons, executive action notices, and brief paragraphs and citations. Most public pages still read static releases. [Publication](publication.md#public-api-views) owns the view rules and column reference.
+The public read API and the gated SSR home read `public_api` views. Implemented data covers votes, bills, officials, attendance, party-line figures, ZIP districts, issues, related records, executive actions, and briefs. It includes bill status and action history, public-law numbers, vote-to-bill links, relationship reasons, executive action notices, and brief paragraphs and citations. Most public pages still read static releases. [Publication](publication.md#public-api-views) owns the view rules and column reference.
 
 `public_api.bills` exposes the bill summary, its text-origin label, and the cited bill-text summary metadata (`why_it_matters`, version name and date, and characters read and total). The view can serve these fields; the bill-text model setting is off by default, and activation awaits sample approval. See [Publication](publication.md#public-api-views) for the view contract.
 
@@ -180,7 +180,7 @@ The views expose the stored member party and vote alignment, normalized member-v
 
 Remaining planned view columns and views, in the order that R-68 builds them:
 
-- Party lines: `official_party_lines` and `party_agreement`.
+- Party lines: `party_agreement` and the board endpoints. The official party-line view is implemented.
 - Votes: a second AI text column for "what this vote decides".
 - Bills: `bills.crs_summary_text`, `bills.crs_summary_version`, and `bill_key_terms`.
 - Issues: party line-up data.
