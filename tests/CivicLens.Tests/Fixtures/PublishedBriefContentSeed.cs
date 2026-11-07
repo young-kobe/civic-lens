@@ -10,7 +10,7 @@ internal static class PublishedBriefContentSeed
         var seeder = new BriefWorldSeeder(connectionString);
         await seeder.StatementAsync(BriefFixtures.CitedStatement, 1, "Pinned statement headline");
         await seeder.StatementAsync(BriefWorldSeeder.StatementId('3'), 1, "Suggestion target headline");
-        await seeder.ActionAsync(BriefFixtures.CitedAction, 1, 7);
+        await seeder.ActionAsync(BriefFixtures.CitedAction, 1, 7, "warren");
         await seeder.DocumentChangeAsync(BriefFixtures.CitedDocumentChange, 1, "Pinned document headline");
         var revision = BriefFixtures.ReviewableRevision() with
         {
@@ -28,7 +28,7 @@ internal static class PublishedBriefContentSeed
             BriefWorldSeeder.Binding(PublishedRecordKind.DocumentChange, BriefFixtures.CitedDocumentChange, 1));
         await seeder.AppendRevisionAsync(revision with { RevisionNumber = 2, Headline = "Unpublished brief revision" });
         await seeder.StatementAsync(BriefFixtures.CitedStatement, 2, "New unpublished statement headline");
-        await seeder.ActionAsync(BriefFixtures.CitedAction, 2, 7);
+        await seeder.ActionAsync(BriefFixtures.CitedAction, 2, 7, "warren");
         await seeder.DocumentChangeAsync(BriefFixtures.CitedDocumentChange, 2, "New unpublished document headline");
     }
 }
