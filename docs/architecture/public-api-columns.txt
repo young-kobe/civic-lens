@@ -97,6 +97,8 @@ member_votes vote_cast
 member_votes issue_ids
 member_votes party_majority_cast
 member_votes side
+member_votes party
+member_votes alignment
 vote_issues record_id
 vote_issues revision_number
 vote_issues issue_id
@@ -258,6 +260,15 @@ official_attendance held
 official_attendance missed
 official_attendance first_voted_on
 official_attendance last_voted_on
+official_party_lines official_id
+official_party_lines chamber
+official_party_lines congress
+official_party_lines party
+official_party_lines with_party
+official_party_lines against_party
+official_party_lines cast_count
+official_party_lines first_voted_on
+official_party_lines last_voted_on
 official_bill_counts official_id
 official_bill_counts congress
 official_bill_counts sponsored
