@@ -52,7 +52,7 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
-        Assert.Contains("private, no-store", response.Headers.CacheControl?.ToString());
+        AssertPrivate(response);
         var fragment = document.QuerySelector("[data-zip-member-fragment]")!;
         Assert.Equal("36009", fragment.GetAttribute("data-zcta"));
         Assert.Equal("1", fragment.GetAttribute("data-release"));
@@ -143,8 +143,18 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
         using var response = await host.Client.GetAsync(path);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
-        Assert.Contains("private, no-store", response.Headers.CacheControl?.ToString());
+        AssertPrivate(response);
         return new HtmlParser().ParseDocument(await response.Content.ReadAsStringAsync());
+    }
+
+    private static void AssertPrivate(HttpResponseMessage response)
+    {
+        var cache = response.Headers.CacheControl;
+        Assert.NotNull(cache);
+        Assert.True(cache.Private);
+        Assert.True(cache.NoStore);
+        Assert.False(cache.Public);
+        Assert.Null(cache.MaxAge);
     }
 
     private static async Task AssertProblemAsync(ApiHost host, string path, HttpStatusCode status)
@@ -152,6 +162,6 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
         using var response = await host.Client.GetAsync(path);
         Assert.Equal(status, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
-        Assert.Contains("private, no-store", response.Headers.CacheControl?.ToString());
+        AssertPrivate(response);
     }
 }
