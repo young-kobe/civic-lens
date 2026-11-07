@@ -94,7 +94,7 @@ These decisions come from the component audit. The owner accepted every recommen
 - Shared home HTML does not vary by cookie or ZIP query. Enforcer: the home component has no reader-specific input and the page cache is shared. Test: the same home route test.
 - The ZIP lookup restores its controls after the current request, including a malformed success response. An older response cannot replace a newer result. Enforcer: `initZipLookup`. No automated test.
 - The browser remembers only a validated five-digit ZIP after its current lookup answer renders. It stores no member details; the home page re-queries published current data. Enforcer: `initRememberedMembers` and `initZipLookup`. No automated test.
-- Shared page HTML contains no remembered ZIP or personal lookup results. Enforcer: `PublicPage` emits empty hooks and browser code reads device storage. Test: the same home route test covers the shared home response; no test covers static page HTML.
+- Shared page HTML contains no remembered ZIP or personal lookup results. Enforcer: `PublicPage` emits empty hooks and browser code reads device storage. Tests: `HomePageTests.TheRememberedMembersLinkTargetsTheLookupHeadingInSharedMarkup` and `PublishedHomePageTests.TheResultPanelIsHiddenUntilALookupAndCreditsTheCensusBureauAndSaysAZctaIsNotAZipCode`.
 
 ## Behavior
 

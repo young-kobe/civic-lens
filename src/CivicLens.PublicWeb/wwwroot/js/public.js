@@ -235,7 +235,7 @@
         const submit = form.querySelector("[type=submit]");
         const problem = form.querySelector("[data-zip-error]");
         const heading = panel.querySelector("h2");
-        const answerFragment = "#" + panel.id;
+        const answerFragment = "#" + heading.id;
         heading.tabIndex = -1;
         const houseOffices = JSON.parse(form.dataset.houseOffices);
         const stateName = code => states[code] ?? code;

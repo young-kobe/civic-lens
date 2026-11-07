@@ -56,14 +56,30 @@ public sealed class HomePageTests
         Assert.Equal(Root + PublicationProtocol.RecordPagePath(id), line.QuerySelector("a")!.GetAttribute("href"));
     }
 
-    private static async Task<IDocument> RenderAsync(HomePageData data)
+    [Fact]
+    public async Task TheRememberedMembersLinkTargetsTheLookupHeadingInSharedMarkup()
+    {
+        var page = await RenderAsync(new(7, Featured, [], null), "https://api.civic-lens.test");
+        var chip = page.QuerySelector("[data-your-members]")!;
+        var heading = page.QuerySelector("[data-zip-results] h2")!;
+        var link = chip.QuerySelector("a")!;
+
+        Assert.NotEmpty(heading.Id!);
+        Assert.Equal("#" + heading.Id, new Uri(link.GetAttribute("href")!).Fragment);
+        Assert.Single(page.QuerySelectorAll("#" + heading.Id));
+        Assert.True(chip.HasAttribute("hidden"));
+        Assert.Empty(page.QuerySelector("[data-zip-body]")!.Children);
+        Assert.Null(page.QuerySelector("input[name=zip]")!.GetAttribute("value"));
+    }
+
+    private static async Task<IDocument> RenderAsync(HomePageData data, string? browserApiUrl = null)
     {
         await using var services = new ServiceCollection().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
         var html = await renderer.Dispatcher.InvokeAsync(async () =>
         {
             var output = await renderer.RenderComponentAsync<HomePage>(ParameterView.FromDictionary(
-                new Dictionary<string, object?> { [nameof(HomePage.Data)] = data, [nameof(HomePage.RootPath)] = Root }));
+                new Dictionary<string, object?> { [nameof(HomePage.Data)] = data, [nameof(HomePage.RootPath)] = Root, [nameof(HomePage.BrowserApiUrl)] = browserApiUrl }));
             return output.ToHtmlString();
         });
         return await new HtmlParser().ParseDocumentAsync(html);
