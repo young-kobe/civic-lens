@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using CivicLens.Tests.Infrastructure.Collection;
+using CivicLens.Tests.PublicApi.Bills;
 
 namespace CivicLens.Tests.PublicApi.Votes;
 
@@ -63,6 +64,7 @@ public sealed class VoteEndpointsTests(PostgresCollection postgres)
     public async Task AVoteRowShowsTheViewFieldsInTheWordingOfTheReleaseFiles()
     {
         await using var host = await StartWithVotesAsync(E);
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('a', "2026-01-01") { BillNumber = 1 });
 
         using var page = await GetAsync(host, "/v1/votes");
 
@@ -77,6 +79,7 @@ public sealed class VoteEndpointsTests(PostgresCollection postgres)
         Assert.Equal("passage", vote.GetProperty("kind").GetString());
         Assert.Equal("hr", vote.GetProperty("billType").GetString());
         Assert.Equal(1, vote.GetProperty("billNumber").GetInt32());
+        Assert.Equal(new string('a', 64), vote.GetProperty("billRecordId").GetString());
         Assert.Equal("Headline e", vote.GetProperty("headline").GetString());
         Assert.Equal("Summary e", vote.GetProperty("summary").GetString());
         Assert.Equal("model", vote.GetProperty("textOrigin").GetString());
@@ -85,6 +88,9 @@ public sealed class VoteEndpointsTests(PostgresCollection postgres)
         Assert.Equal("Passed e", vote.GetProperty("result").GetString());
         Assert.Equal((2, 1, 0, 0), (vote.GetProperty("yea").GetInt32(), vote.GetProperty("nay").GetInt32(),
             vote.GetProperty("present").GetInt32(), vote.GetProperty("notVoting").GetInt32()));
+
+        using var detail = await GetAsync(host, $"/v1/votes/{E.RecordId}");
+        Assert.Equal(new string('a', 64), detail.RootElement.GetProperty("vote").GetProperty("billRecordId").GetString());
     }
 
     [Fact]

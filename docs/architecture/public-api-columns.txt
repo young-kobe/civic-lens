@@ -89,6 +89,7 @@ votes voted_on
 votes kind
 votes bill_type
 votes bill_number
+votes bill_record_id
 votes headline
 votes summary
 votes text_origin
