@@ -27,8 +27,12 @@ public sealed class BriefStore(NpgsqlDataSource views)
         if (reader.IsDBNull(1)) return null;
         var brief = new BriefRow
         {
-            RecordId = reader.GetString(1), RevisionNumber = reader.GetInt32(2), WeekStart = reader.GetFieldValue<DateOnly>(3),
-            Headline = reader.GetString(4), TextOrigin = ViewColumns.Enum<PublishedTextOrigin>(reader, 5), Label = ViewColumns.Text(reader, 6)
+            RecordId = reader.GetString(1),
+            RevisionNumber = reader.GetInt32(2),
+            WeekStart = reader.GetFieldValue<DateOnly>(3),
+            Headline = reader.GetString(4),
+            TextOrigin = ViewColumns.Enum<PublishedTextOrigin>(reader, 5),
+            Label = ViewColumns.Text(reader, 6)
         };
         if (reader.IsDBNull(7) || reader.IsDBNull(8))
             throw new InvalidDataException("The active brief has no published content.");
