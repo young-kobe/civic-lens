@@ -202,7 +202,7 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
     public async Task NoOfficialsViewShowsAPersonOrBioguideIdBecausePublicContractsKeyOfficialsByOurId()
     {
         await using var connection = await OpenPublicAsync();
-        foreach (var view in new[] { "officials", "official_attendance", "official_bill_counts", "official_issue_counts", "official_executive_actions" })
+        foreach (var view in new[] { "officials", "official_attendance", "official_party_lines", "official_bill_counts", "official_issue_counts", "official_executive_actions" })
         {
             await AssertDeniedAsync(connection, $"SELECT person_id FROM public_api.{view}");
             await AssertDeniedAsync(connection, $"SELECT bioguide_id FROM public_api.{view}");
