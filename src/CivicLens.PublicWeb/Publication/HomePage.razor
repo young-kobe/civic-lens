@@ -77,6 +77,10 @@
                             <div>
                                 <a href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))">
                                     <span>@vote.Headline</span>
+                                    @if (vote.Label is not null)
+                                    {
+                                        <span class="muted small">@vote.Label</span>
+                                    }
                                     <span class="muted small">@vote.Chamber, @vote.VotedOn.ToString("d MMM yyyy")</span>
                                 </a>
                                 <p class="home-vote-counts"><span><b>@vote.Yea</b> Yea</span><span><b>@vote.Nay</b> Nay</span><span>@vote.ResultWords</span></p>
