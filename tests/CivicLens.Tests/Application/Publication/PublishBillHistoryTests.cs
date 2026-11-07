@@ -35,7 +35,7 @@ public sealed class PublishBillHistoryTests
             new PublishReleaseRequest([new(PublishedRecordKind.Action, action)], "publish"));
         scenario.Publications.PreparedHistories.Clear();
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            new PublishReleaseRequest([], "withdraw") { Withdrawals = [new(new(PublishedRecordKind.Action, action), "Removed for review.")] });
+            new PublishReleaseRequest([], "withdraw") { Withdrawals = [new(PublishedRecordKind.Action, action, "Removed for review.")] });
         Assert.Empty(scenario.Publications.LastCommit!.BillHistories);
         Assert.Empty(scenario.Publications.PreparedHistories);
     }

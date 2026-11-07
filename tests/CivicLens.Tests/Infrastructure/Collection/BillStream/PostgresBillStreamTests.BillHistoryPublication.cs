@@ -139,9 +139,10 @@ public sealed partial class PostgresBillStreamTests
             (reader.GetInt32(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
                 reader.GetString(5), reader.GetInt32(6), reader.GetString(7)));
         Assert.True(await reader.ReadAsync());
-        Assert.Equal((1, "2025-03-01", null, "Introduced.", null, null, null, null),
-            (reader.GetInt32(0), reader.GetString(1), NullableString(reader, 2), reader.GetString(3), NullableString(reader, 4),
-                NullableString(reader, 5), reader.IsDBNull(6) ? null : reader.GetInt32(6), NullableString(reader, 7)));
+        Assert.Equal(1, reader.GetInt32(0));
+        Assert.Equal("2025-03-01", reader.GetString(1));
+        Assert.Equal("Introduced.", reader.GetString(3));
+        foreach (var ordinal in new[] { 2, 4, 5, 6, 7 }) Assert.True(reader.IsDBNull(ordinal));
         Assert.False(await reader.ReadAsync());
     }
 
