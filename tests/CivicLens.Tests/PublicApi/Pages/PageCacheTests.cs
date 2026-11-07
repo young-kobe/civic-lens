@@ -9,6 +9,16 @@ public sealed class PageCacheTests
     private static readonly string Build = new('a', 40);
     private static readonly PublicBaseUrl Origin = PublicBaseUrl.Parse("https://civic-lens.test", "test")!;
 
+    [Fact]
+    public void ThePageValidatorIsWeakBecauseItIdentifiesRenderedHtmlSemantics()
+    {
+        var cache = new PageCache(Build, Origin);
+
+        Assert.True(cache.ETag(7).IsWeak);
+        Assert.StartsWith("W/\"r7-" + Build + "-", cache.ETag(7).ToString());
+        Assert.Equal("public, s-maxage=60, stale-while-revalidate=600, stale-if-error=86400", PageCache.CacheControl);
+    }
+
     [Theory]
     [InlineData("https://other.test")]
     [InlineData("https://civic-lens.test:8443")]
