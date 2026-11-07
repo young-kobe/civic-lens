@@ -34,6 +34,7 @@ internal static class PublicApiGrants
             bill_type, bill_number, headline, summary, text_origin, member_list_id, question, result, alignment, democrat_majority, republican_majority) ON vote_revisions TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, revision_number, event_date, link_type, statement_kind, statement_record_id, target_kind, target_record_id, bill_line, document_type, approved_by)
             ON published_entries TO civic_lens_public_owner;
+        GRANT SELECT (record_id, revision_number, reason) ON relationship_revisions TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, revision_number, official_id) ON published_entry_officials TO civic_lens_public_owner;
         GRANT SELECT (list_id, "position", person_id, vote_cast, party) ON vote_member_list_entries TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, is_tracked) ON vote_revision_issues TO civic_lens_public_owner;

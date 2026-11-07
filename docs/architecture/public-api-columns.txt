@@ -187,6 +187,7 @@ record_links related_label
 record_links link_type
 record_links statement_date
 record_links link_record_id
+record_links reason
 vote_facts record_id
 vote_facts revision_number
 vote_facts position
