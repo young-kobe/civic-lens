@@ -51,7 +51,9 @@ internal static class PublicApiGrants
             action_record_id, action_revision_number, document_change_draft_id, document_change_revision_number) ON brief_revision_citations TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, part, paragraph_position, position, citation_id) ON brief_revision_paragraph_citations TO civic_lens_public_owner;
         GRANT SELECT (draft_id, revision_number, headline) ON document_change_revisions TO civic_lens_public_owner;
-        GRANT SELECT (candidate_id, revision_number, author_kind, headline) ON statement_revisions TO civic_lens_public_owner;
+        GRANT SELECT (candidate_id, revision_number, author_kind, headline, summary, statement_date) ON statement_revisions TO civic_lens_public_owner;
+        GRANT SELECT (candidate_id, revision_number, official_id, "position") ON statement_revision_speakers TO civic_lens_public_owner;
+        GRANT SELECT (candidate_id, revision_number, issue_id, "position") ON statement_revision_issues TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", fact_text) ON vote_revision_facts TO civic_lens_public_owner;
         GRANT SELECT (release_number, record_id, latest_action_text, latest_action_date, read_at_utc_ticks) ON release_bill_statuses TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, kind, document_number, signed_on, published_on, federal_register_citation, document_url,
@@ -82,6 +84,7 @@ internal static class PublicApiGrants
             public_api.official_bill_counts, public_api.official_issue_counts, public_api.official_executive_actions,
             public_api.bill_status, public_api.record_headlines, public_api.record_links, public_api.vote_facts,
             public_api.executive_actions, public_api.executive_action_notices TO civic_lens_public;
+        GRANT SELECT ON public_api.statements, public_api.statement_speakers TO civic_lens_public;
         """;
 
     public static Task ApplyAsync(DbContext db, CancellationToken cancellationToken) =>
