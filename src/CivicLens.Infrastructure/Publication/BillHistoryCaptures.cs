@@ -10,7 +10,7 @@ internal static class BillHistoryCaptures
                           SELECT max(c.observed_at_utc_ticks) AS observed_at_utc_ticks
                             FROM bill_pages p
                             LEFT JOIN document_extractions e ON e.extraction_id = p.extraction_id
-                            LEFT JOIN collection_attempts c ON c.attempt_id = e.attempt_id AND c.outcome = 'Captured'
+                            LEFT JOIN collection_attempts c ON c.attempt_id = e.attempt_id AND c.outcome = 'captured'
                                                            AND c.capture_sha256 IS NOT NULL
                            WHERE p.detail_job_id = g.detail_job_id AND p.role = 'Actions'
                           HAVING count(*) > 0 AND min(p.page_order) = 0 AND max(p.page_order) = count(*) - 1
