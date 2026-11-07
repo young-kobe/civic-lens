@@ -16,9 +16,13 @@ public sealed class HomeStore(NpgsqlDataSource views)
                s.headline, s.label, s.result, s.yea, s.nay, s.bill_type, s.bill_number, s.bill_line, s.summary, s.text_origin
           FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
           LEFT JOIN LATERAL (
-               SELECT v.* FROM public_api.votes v
+               SELECT v.record_id FROM public_api.votes v
                 WHERE v.kind = 'Passage' AND v.bill_type IS NOT NULL AND v.bill_number IS NOT NULL
                 ORDER BY {VoteStore.Order} LIMIT 1
+          ) featured_key ON TRUE
+          LEFT JOIN LATERAL (
+               SELECT v.* FROM public_api.votes v
+                WHERE v.record_id = featured_key.record_id LIMIT 1
           ) featured ON TRUE
           LEFT JOIN LATERAL (SELECT * FROM public_api.briefs b ORDER BY b.week_start DESC, b.record_id LIMIT 1) b ON TRUE
           LEFT JOIN LATERAL (
