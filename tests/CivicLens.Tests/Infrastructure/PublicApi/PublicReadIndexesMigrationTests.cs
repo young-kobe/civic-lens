@@ -23,7 +23,7 @@ public sealed class PublicReadIndexesMigrationTests(PostgresCollection postgres)
             await db.GetService<IMigrator>().MigrateAsync(previous);
             Assert.Empty(await IndexDefinitionsAsync(database));
 
-            await db.Database.MigrateAsync();
+            await PostgresCollectionAttemptStore.FromConnectionString(database).MigrateAsync();
             var definitions = await IndexDefinitionsAsync(database);
             Assert.Equal(2, definitions.Length);
             Assert.Contains(definitions, definition => definition.Contains("(congress, bill_number, bill_type, record_id, revision_number)", StringComparison.Ordinal)

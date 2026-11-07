@@ -32,6 +32,8 @@ internal sealed class ActionRevisionRow : IReviewRevisionRow, IReviewTextRow
     public bool? CandidateIncludesSubjects { get; set; }
     public string? Fingerprint { get; set; }
     public string? SummaryVersion { get; set; }
+    public string? CrsSummaryText { get; set; }
+    public bool CrsSummaryRead { get; set; }
     public string? SummaryCitationExtractionId { get; set; }
     public int? SummaryCitationStart { get; set; }
     public int? SummaryCitationLength { get; set; }

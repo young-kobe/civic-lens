@@ -53,15 +53,26 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
 
     public Task<ActionDraftRevision> SaveRevisionAsync(string actorSubject, ActionDraftRevision revision, int expectedRevisionNumber,
         ReviewDecision? approval, string idempotencyKey, string payloadHash, ImmutableArray<Guid> correctedReportIds,
-        CancellationToken cancellationToken) =>
-        Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
-            payloadHash, (_, _, current) =>
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyDictionary<string, DocumentExtraction>? extractions = null;
+        return Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
+            payloadHash, async (db, _, current) =>
             {
                 revision.ValidatePersonEditOf(current);
-                return Task.FromResult(revision);
-            }, saved => ActionRevisionRows.Create(saved, null, CodeVersion.Unknown), null,
-            approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken),
+                extractions = revision.SummaryCitation is null && approval is null
+                    ? ImmutableDictionary<string, DocumentExtraction>.Empty
+                    : await ReadExtractionsAsync(db, [revision], cancellationToken);
+                return revision;
+            }, saved =>
+            {
+                var row = ActionRevisionRows.Create(saved, null, CodeVersion.Unknown);
+                ActionRevisionRows.FillCrsSummary(row, saved, extractions!);
+                return row;
+            }, null,
+            approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken, extractions),
                 afterDecision, revision => revision.ComparableForm(), correctedReportIds), cancellationToken);
+    }
 
     public Task<ReviewDecision> DecideAsync(string actorSubject, ReviewDecision decision, int expectedRevisionNumber,
         int expectedReviewStateVersion, string idempotencyKey, string payloadHash,
@@ -149,10 +160,11 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         new(draft.RecordId, history.CurrentRevision!, history.LastApprovedRevision, history.LoadedRevisions, draft.ReviewStateVersion,
             history.CurrentStatus, history.Decisions, history.UnresolvedConcerns);
 
-    internal static async Task ValidateApprovalAsync(CollectionAttemptDbContext db, ActionDraftRevision revision, CancellationToken cancellationToken) =>
-        ActionTextApproval.Validate(revision, await ReadExtractionsAsync(db, [revision], cancellationToken));
+    internal static async Task ValidateApprovalAsync(CollectionAttemptDbContext db, ActionDraftRevision revision, CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, DocumentExtraction>? extractions = null) =>
+        ActionTextApproval.Validate(revision, extractions ?? await ReadExtractionsAsync(db, [revision], cancellationToken));
 
-    private static Task<Dictionary<string, DocumentExtraction>> ReadExtractionsAsync(CollectionAttemptDbContext db,
+    internal static Task<Dictionary<string, DocumentExtraction>> ReadExtractionsAsync(CollectionAttemptDbContext db,
         IEnumerable<ActionDraftRevision> revisions, CancellationToken cancellationToken) =>
         PostgresDocumentExtractionStore.ReadManyAsync(db,
             [.. revisions.SelectMany(revision => revision.Citations).Select(span => span.ExtractionId).Distinct(StringComparer.Ordinal)],

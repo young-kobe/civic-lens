@@ -62,7 +62,7 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task ARerunChangesNothingBecauseTheBackfillTouchesOnlyRowsWithoutAnEventDate()
+    public async Task ARerunChangesNothingBecauseTheBackfillTouchesOnlyRowsWithUnfinishedColumns()
     {
         await SettleFullRevisionAsync();
         await MakeActionRevisionsLegacyAsync(1);
@@ -260,7 +260,7 @@ public sealed partial class PostgresBillStreamTests
     private async Task<List<string>> ActionRevisionSnapshotAsync()
     {
         var snapshot = new List<string>();
-        foreach (var table in new[] { "action_revisions", "action_revision_issues", "action_revision_sponsorships", "action_revision_sponsorship_citations" })
+        foreach (var table in new[] { "action_revisions", "action_revision_issues", "action_revision_sponsorships", "action_revision_sponsorship_citations", "action_revision_text_citations" })
             snapshot.AddRange(await LinesAsync($"SELECT to_jsonb(t)::text FROM {table} t ORDER BY 1"));
         return snapshot;
     }

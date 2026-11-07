@@ -12,4 +12,5 @@ internal sealed record RevisionBackfillKind<TRow, TRevision, TPage>(
     Func<CollectionAttemptDbContext, TRow, TRevision, CancellationToken, Task> FillColumnsAsync,
     Func<TRow, (TRevision? Revision, string? Refusal)> ReadMovable,
     Func<TRow, TPage, IReadOnlyList<string>> DifferingFields,
-    string RecordIdProperty = nameof(IReviewRevisionRow.RecordId));
+    string RecordIdProperty = nameof(IReviewRevisionRow.RecordId),
+    Func<TRow, TRow, bool>? DerivedValuesMatch = null);
