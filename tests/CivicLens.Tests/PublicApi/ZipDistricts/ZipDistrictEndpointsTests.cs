@@ -78,6 +78,71 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task SeatHoldersCarryStoredPhotosAndLatestAttendanceInOneAnswerAcrossMoreThanThreeDistinctHolders()
+    {
+        await using var host = await StartAsync(withNames: false);
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 0, 0, 0, TimeSpan.Zero));
+        await ZipSeed.AddRecordAsync(host.OperationalDatabase, 2);
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2,
+            new SeededSeat("p0", "Pat House One", Representative, "AL", 2),
+            new SeededSeat("p1", "Pat House Two", Representative, "AL", 1),
+            new SeededSeat("p2", "Sam Senate One", Senator, "AL", null),
+            new SeededSeat("p3", "Sam Senate Two", Senator, "AL", null));
+        var photo = "photos/" + new string('b', 64) + ".jpg";
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE release_officials SET photo_path = '{photo}' WHERE release_number = 2 AND official_id = 'p0';");
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('b', "2026-01-01") { Congress = 119, Casts = ["Not Voting"] },
+            new SeededVote('c', "2026-02-01") { Congress = 120, Casts = ["Not Voting", "Yea"] },
+            new SeededVote('d', "2026-02-02") { Congress = 120, Chamber = "Senate", Casts = ["Yea", "Not Voting", "Nay"] },
+            new SeededVote('e', "2026-03-01") { Congress = 121, FirstRelease = 3 },
+            new SeededVote('f', "2026-04-01") { Congress = 122, LastRelease = 1 });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "UPDATE vote_member_list_entries SET person_id = 'other' WHERE person_id = 'p1';");
+
+        var answer = await GetAsync(host, "/v1/zip-districts/36009");
+
+        var districts = answer.GetProperty("districts");
+        Assert.Equal("p0", districts[0].GetProperty("representative").GetProperty("officialId").GetString());
+        Assert.Equal(photo, districts[0].GetProperty("representative").GetProperty("photoPath").GetString());
+        Assert.Equal(2, answer.GetProperty("release").GetInt32());
+        Assert.Equal(119, answer.GetProperty("congress").GetInt32());
+        var representativeFigures = districts[0].GetProperty("representative").GetProperty("missedVotes");
+        Assert.Equal(["house", "senate"], representativeFigures.EnumerateArray().Select(figure => figure.GetProperty("chamber").GetString()));
+        var houseFigure = representativeFigures[0];
+        Assert.Equal(("house", 120, 1, 1), (houseFigure.GetProperty("chamber").GetString(), houseFigure.GetProperty("congress").GetInt32(), houseFigure.GetProperty("missed").GetInt32(), houseFigure.GetProperty("held").GetInt32()));
+        Assert.Contains("Not Voting", houseFigure.GetProperty("scope").GetString());
+        Assert.Equal("2026-02-01", houseFigure.GetProperty("firstVotedOn").GetString());
+        Assert.Equal("2026-02-01", houseFigure.GetProperty("lastVotedOn").GetString());
+        var senators = answer.GetProperty("states")[0].GetProperty("senators");
+        Assert.Equal("p2", senators[0].GetProperty("officialId").GetString());
+        var senateFigure = Assert.Single(senators[0].GetProperty("missedVotes").EnumerateArray());
+        Assert.Equal(("senate", 120, 0, 1), (senateFigure.GetProperty("chamber").GetString(), senateFigure.GetProperty("congress").GetInt32(), senateFigure.GetProperty("missed").GetInt32(), senateFigure.GetProperty("held").GetInt32()));
+        Assert.Equal(JsonValueKind.Null, districts[1].GetProperty("representative").GetProperty("photoPath").ValueKind);
+        Assert.Empty(districts[1].GetProperty("representative").GetProperty("missedVotes").EnumerateArray());
+        Assert.Empty(senators[1].GetProperty("missedVotes").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task PhotosFollowTheActiveReleaseAndMissingPhotosStayNull()
+    {
+        await using var host = await StartAsync();
+        var photo = "photos/" + new string('b', 64) + ".jpg";
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE release_officials SET photo_path = '{photo}' WHERE release_number = 1 AND official_id = 'al2';");
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 0, 0, 0, TimeSpan.Zero));
+        await ZipSeed.AddRecordAsync(host.OperationalDatabase, 2);
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2, new SeededSeat("al2", "Alice Two", Representative, "AL", 2));
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+
+        var first = await GetAsync(host, "/v1/zip-districts/36009");
+        Assert.Equal(1, first.GetProperty("release").GetInt32());
+        Assert.Equal(photo, first.GetProperty("districts")[0].GetProperty("representative").GetProperty("photoPath").GetString());
+
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 0, 0, 0, TimeSpan.Zero));
+        var second = await GetAsync(host, "/v1/zip-districts/36009");
+        Assert.Equal(2, second.GetProperty("release").GetInt32());
+        Assert.Equal(JsonValueKind.Null, second.GetProperty("districts")[0].GetProperty("representative").GetProperty("photoPath").ValueKind);
+    }
+
+    [Fact]
     public async Task DistrictsWithTheSameLandKeepTheOrderOfStateAndDistrict()
     {
         await using var host = await StartAsync();
