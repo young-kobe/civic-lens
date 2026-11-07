@@ -285,7 +285,10 @@ internal sealed class PublicationScenario
                     [new(cosponsors.ExtractionId, ActionCosponsors.IndexOf("Cosponsor", StringComparison.Ordinal),
                         ActionCosponsors.Length - ActionCosponsors.IndexOf("Cosponsor", StringComparison.Ordinal) - 1)])
             ], "A housing bill") with
-        { BillLine = billLine };
+        {
+            BillLine = billLine,
+            BillLineCitation = billLine is null ? null : FirstSentenceSpan(detail.ExtractionId, summaryText!)
+        };
         var all = decisions ?? [Decision(recordId, 1, ReviewDecisionKind.Approve)];
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
         var review = new ActionReview(recordId, revision, null, [revision], all.Length, ReviewPolicy.GetCurrentStatus(1, all, concerns), all, concerns);
@@ -293,6 +296,10 @@ internal sealed class PublicationScenario
             [KeyValuePair.Create(detail.ExtractionId, detail), KeyValuePair.Create(cosponsors.ExtractionId, cosponsors)]), null);
         return recordId;
     }
+
+    // The quote of a bill line is the first sentence of the summary text, inside the summary block.
+    private static SourceSpan FirstSentenceSpan(string extractionId, string summaryText) =>
+        new(extractionId, ActionDetail.Length + SummaryBlock(summaryText).Length - summaryText.Length, summaryText.IndexOf('.') + 1);
 
     private static string SummaryBlock(string text) =>
         $"Summary version: 00\nAction date: 2026-01-03\nAction: Introduced in House\nUpdated: 2026-01-05T08:00:00Z\nText:\n{text}";

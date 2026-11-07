@@ -196,7 +196,7 @@ public sealed class ActionDraftRevisionTests
             BillLine = "The bill pays for rent aid.",
             BillLineCitation = new(ExtractionId, 5, 25)
         };
-        var edit = previous with { RevisionNumber = previous.RevisionNumber + 1, AuthorSubject = "auth0|person", Headline = "Updated headline" };
+        var edit = previous with { RevisionNumber = previous.RevisionNumber + 1, AuthorSubject = "auth0|person", TextOrigin = ReviewTextOrigin.Person, Headline = "Updated headline" };
 
         edit.ValidatePersonEditOf(previous);
         Assert.Throws<ArgumentException>(() => (edit with { BillLineCitation = new(ExtractionId, 0, 25) }).ValidatePersonEditOf(previous));
