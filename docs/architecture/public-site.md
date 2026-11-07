@@ -35,10 +35,10 @@ Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 pa
 
 - The hero side tile is a featured vote. A fixed rule in code picks it: the latest passage vote on a bill. It shows the result, a small map, party bars, the labeled AI summary, and a ZIP prompt.
 - The featured vote does not repeat in the recent votes list. It includes the bill line and what a Yes vote meant.
-- Recent votes show two House votes and two Senate votes. Repeated split badges become one scoped caption when all four votes split the parties.
+- Recent votes show up to two House votes and two Senate votes. When all four shown votes have stored split alignment, the server home shows one caption that names those four votes and the opposing party majorities. Missing alignment, mixed majorities, or fewer votes never produce that caption.
 - Issue tiles name their vote and bill counts and the Congress.
 - Executive actions show one row per document type, with its newest title and count. The AI summary follows when executive summaries land.
-- A weekly brief shows as one "This week" lead line above the latest votes, only when a brief exists (DR5).
+- A weekly brief shows as one "This week" lead line above the latest votes, only when a brief exists (DR5). The server home implements this placement.
 
 ### Reader-flow decisions
 
@@ -92,6 +92,7 @@ These decisions come from the component audit. The owner accepted every recommen
 - Public pages read published data only, through `Publication.Contracts` and the `public_api` views. Enforcer: the project references and the view role. Test: `ArchitectureTests` and the `PublicApiViewsTests` role test.
 - The SSR home HTML and its ETag use the same `HomeAnswer` release snapshot. Enforcer: `HomePageReader` passes `HomePageData.Release` to the release-number responder overload. Test: `ServerPageTests.TheHomeRouteUsesTheHomeSnapshotReleaseAndAnswers503WithoutCacheWhenItIsMissing`.
 - Shared home HTML does not vary by cookie or ZIP query. Enforcer: the home component has no reader-specific input and the page cache is shared. Test: the same home route test.
+- The recent-vote split caption describes exactly four displayed votes with stored split alignment. It does not include the featured vote or infer a missing alignment. Enforcer: HomePage. Tests: HomePageTests.TheBriefLeadsTheRecentVotesAndASplitCaptionNamesOnlyThoseFourVotes, HomePageTests.MissingOrDifferentAlignmentCannotBecomeAnAllSplitClaim, and HomePageTests.ThreeRecentVotesAndTheFeaturedVoteCannotMakeAFourVoteCaption.
 - The ZIP lookup restores its controls after the current request, including a malformed success response. An older response cannot replace a newer result. Enforcer: `initZipLookup`. No automated test.
 - The browser remembers only a validated five-digit ZIP after its current lookup answer renders. It stores no member details; the home page re-queries published current data. Enforcer: `initRememberedMembers` and `initZipLookup`. No automated test.
 - Shared page HTML contains no remembered ZIP or personal lookup results. Enforcer: `PublicPage` emits empty hooks and browser code reads device storage. Tests: `HomePageTests.TheRememberedMembersLinkTargetsTheLookupHeadingInSharedMarkup` and `PublishedHomePageTests.TheResultPanelIsHiddenUntilALookupAndCreditsTheCensusBureauAndSaysAZctaIsNotAZipCode`.

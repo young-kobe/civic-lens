@@ -8,6 +8,7 @@ using CivicLens.PublicApi.Home;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
+using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Home;
 
@@ -114,6 +115,49 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
 
         Assert.Null(FeaturedId(answer));
         Assert.Equal([votes[2].RecordId, votes[1].RecordId, votes[0].RecordId], Ids(answer));
+    }
+
+    [Fact]
+    public async Task RecentVotesKeepThePublishedAlignmentInTheApiAndHomePage()
+    {
+        var votes = new[]
+        {
+            House('a', "2026-05-01", 1), House('b', "2026-05-02", 2),
+            Senate('c', "2026-05-03", 3), Senate('d', "2026-05-04", 4), House('e', "2026-05-05", 5)
+        };
+        await using var host = await StartAsync(votes);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            UPDATE vote_revisions SET alignment = CASE record_id
+                WHEN '{votes[0].RecordId}' THEN 'Split'
+                WHEN '{votes[1].RecordId}' THEN 'PartiesAgree'
+                WHEN '{votes[2].RecordId}' THEN 'Mixed'
+                ELSE NULL END, columns_written = true
+            WHERE revision_number = 1;
+            INSERT INTO vote_revisions
+            SELECT (jsonb_populate_record(NULL::public.vote_revisions,
+                to_jsonb(v) || jsonb_build_object('revision_number', 2, 'alignment', 'Mixed'))).*
+            FROM vote_revisions v WHERE record_id = '{votes[0].RecordId}' AND revision_number = 1;
+            """);
+
+        var answer = await GetAsync(host);
+        var servedVotes = answer.GetProperty("votes").EnumerateArray().ToDictionary(
+            vote => vote.GetProperty("recordId").GetString()!, vote => vote.GetProperty("alignment"));
+
+        Assert.Equal("split", servedVotes[votes[0].RecordId].GetString());
+        Assert.Equal("partiesAgree", servedVotes[votes[1].RecordId].GetString());
+        Assert.Equal("mixed", servedVotes[votes[2].RecordId].GetString());
+        Assert.Equal(JsonValueKind.Null, servedVotes[votes[3].RecordId].ValueKind);
+        Assert.Equal(votes[4].RecordId, FeaturedId(answer));
+
+        await using var dataSource = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase!);
+        var page = await new HomePageReader(new HomeStore(dataSource), null).ReadAsync(CancellationToken.None);
+
+        Assert.NotNull(page);
+        Assert.Equal(PublishedVoteAlignment.Split, page.Votes.Single(vote => vote.RecordId == votes[0].RecordId).Alignment);
+        Assert.Equal(PublishedVoteAlignment.PartiesAgree, page.Votes.Single(vote => vote.RecordId == votes[1].RecordId).Alignment);
+        Assert.Equal(PublishedVoteAlignment.Mixed, page.Votes.Single(vote => vote.RecordId == votes[2].RecordId).Alignment);
+        Assert.Null(page.Votes.Single(vote => vote.RecordId == votes[3].RecordId).Alignment);
     }
 
     [Fact]

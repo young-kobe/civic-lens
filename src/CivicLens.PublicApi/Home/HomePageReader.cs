@@ -16,7 +16,7 @@ public sealed class HomePageReader(HomeStore home, PublicBaseUrl? browserApiUrl)
                 vote.TextOrigin, vote.ResultWords, vote.Yea, vote.Nay, vote.BillLine, vote.BillLineSource)
             : null;
         var votes = answer.Votes.Select(vote => new HomeVoteData(vote.RecordId, vote.VotedOn, vote.Chamber, vote.Headline, vote.Label,
-            vote.ResultWords, vote.Yea, vote.Nay, vote.BillLine, vote.BillLineSource)).ToArray();
+            vote.ResultWords, vote.Yea, vote.Nay, vote.BillLine, vote.BillLineSource) { Alignment = vote.Alignment }).ToArray();
         var brief = answer.Brief is { } item ? new HomeBriefData(item.RecordId, item.Headline, item.Label) : null;
         return new(answer.Release, featured, votes, brief);
     }
