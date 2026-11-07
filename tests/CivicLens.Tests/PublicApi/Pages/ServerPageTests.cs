@@ -285,7 +285,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
         var first = await host.Client.GetAsync("/" + PublicAssets.Script);
-        using var request = new HttpRequestMessage(HttpMethod.Get, ServerPageEndpoints.Prefix + "/" + PublicAssets.Script);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/" + PublicAssets.Script);
         request.Headers.IfNoneMatch.Add(first.Headers.ETag!);
 
         var second = await host.Client.SendAsync(request);
