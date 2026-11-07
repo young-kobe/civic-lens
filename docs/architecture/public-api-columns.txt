@@ -54,6 +54,8 @@ bills why_it_matters
 bills public_law
 bills history_observed_at_utc_ticks
 bills history_action_count
+bills crs_summary_text
+bills crs_summary_version
 brief_paragraphs record_id
 brief_paragraphs revision_number
 brief_paragraphs release_number

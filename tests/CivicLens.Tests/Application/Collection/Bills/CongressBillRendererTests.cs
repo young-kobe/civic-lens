@@ -150,6 +150,42 @@ public sealed class CongressBillRendererTests
         Assert.Equal(expected, CongressBillRenderer.RenderSummaries(Item, summaries));
     }
 
+    [Fact]
+    public void SummaryBodyReaderReturnsTheExactRenderedBodyIncludingWhitespaceAndTextLabels()
+    {
+        const string body = "  first line\nText:\nlast line  ";
+        var summary = new CongressBillSummary("00", new DateOnly(2022, 3, 1), "Introduced",
+            new DateTimeOffset(2022, 3, 1, 10, 0, 0, TimeSpan.Zero), "");
+        var rendered = CongressBillRenderer.RenderSummaries(Item, [new CongressBillSummaryText(summary, body)]);
+        var block = rendered[(rendered.IndexOf("\n\n", StringComparison.Ordinal) + 2)..];
+
+        Assert.Equal(body, CongressBillRenderer.ReadSummaryBody(block, "00@2022-03-01T10:00:00Z"));
+    }
+
+    [Fact]
+    public void SummaryBodyReaderFailsClosedForWrongVersionMalformedHeadersOrBlockSeparators()
+    {
+        const string block = "Summary version: 7\nAction date: 2022-01-01\nAction: Filed\nUpdated: 2022-01-01T00:00:00Z\nText:\nBody";
+
+        Assert.Null(CongressBillRenderer.ReadSummaryBody(block, "8@2022-01-01T00:00:00Z"));
+        Assert.Null(CongressBillRenderer.ReadSummaryBody(block, "7@2022-01-02T00:00:00Z"));
+        Assert.Null(CongressBillRenderer.ReadSummaryBody(block, " 7@2022-01-01T00:00:00Z"));
+        Assert.Null(CongressBillRenderer.ReadSummaryBody(block.Replace("Action date:", "Action:", StringComparison.Ordinal), "7@2022-01-01T00:00:00Z"));
+        Assert.Null(CongressBillRenderer.ReadSummaryBody(block.Replace("Updated:", "Text:", StringComparison.Ordinal), "7@2022-01-01T00:00:00Z"));
+        Assert.Null(CongressBillRenderer.ReadSummaryBody(block.Replace("Body", "Body\n\nnext", StringComparison.Ordinal), "7@2022-01-01T00:00:00Z"));
+        Assert.Null(CongressBillRenderer.ReadSummaryBody(block.Replace("Body", "Body\r\nnext", StringComparison.Ordinal), "7@2022-01-01T00:00:00Z"));
+    }
+
+    [Fact]
+    public void SummaryBodyReaderReturnsNullWhenRenderedSummaryHasNoBody()
+    {
+        const string block = "Summary version: 7\nAction date: 2022-01-01\nAction: Filed\nUpdated: 2022-01-01T00:00:00Z\nText:";
+
+        Assert.Null(CongressBillRenderer.ReadSummaryBody(block, "7@2022-01-01T00:00:00Z"));
+        Assert.Null(CongressBillRenderer.ReadSummaryBody(block + "\n", "7@2022-01-01T00:00:00Z"));
+        Assert.Null(CongressBillRenderer.ReadSummaryBody(block + "\n  ", "7@2022-01-01T00:00:00Z"));
+    }
+
     [Theory]
     [InlineData("one\n\ntwo")]
     [InlineData("one\r\ntwo")]

@@ -845,7 +845,11 @@ public sealed partial class PostgresBillStreamTests
         await AddSponsorForReviewAsync(UpdatedAt.AddDays(1));
 
         var second = await ListedColumnsAsync();
-        Assert.Equal(2, second.Officials.Length);
+        var hasUpdatedOfficials = second.Officials.Length == 2;
+        var failure = hasUpdatedOfficials ? null :
+            $"Expected two officials, found {second.Officials.Length}. Queue: {string.Join("; ", await QueueAsync())}. " +
+            $"Runs: {string.Join("; ", await LinesAsync("SELECT outcome || '|' || coalesce(reason, '') FROM action_analysis_runs ORDER BY started_at_utc_ticks"))}";
+        Assert.True(hasUpdatedOfficials, failure);
         Assert.NotEqual(first.CandidateId, second.CandidateId);
         Assert.Equal(second.FromRevision, second.FromColumns);
     }

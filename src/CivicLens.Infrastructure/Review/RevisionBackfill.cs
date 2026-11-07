@@ -90,7 +90,9 @@ internal sealed class RevisionBackfill<TRow, TRevision, TPage>(IDbContextFactory
         await db.SaveChangesAsync(cancellationToken);
         var stored = await kind.ReadPageAsync(db, db.Set<TRow>().AsNoTracking()
             .Where(candidate => EF.Property<string>(candidate, kind.RecordIdProperty) == row.RecordId && candidate.RevisionNumber == row.RevisionNumber), cancellationToken);
-        return kind.DifferingFields(stored.Rows.Single(), stored).Count == 0 ? null : RevisionBackfillReasons.RebuildMismatch;
+        var saved = stored.Rows.Single();
+        return kind.DifferingFields(saved, stored).Count == 0 && (kind.DerivedValuesMatch?.Invoke(row, saved) ?? true)
+            ? null : RevisionBackfillReasons.RebuildMismatch;
     }
 
     private async Task<TPage> ReadVerifyPageAsync(CollectionAttemptDbContext db, RevisionKey? after, CancellationToken cancellationToken)

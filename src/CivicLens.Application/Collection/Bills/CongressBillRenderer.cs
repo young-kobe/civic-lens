@@ -56,6 +56,27 @@ public static class CongressBillRenderer
         return string.Join("\n\n", blocks);
     }
 
+    public static string? ReadSummaryBody(string block, string version)
+    {
+        if (string.IsNullOrEmpty(block) || string.IsNullOrEmpty(version) || block.Contains('\r') || block.Contains("\n\n", StringComparison.Ordinal))
+            return null;
+
+        var separator = version.LastIndexOf('@');
+        if (separator <= 0 || separator == version.Length - 1) return null;
+        var versionCode = version[..separator];
+        var updated = version[(separator + 1)..];
+        if (versionCode != SingleLine(versionCode) ||
+            !DateTimeOffset.TryParseExact(updated, UpdateFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out _)) return null;
+        var lines = block.Split('\n');
+        if (lines.Length < 6 || lines[0] != SummaryVersionLine(versionCode) ||
+            !HasActionDate(lines[1]) || !HasHeaderValue(lines[2], "Action") ||
+            lines[3] != SummaryUpdatedLine(updated) || lines[4] != SummaryTextLabel)
+            return null;
+
+        var body = block[(lines[0].Length + lines[1].Length + lines[2].Length + lines[3].Length + lines[4].Length + 5)..];
+        return string.IsNullOrWhiteSpace(body) ? null : body;
+    }
+
     public static CongressBillTextReading RenderText(CongressBillListItem bill, CongressBillTextVersion version, string text)
     {
         ArgumentNullException.ThrowIfNull(bill);
@@ -103,10 +124,21 @@ public static class CongressBillRenderer
 
     internal const string SummaryTextLabel = "Text:";
 
-    internal static string SummaryVersionLine(CongressBillSummary summary) => Line("Summary version", summary.VersionCode);
+    internal static string SummaryVersionLine(CongressBillSummary summary) => SummaryVersionLine(summary.VersionCode);
+
+    private static string SummaryVersionLine(string versionCode) => Line("Summary version", versionCode);
+
+    private static bool HasHeaderValue(string line, string label) =>
+        line == label + ":" || line.StartsWith(label + ": ", StringComparison.Ordinal) && line.Length > label.Length + 2;
+
+    private static bool HasActionDate(string line) =>
+        line.StartsWith("Action date: ", StringComparison.Ordinal) &&
+        DateOnly.TryParseExact(line.AsSpan("Action date: ".Length), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
 
     internal static string SummaryUpdatedLine(CongressBillSummary summary) =>
-        Line("Updated", summary.UpdateDate.UtcDateTime.ToString(UpdateFormat, CultureInfo.InvariantCulture));
+        SummaryUpdatedLine(summary.UpdateDate.UtcDateTime.ToString(UpdateFormat, CultureInfo.InvariantCulture));
+
+    private static string SummaryUpdatedLine(string updated) => Line("Updated", updated);
 
     internal static string CosponsorLine(CongressBillCosponsor cosponsor)
     {
