@@ -4,19 +4,21 @@
     <PageHeader Title="Glossary" />
     <Panel Title="Index of terms" Padded="true">
         <nav class="glossary-index" aria-label="@Glossary.IndexLabel">
+            <ul class="glossary-index-letters">
+                @foreach (var group in IndexGroups)
+                {
+                    <li><a href="@($"#glossary-index-{char.ToLowerInvariant(group.Letter)}")">@group.Letter</a></li>
+                }
+            </ul>
             <ul class="glossary-index-groups">
-                @foreach (var group in Glossary.Groups)
+                @foreach (var group in IndexGroups)
                 {
                     <li>
-                        <a href="@($"#{group.AnchorId}")">@group.Title</a>
+                        <h3 id="@($"glossary-index-{char.ToLowerInvariant(group.Letter)}")" tabindex="-1">@group.Letter</h3>
                         <ul class="glossary-index-terms">
-                            @foreach (var term in group.Terms)
+                            @foreach (var entry in group.Entries)
                             {
-                                <li><a href="@($"#{term.AnchorId}")">@term.Name</a></li>
-                            }
-                            @if (group == Glossary.PartyCountGroup)
-                            {
-                                <li><a href="@($"#{Glossary.PartyCountAnchorId}")">@Glossary.PartyCountHeading</a></li>
+                                <li><a href="@($"#{entry.AnchorId}")">@entry.Name</a></li>
                             }
                         </ul>
                     </li>
@@ -62,4 +64,23 @@
 </PublicPage>
 
 @code {
+    private static readonly IReadOnlyList<GlossaryIndexGroup> IndexGroups = BuildIndexGroups();
+
+    private static IReadOnlyList<GlossaryIndexGroup> BuildIndexGroups()
+    {
+        var entries = Glossary.Groups
+            .SelectMany(group => group.Terms)
+            .Select(term => new GlossaryIndexEntry(term.Name, term.AnchorId))
+            .Append(new GlossaryIndexEntry(Glossary.PartyCountHeading, Glossary.PartyCountAnchorId))
+            .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase);
+
+        return entries
+            .GroupBy(entry => char.ToUpperInvariant(entry.Name[0]))
+            .Select(group => new GlossaryIndexGroup(group.Key, group.ToArray()))
+            .ToArray();
+    }
+
+    private sealed record GlossaryIndexEntry(string Name, string AnchorId);
+
+    private sealed record GlossaryIndexGroup(char Letter, IReadOnlyList<GlossaryIndexEntry> Entries);
 }
