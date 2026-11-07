@@ -227,7 +227,6 @@
 
     const initZipLookup = (form, remembered) => {
         const api = form.dataset.zipApi;
-        const states = JSON.parse(form.dataset.states);
         const panel = document.querySelector("[data-zip-results]");
         const body = panel.querySelector("[data-zip-body]");
         const notes = panel.querySelector("[data-zip-notes]");
@@ -237,32 +236,11 @@
         const heading = panel.querySelector("h2");
         const answerFragment = "#" + heading.id;
         heading.tabIndex = -1;
-        const houseOffices = JSON.parse(form.dataset.houseOffices);
-        const stateName = code => states[code] ?? code;
         const element = (tag, text, className) => {
             const node = document.createElement(tag);
             if (text !== undefined) node.textContent = text;
             if (className) node.className = className;
             return node;
-        };
-        const seatTitle = district => {
-            if (district.state in houseOffices) return `${houseOffices[district.state]} for ${stateName(district.state)}`;
-            return district.district === 0
-                ? `Representative for ${stateName(district.state)}, at large`
-                : `Representative for ${stateName(district.state)}, district ${district.district}`;
-        };
-        const seat = (title, holder) => {
-            const item = element("li", undefined, "zip-seat");
-            item.append(element("span", title, "muted small"));
-            if (holder === null) { item.append(element("span", "No current member is in our records.")); return item; }
-            const link = element("a", holder.name);
-            link.href = form.dataset.officialPage.replace("{id}", encodeURIComponent(holder.officialId));
-            const line = element("span");
-            line.append(link);
-            if (holder.party) line.append(`, ${holder.party}`);
-            item.append(line);
-            item.append(element("span", holder.termEndsOn ? `Current term ends ${formatDay(holder.termEndsOn)}.` : "Our records show no end date for this term.", "muted small"));
-            return item;
         };
         const show = (nodes, listed = false) => { panel.hidden = false; notes.hidden = !listed; body.replaceChildren(...nodes); };
         const showProblem = node => { panel.hidden = true; problem.replaceChildren(node); };
@@ -270,20 +248,20 @@
             panel.scrollIntoView({ block: "start", behavior: reducedMotion.matches ? "auto" : "smooth" });
             heading.focus({ preventScroll: true });
         };
-        const showAnswer = (answer, revealAnswer) => {
-            const list = element("ul", undefined, "zip-seats");
-            const nodes = [];
-            if (answer.districts.length > 1)
-                nodes.push(element("p", `Your ZIP area lies in ${answer.districts.length} districts. The district with the most land is first.`, "zip-count"));
-            for (const district of answer.districts)
-                list.append(seat(seatTitle(district), district.representative));
-            for (const state of answer.states) {
-                if (state.senators.length === 0) { list.append(element("li", `${stateName(state.state)} has no senators.`, "zip-seat")); continue; }
-                for (const senator of state.senators) list.append(seat(`Senator for ${stateName(state.state)}`, senator));
-            }
-            nodes.push(list);
-            show(nodes, true);
+        const showAnswer = (fragment, revealAnswer) => {
+            show([fragment], true);
             if (revealAnswer) reveal();
+        };
+        const memberFragment = (html, zip) => {
+            const template = document.createElement("template");
+            template.innerHTML = html;
+            const fragment = template.content.firstElementChild;
+            const positiveNumber = value => /^[1-9][0-9]*$/.test(value ?? "") && Number(value) <= 2147483647;
+            if (template.content.childElementCount !== 1 || !fragment.matches("div[data-zip-member-fragment]")
+                || fragment.dataset.zcta !== zip || !positiveNumber(fragment.dataset.release)
+                || !positiveNumber(fragment.dataset.congress) || !fragment.querySelector(".zip-member-cards > li"))
+                throw new TypeError("Invalid ZIP lookup answer.");
+            return fragment;
         };
         const failure = (zip, status) => {
             const texts = {
@@ -308,16 +286,16 @@
         let lookup = 0;
         const look = async (zip, request, revealAnswer, persist) => {
             try {
-                const response = await fetch(`${api}/v1/zip-districts/${zip}`);
+                const response = await fetch(`${api}/v1/zip-districts/${zip}/members`, { headers: { Accept: "text/html" } });
                 if (!response.ok) {
                     if (request === lookup) showProblem(failure(zip, response.status));
                     return false;
                 }
-                const answer = await response.json();
+                const html = await response.text();
                 if (request !== lookup) return false;
-                if (!Array.isArray(answer?.districts) || answer.districts.length === 0 || !Array.isArray(answer.states) || answer.states.length === 0)
-                    throw new TypeError("Invalid ZIP lookup answer.");
-                showAnswer(answer, revealAnswer);
+                if (!/^text\/html(?:;|$)/i.test(response.headers.get("Content-Type") ?? ""))
+                    throw new TypeError("Invalid ZIP lookup content type.");
+                showAnswer(memberFragment(html, zip), revealAnswer);
                 if (request === lookup && persist) remembered.save(zip);
                 return true;
             }
