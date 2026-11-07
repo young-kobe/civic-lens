@@ -3047,7 +3047,7 @@ public sealed class ReleaseRendererTests
         var assets = new ReleaseRenderer(null, null).Assets;
 
         foreach (var path in new[] { "assets/css/theme.css", "assets/css/app.css", "assets/css/public.css", "assets/js/theme.js", "assets/js/app.js", "assets/js/public.js",
-                     "assets/fonts/schibsted-grotesk.woff2", "assets/fonts/newsreader.woff2", "assets/favicon.svg" })
+                     "assets/fonts/schibsted-grotesk.woff2", "assets/fonts/newsreader.woff2", "assets/fonts/archivo.woff2", "assets/fonts/figtree.woff2", "assets/fonts/gabarito.woff2", "assets/favicon.svg" })
             Assert.Contains(assets, asset => asset.RelativePath == path && asset.Content.Length > 0);
     }
 
@@ -3060,27 +3060,25 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task EveryPageTypePreloadsSchibstedGroteskAndOnlyPagesWithNewsreaderTextAboveTheFoldPreloadNewsreader()
+    public async Task EveryPagePreloadsArchivoAndFigtreeForItsDisplayAndBodyType()
     {
-        string[] newsreaderPages = ["record", "statement", "action", "vote", "relationship", "brief", "withdrawal"];
-
         foreach (var (name, pagePath, html, _) in await RenderEveryPageTypeAsync())
         {
-            string[] expected = newsreaderPages.Contains(name) ? [UiFont, NewsreaderFont] : [UiFont];
+            string[] expected = [ArchivoFont, FigtreeFont];
             Assert.True(expected.SequenceEqual(FontPreloads(html, pagePath)), name);
         }
     }
 
     [Fact]
-    public async Task TheHomePagePreloadsNewsreaderWhenItShowsABriefBecauseTheBriefTextIsSetInNewsreader()
+    public async Task TheHomePagePreloadsItsDisplayAndBodyFontsWhenItShowsABrief()
     {
         var html = await new ReleaseRenderer(null, null).RenderHomeAsync(ReleaseOf(1), Brief(), NoFacets, NoHighlights(ReleaseOf(1)), CancellationToken.None);
 
-        Assert.Equal([UiFont, NewsreaderFont], FontPreloads(html, PublicationProtocol.HomePath));
+        Assert.Equal([ArchivoFont, FigtreeFont], FontPreloads(html, PublicationProtocol.HomePath));
     }
 
-    private const string UiFont = "assets/fonts/schibsted-grotesk.woff2";
-    private const string NewsreaderFont = "assets/fonts/newsreader.woff2";
+    private const string ArchivoFont = "assets/fonts/archivo.woff2";
+    private const string FigtreeFont = "assets/fonts/figtree.woff2";
 
     private static string[] FontPreloads(string html, string pagePath)
     {
