@@ -89,7 +89,7 @@
     [Parameter, EditorRequired] public PublicationCatalog Catalog { get; set; } = default!;
 
     private RenderFragment? Portrait => Page.IsCurrent
-        ? @<OfficialPortrait Profile="Page.Profile" RootPath="@Page.RootPath" />
+        ? @<OfficialPortrait Name="@Page.Profile.Name" PhotoPath="@Page.Profile.Photo?.Path" PhotoWidth="@Page.Profile.Photo?.Width" PhotoHeight="@Page.Profile.Photo?.Height" PhotoCredit="@Page.Profile.Photo?.Credit" RootPath="@Page.RootPath" />
         : null;
 
     private RenderFragment? Introduction => Page.IsCurrent && (Tenure is not null || Page.Profile.Website is not null)

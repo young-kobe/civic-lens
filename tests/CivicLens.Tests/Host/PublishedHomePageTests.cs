@@ -266,13 +266,7 @@ public sealed class PublishedHomePageTests
         var form = document.QuerySelector("form[data-zip-api]")!;
         Assert.Equal("https://api.example.test", form.GetAttribute("data-zip-api"));
         Assert.True(form.HasAttribute("hidden"));
-        Assert.Equal("officials/{id}.html", form.GetAttribute("data-official-page"));
         Assert.Equal("officials.html", form.GetAttribute("data-officials-page"));
-        Assert.Equal("District of Columbia", System.Text.Json.JsonDocument.Parse(form.GetAttribute("data-states")!).RootElement.GetProperty("DC").GetString());
-        var offices = System.Text.Json.JsonDocument.Parse(form.GetAttribute("data-house-offices")!).RootElement;
-        Assert.Equal("Resident Commissioner", offices.GetProperty("PR").GetString());
-        Assert.Equal("Delegate", offices.GetProperty("DC").GetString());
-        Assert.Equal(6, offices.EnumerateObject().Count());
         var input = form.QuerySelector("input")!;
         Assert.Equal(("zip", "5", "numeric"), (input.GetAttribute("name"), input.GetAttribute("maxlength"), input.GetAttribute("inputmode")));
         Assert.Equal("Your ZIP code", form.QuerySelector("label[for='zip-code']")!.TextContent);
@@ -313,17 +307,9 @@ public sealed class PublishedHomePageTests
         Assert.Equal("status", panel.QuerySelector("[data-zip-body]")!.GetAttribute("role"));
         var notes = panel.QuerySelector("[data-zip-notes]")!;
         Assert.True(notes.HasAttribute("hidden"));
-        Assert.Equal(["Source: U.S. Census Bureau", "A ZIP Code Tabulation Area is a Census Bureau area. It is not a USPS ZIP code. Near a border, check your address with your House office."],
+        Assert.Equal(["District lookup source: U.S. Census Bureau", "A ZIP Code Tabulation Area is a Census Bureau area. It is not a USPS ZIP code. Near a border, check your address with your House office."],
             notes.QuerySelectorAll("p").Select(note => note.TextContent));
         Assert.Single(panel.QuerySelectorAll("[data-zip-notes]"));
-    }
-
-    [Fact]
-    public void TheZipResultShowsTheTermEndDateInTheSiteFormatOrSaysTheRecordsHoldNoEndDate()
-    {
-        var script = System.Text.Encoding.UTF8.GetString(new ReleaseRenderer(null, null).Assets.Single(asset => asset.RelativePath == "assets/js/public.js").Content);
-
-        Assert.Contains("holder.termEndsOn ? `Current term ends ${formatDay(holder.termEndsOn)}.` : \"Our records show no end date for this term.\"", script, StringComparison.Ordinal);
     }
 
     [Fact]

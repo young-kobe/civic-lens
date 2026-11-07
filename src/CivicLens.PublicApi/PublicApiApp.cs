@@ -65,12 +65,12 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new RelatedStore(views));
         builder.Services.AddSingleton(new WithdrawalStore(views));
         builder.Services.AddSingleton(new ExecutiveActionStore(views));
+        builder.Services.AddSingleton<PageRenderer>();
         if (options.PublicBaseUrl is { } baseUrl)
         {
             builder.Services.AddSingleton(baseUrl);
             builder.Services.AddSingleton(new MembersStripSlot());
             builder.Services.AddSingleton(new PageCache(buildId!, baseUrl, options.BrowserApiUrl));
-            builder.Services.AddSingleton<PageRenderer>();
             builder.Services.AddSingleton<ServerPageResponder>();
         }
         builder.Services.AddSingleton(new OfficialStore(views));

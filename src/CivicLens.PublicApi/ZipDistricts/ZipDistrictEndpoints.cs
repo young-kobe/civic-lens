@@ -1,4 +1,6 @@
 using CivicLens.PublicApi.Http;
+using CivicLens.PublicApi.Pages;
+using CivicLens.PublicWeb.Publication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -22,6 +24,25 @@ public static class ZipDistrictEndpoints
             http.Response.Headers[HeaderNames.CacheControl] = CacheControl;
             return ApiResults.Json(answer);
         }));
+        v1.MapGet("/zip-districts/{zcta}/members", MembersAsync);
+    }
+
+    private static Task<IResult> MembersAsync(string zcta, HttpContext http, ZipDistrictStore zips, PageRenderer renderer,
+        CancellationToken cancellationToken)
+    {
+        http.Response.Headers.CacheControl = "private, no-store";
+        return ApiResults.GuardAsync(async () =>
+        {
+            var request = ZipDistrictRequest.Parse(zcta, http.Request.Query);
+            var lookup = await zips.FindAsync(request, cancellationToken);
+            if (lookup.Answer is not { } answer) return Miss(lookup.Miss!.Value);
+            var html = await renderer.RenderAsync<ZipMemberCards>(new Dictionary<string, object?>
+            {
+                [nameof(ZipMemberCards.Data)] = ZipMemberCardsMapper.Map(answer),
+                [nameof(ZipMemberCards.RootPath)] = "/"
+            });
+            return Results.Content(html, "text/html; charset=utf-8");
+        });
     }
 
     private static IResult Miss(ZipLookupMiss miss) => miss switch
