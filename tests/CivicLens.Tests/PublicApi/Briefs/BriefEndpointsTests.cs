@@ -52,10 +52,10 @@ public sealed class BriefEndpointsTests(PostgresCollection postgres)
 
         var seeder = new BriefWorldSeeder(host.OperationalDatabase);
         await seeder.ReleaseWithoutApprovalsAsync(2, BriefFixtures.InWeek.AddDays(1), active: false);
-        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "UPDATE publication_releases SET is_active = (release_number = 2)");
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, BriefFixtures.InWeek.AddDays(1));
         using var withdrawn = await host.Client.GetAsync("/v1/briefs/" + BriefFixtures.RecordId);
         Assert.Equal(HttpStatusCode.NotFound, withdrawn.StatusCode);
-        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "UPDATE publication_releases SET is_active = (release_number = 1)");
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, BriefFixtures.InWeek);
         using var restored = await host.Client.GetAsync("/v1/briefs/" + BriefFixtures.RecordId);
         Assert.Equal(HttpStatusCode.OK, restored.StatusCode);
     }
