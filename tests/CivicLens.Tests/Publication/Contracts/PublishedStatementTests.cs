@@ -60,6 +60,24 @@ public sealed class PublishedStatementTests
     }
 
     [Fact]
+    public void PublishedSourceTextAllowsTwoMillionUtf16CharactersAndRejectsOneMore()
+    {
+        var original = Statement();
+        var maximum = string.Concat(Enumerable.Repeat("\U00010400", 1_000_000));
+        var statement = original with
+        {
+            Source = original.Source with { Text = maximum },
+            StatementDate = null,
+            StatementDateEvidence = null,
+            Quotations = [Quotation(0, 2, "\U00010400")]
+        };
+        statement.Validate();
+
+        var tooLong = maximum + "x";
+        Assert.Throws<InvalidDataException>((statement with { Source = statement.Source with { Text = tooLong } }).Validate);
+    }
+
+    [Fact]
     public void RejectsAQuotationWhoseQuoteIsNotTheTextAtItsOffsetsBecauseTheSiteWouldShowWordsNobodySaid()
     {
         var statement = Statement() with { Quotations = [Quotation(15, 15, "housing matter!")] };
