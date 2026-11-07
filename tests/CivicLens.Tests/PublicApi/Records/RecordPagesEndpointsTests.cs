@@ -111,6 +111,8 @@ public sealed class RecordPagesEndpointsTests(PostgresCollection postgres)
             {PublicRecordPageRows.Link(links[0], Statement, actions[0], "action", "DescribesOwnBill", "2026-05-02")}
             {PublicRecordPageRows.Link(links[1], Statement, actions[1], "action", "ClaimsCreditFor", "2026-05-01")}
             {PublicRecordPageRows.Link(links[2], Statement, Vote, "vote", "StatementAboutVote", null)}
+            {PublicRecordPageRows.RelationshipRevision(links[0], 1, Statement, actions[0], "action", "DescribesOwnBill", "The statement names this bill.")}
+            {PublicRecordPageRows.RelationshipRevision(links[0], 2, Statement, actions[0], "action", "DescribesOwnBill", "Unpublished draft reason.")}
             """);
 
         using var first = await GetAsync(host, $"/v1/records/statement/{Statement}/related?limit=2");
@@ -123,6 +125,9 @@ public sealed class RecordPagesEndpointsTests(PostgresCollection postgres)
         Assert.Equal(JsonValueKind.Null, second.RootElement.GetProperty("nextCursor").ValueKind);
         Assert.Equal(["Doe on rent|statement|describesOwnBill|2026-05-02|person|none"], Describe(fromAction));
         Assert.Equal(links[1], first.RootElement.GetProperty("related")[0].GetProperty("linkRecordId").GetString());
+        Assert.Equal("The statement names this bill.", first.RootElement.GetProperty("related")[1].GetProperty("reason").GetString());
+        Assert.Equal("The statement names this bill.", fromAction.RootElement.GetProperty("related")[0].GetProperty("reason").GetString());
+        Assert.Equal(JsonValueKind.Null, second.RootElement.GetProperty("related")[0].GetProperty("reason").ValueKind);
     }
 
     [Fact]
