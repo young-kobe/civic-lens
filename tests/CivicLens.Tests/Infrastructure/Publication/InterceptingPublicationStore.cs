@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
@@ -87,6 +88,12 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
 
     public Task<int> AddFirstPublishedAsync(IReadOnlyCollection<PublishedFirstPublication> records, CancellationToken cancellationToken) =>
         inner.AddFirstPublishedAsync(records, cancellationToken);
+
+    public Task<IReadOnlyList<BillPublicationInput>> ReadBillInputsAsync(int? previousReleaseNumber, ImmutableArray<string> recordIds,
+        CancellationToken cancellationToken) => inner.ReadBillInputsAsync(previousReleaseNumber, recordIds, cancellationToken);
+
+    public Task PrepareBillHistoriesAsync(IReadOnlyCollection<BillHistoryCapture> histories, CancellationToken cancellationToken) =>
+        inner.PrepareBillHistoriesAsync(histories, cancellationToken);
 
     public Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken) => inner.FindReplayAsync(actorSubject, idempotencyKey, payloadHash, cancellationToken);

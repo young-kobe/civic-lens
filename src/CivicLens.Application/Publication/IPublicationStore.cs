@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 
@@ -54,6 +55,10 @@ public interface IPublicationStore
     Task<int> FillStatementApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken);
 
     Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<BillPublicationInput>> ReadBillInputsAsync(int? previousReleaseNumber, ImmutableArray<string> recordIds, CancellationToken cancellationToken);
+
+    Task PrepareBillHistoriesAsync(IReadOnlyCollection<BillHistoryCapture> histories, CancellationToken cancellationToken);
 
     Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken);

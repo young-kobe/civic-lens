@@ -16,6 +16,13 @@ public static partial class BillStatusMeaning
     private const string SpeakerTail = ", for a period to be subsequently determined by the Speaker, in each case for consideration of such provisions as fall within the jurisdiction of the committee concerned";
     private const string ChamberReferral = @"(?: and (?:Read twice and )?referred to the .+| ?\. Read twice\. Placed on .+|\.)?";
 
+    /// <summary>Returns the public law number only when the complete official action has the known public law shape.</summary>
+    public static string? PublicLawNumberOf(string officialActionText)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(officialActionText);
+        return LawText().Match(officialActionText) is { Success: true } match ? match.Groups["number"].Value : null;
+    }
+
     public static string Of(string text, string billType) => Known(text, billType) ?? UnmatchedPrefix + Sentence(text);
 
     /// <summary>The meaning of a known text, or the official text as a sentence when no rule matches. It never adds the unmatched prefix.</summary>
@@ -61,7 +68,7 @@ public static partial class BillStatusMeaning
         OrderedToBeReported().IsMatch(text) ? $"A committee voted to send this {Noun(billType)} to the full chamber." : null;
 
     private static string? Law(string text) =>
-        LawText().Match(text) is { Success: true } match ? $"Became law: Public Law {match.Groups["number"].Value}." : null;
+        PublicLawNumberOf(text) is { } number ? $"Became law: Public Law {number}." : null;
 
     private static string Noun(string billType) => billType is "hr" or "s" ? "bill" : "measure";
 
@@ -83,6 +90,6 @@ public static partial class BillStatusMeaning
         RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex OrderedToBeReported();
 
-    [GeneratedRegex(@"^Became Public Law No: (?<number>\d+-\d+)\.?$", RegexOptions.ExplicitCapture | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"\ABecame Public Law No: (?<number>[0-9]+-[0-9]+)\.?\z", RegexOptions.ExplicitCapture | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex LawText();
 }

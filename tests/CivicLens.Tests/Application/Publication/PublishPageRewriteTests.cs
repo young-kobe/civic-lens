@@ -152,7 +152,7 @@ public sealed class PublishPageRewriteTests
     {
         var statement = scenario.AddStatement('c', statementDate: new DateOnly(2026, 1, 2));
         var action = scenario.AddAction('d');
-        scenario.Actions.BillStatuses[action] = new() { RecordId = action, Text = "Passed House.", Date = new DateOnly(2026, 1, 28), ObservedAtUtc = new DateTimeOffset(2026, 1, 30, 9, 0, 0, TimeSpan.Zero) };
+        scenario.Publications.BillStatuses[action] = new() { RecordId = action, Text = "Passed House.", Date = new DateOnly(2026, 1, 28), ObservedAtUtc = new DateTimeOffset(2026, 1, 30, 9, 0, 0, TimeSpan.Zero) };
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k0", new PublishedRecordReference(PublishedRecordKind.Action, action)));
         scenario.ReviseAction(action, 2, correctionNote: "Fixed the issue.");
         var vote = scenario.AddVote('f', billActionRecordIds: [action]);

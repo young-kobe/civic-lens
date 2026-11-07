@@ -27,5 +27,11 @@ public static class BillEndpoints
             if (!PublicationProtocol.IsAnyRecordId(recordId) || await bills.ListSponsorshipsAsync(request, cancellationToken) is not { } page) return ApiResults.RecordNotFound();
             return request.Cursor is { } cursor && cursor.Release != page.Release ? ApiResults.ReleaseChanged(page.Release) : ApiResults.Json(page);
         }));
+        v1.MapGet("/bills/{recordId}/actions", (string recordId, HttpContext http, BillStore bills, CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
+        {
+            var request = ActionHistoryRequest.Parse(recordId, http.Request.Query);
+            if (!PublicationProtocol.IsAnyRecordId(recordId) || await bills.ListActionsAsync(request, cancellationToken) is not { } page) return ApiResults.RecordNotFound();
+            return request.Cursor is { } cursor && cursor.Release != page.Release ? ApiResults.ReleaseChanged(page.Release) : ApiResults.Json(page);
+        }));
     }
 }

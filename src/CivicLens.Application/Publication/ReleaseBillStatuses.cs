@@ -12,15 +12,10 @@ namespace CivicLens.Application.Publication;
 /// </summary>
 internal static class ReleaseBillStatuses
 {
-    public static async Task<IReadOnlyDictionary<string, ActionBillStatus>> LoadAsync(ActionRecordLoader actions, PreviousRelease previous,
-        ImmutableArray<PublishedRecordReference> references, CancellationToken cancellationToken)
-    {
-        ImmutableArray<string> ids = [.. ActionIdsOf(previous.Entries).Concat(references.Where(record => record.Kind == PublishedRecordKind.Action)
-            .Select(record => record.RecordId)).Distinct(StringComparer.Ordinal)];
-        return (await actions.BillStatusesAsync(ids, cancellationToken))
-            .Select(read => previous.BillStatuses.TryGetValue(read.Status.RecordId, out var shown) && !Differs(shown, read.Status) ? read with { Status = shown } : read)
-            .ToDictionary(read => read.Status.RecordId, StringComparer.Ordinal);
-    }
+    public static IReadOnlyDictionary<string, ActionBillStatus> KeepObservationTimes(PreviousRelease previous,
+        IReadOnlyList<BillPublicationInput> inputs) => inputs.Select(input => input.Status).OfType<ActionBillStatus>()
+        .Select(read => previous.BillStatuses.TryGetValue(read.Status.RecordId, out var shown) && !Differs(shown, read.Status) ? read with { Status = shown } : read)
+        .ToDictionary(read => read.Status.RecordId, StringComparer.Ordinal);
 
     public static IEnumerable<string> ChangedActionIds(IEnumerable<string> actionIds, PreviousRelease previous,
         IReadOnlyDictionary<string, ActionBillStatus> statuses) =>

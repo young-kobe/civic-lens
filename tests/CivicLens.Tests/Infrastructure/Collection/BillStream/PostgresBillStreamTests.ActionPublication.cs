@@ -1,3 +1,5 @@
+using CivicLens.Application.Actions;
+using System.Collections.Immutable;
 using CivicLens.Infrastructure.ExecutiveActions;
 using Microsoft.Extensions.Logging.Abstractions;
 using CivicLens.Tests.Fixtures;
@@ -25,6 +27,10 @@ namespace CivicLens.Tests.Infrastructure.Collection.BillStream;
 public sealed partial class PostgresBillStreamTests
 {
     private static readonly DateTimeOffset ReleasedAt = new(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
+
+    private async Task<IReadOnlyList<ActionBillStatus>> ReadPublicationBillStatusesAsync(ImmutableArray<string> recordIds,
+        CancellationToken cancellationToken) => [.. (await PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current)
+            .ReadBillInputsAsync(null, recordIds, cancellationToken)).Select(input => input.Status).OfType<ActionBillStatus>()];
 
     [Fact]
     public async Task AnActionDecisionAfterTheBuildBlocksTheCommitBecauseApprovalMayHaveChanged()
@@ -124,7 +130,7 @@ public sealed partial class PostgresBillStreamTests
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await ExecuteAsync(connectionString, "UPDATE bill_gates SET latest_action_date = '2025-03-02', latest_action_text = 'Passed House.'");
 
-        var statuses = await ActionReviews().ReadBillStatusesAsync([RecordId, new string('f', 64)], default);
+        var statuses = await ReadPublicationBillStatusesAsync([RecordId, new string('f', 64)], default);
 
         var read = Assert.Single(statuses);
         var status = read.Status;
@@ -133,8 +139,8 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal((long)(await ScalarAsync("SELECT created_at_utc_ticks FROM bill_gates"))!, status.ObservedAtUtc.UtcTicks);
         var newer = await EnqueueDetailAsync("newer");
         await AdmitDetailAsync(newer, DetailBill(UpdatedAt.AddDays(1), cosponsors: 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
-        Assert.Empty(await ActionReviews().ReadBillStatusesAsync([RecordId], default));
-        Assert.Empty(await ActionReviews().ReadBillStatusesAsync([], default));
+        Assert.Empty(await ReadPublicationBillStatusesAsync([RecordId], default));
+        Assert.Empty(await ReadPublicationBillStatusesAsync([], default));
     }
 
     // The saved Congress.gov pages pass the contract check, so a drafted citation never blocks a publish.

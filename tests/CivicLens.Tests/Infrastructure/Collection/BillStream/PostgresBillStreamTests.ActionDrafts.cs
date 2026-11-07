@@ -233,7 +233,7 @@ public sealed partial class PostgresBillStreamTests
         await AdmitDetailAsync(detail, DetailBill(UpdatedAt, cosponsors: 0, policyArea: null, latestAction: new(new DateOnly(2025, 3, 2), "Passed House.")), BillGateOutcome.NotRelevant(BillGateReason.NoPolicyArea));
 
         Assert.Equal("Passed House.", await ScalarAsync($"SELECT latest_action_text FROM bill_gates WHERE detail_job_id = '{detail}' AND decision = 'NotRelevant'"));
-        Assert.Empty(await ActionReviews().ReadBillStatusesAsync([RecordId], default));
+        Assert.Empty(await ReadPublicationBillStatusesAsync([RecordId], default));
     }
 
     [Fact]

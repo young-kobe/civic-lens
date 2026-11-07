@@ -80,7 +80,8 @@ public sealed class PublishRelease
         var roster = await officials.ReadRosterAsync(cancellationToken);
         var settings = await officials.ReadSettingsAsync(cancellationToken);
         var photos = await officials.ReadPhotosAsync(settings, cancellationToken);
-        var statuses = await ReleaseBillStatuses.LoadAsync(loaders.Actions, previous, references, cancellationToken);
+        var billInputs = await ReadBillInputsAsync(state.Active?.ReleaseNumber, previous, references, cancellationToken);
+        var statuses = ReleaseBillStatuses.KeepObservationTimes(previous, billInputs);
         var build = new PublicationBuild(previous, now, rules, renderer, catalog, corrections, roster, byCode, firstPublished)
             .WithRemoved(withdrawn).WithReturned(returned).WithBillStatuses(statuses);
         var additions = await LoadAdditionsAsync(references, build, cancellationToken);
@@ -96,8 +97,13 @@ public sealed class PublishRelease
         List<PublishedWithdrawal> withdrawals = [.. previous.Withdrawals.Where(withdrawal => !build.Returned.Any(record => record.RecordId == withdrawal.RecordId)), .. newWithdrawals];
         RequireRoom(previous, carried.Count + additions.Count + withdrawals.Count, additions);
 
+        var billIds = ReleaseBillStatuses.ActionIdsOf(carried.Concat(additions.Select(addition => addition.Entry))).ToHashSet(StringComparer.Ordinal);
+        var histories = billInputs.Where(input => billIds.Contains(input.RecordId) && input.History is not null).ToArray();
+        await publications.PrepareBillHistoriesAsync([.. histories.Select(input => input.History!).Distinct()], cancellationToken);
+
+        var historyChanged = billInputs.Any(input => billIds.Contains(input.RecordId) && input.History?.DetailJobId != input.PublishedHistoryDetailJobId);
         var number = state.LatestReleaseNumber + 1;
-        var (directory, entries, names) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, released.BillLines, statuses, roster, settings, photos, request.RewriteOfficials, request.RewriteEntries, request.RewritePages, cancellationToken);
+        var (directory, entries, names) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, released.BillLines, statuses, roster, settings, photos, request.RewriteOfficials, request.RewriteEntries, request.RewritePages, historyChanged, cancellationToken);
         var commit = new PublicationCommit(number, state.Active?.ReleaseNumber, directory,
             [.. entries.Select(PublishedRevisionBinding.Of)],
             [.. additions.Select(addition => addition.Expectation)])
@@ -108,7 +114,8 @@ public sealed class PublishRelease
             RewrittenEntries = request.RewriteEntries ? [.. carried.Where(entry => entry.Kind == PublishedRecordKind.Action)] : [],
             VoteColumns = [.. additions.OfType<PendingRecord<PublishedVote>>().Select(addition => VoteStoredColumns.From(addition.Record))],
             Names = names,
-            BillStatuses = ReleaseBillStatuses.RowsOf(ReleaseBillStatuses.ActionIdsOf(entries), statuses)
+            BillStatuses = ReleaseBillStatuses.RowsOf(ReleaseBillStatuses.ActionIdsOf(entries), statuses),
+            BillHistories = [.. histories.Select(input => new BillHistoryBinding(input.RecordId, input.History!.DetailJobId))]
         };
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
         await ServeActiveReleaseAsync(cancellationToken);
@@ -135,15 +142,23 @@ public sealed class PublishRelease
         throw new ReleaseFullException(PublicationProtocol.MaximumRecordsPerRelease - (total - added.Length), added);
     }
 
-    // The worker asks this when no record is ready. Reading the previous files and one status query is much cheaper than staging a release.
-    public async Task<bool> HasBillStatusChangeAsync(CancellationToken cancellationToken = default)
+    // The worker asks this when no record is ready. Reading the previous files and one bill input query is much cheaper than staging a release.
+    public async Task<bool> HasBillInputChangeAsync(CancellationToken cancellationToken = default)
     {
         var state = await publications.GetStateAsync(cancellationToken);
         var previous = await PreviousRelease.LoadAsync(releases, state.Active, cancellationToken);
         if (previous.DirectoryName is null) return false;
-        var statuses = await ReleaseBillStatuses.LoadAsync(loaders.Actions, previous, [], cancellationToken);
-        return ReleaseBillStatuses.ChangedActionIds(ReleaseBillStatuses.ActionIdsOf(previous.Entries), previous, statuses).Any();
+        var inputs = await ReadBillInputsAsync(state.Active?.ReleaseNumber, previous, [], cancellationToken);
+        var statuses = ReleaseBillStatuses.KeepObservationTimes(previous, inputs);
+        return ReleaseBillStatuses.ChangedActionIds(ReleaseBillStatuses.ActionIdsOf(previous.Entries), previous, statuses).Any() ||
+            inputs.Any(input => input.History?.DetailJobId != input.PublishedHistoryDetailJobId);
     }
+
+    private Task<IReadOnlyList<BillPublicationInput>> ReadBillInputsAsync(int? previousReleaseNumber, PreviousRelease previous,
+        ImmutableArray<PublishedRecordReference> references, CancellationToken cancellationToken) =>
+        publications.ReadBillInputsAsync(previousReleaseNumber,
+            [.. ReleaseBillStatuses.ActionIdsOf(previous.Entries).Concat(references.Where(record => record.Kind == PublishedRecordKind.Action)
+                .Select(record => record.RecordId)).Distinct(StringComparer.Ordinal)], cancellationToken);
 
     // Reads the active release again under the publication lock, so an older command cannot serve a stale release.
     private async Task ServeActiveReleaseAsync(CancellationToken cancellationToken)
@@ -185,7 +200,7 @@ public sealed class PublishRelease
     private async Task<(string Directory, List<PublishedRecordEntry> Entries, ReleaseNames Names)> StageAsync(int number, DateTimeOffset now,
         PreviousRelease previous, List<PublishedRecordEntry> carried, List<PendingRecord> additions,
         List<PublishedRecordEntry> removed, List<PublishedWithdrawal> withdrawals, IReadOnlyDictionary<string, StagedPage> pages, ReleaseBillLines billLines, IReadOnlyDictionary<string, ActionBillStatus> statuses, IReadOnlyList<RosterMember> roster,
-        IReadOnlyDictionary<string, PersonSetting> settings, IReadOnlyList<OfficialPhoto> photos, bool rewriteOfficials, bool rewriteEntries, bool rewritePages, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, PersonSetting> settings, IReadOnlyList<OfficialPhoto> photos, bool rewriteOfficials, bool rewriteEntries, bool rewritePages, bool historyChanged, CancellationToken cancellationToken)
     {
         List<PublishedRecordEntry> entries = [.. carried, .. additions.Select(addition => addition.Entry)];
         var manifest = new PublicationRelease
@@ -228,9 +243,9 @@ public sealed class PublishRelease
         await indexPages.WriteAsync(staging, manifest, facets, billLines, cancellationToken);
         await ReleaseBillStatuses.WriteAsync(staging, ReleaseBillStatuses.RowsOf(ReleaseBillStatuses.ActionIdsOf(manifest.Records), statuses), cancellationToken);
         var officials = await dataFiles.WriteAsync(staging, manifest, facets, additions, previous, roster, settings, photos, cancellationToken);
-        if (additions.Count == 0 && removed.Count == 0 && !rewriteOfficials && !rewriteEntries && !rewritePages && !ReleaseOfficialPages.ChangesProfiles(previous, officials) &&
+        if (!historyChanged && additions.Count == 0 && removed.Count == 0 && !rewriteOfficials && !rewriteEntries && !rewritePages && !ReleaseOfficialPages.ChangesProfiles(previous, officials) &&
             !ReleaseBillStatuses.ChangedActionIds(ReleaseBillStatuses.ActionIdsOf(manifest.Records), previous, statuses).Any())
-            throw new ArgumentException("Nothing to publish: no record, official, or bill status changed.");
+            throw new ArgumentException("Nothing to publish: no record, official, or bill input changed.");
         var boards = await officialPages.WriteAsync(staging, manifest, officials, additions, removed, previous, statuses, billLines, rewriteOfficials, cancellationToken);
         await indexPages.WriteHomeAsync(staging, manifest, facets, HomeHighlights.From(manifest, boards, officials.Officials.Length) with { BillLines = billLines }, additions, previous, cancellationToken);
         await staging.WriteSiteFilesAsync(manifest, cancellationToken);

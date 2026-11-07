@@ -34,6 +34,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
          "brief_revisions", "action_revisions", "action_revision_sponsorships", "action_revision_issues", "action_drafts", "published_entries", "zcta_districts", "roster_snapshots", "collection_attempts",
          "brief_revision_paragraphs", "brief_revision_citations", "brief_revision_paragraph_citations", "document_change_revisions",
          "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas", "published_entry_officials",
+         "published_bill_histories", "published_bill_history_actions", "release_bill_histories",
          "release_bill_statuses", "statement_review_decisions", "executive_action_revisions", "executive_action_revision_notices", "executive_action_documents"];
 
     private string connectionString = null!;
@@ -105,6 +106,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Equal(
         [
             $"active_records v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"bill_actions v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_sponsorships v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_status v {Owner} {Role}:SELECT {{security_barrier=true}}",
