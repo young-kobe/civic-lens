@@ -2327,7 +2327,7 @@ public sealed class ReleaseRendererTests
 
         var table = Assert.Single(document.QuerySelectorAll("table"), candidate => candidate.QuerySelector("caption")!.TextContent == "What we keep and who else sees it");
         Assert.Equal(["When you", "What we keep", "Who else sees it"], table.QuerySelectorAll("thead th").Select(cell => cell.TextContent));
-        Assert.Equal(["Read a page", "Pick light or dark", "Search", "Report a problem", "Email us"], table.QuerySelectorAll("tbody tr").Select(row => row.FirstElementChild!.TextContent));
+        Assert.Equal(["Read a page", "Pick light or dark", "Look up your ZIP", "Search", "Report a problem", "Email us"], table.QuerySelectorAll("tbody tr").Select(row => row.FirstElementChild!.TextContent));
         Assert.Contains($"deleted after {ReaderReportProtocol.PurgeAfterDays} days", document.QuerySelector("main")!.TextContent, StringComparison.Ordinal);
         Assert.NotNull(document.QuerySelector("main a[href='https://www.cloudflare.com/privacypolicy/']"));
     }

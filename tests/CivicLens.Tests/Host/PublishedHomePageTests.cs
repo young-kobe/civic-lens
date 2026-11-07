@@ -301,6 +301,15 @@ public sealed class PublishedHomePageTests
         var panel = document.QuerySelector("[data-zip-results]")!;
         Assert.True(panel.HasAttribute("hidden"));
         Assert.Equal("Your officials", panel.QuerySelector("h2")!.TextContent);
+        var heading = panel.QuerySelector("h2")!;
+        var chip = document.QuerySelector("[data-your-members]")!;
+        var membersLink = new Uri(new Uri("https://civic-lens.test/"), chip.QuerySelector("a")!.GetAttribute("href")!);
+        Assert.NotEmpty(heading.Id!);
+        Assert.Equal("#" + heading.Id, membersLink.Fragment);
+        Assert.Single(document.QuerySelectorAll("#" + heading.Id));
+        Assert.True(chip.HasAttribute("hidden"));
+        Assert.Empty(panel.QuerySelector("[data-zip-body]")!.Children);
+        Assert.Null(document.QuerySelector("input[name=zip]")!.GetAttribute("value"));
         Assert.Equal("status", panel.QuerySelector("[data-zip-body]")!.GetAttribute("role"));
         var notes = panel.QuerySelector("[data-zip-notes]")!;
         Assert.True(notes.HasAttribute("hidden"));

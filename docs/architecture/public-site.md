@@ -93,10 +93,12 @@ These decisions come from the component audit. The owner accepted every recommen
 - The SSR home HTML and its ETag use the same `HomeAnswer` release snapshot. Enforcer: `HomePageReader` passes `HomePageData.Release` to the release-number responder overload. Test: `ServerPageTests.TheHomeRouteUsesTheHomeSnapshotReleaseAndAnswers503WithoutCacheWhenItIsMissing`.
 - Shared home HTML does not vary by cookie or ZIP query. Enforcer: the home component has no reader-specific input and the page cache is shared. Test: the same home route test.
 - The ZIP lookup restores its controls after the current request, including a malformed success response. An older response cannot replace a newer result. Enforcer: `initZipLookup`. No automated test.
+- The browser remembers only a validated five-digit ZIP after its current lookup answer renders. It stores no member details; the home page re-queries published current data. Enforcer: `initRememberedMembers` and `initZipLookup`. No automated test.
+- Shared page HTML contains no remembered ZIP or personal lookup results. Enforcer: `PublicPage` emits empty hooks and browser code reads device storage. Tests: `HomePageTests.TheRememberedMembersLinkTargetsTheLookupHeadingInSharedMarkup` and `PublishedHomePageTests.TheResultPanelIsHiddenUntilALookupAndCreditsTheCensusBureauAndSaysAZctaIsNotAZipCode`.
 
 ## Behavior
 
-Implemented today: the static pages that [publication](publication.md#public-reader-experience) describes. PublicApi also serves `/web` as the first gated server-rendered route when `CIVIC_LENS_PUBLIC_BASE_URL` is configured. It uses one `HomeAnswer` snapshot and its release number for the page validator. A missing active release returns 503 without cache headers. The browser ZIP form appears only when `CIVIC_LENS_PUBLIC_API_URL` is configured; configure that origin before a future live ZIP cutover. The existing static home remains the live route. Other pages move to PublicApi one route at a time in R-68. Rows marked "planned" describe accepted design that is not implemented.
+Implemented today: the static pages that [publication](publication.md#public-reader-experience) describes. PublicApi also serves `/web` as the first gated server-rendered route when `CIVIC_LENS_PUBLIC_BASE_URL` is configured. It uses one `HomeAnswer` snapshot and its release number for the page validator. A missing active release returns 503 without cache headers. The browser ZIP form appears only when `CIVIC_LENS_PUBLIC_API_URL` is configured; configure that origin before a future live ZIP cutover. The existing static home remains the live route. After a successful current ZIP lookup, the browser stores the five-digit ZIP on this device. The header then shows "Your members" and a Forget control. Returning to the home fragment re-queries the configured ZIP endpoint against current published data. Personal lookup results are added only in the browser. Other pages move to PublicApi one route at a time in R-68. Rows marked "planned" describe accepted design that is not implemented.
 
 ### Reader flow matrix
 
@@ -118,7 +120,7 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 | 14 | Read the method and the about page | Method page, about page | Implemented |
 | 15 | Report a problem | Footer and record report links | Partial. Planned: the footer link names the record |
 | 16 | Reach a useful 404 | Not found page | Implemented |
-| 17 | Return and find my members again | "Your members" header chip with a Forget control | Planned |
+| 17 | Return and find my members again | "Your members" header chip with a Forget control | Implemented. A successful ZIP stays in browser local storage; the home fragment refreshes the answer from the current endpoint. |
 | 18 | Compare my members | Compare page: attendance, party line, bills, issues, differing votes | Planned |
 
 ### Component inventory
