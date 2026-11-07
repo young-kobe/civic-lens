@@ -5,7 +5,7 @@ using Npgsql;
 
 namespace CivicLens.PublicApi.Home;
 
-/// <summary>Reads votes, bills, and briefs through one statement from one active release.</summary>
+/// <summary>Reads votes, bills, briefs, and executive action groups through one statement from one active release.</summary>
 public sealed class HomeStore(NpgsqlDataSource views)
 {
     private const int VotesPerChamber = 2;
@@ -13,7 +13,8 @@ public sealed class HomeStore(NpgsqlDataSource views)
     private const string Sql = $"""
         SELECT a.release_number, b.record_id, b.week_start, b.headline, b.label,
                s.is_featured, s.record_id, s.voted_on, s.chamber, s.congress, s.session_number, s.roll_call_number,
-               s.headline, s.label, s.result, s.yea, s.nay, s.bill_type, s.bill_number, s.bill_line, s.summary, s.text_origin, s.alignment
+               s.headline, s.label, s.result, s.yea, s.nay, s.bill_type, s.bill_number, s.bill_line, s.summary, s.text_origin, s.alignment,
+               s.action_kind, s.action_count, s.newest_record_id, s.newest_title, s.newest_signed_on
           FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT v.record_id FROM public_api.votes v
@@ -26,9 +27,14 @@ public sealed class HomeStore(NpgsqlDataSource views)
           ) featured ON TRUE
           LEFT JOIN LATERAL (SELECT * FROM public_api.briefs b ORDER BY b.week_start DESC, b.record_id LIMIT 1) b ON TRUE
           LEFT JOIN LATERAL (
-               SELECT v.*, (SELECT l.bill_line FROM public_api.bills l
-                             WHERE l.congress = v.congress AND l.bill_type = v.bill_type AND l.bill_number = v.bill_number
-                             ORDER BY l.record_id LIMIT 1) AS bill_line
+               SELECT v.is_featured, v.record_id, v.voted_on, v.chamber, v.congress, v.session_number, v.roll_call_number,
+                      v.headline, v.label, v.result, v.yea, v.nay, v.bill_type, v.bill_number,
+                      (SELECT l.bill_line FROM public_api.bills l
+                        WHERE l.congress = v.congress AND l.bill_type = v.bill_type AND l.bill_number = v.bill_number
+                        ORDER BY l.record_id LIMIT 1) AS bill_line,
+                      v.summary, v.text_origin, v.alignment,
+                      NULL::text AS action_kind, NULL::integer AS action_count, NULL::text AS newest_record_id,
+                      NULL::text AS newest_title, NULL::date AS newest_signed_on
                  FROM LATERAL (
                       SELECT true AS is_featured, featured.* WHERE featured.record_id IS NOT NULL
                       UNION ALL
@@ -40,8 +46,19 @@ public sealed class HomeStore(NpgsqlDataSource views)
                                AND (featured.record_id IS NULL OR v.record_id <> featured.record_id)
                              ORDER BY {VoteStore.Order} LIMIT @take) recent
                  ) v
+               UNION ALL
+               SELECT false, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+                      NULL, NULL,
+                      e.kind, e.action_count, e.record_id, e.headline, e.signed_on
+                 FROM (
+                      SELECT kind, record_id, headline, signed_on,
+                             (count(*) OVER (PARTITION BY kind))::integer AS action_count,
+                             row_number() OVER (PARTITION BY kind ORDER BY signed_on DESC, record_id) AS newest
+                        FROM public_api.executive_actions
+                 ) e
+                WHERE e.newest = 1
           ) s ON TRUE
-         ORDER BY s.is_featured DESC NULLS LAST, s.voted_on DESC, s.chamber, s.session_number DESC, s.roll_call_number DESC, s.record_id
+         ORDER BY s.is_featured DESC NULLS LAST, s.voted_on DESC, s.chamber, s.session_number DESC, s.roll_call_number DESC, s.record_id, s.action_kind
         """;
 
     /// <summary>Reads the home answer. Null means there is no active release.</summary>
@@ -54,17 +71,23 @@ public sealed class HomeStore(NpgsqlDataSource views)
         var votes = new List<HomeVote>();
         HomeFeaturedVote? featured = null;
         HomeBrief? brief = null;
+        var executiveActions = new List<HomeExecutiveGroup>();
         int? release = null;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
             release = reader.GetInt32(0);
             brief ??= reader.IsDBNull(1) ? null : new(reader.GetString(1), reader.GetFieldValue<DateOnly>(2), reader.GetString(3), ViewColumns.Text(reader, 4));
+            if (!reader.IsDBNull(23))
+            {
+                executiveActions.Add(new(ViewColumns.Enum<PublishedExecutiveActionKind>(reader, 23), reader.GetInt32(24), reader.GetString(25), reader.GetString(26), reader.GetFieldValue<DateOnly>(27)));
+                continue;
+            }
             if (reader.IsDBNull(5)) continue;
             if (reader.GetBoolean(5)) featured = ReadFeaturedVote(reader);
             else votes.Add(ReadVote(reader));
         }
-        return release is { } active ? new(active, featured, [.. votes], brief) : null;
+        return release is { } active ? new(active, featured, [.. votes], brief) { ExecutiveActions = [.. executiveActions] } : null;
     }
 
     private static HomeFeaturedVote ReadFeaturedVote(NpgsqlDataReader reader)

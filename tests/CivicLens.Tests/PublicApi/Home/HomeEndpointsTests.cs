@@ -18,14 +18,80 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
 {
     private static readonly DateTimeOffset Published = new(2026, 6, 2, 0, 0, 0, TimeSpan.Zero);
 
-    private async Task<ApiHost> StartAsync(SeededVote[] votes, SeededBill[]? bills = null, SeededBrief[]? briefs = null)
+    private async Task<ApiHost> StartAsync(SeededVote[] votes, SeededBill[]? bills = null, SeededBrief[]? briefs = null, SeededExecutiveAction[]? executiveActions = null)
     {
         var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        try
+        {
+            await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, Published);
+            await ViewsSeed.AddVotesAsync(host.OperationalDatabase, votes);
+            await BillsSeed.AddBillsAsync(host.OperationalDatabase, bills ?? []);
+            await HomeSeed.AddBriefsAsync(host.OperationalDatabase, briefs ?? []);
+            await HomeSeed.AddExecutiveActionsAsync(host.OperationalDatabase, executiveActions ?? []);
+            return host;
+        }
+        catch
+        {
+            await host.DisposeAsync();
+            throw;
+        }
+    }
+
+    [Fact]
+    public async Task ExecutiveGroupsCountActivePublishedKindsAndChooseNewestSignedRecordWithRecordIdTieOrder()
+    {
+        var votes = new[] { House('1', "2026-05-01", 1), House('2', "2026-05-02", 2), House('3', "2026-05-03", 3) };
+        var actions = new[]
+        {
+            new SeededExecutiveAction('a', "ExecutiveOrder", "2026-05-20", "2026-05-01") { Title = "Pinned active title", ActiveRevision = 2, AddUnpublishedRevision = true },
+            new SeededExecutiveAction('b', "ExecutiveOrder", "2026-05-20", "2026-06-01") { Title = "Tie title" },
+            new SeededExecutiveAction('c', "ExecutiveOrder", "2026-05-19", "2026-06-02") { Title = "Older signed title" },
+            new SeededExecutiveAction('d', "Proclamation", "2026-05-18", "2026-06-03"),
+            new SeededExecutiveAction('e', "ExecutiveOrder", "2026-05-21", "2026-05-22") { Title = "Unpublished wrong title", FirstRelease = 2 }
+        };
+        await using var host = await StartAsync(votes, briefs: [new SeededBrief('x', "2026-05-25")], executiveActions: actions);
+
+        var answer = await GetAsync(host);
+        var groups = answer.GetProperty("executiveActions").EnumerateArray().ToArray();
+
+        Assert.Equal(2, groups.Length);
+        var order = Assert.Single(groups, group => group.GetProperty("kind").GetString() == "executiveOrder");
+        Assert.Equal(3, order.GetProperty("count").GetInt32());
+        Assert.Equal(actions[0].RecordId, order.GetProperty("newestRecordId").GetString()!);
+        Assert.Equal("Pinned active title", order.GetProperty("newestTitle").GetString());
+        Assert.Equal("2026-05-20", order.GetProperty("newestSignedOn").GetString());
+        var proclamation = Assert.Single(groups, group => group.GetProperty("kind").GetString() == "proclamation");
+        Assert.Equal(1, proclamation.GetProperty("count").GetInt32());
+        Assert.Equal(actions[3].RecordId, proclamation.GetProperty("newestRecordId").GetString()!);
+        Assert.Equal(votes[2].RecordId, FeaturedId(answer));
+        Assert.Equal([votes[1].RecordId, votes[0].RecordId], Ids(answer));
+        Assert.Equal(new SeededBrief('x', "2026-05-25").RecordId, answer.GetProperty("brief").GetProperty("recordId").GetString()!);
+
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, Published.AddDays(1));
+        var next = await GetAsync(host);
+        var nextOrder = Assert.Single(next.GetProperty("executiveActions").EnumerateArray(), group => group.GetProperty("kind").GetString() == "executiveOrder");
+        Assert.Equal(2, next.GetProperty("release").GetInt32());
+        Assert.Equal(4, nextOrder.GetProperty("count").GetInt32());
+        Assert.Equal(actions[4].RecordId, nextOrder.GetProperty("newestRecordId").GetString());
+
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, Published);
-        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, votes);
-        await BillsSeed.AddBillsAsync(host.OperationalDatabase, bills ?? []);
-        await HomeSeed.AddBriefsAsync(host.OperationalDatabase, briefs ?? []);
-        return host;
+        var rolledBack = await GetAsync(host);
+        var restoredOrder = Assert.Single(rolledBack.GetProperty("executiveActions").EnumerateArray(), group => group.GetProperty("kind").GetString() == "executiveOrder");
+        Assert.Equal(3, restoredOrder.GetProperty("count").GetInt32());
+        Assert.Equal("Pinned active title", restoredOrder.GetProperty("newestTitle").GetString());
+    }
+
+    [Fact]
+    public async Task ExecutiveOnlyReleaseReturnsGroupsAndAnEmptyVoteArray()
+    {
+        var action = new SeededExecutiveAction('a', "Memorandum", "2026-05-20", "2026-05-21");
+        await using var host = await StartAsync([], executiveActions: [action]);
+
+        var answer = await GetAsync(host);
+
+        Assert.Equal(1, answer.GetProperty("release").GetInt32());
+        Assert.Equal(0, answer.GetProperty("votes").GetArrayLength());
+        Assert.Equal(1, answer.GetProperty("executiveActions")[0].GetProperty("count").GetInt32());
     }
 
     private static async Task<JsonElement> GetAsync(ApiHost host, HttpStatusCode expected = HttpStatusCode.OK)
@@ -399,5 +465,6 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(1, answer.GetProperty("release").GetInt32());
         Assert.Equal(JsonValueKind.Null, answer.GetProperty("featuredVote").ValueKind);
         Assert.Equal(0, answer.GetProperty("votes").GetArrayLength());
+        Assert.Equal(0, answer.GetProperty("executiveActions").GetArrayLength());
     }
 }
