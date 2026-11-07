@@ -185,7 +185,7 @@ public static class Glossary
         ])
     ];
 
-    /// <summary>The group whose entries are followed by the party count note, in the index and in the body.</summary>
+    /// <summary>The definition group that holds the party count note in the page body.</summary>
     public static GlossaryGroup PartyCountGroup => Groups[0];
 
     public static readonly string PartyCountHeading = "How we count party votes";

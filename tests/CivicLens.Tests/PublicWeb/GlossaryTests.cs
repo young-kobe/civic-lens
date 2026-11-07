@@ -53,37 +53,53 @@ public sealed class GlossaryTests
     }
 
     [Fact]
-    public async Task TheGlossaryPageStartsWithAnIndexThatLinksEveryGroupAndTermToItsAnchor()
+    public async Task TheGlossaryIndexGroupsEveryTermAlphabeticallyAndLinksPopulatedLettersAndDefinitions()
     {
         var document = new HtmlParser().ParseDocument(await Renderer.RenderGlossaryAsync(CancellationToken.None));
         var main = document.QuerySelector("main")!;
         var index = main.QuerySelector($"nav[aria-label='{Glossary.IndexLabel}']")!;
+        var entries = index.QuerySelectorAll(".glossary-index-terms a").ToList();
+        var expected = AllTerms.Select(term => (term.Name, term.AnchorId))
+            .Append((Glossary.PartyCountHeading, Glossary.PartyCountAnchorId))
+            .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        var expected = Glossary.Groups.Select(group => group.AnchorId)
-            .Concat(AllTerms.Select(term => term.AnchorId))
-            .Append(Glossary.PartyCountAnchorId);
-        var links = index.QuerySelectorAll("a").ToList();
+        Assert.Equal(expected.Select(entry => entry.Name), entries.Select(link => link.TextContent));
+        Assert.Equal(expected.Select(entry => $"#{entry.AnchorId}"), entries.Select(link => link.GetAttribute("href")));
+        Assert.All(entries, link => Assert.NotNull(main.QuerySelector($"[id='{link.GetAttribute("href")!.TrimStart('#')}']")));
+        Assert.Equal(entries.Count, entries.Select(link => link.GetAttribute("href")).Distinct().Count());
 
-        Assert.Equal(expected.Order(), links.Select(link => link.GetAttribute("href")!.TrimStart('#')).Order());
-        Assert.All(links, link => Assert.NotNull(main.QuerySelector($"[id='{link.GetAttribute("href")!.TrimStart('#')}']")));
+        var letters = index.QuerySelectorAll(".glossary-index-letters a").ToList();
+        var letterHeadings = index.QuerySelectorAll(".glossary-index-groups h3").ToList();
+        var expectedLetters = expected.Select(entry => char.ToUpperInvariant(entry.Name[0]).ToString()).Distinct().ToList();
+        Assert.Equal(expectedLetters, letterHeadings.Select(heading => heading.TextContent));
+        Assert.Equal(expectedLetters, letters.Select(link => link.TextContent));
+        Assert.Equal(letterHeadings.Select(heading => "#" + heading.Id), letters.Select(link => link.GetAttribute("href")));
+        Assert.All(letterHeadings, heading => Assert.Equal("-1", heading.GetAttribute("tabindex")));
+        Assert.All(index.QuerySelectorAll(".glossary-index-groups > li"), group =>
+        {
+            var letter = group.QuerySelector("h3")!.TextContent;
+            var groupEntries = group.QuerySelectorAll(".glossary-index-terms a");
+            Assert.NotEmpty(groupEntries);
+            Assert.All(groupEntries, link => Assert.Equal(letter, char.ToUpperInvariant(link.TextContent[0]).ToString()));
+        });
+        Assert.All(Glossary.Groups, group => Assert.NotNull(main.QuerySelector($"[id='{group.AnchorId}']")));
+        var ids = main.QuerySelectorAll("[id]").Select(element => element.Id).ToList();
+        Assert.Equal(ids.Count, ids.Distinct(StringComparer.Ordinal).Count());
         Assert.True(index.CompareDocumentPosition(main.QuerySelector("section.glossary-term")!).HasFlag(AngleSharp.Dom.DocumentPositions.Following));
-        Assert.Empty(index.QuerySelectorAll("h1, h2, h3, h4, h5, h6"));
     }
 
     [Fact]
-    public async Task ThePartyCountNoteSitsInTheSameGroupInTheIndexAndInTheBody()
+    public async Task ThePartyCountNoteKeepsItsBodyGroupAndIsInTheAlphabeticalIndex()
     {
         var document = new HtmlParser().ParseDocument(await Renderer.RenderGlossaryAsync(CancellationToken.None));
         var main = document.QuerySelector("main")!;
-        var expected = Glossary.PartyCountGroup.AnchorId;
-
         var indexLink = main.QuerySelector($"nav a[href='#{Glossary.PartyCountAnchorId}']")!;
-        var indexGroup = indexLink.Closest("ul.glossary-index-groups > li")!.QuerySelector("a")!;
         var bodyPanel = main.QuerySelectorAll("section[aria-labelledby^='glossary-group-']")
             .Single(panel => panel.QuerySelector($"#{Glossary.PartyCountAnchorId}") is not null);
 
-        Assert.Equal($"#{expected}", indexGroup.GetAttribute("href"));
-        Assert.Equal(expected, bodyPanel.GetAttribute("aria-labelledby"));
+        Assert.Equal(Glossary.PartyCountHeading, indexLink.TextContent);
+        Assert.Equal(Glossary.PartyCountGroup.AnchorId, bodyPanel.GetAttribute("aria-labelledby"));
     }
 
     [Fact]
