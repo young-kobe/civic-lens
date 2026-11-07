@@ -11,7 +11,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
 {
     private const string Columns = """
         v.record_id, v.revision_number, v.chamber, v.congress, v.session_number, v.roll_call_number, v.voted_on, v.kind, v.bill_type, v.bill_number,
-        v.headline, v.summary, v.text_origin, v.label, v.question, v.result, v.yea, v.nay, v.present, v.not_voting, v.alignment
+        v.headline, v.summary, v.text_origin, v.label, v.question, v.result, v.yea, v.nay, v.present, v.not_voting, v.alignment, v.bill_record_id
         """;
     internal const string Order = "v.voted_on DESC, v.chamber, v.session_number DESC, v.roll_call_number DESC, v.record_id";
     // The tuple comparison cannot mix directions, so the chain follows the ORDER BY key by key.
@@ -55,7 +55,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
             """);
         command.Parameters.AddWithValue("id", recordId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken) ? new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(22), reader.GetFieldValue<string[]>(23)) : null;
+        return await reader.ReadAsync(cancellationToken) ? new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(23), reader.GetFieldValue<string[]>(24)) : null;
     }
 
     /// <summary>Reads one page of members. Null means that the active release holds no such vote. The caller compares the release of the page with the release of the cursor.</summary>
@@ -166,6 +166,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
         Nay = ViewColumns.Number(reader, 18),
         Present = ViewColumns.Number(reader, 19),
         NotVoting = ViewColumns.Number(reader, 20),
-        Alignment = reader.IsDBNull(21) ? null : ViewColumns.Enum<PublishedVoteAlignment>(reader, 21)
+        Alignment = reader.IsDBNull(21) ? null : ViewColumns.Enum<PublishedVoteAlignment>(reader, 21),
+        BillRecordId = ViewColumns.Text(reader, 22)
     };
 }
