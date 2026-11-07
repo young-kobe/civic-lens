@@ -36,7 +36,7 @@ public sealed class RelatedStore(NpgsqlDataSource views)
     private static string Sql(RelatedRequest request) => $"""
         SELECT a.release_number,
                EXISTS (SELECT 1 FROM public_api.active_records x WHERE x.kind = @kind AND x.record_id = @id),
-               l.related_kind, l.related_record_id, l.related_headline, l.related_text_origin, l.related_label, l.link_type, l.statement_date, l.link_record_id
+               l.related_kind, l.related_record_id, l.related_headline, l.related_text_origin, l.related_label, l.link_type, l.statement_date, l.link_record_id, l.reason
           FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT l.* FROM public_api.record_links l
@@ -74,6 +74,7 @@ public sealed class RelatedStore(NpgsqlDataSource views)
         Label = ViewColumns.Text(reader, 6),
         LinkType = ViewColumns.Enum<PublishedRelationshipType>(reader, 7),
         StatementDate = ViewColumns.Date(reader, 8),
-        LinkRecordId = reader.GetString(9)
+        LinkRecordId = reader.GetString(9),
+        Reason = ViewColumns.Text(reader, 10)
     };
 }

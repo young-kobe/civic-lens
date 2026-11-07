@@ -48,6 +48,17 @@ internal static class PublicRecordPageRows
           VALUES ('relationship', '{link}', 1, '{link}', 1, 'Link', {(statementDate is null ? "NULL" : $"'{statementDate}'")}, '{type}', '{statement}', '{targetKind}', '{target}');
         """;
 
+    /// <summary>A typed relationship revision for view tests. Run with <c>session_replication_role = replica</c>.</summary>
+    public static string RelationshipRevision(string link, int revision, string statement, string target, string targetKind, string type, string reason) => $"""
+        INSERT INTO relationship_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks,
+            statement_candidate_id, statement_revision_number, target_kind, match_basis, match_extraction_id, match_start, match_length, type, reason,
+            statement_quote_extraction_id, statement_quote_start, statement_quote_length, target_fact_id, target_action_record_id, target_action_revision_number,
+            target_vote_record_id, target_vote_revision_number, official_id)
+          VALUES ('{link}', {revision}, 'test', 'Person', NULL, '{{}}', 1, '{statement}', 1,
+            '{(targetKind == "action" ? "Action" : "Vote")}', 'BillNumber', 'ext', 0, 1, '{type}', '{reason}', 'ext', 0, 1, 'fact',
+            {(targetKind == "action" ? $"'{target}', 1" : "NULL, NULL")}, {(targetKind == "vote" ? $"'{target}', 1" : "NULL, NULL")}, 'official');
+        """;
+
     /// <summary>The revision 1 of a statement, action, or vote, with its headline and text origin ("Model", "Code", or "Person"). Write it once for each record.
     /// A statement has no origin column, so "Model" gives the author kind Analysis and any other origin gives Person.</summary>
     public static string Headline(string kind, string record, string headline, string origin = "Person", string? approvedBy = null) => kind switch
