@@ -2,6 +2,8 @@ namespace CivicLens.Publication.Contracts;
 
 public sealed record PublishedDocumentVersion
 {
+    public const int MaximumTextLength = 2_000_000;
+
     public required string ExtractionId { get; init; }
     public required string Url { get; init; }
     public required DateTimeOffset ObservedAtUtc { get; init; }
