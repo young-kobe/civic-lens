@@ -47,7 +47,7 @@
                             @featured.BillLine
                             @if (featured.BillLineSource is not null)
                             {
-                                <span> @featured.BillLineSource</span>
+                                <span>@(" " + featured.BillLineSource)</span>
                             }
                         </p>
                     }
@@ -86,7 +86,7 @@
                                         @vote.BillLine
                                         @if (vote.BillLineSource is not null)
                                         {
-                                            <span> @vote.BillLineSource</span>
+                                            <span>@(" " + vote.BillLineSource)</span>
                                         }
                                     </p>
                                 }
