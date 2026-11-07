@@ -61,6 +61,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new HomeStore(views));
         builder.Services.AddSingleton(provider => new HomePageReader(provider.GetRequiredService<HomeStore>(), options.BrowserApiUrl));
         builder.Services.AddSingleton(new RelatedStore(views));
+        builder.Services.AddSingleton(new WithdrawalStore(views));
         builder.Services.AddSingleton(new ExecutiveActionStore(views));
         if (options.PublicBaseUrl is { } baseUrl)
         {
@@ -109,6 +110,7 @@ public static class PublicApiApp
         app.MapIssues();
         app.MapHome();
         app.MapRelated();
+        app.MapWithdrawals();
         app.MapExecutiveActions();
         app.MapOfficials();
         app.MapSearch();
