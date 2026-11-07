@@ -54,7 +54,7 @@ internal static class PublicRecordPageRows
             statement_candidate_id, statement_revision_number, target_kind, match_basis, match_extraction_id, match_start, match_length, type, reason,
             statement_quote_extraction_id, statement_quote_start, statement_quote_length, target_fact_id, target_action_record_id, target_action_revision_number,
             target_vote_record_id, target_vote_revision_number, official_id)
-          VALUES ('{link}', {revision}, 'test', 'Person', NULL, '{{}}', 1, '{statement}', 1,
+          VALUES ('{link}', {revision}, 'test', 'Person', NULL, 'x', 1, '{statement}', 1,
             '{(targetKind == "action" ? "Action" : "Vote")}', 'BillNumber', 'ext', 0, 1, '{type}', '{reason}', 'ext', 0, 1, 'fact',
             {(targetKind == "action" ? $"'{target}', 1" : "NULL, NULL")}, {(targetKind == "vote" ? $"'{target}', 1" : "NULL, NULL")}, 'official');
         """;
