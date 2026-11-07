@@ -111,8 +111,9 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
         await using var host = await StartAsync(withNames: false);
 
         await AssertProblemAsync(host, "/v1/zip-districts/not-a-zip/members", HttpStatusCode.BadRequest);
-        await AssertProblemAsync(host, "/v1/zip-districts/11111/members", HttpStatusCode.NotFound);
         await AssertProblemAsync(host, "/v1/zip-districts/36009/members", HttpStatusCode.ServiceUnavailable);
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 1, new SeededSeat("al2", "Alice Two", Representative, "AL", 2));
+        await AssertProblemAsync(host, "/v1/zip-districts/11111/members", HttpStatusCode.NotFound);
     }
 
     [Fact]
