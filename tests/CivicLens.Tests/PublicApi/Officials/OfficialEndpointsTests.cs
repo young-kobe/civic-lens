@@ -64,9 +64,20 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
 
     private static PublishedOfficialVote PartyVote(char id, PublishedChamber chamber, int congress, string votedOn, string cast, string party, string partyMajority) => new()
     {
-        RecordId = new(id, 64), Chamber = chamber, Congress = congress, Session = 1, RollCallNumber = id,
-        VotedOn = DateOnly.Parse(votedOn), Cast = cast, Party = party, PartyMajority = partyMajority,
-        Result = "Passed", SplitVote = true, Headline = "Vote", Kind = PublishedVoteKind.Passage, IssueIds = []
+        RecordId = new(id, 64),
+        Chamber = chamber,
+        Congress = congress,
+        Session = 1,
+        RollCallNumber = id,
+        VotedOn = DateOnly.Parse(votedOn),
+        Cast = cast,
+        Party = party,
+        PartyMajority = partyMajority,
+        Result = "Passed",
+        SplitVote = true,
+        Headline = "Vote",
+        Kind = PublishedVoteKind.Passage,
+        IssueIds = []
     };
 
     [Fact]
@@ -281,10 +292,12 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
         await using var host = await StartAsync(withVotesAndBills: true);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, new SeededVote('e', "2026-02-07")
         {
-            Casts = ["Yea", "Not Voting", "Yea", "Present", "Nay"], RollCall = 5
+            Casts = ["Yea", "Not Voting", "Yea", "Present", "Nay"],
+            RollCall = 5
         }, new SeededVote('f', "2026-02-08")
         {
-            Casts = ["Yea", "Not Voting", "No", "Present", "Nay"], RollCall = 6
+            Casts = ["Yea", "Not Voting", "No", "Present", "Nay"],
+            RollCall = 6
         });
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
             SET session_replication_role = replica;
