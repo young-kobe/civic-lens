@@ -96,6 +96,24 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task BillsNeedASponsorshipButDoNotRequireTheSponsorRole()
+    {
+        var empty = new SeededBill('0', "2026-03-04") { Sponsorships = [] };
+        var cosponsor = new SeededBill('a', "2026-03-03")
+        {
+            Sponsorships = [new("p2", "Cosponsor", "2026-01-10")]
+        };
+        await using var host = await StartWithBillsAsync(empty, cosponsor);
+
+        using var page = await GetAsync(host, "/v1/bills");
+        Assert.Equal(['a'], Ids(page));
+        var bill = Assert.Single(page.RootElement.GetProperty("bills").EnumerateArray());
+        Assert.Equal(0, bill.GetProperty("sponsorCount").GetInt32());
+        Assert.Equal(1, bill.GetProperty("cosponsorCount").GetInt32());
+        using var missing = await GetAsync(host, $"/v1/bills/{empty.RecordId}", HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task BillsComeNewestEventFirstAndATieOnTheEventDateFallsBackToTheRecordIdWithTheReleaseOfTheSameQuery()
     {
         await using var host = await StartWithBillsAsync(All);
