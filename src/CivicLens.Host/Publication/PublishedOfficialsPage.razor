@@ -34,7 +34,7 @@
                 @foreach (var card in Cards)
                 {
                     <li class="official-card" data-name="@card.Official.Profile.Name" data-office="@PublishedOfficialView.OfficeKey(card.Kind)" data-state="@card.Term?.State">
-                        <OfficialPortrait Profile="card.Official.Profile" RootPath="" Compact="true" ShowCredit="@(!SharedCredit)" />
+                        <OfficialPortrait Name="@card.Official.Profile.Name" PhotoPath="@card.Official.Profile.Photo?.Path" PhotoWidth="@card.Official.Profile.Photo?.Width" PhotoHeight="@card.Official.Profile.Photo?.Height" PhotoCredit="@card.Official.Profile.Photo?.Credit" RootPath="" Compact="true" ShowCredit="@(!SharedCredit)" />
                         <div class="official-card-text">
                             <CellTitle Href="@card.Official.PagePath">@card.Official.Profile.Name</CellTitle>
                             @if (card.Term is { } term)

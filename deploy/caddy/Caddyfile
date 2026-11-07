@@ -63,7 +63,7 @@ http://civic-lens.info, http://127.0.0.1 {
 http://api.civic-lens.info {
 	import security_headers
 
-	@web path /web /web/*
+	@web path /web /web/* /v1/zip-districts/*/members
 	encode @web zstd gzip
 	header @web {
 		+Cache-Control no-transform
