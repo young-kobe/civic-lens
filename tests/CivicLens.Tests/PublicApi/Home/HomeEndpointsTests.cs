@@ -8,6 +8,7 @@ using CivicLens.PublicApi.Home;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
+using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Home;
 
@@ -17,14 +18,80 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
 {
     private static readonly DateTimeOffset Published = new(2026, 6, 2, 0, 0, 0, TimeSpan.Zero);
 
-    private async Task<ApiHost> StartAsync(SeededVote[] votes, SeededBill[]? bills = null, SeededBrief[]? briefs = null)
+    private async Task<ApiHost> StartAsync(SeededVote[] votes, SeededBill[]? bills = null, SeededBrief[]? briefs = null, SeededExecutiveAction[]? executiveActions = null)
     {
         var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        try
+        {
+            await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, Published);
+            await ViewsSeed.AddVotesAsync(host.OperationalDatabase, votes);
+            await BillsSeed.AddBillsAsync(host.OperationalDatabase, bills ?? []);
+            await HomeSeed.AddBriefsAsync(host.OperationalDatabase, briefs ?? []);
+            await HomeSeed.AddExecutiveActionsAsync(host.OperationalDatabase, executiveActions ?? []);
+            return host;
+        }
+        catch
+        {
+            await host.DisposeAsync();
+            throw;
+        }
+    }
+
+    [Fact]
+    public async Task ExecutiveGroupsCountActivePublishedKindsAndChooseNewestSignedRecordWithRecordIdTieOrder()
+    {
+        var votes = new[] { House('1', "2026-05-01", 1), House('2', "2026-05-02", 2), House('3', "2026-05-03", 3) };
+        var actions = new[]
+        {
+            new SeededExecutiveAction('a', "ExecutiveOrder", "2026-05-20", "2026-05-01") { Title = "Pinned active title", ActiveRevision = 2, AddUnpublishedRevision = true },
+            new SeededExecutiveAction('b', "ExecutiveOrder", "2026-05-20", "2026-06-01") { Title = "Tie title" },
+            new SeededExecutiveAction('c', "ExecutiveOrder", "2026-05-19", "2026-06-02") { Title = "Older signed title" },
+            new SeededExecutiveAction('d', "Proclamation", "2026-05-18", "2026-06-03"),
+            new SeededExecutiveAction('e', "ExecutiveOrder", "2026-05-21", "2026-05-22") { Title = "Unpublished wrong title", FirstRelease = 2 }
+        };
+        await using var host = await StartAsync(votes, briefs: [new SeededBrief('x', "2026-05-25")], executiveActions: actions);
+
+        var answer = await GetAsync(host);
+        var groups = answer.GetProperty("executiveActions").EnumerateArray().ToArray();
+
+        Assert.Equal(2, groups.Length);
+        var order = Assert.Single(groups, group => group.GetProperty("kind").GetString() == "executiveOrder");
+        Assert.Equal(3, order.GetProperty("count").GetInt32());
+        Assert.Equal(actions[0].RecordId, order.GetProperty("newestRecordId").GetString()!);
+        Assert.Equal("Pinned active title", order.GetProperty("newestTitle").GetString());
+        Assert.Equal("2026-05-20", order.GetProperty("newestSignedOn").GetString());
+        var proclamation = Assert.Single(groups, group => group.GetProperty("kind").GetString() == "proclamation");
+        Assert.Equal(1, proclamation.GetProperty("count").GetInt32());
+        Assert.Equal(actions[3].RecordId, proclamation.GetProperty("newestRecordId").GetString()!);
+        Assert.Equal(votes[2].RecordId, FeaturedId(answer));
+        Assert.Equal([votes[1].RecordId, votes[0].RecordId], Ids(answer));
+        Assert.Equal(new SeededBrief('x', "2026-05-25").RecordId, answer.GetProperty("brief").GetProperty("recordId").GetString()!);
+
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, Published.AddDays(1));
+        var next = await GetAsync(host);
+        var nextOrder = Assert.Single(next.GetProperty("executiveActions").EnumerateArray(), group => group.GetProperty("kind").GetString() == "executiveOrder");
+        Assert.Equal(2, next.GetProperty("release").GetInt32());
+        Assert.Equal(4, nextOrder.GetProperty("count").GetInt32());
+        Assert.Equal(actions[4].RecordId, nextOrder.GetProperty("newestRecordId").GetString());
+
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, Published);
-        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, votes);
-        await BillsSeed.AddBillsAsync(host.OperationalDatabase, bills ?? []);
-        await HomeSeed.AddBriefsAsync(host.OperationalDatabase, briefs ?? []);
-        return host;
+        var rolledBack = await GetAsync(host);
+        var restoredOrder = Assert.Single(rolledBack.GetProperty("executiveActions").EnumerateArray(), group => group.GetProperty("kind").GetString() == "executiveOrder");
+        Assert.Equal(3, restoredOrder.GetProperty("count").GetInt32());
+        Assert.Equal("Pinned active title", restoredOrder.GetProperty("newestTitle").GetString());
+    }
+
+    [Fact]
+    public async Task ExecutiveOnlyReleaseReturnsGroupsAndAnEmptyVoteArray()
+    {
+        var action = new SeededExecutiveAction('a', "Memorandum", "2026-05-20", "2026-05-21");
+        await using var host = await StartAsync([], executiveActions: [action]);
+
+        var answer = await GetAsync(host);
+
+        Assert.Equal(1, answer.GetProperty("release").GetInt32());
+        Assert.Equal(0, answer.GetProperty("votes").GetArrayLength());
+        Assert.Equal(1, answer.GetProperty("executiveActions")[0].GetProperty("count").GetInt32());
     }
 
     private static async Task<JsonElement> GetAsync(ApiHost host, HttpStatusCode expected = HttpStatusCode.OK)
@@ -114,6 +181,49 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
 
         Assert.Null(FeaturedId(answer));
         Assert.Equal([votes[2].RecordId, votes[1].RecordId, votes[0].RecordId], Ids(answer));
+    }
+
+    [Fact]
+    public async Task RecentVotesKeepThePublishedAlignmentInTheApiAndHomePage()
+    {
+        var votes = new[]
+        {
+            House('a', "2026-05-01", 1), House('b', "2026-05-02", 2),
+            Senate('c', "2026-05-03", 3), Senate('d', "2026-05-04", 4), House('e', "2026-05-05", 5)
+        };
+        await using var host = await StartAsync(votes);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            UPDATE vote_revisions SET alignment = CASE record_id
+                WHEN '{votes[0].RecordId}' THEN 'Split'
+                WHEN '{votes[1].RecordId}' THEN 'PartiesAgree'
+                WHEN '{votes[2].RecordId}' THEN 'Mixed'
+                ELSE NULL END, columns_written = true
+            WHERE revision_number = 1;
+            INSERT INTO vote_revisions
+            SELECT (jsonb_populate_record(NULL::public.vote_revisions,
+                to_jsonb(v) || jsonb_build_object('revision_number', 2, 'alignment', 'Mixed'))).*
+            FROM vote_revisions v WHERE record_id = '{votes[0].RecordId}' AND revision_number = 1;
+            """);
+
+        var answer = await GetAsync(host);
+        var servedVotes = answer.GetProperty("votes").EnumerateArray().ToDictionary(
+            vote => vote.GetProperty("recordId").GetString()!, vote => vote.GetProperty("alignment"));
+
+        Assert.Equal("split", servedVotes[votes[0].RecordId].GetString());
+        Assert.Equal("partiesAgree", servedVotes[votes[1].RecordId].GetString());
+        Assert.Equal("mixed", servedVotes[votes[2].RecordId].GetString());
+        Assert.Equal(JsonValueKind.Null, servedVotes[votes[3].RecordId].ValueKind);
+        Assert.Equal(votes[4].RecordId, FeaturedId(answer));
+
+        await using var dataSource = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase!);
+        var page = await new HomePageReader(new HomeStore(dataSource), null).ReadAsync(CancellationToken.None);
+
+        Assert.NotNull(page);
+        Assert.Equal(PublishedVoteAlignment.Split, page.Votes.Single(vote => vote.RecordId == votes[0].RecordId).Alignment);
+        Assert.Equal(PublishedVoteAlignment.PartiesAgree, page.Votes.Single(vote => vote.RecordId == votes[1].RecordId).Alignment);
+        Assert.Equal(PublishedVoteAlignment.Mixed, page.Votes.Single(vote => vote.RecordId == votes[2].RecordId).Alignment);
+        Assert.Null(page.Votes.Single(vote => vote.RecordId == votes[3].RecordId).Alignment);
     }
 
     [Fact]
@@ -209,7 +319,8 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         {
             // The first record of the bill has no line, so the line is null, as in the static rule.
             new SeededBill('a', "2026-03-01") { BillNumber = 1 }, new SeededBill('b', "2026-03-01") { BillNumber = 1, BillLine = "Line b." },
-            new SeededBill('d', "2026-03-01") { BillNumber = 2, BillLine = "Line d." }, new SeededBill('c', "2026-03-01") { BillNumber = 2, BillLine = "Line c." }
+            new SeededBill('d', "2026-03-01") { BillNumber = 2, BillLine = "Line d." }, new SeededBill('c', "2026-03-01") { BillNumber = 2, BillLine = "Line c." },
+            new SeededBill('0', "2026-03-01") { BillNumber = 3, BillLine = "No sponsorships.", Sponsorships = [] }
         };
         await using var host = await StartAsync(votes, bills);
 
@@ -234,6 +345,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         var served = answer.GetProperty("votes").EnumerateArray().Select(vote => vote.GetProperty("billLine").GetString()).ToArray();
         Assert.Equal(expected, served);
         Assert.Equal(new string?[] { "Line c.", null }, served);
+        Assert.Equal(JsonValueKind.Null, answer.GetProperty("featuredVote").GetProperty("billLine").ValueKind);
     }
 
     [Fact]
@@ -353,5 +465,6 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(1, answer.GetProperty("release").GetInt32());
         Assert.Equal(JsonValueKind.Null, answer.GetProperty("featuredVote").ValueKind);
         Assert.Equal(0, answer.GetProperty("votes").GetArrayLength());
+        Assert.Equal(0, answer.GetProperty("executiveActions").GetArrayLength());
     }
 }

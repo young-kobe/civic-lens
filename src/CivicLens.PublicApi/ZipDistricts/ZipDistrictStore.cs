@@ -1,5 +1,6 @@
 using System.Data;
 using CivicLens.PublicApi.Http;
+using CivicLens.PublicApi.Officials;
 using CivicLens.Publication.Contracts;
 using Npgsql;
 
@@ -43,8 +44,16 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
          ORDER BY state, start_on, official_id
         """;
 
+    private const string HolderFiguresSql = $"""
+        SELECT p.official_id, p.photo_path, a.chamber, a.congress, a.held, a.missed, a.first_voted_on, a.last_voted_on
+          FROM public_api.officials p
+          LEFT JOIN ({OfficialAttendanceReader.LatestSql}) a ON a.official_id = p.official_id
+         WHERE p.official_id = ANY(@attendanceIds)
+         ORDER BY p.official_id, a.chamber
+        """;
+
     /// <summary>Finds the districts of a ZCTA. The lookup names the miss when no release is active, when the release holds no names, or when the ZCTA has no row for the Congress.
-    /// One snapshot serves both reads, so the districts and the senators come from one release.</summary>
+    /// One snapshot serves all reads, so the seats, portraits, and figures come from one release.</summary>
     public async Task<ZipLookup> FindAsync(ZipDistrictRequest request, CancellationToken cancellationToken)
     {
         await using var connection = await views.OpenConnectionAsync(cancellationToken);
@@ -55,9 +64,15 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         if (districts.Rows.Count == 0) return ZipLookup.NotFound;
         var states = districts.Rows.Select(row => row.State).Distinct(StringComparer.Ordinal).ToArray();
         var senators = await ReadSenatorsAsync(connection, states, cancellationToken);
+        var stateAnswers = states.Select(state => new ZipState(state, SenateSeats(state, senators))).ToArray();
+        var holderIds = districts.Rows.Select(row => row.Representative?.OfficialId)
+            .Concat(stateAnswers.SelectMany(state => state.Senators).Select(holder => holder?.OfficialId))
+            .OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
+        var figures = await ReadHolderFiguresAsync(connection, holderIds, cancellationToken);
+        var districtAnswers = districts.Rows.Select(row => new ZipDistrict(row.State, row.District, Enrich(row.Representative, figures))).ToArray();
         var answer = new ZipDistrictAnswer(release, districts.Congress, request.Zcta,
-            [.. districts.Rows.Select(row => new ZipDistrict(row.State, row.District, row.Representative))],
-            [.. states.Select(state => new ZipState(state, SenateSeats(state, senators)))]);
+            districtAnswers,
+            [.. stateAnswers.Select(state => state with { Senators = [.. state.Senators.Select(holder => Enrich(holder, figures))] })]);
         return ZipLookup.Of(answer);
     }
 
@@ -106,9 +121,35 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
     }
 
     private static SeatHolder? ReadHolder(NpgsqlDataReader reader, int first) =>
-        reader.IsDBNull(first) ? null : new(reader.GetString(first), reader.GetString(first + 1), ViewColumns.Text(reader, first + 2), ViewColumns.Date(reader, first + 3));
+        reader.IsDBNull(first) ? null : new(reader.GetString(first), reader.GetString(first + 1), ViewColumns.Text(reader, first + 2), ViewColumns.Date(reader, first + 3), null, []);
+
+    private static SeatHolder? Enrich(SeatHolder? holder, Dictionary<string, HolderFigures> figures) =>
+        holder is null ? null : holder with { PhotoPath = figures[holder.OfficialId].PhotoPath, MissedVotes = [.. figures[holder.OfficialId].MissedVotes] };
+
+    private static async Task<Dictionary<string, HolderFigures>> ReadHolderFiguresAsync(NpgsqlConnection connection, string[] officialIds, CancellationToken cancellationToken)
+    {
+        var figures = new Dictionary<string, HolderFigures>(StringComparer.Ordinal);
+        if (officialIds.Length == 0) return figures;
+        await using var command = new NpgsqlCommand(HolderFiguresSql, connection);
+        command.Parameters.AddWithValue("attendanceIds", officialIds);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var id = reader.GetString(0);
+            if (!figures.TryGetValue(id, out var holder))
+                figures[id] = holder = new(ViewColumns.Text(reader, 1));
+            if (!reader.IsDBNull(2)) holder.MissedVotes.Add(OfficialAttendanceReader.ReadFigure(reader, 2));
+        }
+        return figures;
+    }
 
     private sealed record DistrictRow(string State, int District, SeatHolder? Representative);
 
     private sealed record DistrictRows(int? Release, bool HasNames, int Congress, List<DistrictRow> Rows);
+
+    private sealed class HolderFigures(string? photoPath)
+    {
+        public string? PhotoPath { get; } = photoPath;
+        public List<MissedVotesFigure> MissedVotes { get; } = [];
+    }
 }

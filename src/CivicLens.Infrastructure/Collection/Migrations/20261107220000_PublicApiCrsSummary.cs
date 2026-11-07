@@ -23,7 +23,7 @@ public partial class PublicApiCrsSummary : Migration
           FROM public_api.active_records a
           JOIN public.action_revisions r ON r.record_id = a.record_id AND r.revision_number = a.revision_number
          CROSS JOIN LATERAL (
-               SELECT count(*) AS total, count(*) FILTER (WHERE p.role = 'Sponsor') AS sponsor_count
+               SELECT count(*) FILTER (WHERE p.role = 'Sponsor') AS sponsor_count
                  FROM public.action_revision_sponsorships p
                 WHERE p.record_id = r.record_id AND p.revision_number = r.revision_number) s
           LEFT JOIN public.published_entries e ON e.kind = 'action' AND e.record_id = a.record_id AND e.revision_number = a.revision_number
@@ -32,9 +32,12 @@ public partial class PublicApiCrsSummary : Migration
 
           LEFT JOIN public.release_bill_histories rh ON rh.release_number = a.release_number AND rh.record_id = a.record_id
           LEFT JOIN public.published_bill_histories h ON h.detail_job_id = rh.detail_job_id
-         WHERE a.kind = 'action' AND r.headline IS NOT NULL AND r.event_on IS NOT NULL AND s.total > 0;
+         WHERE a.kind = 'action' AND r.headline IS NOT NULL AND r.event_on IS NOT NULL
+           AND EXISTS (SELECT 1 FROM public.action_revision_sponsorships eligible
+                        WHERE eligible.record_id = r.record_id AND eligible.revision_number = r.revision_number);
 
         ALTER VIEW public_api.bills OWNER TO civic_lens_public_owner;
+
         """;
 
     private const string DownViewsSql = """
@@ -55,7 +58,7 @@ public partial class PublicApiCrsSummary : Migration
           FROM public_api.active_records a
           JOIN public.action_revisions r ON r.record_id = a.record_id AND r.revision_number = a.revision_number
          CROSS JOIN LATERAL (
-               SELECT count(*) AS total, count(*) FILTER (WHERE p.role = 'Sponsor') AS sponsor_count
+               SELECT count(*) FILTER (WHERE p.role = 'Sponsor') AS sponsor_count
                  FROM public.action_revision_sponsorships p
                 WHERE p.record_id = r.record_id AND p.revision_number = r.revision_number) s
           LEFT JOIN public.published_entries e ON e.kind = 'action' AND e.record_id = a.record_id AND e.revision_number = a.revision_number
@@ -64,7 +67,9 @@ public partial class PublicApiCrsSummary : Migration
 
           LEFT JOIN public.release_bill_histories rh ON rh.release_number = a.release_number AND rh.record_id = a.record_id
           LEFT JOIN public.published_bill_histories h ON h.detail_job_id = rh.detail_job_id
-         WHERE a.kind = 'action' AND r.headline IS NOT NULL AND r.event_on IS NOT NULL AND s.total > 0;
+         WHERE a.kind = 'action' AND r.headline IS NOT NULL AND r.event_on IS NOT NULL
+           AND EXISTS (SELECT 1 FROM public.action_revision_sponsorships eligible
+                        WHERE eligible.record_id = r.record_id AND eligible.revision_number = r.revision_number);
 
         ALTER VIEW public_api.bills OWNER TO civic_lens_public_owner;
 
@@ -94,10 +99,9 @@ public partial class PublicApiCrsSummary : Migration
           FROM public_api.active_records a
           JOIN public.vote_revisions v ON v.record_id = a.record_id AND v.revision_number = a.revision_number
           LEFT JOIN (
-               SELECT DISTINCT ON (b.congress, b.bill_type, b.bill_number)
-                      b.congress, b.bill_type, b.bill_number, b.record_id
+               SELECT b.congress, b.bill_type, b.bill_number, min(b.record_id)::varchar(64) AS record_id
                  FROM public_api.bills b
-                ORDER BY b.congress, b.bill_type, b.bill_number, b.record_id
+                GROUP BY b.congress, b.bill_type, b.bill_number
           ) bill ON bill.congress = v.congress AND bill.bill_type = v.bill_type AND bill.bill_number = v.bill_number
          CROSS JOIN LATERAL (
                SELECT count(*) FILTER (WHERE e.vote_cast IN ('Yea', 'Aye')) AS yea,

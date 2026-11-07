@@ -46,6 +46,10 @@
             <Icon Name="IconName.Search" />
             <input id="site-search" type="search" name="q" maxlength="200" placeholder="Search bills, votes, people" />
         </form>
+        <div class="your-members" data-your-members hidden>
+            <a href="@(RootPath + PublicationProtocol.HomePath)#zip-results">Your members</a>
+            <button type="button" data-forget-members>Forget</button>
+        </div>
         <div class="topbar-tools"><PublicThemeMenu /></div>
     </header>
     @if (showMembersStrip)

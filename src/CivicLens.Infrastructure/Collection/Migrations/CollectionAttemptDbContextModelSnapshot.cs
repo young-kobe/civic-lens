@@ -789,6 +789,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("EventOn")
                         .HasDatabaseName("ix_action_revisions_event_on");
 
+                    b.HasIndex("Congress", "BillNumber", "BillType", "RecordId", "RevisionNumber")
+                        .HasDatabaseName("ix_action_revisions_bill_identity")
+                        .HasFilter("headline IS NOT NULL AND event_on IS NOT NULL");
+
                     b.HasIndex("PolicyAreaCitationExtractionId");
 
                     b.HasIndex("RunId")
@@ -8366,6 +8370,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("PersonId", "ListId")
                         .HasDatabaseName("ix_vote_member_list_entries_person");
+
+                    b.HasIndex("ListId")
+                        .HasDatabaseName("ix_vote_member_list_entries_tallies")
+                        .IncludeProperties("VoteCast");
 
                     b.ToTable("vote_member_list_entries", null, t =>
                         {

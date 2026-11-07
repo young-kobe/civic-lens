@@ -18,7 +18,7 @@ public sealed class PublicApiCrsSummaryMigrationTests(PostgresCollection postgre
         try
         {
             await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
-            await db.GetService<IMigrator>().MigrateAsync("20261107040000_PublicApiBriefContent");
+            await db.GetService<IMigrator>().MigrateAsync("20261107210000_PublicApiOfficialPartyLines");
             await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync();
             await using var absent = new NpgsqlCommand("""

@@ -5,4 +5,4 @@ namespace CivicLens.PublicApi.Officials;
 /// <c>Bills</c> and <c>Issues</c> are null then. <c>ExecutiveActions</c> is null unless the latest term is an executive term. Every figure names its scope.
 /// </summary>
 public sealed record OfficialDetail(int Release, OfficialRow Official, string RecordCountScope, OfficialTerm[] Terms, int? Congress, MissedVotesFigure[] MissedVotes,
-    BillCountsFigure? Bills, IssueCountsFigures? Issues, ExecutiveActionsFigure? ExecutiveActions);
+    PartyLineFigure[] PartyLines, BillCountsFigure? Bills, IssueCountsFigures? Issues, ExecutiveActionsFigure? ExecutiveActions);

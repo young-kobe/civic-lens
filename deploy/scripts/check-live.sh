@@ -73,10 +73,10 @@ check_missing_page() {
     fail "Missing page: expected status 404 from $site, got '$(status_of "$headers")'. Check that the active release has files: sudo deploy/scripts/compose.sh run --rm cli releases list"
   elif ! grep -qi '<html' "$body_file"; then
     fail "Missing page: expected the release 404 page (HTML), got a plain body. Check that the active release has 404.html."
-  elif [[ $cache != no-store ]]; then
-    fail "Missing page: expected Cache-Control: no-store, got '${cache:-no header}'. Check the handle_errors block of the Caddyfile."
+  elif [[ $cache != 'no-store, no-transform' ]]; then
+    fail "Missing page: expected Cache-Control: no-store, no-transform, got '${cache:-no header}'. Check the handle_errors block of the Caddyfile."
   else
-    pass "Missing page: status 404, release 404 page, Cache-Control no-store"
+    pass "Missing page: status 404, release 404 page, Cache-Control no-store, no-transform"
   fi
 }
 

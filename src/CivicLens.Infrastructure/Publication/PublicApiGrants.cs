@@ -29,6 +29,9 @@ internal static class PublicApiGrants
         ALTER ROLE civic_lens_public SET idle_session_timeout = '60s';
 
         GRANT SELECT (release_number, published_at_utc_ticks, is_active) ON publication_releases TO civic_lens_public_owner;
+        GRANT SELECT (kind, record_id, first_release, last_release, withdrawn_revision_number, withdrawn_at_utc_ticks, note) ON publication_withdrawals TO civic_lens_public_owner;
+        GRANT SELECT (kind, record_id, first_release, "position", replaced_revision_number, published_at_utc_ticks, note, facts_unchanged) ON publication_withdrawal_corrections TO civic_lens_public_owner;
+        GRANT SELECT (kind, record_id, first_published_at_utc_ticks) ON published_records TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, first_release, revision_number, last_release) ON publication_record_states TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, chamber, congress, session_number, roll_call_number, voted_on, kind,
             bill_type, bill_number, headline, summary, text_origin, member_list_id, question, result, alignment, democrat_majority, republican_majority) ON vote_revisions TO civic_lens_public_owner;
@@ -52,7 +55,9 @@ internal static class PublicApiGrants
             action_record_id, action_revision_number, document_change_draft_id, document_change_revision_number) ON brief_revision_citations TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, part, paragraph_position, position, citation_id) ON brief_revision_paragraph_citations TO civic_lens_public_owner;
         GRANT SELECT (draft_id, revision_number, headline) ON document_change_revisions TO civic_lens_public_owner;
-        GRANT SELECT (candidate_id, revision_number, author_kind, headline) ON statement_revisions TO civic_lens_public_owner;
+        GRANT SELECT (candidate_id, revision_number, author_kind, headline, summary, statement_date) ON statement_revisions TO civic_lens_public_owner;
+        GRANT SELECT (candidate_id, revision_number, official_id, "position") ON statement_revision_speakers TO civic_lens_public_owner;
+        GRANT SELECT (candidate_id, revision_number, issue_id, "position") ON statement_revision_issues TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", fact_text) ON vote_revision_facts TO civic_lens_public_owner;
         GRANT SELECT (release_number, record_id, latest_action_text, latest_action_date, read_at_utc_ticks) ON release_bill_statuses TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, kind, document_number, signed_on, published_on, federal_register_citation, document_url,
@@ -80,9 +85,10 @@ internal static class PublicApiGrants
             public_api.bills, public_api.bill_actions, public_api.bill_sponsorships, public_api.briefs, public_api.brief_paragraphs, public_api.brief_citations, public_api.issue_votes, public_api.issue_sponsors, public_api.bill_issues, public_api.zip_districts,
             public_api.release_officials, public_api.release_official_terms, public_api.release_issues, public_api.release_issue_includes,
             public_api.release_issue_excludes, public_api.release_policy_areas, public_api.officials, public_api.official_attendance,
-            public_api.official_bill_counts, public_api.official_issue_counts, public_api.official_executive_actions,
+            public_api.official_party_lines, public_api.official_bill_counts, public_api.official_issue_counts, public_api.official_executive_actions,
             public_api.bill_status, public_api.record_headlines, public_api.record_links, public_api.vote_facts,
-            public_api.executive_actions, public_api.executive_action_notices TO civic_lens_public;
+            public_api.executive_actions, public_api.executive_action_notices, public_api.withdrawals, public_api.withdrawal_corrections TO civic_lens_public;
+        GRANT SELECT ON public_api.statements, public_api.statement_speakers TO civic_lens_public;
         """;
 
     public static Task ApplyAsync(DbContext db, CancellationToken cancellationToken) =>

@@ -55,7 +55,7 @@ Implemented:
 - record withdrawals, the member roster, and member photos
 - the public search service with its own Postgres database, fed from published releases, and the search page of each release
 
-Pending: live Auth0 tenant verification, production deployment, AI classification, and MCP. The [roadmap](roadmap.md) holds the order.
+Pending: live Auth0 tenant verification, migration of the remaining public routes, the long-term cloud hosting move, AI classification, and MCP. A Jetson with Docker Compose runs temporary production. The public root remains static; `/web` is a gated server-rendered home preview configured with the public base URL. The [roadmap](roadmap.md) holds the order.
 
 ## Layers and dependency rules
 
@@ -154,8 +154,8 @@ flowchart LR
 | Captures | Compressed content-addressed files; immutable source and extraction versions |
 | Classification (planned) | Rules from measured change history first. A model tier only if the R-13 measurement shows a need (D-05) |
 | Drafting | Claude models through the official `Anthropic` C# SDK in Infrastructure; model extraction is planned; the model for each task can change after evaluation |
-| Public website | C# release builder renders shared Razor components to static HTML; small JS modules add the theme toggle, the comparison control, and the search page |
-| Public search and read API | `CivicLens.PublicApi`, a Web SDK project over its own Postgres database through plain Npgsql, fed from published releases. The vote routes read the `public_api` views of the operational database as the role `civic_lens_public` |
+| Public website | The C# release builder renders shared Razor components for the static public root; small JS modules add the theme toggle, the comparison control, and the search page. `/web` is a gated server-rendered home preview configured with the public base URL |
+| Public search and read API | `CivicLens.PublicApi` uses its own Postgres database, fed from published releases, for full-text search. Its read API and server-rendered `/web` preview read published data from the operational database's `public_api` views as the restricted role `civic_lens_public` |
 | Local MCP (planned) | Official C# SDK; separate local development and review registration |
 | Public MCP (planned) | Separate deployment over published artifacts and index; Cloudflare Worker is a candidate |
 | Production hosting | Jetson with Docker Compose (temporary); planned cloud move with Terraform and CI deployment |

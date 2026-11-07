@@ -14,6 +14,7 @@ using CivicLens.Host.Components.Layout;
 using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using CivicLens.Host.Components.Ui;
 using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.Host.Review;

@@ -35,6 +35,8 @@ http://civic-lens.info, http://127.0.0.1 {
 	root * {$CIVIC_LENS_RELEASE_DIRECTORY}/current
 	encode zstd gzip
 
+	@html path_regexp html ^/(?:|.*\.html|.*/)$
+	header @html >Cache-Control "public, max-age=60, no-transform"
 	header ?Cache-Control "public, max-age=60"
 
 	@photos path_regexp photos ^/photos/[0-9a-f]{64}\.jpg$
@@ -46,7 +48,7 @@ http://civic-lens.info, http://127.0.0.1 {
 
 	handle_errors 404 {
 		import security_headers
-		header Cache-Control "no-store"
+		header >Cache-Control "no-store, no-transform"
 		rewrite * /404.html
 		file_server
 	}
@@ -60,6 +62,14 @@ http://civic-lens.info, http://127.0.0.1 {
 
 http://api.civic-lens.info {
 	import security_headers
+
+	@web path /web /web/*
+	encode @web zstd gzip
+	header @web {
+		+Cache-Control no-transform
+		+Vary Accept-Encoding
+		defer
+	}
 
 	handle /internal/* {
 		respond 404
