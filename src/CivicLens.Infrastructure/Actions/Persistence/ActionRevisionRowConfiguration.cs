@@ -62,6 +62,7 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.Fingerprint).HasColumnName("fingerprint").HasMaxLength(64);
         builder.Property(row => row.SummaryVersion).HasColumnName("summary_version").HasMaxLength(ActionDraftRevision.MaximumSummaryVersionLength);
         builder.Property(row => row.CrsSummaryText).HasColumnName("crs_summary_text");
+        builder.Property(row => row.CrsSummaryRead).HasColumnName("crs_summary_read").HasDefaultValue(false);
         builder.Property(row => row.PolicyArea).HasColumnName("policy_area").HasMaxLength(ActionDraftRevision.MaximumPolicyAreaLength);
         builder.Property(row => row.PolicyAreaId).HasColumnName("policy_area_id").HasMaxLength(ActionDraftRevision.MaximumPolicyAreaIdLength);
         builder.Property(row => row.BillTitle).HasColumnName("bill_title").HasMaxLength(ActionDraftRevision.MaximumTitleLength);

@@ -71,8 +71,11 @@ internal static class ActionRevisionRows
     }
 
     public static void FillCrsSummary(ActionRevisionRow row, ActionDraftRevision revision,
-        IReadOnlyDictionary<string, DocumentExtraction> extractions) =>
+        IReadOnlyDictionary<string, DocumentExtraction> extractions)
+    {
         row.CrsSummaryText = CrsSummaryOf(revision, extractions);
+        row.CrsSummaryRead = true;
+    }
 
     private static string? CrsSummaryOf(ActionDraftRevision revision, IReadOnlyDictionary<string, DocumentExtraction> extractions)
     {

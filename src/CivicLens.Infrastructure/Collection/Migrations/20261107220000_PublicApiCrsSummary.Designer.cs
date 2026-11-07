@@ -657,6 +657,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
 
+                    b.Property<bool>("CrsSummaryRead")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("crs_summary_read");
+
                     b.Property<string>("CrsSummaryText")
                         .HasColumnType("text")
                         .HasColumnName("crs_summary_text");

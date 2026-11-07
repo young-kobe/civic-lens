@@ -19,7 +19,19 @@ public sealed class ActionCrsSummaryTests
         var extraction = Extraction("original", Prefix + Block + "\n\n" + Block.Replace("Exact body", "Later body", StringComparison.Ordinal));
         var revision = WithSummary(extraction, Prefix.Length, Block.Length);
 
-        Assert.Equal("  Exact body\nText: stays body.  ", ReadBody(revision, [extraction]));
+        var row = ReadRow(revision, [extraction]);
+
+        Assert.Equal("  Exact body\nText: stays body.  ", (string?)row.GetType().GetProperty("CrsSummaryText")!.GetValue(row));
+        Assert.True((bool)row.GetType().GetProperty("CrsSummaryRead")!.GetValue(row)!);
+    }
+
+    [Fact]
+    public void CompletedReadMarksAttemptWhenSummaryBodyIsLegitimatelyNull()
+    {
+        var row = ReadRow(ActionRevisionFixtures.Model(), []);
+
+        Assert.Null((string?)row.GetType().GetProperty("CrsSummaryText")!.GetValue(row));
+        Assert.True((bool)row.GetType().GetProperty("CrsSummaryRead")!.GetValue(row)!);
     }
 
     [Theory]
@@ -65,10 +77,16 @@ public sealed class ActionCrsSummaryTests
 
     private static string? ReadBody(ActionDraftRevision revision, DocumentExtraction[] extractions)
     {
+        var row = ReadRow(revision, extractions);
+        return (string?)row.GetType().GetProperty("CrsSummaryText")!.GetValue(row);
+    }
+
+    private static object ReadRow(ActionDraftRevision revision, DocumentExtraction[] extractions)
+    {
         var owner = typeof(PostgresActionReviewStore).Assembly.GetType("CivicLens.Infrastructure.Actions.ActionRevisionRows", throwOnError: true)!;
         var row = owner.GetMethod("Create")!.Invoke(null, [revision, "run", TestCodeVersion.Current])!;
         owner.GetMethod("FillCrsSummary", BindingFlags.Public | BindingFlags.Static)!.Invoke(null,
             [row, revision, extractions.ToDictionary(item => item.ExtractionId, StringComparer.Ordinal)]);
-        return (string?)row.GetType().GetProperty("CrsSummaryText")!.GetValue(row);
+        return row;
     }
 }

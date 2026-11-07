@@ -120,6 +120,7 @@ public partial class PublicApiCrsSummary : Migration
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.AddColumn<string>(name: "crs_summary_text", table: "action_revisions", type: "text", nullable: true);
+        migrationBuilder.AddColumn<bool>(name: "crs_summary_read", table: "action_revisions", type: "boolean", nullable: false, defaultValue: false);
         migrationBuilder.AddCheckConstraint(name: "ck_action_revisions_crs_summary", table: "action_revisions",
             sql: "crs_summary_text IS NULL OR (length(btrim(crs_summary_text)) > 0 AND summary_version IS NOT NULL AND summary_citation_extraction_id IS NOT NULL)");
         migrationBuilder.Sql(UpViewSql);
@@ -130,5 +131,6 @@ public partial class PublicApiCrsSummary : Migration
         migrationBuilder.Sql(DownViewsSql);
         migrationBuilder.DropCheckConstraint(name: "ck_action_revisions_crs_summary", table: "action_revisions");
         migrationBuilder.DropColumn(name: "crs_summary_text", table: "action_revisions");
+        migrationBuilder.DropColumn(name: "crs_summary_read", table: "action_revisions");
     }
 }
