@@ -1,0 +1,67 @@
+<div data-zip-member-fragment data-zcta="@Data.Zcta" data-release="@Data.Release" data-congress="@Data.Congress">
+    @if (Data.DistrictCount > 1)
+    {
+        <p class="zip-count">Your ZIP area lies in @Data.DistrictCount districts. The district with the most land is first.</p>
+    }
+    <ul class="zip-member-cards" role="list">
+        @for (var seatIndex = 0; seatIndex < Data.Seats.Length; seatIndex++)
+        {
+            var seat = Data.Seats[seatIndex];
+            <li class="official-card zip-member-card">
+                @if (seat.Member is { } member)
+                {
+                    <div class="zip-member-header">
+                        <OfficialPortrait Name="@member.Name" PhotoPath="@member.PhotoPath" RootPath="@RootPath" Compact="true" ShowCredit="false" />
+                        <div class="official-card-text">
+                            <h3><a href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(member.OfficialId)))">@member.Name</a></h3>
+                            <p class="small muted">@seat.Title</p>
+                            @if (member.Party is not null)
+                            {
+                                <p class="small muted">@member.Party</p>
+                            }
+                        </div>
+                    </div>
+                    <p class="small muted">
+                        @if (member.TermEndsOn is { } termEnd)
+                        {
+                            <text>Current term ends <time datetime="@Moment.Iso(termEnd)">@Moment.Day(termEnd)</time>.</text>
+                        }
+                        else
+                        {
+                            <text>Our records show no end date for this term.</text>
+                        }
+                    </p>
+                    @if (member.Attendance.Length == 0)
+                    {
+                        <p class="small muted">No published roll calls list this member.</p>
+                    }
+                    @for (var figureIndex = 0; figureIndex < member.Attendance.Length; figureIndex++)
+                    {
+                        var figure = member.Attendance[figureIndex];
+                        <div class="zip-member-attendance">
+                            <p>Missed <strong>@figure.Missed of @figure.Held</strong> published @figure.Chamber @(figure.Held == 1 ? "roll call" : "roll calls") listing this member in Congress @figure.Congress.</p>
+                            <InfoPopover Id="@($"zip-attendance-{seatIndex}-{figureIndex}")" Label="@($"About attendance for {member.Name} in the {figure.Chamber}")">
+                                <p>@figure.Scope</p>
+                                <p>From <time datetime="@Moment.Iso(figure.FirstVotedOn)">@Moment.Day(figure.FirstVotedOn)</time> to <time datetime="@Moment.Iso(figure.LastVotedOn)">@Moment.Day(figure.LastVotedOn)</time>.</p>
+                            </InfoPopover>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <h3>@seat.Title</h3>
+                    <p>No current member is in our records.</p>
+                }
+            </li>
+        }
+    </ul>
+    @foreach (var state in Data.StatesWithoutSenators)
+    {
+        <p class="small muted">@state has no senators.</p>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ZipMemberCardsData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+}

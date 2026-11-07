@@ -50,9 +50,21 @@
             button.setAttribute("aria-pressed", String(button.dataset.layoutChoice === choice)));
     };
 
+    const showMissingPortrait = image => {
+        const portrait = image.closest("[data-portrait]");
+        const fallback = portrait?.querySelector("template[data-portrait-fallback]");
+        if (fallback) portrait.replaceChildren(fallback.content.cloneNode(true));
+    };
+
+    document.addEventListener("error", event => {
+        const image = event.target;
+        if (image instanceof HTMLImageElement && image.matches("[data-portrait-image]")) showMissingPortrait(image);
+    }, true);
+
     const init = () => {
         all(".theme-toggle, .theme-menu").forEach(toggle => { toggle.hidden = false; });
         all("[data-layout-switch]").forEach(control => { control.hidden = false; });
+        all("[data-portrait-image]").filter(image => image.complete && image.naturalWidth === 0).forEach(showMissingPortrait);
         showTheme(root.dataset.theme || "");
         measureAll();
     };

@@ -70,6 +70,8 @@ public sealed class HomePageTests
         Assert.True(chip.HasAttribute("hidden"));
         Assert.Empty(page.QuerySelector("[data-zip-body]")!.Children);
         Assert.Null(page.QuerySelector("input[name=zip]")!.GetAttribute("value"));
+        Assert.True(page.QuerySelector("[data-zip-results]")!.ClassList.Contains("zip-member-results"));
+        Assert.Equal("District lookup source: U.S. Census Bureau", page.QuerySelector("[data-zip-notes] p")!.TextContent);
     }
 
     [Fact]
