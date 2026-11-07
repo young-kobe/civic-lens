@@ -107,7 +107,7 @@ public sealed partial class PostgresBillStreamTests
     [InlineData("action_revisions", "summary_version = NULL", "ck_action_revisions_summary_version")]
     [InlineData("action_revisions", "policy_area_citation_extraction_id = NULL, policy_area_citation_start = NULL, policy_area_citation_length = NULL", "ck_action_revisions_policy_area")]
     [InlineData("action_revisions", "policy_area = NULL, policy_area_citation_extraction_id = NULL, policy_area_citation_start = NULL, policy_area_citation_length = NULL", "ck_action_revisions_policy_area_id")]
-    [InlineData("action_revisions", "summary_citation_start = -1", "ck_action_revisions_summary_citation")]
+    [InlineData("action_revisions", "bill_line = NULL, bill_line_citation_extraction_id = NULL, bill_line_citation_start = NULL, bill_line_citation_length = NULL, summary_citation_start = -1", "ck_action_revisions_summary_citation")]
     [InlineData("action_revisions", "policy_area_citation_length = 0", "ck_action_revisions_policy_area_citation")]
     [InlineData("action_revisions", "bill_citation_start = NULL", "ck_action_revisions_bill_citation")]
     [InlineData("action_revisions", "author_kind = 'Code', bill_citation_extraction_id = NULL, bill_citation_start = NULL, bill_citation_length = NULL", "ck_action_revisions_code_bill_citation")]
@@ -175,7 +175,7 @@ public sealed partial class PostgresBillStreamTests
         var basis = Revision(candidate, 1, includesSummaries: true, includesSubjects: true);
         var extractionId = basis.Sponsorships[0].Citations[0].ExtractionId;
         var span = new SourceSpan(extractionId, 2, 3);
-        var summarySpan = new SourceSpan(extractionId, 1, 4);
+        var summarySpan = new SourceSpan(extractionId, 0, 16);
         var policyAreaSpan = new SourceSpan(extractionId, 6, 7);
         var billSpan = new SourceSpan(extractionId, 3, 9);
         var full = basis with
@@ -183,7 +183,7 @@ public sealed partial class PostgresBillStreamTests
             SummaryVersion = "summary-v1",
             SummaryCitation = summarySpan,
             BillLine = "The bill pays for rent aid.",
-            BillLineCitation = new(extractionId, 1, 3),
+            BillLineCitation = new(extractionId, 0, 14),
             PolicyArea = "Housing",
             PolicyAreaCitation = policyAreaSpan,
             PolicyAreaId = "housing",

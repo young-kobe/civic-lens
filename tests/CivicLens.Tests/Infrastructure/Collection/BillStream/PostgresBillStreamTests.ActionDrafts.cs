@@ -1069,6 +1069,7 @@ public sealed partial class PostgresBillStreamTests
         return revision with
         {
             SummaryCitation = revision.SummaryCitation is { } summary ? Swap(summary) : null,
+            BillLineCitation = revision.BillLineCitation is { } line ? Swap(line) : null,
             PolicyAreaCitation = revision.PolicyAreaCitation is { } area ? Swap(area) : null,
             BillCitation = revision.BillCitation is { } bill ? Swap(bill) : null,
             Sponsorships = [.. revision.Sponsorships.Select(item => item with { Citations = [.. item.Citations.Select(Swap)] })]
