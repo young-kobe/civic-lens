@@ -15,6 +15,7 @@ public sealed record VoteRow
     public required PublishedVoteKind Kind { get; init; }
     public string? BillType { get; init; }
     public int? BillNumber { get; init; }
+    public string? BillRecordId { get; init; }
     public required string Headline { get; init; }
     public required string Summary { get; init; }
     public required PublishedTextOrigin TextOrigin { get; init; }
