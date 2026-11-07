@@ -1,5 +1,6 @@
 using CivicLens.Application.Collection.Health;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Host.Components.Ui;
 using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.Host.Collection;

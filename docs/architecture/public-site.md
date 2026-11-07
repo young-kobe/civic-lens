@@ -126,63 +126,63 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 
 ### Component inventory
 
-Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui` and `Evidence`. They are `Button`, `Field`, `FieldSet`, `Chip`, `Icon`, `IconFrame`, `Panel`. They also include `PageHeader`, `Notice`, `EmptyState`, `InfoPopover`, `DataTable`. The list ends with `Pager`, `FilterTabs`, `TabSet`, `Timestamp`, `StatusBadge`, `CitationQuote`, `DocumentText`, `RedlineText`, `SourceLineLink`, `OfficialPortrait`, and the theme controls. Nine components have only Host callers. They move back to Host unless a route step uses them: `ActivityFeed`, `HealthList`, `Drawer`, `Toolbar`, `Stat`, `StatStrip`, `Choice`, `TechnicalDetails`, and `LayoutSwitch`.
+Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui` and `Evidence`. They are `Button`, `Field`, `FieldSet`, `Chip`, `Icon`, `IconFrame`, `Panel`. They also include `PageHeader`, `Notice`, `EmptyState`, `InfoPopover`, `DataTable`. The list ends with `Pager`, `FilterTabs`, `TabSet`, `Timestamp`, `StatusBadge`, `CitationQuote`, `DocumentText`, `RedlineText`, `SourceLineLink`, `OfficialPortrait`, and the theme controls. Host owns the controls that only its review and collection pages use: `ActivityFeed`, `HealthList`, `Drawer`, `Toolbar`, `Stat`, `StatStrip`, `Choice`, `TechnicalDetails`, and `LayoutSwitch`.
 
 | Component | Pages | Reader question | Data source | Status |
 |---|---|---|---|---|
-| Site header, split nav, header search | All | Where can I go? | Fixed links, search service | Partial. Planned: split nav and search on every page, R-68 route steps |
+| Site header, split nav, header search | All | Where can I go? | Fixed links, search service | Partial. The shared `PublicPage` renders header search for its existing callers. Planned: split nav and route migration, R-68 |
 | Freshness line | All | How current is this? | `active_records`, newest `votes.voted_on` per chamber | Partial. Planned: newest vote day per chamber |
 | ZIP form and notices | Home | Who represents me? | `zip_districts`, `officials` | Implemented: visible busy state, answer scroll and focus, and error recovery |
 | Featured vote tile | Home | What did Congress just decide? | `votes` | Partial. Gated SSR preview shows the published summary, wording label, result, and Yea/Nay counts. Planned: map and party bars |
-| Party tally bar | Home, vote, bill | How did the chamber split? | `votes` counts, `vote_members.party` | Planned: needs the party column |
+| Party tally bar | Home, vote, bill | How did the chamber split? | `votes` counts, `vote_members.party` | Planned: bars; the party column is available |
 | Latest votes list | Home | What was voted on lately? | `votes` | Partial. Gated SSR preview shows up to two recent substantive votes per chamber, excluding the featured vote. Planned: one AI label |
-| Issue tiles | Home | Where do I start? | `issue_votes`, `issue_sponsors` | Planned: counts need #400 |
+| Issue tiles | Home | Where do I start? | `issue_votes`, `issue_sponsors` | Planned: page content and counts; the views and issue data endpoint are implemented |
 | Break board | Home, boards | Who breaks from their party? | `official_party_lines` | Planned: view needed |
-| Latest executive actions | Home | What did the President sign? | `executive_actions` | Planned: needs #402 |
+| Latest executive actions | Home | What did the President sign? | `executive_actions` | Planned: grouped home rows; executive action data is served by the API |
 | Member card | After a ZIP | Who is my member? | `officials`, `official_attendance`, `official_bill_counts` | Partial. Planned: portrait, party-line figure |
 | Member votes list | After a ZIP, official | How did my members vote? | `member_votes` | Implemented. Planned: issue filter chips |
 | Compare members | Compare page | How do my members differ? | `official_*` views, `member_votes` | Planned |
 | Profile header, key figures | Official | Who is this? | `officials`, `official_attendance` | Implemented. Planned: merged party figures |
 | Vote strip | Official | What is their voting pattern? | `member_votes.side` | Planned: marks only breaks and missed votes |
-| Statement and vote pairs | Official, vote | Did words match votes? | `record_links` | Planned: needs #402 |
+| Statement and vote pairs | Official, vote | Did words match votes? | `record_links` | Planned: page content; related-record data is served by the API |
 | Vote header and AI summary | Vote | What was this vote? | `votes` headline, summary, label | Implemented. Planned: "what this vote decides" |
 | Fixed explainers | Vote, executive action | What did Yes mean? What next? | Code tables in `Publication.Contracts` | Planned: #407 |
-| Result card, party bars | Vote | Did it pass, and by how much? | `votes`, `vote_members.party` | Partial. Planned: party column |
+| Result card, party bars | Vote | Did it pass, and by how much? | `votes`, `vote_members.party` | Partial. Party data is available; redesigned bars remain planned |
 | Breakers list | Vote | Who broke ranks? | `votes.alignment`, `vote_members.party` | Planned |
 | Member list with finder | Vote | How did my member vote? | `vote_members`, `officials` | Implemented. Planned: folded table with filters |
 | Vote map | Vote, home | Where did Yes and No come from? | `vote_members`, `release_official_terms` | Planned: R-68 map step |
-| Bill status stepper | Bill | Where is the bill now? | `bill_actions`, `bills.public_law` | Planned |
+| Bill status stepper | Bill | Where is the bill now? | `bill_actions`, `bills.public_law` | Planned: route and UI; bill actions and public law data are available |
 | Bill summary and CRS fold | Bill | What would the bill do? | `bills.summary`, `bills.crs_summary_text` | Partial. Planned: CRS text column, text summary |
 | Who backed it | Bill | Is it bipartisan? | `bill_sponsorships`, `release_official_terms.party` | Partial. Planned: party split |
-| Votes on this bill | Bill | How did Congress vote? | `votes.bill_record_id` | Partial. Planned: record link column |
-| Executive action page | Executive action, President | What does this document do? | `executive_actions`, `executive_action_links` | Planned: needs #402 |
+| Votes on this bill | Bill | How did Congress vote? | `votes.bill_record_id` | Planned: route and UI; vote-to-bill data is available |
+| Executive action page | Executive action, President | What does this document do? | `executive_actions`, `executive_action_notices`, `executive_action_links` | Planned: route and UI; action and notice data are served, links remain pending |
 | Statement page, quotations | Statement | What exactly was said? | `statements`, `statement_quotations` | Planned: views needed |
 | Document change page | Document change | What changed on this page? | `document_changes` | Planned: views needed |
-| Issue page | Issue | What is there on this issue? | `release_issues`, `issue_votes`, `issue_sponsors` | Partial. Planned: party line-up |
+| Issue page | Issue | What is there on this issue? | `release_issues`, `issue_votes`, `issue_sponsors` | Partial. Issue counts and sponsor data are available through the API. Planned: page and party line-up |
 | Party boards | Boards | Who breaks from their party most? | `official_party_lines`, `party_agreement` | Planned: views needed |
 | List pages for votes, bills, executive actions, statements | Lists | Show me all of one kind | Per-kind views | Planned: R-68 list step |
 | Record row, status badge | All lists | What is this record? | Per-kind views | Implemented. Planned: event-named date, one bill number format |
 | Search results | Search | Find a person, bill, or vote | Search service | Partial. Planned: ranking and snippets |
-| Weekly brief page | Brief | What happened this week? | `briefs`, `brief_paragraphs`, `brief_citations` | Partial. Planned: paragraphs and citations |
+| Weekly brief page | Brief | What happened this week? | `briefs`, `brief_paragraphs`, `brief_citations` | Partial. Brief paragraphs and citations are served through the API. Planned: route and page |
 | Correction and withdrawal pages | Record | What changed on this record? | `record_corrections`, `withdrawals` | Planned: views needed |
 
 ## Storage and contracts
 
-The public pages read these `public_api` views today. They are `active_records`, `votes`, `vote_issues`, `vote_members`, `member_votes`, `bills`, `bill_sponsorships`, `bill_issues`, `officials`, `official_attendance`, `official_bill_counts`, `official_issue_counts`, `official_executive_actions`, `zip_districts`, and the six release name views. [Publication](publication.md#public-api-views) lists the columns.
+The public read API and the gated SSR home read `public_api` views. Implemented data covers votes, bills, officials, attendance, ZIP districts, issues, related records, executive actions, and briefs. It includes bill status and action history, public-law numbers, vote-to-bill links, relationship reasons, executive action notices, and brief paragraphs and citations. Most public pages still read static releases. [Publication](publication.md#public-api-views) owns the view rules and column reference.
 
 The home route reads `HomeAnswer` from one statement and maps it into presentation records beside the PublicWeb component. These are page inputs, not durable publication contracts. `CIVIC_LENS_PUBLIC_API_URL` is an optional bare origin for the browser ZIP lookup. The page cache validator includes the normalized public site and browser API origins because both affect the HTML.
 
 The views expose the stored member party and vote alignment, normalized member-vote side, party-majority cast, and official photo path. Member caucus comes from the matching chamber term in the active release on the vote date.
 
-Planned view columns and views, in the order that R-68 builds them:
+Remaining planned view columns and views, in the order that R-68 builds them:
 
 - Party lines: `official_party_lines` and `party_agreement`.
-- Votes: a second AI text column for "what this vote decides", `votes.bill_record_id`, and `vote_facts`.
-- Bills: `bill_actions`, `bills.public_law`, `bills.crs_summary_text`, `bills.crs_summary_version`, the text summary columns of #409, `bill_key_terms`, `bill_status`.
-- Issues and links: `issue_votes`, `issue_sponsors`, `record_links` with a `reason` column.
-- Executive actions: `executive_actions`, `executive_action_notices`, `executive_action_links`, and the summary columns.
+- Votes: a second AI text column for "what this vote decides".
+- Bills: `bills.crs_summary_text`, `bills.crs_summary_version`, the text summary columns of #409, `bill_key_terms`.
+- Issues: party line-up data.
+- Executive actions: `executive_action_links` and the summary columns.
 - Statements: `statements`, `statement_speakers`, `statement_quotations`.
-- Other kinds: `document_changes` with a changed-region child view, `briefs`, `brief_paragraphs`, `brief_citations`, `record_corrections`, `withdrawals`.
+- Other kinds: `document_changes` with a changed-region child view, `record_corrections`, `withdrawals`.
 
 Each AI text column carries its text origin and its label. The roadmap steps under [R-68](../roadmap.md#later) name each view.
 
@@ -209,4 +209,3 @@ Open choices:
 
 - The party colors, chosen together with the vote Yes and No colors at the map party layer.
 - The approved text for each glossary term that still shows example wording.
-- Whether a route step needs any of the nine Host-only components in `CivicLens.PublicWeb`.
