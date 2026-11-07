@@ -44,6 +44,7 @@ internal static class PublicApiGrants
         GRANT SELECT (record_id, revision_number, "position", person_id, role, is_original, sponsored_on, withdrawn_on)
             ON action_revision_sponsorships TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, "position", is_tracked) ON action_revision_issues TO civic_lens_public_owner;
+        GRANT SELECT (crs_summary_text, summary_version) ON action_revisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, week_start, headline, text_origin) ON brief_revisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, part, position, paragraph_text) ON brief_revision_paragraphs TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, part, citation_id, position, kind, statement_candidate_id, statement_revision_number,

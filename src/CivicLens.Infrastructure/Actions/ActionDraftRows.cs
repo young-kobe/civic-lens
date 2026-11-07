@@ -33,8 +33,11 @@ internal static class ActionDraftRows
             return ActionDraftErrorCodes.RecordRejected;
         if (draft is null) db.Add(draft = NewDraft(revision));
         var records = PostgresActionReviewStore.Records;
-        await records.AppendCodeApprovedAsync(db, draft, revision, ActionRevisionRows.Create(revision, runId, codeVersion), await records.ReadCycleAsync(db, draft, cancellationToken),
-            () => ApprovalCheck.OfAsync(() => PostgresActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)));
+        var extractions = await PostgresActionReviewStore.ReadExtractionsAsync(db, [revision], cancellationToken);
+        var row = ActionRevisionRows.Create(revision, runId, codeVersion);
+        ActionRevisionRows.FillCrsSummary(row, revision, extractions);
+        await records.AppendCodeApprovedAsync(db, draft, revision, row, await records.ReadCycleAsync(db, draft, cancellationToken),
+            () => ApprovalCheck.OfAsync(() => PostgresActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken, extractions)));
         return null;
     }
 

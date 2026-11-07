@@ -12,7 +12,8 @@ public sealed class BillStore(NpgsqlDataSource views)
     private const string Columns = """
         b.record_id, b.revision_number, b.congress, b.bill_type, b.bill_number, b.bill_title, b.headline, b.summary, b.text_origin, b.label,
         b.policy_area, b.policy_area_id, b.event_date, b.sponsor_count, b.cosponsor_count, b.bill_line,
-        b.why_it_matters, b.text_version_name, b.text_version_date, b.text_chars_read, b.text_chars_total, b.public_law
+        b.why_it_matters, b.text_version_name, b.text_version_date, b.text_chars_read, b.text_chars_total, b.public_law,
+        b.crs_summary_text, b.crs_summary_version
         """;
     private const string Order = "b.event_date DESC, b.record_id";
     private const string AfterCursor = " AND (b.event_date < @cursor_date OR (b.event_date = @cursor_date AND b.record_id > @cursor_id))";
@@ -51,7 +52,7 @@ public sealed class BillStore(NpgsqlDataSource views)
         command.Parameters.AddWithValue("id", recordId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
-        return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(25), ReadLatestAction(reader), ReadHistory(reader, 23, 24));
+        return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(27), ReadLatestAction(reader), ReadHistory(reader, 25, 26));
     }
 
     /// <summary>Reads one page of the sponsorships of a bill. Null means that no release is active or that the active release holds no such bill.</summary>
@@ -182,17 +183,19 @@ public sealed class BillStore(NpgsqlDataSource views)
         TextVersionDate = ViewColumns.Date(reader, 19),
         TextCharsRead = ViewColumns.Number(reader, 20),
         TextCharsTotal = ViewColumns.Number(reader, 21),
-        PublicLaw = ViewColumns.Text(reader, 22)
+        PublicLaw = ViewColumns.Text(reader, 22),
+        CrsSummaryText = ViewColumns.Text(reader, 23),
+        CrsSummaryVersion = ViewColumns.Text(reader, 24)
     };
 
     private static BillHistory? ReadHistory(DbDataReader reader, int observedAtIndex, int actionCountIndex) => reader.IsDBNull(observedAtIndex) || reader.IsDBNull(actionCountIndex)
         ? null
         : new(new DateTimeOffset(reader.GetInt64(observedAtIndex), TimeSpan.Zero), reader.GetInt32(actionCountIndex));
 
-    // Columns 26 to 28 hold the status. The view holds no row for a bill with no latest action.
-    private static BillLatestAction? ReadLatestAction(DbDataReader reader) => reader.IsDBNull(26)
+    // Columns 28 to 30 hold the status. The view holds no row for a bill with no latest action.
+    private static BillLatestAction? ReadLatestAction(DbDataReader reader) => reader.IsDBNull(28)
         ? null
-        : new(reader.GetString(26), reader.GetFieldValue<DateOnly>(27), new DateTimeOffset(reader.GetInt64(28), TimeSpan.Zero));
+        : new(reader.GetString(28), reader.GetFieldValue<DateOnly>(29), new DateTimeOffset(reader.GetInt64(30), TimeSpan.Zero));
 
     // Column 0 holds the release and column 1 holds whether the bill exists. The row starts at column 2.
     private static SponsorshipRow ReadSponsorship(DbDataReader reader) => new()
