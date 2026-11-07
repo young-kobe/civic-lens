@@ -72,6 +72,49 @@ public sealed class HomePageTests
         Assert.Null(page.QuerySelector("input[name=zip]")!.GetAttribute("value"));
     }
 
+    [Fact]
+    public async Task TheBriefLeadsTheRecentVotesAndASplitCaptionNamesOnlyThoseFourVotes()
+    {
+        var votes = RecentVotes(PublishedVoteAlignment.Split);
+        var page = await RenderAsync(new(7, Featured, votes, new(new string('f', 64), "Published brief", PublishedWording.ModelBrief)));
+        var recent = page.QuerySelector(".home-preview-section")!;
+        var caption = Assert.Single(recent.QuerySelectorAll(".home-vote-caption"));
+
+        Assert.Contains("All four votes shown", caption.TextContent);
+        Assert.Contains("Among members voting Yes or No", caption.TextContent);
+        Assert.Contains("most Democrats and most Republicans chose opposite sides", caption.TextContent);
+        Assert.Equal(4, recent.QuerySelectorAll(".latest-rows > li").Length);
+        Assert.Same(recent, page.QuerySelector(".home-brief-line")!.NextElementSibling);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(PublishedVoteAlignment.Mixed)]
+    [InlineData(PublishedVoteAlignment.PartiesAgree)]
+    public async Task MissingOrDifferentAlignmentCannotBecomeAnAllSplitClaim(PublishedVoteAlignment? alignment)
+    {
+        var votes = RecentVotes(PublishedVoteAlignment.Split);
+        votes[0] = votes[0] with { Alignment = alignment };
+        var page = await RenderAsync(new(7, Featured, votes, null));
+
+        Assert.Null(page.QuerySelector(".home-vote-caption"));
+        Assert.Equal(4, page.QuerySelectorAll(".latest-rows > li").Length);
+    }
+
+    [Fact]
+    public async Task ThreeRecentVotesAndTheFeaturedVoteCannotMakeAFourVoteCaption()
+    {
+        var page = await RenderAsync(new(7, Featured, RecentVotes(PublishedVoteAlignment.Split)[..3], null));
+
+        Assert.Null(page.QuerySelector(".home-vote-caption"));
+        Assert.Equal(3, page.QuerySelectorAll(".latest-rows > li").Length);
+    }
+
+    private static HomeVoteData[] RecentVotes(PublishedVoteAlignment alignment) =>
+        [.. Enumerable.Range(0, 4).Select(index => new HomeVoteData(new string((char)('b' + index), 64), new(2026, 3, 2),
+            index < 2 ? PublishedChamber.House : PublishedChamber.Senate, "Published vote", null, "Passed", 216, 214, null, null)
+        { Alignment = alignment })];
+
     private static async Task<IDocument> RenderAsync(HomePageData data, string? browserApiUrl = null)
     {
         await using var services = new ServiceCollection().BuildServiceProvider();

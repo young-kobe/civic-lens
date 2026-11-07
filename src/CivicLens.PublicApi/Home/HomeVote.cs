@@ -7,4 +7,7 @@ namespace CivicLens.PublicApi.Home;
 /// <c>BillLineSource</c> is <see cref="PublishedWording.BillLineSource"/> when <c>BillLine</c> is not null, else null.</summary>
 public sealed record HomeVote(
     string RecordId, DateOnly VotedOn, PublishedChamber Chamber, int Congress, int Session, int RollCall, string Headline, string? Label, string Result,
-    string ResultWords, int Yea, int Nay, string? BillType, int? BillNumber, string? BillLine, string? BillLineSource);
+    string ResultWords, int Yea, int Nay, string? BillType, int? BillNumber, string? BillLine, string? BillLineSource)
+{
+    public PublishedVoteAlignment? Alignment { get; init; }
+}

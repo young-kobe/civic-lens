@@ -13,7 +13,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
     private const string Sql = $"""
         SELECT a.release_number, b.record_id, b.week_start, b.headline, b.label,
                s.is_featured, s.record_id, s.voted_on, s.chamber, s.congress, s.session_number, s.roll_call_number,
-               s.headline, s.label, s.result, s.yea, s.nay, s.bill_type, s.bill_number, s.bill_line, s.summary, s.text_origin
+               s.headline, s.label, s.result, s.yea, s.nay, s.bill_type, s.bill_number, s.bill_line, s.summary, s.text_origin, s.alignment
           FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT v.record_id FROM public_api.votes v
@@ -84,6 +84,9 @@ public sealed class HomeStore(NpgsqlDataSource views)
         return new(reader.GetString(6), reader.GetFieldValue<DateOnly>(7), ViewColumns.Enum<PublishedChamber>(reader, 8), reader.GetInt32(9), reader.GetInt32(10),
             reader.GetInt32(11), reader.GetString(12), ViewColumns.Text(reader, 13), result, PlainVoteWords.Result(result), ViewColumns.Number(reader, 15)!.Value,
             ViewColumns.Number(reader, 16)!.Value, ViewColumns.Text(reader, 17), ViewColumns.Number(reader, 18), billLine,
-            billLine is null ? null : PublishedWording.BillLineSource);
+            billLine is null ? null : PublishedWording.BillLineSource)
+        {
+            Alignment = reader.IsDBNull(22) ? null : ViewColumns.Enum<PublishedVoteAlignment>(reader, 22)
+        };
     }
 }
