@@ -11,6 +11,8 @@ namespace CivicLens.Tests.Infrastructure.PublicApi;
 [Trait("Category", "Postgres")]
 public sealed class PublicApiBillLookupMigrationTests(PostgresCollection postgres)
 {
+    private const string Migration = "20261107080000_PublicApiBillLookup";
+
     [Fact]
     public async Task UpgradeAndDowngradePreserveViewColumnTypesPositionsAndPublicReads()
     {
@@ -18,12 +20,15 @@ public sealed class PublicApiBillLookupMigrationTests(PostgresCollection postgre
         try
         {
             await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
-            var expected = await ColumnsAsync(database);
-            var previous = db.Database.GetMigrations().Last(id => string.CompareOrdinal(id, "20261107080000_PublicApiBillLookup") < 0);
+            var previous = db.Database.GetMigrations().Last(id => string.CompareOrdinal(id, Migration) < 0);
 
             await db.GetService<IMigrator>().MigrateAsync(previous);
+            var expected = await ColumnsAsync(database);
+
+            await db.GetService<IMigrator>().MigrateAsync(Migration);
             Assert.Equal(expected, await ColumnsAsync(database));
-            await db.Database.MigrateAsync();
+
+            await db.GetService<IMigrator>().MigrateAsync(previous);
             Assert.Equal(expected, await ColumnsAsync(database));
         }
         finally { await postgres.DropDatabaseAsync(database); }
