@@ -21,6 +21,8 @@ public sealed record BillRow
     public required int SponsorCount { get; init; }
     public required int CosponsorCount { get; init; }
     public string? BillLine { get; init; }
+    public PublishedTextOrigin? BillLineOrigin { get; init; }
+    public string? BillLineLabel { get; init; }
 
     /// <summary>The "why it matters" text of an AI summary of the bill text. It is null unless <see cref="TextOrigin"/> is Model and the bill has a text summary.</summary>
     public string? WhyItMatters { get; init; }

@@ -29,6 +29,8 @@ internal sealed class PublishedActionBuilder(PublishedRecordRules rules)
             PolicyAreaCitation = revision.PolicyAreaCitation is { } area ? Cite(area) : null,
             TrackedIssueIds = [.. revision.TrackedIssueIds],
             SummaryCitation = revision.SummaryCitation is { } summary ? Cite(summary) : null,
+            BillLine = revision.BillLine,
+            BillLineCitation = revision.BillLineCitation is { } line ? Cite(line) : null,
             BillCitation = revision.BillCitation is { } bill ? Cite(bill) : null,
             BillText = BillTextOf(revision, textVersion, Cite),
             Sponsorships = [.. revision.Sponsorships.Select(sponsorship => new PublishedSponsorship

@@ -609,6 +609,23 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("bill_citation_start");
 
+                    b.Property<string>("BillLine")
+                        .HasColumnType("text")
+                        .HasColumnName("bill_line");
+
+                    b.Property<string>("BillLineCitationExtractionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("bill_line_citation_extraction_id");
+
+                    b.Property<int?>("BillLineCitationLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("bill_line_citation_length");
+
+                    b.Property<int?>("BillLineCitationStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("bill_line_citation_start");
+
                     b.Property<int?>("BillNumber")
                         .HasColumnType("integer")
                         .HasColumnName("bill_number");
@@ -797,6 +814,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("SummaryCitationExtractionId");
 
+                    b.HasIndex("BillLineCitationExtractionId");
+
                     b.HasIndex("Congress", "BillType", "BillNumber", "TextPackageId");
 
                     b.HasIndex("RecordId", "SourceId", "Congress", "BillType", "BillNumber");
@@ -808,6 +827,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_action_revisions_bill", "congress >= 1 AND bill_number >= 1");
 
                             t.HasCheckConstraint("ck_action_revisions_bill_citation", "(bill_citation_extraction_id IS NULL) = (bill_citation_start IS NULL) AND (bill_citation_extraction_id IS NULL) = (bill_citation_length IS NULL) AND bill_citation_start >= 0 AND bill_citation_length > 0");
+
+                            t.HasCheckConstraint("ck_action_revisions_bill_line", "(bill_line IS NULL) = (bill_line_citation_extraction_id IS NULL) AND (bill_line IS NULL OR (summary_citation_extraction_id IS NOT NULL AND bill_line_citation_extraction_id = summary_citation_extraction_id AND bill_line_citation_start >= summary_citation_start AND bill_line_citation_length <= summary_citation_length AND bill_line_citation_start - summary_citation_start <= summary_citation_length - bill_line_citation_length AND length(btrim(bill_line)) >= 1 AND length(bill_line) <= 200)");
+
+                            t.HasCheckConstraint("ck_action_revisions_bill_line_citation", "(bill_line_citation_extraction_id IS NULL) = (bill_line_citation_start IS NULL) AND (bill_line_citation_extraction_id IS NULL) = (bill_line_citation_length IS NULL) AND bill_line_citation_start >= 0 AND bill_line_citation_length > 0");
 
                             t.HasCheckConstraint("ck_action_revisions_candidate", "candidate_id ~ '^[0-9a-f]{64}$'");
 
@@ -8872,6 +8895,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Actions.Persistence.ActionAnalysisRunRow", null)
                         .WithMany()
                         .HasForeignKey("SuggestionRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("BillLineCitationExtractionId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)

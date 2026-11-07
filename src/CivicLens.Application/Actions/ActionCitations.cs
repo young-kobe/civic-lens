@@ -31,4 +31,14 @@ internal static class ActionCitations
         }
         return null;
     }
+
+    public static SourceSpan? SummaryText(ActionDraftPage page, CongressBillSummaryText summary)
+    {
+        if (summary.Text.Length == 0) return null;
+        var block = SummaryBlock(page, summary.Summary) ?? throw new InvalidDataException("The selected CRS summary has no source span.");
+        var start = block.Start + block.Length - summary.Text.Length;
+        if (start < block.Start || !page.Text.AsSpan(start, summary.Text.Length).SequenceEqual(summary.Text))
+            throw new InvalidDataException("The selected CRS summary text is not the suffix of its source block.");
+        return new(page.ExtractionId, start, summary.Text.Length);
+    }
 }

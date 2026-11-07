@@ -6,7 +6,7 @@ namespace CivicLens.Application.Publication;
 /// <summary>
 /// Builds the manifest entries of carried vote and action records again from their record files. A carried entry from before a contract
 /// change then gets the new optional fields. A carried action keeps the bill line of its entry, because the entry table writes the line of a
-/// revision once and a later change of the line rule must not conflict with it. The record files stay as they are, and every other entry
+/// revision once. A record file written before the model line holds none. The record files stay as they are, and every other entry
 /// stays as it is. A record file that is invalid, or that differs from its entry outside the new fields, stops the rewrite.
 /// </summary>
 internal static class ReleaseEntryRewrite
@@ -34,7 +34,7 @@ internal static class ReleaseEntryRewrite
             throw new ReleaseRewriteException($"The record file of {entry.Kind} {entry.RecordId} is invalid, so the entries cannot be rebuilt.", exception);
         }
         return ReleaseEntryComparison.SameOutsideNewFields(entry, rebuilt)
-            ? rebuilt with { BillLine = entry.BillLine ?? rebuilt.BillLine }
+            ? rebuilt with { BillLine = entry.BillLine }
             : throw new ReleaseRewriteException($"The record file of {entry.Kind} {entry.RecordId} does not match its manifest entry, so the entry cannot be rebuilt.");
     }
 }

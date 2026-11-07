@@ -76,7 +76,9 @@ public sealed record PublishedRecordEntry
         Kind == PublishedRecordKind.Vote && VoteKind is { } voteKind && Enum.IsDefined(voteKind) && Congress is >= 1;
 
     private bool HasValidBillLine =>
-        BillLine is null || Kind == PublishedRecordKind.Action && !string.IsNullOrWhiteSpace(BillLine) && BillLine.Length <= MaximumBillLineLength;
+        BillLine is null || Kind == PublishedRecordKind.Action && IsBillLine(BillLine);
+
+    public static bool IsBillLine(string line) => !string.IsNullOrWhiteSpace(line) && line.Length <= MaximumBillLineLength;
 
     private bool HasValidCosponsors =>
         CosponsorIds is null ||

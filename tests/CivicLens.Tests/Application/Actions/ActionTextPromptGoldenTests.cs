@@ -25,7 +25,7 @@ public sealed class ActionTextPromptGoldenTests
             (ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model));
         Assert.Equal((ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion), (request.PromptVersion, request.SchemaVersion));
         Assert.Contains(ActionDraftTask.TextPromptVersion, ActionDraftTask.CurrentVersions.PromptVersions);
-        Assert.Equal("action-draft-prompt-v5", ActionDraftTask.PromptVersion);
+        Assert.Equal("action-draft-prompt-v6", ActionDraftTask.PromptVersion);
         Assert.True(request.CacheSystemPrompt);
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");

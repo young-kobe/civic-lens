@@ -19,7 +19,9 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SourceSpan? BillCitation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TextPackageId = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? WhyItMatters = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<ActionTextCitation> TextCitations = default)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<ActionTextCitation> TextCitations = default,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BillLine = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SourceSpan? BillLineCitation = null)
     : IHeadlineSummaryRevision
 {
     public const int MaximumHeadlineLength = 256;
@@ -43,6 +45,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     public const int MaximumTextQuoteLength = 300;
     public const int MinimumTextQuoteWords = 4;
     public const int MaximumTextSentenceLength = 400;
+    public const int MaximumBillLineLength = 200;
 
     private ImmutableArray<ActionTextCitation> TextCitationList => TextCitations.IsDefault ? [] : TextCitations;
 
@@ -50,7 +53,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
 
     public IEnumerable<SourceSpan> Citations => Sponsorships.SelectMany(item => item.Citations)
         .Concat(SummaryCitation is { } summary ? [summary] : []).Concat(PolicyAreaCitation is { } area ? [area] : [])
-        .Concat(BillCitation is { } bill ? [bill] : []).Concat(TextCitationList.Select(citation => citation.Span));
+        .Concat(BillCitation is { } bill ? [bill] : []).Concat(BillLineCitation is { } line ? [line] : []).Concat(TextCitationList.Select(citation => citation.Span));
 
     public DateOnly EventOn() => Sponsorships.Max(item => item.WithdrawnOn ?? item.SponsoredOn);
 
@@ -99,11 +102,14 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         if (Sponsorships.Any(item => item.WithdrawnOn < item.SponsoredOn))
             throw new ArgumentException("A sponsorship cannot be withdrawn before it began.");
         if (SummaryCitation is { } summary && !IsBounded(summary) || PolicyAreaCitation is { } area && !IsBounded(area) ||
-            BillCitation is { } bill && !IsBounded(bill))
+            BillCitation is { } bill && !IsBounded(bill) || BillLineCitation is { } lineCitation && !IsBounded(lineCitation))
             throw new ArgumentException("Citations must be bounded spans.");
         if (AuthorKind == ReviewAuthorKind.Code && BillCitation is null)
             throw new ArgumentException("Code text states the bill title and date, so the revision cites the bill page.");
         ValidateTextSource();
+        if ((BillLine is null) != (BillLineCitation is null) || BillLine is not null &&
+            (SummaryCitation is not { } lineSummary || !lineSummary.Covers(BillLineCitation!) || string.IsNullOrWhiteSpace(BillLine) || BillLine.Length > MaximumBillLineLength))
+            throw new ArgumentException($"A bill line has 1 to {MaximumBillLineLength} characters and needs its quote span inside the cited summary.");
         if ((SummaryVersion is null) != (SummaryCitation is null) || (PolicyArea is null) != (PolicyAreaCitation is null))
             throw new ArgumentException("A summary version and a policy area each need their citation.");
         if (PolicyAreaId is not null && PolicyArea is null)
@@ -174,6 +180,8 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         foreach (var span in Citations)
             _ = new DocumentTextSpan(extractions.GetValueOrDefault(span.ExtractionId)
                 ?? throw new ArgumentException("An action citation names a missing extraction."), span.Start, span.Length);
+        if (BillLineCitation is { } line && ActionTextCitation.WordCount(line.QuoteIn(extractions)) < MinimumTextQuoteWords)
+            throw new ArgumentException($"The bill line quote has at least {MinimumTextQuoteWords} words.");
         if (TextPackageId is null) return;
         RequireTextSpansInTheBody(extractions);
         if (TextOrigin == ReviewTextOrigin.Model) RequireQuotesOfEnoughWords(extractions);
@@ -216,6 +224,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     private bool HasSameBillFactsAs(ActionDraftRevision other) =>
         SummaryVersion == other.SummaryVersion && PolicyArea == other.PolicyArea && PolicyAreaId == other.PolicyAreaId && IssueRevisionId == other.IssueRevisionId &&
         BillTitle == other.BillTitle && TrackedIssueIds.SequenceEqual(other.TrackedIssueIds) &&
+        BillLine == other.BillLine && BillLineCitation == other.BillLineCitation &&
         IssueCandidateIds.IsDefault == other.IssueCandidateIds.IsDefault &&
         (IssueCandidateIds.IsDefault || IssueCandidateIds.SequenceEqual(other.IssueCandidateIds));
 

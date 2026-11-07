@@ -3,6 +3,7 @@ using System.Text;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Issues;
+using CivicLens.Core.Actions;
 using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.Fixtures.ActionBillWorld;
 
@@ -10,10 +11,10 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "d62af2685dd1ec265f8063e01350821831907d6708999c0ec481cf9407d94235";
-    private const string NoCandidateSystemSha256 = "7ea8500a184d016db4ec9580b928c7c6c7232929a3a43907be8a61b03c327c05";
-    private const string SchemaSha256 = "6d6adb018d7ee24f5df2e21a1f678cc87ed0fb7c144cf0a5c99cd84153a3acf0";
-    private const string InputHash = "7992facd4a0362511431945582fe13d5ffecd2df0e60d726baed061ee8dd23ee";
+    private const string SystemSha256 = "438fcdbe42422558021736cac8b2da8c96248fd7648cdcfc2905b0423adaf68a";
+    private const string NoCandidateSystemSha256 = "2f60a7f1308e5108923b1ff377fc0639f56fdb09149753879d0127a25b0c0e0f";
+    private const string SchemaSha256 = "966e1afd7d1647c3b07eb0b8575911017e9532b39ca78d5bf55040e38c34a776";
+    private const string InputHash = "9d91109408412fd62fc875f5c9ce114cb630efdbfe887c0508052c63649b8af7";
 
     [Fact]
     public async Task ThePromptAndSchemaMatchTheirPinnedVersions()
@@ -26,7 +27,7 @@ public sealed class ActionDraftPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(ActionDraftTask.PromptVersion)} ({ActionDraftTask.PromptVersion}) or " +
             $"{nameof(ActionDraftTask.SchemaVersion)} ({ActionDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("action-draft", "action-draft-v1", "action-draft-prompt-v5", "action-draft-schema-v2", "claude-haiku-5-5"),
+        Assert.Equal(("action-draft", "action-draft-v1", "action-draft-prompt-v6", "action-draft-schema-v3", "claude-haiku-5-5"),
             (ActionDraftTask.Task, ActionDraftTask.TaskVersion, ActionDraftTask.PromptVersion, ActionDraftTask.SchemaVersion, ActionDraftTask.Model));
         Assert.NotEqual(StatementDraftTaskName, ActionDraftTask.Task);
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
@@ -49,6 +50,23 @@ public sealed class ActionDraftPromptGoldenTests
         Assert.Contains("Never write that it passed, was enacted, became law, or is law", request.SystemPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("Congress.gov has no summary of this bill yet.", request.SystemPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("Rent aid", request.SystemPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheSummaryCallAsksForABillLineWithAnExactQuoteAndTheSchemaRequiresBoth()
+    {
+        var world = Create(summaries: [new("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>It funds rent aid.</p>")]);
+        var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
+
+        var request = ActionDraftPrompt.Build(snapshot, NoChoice(), ActionDraftTask.MaximumPromptBytes)!;
+
+        Assert.Contains("- billLine: an object with a line and a quote.", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains($"at most {ActionDraftRevision.MaximumBillLineLength} characters", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("exact quote from the summary text", request.SystemPrompt, StringComparison.Ordinal);
+        using var schema = System.Text.Json.JsonDocument.Parse(request.SchemaJson);
+        Assert.Contains("billLine", schema.RootElement.GetProperty("required").EnumerateArray().Select(item => item.GetString()));
+        Assert.Equal(["line", "quote"], schema.RootElement.GetProperty("properties").GetProperty("billLine").GetProperty("required").EnumerateArray().Select(item => item.GetString()));
+        Assert.Equal((ActionDraftTask.PromptVersion, ActionDraftTask.SchemaVersion), (request.PromptVersion, request.SchemaVersion));
     }
 
     [Fact]
@@ -98,7 +116,7 @@ public sealed class ActionDraftPromptGoldenTests
 
         Assert.Contains("\"issueIds\"", asked.SchemaJson, StringComparison.Ordinal);
         Assert.Contains("\"definition\": \"Rent costs.\"", asked.UserPrompt, StringComparison.Ordinal);
-        Assert.Equal(AnalysisSchema.HeadlineAndSummary(), none.SchemaJson);
+        Assert.Equal(AnalysisSchema.HeadlineAndSummary(withBillLine: true), none.SchemaJson);
         Assert.DoesNotContain("issueIds", none.SystemPrompt, StringComparison.Ordinal);
     }
 

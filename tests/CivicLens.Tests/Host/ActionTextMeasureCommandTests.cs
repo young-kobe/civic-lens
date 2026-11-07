@@ -88,7 +88,40 @@ public sealed class ActionTextMeasureCommandTests : IDisposable
         Assert.False(created);
     }
 
-    private async Task<(int Code, string Output)> ExecuteAsync(string[] args, Func<ActionTextMeasure> createMeasure)
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-5")]
+    public async Task TheLineCommandRefusesACapThatIsNotAWholePositiveNumberAndCreatesNoMeasure(string cap)
+    {
+        var created = false;
+
+        var exit = await ExecuteAsync(["actions", "line", "measure", cap, BillsFile], _ => { created = true; return Measure(); });
+
+        Assert.Equal(2, exit.Code);
+        Assert.False(created);
+    }
+
+    [Fact]
+    public async Task TheLineCommandMeasuresTheSummaryPromptAndWritesItsReportBesideNotInsideTheTextReports()
+    {
+        var path = Path.Combine(directory, "one-bill.json");
+        File.WriteAllText(path, "[\"119-hr-1\"]");
+        var asked = new List<ActionMeasuredPrompt>();
+
+        var exit = await ExecuteAsync(["actions", "line", "measure", "10000000", path], prompt => { asked.Add(prompt); return LineMeasure(prompt); });
+
+        Assert.Equal(0, exit.Code);
+        Assert.Equal([ActionMeasuredPrompt.BillLine], asked);
+        Assert.False(Directory.Exists(Path.Combine(directory, ActionTextMeasureCommand.ReportDirectory)));
+        var file = Assert.Single(Directory.GetFiles(Path.Combine(directory, ActionTextMeasureCommand.LineReportDirectory)));
+        using var report = JsonDocument.Parse(File.ReadAllText(file));
+        Assert.Equal(ActionDraftTask.PromptVersion, report.RootElement.GetProperty("promptVersion").GetString());
+        Assert.Equal(1, report.RootElement.GetProperty("totals").GetProperty("linesKept").GetInt32());
+    }
+
+    private Task<(int Code, string Output)> ExecuteAsync(string[] args, Func<ActionTextMeasure> createMeasure) => ExecuteAsync(args, _ => createMeasure());
+
+    private async Task<(int Code, string Output)> ExecuteAsync(string[] args, Func<ActionMeasuredPrompt, ActionTextMeasure> createMeasure)
     {
         var output = new StringWriter();
         var error = Console.Error;
@@ -102,6 +135,14 @@ public sealed class ActionTextMeasureCommandTests : IDisposable
         {
             Console.SetError(error);
         }
+    }
+
+    private static ActionTextMeasure LineMeasure(ActionMeasuredPrompt prompt)
+    {
+        var world = ActionBillWorld.Create(summaries: [new("00", "2025-01-03", "2025-01-05T10:00:00Z", "<p>It funds rent aid for tenants with low income.</p>")]);
+        var store = new FakeActionDraftStore(world.Evidence());
+        var model = new FakeHeadlineSummaryModel().Draft(HeadlineSummaryOutputs.Output(issueIds: ["rent"], billLine: ("The bill pays for rent aid.", "funds rent aid for tenants")));
+        return new(store, new ActionDraftStep(store, world.Reader(), model, new ActionDraftSettings(10_000_000, 1, true), BillGateFixtures.Revision()), prompt);
     }
 
     private static ActionTextMeasure Measure() => Measure(new FakeHeadlineSummaryModel().Draft(Output()));

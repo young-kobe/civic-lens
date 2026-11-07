@@ -346,7 +346,7 @@ try
     if (ActionTextMeasureCommand.Matches(args))
     {
         executing = true;
-        return await ActionTextMeasureCommand.ExecuteAsync(args, () => ActionDraftComposition.CreateMeasure(codeVersion), Path.GetFullPath("artifacts"), Console.Out, TimeProvider.System,
+        return await ActionTextMeasureCommand.ExecuteAsync(args, prompt => ActionDraftComposition.CreateMeasure(codeVersion, prompt), Path.GetFullPath("artifacts"), Console.Out, TimeProvider.System,
             cancellation.Token);
     }
 

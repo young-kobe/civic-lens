@@ -35,6 +35,8 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
                 "author_kind <> 'Code' OR headline IS NULL OR bill_citation_extraction_id IS NOT NULL");
             table.HasCheckConstraint("ck_action_revisions_text_source", "text_package_id IS NULL OR summary_citation_extraction_id IS NULL");
             table.HasCheckConstraint("ck_action_revisions_why_it_matters", "(text_package_id IS NULL) = (why_it_matters IS NULL)");
+            table.HasCheckConstraint("ck_action_revisions_bill_line",
+                $"(bill_line IS NULL) = (bill_line_citation_extraction_id IS NULL) AND (bill_line IS NULL OR (summary_citation_extraction_id IS NOT NULL AND bill_line_citation_extraction_id = summary_citation_extraction_id AND bill_line_citation_start >= summary_citation_start AND bill_line_citation_length <= summary_citation_length AND bill_line_citation_start - summary_citation_start <= summary_citation_length - bill_line_citation_length AND length(btrim(bill_line)) >= 1 AND length(bill_line) <= {ActionDraftRevision.MaximumBillLineLength}))");
             table.HasCheckConstraint("ck_action_revisions_cosponsor_count", "cosponsor_count >= 0");
             table.HasCheckConstraint("ck_action_revisions_columns_written", $"num_nulls({string.Join(", ", WrittenTogether)}) IN (0, {WrittenTogether.Length})");
             table.HasCheckConstraint("ck_action_revisions_derived_columns_written", "num_nulls(event_on, cosponsor_count) IN (0, 2)");
@@ -67,6 +69,8 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.SubjectsHash).HasColumnName("subjects_hash").HasMaxLength(64);
         builder.Property(row => row.TextPackageId).HasColumnName("text_package_id").HasMaxLength(ActionDraftRevision.MaximumTextPackageIdLength);
         builder.Property(row => row.WhyItMatters).HasColumnName("why_it_matters").HasMaxLength(ActionDraftRevision.MaximumSummaryLength);
+        builder.Property(row => row.BillLine).HasColumnName("bill_line");
+        SourceSpanColumns.Configure(builder, "action_revisions", "BillLineCitation", "bill_line_citation", optional: true);
         builder.Property(row => row.IssueCandidatesRecorded).HasColumnName("issue_candidates_recorded");
         builder.Property(row => row.EventOn).HasColumnName("event_on");
         builder.Property(row => row.CosponsorCount).HasColumnName("cosponsor_count");

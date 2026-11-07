@@ -6,6 +6,7 @@ public sealed record PublishedAction
     public const int MaximumCitationsPerSponsorship = 2;
     public const int MaximumSources = 8;
     public const int MaximumBillTitleLength = 4_000;
+    public const int MinimumBillLineQuoteWords = 4;
 
     public required string RecordId { get; init; }
     public required int RevisionNumber { get; init; }
@@ -21,6 +22,8 @@ public sealed record PublishedAction
     public PublishedCitation? PolicyAreaCitation { get; init; }
     public required string[] TrackedIssueIds { get; init; }
     public PublishedCitation? SummaryCitation { get; init; }
+    public string? BillLine { get; init; }
+    public PublishedCitation? BillLineCitation { get; init; }
     public PublishedCitation? BillCitation { get; init; }
     public PublishedBillText? BillText { get; init; }
     public required PublishedSponsorship[] Sponsorships { get; init; }
@@ -42,6 +45,7 @@ public sealed record PublishedAction
         SourceHost = Sources[0].Host,
         BillTitle = BillTitle,
         EventDate = Sponsorships.Max(item => item.LatestDate),
+        BillLine = BillLine,
         CosponsorIds = CosponsorIdsOfEntry()
     };
 
@@ -72,6 +76,15 @@ public sealed record PublishedAction
             throw new InvalidDataException("A policy area id requires a policy area.");
         if (PolicyAreaCitation is not null) ValidateCitation(PolicyAreaCitation);
         if (SummaryCitation is not null) ValidateCitation(SummaryCitation);
+        if ((BillLine is null) != (BillLineCitation is null) || BillLine is not null &&
+            (SummaryCitation is null || !PublishedRecordEntry.IsBillLine(BillLine) || !Covers(SummaryCitation, BillLineCitation!)))
+            throw new InvalidDataException($"A bill line has 1 to {PublishedRecordEntry.MaximumBillLineLength} characters and needs its quote span inside the cited summary.");
+        if (BillLineCitation is not null)
+        {
+            ValidateCitation(BillLineCitation);
+            if (BillLineCitation.Quote.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length < MinimumBillLineQuoteWords)
+                throw new InvalidDataException($"A bill line quote has at least {MinimumBillLineQuoteWords} words.");
+        }
         if (BillCitation is not null) ValidateCitation(BillCitation);
         ValidateBillText();
         if (TrackedIssueIds is null || !PublishedEvidenceRules.AreDistinctAndNotBlank(TrackedIssueIds))
@@ -81,7 +94,7 @@ public sealed record PublishedAction
 
     public IEnumerable<PublishedCitation> Citations() => Sponsorships.SelectMany(item => item.Citations)
         .Concat(PolicyAreaCitation is { } area ? [area] : []).Concat(SummaryCitation is { } summary ? [summary] : [])
-        .Concat(BillCitation is { } bill ? [bill] : []).Concat(BillText?.Sentences.Select(item => item.Citation) ?? []);
+        .Concat(BillCitation is { } bill ? [bill] : []).Concat(BillLineCitation is { } line ? [line] : []).Concat(BillText?.Sentences.Select(item => item.Citation) ?? []);
 
     private void ValidateBillText()
     {
@@ -102,6 +115,9 @@ public sealed record PublishedAction
             throw new InvalidDataException("A sponsorship cannot be withdrawn before it began.");
         foreach (var citation in sponsorship.Citations) ValidateCitation(citation);
     }
+
+    private static bool Covers(PublishedCitation summary, PublishedCitation quote) =>
+        summary.ExtractionId == quote.ExtractionId && summary.Start <= quote.Start && (long)quote.Start + quote.Length <= (long)summary.Start + summary.Length;
 
     private void ValidateCitation(PublishedCitation? citation) => PublishedEvidenceRules.RequireCitation(Sources, citation, "action");
 }

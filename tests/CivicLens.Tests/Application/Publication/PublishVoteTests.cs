@@ -195,7 +195,7 @@ public sealed class PublishVoteTests
     public async Task TheVotePageAndTheListPagesShowTheBillLineOfTheActionOnItsBillBecauseOneMapOfTheBuildFeedsEveryPage()
     {
         var scenario = new PublicationScenario();
-        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid. It adds a cap.");
+        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid. It adds a cap.", billLine: "This bill funds rent aid.");
         var vote = scenario.AddVote('d', billActionRecordIds: [action]);
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
@@ -212,7 +212,7 @@ public sealed class PublishVoteTests
     public async Task TheHomeHighlightsGetTheSameBillLinesAsTheListPages()
     {
         var scenario = new PublicationScenario();
-        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid.");
+        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid.", billLine: "This bill funds rent aid.");
         var vote = scenario.AddVote('d', billActionRecordIds: [action]);
 
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
@@ -225,7 +225,7 @@ public sealed class PublishVoteTests
     public async Task ACarriedVotePageRendersAgainWhenAnActionWithABillLineJoinsItsBillAndStaysAsItWasWhenAnUnrelatedRecordPublishes()
     {
         var scenario = new PublicationScenario();
-        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid.");
+        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid.", billLine: "This bill funds rent aid.");
         var vote = scenario.AddVote('d', billActionRecordIds: [action]);
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", vote));
         scenario.PageLayout = " layout-2";
@@ -258,7 +258,7 @@ public sealed class PublishVoteTests
     public async Task ACarriedVotePageStaysAsItWasWhenANewRevisionOfItsActionKeepsTheSameBillLine()
     {
         var scenario = new PublicationScenario();
-        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid.");
+        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid.", billLine: "This bill funds rent aid.");
         var vote = scenario.AddVote('d', billActionRecordIds: [action]);
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
             new PublishedRecordReference(PublishedRecordKind.Vote, vote), new PublishedRecordReference(PublishedRecordKind.Action, action)));

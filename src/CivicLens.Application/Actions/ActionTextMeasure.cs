@@ -7,10 +7,17 @@ using CivicLens.Core.Analysis;
 
 namespace CivicLens.Application.Actions;
 
-/// <summary>Drafts the bill text summary of fixed bills through the real step, and keeps nothing. It reads evidence and sends model calls only.
-/// It clears the draft history of each bill, so a bill with a current record is drafted again as a new bill.</summary>
-public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep step)
+public enum ActionMeasuredPrompt { BillText, BillLine }
+
+/// <summary>Drafts one prompt of the step on fixed bills through the real step, and keeps nothing. <see cref="ActionMeasuredPrompt.BillText"/> measures the bill
+/// text summary. <see cref="ActionMeasuredPrompt.BillLine"/> measures the summary prompt that also writes the bill line, on bills that have a CRS summary.
+/// It reads evidence and sends model calls only. It clears the draft history of each bill, so a bill with a current record is drafted again as a new bill.</summary>
+public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep step, ActionMeasuredPrompt prompt = ActionMeasuredPrompt.BillText)
 {
+    private bool MeasuresBillText => prompt == ActionMeasuredPrompt.BillText;
+
+    private string MeasuredPromptVersion => MeasuresBillText ? ActionDraftTask.TextPromptVersion : ActionDraftTask.PromptVersion;
+
     public async Task<ActionTextMeasureReport> RunAsync(IReadOnlyList<CongressBillListItem> bills, long tokenCap, CancellationToken cancellationToken)
     {
         if (tokenCap < 1) throw new ArgumentOutOfRangeException(nameof(tokenCap), tokenCap, "The spend cap must be at least 1 token.");
@@ -32,8 +39,9 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         return ReportOf(tokenCap, results);
     }
 
-    private static ActionTextMeasureReport ReportOf(long tokenCap, ImmutableArray<ActionTextMeasureBill>.Builder results) =>
-        new(ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model, tokenCap, results.ToImmutable());
+    private ActionTextMeasureReport ReportOf(long tokenCap, ImmutableArray<ActionTextMeasureBill>.Builder results) =>
+        new(MeasuredPromptVersion, MeasuresBillText ? ActionDraftTask.TextSchemaVersion : ActionDraftTask.SchemaVersion, ActionDraftTask.Model, tokenCap,
+            results.ToImmutable());
 
     private static ActionTextMeasureBill NotRun(CongressBillListItem bill, IEnumerable<ActionTextMeasureBill> earlier) =>
         earlier.Any(item => item.Outcome == ActionTextMeasureOutcome.StoppedByModel)
@@ -52,20 +60,60 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         var billId = IdOf(bill);
         if (await store.NewestCandidateIdAsync(bill, cancellationToken) is not { } candidateId)
             return ActionTextMeasureBill.Skipped(billId, ActionTextMeasureReason.NoCandidate);
-        var evidence = await store.ReadEvidenceAsync(candidateId, withBillText: true, cancellationToken);
-        if (evidence?.BillText is not { } billText) return ActionTextMeasureBill.Skipped(billId, ActionTextMeasureReason.NoBillText);
+        var evidence = await store.ReadEvidenceAsync(candidateId, withBillText: MeasuresBillText, cancellationToken);
+        if (evidence is null) return ActionTextMeasureBill.Skipped(billId, MeasuresBillText ? ActionTextMeasureReason.NoBillText : ActionDraftErrorCodes.EvidenceUnavailable);
+        if (MeasuresBillText && evidence.BillText is null) return ActionTextMeasureBill.Skipped(billId, ActionTextMeasureReason.NoBillText);
 
-        var attempt = new ActionTextMeasureAttempt(candidateId, tokenCap, spent);
+        var attempt = new ActionTextMeasureAttempt(candidateId, tokenCap, spent, MeasuredPromptVersion);
         await step.DraftAsync(attempt, evidence with { Current = null, HasStaleDraft = false, IsRejected = false },
             cancellationToken);
-        return Summarize(billId, evidence, billText, attempt);
+        return MeasuresBillText ? Summarize(billId, evidence, evidence.BillText!, attempt) : SummarizeLine(billId, evidence, attempt);
     }
+
+    private static ActionTextMeasureBill SummarizeLine(string billId, ActionDraftEvidence evidence, ActionTextMeasureAttempt attempt)
+    {
+        var bill = ActionTextMeasureBill.WithoutCall(billId, ActionTextMeasureOutcome.Skipped, ActionTextMeasureReason.NotSummaryPrompt) with
+        {
+            Title = TitleOf(evidence),
+            Calls = attempt.Calls,
+            Usage = UsageOf(attempt),
+            ChargedTokens = attempt.Runs.Sum(run => run.ChargedTokens),
+            Rejections = [.. attempt.Runs.SelectMany(run => run.ValidationErrors)],
+            Passes = PassesOf(attempt)
+        };
+        if (attempt.RefusedOtherPrompt) return bill;
+        if (attempt.Failure is { } failure)
+            return bill with { Outcome = AnalysisFailureRules.NeedsPerson(failure) ? ActionTextMeasureOutcome.StoppedByModel : ActionTextMeasureOutcome.Failed, Reason = attempt.ErrorCode };
+        if (attempt.StoppedByCap) return bill with { Outcome = ActionTextMeasureOutcome.StoppedByCap, Reason = ActionTextMeasureReason.SpendCap };
+        if (attempt.Revision is not null && attempt.Calls > 0)
+        {
+            var line = LineOf(attempt);
+            return bill with { Outcome = ActionTextMeasureOutcome.Accepted, Reason = null, BillLine = line, PassageGrade = line.Grade };
+        }
+        if (attempt.Revision is not null) return bill with { Reason = ActionTextMeasureReason.WrittenByCode };
+        if (attempt.Calls == 0) return bill with { Reason = attempt.ErrorCode };
+        return bill with { Outcome = IsResolverRefusal(attempt.Runs[^1].Outcome) ? ActionTextMeasureOutcome.Rejected : ActionTextMeasureOutcome.Failed, Reason = attempt.ErrorCode };
+    }
+
+    /// <summary>Reads the line that the model wrote in its last answer. The revision holds the line only when the checks kept it.</summary>
+    private static ActionTextMeasureLine LineOf(ActionTextMeasureAttempt attempt)
+    {
+        var written = HeadlineSummaryOutput.Parse(attempt.Runs[^1].OutputJson ?? string.Empty)?.BillLine;
+        var line = written?.Line?.Trim();
+        return new(line, written?.Quote, attempt.Revision!.BillLine is not null, line?.Length ?? 0, string.IsNullOrEmpty(line) ? null : ReadingGrade.Rounded(line));
+    }
+
+    private static AnalysisTokenUsage UsageOf(ActionTextMeasureAttempt attempt) => attempt.Runs.Aggregate(AnalysisTokenUsage.None, (sum, run) => new(
+        sum.InputTokens + run.Usage.InputTokens, sum.OutputTokens + run.Usage.OutputTokens, sum.CacheReadTokens + run.Usage.CacheReadTokens,
+        sum.CacheWriteTokens + run.Usage.CacheWriteTokens));
+
+    private static ImmutableArray<ActionTextMeasurePass> PassesOf(ActionTextMeasureAttempt attempt) =>
+        [.. attempt.Runs.Where(run => run.OutputJson is not null).Select(run => new ActionTextMeasurePass(run.Outcome, run.OutputJson))];
 
     private static ActionTextMeasureBill Summarize(string billId, ActionDraftEvidence evidence, ActionDraftBillText billText,
         ActionTextMeasureAttempt attempt)
     {
-        var usage = attempt.Runs.Aggregate(AnalysisTokenUsage.None, (sum, run) => new(sum.InputTokens + run.Usage.InputTokens,
-            sum.OutputTokens + run.Usage.OutputTokens, sum.CacheReadTokens + run.Usage.CacheReadTokens, sum.CacheWriteTokens + run.Usage.CacheWriteTokens));
+        var usage = UsageOf(attempt);
         var rejections = attempt.Runs.SelectMany(run => run.ValidationErrors).ToImmutableArray();
         var textFigures = BillFigures.Count(billText.Body);
         ActionTextMeasureBill With(ActionTextMeasureOutcome outcome, string? reason, ImmutableArray<ActionTextMeasureSentence> sentences = default, double? passageGrade = null)
@@ -74,7 +122,7 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
             var sentenceText = string.Join('\n', kept.Select(sentence => sentence.Sentence));
             var bill = new ActionTextMeasureBill(billId, TitleOf(evidence), outcome, reason, billText.CharsRead, billText.CharsTotal, attempt.Calls, usage,
                 attempt.Runs.Sum(run => run.ChargedTokens), kept, rejections,
-                [.. attempt.Runs.Where(run => run.OutputJson is not null).Select(run => new ActionTextMeasurePass(run.Outcome, run.OutputJson))],
+                PassesOf(attempt),
                 textFigures, BillFigures.Count(sentenceText), passageGrade, []);
             return bill.LosesFigures ? bill with { MissingDates = [.. BillFigures.MissingDates(billText.Body, sentenceText)] } : bill;
         }

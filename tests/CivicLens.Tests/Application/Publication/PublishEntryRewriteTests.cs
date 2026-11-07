@@ -82,7 +82,7 @@ public sealed class PublishEntryRewriteTests
     }
 
     [Fact]
-    public async Task TheRewriteOptionFillsTheBillLineOfAnOldActionEntryBecauseTheRecordFileOwnsTheLine()
+    public async Task TheRewriteOptionMakesNoLineFromTheSummaryOfAnOldActionBecauseOnlyTheModelWritesALine()
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('b', summaryText: "This bill funds rent aid.");
@@ -93,21 +93,21 @@ public sealed class PublishEntryRewriteTests
 
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true });
 
-        Assert.Equal("This bill funds rent aid.", Assert.Single(Manifest(scenario, second).Records).BillLine);
+        Assert.Null(Assert.Single(Manifest(scenario, second).Records).BillLine);
     }
 
     [Fact]
     public async Task TheRewriteOptionHandsTheRewrittenCarriedActionsToTheCommitBecauseTheTableMustFillTheirRowsInTheSameTransaction()
     {
         var scenario = new PublicationScenario();
-        var action = scenario.AddAction('b', summaryText: "This bill funds rent aid.");
+        var action = scenario.AddAction('b', summaryText: "This bill funds rent aid.", billLine: "The bill pays for rent aid.");
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
 
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true });
 
         var rewritten = Assert.Single(scenario.Publications.LastCommit!.RewrittenEntries);
-        Assert.Equal((PublishedRecordKind.Action, "This bill funds rent aid."), (rewritten.Kind, rewritten.BillLine));
+        Assert.Equal((PublishedRecordKind.Action, "The bill pays for rent aid."), (rewritten.Kind, rewritten.BillLine));
     }
 
     [Fact]
@@ -128,29 +128,28 @@ public sealed class PublishEntryRewriteTests
     public async Task TheRewriteOptionKeepsTheSameBillLineOfACarriedEntryThatHoldsOne()
     {
         var scenario = new PublicationScenario();
-        var action = scenario.AddAction('b', summaryText: "This bill funds rent aid.");
+        var action = scenario.AddAction('b', summaryText: "This bill funds rent aid.", billLine: "The bill pays for rent aid.");
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
 
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true });
 
-        Assert.Equal("This bill funds rent aid.", Assert.Single(Manifest(scenario, second).Records).BillLine);
+        Assert.Equal("The bill pays for rent aid.", Assert.Single(Manifest(scenario, second).Records).BillLine);
     }
 
     [Fact]
-    public async Task TheRewriteKeepsTheBillLineOfACarriedEntryWhenTheLineRuleNowGivesAnotherLineBecauseTheTableWritesTheLineOnce()
+    public async Task TheRewriteKeepsTheBillLineOfACarriedEntryWhenItsRecordFileHoldsNoLineBecauseTheTableWritesTheLineOnce()
     {
         var scenario = new PublicationScenario();
-        var action = scenario.AddAction('b', summaryText: "This resolution informs the Senate that Rep. Steve Scalise was elected Speaker.");
+        var action = scenario.AddAction('b', summaryText: "This bill funds rent aid.");
         var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k1", new PublishedRecordReference(PublishedRecordKind.Action, action)));
-        Assert.Equal("This resolution informs the Senate that Rep. Steve Scalise was elected Speaker.", Assert.Single(Manifest(scenario, first).Records).BillLine);
-        WithBillLine(scenario, first, "This resolution informs the Senate that Rep.");
+        WithBillLine(scenario, first, "A line of the retired rule.");
 
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2") { RewriteEntries = true });
 
-        Assert.Equal("This resolution informs the Senate that Rep.", Assert.Single(Manifest(scenario, second).Records).BillLine);
-        Assert.Equal("This resolution informs the Senate that Rep.", Assert.Single(scenario.Publications.LastCommit!.RewrittenEntries).BillLine);
+        Assert.Equal("A line of the retired rule.", Assert.Single(Manifest(scenario, second).Records).BillLine);
+        Assert.Equal("A line of the retired rule.", Assert.Single(scenario.Publications.LastCommit!.RewrittenEntries).BillLine);
     }
 
     [Fact]

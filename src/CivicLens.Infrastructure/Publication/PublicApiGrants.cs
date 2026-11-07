@@ -32,13 +32,13 @@ internal static class PublicApiGrants
         GRANT SELECT (kind, record_id, first_release, revision_number, last_release) ON publication_record_states TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, chamber, congress, session_number, roll_call_number, voted_on, kind,
             bill_type, bill_number, headline, summary, text_origin, member_list_id, question, result, alignment, democrat_majority, republican_majority) ON vote_revisions TO civic_lens_public_owner;
-        GRANT SELECT (kind, record_id, revision_number, event_date, link_type, statement_kind, statement_record_id, target_kind, target_record_id, bill_line, document_type, approved_by)
+        GRANT SELECT (kind, record_id, revision_number, event_date, link_type, statement_kind, statement_record_id, target_kind, target_record_id, document_type, approved_by)
             ON published_entries TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, revision_number, official_id) ON published_entry_officials TO civic_lens_public_owner;
         GRANT SELECT (list_id, "position", person_id, vote_cast, party) ON vote_member_list_entries TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, is_tracked) ON vote_revision_issues TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, congress, bill_type, bill_number, bill_title, headline, summary, text_origin,
-            policy_area, policy_area_id, event_on, cosponsor_count, text_package_id, why_it_matters) ON action_revisions TO civic_lens_public_owner;
+            policy_area, policy_area_id, event_on, cosponsor_count, bill_line, text_package_id, why_it_matters) ON action_revisions TO civic_lens_public_owner;
         GRANT SELECT (congress, bill_type, bill_number, package_id, version_type, version_date, chars_read, chars_total)
             ON bill_text_versions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", person_id, role, is_original, sponsored_on, withdrawn_on)

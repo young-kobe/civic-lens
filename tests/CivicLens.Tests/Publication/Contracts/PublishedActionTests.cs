@@ -42,6 +42,39 @@ public sealed class PublishedActionTests
     }
 
     [Fact]
+    public void ARecordWithoutTheOptionalBillLineCitationReadsBackBecauseItWasNotInEarlierRecords()
+    {
+        var json = JsonSerializer.Serialize(Action(), PublicationProtocol.JsonOptions).Replace("\"billLineCitation\":null,", "", StringComparison.Ordinal);
+        var read = JsonSerializer.Deserialize<PublishedAction>(json, PublicationProtocol.JsonOptions)!;
+        Assert.Null(read.BillLineCitation);
+        read.Validate();
+    }
+
+    [Fact]
+    public void ABillLineNeedsTheSummaryCitationThatItQuotesAndFitsOneToTwoHundredCharactersAndTheEntryCarriesIt()
+    {
+        var summaryQuote = Cite(DetailId, DetailText, DetailText);
+        var cited = Action() with { SummaryCitation = summaryQuote, BillLine = "The bill pays for rent aid.", BillLineCitation = summaryQuote };
+
+        cited.Validate();
+        Assert.Equal("The bill pays for rent aid.", cited.ToEntry().BillLine);
+        Assert.Contains(summaryQuote, cited.Citations());
+        Assert.Throws<InvalidDataException>((cited with { BillLine = null }).Validate);
+        Assert.Throws<InvalidDataException>((cited with { SummaryCitation = null }).Validate);
+        Assert.Throws<InvalidDataException>((cited with { BillLineCitation = null }).Validate);
+        Assert.Throws<InvalidDataException>((cited with { BillLineCitation = cited.BillLineCitation! with { Quote = "not present" } }).Validate);
+        var otherSourceQuote = Cite(CosponsorsId, CosponsorsText, CosponsorsText);
+        Assert.Throws<InvalidDataException>((cited with { BillLineCitation = otherSourceQuote }).Validate);
+        var shortQuote = Cite(DetailId, DetailText, "Policy area: Housing");
+        Assert.Throws<InvalidDataException>((cited with { BillLineCitation = shortQuote }).Validate);
+        var narrowerSummary = Cite(DetailId, DetailText, "Sponsor: M000001");
+        Assert.Throws<InvalidDataException>((cited with { SummaryCitation = narrowerSummary }).Validate);
+        Assert.Throws<InvalidDataException>((cited with { BillLine = " " }).Validate);
+        Assert.Throws<InvalidDataException>((cited with { BillLine = new string('x', PublishedRecordEntry.MaximumBillLineLength + 1) }).Validate);
+        (cited with { BillLine = new string('x', PublishedRecordEntry.MaximumBillLineLength) }).Validate();
+    }
+
+    [Fact]
     public void CodeTextOriginWritesAsCodeAndReadsBackBecauseTheOriginIsPartOfTheContract()
     {
         var json = JsonSerializer.Serialize(Action() with { TextOrigin = PublishedTextOrigin.Code }, PublicationProtocol.JsonOptions);
@@ -56,7 +89,7 @@ public sealed class PublishedActionTests
         var json = JsonSerializer.Serialize(Action(), PublicationProtocol.JsonOptions);
 
         Assert.Equal(1, PublicationProtocol.SchemaVersion);
-        Assert.True(json == """{"recordId":"5555555555555555555555555555555555555555555555555555555555555555","revisionNumber":1,"headline":"Headline","summary":"Summary","textOrigin":"model","congress":119,"billType":"hr","billNumber":7,"billTitle":"A housing bill","policyArea":"Housing","policyAreaId":"housing-area","policyAreaCitation":{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":17,"length":20,"quote":"Policy area: Housing"},"trackedIssueIds":["housing"],"summaryCitation":null,"billCitation":null,"billText":null,"sponsorships":[{"official":{"id":"mayor","name":"Mayor Example"},"role":"sponsor","isOriginal":false,"sponsoredOn":"2026-01-03","withdrawnOn":null,"citations":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":0,"length":16,"quote":"Sponsor: M000001"}]},{"official":{"id":"chair","name":"Chair Example"},"role":"cosponsor","isOriginal":true,"sponsoredOn":"2026-01-05","withdrawnOn":"2026-01-20","citations":[{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","start":0,"length":30,"quote":"Cosponsor: C000001, 2026-01-05"}]}],"sources":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","url":"https://api.congress.gov/v3/bill/119/hr/7","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Sponsor: M000001\nPolicy area: Housing\n"},{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","url":"https://api.congress.gov/v3/bill/119/hr/7/cosponsors","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Cosponsor: C000001, 2026-01-05\n"}],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
+        Assert.True(json == """{"recordId":"5555555555555555555555555555555555555555555555555555555555555555","revisionNumber":1,"headline":"Headline","summary":"Summary","textOrigin":"model","congress":119,"billType":"hr","billNumber":7,"billTitle":"A housing bill","policyArea":"Housing","policyAreaId":"housing-area","policyAreaCitation":{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":17,"length":20,"quote":"Policy area: Housing"},"trackedIssueIds":["housing"],"summaryCitation":null,"billLine":null,"billLineCitation":null,"billCitation":null,"billText":null,"sponsorships":[{"official":{"id":"mayor","name":"Mayor Example"},"role":"sponsor","isOriginal":false,"sponsoredOn":"2026-01-03","withdrawnOn":null,"citations":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","start":0,"length":16,"quote":"Sponsor: M000001"}]},{"official":{"id":"chair","name":"Chair Example"},"role":"cosponsor","isOriginal":true,"sponsoredOn":"2026-01-05","withdrawnOn":"2026-01-20","citations":[{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","start":0,"length":30,"quote":"Cosponsor: C000001, 2026-01-05"}]}],"sources":[{"extractionId":"1111111111111111111111111111111111111111111111111111111111111111","url":"https://api.congress.gov/v3/bill/119/hr/7","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Sponsor: M000001\nPolicy area: Housing\n"},{"extractionId":"2222222222222222222222222222222222222222222222222222222222222222","url":"https://api.congress.gov/v3/bill/119/hr/7/cosponsors","observedAtUtc":"1970-01-01T00:00:00+00:00","text":"Cosponsor: C000001, 2026-01-05\n"}],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
             "The published action JSON changed. Bump PublicationProtocol.SchemaVersion, update the version table " +
             "in docs/architecture.md, then update this test. Actual: " + json);
     }

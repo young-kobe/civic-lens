@@ -175,7 +175,8 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [ ] AI summaries are part of the redesign (owner, 2026-11-06). Each one is a view column with its text origin and label. Each prompt gets a budgeted measure on fixed records before it runs ([R-67](#later)), and code checks each summary against its source. Each summary lands with the page step that shows it:
     - [ ] Home and members: code tables for what a Yes vote means and what happens next, by vote kind and result, and one grade 12 test over page and AI text
     - [ ] Votes: "what this vote decides". The vote prompt gets the bill line, the Congressional Research Service summary, and the plain vote words. Procedure votes name the bill only
-    - [ ] Bills: the bill line from a model with a checked quote ([bill line](architecture/actions.md#limits-and-planned-work)), then the owner reads the measured sample, turns the bill text setting on, and runs the backfill of older bills
+    - [x] Bills: the bill line from a model with a checked quote ([bill line](architecture/actions.md#invariants)). Owner next: measure it with `actions line measure`, then run `analyses redraft --stale actions` after deploy
+    - [ ] Bills: publish the bill text summary after the owner reads the measured sample, turns the setting on, and backfills older bills
     - [ ] Bills: up to 5 key terms, each defined only by a quote from the bill's definitions section
     - [ ] Executive actions: collect the document body text, then an AI summary that says what the document states, never its motive
     - [ ] Later, after amendment data ([R-58](#later)): the purpose of each amendment

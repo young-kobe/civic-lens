@@ -18,7 +18,7 @@ namespace CivicLens.Tests.Fixtures;
 
 internal sealed record CosponsorSpec(string Bioguide, string Date, bool Original = false, string? Withdrawn = null);
 
-internal sealed record SummarySpec(string Version, string ActionDate, string Updated, string Html);
+internal sealed record SummarySpec(string Version, string ActionDate, string Updated, string Html, string ActionDescription = "Introduced");
 
 /// <summary>One Congress.gov bill with real page bodies, the texts that preparation would have saved, and the stores that serve them.</summary>
 internal sealed class ActionBillWorld
@@ -209,7 +209,7 @@ internal sealed class ActionBillWorld
     {
         summaries = new[]
         {
-            new { versionCode = summary.Version, actionDate = summary.ActionDate, actionDesc = "Introduced", updateDate = summary.Updated, text = summary.Html }
+            new { versionCode = summary.Version, actionDate = summary.ActionDate, actionDesc = summary.ActionDescription, updateDate = summary.Updated, text = summary.Html }
         },
         pagination = new { next }
     });

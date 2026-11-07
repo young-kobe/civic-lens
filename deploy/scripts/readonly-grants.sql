@@ -28,7 +28,7 @@ GRANT USAGE ON SCHEMA public TO civic_lens_readonly, civic_lens_readonly_owner;
 DO $$
 DECLARE
   hidden_column constant text := '(^|_)(notes?|body|secret|password|email|credential|reviewer|actor)($|_)'
-    || '|(^|_)(subject|token|key)$|^resolved_by$'
+    || '|(^|_)(subject|token|key)$|^resolved_by$|^bill_line($|_)'
     || '|^(headline|summary|fact_text|user_message)$|^suggestion_'
     || '|^(revision|decision|label|request|definition|input|resolution|discovery|result)_json$';
   hidden_table constant text[] := ARRAY['document_change_review_idempotency'];

@@ -626,7 +626,8 @@ public sealed partial class PostgresBillStreamTests
     [Theory]
     [InlineData("action-draft-prompt-v3", 1)]
     [InlineData("action-draft-prompt-v4", 1)]
-    [InlineData("action-draft-prompt-v5", 0)]
+    [InlineData("action-draft-prompt-v5", 1)]
+    [InlineData(ActionDraftTask.PromptVersion, 0)]
     [InlineData("action-issue-prompt-v3", 0)]
     public async Task RedraftTreatsOnlyAnOldFullDraftAsStaleBecauseBothCurrentPromptsNameAFinishedDraft(string newestDraftPrompt, int requeued)
     {
@@ -1068,6 +1069,7 @@ public sealed partial class PostgresBillStreamTests
         return revision with
         {
             SummaryCitation = revision.SummaryCitation is { } summary ? Swap(summary) : null,
+            BillLineCitation = revision.BillLineCitation is { } line ? Swap(line) : null,
             PolicyAreaCitation = revision.PolicyAreaCitation is { } area ? Swap(area) : null,
             BillCitation = revision.BillCitation is { } bill ? Swap(bill) : null,
             Sponsorships = [.. revision.Sponsorships.Select(item => item with { Citations = [.. item.Citations.Select(Swap)] })]

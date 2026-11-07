@@ -18,6 +18,8 @@ bill_sponsorships role
 bill_sponsorships sponsored_on
 bill_sponsorships withdrawn_on
 bills bill_line
+bills bill_line_label
+bills bill_line_origin
 bills bill_number
 bills bill_title
 bills bill_type

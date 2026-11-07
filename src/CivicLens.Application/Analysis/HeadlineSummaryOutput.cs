@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace CivicLens.Application.Analysis;
 
-internal sealed record HeadlineSummaryOutput(AnalysisOutputText Headline, AnalysisOutputText Summary, string[]? IssueIds = null)
+internal sealed record HeadlineSummaryOutput(AnalysisOutputText Headline, AnalysisOutputText Summary, string[]? IssueIds = null, AnalysisOutputLine? BillLine = null)
 {
     public static HeadlineSummaryOutput? Parse(string outputJson)
     {
@@ -16,3 +16,5 @@ internal sealed record HeadlineSummaryOutput(AnalysisOutputText Headline, Analys
 }
 
 internal sealed record AnalysisOutputText(string Text, double Confidence);
+
+internal sealed record AnalysisOutputLine(string? Line, string? Quote);

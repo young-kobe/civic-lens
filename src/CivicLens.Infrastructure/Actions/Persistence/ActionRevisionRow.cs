@@ -51,6 +51,10 @@ internal sealed class ActionRevisionRow : IReviewRevisionRow, IReviewTextRow
     public int? CosponsorCount { get; set; }
     public string? TextPackageId { get; set; }
     public string? WhyItMatters { get; set; }
+    public string? BillLine { get; set; }
+    public string? BillLineCitationExtractionId { get; set; }
+    public int? BillLineCitationStart { get; set; }
+    public int? BillLineCitationLength { get; set; }
     public List<ActionRevisionIssueRow> Issues { get; set; } = [];
     public List<ActionRevisionSponsorshipRow> Sponsorships { get; set; } = [];
     public List<ActionRevisionTextCitationRow> TextCitations { get; set; } = [];

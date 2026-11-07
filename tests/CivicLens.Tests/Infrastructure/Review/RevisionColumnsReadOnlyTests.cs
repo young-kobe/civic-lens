@@ -19,7 +19,7 @@ public sealed class RevisionColumnsReadOnlyTests(PostgresCollection postgres) : 
     [InlineData("vote_revisions,vote_revision_facts,vote_revision_issues,vote_member_lists,vote_member_list_entries",
         "author_subject,headline,summary,fact_text,suggestion_headline,suggestion_summary,suggestion_run_id,suggestion_fingerprint")]
     [InlineData("action_revisions,action_revision_issues,action_revision_sponsorships,action_revision_sponsorship_citations",
-        "author_subject,revision_json,headline,summary,suggestion_headline,suggestion_summary,suggestion_run_id,suggestion_fingerprint")]
+        "author_subject,revision_json,headline,summary,suggestion_headline,suggestion_summary,suggestion_run_id,suggestion_fingerprint,bill_line,bill_line_citation_extraction_id,bill_line_citation_start,bill_line_citation_length")]
     public async Task EveryTextColumnOfARevisionIsHiddenFromTheReadOnlyRoleAndTheStructureColumnsAreNot(string tables, string hiddenColumns)
     {
         var expectedHidden = hiddenColumns.Split(',');
