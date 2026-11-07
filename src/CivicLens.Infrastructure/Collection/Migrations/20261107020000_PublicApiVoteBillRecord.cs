@@ -39,7 +39,6 @@ public partial class PublicApiVoteBillRecord : Migration
                  FROM public.vote_member_list_entries e WHERE e.list_id = v.member_list_id) t
          WHERE a.kind = 'vote' AND v.member_list_id IS NOT NULL;
         ALTER VIEW public_api.votes OWNER TO civic_lens_public_owner;
-        GRANT SELECT ON public_api.votes TO civic_lens_public;
         """;
 
     private const string DownSql = """
