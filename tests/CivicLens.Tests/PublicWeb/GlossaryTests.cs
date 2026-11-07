@@ -60,7 +60,7 @@ public sealed class GlossaryTests
         var index = main.QuerySelector($"nav[aria-label='{Glossary.IndexLabel}']")!;
         var entries = index.QuerySelectorAll(".glossary-index-terms a").ToList();
         var expected = AllTerms.Select(term => (term.Name, term.AnchorId))
-            .Append((Glossary.PartyCountHeading, Glossary.PartyCountAnchorId))
+            .Append((Name: Glossary.PartyCountHeading, AnchorId: Glossary.PartyCountAnchorId))
             .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
