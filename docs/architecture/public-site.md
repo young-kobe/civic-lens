@@ -92,6 +92,7 @@ These decisions come from the component audit. The owner accepted every recommen
 - Public pages read published data only, through `Publication.Contracts` and the `public_api` views. Enforcer: the project references and the view role. Test: `ArchitectureTests` and the `PublicApiViewsTests` role test.
 - The SSR home HTML and its ETag use the same `HomeAnswer` release snapshot. Enforcer: `HomePageReader` passes `HomePageData.Release` to the release-number responder overload. Test: `ServerPageTests.TheHomeRouteUsesTheHomeSnapshotReleaseAndAnswers503WithoutCacheWhenItIsMissing`.
 - Shared home HTML does not vary by cookie or ZIP query. Enforcer: the home component has no reader-specific input and the page cache is shared. Test: the same home route test.
+- The ZIP lookup restores its controls after the current request, including a malformed success response. An older response cannot replace a newer result. Enforcer: `initZipLookup`. No automated test.
 
 ## Behavior
 
@@ -101,7 +102,7 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 
 | # | Reader goal | Pages and components | Status |
 |---|---|---|---|
-| 1 | Find my members and what they did | Home ZIP form, member cards after a ZIP | Partial. Gated SSR home includes the existing ZIP flow when its browser API origin is configured. Planned: the answer scrolls into view, cards show attendance and party-line counts (DR1) |
+| 1 | Find my members and what they did | Home ZIP form, member cards after a ZIP | Partial. Gated SSR home includes the existing ZIP flow when its browser API origin is configured. The answer scrolls into view and receives focus. Planned: cards show attendance and party-line counts (DR1) |
 | 2 | See my member on an issue, from the member | Official page, issue chips, vote strip | Partial. Planned: strip marks link to the votes (DR2) |
 | 3 | See my member on an issue, from the issue | Issue page, "your members" section | Planned: each issue vote shows my members' casts |
 | 4 | Understand one vote | Vote page: AI summary, result card, "what a Yes meant", party bars, source fold | Partial. Planned: answer first, one fold (DR3) |
@@ -128,7 +129,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 |---|---|---|---|---|
 | Site header, split nav, header search | All | Where can I go? | Fixed links, search service | Partial. Planned: split nav and search on every page, R-68 route steps |
 | Freshness line | All | How current is this? | `active_records`, newest `votes.voted_on` per chamber | Partial. Planned: newest vote day per chamber |
-| ZIP form and notices | Home | Who represents me? | `zip_districts`, `officials` | Implemented. Planned: busy state, scroll, focus |
+| ZIP form and notices | Home | Who represents me? | `zip_districts`, `officials` | Implemented: visible busy state, answer scroll and focus, and error recovery |
 | Featured vote tile | Home | What did Congress just decide? | `votes` | Partial. Gated SSR preview shows the published summary, wording label, result, and Yea/Nay counts. Planned: map and party bars |
 | Party tally bar | Home, vote, bill | How did the chamber split? | `votes` counts, `vote_members.party` | Planned: needs the party column |
 | Latest votes list | Home | What was voted on lately? | `votes` | Partial. Gated SSR preview shows up to two recent substantive votes per chamber, excluding the featured vote. Planned: one AI label |

@@ -246,29 +246,53 @@
             message.append(link, ".");
             return message;
         };
-        const look = async zip => {
-            let answer;
+        const submitLabel = submit.textContent;
+        const loadingText = "Looking up your officials.";
+        const setBusy = busy => {
+            submit.disabled = busy;
+            submit.textContent = busy ? loadingText : submitLabel;
+            if (busy) body.setAttribute("aria-busy", "true");
+            else body.removeAttribute("aria-busy");
+        };
+        let lookup = 0;
+        const look = async (zip, request) => {
             try {
                 const response = await fetch(`${api}/v1/zip-districts/${zip}`);
-                if (!response.ok) { showProblem(failure(zip, response.status)); return false; }
-                answer = await response.json();
+                if (!response.ok) {
+                    if (request === lookup) showProblem(failure(zip, response.status));
+                    return false;
+                }
+                const answer = await response.json();
+                if (request !== lookup) return false;
+                if (!Array.isArray(answer?.districts) || answer.districts.length === 0 || !Array.isArray(answer.states) || answer.states.length === 0)
+                    throw new TypeError("Invalid ZIP lookup answer.");
+                showAnswer(answer);
+                return true;
             }
-            catch { showProblem(failure(zip, 0)); return false; }
-            showAnswer(answer);
-            return true;
+            catch {
+                if (request === lookup) showProblem(failure(zip, 0));
+                return false;
+            }
         };
         form.addEventListener("submit", async event => {
             event.preventDefault();
+            const request = ++lookup;
             const zip = input.value.trim();
             problem.replaceChildren();
-            if (!/^[0-9]{5}$/.test(zip)) { showProblem(element("p", "Enter a ZIP code with 5 digits.")); return; }
-            submit.disabled = true;
-            body.setAttribute("aria-busy", "true");
-            show([element("p", "Looking up your officials.")]);
-            const found = await look(zip);
-            body.removeAttribute("aria-busy");
-            submit.disabled = false;
-            if (!found) input.focus();
+            if (!/^[0-9]{5}$/.test(zip)) {
+                showProblem(element("p", "Enter a ZIP code with 5 digits."));
+                setBusy(false);
+                input.focus();
+                return;
+            }
+            setBusy(true);
+            show([element("p", loadingText)]);
+            try {
+                const found = await look(zip, request);
+                if (!found && request === lookup) input.focus();
+            } finally {
+                if (request === lookup) setBusy(false);
+            }
         });
         form.hidden = false;
     };
