@@ -657,6 +657,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
 
+                    b.Property<string>("CrsSummaryText")
+                        .HasColumnType("text")
+                        .HasColumnName("crs_summary_text");
+
                     b.Property<DateOnly?>("EventOn")
                         .HasColumnType("date")
                         .HasColumnName("event_on");
@@ -824,6 +828,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_action_revisions_cosponsor_count", "cosponsor_count >= 0");
 
                             t.HasCheckConstraint("ck_action_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_action_revisions_crs_summary", "crs_summary_text IS NULL OR (length(btrim(crs_summary_text)) > 0 AND summary_version IS NOT NULL AND summary_citation_extraction_id IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_action_revisions_derived_columns_written", "num_nulls(event_on, cosponsor_count) IN (0, 2)");
 

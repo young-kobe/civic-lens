@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
 
@@ -166,6 +167,45 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
         Assert.Equal("This bill funds rent aid.", lines['a'].GetString());
         Assert.Equal(JsonValueKind.Null, lines['b'].ValueKind);
         Assert.Equal("This bill funds rent aid.", detail.RootElement.GetProperty("bill").GetProperty("billLine").GetString());
+    }
+
+    [Fact]
+    public async Task CrsSummaryUsesThePublishedRevisionAndExposesOnlyItsBodyAndSummaryVersion()
+    {
+        await using var host = await StartWithBillsAsync(A with { Issues = ["health"] }, B);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            UPDATE action_revisions
+            SET crs_summary_text = E'  The enacted law funds housing.\n', summary_version = 'crs-v1@2026-06-01T12:00:00Z',
+                summary_citation_extraction_id = '{new string('e', 64)}', summary_citation_start = 0, summary_citation_length = 100
+            WHERE record_id = '{A.RecordId}' AND revision_number = 1;
+            {PublicActionRows.ActionRevision(A.RecordId, 2, "Person", "2026-03-02", 4)}
+            UPDATE action_revisions
+            SET crs_summary_text = 'Unpublished replacement text.', summary_version = 'crs-v2@2026-06-02T12:00:00Z',
+                summary_citation_extraction_id = '{new string('e', 64)}', summary_citation_start = 0, summary_citation_length = 100
+            WHERE record_id = '{A.RecordId}' AND revision_number = 2;
+            UPDATE action_revisions SET summary_version = 'old-summary@2026-05-01T00:00:00Z',
+                summary_citation_extraction_id = '{new string('e', 64)}', summary_citation_start = 0, summary_citation_length = 100
+            WHERE record_id = '{B.RecordId}' AND revision_number = 1;
+            """);
+
+        using var page = await GetAsync(host, "/v1/bills");
+        using var detail = await GetAsync(host, $"/v1/bills/{A.RecordId}");
+
+        var listed = page.RootElement.GetProperty("bills").EnumerateArray()
+            .ToDictionary(bill => bill.GetProperty("recordId").GetString()![0]);
+        Assert.False(listed['a'].TryGetProperty("crsSummaryText", out _));
+        Assert.False(listed['a'].TryGetProperty("crsSummaryVersion", out _));
+        Assert.False(listed['a'].GetRawText().Contains("The enacted law funds housing.", StringComparison.Ordinal));
+        Assert.Equal("  The enacted law funds housing.\n", detail.RootElement.GetProperty("crsSummaryText").GetString());
+        Assert.Equal("crs-v1@2026-06-01T12:00:00Z", detail.RootElement.GetProperty("crsSummaryVersion").GetString());
+        Assert.False(listed['b'].TryGetProperty("crsSummaryText", out _));
+        Assert.False(listed['b'].TryGetProperty("crsSummaryVersion", out _));
+        using var emptyDetail = await GetAsync(host, $"/v1/bills/{B.RecordId}");
+        Assert.Equal(JsonValueKind.Null, emptyDetail.RootElement.GetProperty("crsSummaryText").ValueKind);
+        Assert.Equal(JsonValueKind.Null, emptyDetail.RootElement.GetProperty("crsSummaryVersion").ValueKind);
+        Assert.Equal($"Summary {A.RecordId}", listed['a'].GetProperty("summary").GetString());
+        Assert.Equal(["health"], detail.RootElement.GetProperty("issueIds").EnumerateArray().Select(issue => issue.GetString()));
     }
 
     [Fact]

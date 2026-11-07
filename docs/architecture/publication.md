@@ -712,6 +712,8 @@ R-68 plans to serve public data from tables. The schema `public_api` holds reada
 
 ## Storage and contracts
 
+The bill view appends `crs_summary_text` and `crs_summary_version` from the exact published action revision. The version is null when its body is null. C# stores the body at revision write time, using the pinned summary citation; the full block remains evidence. Enforcers: `ActionRevisionRows.FillCrsSummary` and the `PublicApiCrsSummary` view. Tests: `ActionCrsSummaryTests` and `BillEndpointsTests.CrsSummaryUsesThePublishedRevisionAndExposesOnlyItsBodyAndSummaryVersion`. Downgrade restores the dependent bill-history and vote views and removes the added owner grants. Test: `PublicApiCrsSummaryMigrationTests.DowngradeRemovesCrsColumnsAndOwnerGrantsAndRestoresTheDependentPublicViews`.
+
 `published_bill_histories` holds one completed capture identity, bill identity, observation time, action count, and optional public-law number. `published_bill_history_actions` holds its ordered typed actions. `release_bill_histories` binds a release and bill record to that copy. These tables are publication-owned. Operational job IDs stay internal. `public_api.bills` appends the public-law number and history metadata; `public_api.bill_actions` exposes only actions of the active published bills.
 
 The public views expose stored vote alignment, member party, normalized member-vote side, party-majority cast, and official photo paths. Member caucus comes from the matching chamber term in the active release on the vote date. Missing values remain null. The [API reference](search.md#api) lists the response fields.

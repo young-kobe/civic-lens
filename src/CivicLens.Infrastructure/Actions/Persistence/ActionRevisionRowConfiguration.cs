@@ -29,6 +29,7 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
             table.HasCheckConstraint("ck_action_revisions_issue_revision", "issue_revision_id ~ '^[0-9a-f]{64}$'");
             table.HasCheckConstraint("ck_action_revisions_subjects_hash", "subjects_hash ~ '^[0-9a-f]{64}$'");
             table.HasCheckConstraint("ck_action_revisions_summary_version", "(summary_version IS NULL) = (summary_citation_extraction_id IS NULL)");
+            table.HasCheckConstraint("ck_action_revisions_crs_summary", "crs_summary_text IS NULL OR (length(btrim(crs_summary_text)) > 0 AND summary_version IS NOT NULL AND summary_citation_extraction_id IS NOT NULL)");
             table.HasCheckConstraint("ck_action_revisions_policy_area", "(policy_area IS NULL) = (policy_area_citation_extraction_id IS NULL)");
             table.HasCheckConstraint("ck_action_revisions_policy_area_id", "policy_area_id IS NULL OR policy_area IS NOT NULL");
             table.HasCheckConstraint("ck_action_revisions_code_bill_citation",
@@ -60,6 +61,7 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.CandidateIncludesSubjects).HasColumnName("candidate_includes_subjects");
         builder.Property(row => row.Fingerprint).HasColumnName("fingerprint").HasMaxLength(64);
         builder.Property(row => row.SummaryVersion).HasColumnName("summary_version").HasMaxLength(ActionDraftRevision.MaximumSummaryVersionLength);
+        builder.Property(row => row.CrsSummaryText).HasColumnName("crs_summary_text");
         builder.Property(row => row.PolicyArea).HasColumnName("policy_area").HasMaxLength(ActionDraftRevision.MaximumPolicyAreaLength);
         builder.Property(row => row.PolicyAreaId).HasColumnName("policy_area_id").HasMaxLength(ActionDraftRevision.MaximumPolicyAreaIdLength);
         builder.Property(row => row.BillTitle).HasColumnName("bill_title").HasMaxLength(ActionDraftRevision.MaximumTitleLength);

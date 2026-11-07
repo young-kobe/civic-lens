@@ -39,7 +39,7 @@ public sealed class BillStore(NpgsqlDataSource views)
     public async Task<BillDetail?> FindAsync(string recordId, CancellationToken cancellationToken)
     {
         await using var command = views.CreateCommand($"""
-            SELECT b.release_number, {Columns},
+            SELECT b.release_number, {Columns}, b.crs_summary_text, b.crs_summary_version,
                    b.history_observed_at_utc_ticks, b.history_action_count,
                    ARRAY(SELECT i.issue_id FROM public_api.bill_issues i
                           WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number ORDER BY i."position"),
@@ -51,7 +51,8 @@ public sealed class BillStore(NpgsqlDataSource views)
         command.Parameters.AddWithValue("id", recordId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
-        return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(25), ReadLatestAction(reader), ReadHistory(reader, 23, 24));
+        return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(27), ReadLatestAction(reader), ReadHistory(reader, 25, 26),
+            ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24));
     }
 
     /// <summary>Reads one page of the sponsorships of a bill. Null means that no release is active or that the active release holds no such bill.</summary>
@@ -189,10 +190,10 @@ public sealed class BillStore(NpgsqlDataSource views)
         ? null
         : new(new DateTimeOffset(reader.GetInt64(observedAtIndex), TimeSpan.Zero), reader.GetInt32(actionCountIndex));
 
-    // Columns 26 to 28 hold the status. The view holds no row for a bill with no latest action.
-    private static BillLatestAction? ReadLatestAction(DbDataReader reader) => reader.IsDBNull(26)
+    // Columns 28 to 30 hold the status. The view holds no row for a bill with no latest action.
+    private static BillLatestAction? ReadLatestAction(DbDataReader reader) => reader.IsDBNull(28)
         ? null
-        : new(reader.GetString(26), reader.GetFieldValue<DateOnly>(27), new DateTimeOffset(reader.GetInt64(28), TimeSpan.Zero));
+        : new(reader.GetString(28), reader.GetFieldValue<DateOnly>(29), new DateTimeOffset(reader.GetInt64(30), TimeSpan.Zero));
 
     // Column 0 holds the release and column 1 holds whether the bill exists. The row starts at column 2.
     private static SponsorshipRow ReadSponsorship(DbDataReader reader) => new()

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Application;
+using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
@@ -67,6 +68,24 @@ internal static class ActionRevisionRows
         row.Issues = [.. IssueIds(revision).Select((issueId, position) => IssueRow(revision, issueId, position))];
         row.TextCitations = [.. revision.TextCitations.IsDefault ? [] : revision.TextCitations.Select((citation, position) => TextCitationRow(revision, citation, position))];
         row.Sponsorships = [.. revision.Sponsorships.Select((sponsorship, position) => SponsorshipRow(revision, sponsorship, position))];
+    }
+
+    public static void FillCrsSummary(ActionRevisionRow row, ActionDraftRevision revision,
+        IReadOnlyDictionary<string, DocumentExtraction> extractions) =>
+        row.CrsSummaryText = CrsSummaryOf(revision, extractions);
+
+    private static string? CrsSummaryOf(ActionDraftRevision revision, IReadOnlyDictionary<string, DocumentExtraction> extractions)
+    {
+        if (revision.SummaryCitation is not { } citation || revision.SummaryVersion is not { } version ||
+            !extractions.TryGetValue(citation.ExtractionId, out var extraction)) return null;
+        DocumentTextSpan span;
+        try { span = new(extraction, citation.Start, citation.Length); }
+        catch (ArgumentException) { return null; }
+        var end = span.Start + span.Length;
+        var text = extraction.Text;
+        if (span.Start > 0 && (span.Start < 2 || text.AsSpan(span.Start - 2, 2) is not "\n\n")) return null;
+        if (end < text.Length && (text.Length - end < 2 || text.AsSpan(end, 2) is not "\n\n")) return null;
+        return CongressBillRenderer.ReadSummaryBody(span.Quote, version);
     }
 
     /// <summary>Reads the rows of a query, then their issues, sponsorships, and citations, in a fixed number of queries. The child rows come
