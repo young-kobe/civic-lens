@@ -23,7 +23,7 @@ public sealed class HomePageTests
 
         Assert.Null(page.QuerySelector(".home-featured .home-vote-counts"));
         Assert.Equal("Passed", page.QuerySelector(".home-featured-result")!.TextContent);
-        Assert.Contains(PublishedWording.BillLineSource, page.QuerySelector(".home-featured")!.TextContent);
+        Assert.Contains("Current bill line. " + PublishedWording.BillLineSource, page.QuerySelector(".home-featured")!.TextContent);
     }
 
     [Theory]
