@@ -110,7 +110,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
             new SeededVote('e', "2026-05-04") { RollCall = 5, Kind = "Rule" },
             new SeededVote('f', "2026-05-05") { RollCall = 6, BillType = null, BillNumber = null }
         };
-        var bills = [new SeededBill('x', "2026-03-01") { BillNumber = 1, BillLine = "Current line." }];
+        SeededBill[] bills = [new SeededBill('x', "2026-03-01") { BillNumber = 1, BillLine = "Current line." }];
         await using var host = await StartAsync(votes, bills);
 
         var answer = await GetAsync(host);
