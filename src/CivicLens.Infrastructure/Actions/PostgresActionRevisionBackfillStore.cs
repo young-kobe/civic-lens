@@ -1,7 +1,9 @@
 using CivicLens.Application.Review;
 using CivicLens.Core.Actions;
+using CivicLens.Core.Documents;
 using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Documents;
 using CivicLens.Infrastructure.Review;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,8 +15,9 @@ public sealed class PostgresActionRevisionBackfillStore(IDbContextFactory<Collec
     private static readonly HashSet<string> NoAllowedAbsences = [];
 
     private readonly RevisionBackfill<ActionRevisionRow, ActionDraftRevision, ActionRevisionPage> backfill = new(contextFactory, new(
-        "action_revision_backfill", PostgresAdvisoryLock.ActionReview, row => row.EventOn == null,
-        ActionRevisionRows.ReadPageAsync, FillColumnsAsync, ReadMovable, DifferingFields));
+        "action_revision_backfill", PostgresAdvisoryLock.ActionReview, row => row.EventOn == null || !row.CrsSummaryRead,
+        ActionRevisionRows.ReadPageAsync, FillColumnsAsync, ReadMovable, DifferingFields,
+        DerivedValuesMatch: (expected, stored) => expected.CrsSummaryRead == stored.CrsSummaryRead && expected.CrsSummaryText == stored.CrsSummaryText));
 
     public Task<RevisionBackfillBatch> BackfillBatchAsync(RevisionKey? after, int size, CancellationToken cancellationToken) =>
         backfill.BackfillBatchAsync(after, size, cancellationToken);
@@ -25,8 +28,18 @@ public sealed class PostgresActionRevisionBackfillStore(IDbContextFactory<Collec
     private static async Task FillColumnsAsync(CollectionAttemptDbContext db, ActionRevisionRow row, ActionDraftRevision revision,
         CancellationToken cancellationToken)
     {
-        await DeleteChildRowsAsync(db, row, cancellationToken);
-        ActionRevisionRows.FillColumns(row, revision);
+        if (row.EventOn is null)
+        {
+            await DeleteChildRowsAsync(db, row, cancellationToken);
+            ActionRevisionRows.FillColumns(row, revision);
+        }
+        if (!row.CrsSummaryRead)
+        {
+            Dictionary<string, DocumentExtraction> extractions = [];
+            if (revision.SummaryCitation is { } citation)
+                extractions = await PostgresDocumentExtractionStore.ReadManyAsync(db, [citation.ExtractionId], cancellationToken);
+            ActionRevisionRows.FillCrsSummary(row, revision, extractions);
+        }
     }
 
     private static async Task DeleteChildRowsAsync(CollectionAttemptDbContext db, ActionRevisionRow row, CancellationToken cancellationToken)
