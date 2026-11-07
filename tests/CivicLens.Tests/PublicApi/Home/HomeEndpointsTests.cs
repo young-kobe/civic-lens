@@ -103,7 +103,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
             new SeededVote('a', "2026-05-01") { Congress = 119, Issues = ["health"] },
             new SeededVote('b', "2026-05-02") { Congress = 119, Kind = "Rule", Issues = ["health"] },
             new SeededVote('c', "2026-05-03") { Congress = 118, Issues = ["health"] },
-            new SeededVote('d', "2026-05-04") { Congress = 119, Chamber = "Senate", Kind = "Confirmation", ActiveRevision = 2, EarlierIssues = ["health"], Issues = ["climate"] },
+            new SeededVote('d', "2026-05-04") { Congress = 119, Chamber = "Senate", Kind = "Nomination", ActiveRevision = 2, EarlierIssues = ["health"], Issues = ["climate"] },
             new SeededVote('e', "2026-05-05") { Congress = 119, Issues = ["health"], FirstRelease = 2 }
         };
         var bills = new[]
@@ -114,9 +114,9 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         };
         await using var host = await StartAsync(votes, bills);
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
-            INSERT INTO release_issues (release_number, issue_id, name, definition, position)
-            VALUES (1, 'health', 'Health', 'Health policy', 0), (1, 'climate', 'Climate', 'Climate policy', 1),
-                   (1, 'empty', 'Empty issue', 'No records', 2);
+            INSERT INTO release_issues (release_number, issue_id, name, definition)
+            VALUES (1, 'health', 'Health', 'Health policy'), (1, 'climate', 'Climate', 'Climate policy'),
+                   (1, 'empty', 'Empty issue', 'No records');
             """);
 
         var answer = await GetAsync(host);
@@ -144,7 +144,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     public async Task HomeIssueCongressUsesPublicationDateAndTreatsJanuarySecondAsPreviousCongress()
     {
         await using var host = await StartAsync([House('a', "2026-05-01", 1)]);
-        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition, position) VALUES (1, 'health', 'Health', 'Health policy', 0)");
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health', 'Health policy')");
         foreach (var (date, expectedCongress) in new[] { (new DateTime(2027, 1, 2, 0, 0, 0, DateTimeKind.Utc), 119), (new DateTime(2027, 1, 3, 0, 0, 0, DateTimeKind.Utc), 120) })
         {
             await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE publication_releases SET published_at_utc_ticks = {date.Ticks} WHERE release_number = 1");
@@ -158,8 +158,8 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync([House('a', "2026-05-01", 1)]);
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
-            INSERT INTO release_issues (release_number, issue_id, name, definition, position)
-            VALUES (1, 'health', 'Health', 'Health policy', 0);
+            INSERT INTO release_issues (release_number, issue_id, name, definition)
+            VALUES (1, 'health', 'Health', 'Health policy');
             UPDATE publication_releases SET published_at_utc_ticks = 600000000000000000 WHERE release_number = 1;
             """);
 
@@ -178,9 +178,9 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         ]);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, Published.AddDays(1));
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
-            INSERT INTO release_issues (release_number, issue_id, name, definition, position)
-            VALUES (1, 'health', 'Health before', 'Health policy', 0),
-                   (2, 'health', 'Health after', 'Health policy', 0);
+            INSERT INTO release_issues (release_number, issue_id, name, definition)
+            VALUES (1, 'health', 'Health before', 'Health policy'),
+                   (2, 'health', 'Health after', 'Health policy');
             CREATE FUNCTION wait_for_home_issues() RETURNS boolean LANGUAGE plpgsql AS $function$
             BEGIN
                 PERFORM pg_advisory_xact_lock(hashtextextended('home-issue-snapshot', 0));
