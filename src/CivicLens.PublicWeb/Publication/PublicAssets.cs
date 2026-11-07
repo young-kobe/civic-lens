@@ -16,8 +16,19 @@ public static class PublicAssets
 
     public const string NewsreaderFont = "assets/fonts/newsreader.woff2";
 
-    public static readonly IReadOnlyList<string> FontLicenses = ["assets/fonts/ofl-schibsted-grotesk.txt", "assets/fonts/ofl-newsreader.txt"];
+    public const string ArchivoFont = "assets/fonts/archivo.woff2";
+
+    public const string FigtreeFont = "assets/fonts/figtree.woff2";
+
+    public const string GabaritoFont = "assets/fonts/gabarito.woff2";
+
+    public static readonly IReadOnlyList<string> FontLicenses =
+    [
+        "assets/fonts/ofl-schibsted-grotesk.txt", "assets/fonts/ofl-newsreader.txt",
+        "assets/fonts/ofl-archivo.txt", "assets/fonts/ofl-figtree.txt", "assets/fonts/ofl-gabarito.txt"
+    ];
 
     public static IReadOnlyList<string> Paths { get; } =
-        [.. Stylesheets.Append(ThemeScript).Append(Script).Append(PublicScript).Append(Favicon).Append(SchibstedGroteskFont).Append(NewsreaderFont).Concat(FontLicenses)];
+        [.. Stylesheets.Append(ThemeScript).Append(Script).Append(PublicScript).Append(Favicon)
+            .Append(SchibstedGroteskFont).Append(NewsreaderFont).Append(ArchivoFont).Append(FigtreeFont).Append(GabaritoFont).Concat(FontLicenses)];
 }

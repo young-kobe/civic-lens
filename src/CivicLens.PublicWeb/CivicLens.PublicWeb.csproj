@@ -10,8 +10,14 @@
     <EmbeddedResource Include="wwwroot/favicon.svg" LogicalName="assets/favicon.svg" />
     <EmbeddedResource Include="wwwroot/fonts/schibsted-grotesk.woff2" LogicalName="assets/fonts/schibsted-grotesk.woff2" />
     <EmbeddedResource Include="wwwroot/fonts/newsreader.woff2" LogicalName="assets/fonts/newsreader.woff2" />
+    <EmbeddedResource Include="wwwroot/fonts/archivo.woff2" LogicalName="assets/fonts/archivo.woff2" />
+    <EmbeddedResource Include="wwwroot/fonts/figtree.woff2" LogicalName="assets/fonts/figtree.woff2" />
+    <EmbeddedResource Include="wwwroot/fonts/gabarito.woff2" LogicalName="assets/fonts/gabarito.woff2" />
     <EmbeddedResource Include="wwwroot/fonts/OFL-schibsted-grotesk.txt" LogicalName="assets/fonts/ofl-schibsted-grotesk.txt" />
     <EmbeddedResource Include="wwwroot/fonts/OFL-newsreader.txt" LogicalName="assets/fonts/ofl-newsreader.txt" />
+    <EmbeddedResource Include="wwwroot/fonts/OFL-archivo.txt" LogicalName="assets/fonts/ofl-archivo.txt" />
+    <EmbeddedResource Include="wwwroot/fonts/OFL-figtree.txt" LogicalName="assets/fonts/ofl-figtree.txt" />
+    <EmbeddedResource Include="wwwroot/fonts/OFL-gabarito.txt" LogicalName="assets/fonts/ofl-gabarito.txt" />
   </ItemGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
