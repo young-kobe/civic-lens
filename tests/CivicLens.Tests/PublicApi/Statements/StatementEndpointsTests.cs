@@ -188,11 +188,12 @@ internal static class StatementsSeed
     {
         var date = statement.Date is null ? "NULL, NULL, NULL, NULL" : $"'{statement.Date}', 'fake-extraction', 0, 1";
         var run = statement.AuthorKind == "Analysis" ? $"'run-{statement.Id}-{revision}'" : "NULL";
+        var revisionJson = "{}";
         return $"""
             INSERT INTO statement_revisions (candidate_id, revision_number, author_subject, author_kind, run_id, revision_json,
                 created_at_utc_ticks, headline, summary, statement_date, statement_date_evidence_extraction_id,
                 statement_date_evidence_start, statement_date_evidence_length)
-            VALUES ('{statement.RecordId}', {revision}, 'test', '{statement.AuthorKind}', {run}, '{{}}', 1,
+            VALUES ('{statement.RecordId}', {revision}, 'test', '{statement.AuthorKind}', {run}, '{revisionJson}', 1,
                 {metadata}, {date});
             """;
     }
