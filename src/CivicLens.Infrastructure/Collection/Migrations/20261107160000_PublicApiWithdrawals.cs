@@ -28,11 +28,9 @@ public partial class PublicApiWithdrawals : Migration
 
         ALTER VIEW public_api.withdrawals OWNER TO civic_lens_public_owner;
         ALTER VIEW public_api.withdrawal_corrections OWNER TO civic_lens_public_owner;
-        GRANT SELECT ON public_api.withdrawals, public_api.withdrawal_corrections TO civic_lens_public;
         """;
 
     private const string DownSql = """
-        REVOKE SELECT ON public_api.withdrawals, public_api.withdrawal_corrections FROM civic_lens_public;
         DROP VIEW public_api.withdrawal_corrections;
         DROP VIEW public_api.withdrawals;
         REVOKE SELECT (kind, record_id, first_release, last_release, withdrawn_revision_number, withdrawn_at_utc_ticks, note) ON publication_withdrawals FROM civic_lens_public_owner;
