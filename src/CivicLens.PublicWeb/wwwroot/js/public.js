@@ -175,7 +175,57 @@
         panel.hidden = false;
     };
 
-    const initZipLookup = form => {
+    const memberZipKey = "civic-lens-members-zip";
+    const validZip = value => typeof value === "string" && /^[0-9]{5}$/.test(value);
+    const initRememberedMembers = () => {
+        const chip = document.querySelector("[data-your-members]");
+        if (!chip) return { zip: () => null, save: () => {}, onForget: () => {}, onChange: () => {} };
+        const button = chip.querySelector("[data-forget-members]");
+        let zip = null;
+        let forget = () => {};
+        let changed = () => {};
+        const render = value => { zip = validZip(value) ? value : null; chip.hidden = zip === null; };
+        const readStoredZip = () => {
+            let stored;
+            try { stored = localStorage.getItem(memberZipKey); } catch { return zip; }
+            if (validZip(stored)) return stored;
+            if (stored !== null) {
+                try { localStorage.removeItem(memberZipKey); } catch {}
+            }
+            return null;
+        };
+        render(readStoredZip());
+        button.addEventListener("click", () => {
+            try { localStorage.removeItem(memberZipKey); } catch {}
+            render(null);
+            forget();
+            const input = document.querySelector("[data-zip-api] input[name=zip]");
+            if (input) input.focus();
+            else document.querySelector(".public-brand")?.focus();
+        });
+        window.addEventListener("storage", event => {
+            if (event.key !== memberZipKey && event.key !== null) return;
+            const next = event.key === null ? null : event.newValue;
+            render(next);
+            changed(zip);
+        });
+        window.addEventListener("pageshow", event => {
+            if (!event.persisted) return;
+            render(readStoredZip());
+            changed(zip);
+        });
+        return {
+            zip: () => zip,
+            save: value => {
+                render(value);
+                try { localStorage.setItem(memberZipKey, value); } catch {}
+            },
+            onForget: callback => { forget = callback; },
+            onChange: callback => { changed = callback; }
+        };
+    };
+
+    const initZipLookup = (form, remembered) => {
         const api = form.dataset.zipApi;
         const states = JSON.parse(form.dataset.states);
         const panel = document.querySelector("[data-zip-results]");
@@ -185,6 +235,7 @@
         const submit = form.querySelector("[type=submit]");
         const problem = form.querySelector("[data-zip-error]");
         const heading = panel.querySelector("h2");
+        const answerFragment = "#" + panel.id;
         heading.tabIndex = -1;
         const houseOffices = JSON.parse(form.dataset.houseOffices);
         const stateName = code => states[code] ?? code;
@@ -219,7 +270,7 @@
             panel.scrollIntoView({ block: "start", behavior: reducedMotion.matches ? "auto" : "smooth" });
             heading.focus({ preventScroll: true });
         };
-        const showAnswer = answer => {
+        const showAnswer = (answer, revealAnswer) => {
             const list = element("ul", undefined, "zip-seats");
             const nodes = [];
             if (answer.districts.length > 1)
@@ -232,7 +283,7 @@
             }
             nodes.push(list);
             show(nodes, true);
-            reveal();
+            if (revealAnswer) reveal();
         };
         const failure = (zip, status) => {
             const texts = {
@@ -255,7 +306,7 @@
             else body.removeAttribute("aria-busy");
         };
         let lookup = 0;
-        const look = async (zip, request) => {
+        const look = async (zip, request, revealAnswer, persist) => {
             try {
                 const response = await fetch(`${api}/v1/zip-districts/${zip}`);
                 if (!response.ok) {
@@ -266,7 +317,8 @@
                 if (request !== lookup) return false;
                 if (!Array.isArray(answer?.districts) || answer.districts.length === 0 || !Array.isArray(answer.states) || answer.states.length === 0)
                     throw new TypeError("Invalid ZIP lookup answer.");
-                showAnswer(answer);
+                showAnswer(answer, revealAnswer);
+                if (request === lookup && persist) remembered.save(zip);
                 return true;
             }
             catch {
@@ -274,12 +326,10 @@
                 return false;
             }
         };
-        form.addEventListener("submit", async event => {
-            event.preventDefault();
+        const runLookup = async (zip, revealAnswer, persist = true) => {
             const request = ++lookup;
-            const zip = input.value.trim();
             problem.replaceChildren();
-            if (!/^[0-9]{5}$/.test(zip)) {
+            if (!validZip(zip)) {
                 showProblem(element("p", "Enter a ZIP code with 5 digits."));
                 setBusy(false);
                 input.focus();
@@ -288,13 +338,56 @@
             setBusy(true);
             show([element("p", loadingText)]);
             try {
-                const found = await look(zip, request);
-                if (!found && request === lookup) input.focus();
+                const found = await look(zip, request, revealAnswer, persist);
+                if (!found && request === lookup && revealAnswer) input.focus();
             } finally {
                 if (request === lookup) setBusy(false);
             }
+        };
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            runLookup(input.value.trim(), true);
+        });
+        document.querySelector("[data-your-members] a")?.addEventListener("click", event => {
+            if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+            const saved = remembered.zip();
+            if (saved === null) return;
+            event.preventDefault();
+            if (location.hash !== answerFragment) history.pushState(null, "", answerFragment);
+            input.value = saved;
+            runLookup(saved, true, false);
+        });
+        input.addEventListener("input", () => {
+            const wasBusy = body.hasAttribute("aria-busy");
+            lookup++;
+            setBusy(false);
+            if (wasBusy) {
+                panel.hidden = true;
+                notes.hidden = true;
+                body.replaceChildren();
+            }
+        });
+        const clearLookup = () => {
+            lookup++;
+            setBusy(false);
+            input.value = "";
+            problem.replaceChildren();
+            panel.hidden = true;
+            notes.hidden = true;
+            body.replaceChildren();
+        };
+        remembered.onForget(clearLookup);
+        remembered.onChange(value => {
+            if (value === null) { clearLookup(); return; }
+            input.value = value;
+            runLookup(value, false, false);
         });
         form.hidden = false;
+        const saved = remembered.zip();
+        if (saved !== null) {
+            input.value = saved;
+            runLookup(saved, location.hash === answerFragment, false);
+        }
     };
 
     const initOfficialsFilter = controls => {
@@ -653,6 +746,7 @@
     document.querySelectorAll("[data-officials-filters]").forEach(initOfficialsFilter);
     document.querySelectorAll("[data-search-api]").forEach(initSearchService);
     document.querySelectorAll("[data-report-api]").forEach(initReportForm);
-    document.querySelectorAll("[data-zip-api]").forEach(initZipLookup);
+    const rememberedMembers = initRememberedMembers();
+    document.querySelectorAll("[data-zip-api]").forEach(form => initZipLookup(form, rememberedMembers));
     new Set(Array.from(document.querySelectorAll("th[data-sort]"), header => header.closest("table"))).forEach(initSortable);
 })();
