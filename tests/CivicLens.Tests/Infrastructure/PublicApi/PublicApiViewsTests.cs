@@ -14,6 +14,8 @@ using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Application.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using CivicLens.Tests.PublicApi.Bills;
+using CivicLens.Tests.PublicApi.Votes;
 using CivicLens.Infrastructure.Collection;
 using Npgsql;
 
@@ -224,6 +226,30 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await ExecuteAsync("UPDATE publication_releases SET is_active = false");
         Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.votes"));
         Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.active_records"));
+    }
+
+    [Fact]
+    public async Task VotesLinkOnlyToTheLowestIdMatchingBillInTheActivePublishedRelease()
+    {
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        await ViewsSeed.AddVotesAsync(connectionString,
+            new SeededVote('7', "2026-03-03") { BillNumber = 7 },
+            new SeededVote('8', "2026-03-02") { BillNumber = 8 },
+            new SeededVote('9', "2026-03-01") { BillType = null, BillNumber = null });
+        await BillsSeed.AddBillsAsync(connectionString,
+            new SeededBill('b', "2026-01-01") { BillNumber = 7, LastRelease = 1 },
+            new SeededBill('d', "2026-01-01") { BillNumber = 7, LastRelease = 1 },
+            new SeededBill('e', "2026-01-01") { BillNumber = 7, FirstRelease = 2 },
+            new SeededBill('0', "2026-01-01") { BillNumber = 7, Congress = 118 },
+            new SeededBill('1', "2026-01-01") { BillNumber = 7, BillType = "s" });
+
+        Assert.Equal(["7 b", "8 none", "9 none"], await PublicAsync("SELECT left(v.record_id, 1) || ' ' || coalesce(left(v.bill_record_id, 1), 'none') FROM public_api.votes v ORDER BY v.record_id"));
+
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 2, new DateTimeOffset(2026, 6, 9, 0, 0, 0, TimeSpan.Zero));
+        Assert.Equal(["7 e", "8 none", "9 none"], await PublicAsync("SELECT left(v.record_id, 1) || ' ' || coalesce(left(v.bill_record_id, 1), 'none') FROM public_api.votes v ORDER BY v.record_id"));
+
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        Assert.Equal(["7 b", "8 none", "9 none"], await PublicAsync("SELECT left(v.record_id, 1) || ' ' || coalesce(left(v.bill_record_id, 1), 'none') FROM public_api.votes v ORDER BY v.record_id"));
     }
 
     [Fact]
