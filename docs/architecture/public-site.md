@@ -154,7 +154,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Member list with finder | Vote | How did my member vote? | `vote_members`, `officials` | Implemented. Planned: folded table with filters |
 | Vote map | Vote, home | Where did Yes and No come from? | `vote_members`, `release_official_terms` | Planned: R-68 map step |
 | Bill status stepper | Bill | Where is the bill now? | `bill_actions`, `bills.public_law` | Planned: route and UI; bill actions and public law data are available |
-| Bill summary and CRS fold | Bill | What would the bill do? | `bills.summary`, `bills.crs_summary_text` | Partial. Planned: CRS text column, text summary |
+| Bill summary and CRS fold | Bill | What would the bill do? | `bills.summary` and bill-text metadata; see [Publication](publication.md#public-api-views) | Partial. The API serves the summary and cited bill-text metadata. Planned: CRS text and version, key terms, and the server-rendered bill page. |
 | Who backed it | Bill | Is it bipartisan? | `bill_sponsorships`, `release_official_terms.party` | Partial. Planned: party split |
 | Votes on this bill | Bill | How did Congress vote? | `votes.bill_record_id` | Planned: route and UI; vote-to-bill data is available |
 | Executive action page | Executive action, President | What does this document do? | `executive_actions`, `executive_action_notices`, `executive_action_links` | Planned: route and UI; action and notice data are served, links remain pending |
@@ -172,6 +172,8 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 
 The public read API and the gated SSR home read `public_api` views. Implemented data covers votes, bills, officials, attendance, ZIP districts, issues, related records, executive actions, and briefs. It includes bill status and action history, public-law numbers, vote-to-bill links, relationship reasons, executive action notices, and brief paragraphs and citations. Most public pages still read static releases. [Publication](publication.md#public-api-views) owns the view rules and column reference.
 
+`public_api.bills` exposes the bill summary, its text-origin label, and the cited bill-text summary metadata (`why_it_matters`, version name and date, and characters read and total). The view can serve these fields; the bill-text model setting is off by default, and activation awaits sample approval. See [Publication](publication.md#public-api-views) for the view contract.
+
 The home route reads `HomeAnswer` from one statement and maps it into presentation records beside the PublicWeb component. These are page inputs, not durable publication contracts. `CIVIC_LENS_PUBLIC_API_URL` is an optional bare origin for the browser ZIP lookup. The page cache validator includes the normalized public site and browser API origins because both affect the HTML.
 
 The views expose the stored member party and vote alignment, normalized member-vote side, party-majority cast, and official photo path. Member caucus comes from the matching chamber term in the active release on the vote date.
@@ -180,7 +182,7 @@ Remaining planned view columns and views, in the order that R-68 builds them:
 
 - Party lines: `official_party_lines` and `party_agreement`.
 - Votes: a second AI text column for "what this vote decides".
-- Bills: `bills.crs_summary_text`, `bills.crs_summary_version`, the text summary columns of #409, `bill_key_terms`.
+- Bills: `bills.crs_summary_text`, `bills.crs_summary_version`, and `bill_key_terms`.
 - Issues: party line-up data.
 - Executive actions: `executive_action_links` and the summary columns.
 - Statements: `statements`, `statement_speakers`, `statement_quotations`.
