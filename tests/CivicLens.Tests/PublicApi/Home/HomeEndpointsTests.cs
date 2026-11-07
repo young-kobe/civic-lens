@@ -209,7 +209,8 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         {
             // The first record of the bill has no line, so the line is null, as in the static rule.
             new SeededBill('a', "2026-03-01") { BillNumber = 1 }, new SeededBill('b', "2026-03-01") { BillNumber = 1, BillLine = "Line b." },
-            new SeededBill('d', "2026-03-01") { BillNumber = 2, BillLine = "Line d." }, new SeededBill('c', "2026-03-01") { BillNumber = 2, BillLine = "Line c." }
+            new SeededBill('d', "2026-03-01") { BillNumber = 2, BillLine = "Line d." }, new SeededBill('c', "2026-03-01") { BillNumber = 2, BillLine = "Line c." },
+            new SeededBill('0', "2026-03-01") { BillNumber = 3, BillLine = "No sponsorships.", Sponsorships = [] }
         };
         await using var host = await StartAsync(votes, bills);
 
@@ -234,6 +235,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         var served = answer.GetProperty("votes").EnumerateArray().Select(vote => vote.GetProperty("billLine").GetString()).ToArray();
         Assert.Equal(expected, served);
         Assert.Equal(new string?[] { "Line c.", null }, served);
+        Assert.Equal(JsonValueKind.Null, answer.GetProperty("featuredVote").GetProperty("billLine").ValueKind);
     }
 
     [Fact]
