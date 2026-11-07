@@ -10,7 +10,7 @@ public sealed partial class PostgresBillStreamTests
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
         var original = (await ActionReviews().GetAsync(RecordId, default))!.Review.CurrentRevision;
-        Assert.Equal("It funds rent aid.", await ScalarAsync("SELECT crs_summary_text FROM action_revisions WHERE revision_number = 1"));
+        Assert.Equal("Text of <p>It funds rent aid.</p>", await ScalarAsync("SELECT crs_summary_text FROM action_revisions WHERE revision_number = 1"));
         Assert.Equal("00@2025-01-05T10:00:00Z", original.SummaryVersion);
 
         await ReopenAsync();
@@ -19,7 +19,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal(original.SummaryCitation, edited.SummaryCitation);
         Assert.Equal(original.SummaryVersion, edited.SummaryVersion);
         Assert.Equal(ReviewTextOrigin.Person, edited.TextOrigin);
-        Assert.Equal(["It funds rent aid.", "It funds rent aid."], await LinesAsync("SELECT crs_summary_text FROM action_revisions ORDER BY revision_number"));
+        Assert.Equal(["Text of <p>It funds rent aid.</p>", "Text of <p>It funds rent aid.</p>"], await LinesAsync("SELECT crs_summary_text FROM action_revisions ORDER BY revision_number"));
     }
 
     [Fact]
