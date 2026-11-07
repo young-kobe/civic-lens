@@ -47,7 +47,8 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         var response = await host.Client.GetAsync(UnknownPage);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        Assert.Matches($"^\"r7-{BuildId.FromAssembly(typeof(PublicApiApp).Assembly)}-[0-9a-f]{{64}}\"$", response.Headers.ETag!.Tag);
+        Assert.True(response.Headers.ETag!.IsWeak);
+        Assert.Matches($"^W/\"r7-{BuildId.FromAssembly(typeof(PublicApiApp).Assembly)}-[0-9a-f]{{64}}\"$", response.Headers.ETag.ToString());
         Assert.Equal("text/html; charset=utf-8", response.Content.Headers.ContentType!.ToString());
     }
 
@@ -75,7 +76,8 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         var fresh = await host.Client.GetAsync(UnknownPage);
         var revalidated = await Revalidate(host, fresh);
 
-        Assert.Equal("public, s-maxage=60, stale-while-revalidate=600, stale-if-error=86400", string.Join(", ", fresh.Headers.GetValues("Cache-Control")));
+        Assert.Equal(PageCache.CacheControl, string.Join(", ", fresh.Headers.GetValues("Cache-Control")));
+        Assert.False(fresh.Headers.CacheControl!.NoTransform);
         Assert.Equal(string.Join(", ", fresh.Headers.GetValues("Cache-Control")), string.Join(", ", revalidated.Headers.GetValues("Cache-Control")));
     }
 
@@ -87,7 +89,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
         var fresh = await host.Client.GetAsync(UnknownPage);
 
-        foreach (var tag in new[] { fresh.Headers.ETag!.Tag, "W/" + fresh.Headers.ETag.Tag, "*", "\"r2-old\"" })
+        foreach (var tag in new[] { fresh.Headers.ETag!.ToString(), fresh.Headers.ETag.Tag, "*", "\"r2-old\"" })
         {
             using var response = await Send(host, tag);
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
@@ -105,7 +107,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
         var cache = new PageCache(TestCodeVersion.Sha, BaseUrl);
         var responder = new ServerPageResponder(new ActiveReleaseReader(views), cache, new PageRenderer(services, services.GetRequiredService<ILoggerFactory>()));
-        foreach (var tag in new[] { cache.ETag(9).ToString(), "W/" + cache.ETag(9), "*", "\"old\", W/" + cache.ETag(9) })
+        foreach (var tag in new[] { cache.ETag(9).ToString(), cache.ETag(9).Tag.ToString(), "*", "\"old\", " + cache.ETag(9) })
         {
             var context = new DefaultHttpContext();
             context.Request.Headers.IfNoneMatch = tag;
@@ -165,7 +167,9 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         var html = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("\"r9-", response.Headers.ETag!.Tag);
+        Assert.True(response.Headers.ETag!.IsWeak);
+        Assert.Contains("W/\"r9-", response.Headers.ETag.ToString());
+        Assert.False(response.Headers.CacheControl!.NoTransform);
         Assert.Contains("Headline e", html);
         Assert.Contains("Summary e", html);
         Assert.DoesNotContain("data-zip-api", html);
@@ -177,6 +181,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         revalidation.Headers.IfNoneMatch.Add(response.Headers.ETag!);
         using var cached = await host.Client.SendAsync(revalidation);
         Assert.Equal(HttpStatusCode.NotModified, cached.StatusCode);
+        Assert.False(cached.Headers.CacheControl!.NoTransform);
         Assert.Equal(response.Headers.ETag, cached.Headers.ETag);
         Assert.Equal(response.Headers.CacheControl, cached.Headers.CacheControl);
     }
