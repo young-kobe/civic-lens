@@ -100,6 +100,23 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task RecentVotesStillShowWhenNoPassageVoteNamesABill()
+    {
+        SeededVote[] votes =
+        [
+            House('a', "2026-05-01", 1) with { Kind = "Amendment" },
+            Senate('b', "2026-05-02", 2) with { Kind = "Nomination", BillType = null, BillNumber = null },
+            House('c', "2026-05-03", 3) with { BillType = null, BillNumber = null }
+        ];
+        await using var host = await StartAsync(votes);
+
+        var answer = await GetAsync(host);
+
+        Assert.Null(FeaturedId(answer));
+        Assert.Equal([votes[2].RecordId, votes[1].RecordId, votes[0].RecordId], Ids(answer));
+    }
+
+    [Fact]
     public async Task FeaturedVoteUsesLatestPassageOnBillTieOrderAndCarriesItsSummaryAndSourceLabelWithoutCountsFabricated()
     {
         var votes = new[]
