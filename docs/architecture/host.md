@@ -70,22 +70,24 @@ Pages call Application handlers for editorial and collection actions. Evidence p
 
 Light and dark themes follow the system setting. A toggle on both surfaces stores an override for each browser. The review workspace uses a denser layout where the task needs it.
 
-The shared component library lives in two projects. `src/CivicLens.PublicWeb/Components` holds the components that published pages use. `src/CivicLens.Host/Components` holds the components that need Host types.
+The shared component library lives in two projects. `src/CivicLens.PublicWeb/Components` holds the components that published pages use. `src/CivicLens.Host/Components` holds review and collection controls and components that need Host types.
 
 Host holds these components:
 
 | Folder | Components |
 |---|---|
 | `Layout` | `WorkspaceLayout`, the app shell with a side rail and top bar |
-| `Ui` | `IssueIcon` (draws the path that `IssueIcons` holds for an icon name, and the neutral default for no name) |
+| `Ui` | `IssueIcon`, `ActivityFeed`, `HealthList`, `Drawer`, `Toolbar`, `Stat`, `StatStrip`, `Choice`, `TechnicalDetails`, and `LayoutSwitch`; `FeedItem` and `HealthItem` hold their review data |
 | `Evidence` | `DocumentComparisonView` (redline and side-by-side), `Redline`, `RedlineExcerpt` |
 
 PublicWeb holds these components:
 
 | Folder | Components |
 |---|---|
-| `Ui` | General controls: `Button`, `Panel`, `PageHeader`, `StatStrip`, `DataTable`, `TableCell`, `Pager`, `FilterTabs` (all links from `FilterTab.Link`, or all buttons from `FilterTab.Button` that a script reads; a mixed list throws `ArgumentException`, tested by `FilterTabsTests`), `Notice`, `EmptyState`, `HealthList`, `ActivityFeed`, `Field`, `TabSet`, `Drawer`, `ThemeToggle`, `IconFrame` (owns the SVG tag), `Icon` (the closed `IconName` list), `InfoPopover` (a button with an accessible name that opens a short note; `Term` uses the same popover), `ContextLink` (a link whose hidden suffix names its target), `CellTitle` (a table title that is a link when it has an address, else plain text) |
+| `Ui` | General controls: `Button`, `Panel`, `PageHeader`, `DataTable`, `TableCell`, `Pager`, `FilterTabs` (all links from `FilterTab.Link`, or all buttons from `FilterTab.Button` that a script reads; a mixed list throws `ArgumentException`, tested by `FilterTabsTests`), `Notice`, `EmptyState`, `Field`, `TabSet`, `ThemeToggle`, `IconFrame` (owns the SVG tag), `Icon` (the closed `IconName` list), `InfoPopover` (a button with an accessible name that opens a short note; `Term` uses the same popover), `ContextLink` (a link whose hidden suffix names its target), `CellTitle` (a table title that is a link when it has an address, else plain text) |
 | `Evidence` | `RecordView`, `StatementRecord`, `CitationQuote`, `DateEvidenceLine`, `SourceLineLink`, `SourceLinesNote`, `DocumentText` |
+
+`Tone` and `ToneClass.Suffix` remain in PublicWeb. Public and Host controls use the same CSS suffix rule.
 
 `StatementRecord` wraps `RecordView` for one statement revision. It shows the headline, the summary, and the statement date with its evidence quote. It also shows speakers by configured name, other speakers, issues, policy areas, bill numbers, and each quotation with its kind.
 

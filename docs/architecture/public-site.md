@@ -126,7 +126,7 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 
 ### Component inventory
 
-Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui` and `Evidence`. They are `Button`, `Field`, `FieldSet`, `Chip`, `Icon`, `IconFrame`, `Panel`. They also include `PageHeader`, `Notice`, `EmptyState`, `InfoPopover`, `DataTable`. The list ends with `Pager`, `FilterTabs`, `TabSet`, `Timestamp`, `StatusBadge`, `CitationQuote`, `DocumentText`, `RedlineText`, `SourceLineLink`, `OfficialPortrait`, and the theme controls. Nine components have only Host callers. They move back to Host unless a route step uses them: `ActivityFeed`, `HealthList`, `Drawer`, `Toolbar`, `Stat`, `StatStrip`, `Choice`, `TechnicalDetails`, and `LayoutSwitch`.
+Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui` and `Evidence`. They are `Button`, `Field`, `FieldSet`, `Chip`, `Icon`, `IconFrame`, `Panel`. They also include `PageHeader`, `Notice`, `EmptyState`, `InfoPopover`, `DataTable`. The list ends with `Pager`, `FilterTabs`, `TabSet`, `Timestamp`, `StatusBadge`, `CitationQuote`, `DocumentText`, `RedlineText`, `SourceLineLink`, `OfficialPortrait`, and the theme controls. Host owns the controls that only its review and collection pages use: `ActivityFeed`, `HealthList`, `Drawer`, `Toolbar`, `Stat`, `StatStrip`, `Choice`, `TechnicalDetails`, and `LayoutSwitch`.
 
 | Component | Pages | Reader question | Data source | Status |
 |---|---|---|---|---|
@@ -209,4 +209,3 @@ Open choices:
 
 - The party colors, chosen together with the vote Yes and No colors at the map party layer.
 - The approved text for each glossary term that still shows example wording.
-- Whether a route step needs any of the nine Host-only components in `CivicLens.PublicWeb`.
