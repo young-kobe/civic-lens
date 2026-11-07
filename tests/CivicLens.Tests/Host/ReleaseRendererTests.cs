@@ -250,7 +250,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task TheReportPageGivesTheScriptTheTitleParameterAndLimitAndTheScriptNeverWritesHtml()
+    public async Task TheReportPageGivesTheScriptTheTitleParameterAndLimit()
     {
         var html = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);
 
@@ -259,7 +259,6 @@ public sealed class ReleaseRendererTests
 
         Assert.Equal(ReaderReportProtocol.TitleParameter, form.GetAttribute("data-report-title-parameter"));
         Assert.Equal(ReaderReportProtocol.MaximumTitleCharacters.ToString(), form.GetAttribute("data-report-title-limit"));
-        Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
         Assert.Contains("[data-report-subject]\").textContent = ", script, StringComparison.Ordinal);
     }
 

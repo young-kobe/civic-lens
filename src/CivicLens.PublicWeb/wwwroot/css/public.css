@@ -75,10 +75,20 @@ table[data-paged]:focus { outline: none; }
 .zip-form .btn:hover { filter: brightness(1.08); }
 .home-hero .notice { --warn-bg: var(--bar-field); --warn: var(--bar-ink); margin-bottom: var(--s4); }
 [data-zip-results] { max-width: var(--measure); }
+.public .zip-member-results { max-width: none; padding: 0; background: none; box-shadow: none; }
+.zip-member-results > .panel-head { margin: 0; padding: 0; border: 0; }
+.zip-member-results [data-zip-notes] p { max-width: var(--measure); }
 [data-zip-notes] { display: grid; gap: var(--s4); }
-.zip-seats { display: grid; gap: var(--s3); margin: 0; padding: 0; list-style: none; }
-.zip-seat { display: grid; gap: 2px; }
-.zip-seat a { font-weight: 600; }
+.zip-member-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: var(--s3); margin: 0; padding: 0; list-style: none; }
+.official-card.zip-member-card { display: grid; align-content: start; align-items: start; padding: var(--s4); }
+.zip-member-header { display: flex; align-items: start; gap: var(--s3); min-width: 0; }
+.zip-member-card h3 { margin: 0; font-size: var(--t-lg); overflow-wrap: anywhere; }
+.zip-member-card h3 a { display: inline-flex; align-items: center; min-height: 44px; }
+.zip-member-card p { margin: 0; }
+.zip-member-attendance { display: flex; align-items: center; gap: var(--s2); }
+.zip-member-attendance p { flex: 1; }
+.zip-member-attendance strong { font-variant-numeric: tabular-nums; }
+.zip-member-attendance .info-button { flex: none; width: 44px; height: 44px; }
 .zip-count { margin: 0 0 var(--s3); }
 .home-browse { margin: 0; color: var(--bar-muted); }
 .home-browse a { color: var(--bar-ink); }
