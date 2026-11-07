@@ -1,6 +1,7 @@
 using System.Net;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
 
@@ -13,9 +14,13 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
     private const string Representative = "Representative";
     private const string Senator = "Senator";
 
-    private async Task<ApiHost> StartAsync(bool withNames = true)
+    private async Task<ApiHost> StartAsync(bool withNames = true, bool withServerPages = false)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with
+        {
+            PublicBaseUrl = withServerPages ? PublicBaseUrl.Parse("https://civic-lens.test", "test") : null,
+            BrowserApiUrl = withServerPages ? PublicBaseUrl.Parse("https://api.civic-lens.test", "test") : null
+        });
         try
         {
             await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
@@ -33,6 +38,21 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
             await host.DisposeAsync();
             throw;
         }
+    }
+
+    [Fact]
+    public async Task MembersRouteUsesThePublicSiteOriginForLinksAndPhotosWhenTheHomePreviewRunsOnTheApiHost()
+    {
+        await using var host = await StartAsync(withServerPages: true);
+        var photo = "photos/" + new string('b', 64) + ".jpg";
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE release_officials SET photo_path = '{photo}' WHERE release_number = 1 AND official_id = 'al2';");
+
+        var home = new HtmlParser().ParseDocument(await host.Client.GetStringAsync("/web"));
+        Assert.Equal("https://api.civic-lens.test", home.QuerySelector("[data-zip-api]")!.GetAttribute("data-zip-api"));
+        var fragment = await GetDocumentAsync(host, "/v1/zip-districts/36009/members");
+
+        Assert.Equal("https://civic-lens.test/officials/al2.html", fragment.QuerySelector(".zip-member-card h3 a")!.GetAttribute("href"));
+        Assert.Equal("https://civic-lens.test/" + photo, fragment.QuerySelector(".zip-member-card img")!.GetAttribute("src"));
     }
 
     [Fact]

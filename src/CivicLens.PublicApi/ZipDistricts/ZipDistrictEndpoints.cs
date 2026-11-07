@@ -27,7 +27,7 @@ public static class ZipDistrictEndpoints
         v1.MapGet("/zip-districts/{zcta}/members", MembersAsync);
     }
 
-    private static Task<IResult> MembersAsync(string zcta, HttpContext http, ZipDistrictStore zips, PageRenderer renderer,
+    private static Task<IResult> MembersAsync(string zcta, HttpContext http, ZipDistrictStore zips, PageRenderer renderer, PublicApiOptions options,
         CancellationToken cancellationToken)
     {
         http.Response.Headers.CacheControl = "private, no-store";
@@ -39,7 +39,7 @@ public static class ZipDistrictEndpoints
             var html = await renderer.RenderAsync<ZipMemberCards>(new Dictionary<string, object?>
             {
                 [nameof(ZipMemberCards.Data)] = ZipMemberCardsMapper.Map(answer),
-                [nameof(ZipMemberCards.RootPath)] = "/"
+                [nameof(ZipMemberCards.RootPath)] = options.PublicBaseUrl?.Join(string.Empty) ?? "/"
             });
             return Results.Content(html, "text/html; charset=utf-8");
         });
