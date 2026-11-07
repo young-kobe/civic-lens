@@ -83,6 +83,34 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task MemberVoteExposesKnownSideAndStoredPartyMajorityWhileUnknownValuesRemainNull()
+    {
+        var vote = new SeededVote('a', "2026-03-01") { Casts = ["Aye", "No", "Present"] };
+        var tiedVote = new SeededVote('b', "2026-03-02") { Casts = ["Aye", "No", "Present"] };
+        await using var host = await StartWithVotesAsync(vote, tiedVote);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            UPDATE vote_member_list_entries SET party = CASE person_id WHEN 'p0' THEN 'Democrat' WHEN 'p1' THEN 'Republican' END WHERE list_id IN ('{vote.RecordId}', '{tiedVote.RecordId}');
+            UPDATE vote_revisions SET democrat_majority = CASE record_id WHEN '{vote.RecordId}' THEN 'Yea' END,
+                republican_majority = CASE record_id WHEN '{vote.RecordId}' THEN 'Yea' ELSE 'Nay' END, columns_written = true
+             WHERE record_id IN ('{vote.RecordId}', '{tiedVote.RecordId}');
+            """);
+
+        var answer = await GetAsync(host, "/v1/member-votes?official=p0&official=p1&official=p2");
+
+        var p0 = Votes(answer, 0)[0];
+        var p1 = Votes(answer, 1)[0];
+        var p2 = Votes(answer, 2)[0];
+        var p0Earlier = Votes(answer, 0)[1];
+        var p1Earlier = Votes(answer, 1)[1];
+        Assert.Equal(("Yea", "Yea"), (p0Earlier.GetProperty("side").GetString(), p0Earlier.GetProperty("partyMajorityCast").GetString()));
+        Assert.Equal(("Nay", "Yea"), (p1Earlier.GetProperty("side").GetString(), p1Earlier.GetProperty("partyMajorityCast").GetString()));
+        Assert.Equal("Nay", p1.GetProperty("partyMajorityCast").GetString());
+        Assert.Equal(JsonValueKind.Null, p0.GetProperty("partyMajorityCast").ValueKind);
+        Assert.Equal(JsonValueKind.Null, p2.GetProperty("side").ValueKind);
+        Assert.Equal(JsonValueKind.Null, p2.GetProperty("partyMajorityCast").ValueKind);
+    }
+
+    [Fact]
     public async Task EachVoteSendsPlainWordsForKindResultAndCastNextToTheSourceWordsFromTheOneTable()
     {
         var votes = new[]

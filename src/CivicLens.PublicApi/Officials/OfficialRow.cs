@@ -18,4 +18,5 @@ public sealed record OfficialRow
     public string? Caucus { get; init; }
     public DateOnly? TermEndsOn { get; init; }
     public required int RecordCount { get; init; }
+    public string? PhotoPath { get; init; }
 }

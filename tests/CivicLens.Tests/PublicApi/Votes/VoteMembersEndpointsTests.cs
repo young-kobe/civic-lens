@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using CivicLens.Tests.Infrastructure.Collection;
+using CivicLens.Tests.PublicApi.Officials;
 
 namespace CivicLens.Tests.PublicApi.Votes;
 
@@ -69,6 +70,30 @@ public sealed class VoteMembersEndpointsTests(PostgresCollection postgres)
         Assert.Equal("p1", member.GetProperty("officialId").GetString());
         Assert.Equal("Smith", member.GetProperty("cast").GetString());
         Assert.False(member.TryGetProperty("bioguideId", out _));
+    }
+
+    [Fact]
+    public async Task MemberRowsExposePinnedPartyAndReleaseTermCaucusAndLeaveMissingValuesNull()
+    {
+        await using var host = await StartWithVotesAsync(Senate);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
+            new SeededOfficial("p0", "Ann Able",
+                new SeededTerm("Senator", "Senator", "2025-01-03") { Party = "Independent", Caucus = "Democrat", EndsOn = "2026-03-02" },
+                new SeededTerm("Representative", "Representative", "2026-02-01") { Caucus = "Republican" }),
+            new SeededOfficial("p1", "Ben Baker", new SeededTerm("Senator", "Senator", "2025-01-03") { Party = "Republican" }),
+            new SeededOfficial("p2", "Cy Cole",
+                new SeededTerm("Senator", "Senator", "2025-01-03") { Caucus = "Republican", EndsOn = "2026-03-01" },
+                new SeededTerm("Senator", "Senator", "2026-03-03") { Caucus = "Republican" }));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE vote_member_list_entries SET party = CASE person_id WHEN 'p0' THEN 'Democrat' WHEN 'p1' THEN 'Republican' END WHERE list_id = '{Senate.RecordId}';");
+
+        using var page = await GetAsync(host, $"/v1/votes/{Senate.RecordId}/members");
+
+        var members = page.RootElement.GetProperty("members").EnumerateArray().ToArray();
+        Assert.Equal(("Democrat", "Democrat"), (members[0].GetProperty("party").GetString(), members[0].GetProperty("caucus").GetString()));
+        Assert.Equal("Republican", members[1].GetProperty("party").GetString());
+        Assert.Equal(JsonValueKind.Null, members[1].GetProperty("caucus").ValueKind);
+        Assert.Equal(JsonValueKind.Null, members[2].GetProperty("party").ValueKind);
+        Assert.Equal(JsonValueKind.Null, members[2].GetProperty("caucus").ValueKind);
     }
 
     [Theory]

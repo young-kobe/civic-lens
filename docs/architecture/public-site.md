@@ -164,9 +164,10 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 
 The public pages read these `public_api` views today. They are `active_records`, `votes`, `vote_issues`, `vote_members`, `member_votes`, `bills`, `bill_sponsorships`, `bill_issues`, `officials`, `official_attendance`, `official_bill_counts`, `official_issue_counts`, `official_executive_actions`, `zip_districts`, and the six release name views. [Publication](publication.md#public-api-views) lists the columns.
 
+The views expose the stored member party and vote alignment, normalized member-vote side, party-majority cast, and official photo path. Member caucus comes from the matching chamber term in the active release on the vote date.
+
 Planned view columns and views, in the order that R-68 builds them:
 
-- Party and alignment: `vote_members.party`, `vote_members.caucus`, `votes.alignment`, `member_votes.side`, `member_votes.party_majority_cast`, `officials.photo_path`. The #403 pull request stores these values.
 - Party lines: `official_party_lines` and `party_agreement`.
 - Votes: a second AI text column for "what this vote decides", `votes.bill_record_id`, and `vote_facts`.
 - Bills: `bill_actions`, `bills.public_law`, `bills.crs_summary_text`, `bills.crs_summary_version`, the text summary columns of #409, `bill_key_terms`, `bill_status`.
@@ -189,7 +190,7 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 | Style files | `src/CivicLens.PublicWeb/wwwroot/css/theme.css`, `src/CivicLens.PublicWeb/wwwroot/css/app.css`, `src/CivicLens.PublicWeb/wwwroot/css/public.css` |
 | Presentation rules test | `tests/CivicLens.Tests/Architecture/PresentationArchitectureTests.cs` |
 
-`PublicApi` renders no page yet. The page components move there, and into `CivicLens.PublicWeb` where they need `Publication.Contracts` only, during R-68.
+`PublicApi` renders an opt-in not-found shell under `/web`. Successful reader routes still use static pages. Shared presentation components use `CivicLens.PublicWeb`, which references `Publication.Contracts` only.
 
 ## Limits and planned work
 
