@@ -152,7 +152,8 @@ The owner accepted these designs. Each item holds its choices until the code and
     - [ ] View PR 2, bills: add `bills.crs_summary_text` with its version. History snapshots are implemented, but missing typed imports leave some histories falsely empty. Recovery remains pending. `bill_actions`, `bills.public_law`, and `votes.bill_record_id` are implemented
     - [ ] View PR 3: issue vote and sponsor views and the issue counts endpoint are implemented. Add the issue party line-up from them and PR 1
     - [ ] View PR 4, statements: add `statements`, `statement_speakers`, and `statement_quotations`
-    - [ ] View PR 5: add `document_changes` with a changed-region child view, `record_corrections`, and `withdrawals`
+    - [ ] View PR 5: add `document_changes` with a changed-region child view and `record_corrections`
+      - [x] `withdrawals` and ordered `withdrawal_corrections` views plus `GET /v1/records/{kind}/{recordId}/withdrawal`
     - [x] View PR 6: add `briefs` paragraphs and citations, `brief_paragraphs` and `brief_citations`
     - [ ] View PR 7, executive actions: `executive_actions`, `executive_action_notices`, and their API endpoint are implemented. Add `executive_action_links` for amends and revoked-by
     - [ ] View PR 8: add `official_party_lines` and `party_agreement`, and the party-break and party-line boards from them

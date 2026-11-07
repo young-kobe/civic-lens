@@ -166,7 +166,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Record row, status badge | All lists | What is this record? | Per-kind views | Implemented. Planned: event-named date, one bill number format |
 | Search results | Search | Find a person, bill, or vote | Search service | Partial. Planned: ranking and snippets |
 | Weekly brief page | Brief | What happened this week? | `briefs`, `brief_paragraphs`, `brief_citations` | Partial. Brief paragraphs and citations are served through the API. Planned: route and page |
-| Correction and withdrawal pages | Record | What changed on this record? | `record_corrections`, `withdrawals` | Planned: views needed |
+| Correction and withdrawal pages | Record | What changed on this record? | `record_corrections`, `withdrawals` | The withdrawal read API is implemented at `/v1/records/{kind}/{recordId}/withdrawal`. Record corrections and the reader page remain planned |
 
 ## Storage and contracts
 
@@ -186,7 +186,7 @@ Remaining planned view columns and views, in the order that R-68 builds them:
 - Issues: party line-up data.
 - Executive actions: `executive_action_links` and the summary columns.
 - Statements: `statements`, `statement_speakers`, `statement_quotations`.
-- Other kinds: `document_changes` with a changed-region child view, `record_corrections`, `withdrawals`.
+- Other kinds: `document_changes` with a changed-region child view and `record_corrections`; withdrawal notices now have a typed public read API.
 
 Each AI text column carries its text origin and its label. The roadmap steps under [R-68](../roadmap.md#later) name each view.
 
