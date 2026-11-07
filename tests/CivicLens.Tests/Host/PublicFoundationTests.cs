@@ -113,7 +113,10 @@ public sealed class PublicFoundationTests
         var licenseOf = new Dictionary<string, string>
         {
             ["assets/fonts/schibsted-grotesk.woff2"] = "assets/fonts/ofl-schibsted-grotesk.txt",
-            ["assets/fonts/newsreader.woff2"] = "assets/fonts/ofl-newsreader.txt"
+            ["assets/fonts/newsreader.woff2"] = "assets/fonts/ofl-newsreader.txt",
+            ["assets/fonts/archivo.woff2"] = "assets/fonts/ofl-archivo.txt",
+            ["assets/fonts/figtree.woff2"] = "assets/fonts/ofl-figtree.txt",
+            ["assets/fonts/gabarito.woff2"] = "assets/fonts/ofl-gabarito.txt"
         };
         var fonts = assets.Where(asset => asset.RelativePath.EndsWith(".woff2", StringComparison.Ordinal)).Select(asset => asset.RelativePath);
         Assert.Equal(licenseOf.Keys.Order(StringComparer.Ordinal), fonts.Order(StringComparer.Ordinal));

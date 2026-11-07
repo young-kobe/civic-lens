@@ -16,19 +16,19 @@ Every page and component must pass seven owner tests:
 
 This page holds the design rules and the plan for the reader flows. [Publication](publication.md) owns the release data, the page text rules, and the `public_api` views. [Host](host.md) owns the component library rules. The [roadmap](../roadmap.md#later) step R-68 owns the order of the work.
 
-Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 theme is a prototype. The code on main still renders the older look. Each row below says what is implemented and what is planned.
+Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 palette, type foundation, focus colors, and reduced-motion behavior are implemented. The home bento layout, featured vote, and page-specific layouts remain planned. Each row below says what is implemented and what is planned.
 
 ## Decisions
 
-### Theme (planned)
+### Theme
 
-- The theme is Mosaic v2. The prototype tokens are in the `mosaic2` block of the prototype skin file. The code tokens will go in `src/CivicLens.PublicWeb/wwwroot/css/theme.css`.
+- The theme is Mosaic v2. The prototype tokens are in the `mosaic2` block of the prototype skin file. Shared public theme tokens live in `src/CivicLens.PublicWeb/wwwroot/css/theme.css`.
 - Color follows a 60-30-10 split. The page is a warm off-white in light mode and a deep ink in dark mode. Navy `#14213d` is the second color. Civic yellow `#f5b301` is the accent.
 - Yellow marks primary buttons, the current navigation item, and key highlights. Yellow is never text on a white background.
 - Four record types have four colors: vote teal, bill green, statement brown, and executive slate. The four colors have equal OKLCH lightness and chroma. A record color marks only the icon square, a thin edge, and the tint.
 - Purple marks AI text only. Red marks errors only.
 - The brand has no red and no saturated blue, because party colors may become red and blue.
-- Type: Archivo 900 condensed for the h1 and large numbers, Gabarito for headings, Figtree for body text.
+- Type: Archivo 900 condensed for the h1 and large numbers, Gabarito for headings, Figtree for body text. Font files and OFL texts are self-hosted in PublicWeb.
 - At 1280 px and wider, the page has a 1440 px maximum width. Home uses a 12-column bento grid. Vote, bill, and official pages have a sticky 320 px right rail of key facts. Below 1280 px, every page is one column.
 
 ### Home
