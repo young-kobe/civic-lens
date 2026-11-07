@@ -81,6 +81,21 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
         var noTerm = page.RootElement.GetProperty("officials")[5];
         Assert.Equal(JsonValueKind.Null, noTerm.GetProperty("kind").ValueKind);
         Assert.Equal(0, noTerm.GetProperty("recordCount").GetInt32());
+        Assert.Equal(JsonValueKind.Null, noTerm.GetProperty("photoPath").ValueKind);
+    }
+
+    [Fact]
+    public async Task TheOfficialRouteReturnsOnlyTheStoredPublicationPhotoPath()
+    {
+        await using var host = await StartAsync();
+        var path = "photos/" + new string('a', 64) + ".jpg";
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE release_officials SET photo_path = '{path}' WHERE official_id = 'p0';");
+
+        using var page = await GetAsync(host, "/v1/officials");
+
+        var official = page.RootElement.GetProperty("officials").EnumerateArray().First(row => row.GetProperty("officialId").GetString() == "p0");
+        Assert.Equal(path, official.GetProperty("photoPath").GetString());
+        Assert.Equal(JsonValueKind.Null, page.RootElement.GetProperty("officials")[5].GetProperty("photoPath").ValueKind);
     }
 
     [Theory]

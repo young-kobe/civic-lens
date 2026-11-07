@@ -66,6 +66,8 @@ member_votes label
 member_votes result
 member_votes vote_cast
 member_votes issue_ids
+member_votes party_majority_cast
+member_votes side
 vote_issues record_id
 vote_issues revision_number
 vote_issues issue_id
@@ -74,6 +76,8 @@ vote_members revision_number
 vote_members position
 vote_members official_id
 vote_members vote_cast
+vote_members party
+vote_members caucus
 votes record_id
 votes revision_number
 votes release_number
@@ -95,6 +99,7 @@ votes present
 votes not_voting
 votes question
 votes result
+votes alignment
 zip_districts zcta
 zip_districts state
 zip_districts district
@@ -182,6 +187,7 @@ officials office
 officials state
 officials district
 officials party
+officials photo_path
 officials caucus
 officials term_end_on
 officials record_count

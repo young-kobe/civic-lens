@@ -88,6 +88,19 @@ public sealed class VoteEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AStoredVoteAlignmentIsReturnedAndAnUnwrittenAlignmentStaysNull()
+    {
+        await using var host = await StartWithVotesAsync(E, A);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE vote_revisions SET alignment = 'Split', columns_written = true WHERE record_id = '{E.RecordId}';");
+
+        using var page = await GetAsync(host, "/v1/votes");
+
+        var votes = page.RootElement.GetProperty("votes").EnumerateArray().ToArray();
+        Assert.Equal("split", votes[0].GetProperty("alignment").GetString());
+        Assert.Equal(JsonValueKind.Null, votes[1].GetProperty("alignment").ValueKind);
+    }
+
+    [Fact]
     public async Task APersonTextHasNoLabelAndACandidateNameInTheCastsLeavesTheCountsNullBecauseTheViewGivesNoTotalsThen()
     {
         await using var host = await StartWithVotesAsync(C);
@@ -290,12 +303,17 @@ public sealed class VoteEndpointsTests(PostgresCollection postgres)
     public async Task OneVoteShowsItsRowAndItsTrackedIssuesInOrderAndNeverAnUntrackedOne()
     {
         await using var host = await StartWithVotesAsync(All);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            UPDATE vote_revisions SET alignment = 'Split', columns_written = true WHERE record_id = '{B.RecordId}';
+            """);
 
         using var withIssues = await GetAsync(host, $"/v1/votes/{B.RecordId}");
         using var withoutIssues = await GetAsync(host, $"/v1/votes/{A.RecordId}");
 
         Assert.Equal(1, withIssues.RootElement.GetProperty("release").GetInt32());
         Assert.Equal(B.RecordId, withIssues.RootElement.GetProperty("vote").GetProperty("recordId").GetString());
+        Assert.Equal("split", withIssues.RootElement.GetProperty("vote").GetProperty("alignment").GetString());
+        Assert.Equal(["Question: On " + B.Id, "Result: " + B.Result], withIssues.RootElement.GetProperty("facts").EnumerateArray().Select(fact => fact.GetString()));
         Assert.Equal(9, withIssues.RootElement.GetProperty("vote").GetProperty("rollCall").GetInt32());
         Assert.Equal(["health", "tax"], withIssues.RootElement.GetProperty("issueIds").EnumerateArray().Select(issue => issue.GetString()));
         Assert.Empty(withoutIssues.RootElement.GetProperty("issueIds").EnumerateArray());

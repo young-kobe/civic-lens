@@ -701,6 +701,8 @@ R-68 plans to serve public data from tables. The schema `public_api` holds reada
 
 ## Storage and contracts
 
+The public views expose stored vote alignment, member party, normalized member-vote side, party-majority cast, and official photo paths. Member caucus comes from the matching chamber term in the active release on the vote date. Missing values remain null. The [API reference](search.md#api) lists the response fields.
+
 Statement entries pin `approved_by` as `Code` or `Person`, never a reviewer identity. The commit writes it from the published statement. Existing entries get it through `releases entries backfill`, from the kept record file, never from live review decisions. A pinned value cannot be overwritten. A publication cannot fill an existing null classifier from a new review decision. Statement headlines remain hidden until their classifier is known. An unresolved open classifier makes the backfill command fail. Older manifests may omit the field; their published statement files supply it during backfill. The view owner has no grant on `statement_review_decisions`.
 
 - The generated [publication schema](schema/publication.md) lists every table, column, key, check, index, and trigger.

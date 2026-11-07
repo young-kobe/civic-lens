@@ -21,6 +21,7 @@ public sealed record VoteRow
     public string? Label { get; init; }
     public string? Question { get; init; }
     public required string Result { get; init; }
+    public PublishedVoteAlignment? Alignment { get; init; }
     public int? Yea { get; init; }
     public int? Nay { get; init; }
     public int? Present { get; init; }

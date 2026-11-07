@@ -14,7 +14,7 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
     // A filter on public_api.vote_issues made Postgres build the active records again for each row.
     private static string Sql(MemberVoteRequest request) => $"""
         SELECT a.release_number, o.official_id, v.record_id, v.chamber, v.congress, v.session_number, v.roll_call_number, v.voted_on, v.kind,
-               v.bill_type, v.bill_number, v.headline, v.label, v.result, v.vote_cast
+               v.bill_type, v.bill_number, v.headline, v.label, v.result, v.vote_cast, v.side, v.party_majority_cast
           FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
          CROSS JOIN unnest(@officials) WITH ORDINALITY AS o(official_id, ask_order)
           LEFT JOIN LATERAL (
@@ -56,6 +56,6 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
         var cast = reader.GetString(14);
         return new(reader.GetString(2), reader.GetFieldValue<DateOnly>(7), ViewColumns.Enum<PublishedChamber>(reader, 3), reader.GetInt32(4), reader.GetInt32(5),
             reader.GetInt32(6), kind, PlainVoteWords.Kind(kind), ViewColumns.Text(reader, 9), ViewColumns.Number(reader, 10), reader.GetString(11),
-            ViewColumns.Text(reader, 12), result, PlainVoteWords.Result(result), cast, PlainVoteWords.Cast(cast));
+            ViewColumns.Text(reader, 12), result, PlainVoteWords.Result(result), cast, PlainVoteWords.Cast(cast), ViewColumns.Text(reader, 15), ViewColumns.Text(reader, 16));
     }
 }
