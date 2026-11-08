@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using CivicLens.PublicWeb.Publication;
@@ -155,6 +156,7 @@ internal sealed record SeededStatement(char Id, string? Date, string[] Speakers,
     bool HasMetadata = true, bool AddUnpublishedRevision = false)
 {
     public string RecordId { get; init; } = new(Id, 64);
+    public int? LastRelease { get; init; }
 }
 
 internal static class StatementsSeed
@@ -171,10 +173,11 @@ internal static class StatementsSeed
         var unpublished = statement.AddUnpublishedRevision ? Revision(statement, 2, "'Unpublished headline', 'Unpublished summary'") : "";
         var speakers = string.Join('\n', statement.Speakers.Select((speaker, position) => $"INSERT INTO statement_revision_speakers (candidate_id, revision_number, official_id, \"position\") VALUES ('{statement.RecordId}', 1, '{speaker}', {position});"));
         var issues = string.Join('\n', statement.Issues.Select((issue, position) => $"INSERT INTO statement_revision_issues (candidate_id, revision_number, issue_id, \"position\") VALUES ('{statement.RecordId}', 1, '{issue}', {position});"));
+        var lastRelease = statement.LastRelease?.ToString(CultureInfo.InvariantCulture) ?? "NULL";
         return $"""
             SET session_replication_role = replica;
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
-            VALUES ('statement', '{statement.RecordId}', 1, 1, NULL);
+            VALUES ('statement', '{statement.RecordId}', 1, 1, {lastRelease});
             {revision}
             {unpublished}
             INSERT INTO published_entries (kind, record_id, revision_number, headline, statement_candidate_id, statement_revision_number, approved_by)
