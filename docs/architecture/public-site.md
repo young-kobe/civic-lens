@@ -47,7 +47,7 @@ Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 pa
 
 These decisions come from the component audit. The owner accepted every recommendation, the top 10 changes, and every strengthen and merge verdict.
 
-- DR1: Member cards show attendance and party-line counts with their bases. They show no bare Yes and No totals. The view is available; the card figure remains planned until its UI integration.
+- DR1: Member cards show attendance and one party-line count with its base. They show no bare Yes and No totals. ZIP cards show each positive party-line figure with the party pinned to its votes, its Congress, scope, and dates. Figures with no qualifying split votes are absent.
 - DR2: The official vote strip marks only a vote against most of the party and a missed vote. Each mark is a link. The caption names the scope.
 - DR3: A vote page puts the answer first. The fact rows and the source texts go into one "Check the source" fold on the same page.
 - DR4: The first map layer colors by cast only. The party layer waits for its own step. Then the owner picks the party colors.
@@ -112,7 +112,7 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 
 | # | Reader goal | Pages and components | Status |
 |---|---|---|---|
-| 1 | Find my members and what they did | Home ZIP form, member cards after a ZIP | Partial. Gated SSR home includes the existing ZIP flow when its browser API origin is configured. The answer scrolls into view and receives focus. Cards show portraits, seats, parties, term ends, and scoped attendance from private HTML fragments. Party-line counts remain planned (DR1) |
+| 1 | Find my members and what they did | Home ZIP form, member cards after a ZIP | Partial. Gated SSR home includes the existing ZIP flow when its browser API origin is configured. The answer scrolls into view and receives focus. Cards show portraits, seats, parties, term ends, scoped attendance, and party-line counts from private HTML fragments. Sponsored-bill and top-issue counts remain planned |
 | 2 | See my member on an issue, from the member | Official page, issue chips, vote strip | Partial. Planned: strip marks link to the votes (DR2) |
 | 3 | See my member on an issue, from the issue | Issue page, "your members" section | Planned: each issue vote shows my members' casts |
 | 4 | Understand one vote | Vote page: AI summary, result card, "what a Yes meant", party bars, source fold | Partial. Planned: answer first, one fold (DR3) |
@@ -146,7 +146,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Issue tiles | Home | Where do I start? | `issue_votes`, `bill_issues` | `/web` shows each configured issue's substantive vote count, bill count, and Congress. Other issue layouts remain planned |
 | Break board | Home, boards | Who breaks from their party? | `official_party_lines` | Official figure served. Board endpoint and UI planned |
 | Latest executive actions | Home | What did the President sign? | `executive_actions` | `/web` shows one row per published document type with count, newest title and signed date. Other executive layouts remain planned |
-| Member card | After a ZIP | Who is my member? | `officials`, `official_attendance`, `official_party_lines`, `official_bill_counts` | Portrait, seat, party, term end, and scoped attendance implemented. Official party-line data is available; card figure remains planned |
+| Member card | After a ZIP | Who is my member? | `officials`, `official_attendance`, `official_party_lines`, `official_bill_counts`, `official_issue_counts` | Portrait, seat, party, term end, scoped attendance, and scoped party-line counts implemented. Sponsored-bill and top-issue counts remain planned |
 | Member votes list | After a ZIP, official | How did my members vote? | `member_votes` | Implemented. Planned: issue filter chips |
 | Compare members | Compare page | How do my members differ? | `official_*` views, `member_votes` | Planned |
 | Profile header, key figures | Official | Who is this? | `officials`, `official_attendance`, `official_party_lines` | API data implemented. Profile UI integration remains planned. |

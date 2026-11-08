@@ -38,9 +38,21 @@
                     @for (var figureIndex = 0; figureIndex < member.Attendance.Length; figureIndex++)
                     {
                         var figure = member.Attendance[figureIndex];
-                        <div class="zip-member-attendance">
+                        <div class="zip-member-figure zip-member-attendance">
                             <p>Missed <strong>@figure.Missed of @figure.Held</strong> published @figure.Chamber @(figure.Held == 1 ? "roll call" : "roll calls") listing this member in Congress @figure.Congress.</p>
                             <InfoPopover Id="@($"zip-attendance-{seatIndex}-{figureIndex}")" Label="@($"About attendance for {member.Name} in the {figure.Chamber}")">
+                                <p>@figure.Scope</p>
+                                <p>From <time datetime="@Moment.Iso(figure.FirstVotedOn)">@Moment.Day(figure.FirstVotedOn)</time> to <time datetime="@Moment.Iso(figure.LastVotedOn)">@Moment.Day(figure.LastVotedOn)</time>.</p>
+                            </InfoPopover>
+                        </div>
+                    }
+                    @for (var figureIndex = 0; figureIndex < member.PartyLines.Length; figureIndex++)
+                    {
+                        var figure = member.PartyLines[figureIndex];
+                        if (figure.Cast <= 0) continue;
+                        <div class="zip-member-figure zip-member-party-line">
+                            <p>With most @PublishedPartyNames.PartyOf(figure.Chamber, figure.Party) on <strong>@figure.WithParty of @figure.Cast</strong> split @(figure.Cast == 1 ? "vote" : "votes") in Congress @figure.Congress.</p>
+                            <InfoPopover Id="@($"zip-party-line-{seatIndex}-{figureIndex}")" Label="@($"About party-line votes for {member.Name}, {figure.Party}, in the {figure.Chamber}")">
                                 <p>@figure.Scope</p>
                                 <p>From <time datetime="@Moment.Iso(figure.FirstVotedOn)">@Moment.Day(figure.FirstVotedOn)</time> to <time datetime="@Moment.Iso(figure.LastVotedOn)">@Moment.Day(figure.LastVotedOn)</time>.</p>
                             </InfoPopover>
