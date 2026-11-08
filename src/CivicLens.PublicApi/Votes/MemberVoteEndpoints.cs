@@ -16,5 +16,11 @@ public static class MemberVoteEndpoints
             if (await votes.FindAsync(request, cancellationToken) is not { } answer) return ApiResults.NoRelease();
             return ApiResults.Json(answer);
         }));
+        v1.MapGet("/member-votes/shared", (HttpContext http, MemberVoteStore votes, CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
+        {
+            var request = MemberVoteRequest.ParseShared(http.Request.Query);
+            if (await votes.FindSharedAsync(request, cancellationToken) is not { } answer) return ApiResults.NoRelease();
+            return ApiResults.Json(answer);
+        }));
     }
 }
