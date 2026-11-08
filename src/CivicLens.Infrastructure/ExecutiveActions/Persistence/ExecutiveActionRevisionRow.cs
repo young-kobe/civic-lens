@@ -24,6 +24,10 @@ internal sealed class ExecutiveActionRevisionRow : IReviewRevisionRow
     public string? PresidentName { get; set; }
     public string? PersonId { get; set; }
     public string? DocumentUrl { get; set; }
+    public string? DispositionNotes { get; set; }
+    public string? DispositionNotesExtractionId { get; set; }
+    public int? DispositionNotesStart { get; set; }
+    public int? DispositionNotesLength { get; set; }
     public List<ExecutiveActionRevisionFactRow> Facts { get; set; } = [];
     public List<ExecutiveActionRevisionNoticeRow> Notices { get; set; } = [];
 }

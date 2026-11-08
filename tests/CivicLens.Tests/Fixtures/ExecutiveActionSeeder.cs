@@ -49,7 +49,8 @@ internal sealed class ExecutiveActionSeeder
             DELETE FROM executive_action_revision_facts;
             DELETE FROM executive_action_revision_notices;
             UPDATE executive_action_revisions SET source_id = NULL, document_number = NULL, kind = NULL, presidential_number = NULL, title = NULL,
-                signed_on = NULL, published_on = NULL, federal_register_citation = NULL, president_name = NULL, person_id = NULL, document_url = NULL
+                signed_on = NULL, published_on = NULL, federal_register_citation = NULL, president_name = NULL, person_id = NULL, document_url = NULL,
+                disposition_notes = NULL, disposition_notes_extraction_id = NULL, disposition_notes_start = NULL, disposition_notes_length = NULL
             """, connection);
         await command.ExecuteNonQueryAsync();
     }

@@ -25,6 +25,8 @@ The executive actions feature records presidential documents from the Federal Re
 
 ## Invariants
 
+- Disposition notes cite the complete original source block and survive correction revisions. Enforcers: `ExecutiveActionRevision` and its typed revision columns. Tests: `ExecutiveActionRevisionTests`, `PublishExecutiveActionTests`, and the disposition cases in `PostgresExecutiveActionRevisionColumnsTests`.
+
 Each line gives the rule, what enforces it, and the test that protects it.
 
 - A document makes at most one revision. Enforced by the key of `executive_action_documents`. Test: `PostgresFederalRegisterTests.ADocumentThatIsKnownAddsNoSecondRevisionSoAReplayOfPreparationChangesNothing`.
@@ -147,4 +149,4 @@ The release holds the record file and a page for each record. The headline is th
 - The signing date comes from the Federal Register. Code does not check it against another source.
 - Nine or more corrections that arrive before the original make revision 1 fail validation. The original is then not recorded.
 - A correction waits with no visible sign when the job of its original fails or blocks for good.
-- Disposition notes are captured and cited as source text, but their references are not yet stored as typed amendment or revocation links. Typed links need immutable revision binding and may target only records in the active release.
+- Disposition notes retain their complete value and exact original-extraction span on each immutable revision. Correction revisions preserve that original note and citation. The revision stores the value and optional source-span columns, leaving fixed fact rows unchanged. Publication includes the notes as one cited fact. Old revisions with no captured notes remain null; no historical notes are inferred. Typed amendment and revocation links remain planned and may target only records in the active release.

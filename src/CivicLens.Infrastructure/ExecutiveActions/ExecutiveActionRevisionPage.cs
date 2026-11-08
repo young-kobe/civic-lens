@@ -17,7 +17,8 @@ internal sealed record ExecutiveActionRevisionPage(IReadOnlyList<ExecutiveAction
             throw ExecutiveActionRevisionRows.NotBackfilled($"Executive action revision {row.RecordId} {row.RevisionNumber}");
         return new(row.RecordId, row.RevisionNumber, row.AuthorSubject, new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero),
             row.SourceId, row.DocumentNumber!, row.Kind!.Value, row.PresidentialNumber, row.Title!, row.SignedOn!.Value, row.PublishedOn!.Value,
-            row.FederalRegisterCitation!, row.PresidentName!, row.PersonId!, row.DocumentUrl!, FactsOf(row), NoticesOf(row));
+            row.FederalRegisterCitation!, row.PresidentName!, row.PersonId!, row.DocumentUrl!, FactsOf(row), NoticesOf(row))
+        { DispositionNotes = DispositionNotesOf(row) };
     }
 
     public IReadOnlyList<StoredRevision<ExecutiveActionRevisionRow, ExecutiveActionRevision>> ToStoredRevisions() =>
@@ -28,10 +29,25 @@ internal sealed record ExecutiveActionRevisionPage(IReadOnlyList<ExecutiveAction
         var lines = ExecutiveActionFacts.Of(row.DocumentNumber!, row.Kind!.Value, row.PresidentialNumber, row.Title!, row.SignedOn!.Value,
             row.PublishedOn!.Value, row.FederalRegisterCitation!, row.PresidentName!, row.DocumentUrl!);
         var spans = Facts[(row.RecordId, row.RevisionNumber)].OrderBy(fact => fact.Position).ToArray();
-        if (spans.Length != lines.Count)
-            throw new InvalidDataException($"Executive action revision {row.RecordId} {row.RevisionNumber} has {spans.Length} fact rows for {lines.Count} fact lines.");
+        var expected = lines.Count;
+        if (spans.Length != expected || !spans.Select(span => (int)span.Position).SequenceEqual(Enumerable.Range(0, expected)))
+            throw new InvalidDataException($"Executive action revision {row.RecordId} {row.RevisionNumber} has incomplete fact rows.");
         return [.. lines.Zip(spans, (line, span) => new ExecutiveActionFact(line.Label, line.Value,
             new SourceSpan(span.CitationExtractionId, span.CitationStart, span.CitationLength)))];
+    }
+
+    private static ExecutiveActionFact? DispositionNotesOf(ExecutiveActionRevisionRow row)
+    {
+        if (row.DispositionNotes is null)
+        {
+            if (row.DispositionNotesExtractionId is not null || row.DispositionNotesStart is not null || row.DispositionNotesLength is not null)
+                throw new InvalidDataException("Executive action disposition note columns are incomplete.");
+            return null;
+        }
+        if (row.DispositionNotesExtractionId is null || row.DispositionNotesStart is null || row.DispositionNotesLength is null)
+            throw new InvalidDataException("Executive action disposition note citation is incomplete.");
+        return new(ExecutiveActionFacts.DispositionNotes, row.DispositionNotes,
+            new SourceSpan(row.DispositionNotesExtractionId, row.DispositionNotesStart.Value, row.DispositionNotesLength.Value));
     }
 
     private ImmutableArray<ExecutiveActionNotice> NoticesOf(ExecutiveActionRevisionRow row) =>

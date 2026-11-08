@@ -431,10 +431,12 @@ internal sealed class PublicationScenario
         return recordId;
     }
 
-    public string AddExecutiveAction(char id, ImmutableArray<ReviewDecision>? decisions = null, bool unpublished = false, bool withNotice = false)
+    public string AddExecutiveAction(char id, ImmutableArray<ReviewDecision>? decisions = null, bool unpublished = false, bool withNotice = false,
+        string? dispositionNotes = null)
     {
         var recordId = new string(id, 64);
-        var (extraction, evidence) = ExecutiveEvidence(withNotice ? FederalRegisterFixtures.BidenProclamation : FederalRegisterFixtures.TrumpOrder, $"executive-action-{id}");
+        var (extraction, evidence) = ExecutiveEvidence(withNotice ? FederalRegisterFixtures.BidenProclamation : FederalRegisterFixtures.TrumpOrder,
+            $"executive-action-{id}", dispositionNotes);
         var extractions = new List<DocumentExtraction> { extraction };
         var notices = new List<ExecutiveActionNotice>();
         if (withNotice)
@@ -454,9 +456,10 @@ internal sealed class PublicationScenario
         return recordId;
     }
 
-    private static (DocumentExtraction Extraction, FederalRegisterEvidence Evidence) ExecutiveEvidence(string json, string attemptId)
+    private static (DocumentExtraction Extraction, FederalRegisterEvidence Evidence) ExecutiveEvidence(string json, string attemptId,
+        string? dispositionNotes = null)
     {
-        var document = FederalRegisterFixtures.Document(json);
+        var document = FederalRegisterFixtures.Document(json) with { DispositionNotes = dispositionNotes };
         var text = FederalRegisterRenderer.Render(document);
         var extraction = Extraction(text, attemptId, $"https://www.federalregister.gov/api/v1/documents/{document.DocumentNumber}.json");
         return (extraction, new FederalRegisterEvidence(document, extraction.ExtractionId, text, "mayor"));

@@ -27,6 +27,67 @@ public sealed class PostgresExecutiveActionRevisionColumnsTests(PostgresCollecti
     private string connectionString = null!;
     private ExecutiveActionSeeder executiveActions = null!;
 
+    [Fact]
+    public async Task OriginalDispositionNotesAndTheirCitationSurviveCorrectionRevisions()
+    {
+        const string notes = "Amends: EO 13224, September 23, 2001\r\nSee: EO 14193, February 1, 2025";
+        var recordId = await executiveActions.AdmitAsync(WithNotes(FederalRegisterFixtures.BidenProclamation, notes), "joe-biden");
+        var original = (await ReviewStore().GetAsync(recordId, default))!.Review.CurrentRevision.DispositionNotes;
+        Assert.NotNull(original);
+
+        await executiveActions.AdmitAsync(WithNotes(FederalRegisterFixtures.BidenProclamationCorrection, "Correction-specific notes"), "joe-biden");
+        var read = (await ReviewStore().GetAsync(recordId, default))!;
+        Assert.Equal(2, read.Review.CurrentRevision.RevisionNumber);
+        Assert.Equal(original, read.Review.CurrentRevision.DispositionNotes);
+        Assert.Equal(notes, read.Review.CurrentRevision.DispositionNotes!.Value);
+        var citation = original.Citation;
+        Assert.Equal(original.Text, read.Extractions[citation.ExtractionId].Text.Substring(citation.Start, citation.Length));
+        var verification = await VerifyAsync();
+        Assert.Equal((2, 0, 0), (verification.Checked, verification.Legacy, verification.Mismatched));
+    }
+
+    [Fact]
+    public async Task LegacyColumnsRecoverCitedNotesFromTheirOwnRevisionWithoutChangingJson()
+    {
+        const string notes = "Revokes: EO 14056, December 1, 2021\r\nSee: EO 14186, January 27, 2025";
+        var recordId = await executiveActions.AdmitAsync(WithNotes(FederalRegisterFixtures.TrumpOrder, notes), "donald-trump");
+        var original = (await ReviewStore().GetAsync(recordId, default))!.Review.CurrentRevision.DispositionNotes;
+        var json = await ScalarAsync("SELECT revision_json FROM executive_action_revisions");
+        await executiveActions.MakeLegacyAsync();
+
+        var result = await BackfillAsync(10);
+
+        Assert.Equal((1, 1, 0), (result.Examined, result.Moved, result.Skipped));
+        Assert.Equal(json, await ScalarAsync("SELECT revision_json FROM executive_action_revisions"));
+        Assert.Equal(original, (await ReviewStore().GetAsync(recordId, default))!.Review.CurrentRevision.DispositionNotes);
+        Assert.Equal(0, (await VerifyAsync()).Mismatched);
+    }
+
+    [Fact]
+    public async Task APreNotesJsonRevisionStillVerifiesWhenTheOptionalFieldIsAbsent()
+    {
+        await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
+        await ExecuteAsync("UPDATE executive_action_revisions SET revision_json = (revision_json::jsonb - 'dispositionNotes')::text");
+
+        var verification = await VerifyAsync();
+
+        Assert.Equal((1, 0, 0), (verification.Checked, verification.Legacy, verification.Mismatched));
+    }
+
+    [Fact]
+    public async Task CorruptDispositionCitationsFailClosedWithoutJsonFallback()
+    {
+        var recordId = await executiveActions.AdmitAsync(WithNotes(FederalRegisterFixtures.TrumpOrder, "A cited note"), "donald-trump");
+        await ExecuteAsync("""
+            UPDATE executive_action_revisions SET disposition_notes_length = disposition_notes_length + 1
+            """);
+
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => ReviewStore().GetAsync(recordId, default));
+    }
+
+    private static string WithNotes(string json, string notes) =>
+        json.Replace("\"html_url\":", $"\"disposition_notes\":{JsonSerializer.Serialize(notes)},\"html_url\":", StringComparison.Ordinal);
+
     public async Task InitializeAsync()
     {
         connectionString = await postgres.CreateMigratedDatabaseAsync();

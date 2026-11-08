@@ -4344,6 +4344,24 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("created_at_utc_ticks");
 
+                    b.Property<string>("DispositionNotes")
+                        .HasMaxLength(1999981)
+                        .HasColumnType("character varying(1999981)")
+                        .HasColumnName("disposition_notes");
+
+                    b.Property<string>("DispositionNotesExtractionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("disposition_notes_extraction_id");
+
+                    b.Property<int?>("DispositionNotesLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("disposition_notes_length");
+
+                    b.Property<int?>("DispositionNotesStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("disposition_notes_start");
+
                     b.Property<string>("DocumentNumber")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
@@ -4404,6 +4422,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasKey("RecordId", "RevisionNumber");
 
+                    b.HasIndex("DispositionNotesExtractionId");
+
                     b.ToTable("executive_action_revisions", null, t =>
                         {
                             t.HasCheckConstraint("ck_executive_action_revisions_author", "author_kind = 'Code' AND author_subject = 'civic-lens:code'");
@@ -4415,6 +4435,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_executive_action_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_executive_action_revisions_dates", "signed_on <> '0001-01-01' AND published_on <> '0001-01-01'");
+
+                            t.HasCheckConstraint("ck_executive_action_revisions_disposition_notes", "(disposition_notes_extraction_id IS NULL) = (disposition_notes_start IS NULL) AND (disposition_notes_extraction_id IS NULL) = (disposition_notes_length IS NULL) AND disposition_notes_start >= 0 AND disposition_notes_length > 0");
+
+                            t.HasCheckConstraint("ck_executive_action_revisions_disposition_notes_written", "(disposition_notes IS NULL) = (disposition_notes_extraction_id IS NULL)");
 
                             t.HasCheckConstraint("ck_executive_action_revisions_fields", "(document_number IS NULL OR (btrim(document_number) <> '' AND length(document_number) <= 1000 AND document_number !~ '[\\r\\n]')) AND (title IS NULL OR (btrim(title) <> '' AND length(title) <= 1000 AND title !~ '[\\r\\n]')) AND (federal_register_citation IS NULL OR (btrim(federal_register_citation) <> '' AND length(federal_register_citation) <= 1000 AND federal_register_citation !~ '[\\r\\n]')) AND (president_name IS NULL OR (btrim(president_name) <> '' AND length(president_name) <= 1000 AND president_name !~ '[\\r\\n]')) AND (document_url IS NULL OR (btrim(document_url) <> '' AND length(document_url) <= 1000 AND document_url !~ '[\\r\\n]')) AND (presidential_number IS NULL OR (btrim(presidential_number) <> '' AND length(presidential_number) <= 1000 AND presidential_number !~ '[\\r\\n]'))");
 
@@ -9623,6 +9647,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", b =>
                 {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("DispositionNotesExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionDraftRow", null)
                         .WithMany()
                         .HasForeignKey("RecordId")

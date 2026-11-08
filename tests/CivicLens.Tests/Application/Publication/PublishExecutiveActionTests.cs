@@ -65,6 +65,50 @@ public sealed class PublishExecutiveActionTests
     }
 
     [Fact]
+    public async Task DispositionNotesPublishAsOneFullCitedFactWithTheirExactMultilineSpan()
+    {
+        const string notes = "Keep the original record.\r\n\U00010400 remains in context.";
+        var scenario = new PublicationScenario();
+        var record = scenario.AddExecutiveAction('a', dispositionNotes: notes);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", record));
+
+        var files = scenario.Releases.Directories[summary.DirectoryName];
+        var published = JsonSerializer.Deserialize<PublishedExecutiveAction>(files[PublicationProtocol.RecordDataPath(record)], PublicationProtocol.JsonOptions)!;
+        published.Validate();
+        var fact = Assert.Single(published.Facts, item => item.Label == "Disposition notes");
+        var source = Assert.Single(published.Sources);
+        var quote = $"Disposition notes: {notes}";
+        Assert.Equal(notes, fact.Value);
+        Assert.Equal(quote, fact.Citation.Quote);
+        Assert.Equal(source.ExtractionId, fact.Citation.ExtractionId);
+        Assert.Equal(source.Text.IndexOf(quote, StringComparison.Ordinal), fact.Citation.Start);
+        Assert.Equal(quote.Length, fact.Citation.Length);
+        Assert.Equal(source.Text.IndexOf(notes, StringComparison.Ordinal), source.Text.LastIndexOf(notes, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CorrectionNoticeKeepsDispositionNotesBoundToTheOriginalSource()
+    {
+        const string notes = "Original disposition.\r\n\U00010400 remains here.";
+        var scenario = new PublicationScenario();
+        var record = scenario.AddExecutiveAction('a', withNotice: true, dispositionNotes: notes);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", record));
+
+        var files = scenario.Releases.Directories[summary.DirectoryName];
+        var published = JsonSerializer.Deserialize<PublishedExecutiveAction>(files[PublicationProtocol.RecordDataPath(record)], PublicationProtocol.JsonOptions)!;
+        published.Validate();
+        var fact = Assert.Single(published.Facts, item => item.Label == "Disposition notes");
+        var original = Assert.Single(published.Sources, source => source.Text.Contains(notes, StringComparison.Ordinal));
+        Assert.Equal(notes, fact.Value);
+        Assert.Equal(original.ExtractionId, fact.Citation.ExtractionId);
+        Assert.Equal(2, published.Sources.Length);
+        Assert.Contains(published.Sources, source => source.ExtractionId != original.ExtractionId);
+        Assert.Single(published.Facts, item => item.Label == PublishedExecutiveAction.CorrectionNoticeLabel);
+    }
+
+    [Fact]
     public async Task CommitBindsTheRecordToItsKindSoTheStoreChecksTheExecutiveActionTable()
     {
         var scenario = new PublicationScenario();
@@ -116,4 +160,5 @@ public sealed class PublishExecutiveActionTests
     private static PublicationRelease ReadManifest(PublicationScenario scenario, string directory) =>
         JsonSerializer.Deserialize<PublicationRelease>(
             scenario.Releases.Directories[directory][PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
+
 }

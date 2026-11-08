@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Collection.FederalRegister;
 using CivicLens.Application.Documents;
+using CivicLens.Core.Documents;
 using CivicLens.Core.ExecutiveActions;
 using CivicLens.Core.Review;
 
@@ -16,11 +17,13 @@ public static class ExecutiveActionRevisions
         var lines = LineCitations.ExactLines(original.ExtractionId, original.ExtractionText);
         var facts = ExecutiveActionFacts.Of(document.DocumentNumber, document.Kind, document.PresidentialNumber,
             document.Title, document.SignedOn, document.PublishedOn, document.Citation, document.PresidentName, document.Url);
+        var dispositionNotes = document.DispositionNotes is null ? null : CreateDispositionNotes(original, facts, document.DispositionNotes);
         return new ExecutiveActionRevision(ExecutiveActionIdentity.RecordId(sourceId, document.RecordDocumentNumber), 1, ReviewAuthor.CodeSubject,
             createdAtUtc, sourceId, document.DocumentNumber, document.Kind, document.PresidentialNumber, document.Title, document.SignedOn,
             document.PublishedOn, document.Citation, document.PresidentName, original.PersonId, document.Url,
             [.. facts.Select(fact => new ExecutiveActionFact(fact.Label, fact.Value, lines[ExecutiveActionFacts.Line(fact.Label, fact.Value)]))],
-            Ordered(notices));
+            Ordered(notices))
+        { DispositionNotes = dispositionNotes };
     }
 
     /// <summary>The next revision keeps the original facts and adds the notices.</summary>
@@ -37,4 +40,18 @@ public static class ExecutiveActionRevisions
 
     private static ImmutableArray<ExecutiveActionNotice> Ordered(IEnumerable<ExecutiveActionNotice> notices) =>
         [.. notices.OrderBy(notice => notice.PublishedOn).ThenBy(notice => notice.DocumentNumber, StringComparer.Ordinal)];
+
+    private static ExecutiveActionFact CreateDispositionNotes(FederalRegisterEvidence original,
+        IReadOnlyList<(string Label, string Value)> facts, string notes)
+    {
+        var renderedFacts = string.Join('\n', facts.Select(fact => ExecutiveActionFacts.Line(fact.Label, fact.Value)));
+        var renderedNotes = ExecutiveActionFacts.Line(ExecutiveActionFacts.DispositionNotes, notes);
+        if (notes.Length > ExecutiveActionRevision.MaximumDispositionNotesLength)
+            throw new ArgumentException("Disposition notes exceed the maximum extracted text length.", nameof(notes));
+        var start = renderedFacts.Length + 1;
+        if (!string.Equals(original.ExtractionText, $"{renderedFacts}\n{renderedNotes}", StringComparison.Ordinal))
+            throw new ArgumentException("Disposition notes must match the rendered original document extraction.", nameof(original));
+        return new ExecutiveActionFact(ExecutiveActionFacts.DispositionNotes, notes,
+            new SourceSpan(original.ExtractionId, start, renderedNotes.Length));
+    }
 }

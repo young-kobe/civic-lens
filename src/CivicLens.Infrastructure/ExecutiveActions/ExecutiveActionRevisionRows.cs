@@ -39,6 +39,10 @@ internal static class ExecutiveActionRevisionRows
         row.PresidentName = revision.PresidentName;
         row.PersonId = revision.PersonId;
         row.DocumentUrl = revision.DocumentUrl;
+        row.DispositionNotes = revision.DispositionNotes?.Value;
+        row.DispositionNotesExtractionId = revision.DispositionNotes?.Citation.ExtractionId;
+        row.DispositionNotesStart = revision.DispositionNotes?.Citation.Start;
+        row.DispositionNotesLength = revision.DispositionNotes?.Citation.Length;
         row.Facts = [.. revision.Facts.Select((fact, position) => FactRow(revision, fact, position))];
         row.Notices = [.. revision.Notices.Select((notice, position) => NoticeRow(revision, notice, position))];
     }
