@@ -22,7 +22,7 @@ public sealed class PublicApiPartyAgreementMigrationTests(PostgresCollection pos
             await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
             var previous = db.Database.GetMigrations().Last(id => string.CompareOrdinal(id, Migration) < 0);
             await db.GetService<IMigrator>().MigrateAsync(previous);
-            await db.GetService<IMigrator>().MigrateAsync(Migration);
+            await PostgresCollectionAttemptStore.FromConnectionString(connectionString).MigrateAsync();
 
             await using (var connection = new NpgsqlConnection(connectionString))
             {

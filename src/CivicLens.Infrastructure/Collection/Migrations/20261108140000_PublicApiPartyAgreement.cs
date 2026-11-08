@@ -19,7 +19,6 @@ public partial class PublicApiPartyAgreement : Migration
          GROUP BY a.release_number, v.chamber, v.congress, v.kind;
 
         ALTER VIEW public_api.party_agreement OWNER TO civic_lens_public_owner;
-        GRANT SELECT ON public_api.party_agreement TO civic_lens_public;
         """;
 
     private const string DownSql = "DROP VIEW public_api.party_agreement;";
