@@ -345,6 +345,42 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task RecentVotesSkipUnknownCountsBeforeEachChamberLimitAndKeepRecordedZeroCounts()
+    {
+        var featured = House('f', "2026-05-31", 1) with { Casts = ["Unknown"] };
+        SeededVote[] votes =
+        [
+            featured,
+            House('a', "2026-05-30", 2) with { Kind = "Amendment", Casts = ["Unknown"] },
+            House('b', "2026-05-29", 3) with { Kind = "Amendment", Casts = ["Yea", "Unknown"] },
+            House('c', "2026-05-28", 4) with { Kind = "Amendment", Casts = ["Nay", "Unknown"] },
+            House('d', "2026-05-27", 5) with { Kind = "Amendment", ActiveRevision = 2, Casts = ["Aye", "No"] },
+            House('e', "2026-05-26", 6) with { Kind = "Amendment", Casts = ["Present", "Not Voting"] },
+            House('0', "2026-05-25", 7) with { Kind = "Amendment" },
+            Senate('1', "2026-05-27", 1) with { Kind = "Nomination" },
+            Senate('2', "2026-05-26", 2) with { Kind = "Nomination" },
+            Senate('3', "2026-05-25", 3) with { Kind = "Nomination" }
+        ];
+        await using var host = await StartAsync(votes);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            UPDATE vote_revisions SET headline = 'Earlier revision'
+             WHERE record_id = '{votes[4].RecordId}' AND revision_number = 1
+            """);
+
+        var answer = await GetAsync(host);
+
+        Assert.Equal(featured.RecordId, FeaturedId(answer));
+        Assert.Equal(JsonValueKind.Null, answer.GetProperty("featuredVote").GetProperty("yea").ValueKind);
+        Assert.Equal([votes[4].RecordId, votes[7].RecordId, votes[5].RecordId, votes[8].RecordId], Ids(answer));
+        var recent = answer.GetProperty("votes");
+        Assert.Equal("Headline d", recent[0].GetProperty("headline").GetString());
+        Assert.Equal(1, recent[0].GetProperty("yea").GetInt32());
+        Assert.Equal(1, recent[0].GetProperty("nay").GetInt32());
+        Assert.Equal(0, recent[2].GetProperty("yea").GetInt32());
+        Assert.Equal(0, recent[2].GetProperty("nay").GetInt32());
+    }
+
+    [Fact]
     public async Task RecentVotesStillShowWhenNoPassageVoteNamesABill()
     {
         SeededVote[] votes =

@@ -15,7 +15,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
         v.headline, v.label, v.result, v.yea, v.nay, v.bill_type, v.bill_number, v.summary, v.text_origin, v.alignment
         """;
 
-    private const string Sql = $"""
+    private static readonly string Sql = $"""
         SELECT a.release_number, a.published_at_utc_ticks, b.record_id, b.week_start, b.headline, b.label,
                s.is_featured, s.record_id, s.voted_on, s.chamber, s.congress, s.session_number, s.roll_call_number,
                s.headline, s.label, s.result, s.yea, s.nay, s.bill_type, s.bill_number, s.bill_line, s.summary, s.text_origin, s.alignment,
@@ -52,10 +52,20 @@ public sealed class HomeStore(NpgsqlDataSource views)
                       SELECT false AS is_featured, recent.*
                         FROM unnest(@chambers) AS c(chamber)
                        CROSS JOIN LATERAL (
-                            SELECT {VoteColumns} FROM public_api.votes v
-                             WHERE v.chamber = c.chamber AND v.kind = ANY(@kinds) AND v.yea IS NOT NULL
-                               AND (featured.record_id IS NULL OR v.record_id <> featured.record_id)
-                             ORDER BY {VoteStore.Order} LIMIT @take) recent
+                            SELECT payload.*
+                              FROM (
+                                   SELECT v.record_id, v.revision_number, v.voted_on, v.chamber, v.session_number, v.roll_call_number
+                                     FROM public_api.votes v
+                                    WHERE v.chamber = c.chamber AND v.kind = ANY(@kinds)
+                                      AND (featured.record_id IS NULL OR v.record_id <> featured.record_id)
+                                    ORDER BY {VoteStore.Order} OFFSET 0
+                              ) k
+                              CROSS JOIN LATERAL (
+                                   SELECT {VoteColumns} FROM public_api.votes v
+                                    WHERE v.record_id = k.record_id AND v.revision_number = k.revision_number AND v.yea IS NOT NULL
+                                    LIMIT 1 OFFSET 0
+                              ) payload
+                             ORDER BY {VoteStore.Order.Replace("v.", "k.", StringComparison.Ordinal)} LIMIT @take) recent
                  ) v
                UNION ALL
                SELECT false, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
