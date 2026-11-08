@@ -19,8 +19,14 @@ public sealed class HomeStore(NpgsqlDataSource views)
         SELECT a.release_number, a.published_at_utc_ticks, b.record_id, b.week_start, b.headline, b.label,
                s.is_featured, s.record_id, s.voted_on, s.chamber, s.congress, s.session_number, s.roll_call_number,
                s.headline, s.label, s.result, s.yea, s.nay, s.bill_type, s.bill_number, s.bill_line, s.summary, s.text_origin, s.alignment,
-               s.action_kind, s.action_count, s.newest_record_id, s.newest_title, s.newest_signed_on
+               s.action_kind, s.action_count, s.newest_record_id, s.newest_title, s.newest_signed_on,
+               freshness.house, freshness.senate
           FROM (SELECT release_number, published_at_utc_ticks FROM public_api.active_records LIMIT 1) a
+          CROSS JOIN LATERAL (
+               SELECT max(v.voted_on) FILTER (WHERE v.chamber = 'House') AS house,
+                      max(v.voted_on) FILTER (WHERE v.chamber = 'Senate') AS senate
+                 FROM public_api.votes v
+          ) freshness
           LEFT JOIN LATERAL (
                SELECT v.record_id FROM public_api.votes v
                 WHERE v.kind = 'Passage' AND v.bill_type IS NOT NULL AND v.bill_number IS NOT NULL
@@ -93,6 +99,8 @@ public sealed class HomeStore(NpgsqlDataSource views)
         HomeFeaturedVote? featured = null;
         HomeBrief? brief = null;
         var executiveActions = new List<HomeExecutiveGroup>();
+        DateOnly? newestHouseRollCall = null;
+        DateOnly? newestSenateRollCall = null;
         int? release = null;
         DateOnly? publishedOn = null;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -101,6 +109,8 @@ public sealed class HomeStore(NpgsqlDataSource views)
             {
                 release = reader.GetInt32(0);
                 publishedOn ??= reader.IsDBNull(1) ? null : DateOnly.FromDateTime(new DateTime(reader.GetInt64(1), DateTimeKind.Utc));
+                newestHouseRollCall ??= reader.IsDBNull(29) ? null : reader.GetFieldValue<DateOnly>(29);
+                newestSenateRollCall ??= reader.IsDBNull(30) ? null : reader.GetFieldValue<DateOnly>(30);
                 brief ??= reader.IsDBNull(2) ? null : new(reader.GetString(2), reader.GetFieldValue<DateOnly>(3), reader.GetString(4), ViewColumns.Text(reader, 5));
                 if (!reader.IsDBNull(24))
                 {
@@ -116,7 +126,13 @@ public sealed class HomeStore(NpgsqlDataSource views)
         var issues = publishedOn is { } day && CongressCalendar.CongressOn(day) is { } congress
             ? await ReadIssuesAsync(connection, transaction, congress, cancellationToken)
             : Array.Empty<HomeIssue>();
-        return new(active, featured, [.. votes], brief) { ExecutiveActions = [.. executiveActions], Issues = issues };
+        return new(active, featured, [.. votes], brief)
+        {
+            ExecutiveActions = [.. executiveActions],
+            Issues = issues,
+            NewestHouseRollCall = newestHouseRollCall,
+            NewestSenateRollCall = newestSenateRollCall
+        };
     }
 
     private static async Task<HomeIssue[]> ReadIssuesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, int congress, CancellationToken cancellationToken)
