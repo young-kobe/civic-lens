@@ -19,9 +19,10 @@ public sealed class ExecutiveActionRevisionTests
         return (ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, Now, evidence, []), evidence.ExtractionText);
     }
 
-    private static FederalRegisterEvidence Evidence(string json, string extractionId = ExtractionId)
+    private static FederalRegisterEvidence Evidence(string json, string extractionId = ExtractionId, string? dispositionNotes = null)
     {
         var document = FederalRegisterFixtures.Document(json);
+        if (dispositionNotes is not null) document = document with { DispositionNotes = dispositionNotes };
         return new FederalRegisterEvidence(document, extractionId, FederalRegisterRenderer.Render(document), "donald-trump");
     }
 
@@ -102,6 +103,100 @@ public sealed class ExecutiveActionRevisionTests
     }
 
     [Fact]
+    public void DispositionNotesBindTheCompleteMultilineBlockIncludingCrLfAndSupplementaryCharacters()
+    {
+        var notes = "First line\r\nSecond line \U00010400";
+        var evidence = Evidence(FederalRegisterFixtures.TrumpOrder, dispositionNotes: notes);
+        var revision = ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, Now, evidence, []);
+        var fact = Assert.Single(revision.OriginalFacts.Skip(revision.Facts.Length));
+        var start = evidence.ExtractionText.IndexOf("\n" + fact.Text, StringComparison.Ordinal) + 1;
+
+        Assert.Equal(notes, fact.Value);
+        Assert.Equal((start, fact.Text.Length), (fact.Citation.Start, fact.Citation.Length));
+        Assert.Equal(fact.Text, evidence.ExtractionText.Substring(fact.Citation.Start, fact.Citation.Length));
+        Assert.Equal(fact.Citation, Assert.Single(revision.Citations.Skip(revision.Facts.Length)));
+        Bound(revision, evidence.ExtractionText).ValidateForApproval(Extractions(revision, evidence.ExtractionText));
+    }
+
+    [Fact]
+    public void DispositionNotesCanBeAbsentOrEmpty()
+    {
+        var absent = Create().Revision;
+        var emptyEvidence = Evidence(FederalRegisterFixtures.TrumpOrder, dispositionNotes: string.Empty);
+        var empty = ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, Now, emptyEvidence, []);
+
+        Assert.Null(absent.DispositionNotes);
+        Assert.Equal(string.Empty, empty.DispositionNotes!.Value);
+        empty.ValidateShape();
+        Bound(empty, emptyEvidence.ExtractionText).ValidateAgainst(Extractions(empty, emptyEvidence.ExtractionText));
+    }
+
+    [Fact]
+    public void DispositionNotesRejectNulAndBlocksOverTheExtractionLimit()
+    {
+        var evidence = Evidence(FederalRegisterFixtures.TrumpOrder, dispositionNotes: "A note");
+        var revision = ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, Now, evidence, []);
+        var notes = revision.DispositionNotes!;
+
+        Assert.Throws<ArgumentException>(() => (revision with { DispositionNotes = notes with { Value = "A\0note" } }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, Now,
+            Evidence(FederalRegisterFixtures.TrumpOrder, dispositionNotes: new string('a', DocumentExtraction.MaximumTextLength)), []));
+    }
+
+    [Fact]
+    public void DispositionNotesRequireTheirOriginalRenderedSourceBlockAndExactSavedQuote()
+    {
+        var evidence = Evidence(FederalRegisterFixtures.TrumpOrder, dispositionNotes: "A note\r\ncontinued");
+        var revision = ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, Now, evidence, []);
+
+        Assert.Throws<ArgumentException>(() => ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, Now,
+            evidence with { ExtractionText = evidence.ExtractionText.Replace("A note\r\ncontinued", "changed", StringComparison.Ordinal) }, []));
+        Assert.Throws<ArgumentException>(() => ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, Now,
+            evidence with { ExtractionText = evidence.ExtractionText + "\nextra" }, []));
+        var changedText = evidence.ExtractionText.Replace("continued", "changed", StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => Bound(revision, changedText).ValidateAgainst(Extractions(revision, changedText)));
+        Bound(revision, evidence.ExtractionText).ValidateAgainst(Extractions(revision, evidence.ExtractionText));
+    }
+
+    [Fact]
+    public void DispositionNotesRejectWrongLabelSourceCitationAndExtraction()
+    {
+        var evidence = Evidence(FederalRegisterFixtures.TrumpOrder, dispositionNotes: "A note");
+        var revision = ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, Now, evidence, []);
+        var notes = revision.DispositionNotes!;
+
+        Assert.Throws<ArgumentException>(() => (revision with { DispositionNotes = notes with { Label = "Other" } }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (revision with { DispositionNotes = notes with { Value = null! } }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => (revision with
+        {
+            DispositionNotes = notes with
+            { Citation = notes.Citation with { ExtractionId = new string('f', 64) } }
+        }).ValidateShape());
+        Assert.Throws<ArgumentException>(() => Bound(revision with
+        {
+            DispositionNotes = notes with
+            { Citation = notes.Citation with { Start = notes.Citation.Start + 1 } }
+        }, evidence.ExtractionText)
+            .ValidateAgainst(Extractions(revision, evidence.ExtractionText)));
+        Assert.Throws<ArgumentException>(() => Bound(revision with { DispositionNotes = notes with { Value = notes.Value + " changed" } }, evidence.ExtractionText)
+            .ValidateAgainst(Extractions(revision, evidence.ExtractionText)));
+    }
+
+    [Fact]
+    public void CorrectionRevisionPreservesTheOriginalDispositionNotesAndCitation()
+    {
+        var evidence = Evidence(FederalRegisterFixtures.BidenProclamation, dispositionNotes: "Original note\r\nsecond line");
+        var original = ExecutiveActionRevisions.Create(FederalRegisterFixtures.SourceId, Now, evidence, []);
+        var correction = Evidence(FederalRegisterFixtures.BidenProclamationCorrection, new string('c', 64), "Correction note");
+
+        var next = ExecutiveActionRevisions.Add(original, Now.AddDays(1), [ExecutiveActionRevisions.NoticeOf(correction)]);
+
+        Assert.Equal(original.DispositionNotes, next.DispositionNotes);
+        Assert.Equal(original.DispositionNotes!.Citation, next.DispositionNotes!.Citation);
+        Assert.Equal(evidence.ExtractionId, next.DispositionNotes.Citation.ExtractionId);
+    }
+
+    [Fact]
     public void ANoticeMustEqualTheTextOfItsCitationInTheSavedExtraction()
     {
         var original = Evidence(FederalRegisterFixtures.BidenProclamation);
@@ -120,7 +215,13 @@ public sealed class ExecutiveActionRevisionTests
     private static ExecutiveActionRevision Bound(ExecutiveActionRevision revision, string text)
     {
         var id = new DocumentExtraction(Captured(), "federal-register-document-v1", text).ExtractionId;
-        return revision with { Facts = [.. revision.Facts.Select(fact => fact with { Citation = fact.Citation with { ExtractionId = id } })] };
+        return revision with
+        {
+            Facts = [.. revision.Facts.Select(fact => fact with { Citation = fact.Citation with { ExtractionId = id } })],
+            DispositionNotes = revision.DispositionNotes is { } notes
+                ? notes with { Citation = notes.Citation with { ExtractionId = id } }
+                : null
+        };
     }
 
     private static Dictionary<string, DocumentExtraction> Extractions(ExecutiveActionRevision revision, string text)

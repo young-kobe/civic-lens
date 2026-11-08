@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json.Serialization;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 
@@ -11,10 +12,17 @@ public sealed record ExecutiveActionRevision(string RecordId, int RevisionNumber
     ImmutableArray<ExecutiveActionFact> Facts, ImmutableArray<ExecutiveActionNotice> Notices)
     : IReviewRevision
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ExecutiveActionFact? DispositionNotes { get; init; }
+
     public const int MaximumFieldLength = 1_000;
     public const int MaximumNotices = 8;
+    public static readonly int MaximumDispositionNotesLength = DocumentExtraction.MaximumTextLength - ExecutiveActionFacts.DispositionNotes.Length - 2;
 
-    public IEnumerable<SourceSpan> Citations => Facts.Select(fact => fact.Citation).Concat(Notices.Select(notice => notice.Citation));
+    [JsonIgnore]
+    public IEnumerable<ExecutiveActionFact> OriginalFacts => DispositionNotes is { } notes ? Facts.Append(notes) : Facts;
+
+    public IEnumerable<SourceSpan> Citations => OriginalFacts.Select(fact => fact.Citation).Concat(Notices.Select(notice => notice.Citation));
 
     public ImmutableArray<string> OfficialIds() => [PersonId];
 
@@ -33,6 +41,11 @@ public sealed record ExecutiveActionRevision(string RecordId, int RevisionNumber
         ReviewTextRules.ValidateText(PersonId, ReviewTextRules.MaximumConfigurationIdLength, nameof(PersonId));
         if (Facts.IsDefault || !Facts.Select(fact => (fact.Label, fact.Value)).SequenceEqual(ExpectedFacts()) || Facts.Any(fact => !IsBounded(fact.Citation)))
             throw new ArgumentException("An executive action revision needs its fact lines, each with a bounded citation.");
+        if (DispositionNotes is { } notes &&
+            (notes.Label != ExecutiveActionFacts.DispositionNotes || notes.Value is null || notes.Value.Length > MaximumDispositionNotesLength ||
+             notes.Value.Contains('\0') || !IsBounded(notes.Citation) || notes.Citation.Length > DocumentExtraction.MaximumTextLength ||
+             notes.Citation.ExtractionId != Facts[0].Citation.ExtractionId))
+            throw new ArgumentException("Disposition notes need their fixed label and a bounded citation to the original document extraction.");
         if (Notices.IsDefault || Notices.Length > MaximumNotices || Notices.Any(notice => !HasBoundedFields(notice) || !IsBounded(notice.Citation)) ||
             Notices.Select(notice => notice.DocumentNumber).Distinct(StringComparer.Ordinal).Count() != Notices.Length || Notices.Any(notice => notice.DocumentNumber == DocumentNumber))
             throw new ArgumentException($"An executive action revision needs at most {MaximumNotices} distinct correction notices of other documents, each with a bounded citation.");
@@ -48,7 +61,7 @@ public sealed record ExecutiveActionRevision(string RecordId, int RevisionNumber
 
     public void ValidateAgainst(IReadOnlyDictionary<string, DocumentExtraction> extractions)
     {
-        foreach (var fact in Facts) RequireQuote(extractions, fact.Citation, fact.Text);
+        foreach (var fact in OriginalFacts) RequireQuote(extractions, fact.Citation, fact.Text);
         foreach (var notice in Notices) RequireQuote(extractions, notice.Citation, notice.Text);
     }
 

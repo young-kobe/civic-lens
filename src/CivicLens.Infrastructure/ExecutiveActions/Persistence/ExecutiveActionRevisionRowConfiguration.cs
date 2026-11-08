@@ -1,5 +1,6 @@
 using CivicLens.Core.ExecutiveActions;
 using CivicLens.Core.Review;
+using CivicLens.Infrastructure.Documents.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -31,6 +32,8 @@ internal sealed class ExecutiveActionRevisionRowConfiguration : IEntityTypeConfi
                 string.Join(" AND ", OneLineFields.Append("presidential_number").Select(OneLine)));
             table.HasCheckConstraint("ck_executive_action_revisions_dates", "signed_on <> '0001-01-01' AND published_on <> '0001-01-01'");
             table.HasCheckConstraint("ck_executive_action_revisions_columns_written", $"num_nulls({string.Join(", ", WrittenTogether)}) IN (0, {WrittenTogether.Length})");
+            table.HasCheckConstraint("ck_executive_action_revisions_disposition_notes_written",
+                "(disposition_notes IS NULL) = (disposition_notes_extraction_id IS NULL)");
         });
         builder.HasKey(row => new { row.RecordId, row.RevisionNumber });
         builder.Property(row => row.RecordId).HasColumnName("record_id").HasMaxLength(64);
@@ -51,6 +54,8 @@ internal sealed class ExecutiveActionRevisionRowConfiguration : IEntityTypeConfi
         builder.Property(row => row.PresidentName).HasColumnName("president_name").HasMaxLength(ExecutiveActionRevision.MaximumFieldLength);
         builder.Property(row => row.PersonId).HasColumnName("person_id").HasMaxLength(ReviewTextRules.MaximumConfigurationIdLength);
         builder.Property(row => row.DocumentUrl).HasColumnName("document_url").HasMaxLength(ExecutiveActionRevision.MaximumFieldLength);
+        builder.Property(row => row.DispositionNotes).HasColumnName("disposition_notes").HasMaxLength(ExecutiveActionRevision.MaximumDispositionNotesLength);
+        SourceSpanColumns.Configure(builder, "executive_action_revisions", "DispositionNotes", "disposition_notes", optional: true);
         builder.HasOne<ExecutiveActionDraftRow>().WithMany().HasForeignKey(row => row.RecordId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.Facts).WithOne().HasForeignKey(fact => new { fact.RecordId, fact.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.Notices).WithOne().HasForeignKey(notice => new { notice.RecordId, notice.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);

@@ -32,7 +32,7 @@ internal sealed class PublishedExecutiveActionBuilder(PublishedRecordRules rules
             FederalRegisterCitation = revision.FederalRegisterCitation,
             DocumentUrl = revision.DocumentUrl,
             President = rules.MapOfficial(review.RecordId, revision.PersonId),
-            Facts = [.. revision.Facts.Select(fact => Fact(fact.Label, fact.Value, fact.Citation)),
+            Facts = [.. revision.OriginalFacts.Select(fact => Fact(fact.Label, fact.Value, fact.Citation)),
                 .. revision.Notices.Select(notice => Fact(ExecutiveActionFacts.CorrectionNotice, notice.Value, notice.Citation))],
             CorrectionNotices = [.. revision.Notices.Select(notice => new PublishedExecutiveActionNotice
             {
