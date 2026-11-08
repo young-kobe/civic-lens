@@ -1,3 +1,5 @@
+using CivicLens.Publication.Contracts;
+
 namespace CivicLens.PublicWeb.Publication;
 
 /// <summary>The approved glossary wording. A change to any text here needs the approval of the owner.</summary>
@@ -36,7 +38,15 @@ public static class Glossary
             new("votes-against-their-party", "Votes against their party",
                 "The member voted yes when more members of their party voted no, or the reverse.",
                 "It shows when a member breaks from most party colleagues on a contested vote. It does not show disagreement with an official party position.",
-                "Our page How the counts work")
+                "Our page How the counts work"),
+            new("split-vote", "Split vote",
+                "Among members voting Yes or No, most Democrats and most Republicans chose opposite sides. We use this label only for substantive roll calls.",
+                "It describes how those members voted on this question. It does not name an official party position.",
+                "How the counts work", SourceHref: PublicationProtocol.MethodPagePath),
+            new("substantive-vote", "Substantive vote",
+                "We use this label for roll calls on passage, suspension of the rules, amendments, conference reports, veto overrides, or nominations.",
+                "We use this group for some vote counts and party comparisons. It does not rank how important a vote is.",
+                "How the counts work", SourceHref: PublicationProtocol.MethodPagePath)
         ]),
         new("Kinds of votes",
         [
@@ -127,7 +137,15 @@ public static class Glossary
             new("congress", "Congress (for example, the 119th Congress)",
                 "The two year period of business of the House and Senate. The 119th Congress runs from January 2025 to January 2027.",
                 "Bills that do not pass by the end of a Congress die, and must be introduced again.",
-                "Constitution Amendment XX")
+                "Constitution Amendment XX"),
+            new("concur", "Concur",
+                "To concur is to agree. When a chamber concurs in changes from the other chamber, it accepts those changes.",
+                "The vote is about the question stated on the record. It does not always settle the whole bill.",
+                "Constitution, Article I, Section 7", SourceHref: "https://www.archives.gov/founding-docs/constitution-transcript"),
+            new("delegate", "Delegate",
+                "A delegate represents the District of Columbia or a U.S. territory in the House. Puerto Rico has a Resident Commissioner. Both roles can propose bills and serve on committees, but neither may vote on final passage in the full House.",
+                "Check the kind of vote before comparing their records with representatives from states.",
+                "Office of the Clerk, House Member FAQs", SourceHref: "https://clerk.house.gov/Help/ViewMemberFAQs")
         ]),
         new("Executive actions",
         [
@@ -192,7 +210,7 @@ public static class Glossary
 
     public static readonly IReadOnlyList<string> PartyCountRules =
     [
-        "We count only split votes: a substantive roll call where most Democrats and most Republicans voted on opposite sides.",
+        "We count only split votes.",
         "A party's majority is the side, yes or no, that more of its members took. Present and Not voting do not count.",
         "A party with equal yes and no counts has no majority on that vote.",
         "We use the member's party on the day of the vote, in the same chamber.",

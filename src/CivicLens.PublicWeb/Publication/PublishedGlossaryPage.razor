@@ -39,7 +39,16 @@
                         <dt>Why it matters</dt>
                         <dd>@term.WhyItMatters</dd>
                         <dt>Source</dt>
-                        <dd>@term.Source</dd>
+                        <dd>
+                            @if (term.SourceHref is { } sourceHref)
+                            {
+                                <a href="@sourceHref">@term.Source</a>
+                            }
+                            else
+                            {
+                                @term.Source
+                            }
+                        </dd>
                     </dl>
                     @if (term.LongForm is not null)
                     {
