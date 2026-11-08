@@ -76,7 +76,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
-        foreach (var view in new[] { "active_records", "votes", "vote_members", "member_votes", "vote_issues", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas",
+        foreach (var view in new[] { "active_records", "votes", "vote_members", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas",
             "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "statement_speakers", "statements", "statement_sources", "statement_quotations", "executive_actions", "executive_action_notices", "withdrawals", "withdrawal_corrections" })
         {
             // A view with a join or a group cannot take a write at all, so Postgres refuses with 55000 before it checks a privilege.
@@ -128,6 +128,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"official_issue_counts v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_party_lines v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"officials v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"party_agreement v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"record_headlines v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"record_links v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issue_excludes v {Owner} {Role}:SELECT {{security_barrier=true}}",
@@ -975,7 +976,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     private static string WritableProbeColumn(string view) =>
-        view.StartsWith("issue_", StringComparison.Ordinal) ? "issue_id = 'x'" : view == "zip_districts" ? "zcta = 'x'" : view.StartsWith("official", StringComparison.Ordinal) ? "official_id = 'x'" : view.StartsWith("release_", StringComparison.Ordinal) ? "release_number = 1" : "record_id = 'x'";
+        view.StartsWith("issue_", StringComparison.Ordinal) ? "issue_id = 'x'" : view == "zip_districts" ? "zcta = 'x'" : view.StartsWith("official", StringComparison.Ordinal) ? "official_id = 'x'" : view.StartsWith("release_", StringComparison.Ordinal) || view == "party_agreement" ? "release_number = 1" : "record_id = 'x'";
 
     private async Task<NpgsqlConnection> OpenPublicAsync()
     {

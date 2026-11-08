@@ -10,6 +10,7 @@ using CivicLens.PublicApi.Ingest;
 using CivicLens.PublicApi.Issues;
 using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Pages;
+using CivicLens.PublicApi.PartyAgreement;
 using CivicLens.PublicApi.Records;
 using CivicLens.PublicApi.Reports;
 using CivicLens.PublicApi.Schema;
@@ -54,6 +55,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new SearchIndex(reader));
         builder.Services.AddSingleton(new ActiveReleaseReader(views));
         builder.Services.AddSingleton(new VoteStore(views));
+        builder.Services.AddSingleton(new PartyAgreementStore(views));
         builder.Services.AddSingleton(new MemberVoteStore(views));
         builder.Services.AddSingleton(new BillStore(views));
         builder.Services.AddSingleton(new StatementStore(views));
@@ -105,6 +107,7 @@ public static class PublicApiApp
         app.UseRateLimiter();
         app.MapRelease();
         app.MapVotes();
+        app.MapPartyAgreement();
         app.MapMemberVotes();
         app.MapBills();
         app.MapStatements();

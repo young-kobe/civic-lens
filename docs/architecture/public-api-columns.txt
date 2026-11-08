@@ -274,6 +274,13 @@ officials photo_path
 officials caucus
 officials term_end_on
 officials record_count
+party_agreement agreed
+party_agreement chamber
+party_agreement congress
+party_agreement kind
+party_agreement mixed
+party_agreement release_number
+party_agreement split
 official_attendance official_id
 official_attendance chamber
 official_attendance congress
