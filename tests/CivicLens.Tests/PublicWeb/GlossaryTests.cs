@@ -8,8 +8,8 @@ namespace CivicLens.Tests.PublicWeb;
 
 public sealed class GlossaryTests
 {
-    private const string ApprovedWordingHash = "897C46F1360F7E5E46B9220E91EAC9C48D327677A0E9014E67031AC0161DB33D";
-    private const int ApprovedTermCount = 39;
+    private const string ApprovedWordingHash = "4E9A305ED9F89FC5A4B0EAC334FD62DC979BA59B991CCDF4079DA8F8EDF8639A";
+    private const int ApprovedTermCount = 43;
 
     private static readonly ReleaseRenderer Renderer = new(null, null);
 
@@ -23,7 +23,7 @@ public sealed class GlossaryTests
         {
             text.Append(group.Title).Append('\n');
             foreach (var term in group.Terms)
-                text.AppendJoin('\n', term.Key, term.Name, term.Means, term.WhyItMatters, term.Source, term.LongForm).Append('\n');
+                text.AppendJoin('\n', term.Key, term.Name, term.Means, term.WhyItMatters, term.Source, term.LongForm, term.SourceHref).Append('\n');
         }
         text.Append(Glossary.PartyCountHeading).Append('\n').AppendJoin('\n', Glossary.PartyCountRules);
 
@@ -46,6 +46,15 @@ public sealed class GlossaryTests
             Assert.Contains(term.Means, text);
             Assert.Contains(term.WhyItMatters, text);
             Assert.Contains(term.Source, text);
+            if (term.SourceHref is { } sourceHref)
+            {
+                var source = entry.QuerySelector("dd:last-of-type > a");
+                Assert.NotNull(source);
+                Assert.Equal(sourceHref, source.GetAttribute("href"));
+                Assert.Equal(term.Source, source.TextContent);
+            }
+            else
+                Assert.Empty(entry.QuerySelectorAll("dd:last-of-type a"));
         }
         Assert.Equal(AllTerms.Count() + 1, main.QuerySelectorAll("section.glossary-term").Length);
         Assert.Equal(Glossary.PartyCountRules, main.QuerySelectorAll("#glossary-party-count + ul li").Select(item => item.TextContent));
