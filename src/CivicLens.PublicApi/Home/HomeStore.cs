@@ -10,6 +10,10 @@ namespace CivicLens.PublicApi.Home;
 public sealed class HomeStore(NpgsqlDataSource views)
 {
     private const int VotesPerChamber = 2;
+    private const string VoteColumns = """
+        v.record_id, v.voted_on, v.chamber, v.congress, v.session_number, v.roll_call_number,
+        v.headline, v.label, v.result, v.yea, v.nay, v.bill_type, v.bill_number, v.summary, v.text_origin, v.alignment
+        """;
 
     private const string Sql = $"""
         SELECT a.release_number, a.published_at_utc_ticks, b.record_id, b.week_start, b.headline, b.label,
@@ -23,7 +27,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
                 ORDER BY {VoteStore.Order} LIMIT 1
           ) featured_key ON TRUE
           LEFT JOIN LATERAL (
-               SELECT v.* FROM public_api.votes v
+               SELECT {VoteColumns} FROM public_api.votes v
                 WHERE v.record_id = featured_key.record_id LIMIT 1
           ) featured ON TRUE
           LEFT JOIN LATERAL (SELECT * FROM public_api.briefs b ORDER BY b.week_start DESC, b.record_id LIMIT 1) b ON TRUE
@@ -42,7 +46,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
                       SELECT false AS is_featured, recent.*
                         FROM unnest(@chambers) AS c(chamber)
                        CROSS JOIN LATERAL (
-                            SELECT v.* FROM public_api.votes v
+                            SELECT {VoteColumns} FROM public_api.votes v
                              WHERE v.chamber = c.chamber AND v.kind = ANY(@kinds) AND v.yea IS NOT NULL
                                AND (featured.record_id IS NULL OR v.record_id <> featured.record_id)
                              ORDER BY {VoteStore.Order} LIMIT @take) recent
