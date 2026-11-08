@@ -94,6 +94,14 @@ public sealed class PublishedStatementTests
     }
 
     [Fact]
+    public void RejectsAQuotationThatSplitsASurrogatePairInUtf16Offsets()
+    {
+        var statement = Statement() with { Quotations = [Quotation(13, 1, "\uDE00")] };
+
+        Assert.Throws<InvalidDataException>(statement.Validate);
+    }
+
+    [Fact]
     public void RejectsAQuotationOfAnotherExtraction()
     {
         var statement = Statement() with { Quotations = [Quotation(15, 15, "housing matters") with { ExtractionId = new string('9', 64) }] };

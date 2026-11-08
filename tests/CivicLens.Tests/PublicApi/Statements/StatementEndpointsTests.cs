@@ -124,6 +124,55 @@ public sealed class StatementEndpointsTests(PostgresCollection postgres)
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task StatementDetailReturnsActivePublishedEvidenceAndPreservesRequestedUrlAndUtf16Quotes()
+    {
+        await using var host = await StartAsync(DatedAndUndated[0] with { AddUnpublishedRevision = true });
+        const string text = "\U0001D11E date Friday | exact quote";
+        const string extractionId = "1111111111111111111111111111111111111111111111111111111111111111";
+        var quoteStart = text.IndexOf("exact quote", StringComparison.Ordinal);
+        var dateStart = text.IndexOf("Friday", StringComparison.Ordinal);
+        await AddDetailEvidenceAsync(host.OperationalDatabase, DatedAndUndated[0].RecordId, extractionId, text, quoteStart, 11, dateStart, 6);
+
+        using var response = await GetAsync(host, "/v1/statements/" + DatedAndUndated[0].RecordId);
+        var root = response.RootElement;
+        Assert.Equal(1, root.GetProperty("release").GetInt32());
+        Assert.Equal(1, root.GetProperty("statement").GetProperty("revisionNumber").GetInt32());
+        Assert.Equal(text, root.GetProperty("source").GetProperty("text").GetString());
+        Assert.Equal("https://feed.example/rss", root.GetProperty("source").GetProperty("url").GetString());
+        Assert.Equal("https://article.example/story", root.GetProperty("articleUrl").GetString());
+        Assert.Equal("exact quote", root.GetProperty("quotations")[0].GetProperty("quote").GetString());
+        Assert.Equal("Friday", root.GetProperty("statementDateEvidence").GetProperty("quote").GetString());
+        Assert.DoesNotContain("replacement text", root.GetRawText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StatementDetailDistinguishesMissingRecordFromMissingActiveRelease()
+    {
+        await using (var unavailable = await ApiHost.StartAsync(postgres, new FakeReleaseSite()))
+        using (var noRelease = await unavailable.Client.GetAsync("/v1/statements/" + new string('a', 64)))
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, noRelease.StatusCode);
+
+        await using var host = await StartAsync(DatedAndUndated[0]);
+        using var missing = await host.Client.GetAsync("/v1/statements/" + new string('f', 64));
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(999, 1)]
+    [InlineData(1, 1)]
+    public async Task StatementDetailRejectsStoredOffsetsOutsideTextOrInsideASurrogatePair(int start, int length)
+    {
+        await using var host = await StartAsync(DatedAndUndated[0]);
+        const string text = "\U0001D11E date Friday | exact quote";
+        const string extractionId = "1111111111111111111111111111111111111111111111111111111111111111";
+        var dateStart = text.IndexOf("Friday", StringComparison.Ordinal);
+        await AddDetailEvidenceAsync(host.OperationalDatabase, DatedAndUndated[0].RecordId, extractionId, text, start, length, dateStart, 6);
+
+        using var invalid = await host.Client.GetAsync("/v1/statements/" + DatedAndUndated[0].RecordId);
+        Assert.Equal(HttpStatusCode.InternalServerError, invalid.StatusCode);
+    }
+
     private async Task<ApiHost> StartAsync(params SeededStatement[] statements)
     {
         var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
@@ -139,6 +188,26 @@ public sealed class StatementEndpointsTests(PostgresCollection postgres)
             throw;
         }
     }
+
+    private static Task AddDetailEvidenceAsync(string database, string recordId, string extractionId, string text,
+        int quoteStart, int quoteLength, int dateStart, int dateLength) => ViewsSeed.ExecuteAsync(database, $"""
+            SET session_replication_role = replica;
+            INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks,
+                outcome, has_response, response_status_code, response_content_encodings, has_sent_validators,
+                capture_sha256, elapsed_milliseconds)
+            VALUES ('attempt-detail', 'source', 'https://feed.example/rss', 'https://cdn.example/rss', 123,
+                'captured', true, 200, ARRAY[]::text[], false, REPEAT('a', 64), 0);
+            INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
+            VALUES ('{extractionId}', 'attempt-detail', 'test', '{text}', REPEAT('b', 64));
+            INSERT INTO statement_candidates (candidate_id, source_id, url, extraction_id, attempt_id, created_at_utc_ticks)
+            VALUES ('{recordId}', 'source', 'https://article.example/story', '{extractionId}', 'attempt-detail', 1);
+            UPDATE statement_revisions SET statement_date_evidence_extraction_id = '{extractionId}',
+                statement_date_evidence_start = {dateStart}, statement_date_evidence_length = {dateLength}
+             WHERE candidate_id = '{recordId}' AND revision_number = 1;
+            INSERT INTO statement_revision_quotations (candidate_id, revision_number, position, quotation_extraction_id,
+                quotation_start, quotation_length, kind)
+            VALUES ('{recordId}', 1, 0, '{extractionId}', {quoteStart}, {quoteLength}, 'DirectQuotation');
+            """);
 
     private static async Task<JsonDocument> GetAsync(ApiHost host, string path, HttpStatusCode expected = HttpStatusCode.OK)
     {

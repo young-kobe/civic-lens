@@ -47,31 +47,35 @@ public sealed record PublishedStatement
             throw new InvalidDataException("Published record identity or wording is invalid.");
         if (ApprovedBy == PublishedApprover.Code && TextOrigin != PublishedTextOrigin.Model)
             throw new InvalidDataException("Code approves only text that a model wrote.");
-        PublishedEvidenceRules.RequireVersion(Source);
-        if (ArticleUrl is not null) PublishedEvidenceRules.RequireWebUrl(ArticleUrl);
-        if (Quotations is null || Quotations.Length is 0 or > MaximumQuotations)
-            throw new InvalidDataException($"Published statement requires 1 to {MaximumQuotations} quotations.");
-        foreach (var quotation in Quotations) ValidateQuotation(quotation);
         if ((StatementDate is null) != (StatementDateEvidence is null))
             throw new InvalidDataException("A statement date requires exact evidence.");
-        if (StatementDateEvidence is not null)
-            ValidateSpan(StatementDateEvidence.ExtractionId, StatementDateEvidence.Start, StatementDateEvidence.Length,
-                StatementDateEvidence.Quote);
+        ValidateContent(Source, Quotations, StatementDateEvidence, ArticleUrl);
         ValidateLabels();
     }
 
-    private void ValidateQuotation(PublishedQuotation? quotation)
+    public static void ValidateContent(PublishedDocumentVersion source, PublishedQuotation[] quotations,
+        PublishedCitation? statementDateEvidence, string? articleUrl = null)
     {
-        if (quotation is null || !Enum.IsDefined(quotation.Kind))
-            throw new InvalidDataException("Published quotation is missing or has an unknown kind.");
-        ValidateSpan(quotation.ExtractionId, quotation.Start, quotation.Length, quotation.Quote);
+        PublishedEvidenceRules.RequireVersion(source);
+        if (articleUrl is not null) PublishedEvidenceRules.RequireWebUrl(articleUrl);
+        if (quotations is null || quotations.Length is 0 or > MaximumQuotations)
+            throw new InvalidDataException($"Published statement requires 1 to {MaximumQuotations} quotations.");
+        foreach (var quotation in quotations)
+        {
+            if (quotation is null || !Enum.IsDefined(quotation.Kind))
+                throw new InvalidDataException("Published quotation is missing or has an unknown kind.");
+            ValidateSpan(source, quotation.ExtractionId, quotation.Start, quotation.Length, quotation.Quote);
+        }
+        if (statementDateEvidence is not null)
+            ValidateSpan(source, statementDateEvidence.ExtractionId, statementDateEvidence.Start, statementDateEvidence.Length,
+                statementDateEvidence.Quote);
     }
 
-    private void ValidateSpan(string extractionId, int start, int length, string quote)
+    private static void ValidateSpan(PublishedDocumentVersion source, string extractionId, int start, int length, string quote)
     {
-        if (extractionId != Source.ExtractionId)
+        if (extractionId != source.ExtractionId)
             throw new InvalidDataException("Published citation must cite the source of the statement.");
-        PublishedEvidenceRules.RequireQuote(Source.Text, start, length, quote);
+        PublishedEvidenceRules.RequireQuote(source.Text, start, length, quote);
     }
 
     private void ValidateLabels()

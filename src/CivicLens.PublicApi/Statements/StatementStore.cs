@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Text.Json;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
 using Npgsql;
@@ -8,6 +9,63 @@ namespace CivicLens.PublicApi.Statements;
 
 public sealed class StatementStore(NpgsqlDataSource views)
 {
+    private const string DetailSql = """
+        SELECT a.release_number, s.record_id, s.revision_number, s.statement_date, s.headline, s.summary, s.text_origin, s.label,
+               ARRAY(SELECT p.official_id FROM public_api.statement_speakers p
+                      WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number ORDER BY p."position"),
+               s.issue_ids, src.extraction_id, src.url, src.observed_at_utc_ticks, src.text, src.article_url,
+               src.statement_date_evidence_extraction_id, src.statement_date_evidence_start, src.statement_date_evidence_length,
+               (SELECT json_agg(json_build_object('extractionId', q.extraction_id,
+                    'start', q.quotation_start, 'length', q.quotation_length, 'kind', q.kind) ORDER BY q.position)
+                  FROM (SELECT record_id, revision_number, position, extraction_id, quotation_start, quotation_length, kind
+                          FROM public_api.statement_quotations
+                         WHERE record_id = s.record_id AND revision_number = s.revision_number ORDER BY position LIMIT @quotation_limit) q)
+          FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+          LEFT JOIN public_api.statements s ON s.record_id = @id
+          LEFT JOIN public_api.statement_sources src ON src.record_id = s.record_id AND src.revision_number = s.revision_number
+        """;
+
+    public async Task<(int? Release, StatementDetail? Detail)> FindAsync(string recordId, CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand(DetailSql);
+        command.Parameters.AddWithValue("id", recordId);
+        command.Parameters.AddWithValue("quotation_limit", PublishedStatement.MaximumQuotations + 1);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken) || reader.IsDBNull(0)) return (null, null);
+        if (reader.IsDBNull(1)) return (reader.GetInt32(0), null);
+        if (reader.IsDBNull(10) || reader.IsDBNull(11) || reader.IsDBNull(12) || reader.IsDBNull(13) || reader.IsDBNull(18))
+            throw new InvalidDataException("The active statement has no published evidence content.");
+
+        var statement = ReadRow(reader);
+        var source = new PublishedDocumentVersion
+        {
+            ExtractionId = reader.GetString(10),
+            Url = reader.GetString(11),
+            ObservedAtUtc = new DateTimeOffset(reader.GetInt64(12), TimeSpan.Zero),
+            Text = reader.GetString(13)
+        };
+        if (source.Text.Length > PublishedDocumentVersion.MaximumTextLength)
+            throw new InvalidDataException("Published source text exceeds its maximum length.");
+        var rows = JsonSerializer.Deserialize<StatementDetailRow[]>(reader.GetString(18), PublicationProtocol.JsonOptions)
+            ?? throw new InvalidDataException("The statement quotations view returned invalid content.");
+        if (rows.Length is 0 or > PublishedStatement.MaximumQuotations)
+            throw new InvalidDataException($"Published statement requires 1 to {PublishedStatement.MaximumQuotations} quotations.");
+        var quotations = rows.Select(row => new PublishedQuotation
+        {
+            ExtractionId = row.ExtractionId,
+            Start = row.Start,
+            Length = row.Length,
+            Quote = QuoteAt(source.Text, row.Start, row.Length),
+            Kind = Enum.TryParse<PublishedQuotationKind>(row.Kind, out var kind) && Enum.IsDefined(kind)
+                ? kind
+                : throw new InvalidDataException("The statement quotations view holds an unknown kind.")
+        }).ToArray();
+        var dateEvidence = ReadDateEvidence(reader, source.Text);
+        var articleUrl = ViewColumns.Text(reader, 14);
+        PublishedStatement.ValidateContent(source, quotations, dateEvidence, articleUrl);
+        return (reader.GetInt32(0), new(reader.GetInt32(0), statement, source, articleUrl, dateEvidence, quotations));
+    }
+
     public async Task<StatementPage?> ListAsync(StatementRequest request, CancellationToken cancellationToken)
     {
         await using var command = views.CreateCommand($"""
@@ -74,4 +132,25 @@ public sealed class StatementStore(NpgsqlDataSource views)
         SpeakerIds = reader.GetFieldValue<string[]>(8),
         IssueIds = reader.GetFieldValue<string[]>(9)
     };
+
+    private static PublishedCitation? ReadDateEvidence(DbDataReader reader, string sourceText)
+    {
+        if (reader.IsDBNull(15) && reader.IsDBNull(16) && reader.IsDBNull(17)) return null;
+        if (reader.IsDBNull(15) || reader.IsDBNull(16) || reader.IsDBNull(17))
+            throw new InvalidDataException("The published statement date evidence is incomplete.");
+        var start = reader.GetInt32(16);
+        var length = reader.GetInt32(17);
+        return new()
+        {
+            ExtractionId = reader.GetString(15),
+            Start = start,
+            Length = length,
+            Quote = QuoteAt(sourceText, start, length)
+        };
+    }
+
+    private static string QuoteAt(string text, int start, int length) =>
+        start >= 0 && length > 0 && start <= text.Length - length
+            ? text.Substring(start, length)
+            : throw new InvalidDataException("Published citation quote does not match its offsets.");
 }
