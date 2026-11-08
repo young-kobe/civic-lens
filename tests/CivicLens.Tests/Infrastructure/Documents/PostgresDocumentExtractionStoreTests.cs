@@ -10,6 +10,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Collection.Contracts;
 using CivicLens.Core.Collection;
 using CivicLens.Core.Documents;
+using CivicLens.Core.Review;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Processing;
@@ -206,6 +207,8 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
 
         Assert.Equal(DocumentComparisonStatus.Incompatible, incompatible.Status);
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM document_comparisons"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_comparison_hunks"));
+        Assert.Equal(0L, await ScalarAsync("SELECT hunk_count::bigint FROM document_comparisons"));
         Assert.Null(await comparisons.GetAsync(incompatible.ComparisonId, CancellationToken.None));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_change_analysis"));
     }
@@ -238,7 +241,261 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         await Assert.ThrowsAnyAsync<Exception>(() => comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None));
 
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_comparisons"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_comparison_hunks"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_comparison_word_edits"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_change_analysis"));
+    }
+
+    [Fact]
+    public async Task ComparisonRowsRetainOrderedUtf16OffsetsAndRebuildExactCrLfSpans()
+    {
+        const string beforeText = "A\U0001D11E old\r\nkeep";
+        const string afterText = "A\U0001D11E new\r\nkeep";
+        var before = new DocumentExtraction(await ImportAsync(beforeText), "p", beforeText);
+        var after = new DocumentExtraction(await ImportAsync(afterText), "p", afterText);
+        await extractions.SaveAsync(before, CancellationToken.None);
+        await extractions.SaveAsync(after, CancellationToken.None);
+        var store = new PostgresDocumentComparisonStore(factory);
+        var comparison = await store.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None);
+        var hunk = Assert.Single(comparison.Hunks);
+        Assert.Equal("A\U0001D11E old\r\n", before.Text.Substring(hunk.BeforeStart, hunk.BeforeLength));
+        Assert.Equal("A\U0001D11E new\r\n", after.Text.Substring(hunk.AfterStart, hunk.AfterLength));
+        Assert.Equal(before.Text, before.Text.Substring(hunk.BeforeContextStart, hunk.BeforeContext.Length));
+        Assert.Equal(after.Text, after.Text.Substring(hunk.AfterContextStart, hunk.AfterContext.Length));
+        var wordEdit = Assert.Single(hunk.WordEdits);
+        Assert.Equal("old", before.Text.Substring(wordEdit.BeforeStart, wordEdit.BeforeLength));
+        Assert.Equal("new", after.Text.Substring(wordEdit.AfterStart, wordEdit.AfterLength));
+        var replay = await store.GetAsync(comparison.ComparisonId, CancellationToken.None);
+        Assert.Equal(JsonSerializer.Serialize(comparison, CollectionProtocol.JsonOptions),
+            JsonSerializer.Serialize(replay, CollectionProtocol.JsonOptions));
+
+        await using var db = await factory.CreateDbContextAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparison_hunks SET before_start = {hunk.BeforeStart + 1} WHERE comparison_id = {comparison.ComparisonId}");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.GetAsync(comparison.ComparisonId, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None));
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparison_hunks SET before_start = {hunk.BeforeStart} WHERE comparison_id = {comparison.ComparisonId}");
+        await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM document_comparison_word_edits WHERE comparison_id = {comparison.ComparisonId}");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.GetAsync(comparison.ComparisonId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ComparisonDetailsBackfillExaminesBoundedRowsAndSkipsTamperedJsonWithoutPartialRows()
+    {
+        var first = await SaveComparisonAsync("old first", "new first");
+        var second = await SaveComparisonAsync("old second", "new second");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            foreach (var comparison in new[] { first, second })
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM document_comparison_hunks WHERE comparison_id = {comparison.ComparisonId}");
+                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparisons SET hunk_count = NULL WHERE comparison_id = {comparison.ComparisonId}");
+            }
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparisons SET result_json = '{{}}' WHERE comparison_id = {second.ComparisonId}");
+        }
+
+        var handler = new BackfillDocumentComparisonDetails(new PostgresDocumentComparisonStore(factory));
+        var result = await handler.ExecuteAsync(new ReviewActor("owner", ReviewRole.Owner), 2);
+
+        Assert.Equal(2, result.Examined);
+        Assert.Equal(1, result.Moved);
+        Assert.Equal(1, result.Skipped);
+        Assert.Single(result.SkippedComparisonIds);
+        await using var verify = await factory.CreateDbContextAsync();
+        Assert.Equal(1, await verify.Database.SqlQuery<int>($"SELECT count(*)::integer AS \"Value\" FROM document_comparisons WHERE hunk_count IS NOT NULL").SingleAsync());
+        Assert.Equal(1, await verify.Database.SqlQuery<int>($"SELECT count(*)::integer AS \"Value\" FROM document_comparison_hunks").SingleAsync());
+        Assert.Equal(0, await verify.Database.SqlQuery<int>($"SELECT count(*)::integer AS \"Value\" FROM document_comparison_hunks WHERE comparison_id = {second.ComparisonId}").SingleAsync());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(99)]
+    public async Task ComparisonDetailsBackfillSkipsUnverifiedRowsThatAlreadyHaveHunksAndContinues(int position)
+    {
+        var stale = await SaveComparisonAsync("old legacy", "new legacy");
+        var valid = await SaveComparisonAsync("old valid", "new valid");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM document_comparison_hunks WHERE comparison_id IN ({stale.ComparisonId}, {valid.ComparisonId})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparisons SET hunk_count = NULL WHERE comparison_id = {stale.ComparisonId}");
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO document_comparison_hunks (comparison_id, position, before_start, before_length,
+                    after_start, after_length, before_context_start, before_context_length, after_context_start,
+                    after_context_length, word_edit_count)
+                VALUES ({stale.ComparisonId}, {position}, 0, 1, 0, 1, 0, 1, 0, 1, 0)
+                """);
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparisons SET hunk_count = NULL WHERE comparison_id = {valid.ComparisonId}");
+        }
+
+        var result = await new BackfillDocumentComparisonDetails(new PostgresDocumentComparisonStore(factory))
+            .ExecuteAsync(new ReviewActor("owner", ReviewRole.Owner), 2);
+
+        Assert.Equal(2, result.Examined);
+        Assert.Equal(1, result.Moved);
+        Assert.Equal(1, result.Skipped);
+        Assert.Equal(stale.ComparisonId, Assert.Single(result.SkippedComparisonIds));
+        await using var verify = await factory.CreateDbContextAsync();
+        Assert.Null(await verify.Database.SqlQuery<int?>($"SELECT hunk_count AS \"Value\" FROM document_comparisons WHERE comparison_id = {stale.ComparisonId}").SingleAsync());
+        Assert.Equal($"{position},0,1,0,1,0,1,0,1,0", await verify.Database.SqlQuery<string>($"""
+            SELECT concat_ws(',', position, before_start, before_length, after_start, after_length,
+                before_context_start, before_context_length, after_context_start, after_context_length,
+                word_edit_count) AS "Value"
+            FROM document_comparison_hunks WHERE comparison_id = {stale.ComparisonId}
+            """).SingleAsync());
+        Assert.Equal(1, await verify.Database.SqlQuery<int>($"SELECT count(*)::integer AS \"Value\" FROM document_comparison_hunks WHERE comparison_id = {stale.ComparisonId}").SingleAsync());
+        Assert.Equal(valid.Hunks.Length, await verify.Database.SqlQuery<int>($"SELECT hunk_count AS \"Value\" FROM document_comparisons WHERE comparison_id = {valid.ComparisonId}").SingleAsync());
+        Assert.Equal(valid.Hunks.Length, await verify.Database.SqlQuery<int>($"SELECT count(*)::integer AS \"Value\" FROM document_comparison_hunks WHERE comparison_id = {valid.ComparisonId}").SingleAsync());
+    }
+
+    [Fact]
+    public async Task ComparisonDetailsBackfillProvesSavedOffsetsBeforeCountingARowAsMoved()
+    {
+        var altered = await SaveComparisonAsync("before altered", "after altered");
+        var valid = await SaveComparisonAsync("before valid", "after valid");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM document_comparison_hunks WHERE comparison_id IN ({altered.ComparisonId}, {valid.ComparisonId})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparisons SET hunk_count = NULL WHERE comparison_id IN ({altered.ComparisonId}, {valid.ComparisonId})");
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE FUNCTION alter_comparison_hunk() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    IF NEW.comparison_id = TG_ARGV[0] THEN
+                        NEW.before_start = NEW.before_start + 1;
+                    END IF;
+                    RETURN NEW;
+                END $$;
+                """);
+            var triggerSql = $"""
+                CREATE TRIGGER alter_comparison_hunk BEFORE INSERT ON document_comparison_hunks
+                FOR EACH ROW EXECUTE FUNCTION alter_comparison_hunk('{altered.ComparisonId}')
+                """;
+            await db.Database.ExecuteSqlRawAsync(triggerSql);
+        }
+
+        var result = await new BackfillDocumentComparisonDetails(new PostgresDocumentComparisonStore(factory))
+            .ExecuteAsync(new ReviewActor("owner", ReviewRole.Owner), 2);
+
+        Assert.Equal(2, result.Examined);
+        Assert.Equal(1, result.Moved);
+        Assert.Equal(altered.ComparisonId, Assert.Single(result.SkippedComparisonIds));
+        await using var verify = await factory.CreateDbContextAsync();
+        Assert.Null(await verify.Database.SqlQuery<int?>($"SELECT hunk_count AS \"Value\" FROM document_comparisons WHERE comparison_id = {altered.ComparisonId}").SingleAsync());
+        Assert.Equal(0, await verify.Database.SqlQuery<int>($"SELECT count(*)::integer AS \"Value\" FROM document_comparison_hunks WHERE comparison_id = {altered.ComparisonId}").SingleAsync());
+        Assert.Equal(valid.Hunks.Length, await verify.Database.SqlQuery<int>($"SELECT hunk_count AS \"Value\" FROM document_comparisons WHERE comparison_id = {valid.ComparisonId}").SingleAsync());
+        Assert.NotNull(await new PostgresDocumentComparisonStore(factory).GetAsync(valid.ComparisonId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ComparisonReplayAndLegacyBackfillSerializeOnTheComparisonRow()
+    {
+        var comparison = await SaveComparisonAsync("legacy before", "legacy after");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM document_comparison_hunks WHERE comparison_id = {comparison.ComparisonId}");
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE document_comparisons SET hunk_count = NULL WHERE comparison_id = {comparison.ComparisonId}");
+        }
+
+        var pause = new PauseComparisonWinnerRead();
+        var replayOptions = new DbContextOptionsBuilder<CollectionAttemptDbContext>()
+            .UseNpgsql(connectionString).AddInterceptors(pause).Options;
+        var replayFactory = new PooledDbContextFactory<CollectionAttemptDbContext>(replayOptions);
+        var replayStore = new PostgresDocumentComparisonStore(replayFactory);
+        var backfillApplication = "comparison-backfill-" + Guid.NewGuid().ToString("N");
+        var backfillConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            ApplicationName = backfillApplication
+        }.ConnectionString;
+        var backfillFactory = new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(backfillConnectionString).Options);
+        var backfillStore = new PostgresDocumentComparisonStore(backfillFactory);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var replayTask = replayStore.CompareAndSaveAsync(
+            comparison.BeforeExtractionId, comparison.AfterExtractionId, cancellation.Token);
+        Task<DocumentComparisonBackfillBatch>? backfillTask = null;
+        try
+        {
+            await pause.WinnerRead.WaitAsync(cancellation.Token);
+            backfillTask = backfillStore.BackfillBatchAsync(null, 1, cancellation.Token);
+            var started = DateTime.UtcNow;
+            var backfillCompletedBeforeReplay = false;
+            var backfillWaitingOnRowLock = false;
+            while (DateTime.UtcNow - started < TimeSpan.FromSeconds(5))
+            {
+                if (backfillTask.IsCompleted)
+                {
+                    backfillCompletedBeforeReplay = true;
+                    break;
+                }
+                if (await IsApplicationWaitingForLockAsync(backfillApplication, cancellation.Token))
+                {
+                    backfillWaitingOnRowLock = true;
+                    break;
+                }
+                await Task.Delay(25, cancellation.Token);
+            }
+
+            Assert.True(backfillCompletedBeforeReplay || backfillWaitingOnRowLock,
+                "Backfill neither completed nor exposed its wait for the comparison row lock within the bound.");
+            pause.Resume();
+            Assert.Equal(comparison.ComparisonId, (await replayTask.WaitAsync(cancellation.Token)).ComparisonId);
+            var batch = await backfillTask.WaitAsync(cancellation.Token);
+            Assert.Equal(1, batch.Examined);
+            Assert.Empty(batch.Skipped);
+        }
+        finally
+        {
+            pause.Resume();
+            await cancellation.CancelAsync();
+            var work = Task.WhenAll(replayTask, (Task?)backfillTask ?? Task.CompletedTask);
+            try
+            {
+                await work.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception) when (work.IsCompleted)
+            {
+            }
+        }
+
+        var replay = await new PostgresDocumentComparisonStore(factory).GetAsync(comparison.ComparisonId, CancellationToken.None);
+        Assert.Equal(JsonSerializer.Serialize(comparison, CollectionProtocol.JsonOptions),
+            JsonSerializer.Serialize(replay, CollectionProtocol.JsonOptions));
+    }
+
+    private async Task<bool> IsApplicationWaitingForLockAsync(string applicationName, CancellationToken cancellationToken)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("""
+            SELECT EXISTS (
+                SELECT 1 FROM pg_stat_activity
+                WHERE datname = current_database() AND application_name = @application_name
+                    AND state = 'active' AND wait_event_type = 'Lock')
+            """, connection);
+        command.Parameters.AddWithValue("application_name", applicationName);
+        return (bool)(await command.ExecuteScalarAsync(cancellationToken))!;
+    }
+
+    private sealed class PauseComparisonWinnerRead : DbCommandInterceptor
+    {
+        private readonly TaskCompletionSource winnerRead = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource resumed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int paused;
+
+        public Task WinnerRead => winnerRead.Task;
+
+        public void Resume() => resumed.TrySetResult();
+
+        public override async ValueTask<DbDataReader> ReaderExecutedAsync(DbCommand command,
+            CommandExecutedEventData eventData, DbDataReader result, CancellationToken cancellationToken = default)
+        {
+            var normalized = command.CommandText.Replace("\"", "", StringComparison.Ordinal);
+            if (normalized.Contains("from document_comparisons", StringComparison.OrdinalIgnoreCase) &&
+                Interlocked.Exchange(ref paused, 1) == 0)
+            {
+                winnerRead.TrySetResult();
+                await resumed.Task.WaitAsync(cancellationToken);
+            }
+            return result;
+        }
     }
 
     private async Task<DocumentComparison> SaveComparisonAsync(string beforeText, string afterText)

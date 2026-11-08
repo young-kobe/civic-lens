@@ -13,6 +13,7 @@ The documents feature turns verified captures into immutable text extractions, e
 - One private HTML method serves captures and HTML fragments. One owner holds the HTML rules and limits.
 - History and comparison reject overflow. They never return a partial result.
 - A stored comparison is never reinterpreted. A new algorithm or settings version gives new rows a new ID.
+- Stored comparison details contain offsets and lengths only. Readers rebuild text from the exact retained extractions.
 - Neither an extraction, a citation, nor a comparison is a human approval.
 
 ## Invariants
@@ -24,6 +25,8 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - A read verifies the text hash and the identity. Enforced by `PostgresDocumentExtractionStore`. Test: `PostgresDocumentExtractionStoreTests.RejectsChangedProvenanceAndDetectsStoredTextTampering`.
 - Versions that differ give an Incompatible comparison, not a diff. Enforced by `DocumentComparison`. Test: `DocumentComparisonTests.RequiresEqualProfileRevisionAndProcessingVersions`.
 - The comparison store saves only a result that it computed from retained extractions, and only when the status is Complete. Enforced by `PostgresDocumentComparisonStore.CompareAndSaveAsync`, the only save path. Test: `PostgresDocumentExtractionStoreTests.AnIncompleteComparisonSavesAndQueuesNothing`.
+- A verified comparison has ordered hunk rows and declared word edit counts, all matching the exact computed result. Enforced by `PostgresDocumentComparisonStore`; test: `PostgresDocumentExtractionStoreTests.ComparisonRowsRetainOrderedUtf16OffsetsAndRebuildExactCrLfSpans`.
+- A legacy comparison is marked verified only after its retained extraction comparison matches its JSON and all detail rows commit. Enforced by `BackfillDocumentComparisonDetails` and `PostgresDocumentComparisonStore.BackfillBatchAsync`; test: `PostgresDocumentExtractionStoreTests.ComparisonDetailsBackfillExaminesBoundedRowsAndSkipsTamperedJsonWithoutPartialRows`.
 - Concurrent saves of one identity keep one row, and only the inserting transaction runs the follow-on writes (candidate registration, draft analysis queue row). Enforced by `INSERT ... ON CONFLICT DO NOTHING` in both stores. Test for one row: `PostgresDocumentExtractionStoreTests.ComparisonReplayBindsRetainedEvidenceAndDetectsTampering`. No test for the follow-on writes: the loser returns before commit, and the follow-on inserts are idempotent.
 - A processing checkpoint accepts only a complete, verified comparison of its own extraction. Enforced by `PostgresEvidenceProcessingStore`. Test: `PostgresDocumentExtractionStoreTests.AProcessingCheckpointRejectsAStoredComparisonThatIsNotComplete`.
 
@@ -123,10 +126,11 @@ A malformed link returns 400, and missing evidence returns 404. A storage or rec
 - The nullable `profile_json` column holds the profile snapshot. Old rows are whole-body extractions with unchanged IDs. A changed or removed stored profile fails identity verification.
 - Absent profile fields are null and are left out of configuration snapshots. Older canonical snapshots therefore stay readable.
 - Captures stay as files. Extracted text lives in Postgres. No public serving path reads this store.
-- `document_comparisons` has foreign keys to both extractions. It stores the algorithm and settings versions and the serialized result.
-- A save takes no advisory lock. It inserts with `ON CONFLICT DO NOTHING` in one ReadCommitted transaction. A replay that finds the row checks the retained row against the computed result and throws on a mismatch. The store computes the result from retained extractions, so fabricated text cannot reuse an extraction identity.
+- `document_comparisons` has foreign keys to both extractions. It stores algorithm and settings versions, staged `result_json`, and the nullable hunk verification marker. `document_comparison_hunks` stores ordered changed and context offsets and lengths, plus each hunk's word edit count. `document_comparison_word_edits` stores ordered changed-span offsets and lengths. Neither child table duplicates extracted text.
+- A save takes no advisory lock. It inserts with `ON CONFLICT DO NOTHING` in one ReadCommitted transaction. A replay locks the existing parent with `FOR SHARE` before checking its details. This serializes the check with a backfill's `FOR UPDATE`, so the marker and children cannot come from different commits. A mismatch fails the replay. The store computes the result from retained extractions, so fabricated text cannot reuse an extraction identity.
 - Reads that act on evidence revalidate the extractions and compute the result again to find conflicts. The New changes list reads only the stored result; see [review](review.md#storage-and-contracts).
-- The comparison save also queues AI drafting in the same transaction; see [analysis](analysis.md#behavior).
+- The comparison save writes the parent and ordered details, then queues AI drafting in the same transaction; see [analysis](analysis.md#behavior). Hunk and context text is reconstructed from exact UTF-16 slices of retained extraction text. CRLF stays in the slice. `hunk_count` is null for legacy rows that have not passed conversion, zero for a verified unchanged comparison, and otherwise equals the hunk row count. The JSON remains temporarily for existing operational readers during the staged backfill. No public reader uses JSON as a fallback.
+- `documents comparisons backfill <limit>` is owner-only. It examines at most the requested number of rows in batches of 25 and reports at most 50 skipped IDs. Each row must match its extractions and JSON and have no existing details. The store reads the saved parent and bounded children back within the savepoint to prove their exact shape. This read detects a storage mismatch before the row counts as moved. An invalid row does not keep partial details. See [operations](../operations.md#backfill-comparison-details).
 - `db migrate` installs the comparison table. Version owners are in [Behavior versions](../architecture.md#behavior-versions).
 
 ## Code map
@@ -134,10 +138,10 @@ A malformed link returns 400, and missing evidence returns 404. A storage or rec
 | Concern | Files |
 |---|---|
 | Domain values and comparison | `src/CivicLens.Core/Documents/DocumentExtraction.cs`, `src/CivicLens.Core/Documents/DocumentContentProfile.cs`, `src/CivicLens.Core/Documents/DocumentTextSpan.cs`, `src/CivicLens.Core/Documents/SourceSpan.cs`, `src/CivicLens.Core/Documents/DocumentComparison.cs`, `src/CivicLens.Core/Documents/DocumentLines.cs` |
-| Use cases and ports | `src/CivicLens.Application/Documents/ExtractDocument.cs`, `src/CivicLens.Application/Documents/GetDocumentHistory.cs`, `src/CivicLens.Application/Documents/CompareDocuments.cs`, `src/CivicLens.Application/Documents/GetDocumentCitation.cs`, `src/CivicLens.Application/Documents/IDocumentTextExtractor.cs` |
+| Use cases and ports | `src/CivicLens.Application/Documents/ExtractDocument.cs`, `src/CivicLens.Application/Documents/GetDocumentHistory.cs`, `src/CivicLens.Application/Documents/CompareDocuments.cs`, `src/CivicLens.Application/Documents/GetDocumentCitation.cs`, `src/CivicLens.Application/Documents/BackfillDocumentComparisonDetails.cs`, `src/CivicLens.Application/Documents/IDocumentComparisonBackfillStore.cs`, `src/CivicLens.Application/Documents/IDocumentTextExtractor.cs` |
 | Profile mapping | `src/CivicLens.Application/Documents/DocumentProfileConfiguration.cs` |
 | Text extraction | `src/CivicLens.Infrastructure/Documents/CaptureDocumentTextExtractor.cs` |
-| Postgres stores | `src/CivicLens.Infrastructure/Documents/PostgresDocumentExtractionStore.cs` (`SaveAsync` and `SaveFeedItemsAsync` share one insert), `src/CivicLens.Infrastructure/Documents/PostgresDocumentHistoryStore.cs`, `src/CivicLens.Infrastructure/Documents/PostgresDocumentComparisonStore.cs` |
+| Postgres stores | `src/CivicLens.Infrastructure/Documents/PostgresDocumentExtractionStore.cs` (`SaveAsync` and `SaveFeedItemsAsync` share one insert), `src/CivicLens.Infrastructure/Documents/PostgresDocumentHistoryStore.cs`, `src/CivicLens.Infrastructure/Documents/PostgresDocumentComparisonStore.cs`, `src/CivicLens.Infrastructure/Documents/Persistence/DocumentComparisonHunkRow.cs`, `src/CivicLens.Infrastructure/Documents/Persistence/DocumentComparisonWordEditRow.cs` |
 | Source span columns | `src/CivicLens.Infrastructure/Documents/Persistence/SourceSpanColumns.cs` (the three columns, the extraction key, and the bounds check of a cited span, for every feature that cites one) |
 | Evidence pages and CLI | `src/CivicLens.Host/Documents/ComparisonPage.razor`, `src/CivicLens.Host/Documents/HistoryPage.razor`, `src/CivicLens.Host/Documents/CitationPage.razor`, `src/CivicLens.Host/Documents/ExtractionPage.razor`, `src/CivicLens.Host/Documents/DocumentCommand.cs` |
 | Parser parity test | `tests/CivicLens.Tests/Infrastructure/Documents/HtmlParseParityTests.cs` |
@@ -146,7 +150,7 @@ A malformed link returns 400, and missing evidence returns 404. A storage or rec
 
 - Automatic navigation filtering is planned.
 - A page without a content profile blocks with `contentProfileUnavailable`. On 2026-10-16, 12 of 30 sampled House feeds blocked this way. In `config/federal-coverage.json`, 282 of 1,394 page, HTML, and feed sources have no profile. See [D-12](../roadmap.md#pending-decisions).
-- Future cleanup ([R-31](../roadmap.md#later)): a saved comparison keeps hunk and context text that its exact offsets can rebuild from the two extractions. Remove this redundant copy.
+- Staged migration: switch the existing operational readers from `result_json` to verified detail rows, then remove `result_json` and temporary JSON verification. Keep the row backfill available until all rows have a non-null marker.
 - Keep document history available for investigation.
 
 Document-change acceptance:

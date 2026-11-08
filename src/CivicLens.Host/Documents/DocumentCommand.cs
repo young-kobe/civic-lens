@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Documents;
 using CivicLens.Collection.Contracts;
+using CivicLens.Core.Review;
 
 namespace CivicLens.Host.Documents;
 
@@ -20,15 +21,26 @@ internal static class DocumentCommand
 
     public static bool Matches(string[] args) => args is ["documents", "extract", _, _] or ["documents", "extract", _, _, _] or
         ["documents", "get", _] or ["documents", "cite", _, _, _] or
-        ["documents", "history", _, _] or ["documents", "compare", _, _] or ["documents", "comparison", _];
+        ["documents", "history", _, _] or ["documents", "compare", _, _] or ["documents", "comparison", _] or
+        ["documents", "comparisons", "backfill", _];
 
     public static async Task<int> ExecuteAsync(string[] args, ICollectionAttemptStore attempts,
         IDocumentTextExtractor extractor, IDocumentExtractionStore extractions, CancellationToken cancellationToken,
         CollectionConfiguration? configuration = null, IDocumentHistoryStore? history = null,
-        IDocumentComparisonStore? comparisons = null)
+        IDocumentComparisonStore? comparisons = null, BackfillDocumentComparisonDetails? backfill = null,
+        ReviewActor? owner = null)
     {
         try
         {
+            if (args is ["documents", "comparisons", "backfill", var limit])
+            {
+                var result = await (backfill ?? throw new InvalidOperationException("Comparison backfill is required."))
+                    .ExecuteAsync(owner ?? throw new InvalidOperationException("Owner identity is required."),
+                        int.TryParse(limit, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed)
+                            ? parsed : throw new ArgumentException("Use documents comparisons backfill <limit>."), cancellationToken);
+                Write(result);
+                return result.Skipped == 0 ? 0 : 1;
+            }
             if (args is ["documents", "history", var sourceId, var requestedUrl])
             {
                 Write(await new GetDocumentHistory(history ?? throw new InvalidOperationException("History store is required."))

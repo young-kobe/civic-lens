@@ -78,6 +78,7 @@ if (args is [] or ["--help"] or ["help"])
           documents history <source-id> <exact-requested-url>
           documents compare <before-extraction-id> <after-extraction-id>
           documents comparison <comparison-id>
+          documents comparisons backfill <limit>
           analyses requeue <comparison-id|--all>
           analyses redraft --stale [actions|votes|statements|document-changes|briefs]
           statements status
@@ -488,15 +489,20 @@ try
 
     if (DocumentCommand.Matches(args))
     {
+        var (documentConnectionString, documentOwner) = args is ["documents", "comparisons", "backfill", _]
+            ? OwnerCommand.ReadEnvironment()
+            : (Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!, null);
         var documentConfiguration = args is ["documents", "extract", var documentConfigPath, _, _]
             ? ConfigurationFile.ReadCollection(documentConfigPath) : null;
         var attempts = CreateDatabase();
-        var extractions = PostgresDocumentExtractionStore.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!);
+        var extractions = PostgresDocumentExtractionStore.FromConnectionString(documentConnectionString);
+        var comparisonStore = PostgresDocumentComparisonStore.FromConnectionString(documentConnectionString);
         executing = true;
         return await DocumentCommand.ExecuteAsync(args, attempts, new CaptureDocumentTextExtractor(), extractions,
             cancellation.Token, documentConfiguration,
-            PostgresDocumentHistoryStore.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!),
-            PostgresDocumentComparisonStore.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!));
+            PostgresDocumentHistoryStore.FromConnectionString(documentConnectionString), comparisonStore,
+            args is ["documents", "comparisons", "backfill", _] ? new BackfillDocumentComparisonDetails(comparisonStore) : null,
+            documentOwner);
     }
 
     if (args is ["discovery", "get", var discoveryId])

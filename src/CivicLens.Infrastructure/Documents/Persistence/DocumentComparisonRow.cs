@@ -9,4 +9,6 @@ internal sealed class DocumentComparisonRow
     public string SettingsVersion { get; set; } = string.Empty;
     public string ResultJson { get; set; } = string.Empty;
     public bool HasChanges { get; set; }
+    public int? HunkCount { get; set; }
+    public List<DocumentComparisonHunkRow> Hunks { get; set; } = [];
 }
