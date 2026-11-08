@@ -9,6 +9,8 @@ public static class FederalRegisterRenderer
         var lines = ExecutiveActionFacts.Of(document.DocumentNumber, document.Kind, document.PresidentialNumber,
             document.Title, document.SignedOn, document.PublishedOn, document.Citation, document.PresidentName, document.Url)
             .Select(fact => ExecutiveActionFacts.Line(fact.Label, fact.Value));
+        if (document.DispositionNotes is not null)
+            lines = lines.Append(ExecutiveActionFacts.Line(ExecutiveActionFacts.DispositionNotes, document.DispositionNotes));
         return string.Join('\n', document.CorrectionOf is null ? lines : lines.Append(NoticeLine(document)));
     }
 

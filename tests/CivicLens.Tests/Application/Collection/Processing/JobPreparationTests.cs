@@ -394,17 +394,40 @@ public sealed class JobPreparationTests
         Assert.Empty(extractions.Saved);
     }
 
-    [Fact]
-    public async Task AFederalRegisterDocumentIsExtractedOnceAndTheStoreGetsThatExtractionWithItsSigner()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AFederalRegisterDocumentIsExtractedOnceAndTheStoreGetsThatExtractionWithItsSigner(bool earlierRequest)
     {
-        var result = await Prepare(ApiResource.FederalRegisterDocument, FederalRegisterDocumentUrl, FederalRegisterFixtures.TrumpOrder, null);
+        var requestUrl = earlierRequest
+            ? FederalRegisterDocumentUrl.Replace("&fields%5B%5D=disposition_notes", "", StringComparison.Ordinal)
+            : FederalRegisterDocumentUrl;
+        var result = await Prepare(ApiResource.FederalRegisterDocument, requestUrl, FederalRegisterFixtures.TrumpOrder, null);
 
         Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
         var saved = Assert.Single(extractions.Saved);
-        AssertPinned(saved, "federal-register-document-v1", "FederalRegisterDocumentParser.ExtractionVersion",
+        Assert.Equal(requestUrl, saved.SourceAttempt.RequestedUrl);
+        AssertPinned(saved, "federal-register-document-v2", "FederalRegisterDocumentParser.ExtractionVersion",
             saved.Text.Contains("\nTitle: Ending the Weaponization of the Federal Government\n", StringComparison.Ordinal));
         var call = Assert.Single(federalRegister.Documents);
         Assert.Equal(("job", saved.ExtractionId, "donald-trump", saved.Text), (call.JobId, call.Evidence.ExtractionId, call.Evidence.PersonId, call.Evidence.ExtractionText));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InvalidFederalRegisterNotesSaveNoExtractionAndAdmitNoDocument(bool reachesTextLimit)
+    {
+        var notes = reachesTextLimit ? new string('x', DocumentExtraction.MaximumTextLength) : "a\0b";
+        var body = FederalRegisterFixtures.TrumpOrder.Replace("\"html_url\":",
+            $"\"disposition_notes\":{System.Text.Json.JsonSerializer.Serialize(notes)},\"html_url\":");
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+            Prepare(ApiResource.FederalRegisterDocument, FederalRegisterDocumentUrl, body, null));
+
+        Assert.Equal("text", error.ParamName);
+        Assert.Empty(extractions.Saved);
+        Assert.Empty(federalRegister.Documents);
     }
 
     [Fact]
@@ -793,7 +816,7 @@ public sealed class JobPreparationTests
             ApiResource.BillText => BillTextChainOf(job, bytes, versionsBody ?? BillTextFixtures.Versions(IntroducedVersion), withVersionsJob),
             _ => ([job], _ => bytes)
         };
-        var preparation = new JobPreparation(new SingleJob(jobs), new CapturedAttempts(contentType), new NoDiscoveryAdmissions(), admissions, votes, federalRegister, roster, executives, districts,
+        var preparation = new JobPreparation(new SingleJob(jobs), new CapturedAttempts(contentType, jobs), new NoDiscoveryAdmissions(), admissions, votes, federalRegister, roster, executives, districts,
             new FixedBody(bodyOf, bodyReads), processing, extractions, textExtractor, issues, warnings);
         return await preparation.PrepareAsync("job", "artifacts", default);
     }
@@ -1084,15 +1107,17 @@ public sealed class JobPreparationTests
         public Task<bool> ReleaseClaimAsync(CollectionJobLease jobLease, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class CapturedAttempts(string contentType) : ICollectionAttemptStore
+    private sealed class CapturedAttempts(string contentType, IReadOnlyList<CollectionJobRecord> jobs) : ICollectionAttemptStore
     {
         public Task<IReadOnlyDictionary<string, StoredCollectionAttempt>> GetManyAsync(IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken) =>
-            Task.FromResult<StoredCollectionAttempt?>(new StoredCollectionAttempt(
-                new CapturedAttemptResult(attemptId, "congress-bills", "https://api.congress.gov/v3/bill",
-                    "https://api.congress.gov/v3/bill", DateTimeOffset.UnixEpoch,
+        public Task<StoredCollectionAttempt?> GetAsync(string attemptId, CancellationToken cancellationToken)
+        {
+            var request = jobs.SelectMany(job => job.Attempts).Single(attempt => attempt.AttemptId == attemptId).Request;
+            return Task.FromResult<StoredCollectionAttempt?>(new StoredCollectionAttempt(
+                new CapturedAttemptResult(attemptId, request.SourceId, request.Url, request.Url, DateTimeOffset.UnixEpoch,
                     new CollectionResponse(200, null, null, contentType, []), new CaptureIdentity(new string('a', 64), 1)),
                 null, null));
+        }
 
         public Task<CollectionImportDecision> ImportAtomicallyAsync(CollectionAttemptImport attempt, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
