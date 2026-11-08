@@ -148,7 +148,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Break board | Home, boards | Who breaks from their party? | `official_party_lines` | Official figure served. Board endpoint and UI planned |
 | Latest executive actions | Home | What did the President sign? | `executive_actions` | `/web` shows one row per published document type with count, newest title and signed date. Other executive layouts remain planned |
 | Member card | After a ZIP | Who is my member? | `officials`, `official_attendance`, `official_party_lines`, `official_bill_counts`, `official_issue_counts` | Portrait, seat, party, term end, scoped attendance, and scoped party-line counts implemented. Sponsored-bill and top-issue counts remain planned |
-| Member votes list | After a ZIP, official | How did my members vote? | `member_votes` | Implemented. Planned: issue filter chips |
+| Member votes list | After a ZIP, official | How did my members vote? | `votes`, `member_votes` | Partial. The API serves shared vote rows with recorded casts. ZIP display and issue filter chips remain planned |
 | Compare members | Compare page | How do my members differ? | `official_*` views, `member_votes` | Planned |
 | Profile header, key figures | Official | Who is this? | `officials`, `official_attendance`, `official_party_lines` | API data implemented. Profile UI integration remains planned. |
 | Vote strip | Official | What is their voting pattern? | `member_votes.side` | Planned: marks only breaks and missed votes |

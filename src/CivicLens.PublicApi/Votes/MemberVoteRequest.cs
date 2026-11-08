@@ -12,9 +12,14 @@ public sealed record MemberVoteRequest
     public string? Issue { get; init; }
 
     /// <summary>Reads the query string. An invalid value throws <see cref="ArgumentException"/> that names the parameter.</summary>
-    public static MemberVoteRequest Parse(IQueryCollection query)
+    public static MemberVoteRequest Parse(IQueryCollection query) => Parse(query, OfficialFilter.Maximum);
+
+    /// <summary>Reads a shared vote query with the shared route's official bound.</summary>
+    public static MemberVoteRequest ParseShared(IQueryCollection query) => Parse(query, OfficialFilter.MaximumShared);
+
+    private static MemberVoteRequest Parse(IQueryCollection query, int maximumOfficials)
     {
-        var officials = OfficialFilter.Parse(query);
+        var officials = OfficialFilter.Parse(query, maximumOfficials);
         return officials.Length == 0
             ? throw new ArgumentException("official is required.", "official")
             : new() { Officials = officials, Issue = QueryValues.Filter(query, "issue") };
