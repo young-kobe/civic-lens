@@ -15,6 +15,101 @@ namespace CivicLens.Tests.Infrastructure.Collection.BillStream;
 public sealed partial class PostgresBillStreamTests
 {
     [Fact]
+    public async Task VerifiedCopiesAndReleaseBindingsDoNotOverwriteLegacyEmptyHistoryOfTheSameCapture()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        var newer = await EnqueueDetailAsync("recovered-representation");
+        var admitted = await AdmitDetailAsync(newer, DetailBill(UpdatedAt.AddDays(1), 0),
+            BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        await AdmitActionsAsync(admitted.Jobs.Single(job => job.Url.Contains("/actions?")).JobId,
+            new CongressBillActionsPage([HistoryAction("First recovered action."), HistoryAction("Second recovered action.")], null));
+        var capture = Assert.Single(await ReadBillInputsAsync([RecordId])).History!;
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO published_bill_histories
+                (detail_job_id, projection_version, source_id, congress, bill_type, bill_number, observed_at_utc_ticks, action_count)
+            SELECT detail_job_id, 0, source_id, congress, bill_type, bill_number, {capture.ObservedAtUtc.UtcTicks}, 0
+              FROM bill_gates WHERE detail_job_id = '{capture.DetailJobId}';
+            """);
+        var legacy = await ScalarWithParametersAsync("SELECT to_jsonb(h)::text FROM published_bill_histories h WHERE detail_job_id = @id AND projection_version = 0",
+            new NpgsqlParameter("id", capture.DetailJobId));
+        Assert.Equal(2, Assert.Single(await ReadBillInputsAsync([RecordId])).History!.ActionCount);
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
+        await publications.PrepareBillHistoriesAsync([capture], default);
+        await publications.PrepareBillHistoriesAsync([capture], default);
+        Assert.Equal(2L, await ScalarWithParametersAsync("SELECT count(*) FROM published_bill_histories WHERE detail_job_id = @id",
+            new NpgsqlParameter("id", capture.DetailJobId)));
+        Assert.Equal(legacy, await ScalarWithParametersAsync("SELECT to_jsonb(h)::text FROM published_bill_histories h WHERE detail_job_id = @id AND projection_version = 0",
+            new NpgsqlParameter("id", capture.DetailJobId)));
+
+        var first = new PublicationCommit(1, null, $"000001-{Guid.NewGuid():N}",
+            [new(CivicLens.Publication.Contracts.PublishedRecordKind.Action, RecordId, 1)], [])
+        {
+            Names = new([], new([], [])),
+            Withdrawals = [],
+            AddedEntries = [PublishedEntryFixtures.Action(RecordId, UpdatedAt)]
+        };
+        await publications.CommitAsync("owner", first, "legacy-binding", new string('0', 64), default);
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO release_bill_histories (release_number, record_id, detail_job_id, projection_version)
+            VALUES (1, '{RecordId}', '{capture.DetailJobId}', 0);
+            """);
+        Assert.Equal(0, await ScalarAsync("SELECT history_action_count FROM public_api.bills"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM public_api.bill_actions"));
+
+        var second = first with
+        {
+            ReleaseNumber = 2,
+            BaseReleaseNumber = 1,
+            DirectoryName = $"000002-{Guid.NewGuid():N}",
+            AddedEntries = [],
+            BillHistories = [new(RecordId, capture.DetailJobId, capture.ProjectionVersion)]
+        };
+        await publications.CommitAsync("owner", second, "verified-binding", new string('1', 64), default);
+
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM public_api.bills"));
+        Assert.Equal(2, await ScalarAsync("SELECT history_action_count FROM public_api.bills"));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM public_api.bill_actions"));
+        Assert.Equal(0, await ScalarAsync("SELECT projection_version FROM release_bill_histories WHERE release_number = 1"));
+        Assert.Equal(legacy, await ScalarWithParametersAsync("SELECT to_jsonb(h)::text FROM published_bill_histories h WHERE detail_job_id = @id AND projection_version = 0",
+            new NpgsqlParameter("id", capture.DetailJobId)));
+    }
+
+    [Fact]
+    public async Task AnUnverifiedClosedChainIsNotHistoryEvenWhenALegacyEmptyCopyExists()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        var capture = Assert.Single(await ReadBillInputsAsync([RecordId])).History!;
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO published_bill_histories
+                (detail_job_id, projection_version, source_id, congress, bill_type, bill_number, observed_at_utc_ticks, action_count)
+            SELECT detail_job_id, 0, source_id, congress, bill_type, bill_number, {capture.ObservedAtUtc.UtcTicks}, 0
+              FROM bill_gates WHERE detail_job_id = '{capture.DetailJobId}';
+            UPDATE bill_pages SET imported_count = NULL WHERE detail_job_id = '{capture.DetailJobId}' AND role = 'Actions';
+            """);
+
+        Assert.Null(Assert.Single(await ReadBillInputsAsync([RecordId])).History);
+    }
+
+    [Fact]
+    public async Task ACopyThatDisagreesWithItsVerifiedImportCountRollsBackItsParentAndBody()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        var newer = await EnqueueDetailAsync("wrong-import-count");
+        var admitted = await AdmitDetailAsync(newer, DetailBill(UpdatedAt.AddDays(1), 0),
+            BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        await AdmitActionsAsync(admitted.Jobs.Single(job => job.Url.Contains("/actions?")).JobId,
+            new CongressBillActionsPage([HistoryAction("First."), HistoryAction("Second.")], null));
+        await ExecuteAsync(connectionString, $"UPDATE bill_pages SET imported_count = 1 WHERE detail_job_id = '{newer}' AND role = 'Actions'");
+        var capture = Assert.Single(await ReadBillInputsAsync([RecordId])).History!;
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => publications.PrepareBillHistoriesAsync([capture], default));
+
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM published_bill_histories"));
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM published_bill_history_actions"));
+    }
+
+    [Fact]
     public async Task ANewStatusCanBePublishedWithThePreviousCompletedHistoryWhileTheNewHistoryIsIncomplete()
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
@@ -118,6 +213,7 @@ public sealed partial class PostgresBillStreamTests
             "Floor", "H8D000", 2, "House floor actions", []);
         await AdmitActionsAsync(actions, new CongressBillActionsPage([action, HistoryAction("Introduced.")], null));
         var capture = Assert.Single(await ReadBillInputsAsync([RecordId])).History!;
+        Assert.Equal(1, capture.ProjectionVersion);
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
 
         await publications.PrepareBillHistoriesAsync([capture], default);
@@ -249,11 +345,11 @@ public sealed partial class PostgresBillStreamTests
         {
             Names = new([], new([], [])),
             Withdrawals = [],
-            BillHistories = [new(RecordId, "missing-capture")]
+            BillHistories = [new(RecordId, "missing-capture", BillHistoryCapture.CurrentProjectionVersion)]
         };
         await Assert.ThrowsAsync<PublicationConflictException>(() => publications.CommitAsync("owner", commit, "missing-history", new string('0', 64), default));
         await ExecuteAsync(connectionString, "UPDATE published_bill_histories SET bill_number = bill_number + 1");
-        commit = commit with { BillHistories = [new(RecordId, capture.DetailJobId)] };
+        commit = commit with { BillHistories = [new(RecordId, capture.DetailJobId, capture.ProjectionVersion)] };
         await Assert.ThrowsAsync<PublicationConflictException>(() => publications.CommitAsync("owner", commit, "misbound-history", new string('1', 64), default));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM publication_releases"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM release_bill_histories"));

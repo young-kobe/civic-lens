@@ -17,6 +17,18 @@ public sealed class HomePageTests
         "Passed", 216, 214, "Current bill line.", PublishedWording.BillLineSource);
 
     [Fact]
+    public async Task TheSkipLinkReachesTheMainLandmarkContainingTheHeadingAndLookup()
+    {
+        var page = await RenderAsync(new(7, Featured, [], null), "https://api.civic-lens.test");
+        var main = Assert.Single(page.QuerySelectorAll("main"));
+
+        Assert.Equal("#" + main.Id, page.QuerySelector("a.skip")!.GetAttribute("href"));
+        Assert.Equal("-1", main.GetAttribute("tabindex"));
+        Assert.NotNull(main.QuerySelector("h1"));
+        Assert.NotNull(main.QuerySelector("input[name=zip]"));
+    }
+
+    [Fact]
     public async Task UnknownTotalsStayAbsentButThePublishedResultRemainsVisible()
     {
         var page = await RenderAsync(new(7, Featured with { Yea = null, Nay = null }, [], null));
@@ -39,6 +51,12 @@ public sealed class HomePageTests
         Assert.Null(summary.QuerySelector("script"));
         Assert.Equal(text, summary.QuerySelector("p")!.TextContent);
         Assert.Equal(wording, summary.QuerySelector("span")?.TextContent);
+        Assert.Equal(origin == PublishedTextOrigin.Model, summary.ClassList.Contains("home-ai-summary"));
+        var descriptionId = page.QuerySelector(".home-featured h2")!.GetAttribute("aria-describedby");
+        if (wording is null)
+            Assert.Null(descriptionId);
+        else
+            Assert.Same(summary.QuerySelector("span"), Assert.Single(page.QuerySelectorAll("#" + descriptionId)));
     }
 
     [Fact]
@@ -54,6 +72,52 @@ public sealed class HomePageTests
         var line = brief.QuerySelector(".home-brief-line")!;
         Assert.Contains("This week:", line.TextContent);
         Assert.Equal(Root + PublicationProtocol.RecordPagePath(id), line.QuerySelector("a")!.GetAttribute("href"));
+    }
+
+    [Theory]
+    [InlineData(12, 7, 4, "12 substantive votes", "7 bills", "4 records in this release")]
+    [InlineData(1, 1, 1, "1 substantive vote", "1 bill", "1 record in this release")]
+    public async Task IssuesExecutiveGroupsAndFreshnessRenderTheirScopedPublishedFacts(
+        int substantiveVotes, int bills, int executiveRecords, string voteCount, string billCount, string executiveCount)
+    {
+        var issue = new HomeIssueData("health", "Health", 119, substantiveVotes, bills);
+        var actionId = new string('c', 64);
+        var action = new HomeExecutiveGroupData(PublishedExecutiveActionKind.Notice, executiveRecords, actionId,
+            "Newest notice title", new(2026, 5, 31));
+        var page = await RenderAsync(new(7, null, [], null)
+        {
+            Issues = [issue],
+            ExecutiveActions = [action],
+            NewestHouseRollCall = new(2026, 5, 31),
+            NewestSenateRollCall = new(2026, 5, 29)
+        });
+
+        var issueCard = Assert.Single(page.QuerySelectorAll(".home-issue-list li"));
+        var issueLink = Assert.Single(issueCard.QuerySelectorAll("a.home-issue-tile"));
+        Assert.Equal(Root + PublicationProtocol.IssuePagePath("health", 1), issueLink.GetAttribute("href"));
+        Assert.Contains(voteCount, issueLink.TextContent);
+        Assert.Contains(billCount, issueLink.TextContent);
+        Assert.Contains("119th Congress", issueLink.TextContent);
+
+        var actionCard = Assert.Single(page.QuerySelectorAll(".home-executive-list li"));
+        Assert.Equal("Presidential notice", actionCard.QuerySelector("p")!.TextContent);
+        Assert.Equal(Root + PublicationProtocol.RecordPagePath(actionId), actionCard.QuerySelector("a")!.GetAttribute("href"));
+        Assert.Contains("Newest notice title", actionCard.TextContent);
+        Assert.Contains(executiveCount, actionCard.TextContent);
+        Assert.Contains("Signed 31 May 2026", actionCard.TextContent);
+
+        Assert.Same(page.QuerySelector(".home-freshness"), page.QuerySelector(".home-grid")!.FirstElementChild);
+        Assert.Contains("Newest published House roll call: 31 May 2026", page.QuerySelector(".home-freshness")!.TextContent);
+        Assert.Contains("Newest published Senate roll call: 29 May 2026", page.QuerySelector(".home-freshness")!.TextContent);
+    }
+
+    [Fact]
+    public async Task FreshnessOmitsAChamberWithoutPublishedRollCalls()
+    {
+        var page = await RenderAsync(new(7, null, [], null) { NewestHouseRollCall = new(2026, 5, 31) });
+
+        Assert.Contains("Newest published House roll call: 31 May 2026", page.QuerySelector(".home-freshness")!.TextContent);
+        Assert.DoesNotContain("Senate", page.QuerySelector(".home-freshness")!.TextContent);
     }
 
     [Fact]

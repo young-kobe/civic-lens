@@ -16,12 +16,13 @@ Every page and component must pass seven owner tests:
 
 This page holds the design rules and the plan for the reader flows. [Publication](publication.md) owns the release data, the page text rules, and the `public_api` views. [Host](host.md) owns the component library rules. The [roadmap](../roadmap.md#later) step R-68 owns the order of the work.
 
-Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 palette, type foundation, focus colors, and reduced-motion behavior are implemented. The `/web` home route is a gated PublicApi server-rendered preview of the current published featured vote, recent votes, and optional brief. The existing static home remains live. The full home bento layout and page-specific layouts remain planned. Each row below says what is implemented and what is planned.
+Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 palette, type foundation, focus colors, and reduced-motion behavior are implemented. The `/web` home route is a gated PublicApi server-rendered preview. It shows the published featured vote, recent votes, optional brief, configured issue counts, executive action groups, and chamber freshness. Its available-data bento is implemented; map, party bars, and break board remain planned. The existing static home remains live. Each row below says what is implemented and what is planned.
 
 ## Decisions
 
 ### Theme
 
+- The visual authority is the owner's [Mosaic v2 reference](https://claude.ai/artifact/BNAG2e2nKJVpxfqF2xe2Mr) and its Civic Lens Themes export. Select `mosaic2` when rendering its reader pages. Match the full composition, typography, spacing, colors and responsive behavior. EXAMPLE text requires separate wording approval. The theme-picker toolbar is a prototype control.
 - The theme is Mosaic v2. The prototype tokens are in the `mosaic2` block of the prototype skin file. Shared public theme tokens live in `src/CivicLens.PublicWeb/wwwroot/css/theme.css`.
 - Color follows a 60-30-10 split. The page is a warm off-white in light mode and a deep ink in dark mode. Navy `#14213d` is the second color. Civic yellow `#f5b301` is the accent.
 - Yellow marks primary buttons, the current navigation item, and key highlights. Yellow is never text on a white background.
@@ -33,11 +34,13 @@ Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 pa
 
 ### Home
 
-- The hero side tile is a featured vote. A fixed rule in code picks it: the latest passage vote on a bill. It shows the result, a small map, party bars, the labeled AI summary, and a ZIP prompt.
+- The hero side tile is a featured vote. A fixed rule in code picks it: the latest passage vote on a bill. The preview shows the result, labeled summary, published counts when available, and a ZIP prompt. A map and party bars remain planned.
 - The featured vote does not repeat in the recent votes list. It includes the bill line and what a Yes vote meant.
 - Recent votes show up to two House votes and two Senate votes. When all four shown votes have stored split alignment, the server home shows one caption that names those four votes and the opposing party majorities. Missing alignment, mixed majorities, or fewer votes never produce that caption.
-- Issue tiles name their vote and bill counts and the Congress.
-- Executive actions show one row per document type, with its newest title and count. The AI summary follows when executive summaries land.
+- Issue tiles name their substantive vote and bill counts and the Congress.
+- Executive actions show one row per published document type, with its newest title, signed date, and record count.
+- The freshness line names the newest published roll call date for each chamber. A chamber with no published roll calls is omitted.
+- At 1280 px and wider, votes and issues share the first bento row, then executive actions and method share the second. ZIP results and the brief span the grid. Below 1280 px the layout is one column.
 - A weekly brief shows as one "This week" lead line above the latest votes, only when a brief exists (DR5). The server home implements this placement.
 
 ### Reader-flow decisions
@@ -87,12 +90,14 @@ These decisions come from the component audit. The owner accepted every recommen
 - Every vote kind has a glossary term or none. Enforcer: `Glossary`. Test: `ReleaseRendererTests.EveryVoteKindHasItsTermKeyOrNoneForOtherAndEveryKeyIsInTheGlossary`.
 - Page text and AI text read at grade 12 or below. Enforcer: `ReadingGrade` checks AI action text at draft time. No test covers fixed page text yet. Planned: one grade test over page and AI text, in R-68. Test: No test.
 - Every public number names its base and time frame. Enforcer: review of each UI pull request. Test: No test.
-- A fixed rule in code picks featured content. Enforcer: the featured vote rule, planned with the home step. Test: No test.
+- A fixed rule in code picks featured content. Enforcer: `HomeStore` selects the latest passage vote on a bill. Test: `HomeEndpointsTests.FeaturedVoteUsesLatestPassageOnBillTieOrderAndCarriesItsSummaryAndSourceLabelWithoutCountsFabricated`.
 - Every UI pull request has screenshots at 360 px and 1280 px, light and dark. Enforcer: pull request review. Test: No test.
 - Public pages read published data only, through `Publication.Contracts` and the `public_api` views. Enforcer: the project references and the view role. Test: `ArchitectureTests` and the `PublicApiViewsTests` role test.
 - The SSR home HTML and its ETag use the same `HomeAnswer` release snapshot. Enforcer: `HomePageReader` passes `HomePageData.Release` to the release-number responder overload. Test: `ServerPageTests.TheHomeRouteUsesTheHomeSnapshotReleaseAndAnswers503WithoutCacheWhenItIsMissing`.
 - Shared home HTML does not vary by cookie or ZIP query. Enforcer: the home component has no reader-specific input and the page cache is shared. Test: the same home route test.
 - The recent-vote split caption describes exactly four displayed votes with stored split alignment. It does not include the featured vote or infer a missing alignment. Enforcer: HomePage. Tests: HomePageTests.TheBriefLeadsTheRecentVotesAndASplitCaptionNamesOnlyThoseFourVotes, HomePageTests.MissingOrDifferentAlignmentCannotBecomeAnAllSplitClaim, and HomePageTests.ThreeRecentVotesAndTheFeaturedVoteCannotMakeAFourVoteCaption.
+- Home freshness uses the newest published roll call of each chamber, including procedural votes, and omits a chamber with no published roll calls. Enforcer: `HomeStore` aggregates `public_api.votes` in its highlights statement. Tests: `HomeEndpointsTests.FreshnessUsesNewestPublishedRollCallEvenWhenItIsNotSubstantiveAndOmitsAnEmptyChamber`, `HomeEndpointsTests.NoActiveReleaseHasNoHomeAnswerOrFreshnessDates`, and `HomePageTests.FreshnessOmitsAChamberWithoutPublishedRollCalls`.
+- Home issue and executive rows use the mapped counts and record facts, with shared link, enum label, Congress ordinal, and date format owners. Enforcer: `HomePage`. Test: `HomePageTests.IssuesExecutiveGroupsAndFreshnessRenderTheirScopedPublishedFacts`.
 - The ZIP lookup restores its controls after the current request, including a malformed success response. An older response cannot replace a newer result. Enforcer: `initZipLookup`. No automated test.
 - The browser remembers only a validated five-digit ZIP after its current lookup answer renders. It stores no member details; the home page re-queries published current data. Enforcer: `initRememberedMembers` and `initZipLookup`. No automated test.
 - Shared page HTML contains no remembered ZIP or personal lookup results. Enforcer: `PublicPage` emits empty hooks and browser code reads device storage. Tests: `HomePageTests.TheRememberedMembersLinkTargetsTheLookupHeadingInSharedMarkup` and `PublishedHomePageTests.TheResultPanelIsHiddenUntilALookupAndCreditsTheCensusBureauAndSaysAZctaIsNotAZipCode`.
@@ -133,14 +138,14 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Component | Pages | Reader question | Data source | Status |
 |---|---|---|---|---|
 | Site header, split nav, header search | All | Where can I go? | Fixed links, search service | Partial. The shared `PublicPage` renders header search for its existing callers. Planned: split nav and route migration, R-68 |
-| Freshness line | All | How current is this? | `active_records`, newest `votes.voted_on` per chamber | Partial. Planned: newest vote day per chamber |
+| Freshness line | All | How current is this? | `active_records`, newest `votes.voted_on` per chamber | Partial. `/web` shows newest published roll call dates; other pages remain planned |
 | ZIP form and notices | Home | Who represents me? | `zip_districts`, `officials` | Implemented: visible busy state, answer scroll and focus, and error recovery |
 | Featured vote tile | Home | What did Congress just decide? | `votes` | Partial. Gated SSR preview shows the published summary, wording label, result, and Yea/Nay counts. Planned: map and party bars |
 | Party tally bar | Home, vote, bill | How did the chamber split? | `votes` counts, `vote_members.party` | Planned: bars; the party column is available |
-| Latest votes list | Home | What was voted on lately? | `votes` | Partial. Gated SSR preview shows up to two recent substantive votes per chamber, excluding the featured vote. Planned: one AI label |
-| Issue tiles | Home | Where do I start? | `issue_votes`, `issue_sponsors` | Planned: page content and counts; the views and issue data endpoint are implemented |
+| Latest votes list | Home | What was voted on lately? | `votes` | Partial. Gated SSR preview shows up to two recent substantive votes per chamber, excluding the featured vote, with their published labels and counts |
+| Issue tiles | Home | Where do I start? | `issue_votes`, `bill_issues` | `/web` shows each configured issue's substantive vote count, bill count, and Congress. Other issue layouts remain planned |
 | Break board | Home, boards | Who breaks from their party? | `official_party_lines` | Official figure served. Board endpoint and UI planned |
-| Latest executive actions | Home | What did the President sign? | `executive_actions` | Planned: grouped home rows; executive action data is served by the API |
+| Latest executive actions | Home | What did the President sign? | `executive_actions` | `/web` shows one row per published document type with count, newest title and signed date. Other executive layouts remain planned |
 | Member card | After a ZIP | Who is my member? | `officials`, `official_attendance`, `official_party_lines`, `official_bill_counts` | Portrait, seat, party, term end, and scoped attendance implemented. Official party-line data is available; card figure remains planned |
 | Member votes list | After a ZIP, official | How did my members vote? | `member_votes` | Implemented. Planned: issue filter chips |
 | Compare members | Compare page | How do my members differ? | `official_*` views, `member_votes` | Planned |
@@ -154,11 +159,11 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Member list with finder | Vote | How did my member vote? | `vote_members`, `officials` | Implemented. Planned: folded table with filters |
 | Vote map | Vote, home | Where did Yes and No come from? | `vote_members`, `release_official_terms` | Planned: R-68 map step |
 | Bill status stepper | Bill | Where is the bill now? | `bill_actions`, `bills.public_law` | Planned: route and UI; bill actions and public law data are available |
-| Bill summary and CRS fold | Bill | What would the bill do? | `bills.summary` and bill-text metadata; see [Publication](publication.md#public-api-views) | Partial. The API serves the summary and cited bill-text metadata. Planned: CRS text and version, key terms, and the server-rendered bill page. |
+| Bill summary and CRS fold | Bill | What would the bill do? | `bills.summary`, CRS text and bill-text metadata; see [Publication](publication.md#public-api-views) | The API serves the summary, exact cited CRS body and version, and bill-text metadata. The fold, key terms and server-rendered bill page remain planned |
 | Who backed it | Bill | Is it bipartisan? | `bill_sponsorships`, `release_official_terms.party` | Partial. Planned: party split |
 | Votes on this bill | Bill | How did Congress vote? | `votes.bill_record_id` | Planned: route and UI; vote-to-bill data is available |
 | Executive action page | Executive action, President | What does this document do? | `executive_actions`, `executive_action_notices`, `executive_action_links` | Planned: route and UI; action and notice data are served, links remain pending |
-| Statement page, quotations | Statement | What exactly was said? | `statements`, `statement_quotations` | Planned: views needed |
+| Statement page, quotations | Statement | What exactly was said? | `statements`, `statement_speakers`, `statement_quotations` | Statement lists and speakers are served by the API. Quotations and the reader page remain planned |
 | Document change page | Document change | What changed on this page? | `document_changes` | Planned: views needed |
 | Issue page | Issue | What is there on this issue? | `release_issues`, `issue_votes`, `issue_sponsors` | Partial. Issue counts and sponsor data are available through the API. Planned: page and party line-up |
 | Party boards | Boards | Who breaks from their party most? | `official_party_lines`, `party_agreement` | Planned: views needed |
@@ -174,7 +179,7 @@ The public read API and the gated SSR home read `public_api` views. Implemented 
 
 `public_api.bills` exposes the bill summary, its text-origin label, and the cited bill-text summary metadata (`why_it_matters`, version name and date, and characters read and total). The view can serve these fields; the bill-text model setting is off by default, and activation awaits sample approval. See [Publication](publication.md#public-api-views) for the view contract.
 
-The home route reads `HomeAnswer` in one RepeatableRead snapshot and maps it into presentation records beside the PublicWeb component. One statement reads the highlights and publication date. One batch query counts the configured issues in that publication day's Congress. These are page inputs, not durable publication contracts. `CIVIC_LENS_PUBLIC_API_URL` is an optional bare origin for the browser ZIP lookup. The page cache validator includes the normalized public site and browser API origins because both affect the HTML.
+The home route reads `HomeAnswer` in one RepeatableRead snapshot and maps it into presentation records beside the PublicWeb component. One statement reads highlights, publication date, and newest published roll call dates across all public votes. One batch query counts configured issues in that publication day's Congress. These are page inputs, not durable publication contracts. `CIVIC_LENS_PUBLIC_API_URL` is an optional bare origin for the browser ZIP lookup. The page cache validator includes the normalized public site and browser API origins because both affect the HTML.
 
 The views expose the stored member party and vote alignment, normalized member-vote side, party-majority cast, and official photo path. Member caucus comes from the matching chamber term in the active release on the vote date.
 
@@ -182,10 +187,10 @@ Remaining planned view columns and views, in the order that R-68 builds them:
 
 - Party lines: `party_agreement` and the board endpoints. The official party-line view is implemented.
 - Votes: a second AI text column for "what this vote decides".
-- Bills: `bills.crs_summary_text`, `bills.crs_summary_version`, and `bill_key_terms`.
+- Bills: `bill_key_terms`. The cited CRS body and version are implemented.
 - Issues: party line-up data.
 - Executive actions: `executive_action_links` and the summary columns.
-- Statements: `statements`, `statement_speakers`, `statement_quotations`.
+- Statements: the detail endpoint. Statement lists, speakers, source evidence, and quotation views are implemented.
 - Other kinds: `document_changes` with a changed-region child view and `record_corrections`; withdrawal notices now have a typed public read API.
 
 Each AI text column carries its text origin and its label. The roadmap steps under [R-68](../roadmap.md#later) name each view.

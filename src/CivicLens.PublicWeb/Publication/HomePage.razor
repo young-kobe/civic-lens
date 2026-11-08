@@ -3,8 +3,8 @@
 <PublicPage CanonicalPath="" Title="Civic Lens" Description="Civic Lens collects what officials say and do, with the sources and the exact text that each record cites." RootPath="@RootPath">
     <Hero>
         <div class="home-hero home-preview-hero">
-            <div>
-                <h1>Who represents you?</h1>
+            <div class="home-intro">
+                <h1>See what your members of Congress said and did.</h1>
                 <p class="home-lead">See how your representative and senators voted and which bills they introduced. Each fact links to its official source.</p>
                 @if (BrowserApiUrl is not null)
                 {
@@ -13,7 +13,7 @@
                         <Field Label="Your ZIP code" For="zip-code">
                             <input id="zip-code" name="zip" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="5" placeholder="5 digits" />
                         </Field>
-                        <Button Type="submit">Find my officials</Button>
+                        <Button Type="submit">Find my members</Button>
                         <div class="zip-error" role="alert" data-zip-error></div>
                     </form>
                 }
@@ -21,25 +21,23 @@
             </div>
             @if (Data.FeaturedVote is { } featured)
             {
+                var summaryLabel = featured.Label ?? (featured.TextOrigin is PublishedTextOrigin.Model or PublishedTextOrigin.Code
+                    ? PublishedRecordLabels.Wording(featured.TextOrigin).First().Value : null);
                 <section class="panel panel-padded home-featured" aria-labelledby="home-featured-title">
-                    <h2 id="home-featured-title"><a href="@(RootPath + PublicationProtocol.RecordPagePath(featured.RecordId))">@featured.Headline</a></h2>
-                    <p class="home-featured-meta muted small"><span>@featured.Chamber</span><span>@featured.VotedOn.ToString("d MMM yyyy")</span></p>
-                    <div class="home-featured-summary">
-                        @if (featured.Label is not null)
+                    <p class="home-featured-label">Featured vote</p>
+                    <h2 id="home-featured-title" aria-describedby="@(summaryLabel is null ? null : "home-featured-origin")"><a href="@(RootPath + PublicationProtocol.RecordPagePath(featured.RecordId))">@featured.Headline</a></h2>
+                    <p class="home-featured-meta muted small"><span class="home-featured-result">@featured.ResultWords</span><span>@featured.Chamber</span><span>@featured.VotedOn.ToString("d MMM yyyy")</span></p>
+                    @if (featured.Yea is { } yea && featured.Nay is { } nay)
+                    {
+                        <p class="home-vote-counts"><span><b>@yea</b> Yes</span><span><b>@nay</b> No</span></p>
+                    }
+                    <div class="home-featured-summary @(featured.TextOrigin == PublishedTextOrigin.Model ? "home-ai-summary" : null)">
+                        @if (summaryLabel is not null)
                         {
-                            <span class="muted small">@featured.Label</span>
-                        }
-                        else if (featured.TextOrigin is PublishedTextOrigin.Model or PublishedTextOrigin.Code)
-                        {
-                            <span class="muted small">@PublishedRecordLabels.Wording(featured.TextOrigin).First().Value</span>
+                            <span id="home-featured-origin" class="muted small">@summaryLabel</span>
                         }
                         <p>@featured.Summary</p>
                     </div>
-                    @if (featured.Yea is { } yea && featured.Nay is { } nay)
-                    {
-                        <p class="home-vote-counts"><span><b>@yea</b> Yea</span><span><b>@nay</b> Nay</span></p>
-                    }
-                    <p class="home-featured-result">@featured.ResultWords</p>
                     @if (featured.BillLine is not null)
                     {
                         <p class="small muted">
@@ -55,64 +53,136 @@
         </div>
     </Hero>
     <ChildContent>
-        @if (BrowserApiUrl is not null)
-        {
-            <Panel Title="Your officials" Padded="true" Class="zip-member-results" hidden Id="zip-results" data-zip-results>
-                <div role="status" data-zip-body></div>
-                <div data-zip-notes hidden>
-                    <ZipDistrictNotes />
-                </div>
-            </Panel>
-        }
-        @if (Data.Brief is { } brief)
-        {
-            <p class="home-brief-line">
-                <span>This week:</span>
-                <a href="@(RootPath + PublicationProtocol.RecordPagePath(brief.RecordId))">@brief.Headline</a>
-                @if (brief.Label is not null)
-                {
-                    <span class="muted small">@brief.Label</span>
-                }
-            </p>
-        }
-        @if (Data.Votes.Length > 0)
-        {
-            <section class="home-preview-section" aria-labelledby="home-recent-title">
-                <h2 id="home-recent-title">Latest votes in Congress</h2>
-                @if (Data.Votes.Length == 4 && Data.Votes.All(vote => vote.Alignment == PublishedVoteAlignment.Split))
-                {
-                    <p class="muted small home-vote-caption">All four votes shown split the parties. Among members voting Yes or No, most Democrats and most Republicans chose opposite sides.</p>
-                }
-                <ul class="latest-rows" role="list">
-                    @foreach (var vote in Data.Votes)
+        <div class="home-grid">
+            @if (Data.NewestHouseRollCall is not null || Data.NewestSenateRollCall is not null)
+            {
+                <p class="home-freshness">
+                    @if (Data.NewestHouseRollCall is { } newestHouse)
                     {
-                        <li>
-                            <div>
-                                <a href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))">
-                                    <span>@vote.Headline</span>
-                                    @if (vote.Label is not null)
-                                    {
-                                        <span class="muted small">@vote.Label</span>
-                                    }
-                                    <span class="muted small">@vote.Chamber, @vote.VotedOn.ToString("d MMM yyyy")</span>
-                                </a>
-                                <p class="home-vote-counts"><span><b>@vote.Yea</b> Yea</span><span><b>@vote.Nay</b> Nay</span><span>@vote.ResultWords</span></p>
-                                @if (vote.BillLine is not null)
-                                {
-                                    <p class="small muted">
-                                        @vote.BillLine
-                                        @if (vote.BillLineSource is not null)
-                                        {
-                                            <span>@(" " + vote.BillLineSource)</span>
-                                        }
-                                    </p>
-                                }
-                            </div>
-                        </li>
+                        <span>Newest published House roll call: @newestHouse.ToString("d MMM yyyy")</span>
                     }
-                </ul>
+                    @if (Data.NewestSenateRollCall is { } newestSenate)
+                    {
+                        <span>Newest published Senate roll call: @newestSenate.ToString("d MMM yyyy")</span>
+                    }
+                </p>
+            }
+            @if (BrowserApiUrl is not null)
+            {
+                <Panel Title="Your officials" Padded="true" Class="zip-member-results" hidden Id="zip-results" data-zip-results>
+                    <div role="status" data-zip-body></div>
+                    <div data-zip-notes hidden>
+                        <ZipDistrictNotes />
+                    </div>
+                </Panel>
+            }
+            @if (Data.Brief is { } brief)
+            {
+                <p class="home-brief-line">
+                    <span>This week:</span>
+                    <a href="@(RootPath + PublicationProtocol.RecordPagePath(brief.RecordId))">@brief.Headline</a>
+                    @if (brief.Label is not null)
+                    {
+                        <span class="muted small">@brief.Label</span>
+                    }
+                </p>
+            }
+            @if (Data.Votes.Length > 0)
+            {
+                <section class="home-preview-section home-votes" aria-labelledby="home-recent-title">
+                    <h2 id="home-recent-title">Latest votes in Congress</h2>
+                    @if (Data.Votes.Length == 4 && Data.Votes.All(vote => vote.Alignment == PublishedVoteAlignment.Split))
+                    {
+                        <p class="muted small home-vote-caption">All four votes shown split the parties. Among members voting Yes or No, most Democrats and most Republicans chose opposite sides.</p>
+                    }
+                    <ul class="latest-rows" role="list">
+                        @foreach (var vote in Data.Votes)
+                        {
+                            <li class="home-record">
+                                <span class="home-record-icon"><Icon Name="IconName.Vote" /></span>
+                                <div>
+                                    <a href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))">
+                                        <span>@vote.Headline</span>
+                                        @if (vote.Label is not null)
+                                        {
+                                            <span class="muted small">@vote.Label</span>
+                                        }
+                                        <span class="muted small">@vote.Chamber, @vote.VotedOn.ToString("d MMM yyyy")</span>
+                                    </a>
+                                    <p class="home-vote-counts"><span><b>@vote.Yea</b> Yes</span><span><b>@vote.Nay</b> No</span><span>@vote.ResultWords</span></p>
+                                    @if (vote.BillLine is not null)
+                                    {
+                                        <p class="small muted">
+                                            @vote.BillLine
+                                            @if (vote.BillLineSource is not null)
+                                            {
+                                                <span>@(" " + vote.BillLineSource)</span>
+                                            }
+                                        </p>
+                                    }
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+            @if (Data.Issues.Length > 0)
+            {
+                <section class="home-issues" aria-labelledby="home-issues-title">
+                    <h2 id="home-issues-title">Start with an issue</h2>
+                    <ul class="home-issue-list" role="list">
+                        @foreach (var issue in Data.Issues)
+                        {
+                            <li>
+                                <a class="home-issue-tile" href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">
+                                    <span class="home-issue-name">@issue.Name</span>
+                                    <span class="home-issue-counts">@issue.SubstantiveVotes substantive vote@(issue.SubstantiveVotes == 1 ? "" : "s")</span>
+                                    <span class="home-issue-counts">@issue.Bills bill@(issue.Bills == 1 ? "" : "s")</span>
+                                    <span class="home-issue-congress muted small">@CongressCalendar.Ordinal(issue.Congress) Congress</span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+            @if (Data.ExecutiveActions.Length > 0)
+            {
+                <section class="home-executive" aria-labelledby="home-executive-title">
+                    <h2 id="home-executive-title">Latest executive actions</h2>
+                    <ul class="home-executive-list" role="list">
+                        @foreach (var action in Data.ExecutiveActions)
+                        {
+                            <li>
+                                <div class="home-record-icon home-executive-icon"><Icon Name="IconName.ExecutiveAction" /></div>
+                                <div>
+                                    <p class="muted small">@PublishedRecordLabels.ExecutiveActionKind(action.Kind)</p>
+                                    <a href="@(RootPath + PublicationProtocol.RecordPagePath(action.NewestRecordId))">@action.NewestTitle</a>
+                                    <p class="muted small">@action.Count record@(action.Count == 1 ? "" : "s") in this release</p>
+                                    <p class="muted small">Signed @action.NewestSignedOn.ToString("d MMM yyyy")</p>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+            <section class="home-method" aria-labelledby="home-method-title">
+                <h2 id="home-method-title">How Civic Lens works</h2>
+                <ol class="home-method-steps" role="list">
+                    <li>
+                        <h3>1. We collect official records</h3>
+                        <p>Roll call votes, bills, executive notices and public statements, each from its official source.</p>
+                    </li>
+                    <li>
+                        <h3>2. Code checks the facts</h3>
+                        <p>Code checks counts, results, dates and quotes against the source. A model never approves a record.</p>
+                    </li>
+                    <li>
+                        <h3>3. AI text is labeled</h3>
+                        <p>Where a model drafts plain words, the page says so, and the official source stays one click away. <a href="@(RootPath + PublicationProtocol.MethodPagePath)">How we check records</a></p>
+                    </li>
+                </ol>
             </section>
-        }
+        </div>
     </ChildContent>
 </PublicPage>
 

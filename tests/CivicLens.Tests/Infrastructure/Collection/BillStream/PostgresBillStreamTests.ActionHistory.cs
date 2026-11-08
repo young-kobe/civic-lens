@@ -1,5 +1,13 @@
+using System.Text;
+using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Collection.Processing;
+using CivicLens.Application.Review;
+using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
+using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Documents;
+using CivicLens.Tests.Fixtures;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.Collection.BillStream;
@@ -99,6 +107,220 @@ public sealed partial class PostgresBillStreamTests
 
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM bill_actions"));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM bill_action_recorded_votes"));
+        Assert.Equal(1, await ScalarAsync("SELECT imported_count FROM bill_pages WHERE job_id = '" + bill.Actions + "'"));
+    }
+
+    [Fact]
+    public async Task AnEmptyActionsPageIsMarkedVerifiedWithZeroImportedActions()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+
+        Assert.Equal(0, await ScalarAsync("SELECT imported_count FROM bill_pages WHERE job_id = '" + bill.Actions + "'"));
+    }
+
+    [Fact]
+    public async Task AReplayWithConflictingTypedActionsIsRefusedWithoutChangingTheSavedRows()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        var extractionId = await ExtractionAsync(bill.Actions);
+        await store.AdmitActionsPageAsync(Source(), bill.Actions,
+            new CongressBillActionsPage([HistoryAction("Original.")], null), extractionId, default);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => store.AdmitActionsPageAsync(Source(), bill.Actions,
+            new CongressBillActionsPage([HistoryAction("Conflicting.")], null), extractionId, default));
+
+        Assert.Equal(["Original."], (await ActionRowsAsync()).Select(row => row.Text));
+        Assert.Equal(1, await ScalarAsync("SELECT imported_count FROM bill_pages WHERE job_id = '" + bill.Actions + "'"));
+    }
+
+    [Fact]
+    public async Task AReplayWithADifferentExtractionIdentityIsRefused()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        await AdmitActionsAsync(bill.Actions, new CongressBillActionsPage([], null));
+        var differentExtraction = await ExtractionAsync(bill.Actions, "other captured body", "other extraction", "extraction");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => store.AdmitActionsPageAsync(Source(), bill.Actions,
+            new CongressBillActionsPage([], null), differentExtraction, default));
+
+        Assert.Equal(0, await ScalarAsync("SELECT imported_count FROM bill_pages WHERE job_id = '" + bill.Actions + "'"));
+    }
+
+    [Fact]
+    public async Task RecoveryRebuildsTheWholeOrderedChainWhenANewerPageIsLegacyAndItsRowsAreMissing()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        var firstPage = new CongressBillActionsPage([HistoryAction("First one."), HistoryAction("First two.")], ActionsNext(250));
+        var next = await AdmitActionsAsync(bill.Actions, firstPage);
+        var secondJob = Assert.Single(next.Jobs).JobId;
+        var secondPage = new CongressBillActionsPage([HistoryAction("Second page.")], null);
+        await AdmitActionsAsync(secondJob, secondPage);
+        await ExecuteAsync(connectionString,
+            $"UPDATE bill_pages SET imported_count = NULL WHERE job_id = '{secondJob}'; DELETE FROM bill_actions WHERE job_id = '{secondJob}'");
+        var pages = await ((IBillActionsBackfillStore)store).ListActionPagesAsync(bill.Detail, default);
+
+        await ((IBillActionsBackfillStore)store).RecordVerifiedActionChainAsync(bill.Detail,
+            [new(pages[0], firstPage), new(pages[1], secondPage)], default);
+
+        Assert.Equal([(0, "First one.", bill.Actions), (1, "First two.", bill.Actions), (2, "Second page.", secondJob)],
+            await ActionPositionsAsync());
+        Assert.Equal(new long?[] { 2L, 1L }, await ImportedCountsAsync(bill.Detail));
+    }
+
+    [Fact]
+    public async Task NormalCollectionAdmitsLaterPageBehindLegacyUnverifiedPageForWholeChainRecovery()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        var firstPage = new CongressBillActionsPage([HistoryAction("First page.")], ActionsNext(250));
+        var next = await AdmitActionsAsync(bill.Actions, firstPage);
+        var secondJob = Assert.Single(next.Jobs).JobId;
+        await ExecuteAsync(connectionString,
+            $"UPDATE bill_pages SET imported_count = NULL WHERE job_id = '{bill.Actions}'");
+        var secondPage = new CongressBillActionsPage([HistoryAction("Second page.")], null);
+
+        await AdmitActionsAsync(secondJob, secondPage);
+
+        Assert.Equal(new long?[] { null, null }, await ImportedCountsAsync(bill.Detail));
+        Assert.Equal([(0, "First page.", bill.Actions)], await ActionPositionsAsync());
+        var backfill = (IBillActionsBackfillStore)store;
+        var pages = await backfill.ListActionPagesAsync(bill.Detail, default);
+        Assert.Equal(2, pages.Count);
+
+        await backfill.RecordVerifiedActionChainAsync(bill.Detail,
+            [new(pages[0], firstPage), new(pages[1], secondPage)], default);
+
+        Assert.Equal([(0, "First page.", bill.Actions), (1, "Second page.", secondJob)], await ActionPositionsAsync());
+        Assert.Equal(new long?[] { 1L, 1L }, await ImportedCountsAsync(bill.Detail));
+    }
+
+    [Fact]
+    public async Task RecoveryRepairsPagePositionsToTheExactVerifiedChain()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        var firstPage = new CongressBillActionsPage([HistoryAction("First.")], ActionsNext(250));
+        var next = await AdmitActionsAsync(bill.Actions, firstPage);
+        var secondJob = Assert.Single(next.Jobs).JobId;
+        var secondPage = new CongressBillActionsPage([HistoryAction("Second.")], null);
+        await AdmitActionsAsync(secondJob, secondPage);
+        await ExecuteAsync(connectionString,
+            $"UPDATE bill_actions SET position = 10 WHERE job_id = '{bill.Actions}'; UPDATE bill_actions SET position = 0 WHERE job_id = '{secondJob}'; UPDATE bill_actions SET position = 1 WHERE job_id = '{bill.Actions}'");
+        var pages = await ((IBillActionsBackfillStore)store).ListActionPagesAsync(bill.Detail, default);
+
+        await ((IBillActionsBackfillStore)store).RecordVerifiedActionChainAsync(bill.Detail,
+            [new(pages[0], firstPage), new(pages[1], secondPage)], default);
+
+        Assert.Equal([(0, "First.", bill.Actions), (1, "Second.", secondJob)], await ActionPositionsAsync());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RecoveryRechecksTheGateSourceAndFollowOnRootBeforeWriting(bool changeSource)
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        var page = new CongressBillActionsPage([HistoryAction("Recovered.")], null);
+        await AdmitActionsAsync(bill.Actions, page);
+        await ExecuteAsync(connectionString,
+            $"DELETE FROM bill_actions WHERE detail_job_id = '{bill.Detail}'; UPDATE bill_pages SET imported_count = NULL WHERE job_id = '{bill.Actions}'");
+        var backfill = (IBillActionsBackfillStore)store;
+        var pages = await backfill.ListActionPagesAsync(bill.Detail, default);
+        if (changeSource)
+            await ExecuteAsync(connectionString, $"UPDATE bill_gates SET source_id = 'another-source' WHERE detail_job_id = '{bill.Detail}'");
+        else
+        {
+            var other = await EnqueueDetailAsync("different-root");
+            await AdmitDetailAsync(other, DetailBill(UpdatedAt.AddDays(1), 0), BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+            await ExecuteAsync(connectionString,
+                $"UPDATE bill_follow_on_jobs SET detail_job_id = '{other}' WHERE job_id = '{bill.Actions}'");
+        }
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            backfill.RecordVerifiedActionChainAsync(bill.Detail, [new(Assert.Single(pages), page)], default));
+
+        Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM bill_actions WHERE detail_job_id = '{bill.Detail}'"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM bill_pages WHERE job_id = '{bill.Actions}' AND imported_count IS NULL"));
+    }
+
+    [Fact]
+    public async Task AnUnchangedImportMarkerRollsBackTheRecoveredRows()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        var page = new CongressBillActionsPage([HistoryAction("Recovered.")], null);
+        await AdmitActionsAsync(bill.Actions, page);
+        await ExecuteAsync(connectionString,
+            $"DELETE FROM bill_actions WHERE detail_job_id = '{bill.Detail}'; UPDATE bill_pages SET imported_count = NULL WHERE job_id = '{bill.Actions}'");
+        var backfill = (IBillActionsBackfillStore)store;
+        var pages = await backfill.ListActionPagesAsync(bill.Detail, default);
+        await ExecuteAsync(connectionString, """
+            CREATE FUNCTION keep_history_import_unverified() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                NEW.imported_count := NULL;
+                RETURN NEW;
+            END $$;
+            CREATE TRIGGER keep_history_import_unverified BEFORE UPDATE ON bill_pages
+            FOR EACH ROW EXECUTE FUNCTION keep_history_import_unverified();
+            """);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            backfill.RecordVerifiedActionChainAsync(bill.Detail, [new(Assert.Single(pages), page)], default));
+
+        Assert.Equal(0L, await ScalarAsync($"SELECT count(*) FROM bill_actions WHERE detail_job_id = '{bill.Detail}'"));
+        Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM bill_pages WHERE job_id = '{bill.Actions}' AND imported_count IS NULL"));
+    }
+
+    [Fact]
+    public async Task TheKeysetRecoveryScanAdvancesPastUnverifiedBillsWithoutChangingThem()
+    {
+        var first = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        var secondDetail = await EnqueueDetailAsync("second");
+        var admitted = await AdmitDetailAsync(secondDetail, DetailBill(UpdatedAt.AddDays(1), 0),
+            BillGateOutcome.Passed(BillGateReason.CoveredSponsor));
+        var secondActions = admitted.Jobs.Single(job => job.Url.Contains("/actions?")).JobId;
+        await AdmitActionsAsync(first.Actions, new CongressBillActionsPage([], null));
+        await AdmitActionsAsync(secondActions, new CongressBillActionsPage([], null));
+        await ExecuteAsync(connectionString,
+            $"UPDATE bill_pages SET imported_count = NULL WHERE role = 'Actions' AND detail_job_id IN ('{first.Detail}', '{secondDetail}')");
+        var backfill = (IBillActionsBackfillStore)store;
+
+        var firstBatch = Assert.Single(await backfill.ListBillsWithUnverifiedActionsAsync(null, 1, default));
+        var secondBatch = Assert.Single(await backfill.ListBillsWithUnverifiedActionsAsync(firstBatch, 1, default));
+        var remaining = await backfill.ListBillsWithUnverifiedActionsAsync(secondBatch, 1, default);
+
+        Assert.NotEqual(firstBatch, secondBatch);
+        Assert.Empty(remaining);
+        Assert.Equal(firstBatch, Assert.Single(await backfill.ListBillsWithUnverifiedActionsAsync(null, 1, default)));
+    }
+
+    [Fact]
+    public async Task LegacyRowsAreReconstructedFromTheExactSavedRawPageCapture()
+    {
+        var bill = await StartPassedBillAsync(cosponsors: 0, summaries: 0);
+        var body = ActionBillWorld.ActionsBody(["Recovered from capture."], null);
+        var extractionId = await ReadableExtractionAsync(bill.Actions, ApiResource.BillActions, body);
+        var job = await store.GetAsync(bill.Actions, default);
+        var request = Assert.Single(job!.Attempts).Request;
+        var parsed = CongressBillActionsParser.Parse(Encoding.UTF8.GetBytes(body), request, SourceUrl,
+            new CongressBillListItem(119, "hr", 7, Backfill));
+        await store.AdmitActionsPageAsync(Source(), bill.Actions, parsed, extractionId, default);
+        await ExecuteAsync(connectionString,
+            $"UPDATE bill_pages SET imported_count = NULL WHERE job_id = '{bill.Actions}'; DELETE FROM bill_action_recorded_votes WHERE detail_job_id = '{bill.Detail}'; DELETE FROM bill_actions WHERE detail_job_id = '{bill.Detail}'");
+        var responses = new ApiResponseReader(PostgresCollectionAttemptStore.FromConnectionString(connectionString), new CaptureBodyReader());
+        var backfill = new BackfillBillActions(store, store, extractions, responses, captureRoot);
+
+        var result = await backfill.ExecuteAsync(new ReviewActor("auth0|owner", ReviewRole.Owner), 10);
+
+        Assert.Equal(new BillActionsBackfillResult(1, 1, 0), result);
+        Assert.Equal([(0, "Recovered from capture.", bill.Actions)], await ActionPositionsAsync());
+        Assert.Equal(1, await ScalarAsync($"SELECT imported_count FROM bill_pages WHERE job_id = '{bill.Actions}'"));
+    }
+
+    private async Task<IReadOnlyList<long?>> ImportedCountsAsync(string detailJobId)
+    {
+        await using var reader = await ReadAsync($"SELECT imported_count FROM bill_pages WHERE detail_job_id = '{detailJobId}' AND role = 'Actions' ORDER BY page_order");
+        var counts = new List<long?>();
+        while (await reader.ReadAsync()) counts.Add(reader.IsDBNull(0) ? null : reader.GetInt32(0));
+        return counts;
     }
 
     [Fact]

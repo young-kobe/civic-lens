@@ -2660,6 +2660,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillPageRow", b =>
                 {
+                    b.Property<int?>("ImportedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("imported_count");
+
                     b.Property<string>("JobId")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
@@ -5131,6 +5135,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryRow", b =>
                 {
                     b.Property<string>("DetailJobId").IsRequired().HasMaxLength(128).HasColumnType("character varying(128)").HasColumnName("detail_job_id");
+                    b.Property<int>("ProjectionVersion").ValueGeneratedOnAdd().HasColumnType("integer").HasDefaultValue(0).HasColumnName("projection_version");
                     b.Property<string>("SourceId").IsRequired().HasMaxLength(128).HasColumnType("character varying(128)").HasColumnName("source_id");
                     b.Property<int>("Congress").HasColumnType("integer").HasColumnName("congress");
                     b.Property<string>("BillType").IsRequired().HasMaxLength(16).HasColumnType("character varying(16)").HasColumnName("bill_type");
@@ -5138,10 +5143,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<long>("ObservedAtUtcTicks").HasColumnType("bigint").HasColumnName("observed_at_utc_ticks");
                     b.Property<int>("ActionCount").HasColumnType("integer").HasColumnName("action_count");
                     b.Property<string>("PublicLaw").HasColumnType("text").HasColumnName("public_law");
-                    b.HasKey("DetailJobId");
+                    b.HasKey("DetailJobId", "ProjectionVersion");
                     b.ToTable("published_bill_histories", null, t =>
                         {
                             t.HasCheckConstraint("ck_published_bill_histories_action_count", "action_count >= 0");
+                            t.HasCheckConstraint("ck_published_bill_histories_projection_version", "projection_version >= 0");
                             t.HasCheckConstraint("ck_published_bill_histories_bill_number", "bill_number >= 1");
                             t.HasCheckConstraint("ck_published_bill_histories_congress", "congress >= 1");
                             t.HasCheckConstraint("ck_published_bill_histories_observed_at_utc_ticks", "observed_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
@@ -5151,6 +5157,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryActionRow", b =>
                 {
                     b.Property<string>("DetailJobId").IsRequired().HasMaxLength(128).HasColumnType("character varying(128)").HasColumnName("detail_job_id");
+                    b.Property<int>("ProjectionVersion").ValueGeneratedOnAdd().HasColumnType("integer").HasDefaultValue(0).HasColumnName("projection_version");
                     b.Property<int>("Position").HasColumnType("integer").HasColumnName("position");
                     b.Property<DateOnly>("ActionDate").HasColumnType("date").HasColumnName("action_date");
                     b.Property<TimeOnly?>("ActionTime").HasColumnType("time without time zone").HasColumnName("action_time");
@@ -5159,10 +5166,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<string>("ActionCode").HasColumnType("text").HasColumnName("action_code");
                     b.Property<int?>("SourceSystemCode").HasColumnType("integer").HasColumnName("source_system_code");
                     b.Property<string>("SourceSystemName").HasColumnType("text").HasColumnName("source_system_name");
-                    b.HasKey("DetailJobId", "Position");
+                    b.HasKey("DetailJobId", "ProjectionVersion", "Position");
                     b.ToTable("published_bill_history_actions", null, t =>
                         {
                             t.HasCheckConstraint("ck_published_bill_history_actions_position", "position >= 0");
+                            t.HasCheckConstraint("ck_published_bill_history_actions_projection_version", "projection_version >= 0");
                             t.HasCheckConstraint("ck_published_bill_history_actions_text", "text ~ '\\S'");
                         });
                 });
@@ -5172,10 +5180,14 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<int>("ReleaseNumber").HasColumnType("integer").HasColumnName("release_number");
                     b.Property<string>("RecordId").IsRequired().HasMaxLength(64).HasColumnType("character varying(64)").HasColumnName("record_id");
                     b.Property<string>("DetailJobId").IsRequired().HasMaxLength(128).HasColumnType("character varying(128)").HasColumnName("detail_job_id");
+                    b.Property<int>("ProjectionVersion").ValueGeneratedOnAdd().HasColumnType("integer").HasDefaultValue(0).HasColumnName("projection_version");
                     b.HasKey("ReleaseNumber", "RecordId");
-                    b.HasIndex("DetailJobId");
+                    b.HasIndex("DetailJobId", "ProjectionVersion");
                     b.ToTable("release_bill_histories", null, t =>
-                        t.HasCheckConstraint("ck_release_bill_histories_record_id", "record_id ~ '^[0-9a-f]{64}$'"));
+                        {
+                            t.HasCheckConstraint("ck_release_bill_histories_record_id", "record_id ~ '^[0-9a-f]{64}$'");
+                            t.HasCheckConstraint("ck_release_bill_histories_projection_version", "projection_version >= 0");
+                        });
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseBillStatusRow", b =>
@@ -9721,12 +9733,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryActionRow", b =>
                 {
-                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryRow", null).WithMany().HasForeignKey("DetailJobId").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryRow", null).WithMany().HasForeignKey("DetailJobId", "ProjectionVersion").OnDelete(DeleteBehavior.Restrict).IsRequired();
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseBillHistoryRow", b =>
                 {
-                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryRow", null).WithMany().HasForeignKey("DetailJobId").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryRow", null).WithMany().HasForeignKey("DetailJobId", "ProjectionVersion").OnDelete(DeleteBehavior.Restrict).IsRequired();
                     b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null).WithMany().HasForeignKey("ReleaseNumber").OnDelete(DeleteBehavior.Restrict).IsRequired();
                 });
 

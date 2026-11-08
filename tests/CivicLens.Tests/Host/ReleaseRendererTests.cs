@@ -2199,7 +2199,7 @@ public sealed class ReleaseRendererTests
         Assert.Equal("Who represents you?", document.QuerySelector("h1")!.TextContent);
         Assert.Single(document.QuerySelectorAll("h1"));
         Assert.Equal("See how your representative and senators voted and which bills they introduced. Each fact links to its official source.", document.QuerySelector(".home-lead")!.TextContent);
-        Assert.NotNull(document.QuerySelector("header.public-header + .public-hero + main section#issues"));
+        Assert.NotNull(document.QuerySelector("header.public-header + main > .public-hero + .public-main section#issues"));
         Assert.Equal(["Start with an issue"], document.QuerySelectorAll("main section#issues h2").Select(heading => heading.TextContent));
     }
 

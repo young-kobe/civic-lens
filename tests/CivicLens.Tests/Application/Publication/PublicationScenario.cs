@@ -723,9 +723,17 @@ internal sealed class FakePublicationStore : IPublicationStore
     private readonly Dictionary<int, BillHistoryBinding[]> historyBindings = [];
 
     public Task<IReadOnlyList<BillPublicationInput>> ReadBillInputsAsync(int? previousReleaseNumber, ImmutableArray<string> recordIds,
-        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<BillPublicationInput>>([.. recordIds.Select(id =>
-            new BillPublicationInput(id, BillStatuses.TryGetValue(id, out var status) ? new(status, "hr") : null,
-                BillHistories.GetValueOrDefault(id), historyBindings.GetValueOrDefault(previousReleaseNumber ?? 0)?.SingleOrDefault(binding => binding.RecordId == id)?.DetailJobId))]);
+        CancellationToken cancellationToken)
+    {
+        var prior = (historyBindings.GetValueOrDefault(previousReleaseNumber ?? 0) ?? [])
+            .ToDictionary(binding => binding.RecordId, StringComparer.Ordinal);
+        return Task.FromResult<IReadOnlyList<BillPublicationInput>>([.. recordIds.Select(id =>
+        {
+            var published = prior.GetValueOrDefault(id);
+            return new BillPublicationInput(id, BillStatuses.TryGetValue(id, out var status) ? new(status, "hr") : null,
+                BillHistories.GetValueOrDefault(id), published?.DetailJobId, published?.ProjectionVersion);
+        })]);
+    }
 
     public Task PrepareBillHistoriesAsync(IReadOnlyCollection<BillHistoryCapture> histories, CancellationToken cancellationToken)
     {

@@ -791,7 +791,7 @@ public sealed class PublishedOfficialPageTests
 
         var document = new HtmlParser().ParseDocument(html);
         Assert.Equal("Mayor Example", document.QuerySelector(".public-hero .official-hero header.page-header h1")!.TextContent);
-        Assert.Null(document.QuerySelector("main header.page-header"));
+        Assert.Null(document.QuerySelector(".public-main header.page-header"));
     }
 
     [Fact]

@@ -39,6 +39,35 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task FreshnessUsesNewestPublishedRollCallEvenWhenItIsNotSubstantiveAndOmitsAnEmptyChamber()
+    {
+        var substantive = House('a', "2026-05-01", 1) with { Kind = "Amendment", BillType = null, BillNumber = null };
+        var procedural = new SeededVote('b', "2026-05-31") { Kind = "Rule", RollCall = 2 };
+        await using var host = await StartAsync([substantive, procedural]);
+
+        var answer = await GetAsync(host);
+        Assert.Equal("2026-05-31", answer.GetProperty("newestHouseRollCall").GetString());
+        Assert.Equal(JsonValueKind.Null, answer.GetProperty("newestSenateRollCall").ValueKind);
+        Assert.Equal(substantive.RecordId, answer.GetProperty("votes")[0].GetProperty("recordId").GetString());
+
+        await using var dataSource = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase!);
+        var page = await new HomePageReader(new HomeStore(dataSource), null).ReadAsync(CancellationToken.None);
+        Assert.NotNull(page);
+        Assert.Equal(new DateOnly(2026, 5, 31), page.NewestHouseRollCall);
+        Assert.Null(page.NewestSenateRollCall);
+    }
+
+    [Fact]
+    public async Task NoActiveReleaseHasNoHomeAnswerOrFreshnessDates()
+    {
+        await using var host = await StartAsync([House('a', "2026-05-01", 1)]);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "UPDATE publication_releases SET is_active = false");
+        await using var dataSource = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase!);
+
+        Assert.Null(await new HomeStore(dataSource).ReadAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task ExecutiveGroupsCountActivePublishedKindsAndChooseNewestSignedRecordWithRecordIdTieOrder()
     {
         var votes = new[] { House('1', "2026-05-01", 1), House('2', "2026-05-02", 2), House('3', "2026-05-03", 3) };
@@ -67,6 +96,20 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(votes[2].RecordId, FeaturedId(answer));
         Assert.Equal([votes[1].RecordId, votes[0].RecordId], Ids(answer));
         Assert.Equal(new SeededBrief('x', "2026-05-25").RecordId, answer.GetProperty("brief").GetProperty("recordId").GetString()!);
+
+        await using var dataSource = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase!);
+        var page = await new HomePageReader(new HomeStore(dataSource), null).ReadAsync(CancellationToken.None);
+        Assert.NotNull(page);
+        Assert.Equal(2, page.ExecutiveActions.Length);
+        var pageOrder = Assert.Single(page.ExecutiveActions, group => group.Kind == PublishedExecutiveActionKind.ExecutiveOrder);
+        Assert.Equal(3, pageOrder.Count);
+        Assert.Equal(actions[0].RecordId, pageOrder.NewestRecordId);
+        Assert.Equal("Pinned active title", pageOrder.NewestTitle);
+        Assert.Equal(new DateOnly(2026, 5, 20), pageOrder.NewestSignedOn);
+        var pageProclamation = Assert.Single(page.ExecutiveActions, group => group.Kind == PublishedExecutiveActionKind.Proclamation);
+        Assert.Equal(1, pageProclamation.Count);
+        Assert.Equal(actions[3].RecordId, pageProclamation.NewestRecordId);
+        Assert.DoesNotContain(page.ExecutiveActions, group => group.NewestRecordId == actions[4].RecordId);
 
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, Published.AddDays(1));
         var next = await GetAsync(host);
@@ -132,6 +175,24 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         var empty = Assert.Single(issues, issue => issue.GetProperty("issueId").GetString() == "empty");
         Assert.Equal(0, empty.GetProperty("substantiveVotes").GetInt32());
         Assert.Equal(0, empty.GetProperty("bills").GetInt32());
+
+        await using var dataSource = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase!);
+        var page = await new HomePageReader(new HomeStore(dataSource), null).ReadAsync(CancellationToken.None);
+        Assert.NotNull(page);
+        Assert.Equal(1, page.Release);
+        Assert.Equal(3, page.Issues.Length);
+        var pageHealth = Assert.Single(page.Issues, issue => issue.IssueId == "health");
+        Assert.Equal("Health", pageHealth.Name);
+        Assert.Equal(119, pageHealth.Congress);
+        Assert.Equal(1, pageHealth.SubstantiveVotes);
+        Assert.Equal(1, pageHealth.Bills);
+        var pageClimate = Assert.Single(page.Issues, issue => issue.IssueId == "climate");
+        Assert.Equal(119, pageClimate.Congress);
+        Assert.Equal(1, pageClimate.SubstantiveVotes);
+        Assert.Equal(0, pageClimate.Bills);
+        var pageEmpty = Assert.Single(page.Issues, issue => issue.IssueId == "empty");
+        Assert.Equal(0, pageEmpty.SubstantiveVotes);
+        Assert.Equal(0, pageEmpty.Bills);
 
         using var detail = await host.Client.GetAsync("/v1/issues/health");
         Assert.Equal(HttpStatusCode.OK, detail.StatusCode);

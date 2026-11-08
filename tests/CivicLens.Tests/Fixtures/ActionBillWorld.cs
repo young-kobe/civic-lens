@@ -94,6 +94,7 @@ internal sealed class ActionBillWorld
     {
         ApiResource.Bill => CongressBillParser.ExtractionVersion,
         ApiResource.BillCosponsors => CongressBillCosponsorsParser.ExtractionVersion,
+        ApiResource.BillActions => CongressBillActionsParser.ExtractionVersion,
         ApiResource.BillSubjects => CongressBillSubjectsParser.ExtractionVersion,
         _ => CongressBillSummariesParser.ExtractionVersion(new FragmentExtractor())
     };
@@ -114,6 +115,14 @@ internal sealed class ActionBillWorld
     public void ReplaceCapturedBody(string jobId, string body)
     {
         bodies["attempt-" + jobId] = body;
+    }
+
+    public void AddActionsPage(string jobId, int offset, string body)
+    {
+        var url = offset == 0
+            ? BillPageUrl.FirstPage(SourceUrl, ApiResource.BillActions, new(119, "hr", 1, default))
+            : $"{SourceUrl}/119/hr/1/actions?offset={offset}&limit=250&format=json";
+        Add(ApiResource.BillActions, jobId, url, body);
     }
 
     public void TamperWithSavedText(string jobId, string text)
@@ -157,6 +166,8 @@ internal sealed class ActionBillWorld
             return CongressBillRenderer.RenderCosponsors(bill, CongressBillCosponsorsParser.Parse(bytes, request, SourceUrl, bill));
         if (resource == ApiResource.BillSubjects)
             return CongressBillRenderer.RenderSubjects(bill, CongressBillSubjectsParser.Parse(bytes, request, SourceUrl, bill));
+        if (resource == ApiResource.BillActions)
+            return CongressBillRenderer.RenderActions(bill, CongressBillActionsParser.Parse(bytes, request, SourceUrl, bill));
         var page = CongressBillSummariesParser.Parse(bytes, request, SourceUrl, bill);
         return CongressBillRenderer.RenderSummaries(bill,
             [.. page.Summaries.Select(summary => new CongressBillSummaryText(summary, FragmentExtractor.Text(summary.Html)))]);
@@ -211,6 +222,12 @@ internal sealed class ActionBillWorld
         {
             new { versionCode = summary.Version, actionDate = summary.ActionDate, actionDesc = "Introduced", updateDate = summary.Updated, text = summary.Html }
         },
+        pagination = new { next }
+    });
+
+    public static string ActionsBody(string[] actions, string? next) => JsonSerializer.Serialize(new
+    {
+        actions = actions.Select(text => new { actionDate = "2025-03-01", text }),
         pagination = new { next }
     });
 
