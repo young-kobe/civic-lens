@@ -145,6 +145,8 @@ body.public {
     --marigold: #f5b301;
     --vote-ink: #1f7074;
     --vote-surface: #def3f4;
+    --exec-ink: #45658d;
+    --exec-surface: #e5f0fe;
     --ai-surface: #f3f0ff;
     --ai-line: #6a52c9;
     --ai-ink: #3b2a8f;
@@ -187,6 +189,8 @@ body.public {
     body.public {
         --vote-ink: light-dark(#1f7074, #81cdd1);
         --vote-surface: light-dark(#def3f4, #183031);
+        --exec-ink: light-dark(#45658d, #9dc1ee);
+        --exec-surface: light-dark(#e5f0fe, #212c3a);
         --ai-surface: light-dark(#f3f0ff, #1f1a40);
         --ai-line: light-dark(#6a52c9, #a594f0);
         --ai-ink: light-dark(#3b2a8f, #cfc6ff);
