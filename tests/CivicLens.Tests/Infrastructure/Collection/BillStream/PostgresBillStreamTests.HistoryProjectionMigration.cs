@@ -76,7 +76,7 @@ public sealed partial class PostgresBillStreamTests
               FROM pg_constraint
              WHERE conrelid = 'published_bill_histories'::regclass AND contype = 'p'
             """));
-        Assert.Equal("PRIMARY KEY (detail_job_id, projection_version, position)", await ScalarAsync("""
+        Assert.Equal("PRIMARY KEY (detail_job_id, projection_version, \"position\")", await ScalarAsync("""
             SELECT pg_get_constraintdef(oid)
               FROM pg_constraint
              WHERE conrelid = 'published_bill_history_actions'::regclass AND contype = 'p'

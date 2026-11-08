@@ -26,6 +26,7 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     private const string ListJobKeyPrefix = "test-list/";
     private static readonly DateOnly Backfill = new(2025, 1, 3);
     private readonly HashSet<string> seededJobIds = [];
+    private readonly Dictionary<string, string> seededExtractionIds = [];
     private int detailSequence;
     private string connectionString = null!;
     private PostgresCollectionJobStore store = null!;
@@ -1208,10 +1209,13 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     private async Task<DiscoveryAdmissionResult> AdmitSubjectsAsync(string pageJobId, CongressBillSubjectsPage page) =>
         await store.AdmitSubjectsPageAsync(Source(), pageJobId, page, await ExtractionAsync(pageJobId), default);
 
-    private Task<string> ExtractionAsync(string jobId)
+    private async Task<string> ExtractionAsync(string jobId)
     {
+        if (seededExtractionIds.TryGetValue(jobId, out var existing)) return existing;
         var text = "Bill page extraction for " + jobId;
-        return ExtractionAsync(jobId, text, text, "extraction");
+        var extractionId = await ExtractionAsync(jobId, text, text, "extraction");
+        seededExtractionIds.Add(jobId, extractionId);
+        return extractionId;
     }
 
     private Task<string> ExtractionAsync(string jobId, string body, string text, string extractionVersion) =>
