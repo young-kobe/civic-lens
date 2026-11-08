@@ -52,6 +52,16 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
          ORDER BY p.official_id, a.chamber
         """;
 
+    private const string HolderPartyLinesSql = """
+        SELECT lines.official_id, lines.chamber, lines.congress, lines.party, lines.with_party, lines.against_party,
+               lines.cast_count, lines.first_voted_on, lines.last_voted_on
+          FROM unnest(@officialIds, @congresses) AS latest(official_id, congress)
+          JOIN public_api.official_party_lines lines
+            ON lines.official_id = latest.official_id AND lines.congress = latest.congress
+         WHERE lines.official_id = ANY(@officialIds)
+         ORDER BY lines.official_id, lines.chamber, lines.party
+        """;
+
     /// <summary>Finds the districts of a ZCTA. The lookup names the miss when no release is active, when the release holds no names, or when the ZCTA has no row for the Congress.
     /// One snapshot serves all reads, so the seats, portraits, and figures come from one release.</summary>
     public async Task<ZipLookup> FindAsync(ZipDistrictRequest request, CancellationToken cancellationToken)
@@ -155,7 +165,7 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         var partyLines = new Dictionary<string, List<PartyLineFigure>>(StringComparer.Ordinal);
         var withAttendance = officialIds.Where(id => holderFigures.GetValueOrDefault(id)?.AttendanceCongress is not null).ToArray();
         if (withAttendance.Length == 0) return partyLines;
-        await using var command = new NpgsqlCommand(OfficialPartyLineReader.ForAttendanceSql, connection);
+        await using var command = new NpgsqlCommand(HolderPartyLinesSql, connection);
         command.Parameters.AddWithValue("officialIds", withAttendance);
         command.Parameters.AddWithValue("congresses", withAttendance.Select(id => holderFigures[id].AttendanceCongress!.Value).ToArray());
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
