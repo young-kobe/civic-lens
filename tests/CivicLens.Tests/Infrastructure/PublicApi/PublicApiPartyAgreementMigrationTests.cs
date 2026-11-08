@@ -34,8 +34,8 @@ public sealed class PublicApiPartyAgreementMigrationTests(PostgresCollection pos
             await db.GetService<IMigrator>().MigrateAsync(previous);
             await using var verify = new NpgsqlConnection(connectionString);
             await verify.OpenAsync();
-            await using var command = new NpgsqlCommand("SELECT to_regclass('public_api.party_agreement')", verify);
-            Assert.Null(await command.ExecuteScalarAsync());
+            await using var command = new NpgsqlCommand("SELECT to_regclass('public_api.party_agreement') IS NULL", verify);
+            Assert.True((bool)(await command.ExecuteScalarAsync())!);
         }
         finally { await postgres.DropDatabaseAsync(connectionString); }
     }
