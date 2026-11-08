@@ -1,11 +1,12 @@
 using System.Text.Json.Serialization;
+using CivicLens.Core.Documents;
 using CivicLens.Core.ExecutiveActions;
 
 namespace CivicLens.Application.Collection.FederalRegister;
 
 public static class FederalRegisterDocumentParser
 {
-    public const string ExtractionVersion = "federal-register-document-v1";
+    public const string ExtractionVersion = "federal-register-document-v2";
     private const string PresidentialDocumentType = "Presidential Document";
 
     private sealed record Wire(
@@ -19,7 +20,8 @@ public static class FederalRegisterDocumentParser
         [property: JsonPropertyName("president")] WirePresident? President,
         [property: JsonPropertyName("correction_of")] string? CorrectionOf,
         [property: JsonPropertyName("presidential_document_number")] string? PresidentialDocumentNumber,
-        [property: JsonPropertyName("html_url")] string? HtmlUrl);
+        [property: JsonPropertyName("html_url")] string? HtmlUrl,
+        [property: JsonPropertyName("disposition_notes")] string? DispositionNotes);
 
     private sealed record WirePresident(
         [property: JsonPropertyName("identifier")] string? Identifier,
@@ -33,10 +35,13 @@ public static class FederalRegisterDocumentParser
         var kind = ExecutiveActionKinds.TryRead(wire.Subtype)
             ?? throw new InvalidDataException("Federal Register document has a type that Civic Lens does not record.");
         var president = wire.President;
-        return new FederalRegisterDocument(expectedNumber, CorrectedNumberOf(wire.CorrectionOf), kind, Optional(wire.PresidentialDocumentNumber),
+        var document = new FederalRegisterDocument(expectedNumber, CorrectedNumberOf(wire.CorrectionOf), kind, Optional(wire.PresidentialDocumentNumber),
             Required(wire.Title), wire.SigningDate ?? throw new InvalidDataException("Federal Register document needs a signing date."),
             wire.PublicationDate ?? throw new InvalidDataException("Federal Register document needs a publication date."),
             Required(wire.Citation), Required(president?.Identifier), Required(president?.Name), RequiredUrl(wire.HtmlUrl));
+        if (wire.DispositionNotes is { Length: > DocumentExtraction.MaximumTextLength })
+            throw new InvalidDataException("Federal Register disposition notes exceed the extraction text limit.");
+        return document with { DispositionNotes = wire.DispositionNotes };
     }
 
     private static string? CorrectedNumberOf(string? correctionOf) =>

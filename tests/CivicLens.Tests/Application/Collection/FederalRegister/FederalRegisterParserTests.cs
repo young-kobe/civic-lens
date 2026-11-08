@@ -1,4 +1,5 @@
 using CivicLens.Application.Collection.FederalRegister;
+using CivicLens.Core.Documents;
 using CivicLens.Core.ExecutiveActions;
 using CivicLens.Tests.Fixtures;
 
@@ -62,6 +63,29 @@ public sealed class FederalRegisterParserTests
     }
 
     [Fact]
+    public void DispositionNotesAreOptionalAndKeepTheirExactMultilineValue()
+    {
+        var notes = "Amends: Space Policy Directive 3, June 18, 2018\r\nRevokes: EO 14056, December 1, 2021\r\nSee: EO 14186, January 27, 2025; EO 14271, April 15, 2025";
+        var withNotes = FederalRegisterFixtures.TrumpOrder.Replace("\"html_url\":", $"\"disposition_notes\":{System.Text.Json.JsonSerializer.Serialize(notes)},\"html_url\":");
+        var withNull = FederalRegisterFixtures.TrumpOrder.Replace("\"html_url\":", "\"disposition_notes\":null,\"html_url\":");
+
+        Assert.Equal(notes, FederalRegisterFixtures.Document(withNotes).DispositionNotes);
+        Assert.Null(FederalRegisterFixtures.Document(withNull).DispositionNotes);
+        Assert.Null(FederalRegisterFixtures.Document(FederalRegisterFixtures.TrumpOrder).DispositionNotes);
+    }
+
+    [Fact]
+    public void ADispositionNotesValueMustBeTextAndFitTheExistingExtractionLimit()
+    {
+        var wrongType = FederalRegisterFixtures.TrumpOrder.Replace("\"html_url\":", "\"disposition_notes\":17,\"html_url\":");
+        var tooLong = FederalRegisterFixtures.TrumpOrder.Replace("\"html_url\":",
+            $"\"disposition_notes\":{System.Text.Json.JsonSerializer.Serialize(new string('x', DocumentExtraction.MaximumTextLength + 1))},\"html_url\":");
+
+        Assert.Throws<InvalidDataException>(() => FederalRegisterFixtures.Document(wrongType));
+        Assert.Throws<InvalidDataException>(() => FederalRegisterFixtures.Document(tooLong));
+    }
+
+    [Fact]
     public void ACorrectionNamesTheDocumentItCorrectsAndSharesItsRecord()
     {
         var correction = FederalRegisterFixtures.Document(FederalRegisterFixtures.BidenProclamationCorrection);
@@ -77,6 +101,29 @@ public sealed class FederalRegisterParserTests
         var text = FederalRegisterRenderer.Render(FederalRegisterFixtures.Document(FederalRegisterFixtures.BidenProclamationCorrection));
 
         Assert.EndsWith("\nCorrection notice: R1-2024-26714, published 2024-11-20, https://www.federalregister.gov/documents/2024/11/20/R1-2024-26714/to-facilitate-positive-adjustment-to-competition-from-imports-of-fine-denier-polyester-staple-fiber", text);
+    }
+
+    [Fact]
+    public void DispositionNotesAppendAfterTheOfficialFactsWithoutChangingThem()
+    {
+        const string notes = "Amends: SPD 3\r\nRevokes: EO 14056\r\nSee: EO 14186";
+        var json = FederalRegisterFixtures.TrumpOrder.Replace("\"html_url\":", $"\"disposition_notes\":{System.Text.Json.JsonSerializer.Serialize(notes)},\"html_url\":");
+
+        var text = FederalRegisterRenderer.Render(FederalRegisterFixtures.Document(json));
+        var facts = FederalRegisterRenderer.Render(FederalRegisterFixtures.Document(FederalRegisterFixtures.TrumpOrder));
+
+        Assert.Equal(facts + "\nDisposition notes: " + notes, text);
+    }
+
+    [Fact]
+    public void ACorrectionRendersDispositionNotesBeforeItsExistingNoticeLine()
+    {
+        const string notes = "Amends: SPD 3\nRevokes: EO 14056";
+        var json = FederalRegisterFixtures.BidenProclamationCorrection.Replace("\"html_url\":", $"\"disposition_notes\":{System.Text.Json.JsonSerializer.Serialize(notes)},\"html_url\":");
+
+        var text = FederalRegisterRenderer.Render(FederalRegisterFixtures.Document(json));
+
+        Assert.Contains("\nDisposition notes: Amends: SPD 3\nRevokes: EO 14056\nCorrection notice:", text);
     }
 
     [Fact]

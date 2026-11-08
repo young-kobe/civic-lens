@@ -14,8 +14,9 @@ public static class FederalRegisterUrl
     private static readonly string[] DetailFields =
     [
         "document_number", "type", "subtype", "title", "signing_date", "publication_date", "citation", "president", "correction_of",
-        "presidential_document_number", "html_url"
+        "presidential_document_number", "html_url", "disposition_notes"
     ];
+    private static readonly string[] LegacyDetailFields = DetailFields[..^1];
 
     public static string List(string sourceUrl, FederalRegisterWindow window)
     {
@@ -31,7 +32,7 @@ public static class FederalRegisterUrl
     }
 
     public static string Document(string sourceUrl, string documentNumber) =>
-        $"{DocumentBase(sourceUrl)}/{documentNumber}{JsonSuffix}?{string.Join('&', DetailFields.Select(field => Pair("fields[]", field)))}";
+        Document(sourceUrl, documentNumber, DetailFields);
 
     public static FederalRegisterWindow? TryReadList(string sourceUrl, string url)
     {
@@ -52,7 +53,8 @@ public static class FederalRegisterUrl
         var end = rest.IndexOf(JsonSuffix + "?", StringComparison.Ordinal);
         if (end < 0) return null;
         var number = rest[..end];
-        return FederalRegisterDocumentNumber.IsValid(number) && Document(sourceUrl, number) == url ? number : null;
+        if (!FederalRegisterDocumentNumber.IsValid(number)) return null;
+        return Document(sourceUrl, number, DetailFields) == url || Document(sourceUrl, number, LegacyDetailFields) == url ? number : null;
     }
 
     public static FederalRegisterWindow ReadList(string sourceUrl, string url) =>
@@ -65,6 +67,9 @@ public static class FederalRegisterUrl
         sourceUrl.EndsWith(JsonSuffix, StringComparison.Ordinal)
             ? sourceUrl[..^JsonSuffix.Length]
             : throw new ArgumentException("The Federal Register source URL ends with .json.", nameof(sourceUrl));
+
+    private static string Document(string sourceUrl, string documentNumber, IReadOnlyList<string> fields) =>
+        $"{DocumentBase(sourceUrl)}/{documentNumber}{JsonSuffix}?{string.Join('&', fields.Select(field => Pair("fields[]", field)))}";
 
     private static string Pair(string key, string value) =>
         $"{key.Replace("[", "%5B").Replace("]", "%5D")}={Uri.EscapeDataString(value)}";

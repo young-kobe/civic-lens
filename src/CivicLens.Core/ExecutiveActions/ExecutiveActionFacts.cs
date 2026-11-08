@@ -14,6 +14,7 @@ public static class ExecutiveActionFacts
     public const string Citation = "Citation";
     public const string President = "President";
     public const string CorrectionNotice = "Correction notice";
+    public const string DispositionNotes = "Disposition notes";
     public const string Url = "Document URL";
 
     public static string Line(string label, string value) => $"{label}: {value}";

@@ -27,10 +27,25 @@ public sealed class FederalRegisterRequestTests
         var url = FederalRegisterUrl.Document(Source, "2025-01900");
 
         Assert.StartsWith("https://www.federalregister.gov/api/v1/documents/2025-01900.json?fields%5B%5D=document_number", url);
+        Assert.EndsWith("&fields%5B%5D=disposition_notes", url);
         Assert.DoesNotContain("page_views", url);
         Assert.Equal("2025-01900", FederalRegisterUrl.TryReadDocument(Source, url));
         Assert.Null(FederalRegisterUrl.TryReadDocument(Source, url + "&fields%5B%5D=page_views"));
         Assert.Null(FederalRegisterUrl.TryReadDocument(Source, url.Replace("2025-01900", "../2025-01900")));
+        Assert.Equal("2025-01900", FederalRegisterUrl.TryReadDocument(Source, url.Replace("&fields%5B%5D=disposition_notes", "")));
+        Assert.Null(FederalRegisterUrl.TryReadDocument(Source, url.Replace("&fields%5B%5D=disposition_notes", "&fields%5B%5D=disposition_notes&fields%5B%5D=disposition_notes")));
+        Assert.Null(FederalRegisterUrl.TryReadDocument(Source, url.Replace("&fields%5B%5D=disposition_notes", "&fields%5B%5D=unknown")));
+        Assert.Null(FederalRegisterUrl.TryReadDocument(Source, url.Replace("&fields%5B%5D=html_url&fields%5B%5D=disposition_notes", "&fields%5B%5D=disposition_notes&fields%5B%5D=html_url")));
+    }
+
+    [Fact]
+    public void AQueuedDocumentUrlWithTheExactEarlierFieldSetStillReadsBackUnchanged()
+    {
+        const string oldUrl = "https://www.federalregister.gov/api/v1/documents/2025-01900.json?fields%5B%5D=document_number&fields%5B%5D=type&fields%5B%5D=subtype&fields%5B%5D=title&fields%5B%5D=signing_date&fields%5B%5D=publication_date&fields%5B%5D=citation&fields%5B%5D=president&fields%5B%5D=correction_of&fields%5B%5D=presidential_document_number&fields%5B%5D=html_url";
+
+        Assert.Equal("2025-01900", FederalRegisterUrl.TryReadDocument(Source, oldUrl));
+        Assert.Null(FederalRegisterUrl.TryReadDocument(Source, oldUrl.Replace("&fields%5B%5D=html_url", "&fields%5B%5D=html_url&fields%5B%5D=page_views")));
+        Assert.Null(FederalRegisterUrl.TryReadDocument(Source, oldUrl.Replace("&fields%5B%5D=president&fields%5B%5D=correction_of", "&fields%5B%5D=correction_of&fields%5B%5D=president")));
     }
 
     [Fact]

@@ -51,7 +51,7 @@ Implemented:
 - static release publication of document changes, statements, actions, votes, weekly briefs, and relationships
 - related records on the statement, action, and vote pages
 - the public pages of each release: officials, official profiles, party voting boards, issues, weekly briefs, all records, about, method, reader reports, and photos
-- presidential documents from the Federal Register, recorded as code-approved executive actions with their official titles
+- presidential documents from the Federal Register, recorded as code-approved executive actions with their official titles and captured disposition notes
 - record withdrawals, the member roster, and member photos
 - the public search service with its own Postgres database, fed from published releases, and the search page of each release
 
@@ -281,7 +281,7 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | House vote members extraction | `congress-house-vote-members-v1` | `src/CivicLens.Application/Collection/HouseVotes/HouseVoteMembersParser.cs` | Extraction IDs, text, and citations of a House member list | The parse or the rendered text of a member list changes |
 | Feed item statement extraction | `feed-item-statement-v1` plus the version of the HTML extraction | `src/CivicLens.Application/Collection/FeedStatements/FeedStatementExtractions.cs` | Extraction IDs, text, and citations of a feed item | The parse or the rendered text of a feed item changes |
 | Voteview Senate vote extraction | `voteview-senate-vote-v1` | `src/CivicLens.Application/Collection/VoteviewVotes/VoteviewParser.cs` | Extraction IDs, text, and citations of a Voteview Senate vote | The parse or the rendered text of a roll call changes |
-| Federal Register document extraction | `federal-register-document-v1` | `src/CivicLens.Application/Collection/FederalRegister/FederalRegisterDocumentParser.cs` | Extraction IDs, text, and citations of a Federal Register document | The parse or the rendered text of a document changes |
+| Federal Register document extraction | `federal-register-document-v2` | `src/CivicLens.Application/Collection/FederalRegister/FederalRegisterDocumentParser.cs` | Extraction IDs, text, and citations of a Federal Register document | The parse or the rendered text of a document changes |
 | Comparison algorithm | `line-lcs-context-v1` | `src/CivicLens.Core/Documents/DocumentComparison.cs` | Stored comparison IDs and hunks | Hunk or word-edit output changes |
 | Comparison settings | `bounded-lines-2000-...-v1` | same file | Limits recorded with each comparison | Any limit constant changes |
 | Draft task | `document-change-draft-v1` | `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs` | Analysis runs | Task flow or output handling changes |

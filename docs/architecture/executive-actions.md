@@ -14,8 +14,8 @@ The executive actions feature records presidential documents from the Federal Re
 - A correction that names a correction is invalid data. It blocks its job with the reason code `CorrectionOfCorrectionException`. The check holds in either arrival order.
 - A list job covers a window of publication dates and admits one document job for each listed document. The window needs no cursor table. It starts 2 days before the newest publication date of any stored document, or at `backfillFrom` when none exists. It ends today.
 - A window must fit one API page of 1,000 documents. A longer list is invalid data and blocks the job. About 340 documents appear in a year, so the first window from `backfillFrom` fits.
-- A document job fetches the document with pinned `fields[]`. The pin keeps a changing field such as the page view count out of the capture. The pin also adds `president`, which the API omits otherwise.
-- The extraction text has one fact on each line, so each fact is a clean citation. `ExecutiveActionFacts` owns the labels and the order.
+- A new document job fetches the document with pinned `fields[]`, including `disposition_notes`. The pin keeps a changing field such as the page view count out of the capture. The pin also adds `president`, which the API omits otherwise. Jobs with the exact prior pinned field list stay valid and keep their original URL. Other field orders and query forms are invalid.
+- The extraction text has each fixed fact on its own line, so each is a clean citation. `ExecutiveActionFacts` owns the labels and the order. Disposition notes, when present, retain their multiline source text as one appended block.
 - Admission writes revision 1 and the code approval in one transaction. This follows the roster admission, which writes a snapshot in one transaction, and `ReviewRecords.AppendCodeApprovedAsync`. No analysis queue exists, because no model writes text.
 - The headline is the official title. Public pages say that it is the title from the Federal Register.
 - The signer is the configured person whose `President` office covers the signing date. The person ID must equal the President identifier that the Federal Register cites. Both Presidents hold office on 2025-01-20, so the cited identifier picks one. A document with no match is invalid data and blocks the job.
@@ -65,7 +65,7 @@ The source sets `backfillFrom` and no credential, no coverage list, no validator
 
 ### Window and jobs
 
-The scheduler makes one list job for each due check. Only the schedule makes it. The list URL holds the window, the type filters, the field list, `order=oldest`, and `per_page=1000`. `FederalRegisterUrl` is the one place that builds and reads it.
+The scheduler makes one list job for each due check. Only the schedule makes it. The list URL holds the window, the type filters, the field list, `order=oldest`, and `per_page=1000`. `FederalRegisterUrl` is the one place that builds and reads it. New detail URLs request the exact pinned fields through `disposition_notes`; recovery accepts the exact previous field set for queued jobs without rewriting their requested URL.
 
 A list job admits one document job for each item. The key is `federal-register/{source}/document/{number}`. A known key is a duplicate. A document job gets the check priority when the document was published in the last 2 days, else the backfill priority.
 
@@ -74,9 +74,9 @@ A list job admits one document job for each item. The key is `federal-register/{
 | Parser | Version | Reads |
 |---|---|---|
 | `FederalRegisterListParser` | none, because a list has no extraction | One list with document numbers and publication dates |
-| `FederalRegisterDocumentParser` | `federal-register-document-v1` | One document |
+| `FederalRegisterDocumentParser` | `federal-register-document-v2` | One document |
 
-A document needs these fields: its number, the type `Presidential Document`, and a subtype of the four kinds. It also needs a title, two dates, a citation, and a President. The link must be on `www.federalregister.gov`. The number of the response must equal the number in the job URL. A line break in a value becomes a space. A renderer change bumps the extraction version.
+A document needs these fields: its number, the type `Presidential Document`, and a subtype of the four kinds. It also needs a title, two dates, a citation, and a President. The link must be on `www.federalregister.gov`. The number of the response must equal the number in the job URL. A line break in a fixed fact becomes a space. When the API includes `disposition_notes`, the parser retains its complete text and line breaks; missing or null notes add no text. The existing document extraction limit bounds the output, and notes are never truncated. A renderer change bumps the extraction version.
 
 ```
 Federal Register document: 2025-01900
@@ -147,3 +147,4 @@ The release holds the record file and a page for each record. The headline is th
 - The signing date comes from the Federal Register. Code does not check it against another source.
 - Nine or more corrections that arrive before the original make revision 1 fail validation. The original is then not recorded.
 - A correction waits with no visible sign when the job of its original fails or blocks for good.
+- Disposition notes are captured and cited as source text, but their references are not yet stored as typed amendment or revocation links. Typed links need immutable revision binding and may target only records in the active release.
