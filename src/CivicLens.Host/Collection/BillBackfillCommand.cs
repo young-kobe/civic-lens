@@ -3,10 +3,10 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Host.Collection;
 
-internal sealed class BillBackfillCommand(BackfillBillSubjects subjects, BackfillBillStatus status, Func<BackfillBillText> createText,
+internal sealed class BillBackfillCommand(BackfillBillActions actions, BackfillBillSubjects subjects, BackfillBillStatus status, Func<BackfillBillText> createText,
     ReviewActor owner)
 {
-    private const string Usage = "Use bills subjects backfill [limit], bills status backfill [limit], bills text backfill [limit], or " +
+    private const string Usage = "Use bills actions backfill [limit], bills subjects backfill [limit], bills status backfill [limit], bills text backfill [limit], or " +
         "bills text backfill --bills <bills-file>. The bills file holds a JSON array of IDs such as 119-hr-1943.";
     private const int DefaultLimit = 100;
 
@@ -17,6 +17,9 @@ internal sealed class BillBackfillCommand(BackfillBillSubjects subjects, Backfil
         {
             switch (args)
             {
+                case ["bills", "actions", "backfill", ..] when ReadLimit(args) is { } limit:
+                    CommandOutput.Write(await actions.ExecuteAsync(owner, limit, cancellationToken));
+                    return 0;
                 case ["bills", "subjects", "backfill", ..] when ReadLimit(args) is { } limit:
                     CommandOutput.Write(await subjects.ExecuteAsync(owner, limit, cancellationToken));
                     return 0;

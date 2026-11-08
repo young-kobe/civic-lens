@@ -81,9 +81,9 @@ internal static class PublicApiGrants
         GRANT SELECT (attempt_id) ON roster_snapshots TO civic_lens_public_owner;
         GRANT SELECT (attempt_id, source_id, capture_sha256, observed_at_utc_ticks) ON collection_attempts TO civic_lens_public_owner;
 
-        GRANT SELECT (detail_job_id, public_law, observed_at_utc_ticks, action_count) ON published_bill_histories TO civic_lens_public_owner;
-        GRANT SELECT (release_number, record_id, detail_job_id) ON release_bill_histories TO civic_lens_public_owner;
-        GRANT SELECT (detail_job_id, position, action_date, action_time, text, type, action_code, source_system_code, source_system_name)
+        GRANT SELECT (detail_job_id, projection_version, public_law, observed_at_utc_ticks, action_count) ON published_bill_histories TO civic_lens_public_owner;
+        GRANT SELECT (release_number, record_id, detail_job_id, projection_version) ON release_bill_histories TO civic_lens_public_owner;
+        GRANT SELECT (detail_job_id, projection_version, position, action_date, action_time, text, type, action_code, source_system_code, source_system_name)
             ON published_bill_history_actions TO civic_lens_public_owner;
 
         GRANT USAGE ON SCHEMA public_api TO civic_lens_public;

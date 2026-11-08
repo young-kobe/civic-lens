@@ -22,6 +22,7 @@ internal sealed class BillPageRowConfiguration : IEntityTypeConfiguration<BillPa
         builder.Property(row => row.PageOrder).HasColumnName("page_order");
         builder.Property(row => row.ExtractionId).HasColumnName("extraction_id").HasMaxLength(64);
         builder.Property(row => row.ClosesChain).HasColumnName("closes_chain");
+        builder.Property(row => row.ImportedCount).HasColumnName("imported_count");
         builder.HasKey(row => row.JobId);
         builder.HasIndex(row => new { row.DetailJobId, row.Role, row.PageOrder }).IsUnique().HasDatabaseName("ux_bill_pages_chain_order");
         builder.HasOne<JobRow>().WithMany().HasForeignKey(row => row.JobId).OnDelete(DeleteBehavior.Restrict);

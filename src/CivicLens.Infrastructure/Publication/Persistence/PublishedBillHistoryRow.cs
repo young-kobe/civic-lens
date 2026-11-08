@@ -3,6 +3,7 @@ namespace CivicLens.Infrastructure.Publication.Persistence;
 internal sealed class PublishedBillHistoryRow
 {
     public string DetailJobId { get; set; } = string.Empty;
+    public int ProjectionVersion { get; set; }
     public string SourceId { get; set; } = string.Empty;
     public int Congress { get; set; }
     public string BillType { get; set; } = string.Empty;

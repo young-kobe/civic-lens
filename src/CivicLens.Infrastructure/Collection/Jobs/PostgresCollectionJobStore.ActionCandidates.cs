@@ -35,7 +35,15 @@ public sealed partial class PostgresCollectionJobStore
     private static async Task<bool> RecordPageAsync(CollectionAttemptDbContext db, string detailJobId, string jobId,
         BillPageRole role, string extractionId, bool closesChain, CancellationToken cancellationToken)
     {
-        if (await db.Set<BillPageRow>().AnyAsync(row => row.JobId == jobId, cancellationToken)) return false;
+        var existing = db.Set<BillPageRow>().Local.SingleOrDefault(row => row.JobId == jobId)
+            ?? await db.Set<BillPageRow>().SingleOrDefaultAsync(row => row.JobId == jobId, cancellationToken);
+        if (existing is not null)
+        {
+            if (existing.DetailJobId != detailJobId || existing.Role != role || existing.ExtractionId != extractionId ||
+                existing.ClosesChain != closesChain)
+                throw new InvalidDataException("A replayed bill page conflicts with its saved page identity.");
+            return false;
+        }
         await EnsureExtractionIsOfJobAsync(db, jobId, extractionId, cancellationToken);
         var order = await db.Set<BillPageRow>().CountAsync(row => row.DetailJobId == detailJobId && row.Role == role,
             cancellationToken);
@@ -46,13 +54,45 @@ public sealed partial class PostgresCollectionJobStore
     private static async Task RecordActionsAsync(CollectionAttemptDbContext db, string detailJobId, string jobId,
         IReadOnlyList<CongressBillAction> actions, CancellationToken cancellationToken)
     {
-        var first = await db.Set<BillActionRow>().CountAsync(row => row.DetailJobId == detailJobId, cancellationToken);
-        for (var index = 0; index < actions.Count; index++)
+        var page = db.Set<BillPageRow>().Local.SingleOrDefault(row => row.JobId == jobId)
+            ?? await db.Set<BillPageRow>().SingleAsync(row => row.JobId == jobId, cancellationToken);
+        var priorPages = await db.Set<BillPageRow>().Where(row => row.DetailJobId == detailJobId &&
+                row.Role == BillPageRole.Actions && row.PageOrder < page.PageOrder)
+            .OrderBy(row => row.PageOrder).Select(row => row.ImportedCount).ToListAsync(cancellationToken);
+        if (priorPages.Any(count => count is null))
         {
-            var position = first + index;
-            db.Add(NewActionRow(detailJobId, jobId, position, actions[index]));
-            db.AddRange(actions[index].RecordedVotes.Select((vote, order) => NewRecordedVoteRow(detailJobId, position, order, vote)));
+            if (page.ImportedCount is not null)
+                throw new InvalidDataException("An actions page cannot remain imported while an earlier page is unverified.");
+            return;
         }
+        var first = priorPages.Sum(count => count!.Value);
+        var existingActions = await db.Set<BillActionRow>().Where(row => row.JobId == jobId)
+            .OrderBy(row => row.Position).ToListAsync(cancellationToken);
+        var existingPositions = existingActions.Select(action => action.Position).ToArray();
+        var existingVotes = existingActions.Count == 0 ? [] : await db.Set<BillActionRecordedVoteRow>()
+            .Where(row => row.DetailJobId == detailJobId && existingPositions.Contains(row.ActionPosition))
+            .OrderBy(row => row.ActionPosition).ThenBy(row => row.Position).ToListAsync(cancellationToken);
+        var expected = actions.Select((action, index) =>
+            (Action: NewActionRow(detailJobId, jobId, first + index, action),
+                Votes: action.RecordedVotes.Select((vote, order) =>
+                    NewRecordedVoteRow(detailJobId, first + index, order, vote)).ToList())).ToArray();
+        VerifySemantics(existingActions, existingVotes, expected,
+            new Dictionary<string, int?> { [jobId] = page.ImportedCount });
+        if (page.ImportedCount is { } importedCount && importedCount != actions.Count)
+            throw new InvalidDataException("A replayed actions page conflicts with its imported count.");
+        if (existingActions.Count > 0)
+        {
+            if (!ExistingPositionsMatch(existingActions, existingVotes, expected))
+                throw new InvalidDataException("A replayed actions page has positions inconsistent with its chain.");
+            page.ImportedCount = actions.Count;
+            return;
+        }
+        foreach (var item in expected)
+        {
+            db.Add(item.Action);
+            db.AddRange(item.Votes);
+        }
+        page.ImportedCount = actions.Count;
     }
 
     private static BillActionRow NewActionRow(string detailJobId, string jobId, int position, CongressBillAction action) => new()
