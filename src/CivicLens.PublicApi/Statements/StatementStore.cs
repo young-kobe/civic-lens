@@ -142,7 +142,10 @@ public sealed class StatementStore(NpgsqlDataSource views)
         var length = reader.GetInt32(17);
         return new()
         {
-            ExtractionId = reader.GetString(15), Start = start, Length = length, Quote = QuoteAt(sourceText, start, length)
+            ExtractionId = reader.GetString(15),
+            Start = start,
+            Length = length,
+            Quote = QuoteAt(sourceText, start, length)
         };
     }
 
