@@ -56,11 +56,15 @@
     {
         <div class="members-strip" id="@MembersStripSlot.ElementId" aria-live="polite"></div>
     }
-    @if (Hero is not null)
-    {
-        <div class="public-hero">@Hero</div>
-    }
-    <main class="public-main" id="main" tabindex="-1"><div class="content"><CascadingValue Value="glossaryUse" IsFixed="true">@ChildContent</CascadingValue></div></main>
+    <main id="main" tabindex="-1">
+        <CascadingValue Value="glossaryUse" IsFixed="true">
+            @if (Hero is not null)
+            {
+                <div class="public-hero">@Hero</div>
+            }
+            <div class="public-main"><div class="content">@ChildContent</div></div>
+        </CascadingValue>
+    </main>
     <footer class="public-footer">
         <span class="public-footer-name">Civic Lens</span>
         <nav class="public-footer-nav" aria-label="Footer">@NavLinks(PublicSections.Footer)</nav>

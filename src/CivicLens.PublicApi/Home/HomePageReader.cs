@@ -19,6 +19,16 @@ public sealed class HomePageReader(HomeStore home, PublicBaseUrl? browserApiUrl)
             vote.ResultWords, vote.Yea, vote.Nay, vote.BillLine, vote.BillLineSource)
         { Alignment = vote.Alignment }).ToArray();
         var brief = answer.Brief is { } item ? new HomeBriefData(item.RecordId, item.Headline, item.Label) : null;
-        return new(answer.Release, featured, votes, brief);
+        var executiveActions = answer.ExecutiveActions.Select(group => new HomeExecutiveGroupData(
+            group.Kind, group.Count, group.NewestRecordId, group.NewestTitle, group.NewestSignedOn)).ToArray();
+        var issues = answer.Issues.Select(issue => new HomeIssueData(
+            issue.IssueId, issue.Name, issue.Congress, issue.SubstantiveVotes, issue.Bills)).ToArray();
+        return new(answer.Release, featured, votes, brief)
+        {
+            ExecutiveActions = executiveActions,
+            Issues = issues,
+            NewestHouseRollCall = answer.NewestHouseRollCall,
+            NewestSenateRollCall = answer.NewestSenateRollCall
+        };
     }
 }

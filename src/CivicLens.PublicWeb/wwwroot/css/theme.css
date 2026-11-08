@@ -143,6 +143,12 @@ body.public {
     --t-display: clamp(2.75rem, 7vw, 5.25rem);
     --t-section: 2.25rem;
     --marigold: #f5b301;
+    --vote-ink: #1f7074;
+    --vote-surface: #def3f4;
+    --ai-surface: #f3f0ff;
+    --ai-line: #6a52c9;
+    --ai-ink: #3b2a8f;
+    --ai-label-ink: #ffffff;
     --bar: #14213d;
     --hero-ground: #14213d;
     --bar-edge: #14213d;
@@ -179,6 +185,12 @@ body.public {
 
 @supports (color: light-dark(#000000, #ffffff)) {
     body.public {
+        --vote-ink: light-dark(#1f7074, #81cdd1);
+        --vote-surface: light-dark(#def3f4, #183031);
+        --ai-surface: light-dark(#f3f0ff, #1f1a40);
+        --ai-line: light-dark(#6a52c9, #a594f0);
+        --ai-ink: light-dark(#3b2a8f, #cfc6ff);
+        --ai-label-ink: light-dark(#ffffff, #1f1a40);
         --hero-ground: light-dark(#14213d, #1b2b52);
         --bar-edge: light-dark(#14213d, #56669a);
         --ground: light-dark(#f5f3ee, #0e1526);

@@ -234,7 +234,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         var html = await (await host.Client.GetAsync(ServerPageEndpoints.Prefix)).Content.ReadAsStringAsync();
 
         Assert.Contains("data-zip-api=\"https://api.civic-lens.test\"", html);
-        Assert.Contains("Find my officials", html);
+        Assert.Contains("Find my members", html);
         Assert.Contains("browse all officials", html);
     }
 
