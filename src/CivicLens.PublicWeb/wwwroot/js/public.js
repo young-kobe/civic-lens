@@ -1,4 +1,17 @@
 (() => {
+    const siteMenu = document.querySelector(".public-menu");
+    if (siteMenu) {
+        const summary = siteMenu.querySelector("summary");
+        document.addEventListener("keydown", event => {
+            if (event.key !== "Escape" || !siteMenu.open) return;
+            const restoreFocus = siteMenu.contains(document.activeElement);
+            siteMenu.open = false;
+            if (restoreFocus) summary.focus();
+        });
+        document.addEventListener("pointerdown", event => {
+            if (siteMenu.open && !siteMenu.contains(event.target)) siteMenu.open = false;
+        });
+    }
     const markStart = "\uE000", markEnd = "\uE001";
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const formatDay = isoDay => {
