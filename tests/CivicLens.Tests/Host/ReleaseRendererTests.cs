@@ -2767,10 +2767,20 @@ public sealed class ReleaseRendererTests
     {
         foreach (var (name, _, html, section) in await RenderEveryPageTypeAsync())
         {
-            var current = new HtmlParser().ParseDocument(html).QuerySelectorAll("nav[aria-label='Site'] [aria-current], nav[aria-label='Footer'] [aria-current]");
+            var document = new HtmlParser().ParseDocument(html);
+            var currentByNavigation = document.QuerySelectorAll("nav[aria-label='Site'], nav[aria-label='Footer']")
+                .Select(navigation => navigation.QuerySelectorAll("[aria-current]")).ToArray();
+            var current = currentByNavigation.SelectMany(links => links).ToArray();
             var linkText = section == "All records" ? "Votes and bills" : section;
+            var expectedCount = section is null ? 0 : PublicSections.Header.Any(link => link.Text == linkText) ? 2 : 1;
 
-            Assert.True(section is null ? current.Length == 0 : current.Length == 1 && current[0].TextContent == linkText, name);
+            Assert.True(current.Length == expectedCount, name);
+            Assert.All(currentByNavigation, links => Assert.InRange(links.Length, 0, 1));
+            Assert.All(current, link =>
+            {
+                Assert.Equal(linkText, link.TextContent);
+                Assert.Equal("page", link.GetAttribute("aria-current"));
+            });
         }
     }
 
@@ -2798,7 +2808,7 @@ public sealed class ReleaseRendererTests
             var links = document.QuerySelectorAll("nav[aria-label='Site'] a, nav[aria-label='Footer'] a")
                 .Select(link => link.GetAttribute("href")!).ToList();
 
-            Assert.Equal(7, links.Count);
+            Assert.Equal(PublicSections.Header.Count * 2 + PublicSections.Footer.Count, links.Count);
             Assert.All(links, href => Assert.True(WrittenRootPages.Contains(ReleasePath(pagePath, href)), $"{name}: {href}"));
         }
     }

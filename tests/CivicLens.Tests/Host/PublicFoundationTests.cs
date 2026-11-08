@@ -19,11 +19,14 @@ namespace CivicLens.Tests.Host;
 public sealed class PublicFoundationTests
 {
     [Fact]
-    public async Task TheHeaderHoldsThreeSectionsAndTheFooterHoldsTheOtherPagesSoThePhoneHeaderStaysShort()
+    public async Task BothHeaderNavigationFormsKeepTheirSectionsAndTheFooterHoldsTheOtherPages()
     {
         var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None));
 
-        Assert.Equal(["Officials", "Issues", "Votes and bills"], document.QuerySelectorAll("nav[aria-label='Site'] a").Select(link => link.TextContent));
+        var navigationForms = document.QuerySelectorAll("nav[aria-label='Site']");
+        Assert.Equal(2, navigationForms.Length);
+        Assert.All(navigationForms, navigation =>
+            Assert.Equal(["Officials", "Issues", "Votes and bills"], navigation.QuerySelectorAll("a").Select(link => link.TextContent)));
         Assert.Equal(["How we check records", "Glossary", "About", "Report a problem"],
             document.QuerySelectorAll("nav[aria-label='Footer'] a").Select(link => link.TextContent));
         Assert.Equal("Civic Lens", document.QuerySelector("footer .public-footer-name")!.TextContent);

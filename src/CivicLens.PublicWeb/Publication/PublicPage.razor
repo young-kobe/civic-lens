@@ -50,7 +50,13 @@
             <a href="@(RootPath + PublicationProtocol.HomePath)#zip-results">Your members</a>
             <button type="button" data-forget-members>Forget</button>
         </div>
-        <div class="topbar-tools"><PublicThemeMenu /></div>
+        <div class="topbar-tools">
+            <PublicThemeMenu />
+            <details class="public-menu">
+                <summary>Menu</summary>
+                <nav class="public-menu-nav" aria-label="Site">@NavLinks(PublicSections.Header)</nav>
+            </details>
+        </div>
     </header>
     @if (showMembersStrip)
     {
