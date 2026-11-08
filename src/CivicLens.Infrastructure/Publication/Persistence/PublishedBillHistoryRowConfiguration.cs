@@ -13,9 +13,11 @@ internal sealed class PublishedBillHistoryRowConfiguration : IEntityTypeConfigur
             table.HasCheckConstraint("ck_published_bill_histories_congress", "congress >= 1");
             table.HasCheckConstraint("ck_published_bill_histories_bill_number", "bill_number >= 1");
             table.HasCheckConstraint("ck_published_bill_histories_action_count", "action_count >= 0");
+            table.HasCheckConstraint("ck_published_bill_histories_projection_version", "projection_version >= 0");
         });
-        builder.HasKey(row => row.DetailJobId);
+        builder.HasKey(row => new { row.DetailJobId, row.ProjectionVersion });
         builder.Property(row => row.DetailJobId).HasColumnName("detail_job_id").HasMaxLength(128);
+        builder.Property(row => row.ProjectionVersion).HasColumnName("projection_version").HasDefaultValue(0);
         builder.Property(row => row.SourceId).HasColumnName("source_id").HasMaxLength(128);
         builder.Property(row => row.Congress).HasColumnName("congress");
         builder.Property(row => row.BillType).HasColumnName("bill_type").HasMaxLength(16);

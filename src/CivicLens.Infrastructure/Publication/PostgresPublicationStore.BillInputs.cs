@@ -22,9 +22,9 @@ public sealed partial class PostgresPublicationStore
                    history.detail_job_id AS "DetailJobId", history.source_id AS "SourceId",
                    history.congress AS "Congress", history.bill_number AS "BillNumber",
                    history.observed_at_utc_ticks AS "HistoryObservedAtUtcTicks",
-                   CASE WHEN history.detail_job_id IS NOT NULL THEN COALESCE(saved.action_count,
-                       (SELECT count(*)::integer FROM bill_actions x WHERE x.detail_job_id = history.detail_job_id)) END AS "ActionCount",
-                   prior.detail_job_id AS "PublishedHistoryDetailJobId"
+                   history.action_count AS "ActionCount",
+                   prior.detail_job_id AS "PublishedHistoryDetailJobId",
+                   prior.projection_version AS "PublishedHistoryProjectionVersion"
               FROM action_drafts a
               LEFT JOIN LATERAL (
                    SELECT g.latest_action_text, g.latest_action_date, g.created_at_utc_ticks
@@ -34,7 +34,7 @@ public sealed partial class PostgresPublicationStore
                     ORDER BY g.update_date_utc_ticks DESC, g.detail_job_id DESC LIMIT 1
               ) status ON true
               LEFT JOIN LATERAL (
-                   SELECT g.detail_job_id, g.source_id, g.congress, g.bill_number, chain.observed_at_utc_ticks
+                   SELECT g.detail_job_id, g.source_id, g.congress, g.bill_number, chain.observed_at_utc_ticks, chain.action_count
                      FROM bill_gates g
                      JOIN LATERAL (
                           {{BillHistoryCaptures.CompleteChainSql}}
@@ -43,7 +43,6 @@ public sealed partial class PostgresPublicationStore
                       AND g.bill_type = a.bill_type AND g.bill_number = a.bill_number
                     ORDER BY g.update_date_utc_ticks DESC, g.detail_job_id DESC LIMIT 1
               ) history ON true
-              LEFT JOIN published_bill_histories saved ON saved.detail_job_id = history.detail_job_id
               LEFT JOIN release_bill_histories prior ON prior.release_number = {0} AND prior.record_id = a.record_id
              WHERE a.record_id = ANY({1})
              ORDER BY a.record_id
@@ -56,10 +55,12 @@ public sealed partial class PostgresPublicationStore
         ArgumentNullException.ThrowIfNull(histories);
         foreach (var batch in histories.Distinct().Chunk(256))
         {
-            if (batch.Any(capture => capture is null)) throw new ArgumentException("A history capture is missing.", nameof(histories));
+            if (batch.Any(capture => capture is null || capture.ProjectionVersion != BillHistoryCapture.CurrentProjectionVersion))
+                throw new ArgumentException("A history capture must use the current verified representation.", nameof(histories));
             await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
             var ids = batch.Select(capture => capture.DetailJobId).ToArray();
-            var existing = await db.Set<PublishedBillHistoryRow>().AsNoTracking().Where(row => ids.Contains(row.DetailJobId))
+            var existing = await db.Set<PublishedBillHistoryRow>().AsNoTracking()
+                .Where(row => row.ProjectionVersion == BillHistoryCapture.CurrentProjectionVersion && ids.Contains(row.DetailJobId))
                 .ToDictionaryAsync(row => row.DetailJobId, StringComparer.Ordinal, cancellationToken);
             foreach (var capture in batch)
             {
@@ -89,10 +90,11 @@ public sealed partial class PostgresPublicationStore
             ObservedAtUtc = new DateTimeOffset(row.StatusObservedAtUtcTicks!.Value, TimeSpan.Zero)
         }, row.BillType),
         row.DetailJobId is null ? null : new BillHistoryCapture(row.DetailJobId, row.SourceId!, row.Congress!.Value,
-            row.BillType, row.BillNumber!.Value, new DateTimeOffset(row.HistoryObservedAtUtcTicks!.Value, TimeSpan.Zero), row.ActionCount!.Value),
-        row.PublishedHistoryDetailJobId);
+            row.BillType, row.BillNumber!.Value, new DateTimeOffset(row.HistoryObservedAtUtcTicks!.Value, TimeSpan.Zero),
+            row.ActionCount!.Value, BillHistoryCapture.CurrentProjectionVersion),
+        row.PublishedHistoryDetailJobId, row.PublishedHistoryProjectionVersion);
 
     private sealed record BillInputRow(string RecordId, string BillType, string? Text, DateOnly? Date, long? StatusObservedAtUtcTicks,
         string? DetailJobId, string? SourceId, int? Congress, int? BillNumber, long? HistoryObservedAtUtcTicks,
-        int? ActionCount, string? PublishedHistoryDetailJobId);
+        int? ActionCount, string? PublishedHistoryDetailJobId, int? PublishedHistoryProjectionVersion);
 }

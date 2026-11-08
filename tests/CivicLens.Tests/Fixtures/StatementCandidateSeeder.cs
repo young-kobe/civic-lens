@@ -49,7 +49,8 @@ internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore at
     }
 
     public async Task<CapturedAttemptResult> ImportAsync(string text, string url, CandidateJobKind kind, string sourceId = "source",
-        string definitionJson = "{}", string? revisionId = null, DateTimeOffset? observedAt = null)
+        string definitionJson = "{}", string? revisionId = null, DateTimeOffset? observedAt = null,
+        CollectionRequest? scope = null)
     {
         var bytes = Encoding.UTF8.GetBytes(text);
         var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
@@ -57,13 +58,20 @@ internal sealed class StatementCandidateSeeder(PostgresCollectionAttemptStore at
         await using (var gzip = new GZipStream(file, CompressionLevel.SmallestSize))
             await gzip.WriteAsync(bytes);
         var attemptId = Guid.NewGuid().ToString("N");
-        var request = Request() with { JobId = attemptId, SourceId = sourceId, Url = url, ArtifactDirectory = captureRoot };
+        var request = (scope ?? Request()) with { JobId = attemptId, SourceId = sourceId, Url = url, ArtifactDirectory = captureRoot };
         var receipt = Receipt(request) with
         {
+            RobotsRequestCount = request.Mode == CollectionMode.Api ? 0 : 1,
+            RequestCount = request.Mode == CollectionMode.Api ? 1 : 2,
             ObservedAt = observedAt ?? DateTimeOffset.UtcNow,
             BytesReceived = bytes.Length,
             Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = bytes.Length },
-            Response = new HttpResponseMetadata { StatusCode = 200, ContentType = "text/plain; charset=utf-8", ContentEncodings = [] }
+            Response = new HttpResponseMetadata
+            {
+                StatusCode = 200,
+                ContentType = request.Mode == CollectionMode.Api ? "application/json" : "text/plain; charset=utf-8",
+                ContentEncodings = []
+            }
         };
         var imported = await attempts.ImportAtomicallyAsync(CollectionAttemptImporter.CreateImport(attemptId, request, receipt),
             CancellationToken.None);

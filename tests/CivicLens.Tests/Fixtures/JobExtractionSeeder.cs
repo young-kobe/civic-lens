@@ -18,8 +18,10 @@ internal sealed class JobExtractionSeeder(PostgresCollectionJobStore store, Post
 
     public async Task<CapturedAttemptResult> AttachCaptureAsync(string jobId, string body, DateTimeOffset? observedAt = null)
     {
-        var captured = await seeder.ImportAsync(body, "https://example.test/pages/a", CandidateJobKind.None, observedAt: observedAt);
-        var request = (await store.GetAsync(jobId, default))!.Definition.CreateRequest(captured.AttemptId, captureRoot);
+        var definition = (await store.GetAsync(jobId, default))!.Definition;
+        var captured = await seeder.ImportAsync(body, definition.Url, CandidateJobKind.None,
+            sourceId: definition.SourceId, observedAt: observedAt, scope: definition.CreateRequest("seed", captureRoot));
+        var request = definition.CreateRequest(captured.AttemptId, captureRoot);
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(JobAttemptSql.Insert($"'{captured.AttemptId}'", $"'{jobId}'",

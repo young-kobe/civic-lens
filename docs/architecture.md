@@ -267,6 +267,7 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Collection protocol | `1` (`Version`) | `src/CivicLens.Collection.Contracts/CollectionProtocol.cs` | Collector requests, receipts, saved handoffs, job definitions | Collector fetch, parse, or receipt rules change |
 | Receipt handoff | `2` | `src/CivicLens.Application/Collection/PendingCollectionHandoff.cs` | Spool files of unimported receipts | The envelope shape changes |
 | Publication schema | `1` | `src/CivicLens.Publication.Contracts/PublicationProtocol.cs` | Release manifests and record JSON | The published JSON shape changes |
+| Bill history projection | `1`, with legacy copies at `0` | `src/CivicLens.Application/Publication/BillHistoryCapture.cs` | Immutable history copies and release bindings | The stored history representation changes |
 | Collection configuration | `1` | `src/CivicLens.Application/Collection/CollectionConfiguration.cs` | Configuration files and stored revision snapshots | Coverage or source fields change meaning |
 | Issue configuration | `1` | `src/CivicLens.Application/Issues/IssueConfiguration.cs` (revisions in `IssueConfigurationRevision.cs`) | `config/issues.json` and revision IDs | The snapshot format changes |
 | HTML and text extraction | `html-text-v1` | `src/CivicLens.Infrastructure/Documents/CaptureDocumentTextExtractor.cs` | Extraction IDs, text, and citations | Decoding, whitespace, or block-separator output changes |

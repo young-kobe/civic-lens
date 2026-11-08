@@ -8,4 +8,5 @@ internal sealed class BillPageRow
     public int PageOrder { get; set; }
     public string ExtractionId { get; set; } = "";
     public bool ClosesChain { get; set; }
+    public int? ImportedCount { get; set; }
 }

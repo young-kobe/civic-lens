@@ -101,7 +101,7 @@ public sealed class PublishRelease
         var histories = billInputs.Where(input => billIds.Contains(input.RecordId) && input.History is not null).ToArray();
         await publications.PrepareBillHistoriesAsync([.. histories.Select(input => input.History!).Distinct()], cancellationToken);
 
-        var historyChanged = billInputs.Any(input => billIds.Contains(input.RecordId) && input.History?.DetailJobId != input.PublishedHistoryDetailJobId);
+        var historyChanged = billInputs.Any(input => billIds.Contains(input.RecordId) && input.HasHistoryChange);
         var number = state.LatestReleaseNumber + 1;
         var (directory, entries, names) = await StageAsync(number, now, previous, carried, additions, removed, withdrawals, pages, released.BillLines, statuses, roster, settings, photos, request.RewriteOfficials, request.RewriteEntries, request.RewritePages, historyChanged, cancellationToken);
         var commit = new PublicationCommit(number, state.Active?.ReleaseNumber, directory,
@@ -115,7 +115,8 @@ public sealed class PublishRelease
             VoteColumns = [.. additions.OfType<PendingRecord<PublishedVote>>().Select(addition => VoteStoredColumns.From(addition.Record))],
             Names = names,
             BillStatuses = ReleaseBillStatuses.RowsOf(ReleaseBillStatuses.ActionIdsOf(entries), statuses),
-            BillHistories = [.. histories.Select(input => new BillHistoryBinding(input.RecordId, input.History!.DetailJobId))]
+            BillHistories = [.. histories.Select(input => new BillHistoryBinding(input.RecordId,
+                input.History!.DetailJobId, input.History.ProjectionVersion))]
         };
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
         await ServeActiveReleaseAsync(cancellationToken);
@@ -151,7 +152,7 @@ public sealed class PublishRelease
         var inputs = await ReadBillInputsAsync(state.Active?.ReleaseNumber, previous, [], cancellationToken);
         var statuses = ReleaseBillStatuses.KeepObservationTimes(previous, inputs);
         return ReleaseBillStatuses.ChangedActionIds(ReleaseBillStatuses.ActionIdsOf(previous.Entries), previous, statuses).Any() ||
-            inputs.Any(input => input.History?.DetailJobId != input.PublishedHistoryDetailJobId);
+            inputs.Any(input => input.HasHistoryChange);
     }
 
     private Task<IReadOnlyList<BillPublicationInput>> ReadBillInputsAsync(int? previousReleaseNumber, PreviousRelease previous,

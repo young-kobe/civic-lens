@@ -88,8 +88,8 @@ public sealed partial class PostgresCollectionJobStore
         return TransactionAsync(async (db, now) =>
         {
             var gate = await ReadGateOfPageJobAsync(db, pageJobId, cancellationToken);
-            var recorded = await RecordPageAsync(db, gate.DetailJobId, pageJobId, role, extractionId, next is null, cancellationToken);
-            if (recorded && recordNewPageRows is not null) await recordNewPageRows(db, gate.DetailJobId);
+            await RecordPageAsync(db, gate.DetailJobId, pageJobId, role, extractionId, next is null, cancellationToken);
+            if (recordNewPageRows is not null) await recordNewPageRows(db, gate.DetailJobId);
             ApiJob[] jobs = next is null
                 ? []
                 : [source.CreateNextPageJob(resource, pageJobId, next, BillGate.DayOf(UpdateDateOf(gate)), Today(now))];
