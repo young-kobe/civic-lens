@@ -174,10 +174,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var chamber = ViewColumns.Enum<PublishedChamber>(reader, 0);
-            var party = reader.GetString(2);
-            figures.Add(new(chamber, reader.GetInt32(1), party, ViewColumns.Number(reader, 3)!.Value, ViewColumns.Number(reader, 4)!.Value, ViewColumns.Number(reader, 5)!.Value,
-                reader.GetFieldValue<DateOnly>(6), reader.GetFieldValue<DateOnly>(7), OfficialScopes.PartyLine(chamber, congress, party)));
+            figures.Add(OfficialPartyLineReader.ReadFigure(reader, 0));
         }
         return [.. figures];
     }

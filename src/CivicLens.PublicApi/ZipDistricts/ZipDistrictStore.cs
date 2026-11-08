@@ -69,10 +69,11 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
             .Concat(stateAnswers.SelectMany(state => state.Senators).Select(holder => holder?.OfficialId))
             .OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
         var figures = await ReadHolderFiguresAsync(connection, holderIds, cancellationToken);
-        var districtAnswers = districts.Rows.Select(row => new ZipDistrict(row.State, row.District, Enrich(row.Representative, figures))).ToArray();
+        var partyLines = await ReadHolderPartyLinesAsync(connection, holderIds, figures, cancellationToken);
+        var districtAnswers = districts.Rows.Select(row => new ZipDistrict(row.State, row.District, Enrich(row.Representative, figures, partyLines))).ToArray();
         var answer = new ZipDistrictAnswer(release, districts.Congress, request.Zcta,
             districtAnswers,
-            [.. stateAnswers.Select(state => state with { Senators = [.. state.Senators.Select(holder => Enrich(holder, figures))] })]);
+            [.. stateAnswers.Select(state => state with { Senators = [.. state.Senators.Select(holder => Enrich(holder, figures, partyLines))] })]);
         return ZipLookup.Of(answer);
     }
 
@@ -121,10 +122,15 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
     }
 
     private static SeatHolder? ReadHolder(NpgsqlDataReader reader, int first) =>
-        reader.IsDBNull(first) ? null : new(reader.GetString(first), reader.GetString(first + 1), ViewColumns.Text(reader, first + 2), ViewColumns.Date(reader, first + 3), null, []);
+        reader.IsDBNull(first) ? null : new(reader.GetString(first), reader.GetString(first + 1), ViewColumns.Text(reader, first + 2), ViewColumns.Date(reader, first + 3), null, [], []);
 
-    private static SeatHolder? Enrich(SeatHolder? holder, Dictionary<string, HolderFigures> figures) =>
-        holder is null ? null : holder with { PhotoPath = figures[holder.OfficialId].PhotoPath, MissedVotes = [.. figures[holder.OfficialId].MissedVotes] };
+    private static SeatHolder? Enrich(SeatHolder? holder, Dictionary<string, HolderFigures> figures, Dictionary<string, List<PartyLineFigure>> partyLines) =>
+        holder is null ? null : holder with
+        {
+            PhotoPath = figures[holder.OfficialId].PhotoPath,
+            MissedVotes = [.. figures[holder.OfficialId].MissedVotes],
+            PartyLines = [.. partyLines.GetValueOrDefault(holder.OfficialId) ?? []]
+        };
 
     private static async Task<Dictionary<string, HolderFigures>> ReadHolderFiguresAsync(NpgsqlConnection connection, string[] officialIds, CancellationToken cancellationToken)
     {
@@ -137,19 +143,39 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         {
             var id = reader.GetString(0);
             if (!figures.TryGetValue(id, out var holder))
-                figures[id] = holder = new(ViewColumns.Text(reader, 1));
+                figures[id] = holder = new(ViewColumns.Text(reader, 1), reader.IsDBNull(3) ? null : reader.GetInt32(3));
             if (!reader.IsDBNull(2)) holder.MissedVotes.Add(OfficialAttendanceReader.ReadFigure(reader, 2));
         }
         return figures;
+    }
+
+    private static async Task<Dictionary<string, List<PartyLineFigure>>> ReadHolderPartyLinesAsync(NpgsqlConnection connection, string[] officialIds,
+        Dictionary<string, HolderFigures> holderFigures, CancellationToken cancellationToken)
+    {
+        var partyLines = new Dictionary<string, List<PartyLineFigure>>(StringComparer.Ordinal);
+        var withAttendance = officialIds.Where(id => holderFigures.GetValueOrDefault(id)?.AttendanceCongress is not null).ToArray();
+        if (withAttendance.Length == 0) return partyLines;
+        await using var command = new NpgsqlCommand(OfficialPartyLineReader.ForAttendanceSql, connection);
+        command.Parameters.AddWithValue("officialIds", withAttendance);
+        command.Parameters.AddWithValue("congresses", withAttendance.Select(id => holderFigures[id].AttendanceCongress!.Value).ToArray());
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var id = reader.GetString(0);
+            if (!partyLines.TryGetValue(id, out var rows)) partyLines[id] = rows = [];
+            rows.Add(OfficialPartyLineReader.ReadFigure(reader, 1));
+        }
+        return partyLines;
     }
 
     private sealed record DistrictRow(string State, int District, SeatHolder? Representative);
 
     private sealed record DistrictRows(int? Release, bool HasNames, int Congress, List<DistrictRow> Rows);
 
-    private sealed class HolderFigures(string? photoPath)
+    private sealed class HolderFigures(string? photoPath, int? attendanceCongress)
     {
         public string? PhotoPath { get; } = photoPath;
+        public int? AttendanceCongress { get; } = attendanceCongress;
         public List<MissedVotesFigure> MissedVotes { get; } = [];
     }
 }
