@@ -179,6 +179,14 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- bi
 
 The limit is 100 when you give none. The command prints `examined`, `recorded`, and `failed`. A bill whose saved detail capture is missing or unreadable counts as failed and stays unread, so it is listed again each run. Run it until `examined` is 0 or equals `failed`. If `failed` reaches the limit, raise the limit, because failed bills stay ahead of the later bills. A capture that has no usable `latestAction` is recorded with no status. After the backfill, the worker publishes the status release on its next tick. You can also run `releases publish <idempotency-key>` with no record. The publish writes `bill-status.json` and every action page that now has a status. The [bill status line](architecture/publication.md#bill-status-line) holds the rules. The first status release writes again one page for each action that has a status, and it holds them all in memory until staging. Count the actions with a status and check the free memory of the worker box first.
 
+Legacy bill action histories can be recovered from their exact saved page captures with the owner command below. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_ARTIFACT_DIRECTORY`. It makes no Congress.gov request.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- bills actions backfill 100
+```
+
+The limit defaults to 100 recovered bills. Failed bills advance the key but do not count toward that limit. The command prints `examined`, `recorded`, and `failed`. Failed bills stay unverified. An in-memory key advances through bounded pages, so a bad low-ID capture does not block later bills in the same run. It verifies the entire ordered page chain and refuses conflicting existing typed values. The next publication copies verified history into representation 1; old copies and bindings stay at representation 0. Schema downgrade is refused once a nonzero copy exists. See [action history backfill](architecture/bills.md#action-history-backfill).
+
 After the bill text source exists, bills that the gate saw earlier have no text read. The owner command below adds a text versions job for the newest version of each bill that has no Congress.gov summary and no text read. It needs the three variables of the subjects command. It also needs `CIVIC_LENS_COLLECTION_CONFIG` for a configuration where `congress-bill-text` has `enabled` set to `true`. The new jobs use that configuration, not the configuration of the old detail jobs.
 
 ```sh

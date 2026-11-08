@@ -1210,7 +1210,7 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
 
     private Task<string> ExtractionAsync(string jobId)
     {
-        var text = "Bill: 119 hr 7\n" + Guid.NewGuid().ToString("N");
+        var text = "Bill page extraction for " + jobId;
         return ExtractionAsync(jobId, text, text, "extraction");
     }
 
