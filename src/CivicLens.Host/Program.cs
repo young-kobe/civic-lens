@@ -416,7 +416,9 @@ try
         var responses = new ApiResponseReader(CreateDatabase(), new CaptureBodyReader());
         var artifactRoot = PublicationComposition.RequireArtifactRoot();
         executing = true;
-        return await new BillBackfillCommand(new BackfillBillSubjects(jobs, jobs, responses, artifactRoot),
+        return await new BillBackfillCommand(new BackfillBillActions(jobs, jobs,
+                PostgresDocumentExtractionStore.FromConnectionString(connectionString), responses, artifactRoot),
+            new BackfillBillSubjects(jobs, jobs, responses, artifactRoot),
             new BackfillBillStatus(jobs, jobs, responses, artifactRoot), () => new BackfillBillText(jobs, new PostgresActionDraftStore(AnalysisDbContextFactory.Create(connectionString), codeVersion),
                 CollectionConfigurationRevision.Create(
                 ConfigurationFile.ReadCollectionFromEnvironment() ?? throw new ArgumentException("The text backfill requires CIVIC_LENS_COLLECTION_CONFIG."))),

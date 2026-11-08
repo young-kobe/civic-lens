@@ -23,6 +23,7 @@ public sealed class BillBackfillCommandTests(PostgresCollection postgres) : IAsy
     }
 
     [Theory]
+    [InlineData("actions")]
     [InlineData("subjects")]
     [InlineData("status")]
     public async Task WithNoLimitTheBackfillRunsWithTheDefaultLimitSoTheDocumentedCommandWorks(string kind)
@@ -34,6 +35,7 @@ public sealed class BillBackfillCommandTests(PostgresCollection postgres) : IAsy
     }
 
     [Theory]
+    [InlineData("actions")]
     [InlineData("subjects")]
     [InlineData("status")]
     public async Task AGivenLimitIsAccepted(string kind)
@@ -45,6 +47,9 @@ public sealed class BillBackfillCommandTests(PostgresCollection postgres) : IAsy
     }
 
     [Theory]
+    [InlineData("actions", "many")]
+    [InlineData("actions", "-1")]
+    [InlineData("actions", "0")]
     [InlineData("subjects", "many")]
     [InlineData("subjects", "-1")]
     [InlineData("subjects", "0")]
@@ -59,6 +64,7 @@ public sealed class BillBackfillCommandTests(PostgresCollection postgres) : IAsy
     }
 
     [Theory]
+    [InlineData("actions")]
     [InlineData("subjects")]
     [InlineData("status")]
     public async Task TooManyArgumentsShowTheUsage(string kind)
@@ -66,7 +72,7 @@ public sealed class BillBackfillCommandTests(PostgresCollection postgres) : IAsy
         var result = await RunAsync("bills", kind, "backfill", "5", "6");
 
         Assert.Equal(2, result.ExitCode);
-        Assert.Contains("Use bills subjects backfill [limit], bills status backfill [limit], bills text backfill [limit]", result.Error, StringComparison.Ordinal);
+        Assert.Contains("Use bills actions backfill [limit], bills subjects backfill [limit], bills status backfill [limit], bills text backfill [limit]", result.Error, StringComparison.Ordinal);
     }
 
     [Theory]
