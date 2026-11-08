@@ -122,6 +122,60 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task SeatHoldersCarryPartyLinesFromEachHoldersLatestAttendanceCongress()
+    {
+        await using var host = await StartAsync(withNames: false);
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 0, 0, 0, TimeSpan.Zero));
+        await ZipSeed.AddRecordAsync(host.OperationalDatabase, 2);
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2,
+            new SeededSeat("p0", "Pat House One", Representative, "AL", 2, Party: "Democratic"),
+            new SeededSeat("p1", "Pat House Two", Representative, "AL", 1),
+            new SeededSeat("p2", "Sam Senate One", Senator, "AL", null),
+            new SeededSeat("p3", "Sam Senate Two", Senator, "AL", null));
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('1', "2024-01-01") { Congress = 118, Casts = ["Yea", "Yea", "Nay", "Nay"] },
+            new SeededVote('2', "2024-01-02") { Congress = 118, Casts = ["Yea", "Yea", "Nay", "Nay"] },
+            new SeededVote('3', "2024-01-03") { Congress = 118, Casts = ["Yea", "Yea", "Nay", "Nay"] },
+            new SeededVote('4', "2026-02-01") { Congress = 120, Casts = ["Yea", "Present", "Nay", "Yea"] },
+            new SeededVote('6', "2026-02-02") { Congress = 120, Casts = ["Yea", "Present", "Nay", "Yea"] },
+            new SeededVote('5', "2026-02-02") { Congress = 120, Chamber = "Senate", Casts = ["Nay", "Present", "Nay", "Yea"] },
+            new SeededVote('8', "2026-03-01") { Congress = 121, FirstRelease = 3, Casts = ["Yea"] },
+            new SeededVote('9', "2026-04-01") { Congress = 122, LastRelease = 1, Casts = ["Yea"] });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            UPDATE vote_member_list_entries SET party = CASE person_id
+                WHEN 'p0' THEN 'Democrat' WHEN 'p1' THEN 'Republican' WHEN 'p2' THEN 'Democrat' ELSE 'Republican' END;
+            UPDATE vote_member_list_entries SET party = 'Republican' WHERE list_id = '{new string('4', 64)}' AND person_id = 'p0';
+            UPDATE vote_member_list_entries SET person_id = 'untracked-' || person_id
+             WHERE person_id = 'p3' OR (person_id = 'p2' AND list_id <> '{new string('5', 64)}');
+            UPDATE vote_revisions SET columns_written = true, alignment = 'Split', democrat_majority = 'Yea', republican_majority = 'Nay'
+             WHERE record_id IN ('{new string('1', 64)}', '{new string('2', 64)}', '{new string('3', 64)}', '{new string('4', 64)}', '{new string('5', 64)}', '{new string('6', 64)}');
+            """);
+
+        var answer = await GetAsync(host, "/v1/zip-districts/36009");
+        var house = answer.GetProperty("districts");
+        var first = house[0].GetProperty("representative");
+        var firstLines = first.GetProperty("partyLines").EnumerateArray().ToArray();
+        Assert.Equal(["house Democrat", "house Republican", "senate Democrat"], firstLines.Select(line => $"{line.GetProperty("chamber").GetString()} {line.GetProperty("party").GetString()}"));
+        Assert.All(firstLines, line => Assert.Equal(120, line.GetProperty("congress").GetInt32()));
+        Assert.Equal((1, 0, 1), (firstLines[0].GetProperty("withParty").GetInt32(), firstLines[0].GetProperty("againstParty").GetInt32(), firstLines[0].GetProperty("cast").GetInt32()));
+        Assert.Equal((0, 1, 1), (firstLines[1].GetProperty("withParty").GetInt32(), firstLines[1].GetProperty("againstParty").GetInt32(), firstLines[1].GetProperty("cast").GetInt32()));
+        Assert.Equal((0, 1, 1), (firstLines[2].GetProperty("withParty").GetInt32(), firstLines[2].GetProperty("againstParty").GetInt32(), firstLines[2].GetProperty("cast").GetInt32()));
+        Assert.Contains("Congress 120", firstLines[0].GetProperty("scope").GetString(), StringComparison.Ordinal);
+        Assert.NotEmpty(house[1].GetProperty("representative").GetProperty("missedVotes").EnumerateArray());
+        Assert.Empty(house[1].GetProperty("representative").GetProperty("partyLines").EnumerateArray());
+        var senators = answer.GetProperty("states")[0].GetProperty("senators");
+        var senateLine = Assert.Single(senators[0].GetProperty("partyLines").EnumerateArray());
+        Assert.Equal(("senate", "Democrat", 120), (senateLine.GetProperty("chamber").GetString(), senateLine.GetProperty("party").GetString(), senateLine.GetProperty("congress").GetInt32()));
+        Assert.Empty(senators[1].GetProperty("partyLines").EnumerateArray());
+        Assert.Empty(senators[1].GetProperty("missedVotes").EnumerateArray());
+
+        using var fragment = await host.Client.GetAsync("/v1/zip-districts/36009/members");
+        Assert.Equal(HttpStatusCode.OK, fragment.StatusCode);
+        Assert.True(fragment.Headers.CacheControl is { Private: true, NoStore: true, Public: false });
+    }
+
+    [Fact]
     public async Task PhotosFollowTheActiveReleaseAndMissingPhotosStayNull()
     {
         await using var host = await StartAsync();
