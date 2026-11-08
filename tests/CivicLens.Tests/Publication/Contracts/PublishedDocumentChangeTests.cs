@@ -14,6 +14,54 @@ public sealed class PublishedDocumentChangeTests
     }
 
     [Theory]
+    [InlineData("before")]
+    [InlineData("after")]
+    [InlineData("beforeContext")]
+    [InlineData("afterContext")]
+    [InlineData("beforeWord")]
+    [InlineData("afterWord")]
+    public void RejectsAnyChangeSpanThatSplitsASurrogatePair(string field)
+    {
+        var record = Record(new() { ExtractionId = AfterId, Start = 1, Length = 2, Quote = "\U0001F600" });
+        record = record with { Before = record.Before with { Text = record.After.Text } };
+        var change = record.Changes[0] with { BeforeContextLength = record.Before.Text.Length };
+        var splitPair = field switch
+        {
+            "before" => change with { BeforeStart = 2, BeforeLength = 1 },
+            "after" => change with { AfterStart = 2, AfterLength = 1 },
+            "beforeContext" => change with { BeforeContextStart = 2, BeforeContextLength = 1 },
+            "afterContext" => change with { AfterContextStart = 2, AfterContextLength = 1 },
+            "beforeWord" => change with { WordEdits = [new() { BeforeStart = 2, BeforeLength = 1, AfterStart = 1, AfterLength = 2 }] },
+            "afterWord" => change with { WordEdits = [new() { BeforeStart = 1, BeforeLength = 0, AfterStart = 2, AfterLength = 1 }] },
+            _ => throw new ArgumentOutOfRangeException(nameof(field))
+        };
+
+        var error = Assert.Throws<InvalidDataException>(() => (record with { Changes = [splitPair] }).Validate());
+
+        Assert.Equal("Published change offsets are outside their texts.", error.Message);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void AcceptsEmptySpansAtWholeCharacterBoundaries(int start)
+    {
+        var record = Record(new() { ExtractionId = AfterId, Start = 1, Length = 2, Quote = "\U0001F600" });
+        record = record with { Before = record.Before with { Text = record.After.Text } };
+        var change = record.Changes[0] with
+        {
+            BeforeStart = start,
+            BeforeLength = 0,
+            BeforeContextLength = record.Before.Text.Length,
+            WordEdits = [new() { BeforeStart = start, BeforeLength = 0, AfterStart = 1, AfterLength = 2 }]
+        };
+
+        (record with { Changes = [change] }).Validate();
+    }
+
+    [Theory]
     [InlineData(2, 1)]
     [InlineData(1, 1)]
     public void RejectsACitationThatSplitsASurrogatePairBecauseTheQuoteWouldNotBeExactText(int start, int length)

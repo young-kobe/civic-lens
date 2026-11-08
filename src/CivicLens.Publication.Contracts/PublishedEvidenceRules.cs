@@ -45,13 +45,13 @@ internal static class PublishedEvidenceRules
     public static void RequireQuote(string text, int start, int length, string? quote)
     {
         if (length <= 0 || !IsRange(text, start, length) ||
-            SplitsSurrogatePair(text, start) || SplitsSurrogatePair(text, start + length) ||
             !string.Equals(text.Substring(start, length), quote, StringComparison.Ordinal))
             throw new InvalidDataException("Published citation quote does not match its offsets.");
     }
 
     public static bool IsRange(string text, int start, int length) =>
-        start >= 0 && length >= 0 && start <= text.Length - length;
+        start >= 0 && length >= 0 && start <= text.Length - length &&
+        !SplitsSurrogatePair(text, start) && !SplitsSurrogatePair(text, start + length);
 
     public static bool IsBoundedText(string? value) =>
         !string.IsNullOrWhiteSpace(value) && value.Length <= PublishedRecordEntry.MaximumFilterValueLength;
