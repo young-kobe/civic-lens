@@ -208,7 +208,7 @@ public sealed class PostgresDocumentExtractionStoreTests(PostgresCollection post
         Assert.Equal(DocumentComparisonStatus.Incompatible, incompatible.Status);
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM document_comparisons"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_comparison_hunks"));
-        Assert.Equal(0, await ScalarAsync("SELECT hunk_count FROM document_comparisons"));
+        Assert.Equal(0L, await ScalarAsync("SELECT hunk_count::bigint FROM document_comparisons"));
         Assert.Null(await comparisons.GetAsync(incompatible.ComparisonId, CancellationToken.None));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM document_change_analysis"));
     }
