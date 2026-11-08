@@ -136,7 +136,7 @@ internal static class PublishedOfficialView
         CaucusWith(party, caucus) is { } with ? $"Party: {party}, {with}" : $"Party: {party}";
 
     private static string? CaucusWith(string party, string? caucus) =>
-        caucus is null || caucus == party ? null : $"caucuses with {Members(caucus)}";
+        caucus is null || caucus == party ? null : $"caucuses with {PublishedPartyNames.Members(caucus)}";
 
     public static PublishedOfficeTerm? LatestTerm(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc) =>
         Started(terms, publishedAtUtc).OrderBy(term => term.Start).LastOrDefault();
@@ -246,11 +246,9 @@ internal static class PublishedOfficialView
 
     public static string PartyOf(VotesWithParty votes) => PartyOf(votes.Chamber, votes.Party);
 
-    public static string PartyOf(PublishedChamber chamber, string party) => $"{chamber} {Members(party)}";
+    public static string PartyOf(PublishedChamber chamber, string party) => PublishedPartyNames.PartyOf(chamber, party);
 
     public static string PartyMemberOf(PublishedChamber chamber, string party) => $"{chamber} {party}";
-
-    private static string Members(string party) => $"{party}s";
 
     private static string ChamberName(PublishedChamber chamber) => chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";
 

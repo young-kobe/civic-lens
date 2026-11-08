@@ -139,10 +139,10 @@ table[data-paged]:focus { outline: none; }
 .zip-member-card h3 { margin: 0; font-size: var(--t-lg); overflow-wrap: anywhere; }
 .zip-member-card h3 a { display: inline-flex; align-items: center; min-height: 44px; }
 .zip-member-card p { margin: 0; }
-.zip-member-attendance { display: flex; align-items: center; gap: var(--s2); }
-.zip-member-attendance p { flex: 1; }
-.zip-member-attendance strong { font-variant-numeric: tabular-nums; }
-.zip-member-attendance .info-button { flex: none; width: 44px; height: 44px; }
+.zip-member-figure { display: flex; align-items: center; gap: var(--s2); }
+.zip-member-figure p { flex: 1; }
+.zip-member-figure strong { font-variant-numeric: tabular-nums; }
+.zip-member-figure .info-button { flex: none; width: 44px; height: 44px; }
 .zip-count { margin: 0 0 var(--s3); }
 .home-browse { margin: 0; color: var(--bar-muted); }
 .home-browse a { color: var(--bar-ink); }

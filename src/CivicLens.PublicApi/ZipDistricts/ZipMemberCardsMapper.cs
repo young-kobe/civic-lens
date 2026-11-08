@@ -31,5 +31,7 @@ internal static class ZipMemberCardsMapper
     private static ZipMemberIdentityData? Member(SeatHolder? holder) => holder is null ? null
         : new(holder.OfficialId, holder.Name, holder.Party, holder.TermEndsOn, holder.PhotoPath,
             [.. holder.MissedVotes.Select(figure => new ZipMemberAttendanceData(figure.Chamber, figure.Congress, figure.Missed, figure.Held,
-                figure.FirstVotedOn, figure.LastVotedOn, figure.Scope))]);
+                figure.FirstVotedOn, figure.LastVotedOn, figure.Scope))],
+            [.. holder.PartyLines.Select(figure => new ZipMemberPartyLineData(figure.Chamber, figure.Congress,
+                figure.Party, figure.WithParty, figure.Cast, figure.FirstVotedOn, figure.LastVotedOn, figure.Scope))]);
 }
