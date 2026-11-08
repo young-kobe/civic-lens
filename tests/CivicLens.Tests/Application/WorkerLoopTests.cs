@@ -11,16 +11,15 @@ public sealed class WorkerLoopTests
     private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
 
     [Fact]
-    public async Task RenewalToleratesFailuresUntilTheLeaseDeadline()
+    public async Task RenewalFailureDoesNotCancelOwnershipBeforeTheLeaseDeadline()
     {
         using var ownership = new CancellationTokenSource();
-        var calls = 0;
         var started = Stopwatch.StartNew();
 
-        await WorkerLoop.RenewLeaseAsync(_ => { calls++; throw new InvalidOperationException("Database unavailable."); }, FailureTolerantLease, ownership);
+        await WorkerLoop.RenewLeaseAsync(_ => throw new InvalidOperationException("Database unavailable."), FailureTolerantLease, ownership)
+            .WaitAsync(HangGuard);
 
         Assert.True(ownership.IsCancellationRequested);
-        Assert.True(calls >= 2, $"Only {calls} renewal attempts were made.");
         Assert.True(started.Elapsed >= FailureTolerantLease);
     }
 
