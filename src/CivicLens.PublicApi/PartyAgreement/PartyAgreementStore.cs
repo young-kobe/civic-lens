@@ -8,7 +8,7 @@ public sealed class PartyAgreementStore(NpgsqlDataSource views)
 {
     private const string Sql = """
         SELECT a.release_number, g.release_number, g.congress, g.kind, g.agreed, g.split, g.mixed
-          FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN public_api.party_agreement g ON g.release_number = a.release_number
            AND (g.congress IS NULL OR (g.chamber = @chamber AND g.congress = @congress))
         """;

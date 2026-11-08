@@ -113,6 +113,29 @@ public sealed class PartyAgreementEndpointsTests(PostgresCollection postgres)
         }
     }
 
+    [Fact]
+    public async Task WithdrawalOfTheLastVoteKeepsTheReleaseIdentityAndRollbackRestoresAgreement()
+    {
+        await using var host = await StartAsync(new SeededVote('a', "2026-03-01") { LastRelease = 1 });
+        await SetAlignmentAsync(host.OperationalDatabase, 'a', "PartiesAgree");
+
+        using (var before = await GetAsync(host, "/v1/party-agreement?chamber=house&congress=119"))
+            Assert.Equal(1, before.RootElement.GetProperty("agreement").GetProperty("total").GetInt32());
+
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 3, 0, 0, 0, TimeSpan.Zero), recordCount: 0);
+        using (var withdrawn = await GetAsync(host, "/v1/party-agreement?chamber=house&congress=119"))
+        {
+            Assert.Equal(2, withdrawn.RootElement.GetProperty("release").GetInt32());
+            Assert.Empty(withdrawn.RootElement.GetProperty("agreement").GetProperty("kinds").EnumerateArray());
+            Assert.Equal(0, withdrawn.RootElement.GetProperty("agreement").GetProperty("total").GetInt32());
+        }
+
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        using var restored = await GetAsync(host, "/v1/party-agreement?chamber=house&congress=119");
+        Assert.Equal(1, restored.RootElement.GetProperty("release").GetInt32());
+        Assert.Equal(1, restored.RootElement.GetProperty("agreement").GetProperty("total").GetInt32());
+    }
+
     [Theory]
     [InlineData("/v1/party-agreement?congress=119")]
     [InlineData("/v1/party-agreement?chamber=house")]

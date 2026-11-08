@@ -5,6 +5,8 @@ active_records record_id
 active_records revision_number
 active_records release_number
 active_records published_at_utc_ticks
+active_release release_number
+active_release published_at_utc_ticks
 bill_actions release_number
 bill_actions record_id
 bill_actions revision_number

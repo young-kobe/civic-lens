@@ -14,7 +14,7 @@ public sealed class BriefStore(NpgsqlDataSource views)
                (SELECT json_agg(json_build_object('id', c.citation_id, 'kind', c.kind, 'recordId', c.target_record_id,
                     'revisionNumber', c.target_revision_number, 'headline', c.headline) ORDER BY c.position)
                   FROM public_api.brief_citations c WHERE c.release_number = b.release_number AND c.record_id = b.record_id AND c.revision_number = b.revision_number)
-          FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN public_api.briefs b ON b.record_id = @id
         """;
 

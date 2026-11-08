@@ -22,7 +22,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
 
     private const string DetailSql = $"""
         SELECT a.release_number, {Columns}
-          FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (SELECT o.* FROM public_api.officials o WHERE o.official_id = @id) o ON TRUE
         """;
 
@@ -103,7 +103,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
 
     private static string ListSql(OfficialRequest request) => $"""
         SELECT a.release_number, {Columns}
-          FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT o.* FROM public_api.officials o
                 WHERE TRUE{Filters(request)}

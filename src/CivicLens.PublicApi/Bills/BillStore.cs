@@ -104,7 +104,7 @@ public sealed class BillStore(NpgsqlDataSource views)
 
     private static string ListSql(BillRequest request) => $"""
         SELECT a.release_number, {Columns}
-          FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT b.* FROM public_api.bills b
                 WHERE TRUE{Filters(request)}{(request.Cursor is null ? "" : AfterCursor)}
@@ -150,7 +150,7 @@ public sealed class BillStore(NpgsqlDataSource views)
     private static string SponsorshipSql(SponsorshipRequest request) => $"""
         SELECT a.release_number, EXISTS (SELECT 1 FROM public_api.bills b WHERE b.record_id = @id),
                s."position", s.official_id, s.role, s.is_original, s.sponsored_on, s.withdrawn_on
-          FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT s.* FROM public_api.bill_sponsorships s
                 WHERE s.record_id = @id{(request.Role is null ? "" : " AND s.role = @role")}{(request.Cursor is null ? "" : " AND s.\"position\" > @cursor_position")}
@@ -209,7 +209,7 @@ public sealed class BillStore(NpgsqlDataSource views)
     private static string ActionHistorySql(ActionHistoryRequest request) => $"""
         SELECT a.release_number, b.history_observed_at_utc_ticks, b.history_action_count,
                h."position", h.action_date, h.action_time, h.text, h.type, h.action_code, h.source_system_code, h.source_system_name
-          FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           JOIN public_api.bills b ON b.record_id = @id
           LEFT JOIN LATERAL (
                SELECT h.* FROM public_api.bill_actions h
