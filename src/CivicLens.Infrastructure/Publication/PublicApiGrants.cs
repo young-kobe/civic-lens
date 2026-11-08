@@ -87,9 +87,9 @@ internal static class PublicApiGrants
             ON published_bill_history_actions TO civic_lens_public_owner;
 
         GRANT USAGE ON SCHEMA public_api TO civic_lens_public;
-        GRANT SELECT ON public_api.active_records, public_api.votes, public_api.vote_members, public_api.member_votes, public_api.vote_issues,
+        GRANT SELECT ON public_api.active_records, public_api.active_release, public_api.votes, public_api.vote_members, public_api.member_votes, public_api.vote_issues,
             public_api.bills, public_api.bill_actions, public_api.bill_sponsorships, public_api.briefs, public_api.brief_paragraphs, public_api.brief_citations, public_api.issue_votes, public_api.issue_sponsors, public_api.bill_issues, public_api.zip_districts,
-            public_api.release_officials, public_api.release_official_terms, public_api.release_issues, public_api.release_issue_includes,
+            public_api.party_agreement, public_api.release_officials, public_api.release_official_terms, public_api.release_issues, public_api.release_issue_includes,
             public_api.release_issue_excludes, public_api.release_policy_areas, public_api.officials, public_api.official_attendance,
             public_api.official_party_lines, public_api.official_bill_counts, public_api.official_issue_counts, public_api.official_executive_actions,
             public_api.bill_status, public_api.record_headlines, public_api.record_links, public_api.vote_facts,

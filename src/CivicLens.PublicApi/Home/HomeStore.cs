@@ -21,7 +21,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
                s.headline, s.label, s.result, s.yea, s.nay, s.bill_type, s.bill_number, s.bill_line, s.summary, s.text_origin, s.alignment,
                s.action_kind, s.action_count, s.newest_record_id, s.newest_title, s.newest_signed_on,
                freshness.house, freshness.senate
-          FROM (SELECT release_number, published_at_utc_ticks FROM public_api.active_records LIMIT 1) a
+          FROM (SELECT release_number, published_at_utc_ticks FROM public_api.active_release LIMIT 1) a
           CROSS JOIN LATERAL (
                SELECT max(v.voted_on) FILTER (WHERE v.chamber = 'House') AS house,
                       max(v.voted_on) FILTER (WHERE v.chamber = 'Senate') AS senate

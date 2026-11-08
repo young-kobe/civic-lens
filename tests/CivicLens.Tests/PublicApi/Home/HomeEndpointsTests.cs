@@ -636,8 +636,14 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     {
         await using var empty = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
         await GetAsync(empty, HttpStatusCode.ServiceUnavailable);
-        await using var host = await StartAsync([], briefs: [new SeededBrief('a', "2026-05-04")]);
+        await using var blankRelease = await StartAsync([]);
+        await ViewsSeed.ExecuteAsync(blankRelease.OperationalDatabase, "UPDATE publication_releases SET record_count = 0 WHERE release_number = 1");
+        var blank = await GetAsync(blankRelease);
+        Assert.Equal(1, blank.GetProperty("release").GetInt32());
+        Assert.Equal(0, blank.GetProperty("votes").GetArrayLength());
+        Assert.Equal(0, blank.GetProperty("executiveActions").GetArrayLength());
 
+        await using var host = await StartAsync([], briefs: [new SeededBrief('a', "2026-05-04")]);
         var answer = await GetAsync(host);
 
         Assert.Equal(1, answer.GetProperty("release").GetInt32());

@@ -17,7 +17,7 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
     private const string DistrictsSql = $"""
         SELECT a.release_number, d.congress, d.state, d.district, h.official_id, h.name, h.party, h.end_on,
                EXISTS (SELECT 1 FROM public_api.release_officials) AS has_names
-          FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT z.congress, z.state, z.district, z.land_share FROM public_api.zip_districts z
                 WHERE z.zcta = @zcta AND z.congress = COALESCE(@congress, (SELECT max(m.congress) FROM public_api.zip_districts m WHERE m.zcta = @zcta))) d

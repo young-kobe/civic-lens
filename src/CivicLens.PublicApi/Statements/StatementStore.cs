@@ -20,7 +20,7 @@ public sealed class StatementStore(NpgsqlDataSource views)
                   FROM (SELECT record_id, revision_number, position, extraction_id, quotation_start, quotation_length, kind
                           FROM public_api.statement_quotations
                          WHERE record_id = s.record_id AND revision_number = s.revision_number ORDER BY position LIMIT @quotation_limit) q)
-          FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN public_api.statements s ON s.record_id = @id
           LEFT JOIN public_api.statement_sources src ON src.record_id = s.record_id AND src.revision_number = s.revision_number
         """;
@@ -73,7 +73,7 @@ public sealed class StatementStore(NpgsqlDataSource views)
                    ARRAY(SELECT p.official_id FROM public_api.statement_speakers p
                           WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number ORDER BY p."position"),
                    s.issue_ids
-              FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+              FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
               LEFT JOIN LATERAL (
                    SELECT s.* FROM public_api.statements s
                     WHERE TRUE{Filters(request)}{Cursor(request)}

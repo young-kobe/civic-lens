@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using CivicLens.PublicApi.Search;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -26,6 +27,43 @@ public sealed class ReleaseEndpointsTests(PostgresCollection postgres)
         var release = await host.Client.GetFromJsonAsync<ReleaseInfo>("/v1/release", PublicationProtocol.JsonOptions);
 
         Assert.Equal(new ReleaseInfo(7, new DateTimeOffset(2026, 6, 9, 12, 30, 0, TimeSpan.Zero)), release);
+    }
+
+    [Fact]
+    public async Task AnActiveReleaseWithNoRecordsStillHasAnIdentity()
+    {
+        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 12, 30, 0, TimeSpan.Zero), recordCount: 0);
+
+        var release = await host.Client.GetFromJsonAsync<ReleaseInfo>("/v1/release", PublicationProtocol.JsonOptions);
+
+        Assert.Equal(new ReleaseInfo(2, new DateTimeOffset(2026, 6, 9, 12, 30, 0, TimeSpan.Zero)), release);
+    }
+
+    [Fact]
+    public async Task EmptyRecordListsKeepTheActiveReleaseAndTrueAbsenceStillReturnsNotFound()
+    {
+        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 12, 30, 0, TimeSpan.Zero), recordCount: 0);
+
+        foreach (var (path, collection) in new[]
+        {
+            ("/v1/votes", "votes"),
+            ("/v1/bills", "bills"),
+            ("/v1/statements", "statements"),
+            ("/v1/officials", "officials"),
+            ("/v1/home", "votes")
+        })
+        {
+            using var response = await host.Client.GetAsync(path);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal(2, body.RootElement.GetProperty("release").GetInt32());
+            Assert.Empty(body.RootElement.GetProperty(collection).EnumerateArray());
+        }
+
+        using var missingBrief = await host.Client.GetAsync("/v1/briefs/" + new string('a', 64));
+        Assert.Equal(HttpStatusCode.NotFound, missingBrief.StatusCode);
     }
 
     [Fact]

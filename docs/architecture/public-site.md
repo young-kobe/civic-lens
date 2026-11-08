@@ -139,7 +139,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Component | Pages | Reader question | Data source | Status |
 |---|---|---|---|---|
 | Site header, split nav, header search | All | Where can I go? | Fixed links, search service | Partial. `PublicPage` shows site navigation at 1140 px and wider, and a native Menu sheet below that width. The same current links appear in both forms. Header search stays visible at every width. Per-kind list routes and split nav targets remain planned, R-68 |
-| Freshness line | All | How current is this? | `active_records`, newest `votes.voted_on` per chamber | Partial. `/web` shows newest published roll call dates; other pages remain planned |
+| Freshness line | All | How current is this? | `active_release`, newest `votes.voted_on` per chamber | Partial. `/web` shows newest published roll call dates; other pages remain planned |
 | ZIP form and notices | Home | Who represents me? | `zip_districts`, `officials` | Implemented: visible busy state, answer scroll and focus, and error recovery |
 | Featured vote tile | Home | What did Congress just decide? | `votes` | Partial. Gated SSR preview shows the published summary, wording label, result, and Yea/Nay counts. Planned: map and party bars |
 | Party tally bar | Home, vote, bill | How did the chamber split? | `votes` counts, `vote_members.party` | Planned: bars; the party column is available |

@@ -99,7 +99,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
 
     private static string ListSql(VoteRequest request) => $"""
         SELECT a.release_number, {Columns}
-          FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT v.* FROM public_api.votes v
                 WHERE TRUE{Filters(request)}{(request.Cursor is null ? "" : AfterCursor)}

@@ -5,6 +5,8 @@ active_records record_id
 active_records revision_number
 active_records release_number
 active_records published_at_utc_ticks
+active_release release_number
+active_release published_at_utc_ticks
 bill_actions release_number
 bill_actions record_id
 bill_actions revision_number
@@ -274,6 +276,13 @@ officials photo_path
 officials caucus
 officials term_end_on
 officials record_count
+party_agreement agreed
+party_agreement chamber
+party_agreement congress
+party_agreement kind
+party_agreement mixed
+party_agreement release_number
+party_agreement split
 official_attendance official_id
 official_attendance chamber
 official_attendance congress

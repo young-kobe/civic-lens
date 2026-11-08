@@ -5,7 +5,7 @@ using NpgsqlTypes;
 
 namespace CivicLens.PublicApi.Records;
 
-/// <summary>Reads the view <c>public_api.record_links</c> and <c>public_api.active_records</c>. Every answer takes its release from the query that reads its rows.</summary>
+/// <summary>Reads the view <c>public_api.record_links</c> and <c>public_api.active_records</c>, with identity from <c>public_api.active_release</c>. Every answer takes its release from the query that reads its rows.</summary>
 public sealed class RelatedStore(NpgsqlDataSource views)
 {
     private const string Order = "l.statement_date NULLS LAST, l.link_record_id";
@@ -37,7 +37,7 @@ public sealed class RelatedStore(NpgsqlDataSource views)
         SELECT a.release_number,
                EXISTS (SELECT 1 FROM public_api.active_records x WHERE x.kind = @kind AND x.record_id = @id),
                l.related_kind, l.related_record_id, l.related_headline, l.related_text_origin, l.related_label, l.link_type, l.statement_date, l.link_record_id, l.reason
-          FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT l.* FROM public_api.record_links l
                 WHERE l.kind = @kind AND l.record_id = @id{Cursor(request)}

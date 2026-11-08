@@ -4,7 +4,7 @@ using Npgsql;
 
 namespace CivicLens.PublicApi.Votes;
 
-/// <summary>Reads the view <c>public_api.member_votes</c> for the votes of the asked officials and the issue filter, and <c>public_api.active_records</c> for the release. The kind rule is <see cref="PublishedVoteKindExtensions.SubstantiveNames"/>.</summary>
+/// <summary>Reads the view <c>public_api.member_votes</c> for the votes of the asked officials and the issue filter, and <c>public_api.active_release</c> for the release. The kind rule is <see cref="PublishedVoteKindExtensions.SubstantiveNames"/>.</summary>
 public sealed class MemberVoteStore(NpgsqlDataSource views)
 {
     /// <summary>The most votes of one official in one answer. The list is a short recent view, not a history. The vote list route pages through all votes.</summary>
@@ -15,7 +15,7 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
     private static string Sql(MemberVoteRequest request) => $"""
         SELECT a.release_number, o.official_id, v.record_id, v.chamber, v.congress, v.session_number, v.roll_call_number, v.voted_on, v.kind,
                v.bill_type, v.bill_number, v.headline, v.label, v.result, v.vote_cast, v.side, v.party_majority_cast
-          FROM (SELECT release_number FROM public_api.active_records LIMIT 1) a
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
          CROSS JOIN unnest(@officials) WITH ORDINALITY AS o(official_id, ask_order)
           LEFT JOIN LATERAL (
                SELECT v.* FROM public_api.member_votes v

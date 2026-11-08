@@ -76,12 +76,13 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
-        foreach (var view in new[] { "active_records", "votes", "vote_members", "member_votes", "vote_issues", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas",
+        foreach (var view in new[] { "active_records", "active_release", "votes", "vote_members", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas",
             "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "statement_speakers", "statements", "statement_sources", "statement_quotations", "executive_actions", "executive_action_notices", "withdrawals", "withdrawal_corrections" })
         {
-            // A view with a join or a group cannot take a write at all, so Postgres refuses with 55000 before it checks a privilege.
-            await AssertDeniedAsync(connection, $"DELETE FROM public_api.{view}", "55000");
-            await AssertDeniedAsync(connection, $"UPDATE public_api.{view} SET {WritableProbeColumn(view)}", "55000");
+            // Join and aggregate views reject writes before privilege checks. The simple release identity view reaches the missing-grant check.
+            var sqlState = view == "active_release" ? "42501" : "55000";
+            await AssertDeniedAsync(connection, $"DELETE FROM public_api.{view}", sqlState);
+            await AssertDeniedAsync(connection, $"UPDATE public_api.{view} SET {WritableProbeColumn(view)}", sqlState);
         }
     }
 
@@ -109,6 +110,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Equal(
         [
             $"active_records v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"active_release v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_actions v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_sponsorships v {Owner} {Role}:SELECT {{security_barrier=true}}",
@@ -128,6 +130,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"official_issue_counts v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_party_lines v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"officials v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"party_agreement v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"record_headlines v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"record_links v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issue_excludes v {Owner} {Role}:SELECT {{security_barrier=true}}",
@@ -268,7 +271,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
-    public async Task TheActiveReleaseViewShowsThePublicationTimeOfTheActiveReleaseAndTheRoleReadsNoOtherReleaseColumn()
+    public async Task TheActiveReleaseIdentitySurvivesAnEmptyReleaseAndTheRoleReadsNoOtherReleaseColumn()
     {
         await SeedAsync();
         Assert.Equal(["2 2"], await PublicAsync("SELECT DISTINCT release_number || ' ' || published_at_utc_ticks FROM public_api.active_records"));
@@ -276,7 +279,11 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await ExecuteAsync("UPDATE publication_releases SET is_active = false; UPDATE publication_releases SET is_active = true WHERE release_number = 1");
 
         Assert.Equal(["1 1"], await PublicAsync("SELECT DISTINCT release_number || ' ' || published_at_utc_ticks FROM public_api.active_records"));
+        await ExecuteAsync("UPDATE publication_releases SET is_active = false; UPDATE publication_releases SET is_active = true WHERE release_number = 2; DELETE FROM publication_record_states WHERE first_release = 2; UPDATE publication_record_states SET last_release = 1 WHERE first_release = 1 AND last_release IS NULL; UPDATE publication_releases SET record_count = 0 WHERE release_number = 2");
+        Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.active_records"));
+        Assert.Equal(["2 2"], await PublicAsync("SELECT release_number || ' ' || published_at_utc_ticks FROM public_api.active_release"));
         await using var connection = await OpenPublicAsync();
+        await AssertDeniedAsync(connection, "SELECT is_active FROM public_api.active_release", "42703");
         foreach (var column in new[] { "published_at_utc_ticks", "actor_subject", "directory_name", "record_count", "is_active" })
             await AssertDeniedAsync(connection, $"SELECT {column} FROM public.publication_releases");
     }
@@ -975,7 +982,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     private static string WritableProbeColumn(string view) =>
-        view.StartsWith("issue_", StringComparison.Ordinal) ? "issue_id = 'x'" : view == "zip_districts" ? "zcta = 'x'" : view.StartsWith("official", StringComparison.Ordinal) ? "official_id = 'x'" : view.StartsWith("release_", StringComparison.Ordinal) ? "release_number = 1" : "record_id = 'x'";
+        view.StartsWith("issue_", StringComparison.Ordinal) ? "issue_id = 'x'" : view == "zip_districts" ? "zcta = 'x'" : view.StartsWith("official", StringComparison.Ordinal) ? "official_id = 'x'" : view.StartsWith("release_", StringComparison.Ordinal) || view is "party_agreement" or "active_release" ? "release_number = 1" : "record_id = 'x'";
 
     private async Task<NpgsqlConnection> OpenPublicAsync()
     {

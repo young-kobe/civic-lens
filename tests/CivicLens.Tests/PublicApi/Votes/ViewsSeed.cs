@@ -34,10 +34,10 @@ internal static class ViewsSeed
 {
 
     /// <summary>Makes the release the only active one. It adds the release row when none exists.</summary>
-    public static Task ActivateReleaseAsync(string database, int release, DateTimeOffset publishedAt) => ExecuteAsync(database, $"""
+    public static Task ActivateReleaseAsync(string database, int release, DateTimeOffset publishedAt, int recordCount = 1) => ExecuteAsync(database, $"""
         UPDATE publication_releases SET is_active = false;
         INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
-        VALUES ({release}, '{release:000000}-{new string('0', 31)}1', 'test', {publishedAt.UtcTicks.ToString(CultureInfo.InvariantCulture)}, 1, true)
+        VALUES ({release}, '{release:000000}-{new string('0', 31)}1', 'test', {publishedAt.UtcTicks.ToString(CultureInfo.InvariantCulture)}, {recordCount}, true)
         ON CONFLICT (release_number) DO UPDATE SET is_active = true;
         """);
 
