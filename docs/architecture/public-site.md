@@ -174,7 +174,7 @@ The public read API and the gated SSR home read `public_api` views. Implemented 
 
 `public_api.bills` exposes the bill summary, its text-origin label, and the cited bill-text summary metadata (`why_it_matters`, version name and date, and characters read and total). The view can serve these fields; the bill-text model setting is off by default, and activation awaits sample approval. See [Publication](publication.md#public-api-views) for the view contract.
 
-The home route reads `HomeAnswer` from one statement and maps it into presentation records beside the PublicWeb component. These are page inputs, not durable publication contracts. `CIVIC_LENS_PUBLIC_API_URL` is an optional bare origin for the browser ZIP lookup. The page cache validator includes the normalized public site and browser API origins because both affect the HTML.
+The home route reads `HomeAnswer` in one RepeatableRead snapshot and maps it into presentation records beside the PublicWeb component. One statement reads the highlights and publication date. One batch query counts the configured issues in that publication day's Congress. These are page inputs, not durable publication contracts. `CIVIC_LENS_PUBLIC_API_URL` is an optional bare origin for the browser ZIP lookup. The page cache validator includes the normalized public site and browser API origins because both affect the HTML.
 
 The views expose the stored member party and vote alignment, normalized member-vote side, party-majority cast, and official photo path. Member caucus comes from the matching chamber term in the active release on the vote date.
 

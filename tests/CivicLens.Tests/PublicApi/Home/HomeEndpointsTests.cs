@@ -5,6 +5,7 @@ using CivicLens.Application.Publication;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Home;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
@@ -92,6 +93,122 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(1, answer.GetProperty("release").GetInt32());
         Assert.Equal(0, answer.GetProperty("votes").GetArrayLength());
         Assert.Equal(1, answer.GetProperty("executiveActions")[0].GetProperty("count").GetInt32());
+    }
+
+    [Fact]
+    public async Task HomeIssueCountsUseReleaseCongressSubstantiveKindsAndActiveRevisionsIncludingZeroIssues()
+    {
+        var votes = new[]
+        {
+            new SeededVote('a', "2026-05-01") { Congress = 119, Issues = ["health"] },
+            new SeededVote('b', "2026-05-02") { Congress = 119, Kind = "Rule", Issues = ["health"] },
+            new SeededVote('c', "2026-05-03") { Congress = 118, Issues = ["health"] },
+            new SeededVote('d', "2026-05-04") { Congress = 119, Chamber = "Senate", Kind = "Nomination", ActiveRevision = 2, EarlierIssues = ["health"], Issues = ["climate"] },
+            new SeededVote('e', "2026-05-05") { Congress = 119, Issues = ["health"], FirstRelease = 2 }
+        };
+        var bills = new[]
+        {
+            new SeededBill('a', "2026-05-01") { Congress = 119, Issues = ["health"] },
+            new SeededBill('b', "2026-05-02") { Congress = 118, Issues = ["health"] },
+            new SeededBill('c', "2026-05-03") { Congress = 119, Issues = ["health"], FirstRelease = 2 }
+        };
+        await using var host = await StartAsync(votes, bills);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
+            INSERT INTO release_issues (release_number, issue_id, name, definition)
+            VALUES (1, 'health', 'Health', 'Health policy'), (1, 'climate', 'Climate', 'Climate policy'),
+                   (1, 'empty', 'Empty issue', 'No records');
+            """);
+
+        var answer = await GetAsync(host);
+        var issues = answer.GetProperty("issues").EnumerateArray().ToArray();
+        Assert.Equal(3, issues.Length);
+        var health = Assert.Single(issues, issue => issue.GetProperty("issueId").GetString() == "health");
+        Assert.Equal(119, health.GetProperty("congress").GetInt32());
+        Assert.Equal(1, health.GetProperty("substantiveVotes").GetInt32());
+        Assert.Equal(1, health.GetProperty("bills").GetInt32());
+        var climate = Assert.Single(issues, issue => issue.GetProperty("issueId").GetString() == "climate");
+        Assert.Equal(1, climate.GetProperty("substantiveVotes").GetInt32());
+        Assert.Equal(0, climate.GetProperty("bills").GetInt32());
+        var empty = Assert.Single(issues, issue => issue.GetProperty("issueId").GetString() == "empty");
+        Assert.Equal(0, empty.GetProperty("substantiveVotes").GetInt32());
+        Assert.Equal(0, empty.GetProperty("bills").GetInt32());
+
+        using var detail = await host.Client.GetAsync("/v1/issues/health");
+        Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
+        using var allCongresses = JsonDocument.Parse(await detail.Content.ReadAsStringAsync());
+        Assert.Equal(2, allCongresses.RootElement.GetProperty("substantiveVotes").GetInt32());
+        Assert.Equal(2, allCongresses.RootElement.GetProperty("bills").GetInt32());
+    }
+
+    [Fact]
+    public async Task HomeIssueCongressUsesPublicationDateAndTreatsJanuarySecondAsPreviousCongress()
+    {
+        await using var host = await StartAsync([House('a', "2026-05-01", 1)]);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health', 'Health policy')");
+        foreach (var (date, expectedCongress) in new[] { (new DateTime(2027, 1, 2, 0, 0, 0, DateTimeKind.Utc), 119), (new DateTime(2027, 1, 3, 0, 0, 0, DateTimeKind.Utc), 120) })
+        {
+            await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE publication_releases SET published_at_utc_ticks = {date.Ticks} WHERE release_number = 1");
+            var answer = await GetAsync(host);
+            Assert.Equal(expectedCongress, answer.GetProperty("issues")[0].GetProperty("congress").GetInt32());
+        }
+    }
+
+    [Fact]
+    public async Task HomeIssueCountsOmitScopedRowsWhenReleasePredatesCongressCalendar()
+    {
+        await using var host = await StartAsync([House('a', "2026-05-01", 1)]);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
+            INSERT INTO release_issues (release_number, issue_id, name, definition)
+            VALUES (1, 'health', 'Health', 'Health policy');
+            UPDATE publication_releases SET published_at_utc_ticks = 600000000000000000 WHERE release_number = 1;
+            """);
+
+        var answer = await GetAsync(host);
+
+        Assert.Empty(answer.GetProperty("issues").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task ReleaseActivationBetweenTheTwoQueriesCannotMixHighlightsAndIssueCounts()
+    {
+        const string key = "home-issue-snapshot";
+        await using var host = await StartAsync([
+            new SeededVote('a', "2026-05-01") { Issues = ["health"] },
+            new SeededVote('b', "2026-05-02") { Issues = ["health"], FirstRelease = 2 }
+        ]);
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, Published.AddDays(1));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
+            INSERT INTO release_issues (release_number, issue_id, name, definition)
+            VALUES (1, 'health', 'Health before', 'Health policy'),
+                   (2, 'health', 'Health after', 'Health policy');
+            CREATE FUNCTION wait_for_home_issues() RETURNS boolean LANGUAGE plpgsql
+                SECURITY DEFINER SET search_path = pg_catalog AS $function$
+            BEGIN
+                PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('home-issue-snapshot', 0));
+                RETURN true;
+            END;
+            $function$;
+            CREATE OR REPLACE VIEW public_api.release_issues WITH (security_barrier = true) AS
+            SELECT i.release_number, i.issue_id, i.name, i.definition
+              FROM public.release_issues i JOIN public.publication_releases r ON r.release_number = i.release_number
+             WHERE r.is_active AND public.wait_for_home_issues();
+            """);
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, Published);
+        await using var held = await HeldAdvisoryLock.AcquireAsync(host.OperationalDatabase, key);
+
+        var reading = GetAsync(host);
+        await HeldAdvisoryLock.WaitForWaiterAsync(host.OperationalDatabase, key);
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, Published.AddDays(1));
+        await held.DisposeAsync();
+        var before = await reading;
+        var after = await GetAsync(host);
+
+        Assert.Equal(1, before.GetProperty("release").GetInt32());
+        Assert.Equal("Health before", before.GetProperty("issues")[0].GetProperty("name").GetString());
+        Assert.Equal(1, before.GetProperty("issues")[0].GetProperty("substantiveVotes").GetInt32());
+        Assert.Equal(2, after.GetProperty("release").GetInt32());
+        Assert.Equal("Health after", after.GetProperty("issues")[0].GetProperty("name").GetString());
+        Assert.Equal(2, after.GetProperty("issues")[0].GetProperty("substantiveVotes").GetInt32());
     }
 
     private static async Task<JsonElement> GetAsync(ApiHost host, HttpStatusCode expected = HttpStatusCode.OK)

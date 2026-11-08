@@ -16,6 +16,7 @@ bill_actions type
 bill_actions action_code
 bill_actions source_system_code
 bill_actions source_system_name
+bill_issues congress
 bill_issues issue_id
 bill_issues position
 bill_issues record_id
@@ -80,6 +81,7 @@ briefs label
 issue_sponsors issue_id
 issue_sponsors official_id
 issue_sponsors event_date
+issue_votes congress
 issue_votes issue_id
 issue_votes kind
 member_votes official_id

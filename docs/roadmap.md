@@ -149,7 +149,7 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [x] Move the public components to a Razor class library, `CivicLens.PublicWeb`, that references `CivicLens.Publication.Contracts` only. Host and `PublicApi` reference it. The static pages stay byte for byte the same
   - [ ] Add the views and endpoints that the pages need: officials and their summary figures, party boards, issue counts, the home highlights, bill status, related records, record bodies, and filters by official and issue
     - [x] View PR 1: expose the #403 stored columns through the views: `vote_members.party` and `caucus`, `votes.alignment`, `member_votes.side` and `party_majority_cast`, `officials.photo_path`
-    - [ ] View PR 2, bills: add `bills.crs_summary_text` with its version. History snapshots are implemented, but missing typed imports leave some histories falsely empty. Recovery remains pending. `bill_actions`, `bills.public_law`, and `votes.bill_record_id` are implemented
+    - [ ] View PR 2, bills: bill detail serves `bills.crs_summary_text` with its version. History snapshots are implemented, but missing typed imports leave some histories falsely empty. Recovery remains pending. `bill_actions`, `bills.public_law`, and `votes.bill_record_id` are implemented
     - [ ] View PR 3: issue vote and sponsor views and the issue counts endpoint are implemented. Add the issue party line-up from them and PR 1
     - [ ] View PR 4, statements: add `statements`, `statement_speakers`, and `statement_quotations`
     - [ ] View PR 5: add `document_changes` with a changed-region child view and `record_corrections`
