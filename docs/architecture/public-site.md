@@ -87,6 +87,7 @@ These decisions come from the component audit. The owner accepted every recommen
 
 - AI text carries its public label. Enforcer: `PublishedRecordLabels` and the label column of the `public_api` views. Tests: `ReleaseRendererTests.ActionAndVotePagesLabelAnAiSummaryOnlyWhenAModelWroteTheText`, `PublicApiViewsTests.EveryAiOrCodeBillHasItsLabelAndAPersonBillHasNone`.
 - Components have no inline styles. Enforcer: the component markup. Test: `PresentationArchitectureTests.MarkupCannotStyleItselfSoComponentsStayTheOnlyStyleOwners`.
+- Header navigation uses one `PublicSections.Header` link set for desktop and the mobile menu. Both copies keep the configured root path and current section marker. The native menu is closed by default and works without JavaScript. Enforcer: `PublicPage` and responsive header CSS. Test: `PublicNavigationTests`.
 - Every vote kind has a glossary term or none. Enforcer: `Glossary`. Test: `ReleaseRendererTests.EveryVoteKindHasItsTermKeyOrNoneForOtherAndEveryKeyIsInTheGlossary`.
 - Page text and AI text read at grade 12 or below. Enforcer: `ReadingGrade` checks AI action text at draft time. No test covers fixed page text yet. Planned: one grade test over page and AI text, in R-68. Test: No test.
 - Every public number names its base and time frame. Enforcer: review of each UI pull request. Test: No test.
@@ -137,7 +138,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 
 | Component | Pages | Reader question | Data source | Status |
 |---|---|---|---|---|
-| Site header, split nav, header search | All | Where can I go? | Fixed links, search service | Partial. The shared `PublicPage` renders header search for its existing callers. Planned: split nav and route migration, R-68 |
+| Site header, split nav, header search | All | Where can I go? | Fixed links, search service | Partial. `PublicPage` shows site navigation at 1140 px and wider, and a native Menu sheet below that width. The same current links appear in both forms. Header search stays visible at every width. Per-kind list routes and split nav targets remain planned, R-68 |
 | Freshness line | All | How current is this? | `active_records`, newest `votes.voted_on` per chamber | Partial. `/web` shows newest published roll call dates; other pages remain planned |
 | ZIP form and notices | Home | Who represents me? | `zip_districts`, `officials` | Implemented: visible busy state, answer scroll and focus, and error recovery |
 | Featured vote tile | Home | What did Congress just decide? | `votes` | Partial. Gated SSR preview shows the published summary, wording label, result, and Yea/Nay counts. Planned: map and party bars |
