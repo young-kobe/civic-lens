@@ -474,6 +474,16 @@ Extraction returns the extraction ID, the source attempt ID, the processing vers
 
 Only captured HTML and plain-text attempts are supported. For a linked 304, select the original captured attempt. Repeating an extraction verifies the artifact again and returns the same record for identical output. A relocated artifact directory works. Inspection and citation can use retained text while a capture is unavailable, but back up the raw captures anyway. The rules are in [documents](architecture/documents.md#extraction).
 
+### Backfill comparison details
+
+After applying the migration, run the owner-only backfill:
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents comparisons backfill 500
+```
+
+The limit bounds rows examined. Each batch examines at most 25 rows in comparison ID order. The command rebuilds each comparison from its retained extractions and checks the saved JSON before it writes offsets. It reports at most 50 skipped comparison IDs and exits 1 if any row is skipped. Investigate skipped rows before continuing. The migration keeps the legacy JSON for current operational readers.
+
 ### Configure versioned HTML content selection
 
 In the configuration, declare reusable profiles and name them from sources. This example targets synthetic local HTML with `<main>` and a `.related-news` subtree:

@@ -3878,6 +3878,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("has_changes");
 
+                    b.Property<int?>("HunkCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("hunk_count");
+
                     b.Property<string>("ResultJson")
                         .IsRequired()
                         .HasColumnType("text")
@@ -3898,7 +3902,48 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("document_comparisons", null, t =>
                         {
                             t.HasCheckConstraint("ck_document_comparisons_id", "comparison_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_document_comparisons_hunk_count", "hunk_count IS NULL OR (hunk_count >= 0 AND has_changes = (hunk_count > 0))");
                         });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonHunkRow", b =>
+                {
+                    b.Property<string>("ComparisonId").HasMaxLength(64).HasColumnType("character varying(64)").HasColumnName("comparison_id");
+                    b.Property<int>("Position").HasColumnType("integer").HasColumnName("position");
+                    b.Property<int>("BeforeStart").HasColumnType("integer").HasColumnName("before_start");
+                    b.Property<int>("BeforeLength").HasColumnType("integer").HasColumnName("before_length");
+                    b.Property<int>("AfterStart").HasColumnType("integer").HasColumnName("after_start");
+                    b.Property<int>("AfterLength").HasColumnType("integer").HasColumnName("after_length");
+                    b.Property<int>("BeforeContextStart").HasColumnType("integer").HasColumnName("before_context_start");
+                    b.Property<int>("BeforeContextLength").HasColumnType("integer").HasColumnName("before_context_length");
+                    b.Property<int>("AfterContextStart").HasColumnType("integer").HasColumnName("after_context_start");
+                    b.Property<int>("AfterContextLength").HasColumnType("integer").HasColumnName("after_context_length");
+                    b.Property<int>("WordEditCount").HasColumnType("integer").HasColumnName("word_edit_count");
+                    b.HasKey("ComparisonId", "Position");
+                    b.ToTable("document_comparison_hunks", null, t =>
+                    {
+                        t.HasCheckConstraint("ck_document_comparison_hunks_position", "position >= 0");
+                        t.HasCheckConstraint("ck_document_comparison_hunks_word_edit_count", "word_edit_count >= 0");
+                        t.HasCheckConstraint("ck_document_comparison_hunks_spans", "before_start >= 0 AND before_length >= 0 AND after_start >= 0 AND after_length >= 0 AND before_context_start >= 0 AND before_context_length >= 0 AND after_context_start >= 0 AND after_context_length >= 0");
+                    });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonWordEditRow", b =>
+                {
+                    b.Property<string>("ComparisonId").HasMaxLength(64).HasColumnType("character varying(64)").HasColumnName("comparison_id");
+                    b.Property<int>("HunkPosition").HasColumnType("integer").HasColumnName("hunk_position");
+                    b.Property<int>("Position").HasColumnType("integer").HasColumnName("position");
+                    b.Property<int>("BeforeStart").HasColumnType("integer").HasColumnName("before_start");
+                    b.Property<int>("BeforeLength").HasColumnType("integer").HasColumnName("before_length");
+                    b.Property<int>("AfterStart").HasColumnType("integer").HasColumnName("after_start");
+                    b.Property<int>("AfterLength").HasColumnType("integer").HasColumnName("after_length");
+                    b.HasKey("ComparisonId", "HunkPosition", "Position");
+                    b.ToTable("document_comparison_word_edits", null, t =>
+                    {
+                        t.HasCheckConstraint("ck_document_comparison_word_edits_position", "hunk_position >= 0 AND position >= 0");
+                        t.HasCheckConstraint("ck_document_comparison_word_edits_spans", "before_start >= 0 AND before_length >= 0 AND after_start >= 0 AND after_length >= 0");
+                    });
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", b =>
@@ -9473,6 +9518,24 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .WithMany()
                         .HasForeignKey("AttemptId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonHunkRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonRow", null)
+                        .WithMany("Hunks")
+                        .HasForeignKey("ComparisonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonWordEditRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonHunkRow", null)
+                        .WithMany("WordEdits")
+                        .HasForeignKey("ComparisonId", "HunkPosition")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
