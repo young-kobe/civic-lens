@@ -1,0 +1,27 @@
+@using CivicLens.Publication.Contracts
+
+<div class="members-strip-content" data-member-strip-content>
+    <nav class="members-strip-nav" aria-label="Your members">
+        <a class="members-strip-home" href="@(RootPath + PublicationProtocol.HomePath)#zip-results">Your members</a>
+        @foreach (var member in Members)
+        {
+            <a href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(member.OfficialId)))">@member.Name</a>
+        }
+        <button type="button" data-forget-members>Forget</button>
+    </nav>
+    @if (NewVoteCount is > 0)
+    {
+        <p data-member-updates>@NewVoteCount newly published @(NewVoteCount == 1 ? "vote" : "votes") since your last member lookup.</p>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ZipMemberCardsData Data { get; set; } = default!;
+    [Parameter] public string RootPath { get; set; } = string.Empty;
+    [Parameter] public long? NewVoteCount { get; set; }
+
+    private IEnumerable<ZipMemberIdentityData> Members => Data.Seats
+        .Where(seat => seat.Member is not null)
+        .Select(seat => seat.Member!)
+        .DistinctBy(member => member.OfficialId);
+}

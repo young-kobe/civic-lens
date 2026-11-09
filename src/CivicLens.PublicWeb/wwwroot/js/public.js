@@ -189,53 +189,145 @@
     };
 
     const memberZipKey = "civic-lens-members-zip";
+    const memberReleaseKey = "civic-lens-members-release";
     const validZip = value => typeof value === "string" && /^[0-9]{5}$/.test(value);
+    const positiveRelease = value => /^[1-9][0-9]*$/.test(String(value ?? "")) && Number(value) <= 2147483647;
     const initRememberedMembers = () => {
         const chip = document.querySelector("[data-your-members]");
-        if (!chip) return { zip: () => null, save: () => {}, onForget: () => {}, onChange: () => {} };
-        const button = chip.querySelector("[data-forget-members]");
+        if (!chip) return { zip: () => null, snapshot: () => ({ zip: null, release: null }), current: () => true, complete: () => true, refresh: () => {}, onForget: () => {}, onChange: () => {} };
         let zip = null;
-        let forget = () => {};
-        let changed = () => {};
+        const forgetters = new Set();
+        const changers = new Set();
+        let marker = null;
+        const notify = callbacks => callbacks.forEach(callback => callback(zip));
+        const readMarker = forZip => {
+            let stored;
+            try { stored = localStorage.getItem(memberReleaseKey); } catch { return marker?.zip === forZip ? marker.release : null; }
+            try {
+                const parsed = JSON.parse(stored);
+                if (validZip(parsed?.zip) && Number.isInteger(parsed.release) && positiveRelease(parsed.release)) {
+                    marker = { zip: parsed.zip, release: Number(parsed.release) };
+                    return marker.zip === forZip ? marker.release : null;
+                }
+            } catch {}
+            marker = null;
+            return null;
+        };
+        const clearMarker = () => {
+            marker = null;
+            try { localStorage.removeItem(memberReleaseKey); } catch {}
+        };
         const render = value => { zip = validZip(value) ? value : null; chip.hidden = zip === null; };
         const readStoredZip = () => {
             let stored;
             try { stored = localStorage.getItem(memberZipKey); } catch { return zip; }
-            if (validZip(stored)) return stored;
-            if (stored !== null) {
-                try { localStorage.removeItem(memberZipKey); } catch {}
-            }
+            if (validZip(stored)) { readMarker(stored); return stored; }
+            marker = null;
             return null;
         };
+        const snapshot = () => {
+            const storedZip = readStoredZip();
+            return { zip: storedZip, release: marker?.zip === storedZip ? marker.release : null };
+        };
+        const current = expected => {
+            const latest = snapshot();
+            return latest.zip === expected.zip && latest.release === expected.release;
+        };
+        const refresh = () => { render(readStoredZip()); notify(changers); };
         render(readStoredZip());
-        button.addEventListener("click", () => {
+        document.addEventListener("click", event => {
+            if (!(event.target instanceof Element) || !event.target.closest("button[data-forget-members]")) return;
             try { localStorage.removeItem(memberZipKey); } catch {}
+            clearMarker();
             render(null);
-            forget();
+            notify(forgetters);
             const input = document.querySelector("[data-zip-api] input[name=zip]");
             if (input) input.focus();
             else document.querySelector(".public-brand")?.focus();
         });
         window.addEventListener("storage", event => {
             if (event.key !== memberZipKey && event.key !== null) return;
-            const next = event.key === null ? null : event.newValue;
-            render(next);
-            changed(zip);
+            render(readStoredZip());
+            notify(changers);
         });
         window.addEventListener("pageshow", event => {
             if (!event.persisted) return;
             render(readStoredZip());
-            changed(zip);
+            notify(changers);
         });
         return {
             zip: () => zip,
-            save: value => {
+            snapshot,
+            current,
+            refresh,
+            complete: (value, release, expected, persist) => {
+                if (!current(expected) || !validZip(value) || !positiveRelease(release) || (!persist && value !== expected.zip)) return false;
                 render(value);
-                try { localStorage.setItem(memberZipKey, value); } catch {}
+                marker = { zip: value, release: Number(release) };
+                try {
+                    if (persist) localStorage.setItem(memberZipKey, value);
+                    localStorage.setItem(memberReleaseKey, JSON.stringify(marker));
+                } catch {}
+                return true;
             },
-            onForget: callback => { forget = callback; },
-            onChange: callback => { changed = callback; }
+            onForget: callback => { forgetters.add(callback); },
+            onChange: callback => { changers.add(callback); }
         };
+    };
+
+    const memberFragment = (html, zip, issue, expectedView, sinceRelease = null) => {
+        const template = document.createElement("template");
+        template.innerHTML = html;
+        const fragment = template.content.firstElementChild;
+        const count = fragment?.dataset.newVotes;
+        const hasSince = fragment?.dataset.sinceRelease !== "";
+        const hasCount = count !== "";
+        const stripTemplates = fragment?.querySelectorAll("template[data-member-strip-template]") ?? [];
+        const stripTemplateContent = stripTemplates[0]?.content;
+        if (template.content.childElementCount !== 1 || !fragment.matches("div[data-zip-member-fragment]")
+            || fragment.dataset.zcta !== zip || fragment.dataset.issue !== (issue ?? "") || fragment.dataset.view !== expectedView
+            || !positiveRelease(fragment.dataset.release) || !positiveRelease(fragment.dataset.congress)
+            || (fragment.dataset.sinceRelease !== "" && !positiveRelease(fragment.dataset.sinceRelease))
+            || fragment.dataset.sinceRelease !== (sinceRelease === null ? "" : String(sinceRelease))
+            || (hasSince !== hasCount)
+            || (hasCount && (typeof count !== "string" || count.length > 19 || !/^(0|[1-9][0-9]*)$/.test(count) || BigInt(count) > 9223372036854775807n))
+            || expectedView !== "strip" && (stripTemplates.length !== 1 || stripTemplateContent.childElementCount !== 1
+                || !stripTemplateContent.firstElementChild.matches("div[data-member-strip-content]"))
+            || (expectedView === "strip"
+                ? fragment.childElementCount !== 1 || !fragment.firstElementChild.matches("div[data-member-strip-content]")
+                : !fragment.querySelector(".zip-member-cards > li")))
+            throw new TypeError("Invalid ZIP lookup answer.");
+        return fragment;
+    };
+
+    const readMemberFragment = async (api, zip, issue, view, sinceRelease, signal) => {
+        const params = new URLSearchParams();
+        if (view !== "") params.set("view", view);
+        if (issue !== null) params.set("issue", issue);
+        if (sinceRelease !== null) params.set("sinceRelease", String(sinceRelease));
+        const query = params.size === 0 ? "" : `?${params}`;
+        const response = await fetch(`${api}/v1/zip-districts/${zip}/members${query}`, { headers: { Accept: "text/html" }, signal });
+        if (!response.ok) return { status: response.status, fragment: null };
+        if (!/^text\/html(?:;|$)/i.test(response.headers.get("Content-Type") ?? ""))
+            throw new TypeError("Invalid ZIP lookup content type.");
+        const html = await response.text();
+        signal.throwIfAborted();
+        return { status: response.status, fragment: memberFragment(html, zip, issue, view, sinceRelease) };
+    };
+
+    const memberFailure = (zip, status, officialsPage) => {
+        const message = document.createElement("p");
+        const texts = {
+            404: `No match for ${zip}. Check the 5 digits. Some ZIP codes, such as a PO box, are not in the Census data.`,
+            429: "Too many lookups. Wait one minute and try again."
+        };
+        if (status in texts) { message.textContent = texts[status]; return message; }
+        message.textContent = "The lookup failed. Try again, or ";
+        const link = document.createElement("a");
+        link.textContent = "browse all officials";
+        link.href = officialsPage;
+        message.append(link, ".");
+        return message;
     };
 
     const initZipLookup = (form, remembered) => {
@@ -268,29 +360,21 @@
             if (filtered) fragment.querySelector('[data-member-issue][aria-pressed="true"]')?.focus();
             if (revealAnswer) reveal();
         };
-        const memberFragment = (html, zip, issue) => {
-            const template = document.createElement("template");
-            template.innerHTML = html;
-            const fragment = template.content.firstElementChild;
-            const positiveNumber = value => /^[1-9][0-9]*$/.test(value ?? "") && Number(value) <= 2147483647;
-            if (template.content.childElementCount !== 1 || !fragment.matches("div[data-zip-member-fragment]")
-                || fragment.dataset.zcta !== zip || fragment.dataset.issue !== (issue ?? "") || fragment.dataset.view !== view || !positiveNumber(fragment.dataset.release)
-                || !positiveNumber(fragment.dataset.congress) || !fragment.querySelector(".zip-member-cards > li"))
-                throw new TypeError("Invalid ZIP lookup answer.");
-            return fragment;
+        let strip = document.querySelector("#members-strip");
+        const stripTemplate = fragment => fragment.querySelector("template[data-member-strip-template]");
+        const mountStrip = fragment => {
+            const source = stripTemplate(fragment);
+            if (!source || source.content.childElementCount !== 1 || !source.content.firstElementChild.matches("div[data-member-strip-content]")) return;
+            if (!strip) {
+                strip = document.createElement("div");
+                strip.id = "members-strip";
+                strip.className = "members-strip";
+                strip.setAttribute("aria-live", "polite");
+                document.querySelector(".public-header")?.after(strip);
+            }
+            strip.replaceChildren(source.content.firstElementChild.cloneNode(true));
         };
-        const failure = (zip, status) => {
-            const texts = {
-                404: `No match for ${zip}. Check the 5 digits. Some ZIP codes, such as a PO box, are not in the Census data.`,
-                429: "Too many lookups. Wait one minute and try again."
-            };
-            if (status in texts) return element("p", texts[status]);
-            const message = element("p", "The lookup failed. Try again, or ");
-            const link = element("a", "browse all officials");
-            link.href = form.dataset.officialsPage;
-            message.append(link, ".");
-            return message;
-        };
+        const failure = (zip, status) => memberFailure(zip, status, form.dataset.officialsPage);
         const submitLabel = submit.textContent;
         const loadingText = "Looking up your officials.";
         const setBusy = busy => {
@@ -301,6 +385,8 @@
             body.querySelectorAll("[data-member-issue]").forEach(button => { button.disabled = busy; });
         };
         let lookup = 0;
+        let lookupAbort = null;
+        let renderedSinceRelease = null;
         const look = async (zip, request, revealAnswer, persist, issue, filtered) => {
             const failed = status => {
                 if (request !== lookup) return;
@@ -308,21 +394,22 @@
                 else showProblem(failure(zip, status));
             };
             try {
-                const params = [];
-                if (view !== "") params.push("view=compare");
-                if (issue !== null) params.push(`issue=${encodeURIComponent(issue)}`);
-                const query = params.length === 0 ? "" : `?${params.join("&")}`;
-                const response = await fetch(`${api}/v1/zip-districts/${zip}/members${query}`, { headers: { Accept: "text/html" } });
-                if (!response.ok) {
-                    failed(response.status);
-                    return false;
-                }
-                const html = await response.text();
+                const startingState = remembered.snapshot();
+                const since = filtered ? renderedSinceRelease : startingState.zip === zip ? startingState.release : null;
+                const abort = new AbortController();
+                lookupAbort = abort;
+                const { status, fragment } = await readMemberFragment(api, zip, issue, view, since, abort.signal);
                 if (request !== lookup) return false;
-                if (!/^text\/html(?:;|$)/i.test(response.headers.get("Content-Type") ?? ""))
-                    throw new TypeError("Invalid ZIP lookup content type.");
-                showAnswer(memberFragment(html, zip, issue), revealAnswer, filtered);
-                if (request === lookup && persist) remembered.save(zip);
+                if (fragment === null) { failed(status); return false; }
+                if (!remembered.current(startingState)) { remembered.refresh(); return false; }
+                showAnswer(fragment, revealAnswer, filtered);
+                if (request === lookup) {
+                    mountStrip(fragment);
+                    if (!filtered) {
+                        renderedSinceRelease = since;
+                        if (!remembered.complete(zip, Number(fragment.dataset.release), startingState, persist)) remembered.refresh();
+                    }
+                }
                 return true;
             }
             catch {
@@ -332,6 +419,8 @@
         };
         const runLookup = async (zip, revealAnswer, persist = true, issue = null, filtered = false) => {
             const request = ++lookup;
+            lookupAbort?.abort();
+            lookupAbort = null;
             problem.replaceChildren();
             if (!validZip(zip)) {
                 showProblem(element("p", "Enter a ZIP code with 5 digits."));
@@ -345,7 +434,7 @@
                 const found = await look(zip, request, revealAnswer, persist, issue, filtered);
                 if (!found && request === lookup && revealAnswer) input.focus();
             } finally {
-                if (request === lookup) setBusy(false);
+                if (request === lookup) { setBusy(false); lookupAbort = null; }
             }
         };
         body.addEventListener("click", event => {
@@ -370,6 +459,8 @@
         input.addEventListener("input", () => {
             const wasBusy = body.hasAttribute("aria-busy");
             lookup++;
+            lookupAbort?.abort();
+            lookupAbort = null;
             setBusy(false);
             if (wasBusy) {
                 panel.hidden = true;
@@ -379,16 +470,22 @@
         });
         const clearLookup = () => {
             lookup++;
+            lookupAbort?.abort();
+            lookupAbort = null;
+            renderedSinceRelease = null;
             setBusy(false);
             input.value = "";
             problem.replaceChildren();
             panel.hidden = true;
             notes.hidden = true;
             body.replaceChildren();
+            strip?.replaceChildren();
         };
         remembered.onForget(clearLookup);
         remembered.onChange(value => {
-            if (value === null) { clearLookup(); return; }
+            renderedSinceRelease = null;
+            if (value === null) { clearLookup(); strip?.replaceChildren(); return; }
+            strip?.replaceChildren();
             input.value = value;
             runLookup(value, false, false);
         });
@@ -398,6 +495,71 @@
             input.value = saved;
             runLookup(saved, location.hash === answerFragment, false);
         }
+    };
+
+    const initMemberStrip = (remembered, slot) => {
+        if (document.querySelector("[data-zip-api]")) return;
+        const api = slot.dataset.membersApi;
+        if (!api) return;
+        let request = 0;
+        let active = null;
+        const showState = (...nodes) => {
+            const content = document.createElement("div");
+            content.className = "members-strip-content";
+            const controls = document.createElement("div");
+            controls.className = "members-strip-nav";
+            controls.append(...nodes);
+            content.append(controls);
+            slot.replaceChildren(content);
+        };
+        const showError = (zip, status) => {
+            const message = memberFailure(zip, status, slot.dataset.officialsPage);
+            const retry = document.createElement("button");
+            retry.type = "button";
+            retry.textContent = "Try again";
+            retry.addEventListener("click", () => run(zip));
+            showState(message, retry);
+        };
+        const clear = () => {
+            request++;
+            active?.abort();
+            active = null;
+            slot.removeAttribute("aria-busy");
+            slot.replaceChildren();
+        };
+        const run = async zip => {
+            if (zip !== remembered.zip()) return;
+            const mine = ++request;
+            active?.abort();
+            active = null;
+            if (!validZip(zip)) { slot.replaceChildren(); slot.removeAttribute("aria-busy"); return; }
+            const startingState = remembered.snapshot();
+            if (startingState.zip !== zip) { remembered.refresh(); return; }
+            const since = startingState.release;
+            const abort = new AbortController();
+            active = abort;
+            slot.setAttribute("aria-busy", "true");
+            if (slot.childElementCount === 0) {
+                const loading = document.createElement("p");
+                loading.textContent = "Looking up your officials.";
+                showState(loading);
+            }
+            try {
+                const { status, fragment } = await readMemberFragment(api, zip, null, "strip", since, abort.signal);
+                if (mine !== request) return;
+                if (fragment === null) { showError(zip, status); return; }
+                if (!remembered.current(startingState)) { remembered.refresh(); return; }
+                slot.replaceChildren(fragment.firstElementChild.cloneNode(true));
+            } catch {
+                if (mine === request) showError(zip, 0);
+            } finally {
+                if (mine === request) { slot.removeAttribute("aria-busy"); active = null; }
+            }
+        };
+        remembered.onForget(clear);
+        remembered.onChange(zip => { if (zip === null) clear(); else { slot.replaceChildren(); run(zip); } });
+        const initial = remembered.zip();
+        if (initial !== null) run(initial);
     };
 
     const initOfficialsFilter = controls => {
@@ -758,5 +920,7 @@
     document.querySelectorAll("[data-report-api]").forEach(initReportForm);
     const rememberedMembers = initRememberedMembers();
     document.querySelectorAll("[data-zip-api]").forEach(form => initZipLookup(form, rememberedMembers));
+    const membersStrip = document.querySelector("#members-strip");
+    if (membersStrip) initMemberStrip(rememberedMembers, membersStrip);
     new Set(Array.from(document.querySelectorAll("th[data-sort]"), header => header.closest("table"))).forEach(initSortable);
 })();

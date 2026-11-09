@@ -58,9 +58,9 @@
             </details>
         </div>
     </header>
-    @if (showMembersStrip)
+    @if (membersStrip is not null)
     {
-        <div class="members-strip" id="@MembersStripSlot.ElementId" aria-live="polite"></div>
+        <div class="members-strip" id="@MembersStripSlot.ElementId" data-members-api="@membersStrip.BrowserApiRoot" data-officials-page="@(RootPath + PublicationProtocol.OfficialsPagePath)" aria-live="polite"></div>
     }
     <main id="main" tabindex="-1">
         <CascadingValue Value="glossaryUse" IsFixed="true">
@@ -82,7 +82,7 @@
     private string documentTitle = string.Empty;
     private string description = string.Empty;
     private string? canonicalUrl;
-    private bool showMembersStrip;
+    private MembersStripSlot? membersStrip;
     private readonly GlossaryPageUse glossaryUse = new();
 
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
@@ -111,7 +111,7 @@
     {
         documentTitle = PublicHead.DocumentTitle(Title, Page, PageCount);
         description = PublicHead.Description(Description);
-        showMembersStrip = Services.GetService<MembersStripSlot>() is not null;
+        membersStrip = Services.GetService<MembersStripSlot>();
         canonicalUrl = CanonicalPath is null ? null : Services.GetService<PublicBaseUrl>()?.Join(CanonicalPath);
     }
 }

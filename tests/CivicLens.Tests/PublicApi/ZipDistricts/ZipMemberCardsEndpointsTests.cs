@@ -41,6 +41,57 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task StripUsesThePrivateSnapshotAndNormalResponsesCarryTheSameInertStrip()
+    {
+        await using var host = await StartAsync(withServerPages: true);
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 3, 0, 0, 0, TimeSpan.Zero));
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2,
+            new SeededSeat("al2", "Alice House", Representative, "AL", 2),
+            new SeededSeat("al-sen", "Sam Senator", Senator, "AL", null));
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('b', "2026-06-01") { FirstRelease = 2, Kind = "Rule", Casts = ["Not Voting"], PersonIds = ["al2"] });
+
+        var home = new HtmlParser().ParseDocument(await host.Client.GetStringAsync("/web"));
+        var slot = home.QuerySelector("#members-strip")!;
+        Assert.Equal("https://api.civic-lens.test", slot.GetAttribute("data-members-api"));
+        Assert.Equal("https://civic-lens.test/officials.html", slot.GetAttribute("data-officials-page"));
+        Assert.Equal(0, slot.ChildElementCount);
+        Assert.Null(home.QuerySelector("[data-new-votes]"));
+        var strip = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?view=strip&sinceRelease=1");
+        var root = strip.QuerySelector("[data-zip-member-fragment]")!;
+        Assert.Equal("strip", root.GetAttribute("data-view"));
+        Assert.Equal("2", root.GetAttribute("data-release"));
+        Assert.Equal("1", root.GetAttribute("data-since-release"));
+        Assert.Equal("1", root.GetAttribute("data-new-votes"));
+        Assert.Equal(1, root.ChildElementCount);
+        Assert.Equal("1 newly published vote since your last member lookup.", root.QuerySelector("[data-member-updates]")!.TextContent);
+        Assert.Empty(root.QuerySelectorAll(".zip-member-cards, [data-member-issue-filter], template"));
+        Assert.All(root.QuerySelectorAll("a"), link =>
+        {
+            Assert.StartsWith("https://civic-lens.test/", link.GetAttribute("href"));
+            Assert.DoesNotContain("36009", link.GetAttribute("href"));
+        });
+        var normal = await GetDocumentAsync(host, "/v1/zip-districts/36009/members");
+        var normalRoot = normal.QuerySelector("[data-zip-member-fragment]")!;
+        Assert.Equal("", normalRoot.GetAttribute("data-since-release"));
+        Assert.Equal("", normalRoot.GetAttribute("data-new-votes"));
+        Assert.Single(normalRoot.QuerySelectorAll("template[data-member-strip-template]"));
+        Assert.NotEmpty(normalRoot.QuerySelectorAll(".zip-member-cards > li"));
+    }
+
+    [Fact]
+    public async Task RejectsMalformedReleaseMarkersAndStripIssueFiltersBeforeReadingMembers()
+    {
+        await using var host = await StartAsync(withNames: false);
+        foreach (var query in new[]
+        {
+            "view=strip&issue=health", "sinceRelease=0", "sinceRelease=-1", "sinceRelease=2147483648",
+            "sinceRelease=1.5", "sinceRelease=1&sinceRelease=2"
+        })
+            await AssertProblemAsync(host, "/v1/zip-districts/36009/members?" + query, HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task MembersRouteUsesThePublicSiteOriginForLinksAndPhotosWhenTheHomePreviewRunsOnTheApiHost()
     {
         await using var host = await StartAsync(withServerPages: true);

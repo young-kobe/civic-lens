@@ -7,6 +7,8 @@ public sealed record ZipLookup(ZipDistrictAnswer? Answer, ZipLookupMiss? Miss)
 {
     /// <summary>The shared votes for the current district members, when the member view requested them.</summary>
     public SharedMemberVoteAnswer? SharedVotes { get; init; }
+    /// <summary>The number of votes first published since the requested release that involve a current ZIP member.</summary>
+    public long? NewVoteCount { get; init; }
     /// <summary>The issue filters published in the same release snapshot as the member view.</summary>
     public ZipMemberIssueOption[] IssueOptions { get; init; } = [];
     public static ZipLookup NoRelease { get; } = new(null, ZipLookupMiss.NoRelease);

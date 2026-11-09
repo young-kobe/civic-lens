@@ -105,6 +105,10 @@ member_votes party_majority_cast
 member_votes side
 member_votes party
 member_votes alignment
+vote_first_publications record_id
+vote_first_publications revision_number
+vote_first_publications release_number
+vote_first_publications first_release
 vote_issues record_id
 vote_issues revision_number
 vote_issues issue_id
