@@ -84,7 +84,7 @@ internal static class PublicApiGrants
         GRANT SELECT (release_number, official_id, name, wikidata_id, website, photo_path) ON release_officials TO civic_lens_public_owner;
         GRANT SELECT (release_number, official_id, "position", office, kind, state, district, party, caucus, start_on, end_on)
             ON release_official_terms TO civic_lens_public_owner;
-        GRANT SELECT (release_number, issue_id, name, definition) ON release_issues TO civic_lens_public_owner;
+        GRANT SELECT (release_number, issue_id, name, definition, count_congress, substantive_votes, bills) ON release_issues TO civic_lens_public_owner;
         GRANT SELECT (release_number, issue_id, "position", text) ON release_issue_includes TO civic_lens_public_owner;
         GRANT SELECT (release_number, issue_id, "position", text) ON release_issue_excludes TO civic_lens_public_owner;
         GRANT SELECT (release_number, policy_area_id, name) ON release_policy_areas TO civic_lens_public_owner;

@@ -157,9 +157,9 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         };
         await using var host = await StartAsync(votes, bills);
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
-            INSERT INTO release_issues (release_number, issue_id, name, definition)
-            VALUES (1, 'health', 'Health', 'Health policy'), (1, 'climate', 'Climate', 'Climate policy'),
-                   (1, 'empty', 'Empty issue', 'No records');
+            INSERT INTO release_issues (release_number, issue_id, name, definition, count_congress, substantive_votes, bills)
+            VALUES (1, 'health', 'Health', 'Health policy', 119, 1, 1), (1, 'climate', 'Climate', 'Climate policy', 119, 1, 0),
+                   (1, 'empty', 'Empty issue', 'No records', 119, 0, 0);
             """);
 
         var answer = await GetAsync(host);
@@ -202,16 +202,33 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task HomeIssueCongressUsesPublicationDateAndTreatsJanuarySecondAsPreviousCongress()
+    public async Task HomeIssueCongressIsTheStoredReleaseSnapshotWhenPublicationTimestampChanges()
     {
         await using var host = await StartAsync([House('a', "2026-05-01", 1)]);
-        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health', 'Health policy')");
-        foreach (var (date, expectedCongress) in new[] { (new DateTime(2027, 1, 2, 0, 0, 0, DateTimeKind.Utc), 119), (new DateTime(2027, 1, 3, 0, 0, 0, DateTimeKind.Utc), 120) })
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition, count_congress, substantive_votes, bills) VALUES (1, 'health', 'Health', 'Health policy', 119, 1, 0)");
+        foreach (var date in new[] { new DateTime(2027, 1, 2, 0, 0, 0, DateTimeKind.Utc), new DateTime(2027, 1, 3, 0, 0, 0, DateTimeKind.Utc) })
         {
             await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE publication_releases SET published_at_utc_ticks = {date.Ticks} WHERE release_number = 1");
             var answer = await GetAsync(host);
-            Assert.Equal(expectedCongress, answer.GetProperty("issues")[0].GetProperty("congress").GetInt32());
+            Assert.Equal(119, answer.GetProperty("issues")[0].GetProperty("congress").GetInt32());
         }
+    }
+
+    [Fact]
+    public async Task HomeIssueCountsReadTheStoredSnapshotAfterCurrentRevisionIssueTagsChange()
+    {
+        await using var host = await StartAsync([House('a', "2026-05-01", 1) with { Issues = ["health"] }]);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
+            INSERT INTO release_issues (release_number, issue_id, name, definition, count_congress, substantive_votes, bills)
+            VALUES (1, 'health', 'Health', 'Health policy', 119, 17, 9);
+            UPDATE vote_revision_issues SET is_tracked = false WHERE issue_id = 'health';
+            """);
+
+        var issue = Assert.Single((await GetAsync(host)).GetProperty("issues").EnumerateArray().ToArray());
+
+        Assert.Equal(119, issue.GetProperty("congress").GetInt32());
+        Assert.Equal(17, issue.GetProperty("substantiveVotes").GetInt32());
+        Assert.Equal(9, issue.GetProperty("bills").GetInt32());
     }
 
     [Fact]
@@ -219,8 +236,8 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync([House('a', "2026-05-01", 1)]);
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
-            INSERT INTO release_issues (release_number, issue_id, name, definition)
-            VALUES (1, 'health', 'Health', 'Health policy');
+            INSERT INTO release_issues (release_number, issue_id, name, definition, count_congress, substantive_votes, bills)
+            VALUES (1, 'health', 'Health', 'Health policy', NULL, NULL, NULL);
             UPDATE publication_releases SET published_at_utc_ticks = 600000000000000000 WHERE release_number = 1;
             """);
 
@@ -239,9 +256,9 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         ]);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, Published.AddDays(1));
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
-            INSERT INTO release_issues (release_number, issue_id, name, definition)
-            VALUES (1, 'health', 'Health before', 'Health policy'),
-                   (2, 'health', 'Health after', 'Health policy');
+            INSERT INTO release_issues (release_number, issue_id, name, definition, count_congress, substantive_votes, bills)
+            VALUES (1, 'health', 'Health before', 'Health policy', 119, 1, 0),
+                   (2, 'health', 'Health after', 'Health policy', 119, 2, 0);
             CREATE FUNCTION wait_for_home_issues() RETURNS boolean LANGUAGE plpgsql
                 SECURITY DEFINER SET search_path = pg_catalog AS $function$
             BEGIN
@@ -250,7 +267,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
             END;
             $function$;
             CREATE OR REPLACE VIEW public_api.release_issues WITH (security_barrier = true) AS
-            SELECT i.release_number, i.issue_id, i.name, i.definition
+            SELECT i.release_number, i.issue_id, i.name, i.definition, i.count_congress, i.substantive_votes, i.bills
               FROM public.release_issues i JOIN public.publication_releases r ON r.release_number = i.release_number
              WHERE r.is_active AND public.wait_for_home_issues();
             """);

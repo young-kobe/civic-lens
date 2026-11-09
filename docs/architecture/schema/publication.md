@@ -191,7 +191,8 @@ END
 
 - pk (release_number, issue_id)
 - fk (release_number) -> publication_releases (release_number) on delete restrict
-- cols release_number integer, issue_id varchar(256), name varchar(256), definition text null
+- cols release_number integer, issue_id varchar(256), name varchar(256), definition text null, count_congress integer null, substantive_votes bigint null, bills bigint null
+- check ck_release_issues_home_counts: count_congress IS NULL AND substantive_votes IS NULL AND bills IS NULL OR count_congress IS NOT NULL AND substantive_votes IS NOT NULL AND bills IS NOT NULL AND count_congress > 0 AND substantive_votes >= 0 AND bills >= 0
 - check ck_release_issues_issue_id: length(btrim(issue_id)) > 0
 - check ck_release_issues_name: length(btrim(name)) > 0
 

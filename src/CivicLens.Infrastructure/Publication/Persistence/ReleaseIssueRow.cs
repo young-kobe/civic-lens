@@ -6,4 +6,7 @@ internal sealed class ReleaseIssueRow
     public string IssueId { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Definition { get; set; }
+    public int? CountCongress { get; set; }
+    public long? SubstantiveVotes { get; set; }
+    public long? Bills { get; set; }
 }
