@@ -16,6 +16,7 @@ internal sealed record SeededVote(char Id, string VotedOn)
     public int? BillNumber { get; init; } = 1;
     public string TextOrigin { get; init; } = "Model";
     public string[] Casts { get; init; } = ["Yea", "Yea", "Nay"];
+    public string[]? PersonIds { get; init; }
     public string[] Issues { get; init; } = [];
     public string[] UntrackedIssues { get; init; } = [];
     public int FirstRelease { get; init; } = 1;
@@ -60,7 +61,7 @@ internal static class ViewsSeed
             {string.Join('\n', Enumerable.Range(1, vote.ActiveRevision).Select(revision => Revision(vote, revision, list, source, bill)))}
             {string.Join('\n', vote.Casts.Select((cast, index) => $"""
                 INSERT INTO vote_member_list_entries (list_id, "position", person_id, bioguide_id, vote_cast, citation_extraction_id, citation_start, citation_length)
-                VALUES ('{list}', {index}, 'p{index}', 'B{index:000000}', '{cast}', 'ext', 0, 1);
+                VALUES ('{list}', {index}, '{vote.PersonIds?[index] ?? $"p{index}"}', 'B{index:000000}', '{cast}', 'ext', 0, 1);
                 """))}
             {string.Join('\n', vote.EarlierIssues.Select((issue, index) => IssueRow(vote, 1, issue, index, true)))}
             {string.Join('\n', vote.Issues.Select((issue, index) => IssueRow(vote, vote.ActiveRevision, issue, index, true)))}

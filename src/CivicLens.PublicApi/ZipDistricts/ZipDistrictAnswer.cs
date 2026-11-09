@@ -13,4 +13,8 @@ public sealed record ZipDistrict(string State, int District, SeatHolder? Represe
 public sealed record ZipState(string State, SeatHolder?[] Senators);
 
 /// <summary>The person who holds a seat. <c>TermEndsOn</c> is the end date of the current term, or null when the release has no end date.</summary>
-public sealed record SeatHolder(string OfficialId, string Name, string? Party, DateOnly? TermEndsOn, string? PhotoPath, MissedVotesFigure[] MissedVotes, PartyLineFigure[] PartyLines);
+public sealed record SeatHolder(string OfficialId, string Name, string? Party, DateOnly? TermEndsOn, string? PhotoPath, MissedVotesFigure[] MissedVotes, PartyLineFigure[] PartyLines)
+{
+    public BillCountsFigure? Bills { get; init; }
+    public IssueCountsFigures? Issues { get; init; }
+}

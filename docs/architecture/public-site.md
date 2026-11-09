@@ -101,6 +101,8 @@ These decisions come from the component audit. The owner accepted every recommen
 - Home issue and executive rows use the mapped counts and record facts, with shared link, enum label, Congress ordinal, and date format owners. Enforcer: `HomePage`. Test: `HomePageTests.IssuesExecutiveGroupsAndFreshnessRenderTheirScopedPublishedFacts`.
 - The ZIP lookup restores its controls after the current request, including a malformed success response. An older response cannot replace a newer result. Enforcer: `initZipLookup`. No automated test.
 - The browser remembers only a validated five-digit ZIP after its current lookup answer renders. It stores no member details; the home page re-queries published current data. Enforcer: `initRememberedMembers` and `initZipLookup`. No automated test.
+- Member cards and shared vote rows use one private HTML fragment from one published-release snapshot. Enforcer: `ZipDistrictStore.FindMembersAsync`. Test: `ZipMemberSnapshotTests.MemberDataAndSharedVotesStayOnTheReleaseReadByTheFirstDistrictQuery`.
+- Shared comparisons require at least two listed members and an actual binary cast from every listed member. Recorded nonbinary casts remain visible. Missing casts stay absent. Neither supports a comparison. Enforcers: `ZipMemberCardsMapper` and `PublishedOfficialVote.SideOf`. Test: `ZipDistrictEndpointsTests.CrossStateComparisonsRequireEveryListedMembersBinaryCast`.
 - Shared page HTML contains no remembered ZIP or personal lookup results. Enforcer: `PublicPage` emits empty hooks and browser code reads device storage. Tests: `HomePageTests.TheRememberedMembersLinkTargetsTheLookupHeadingInSharedMarkup` and `PublishedHomePageTests.TheResultPanelIsHiddenUntilALookupAndCreditsTheCensusBureauAndSaysAZctaIsNotAZipCode`.
 
 - The glossary index lists each approved term and the party-count note once, in alphabetical order. Letter links reach focusable index headings. Enforcer: `PublishedGlossaryPage`. Test: `GlossaryTests.TheGlossaryIndexGroupsEveryTermAlphabeticallyAndLinksPopulatedLettersAndDefinitions`.
@@ -113,7 +115,7 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 
 | # | Reader goal | Pages and components | Status |
 |---|---|---|---|
-| 1 | Find my members and what they did | Home ZIP form, member cards after a ZIP | Partial. Gated SSR home includes the existing ZIP flow when its browser API origin is configured. The answer scrolls into view and receives focus. Cards show portraits, seats, parties, term ends, scoped attendance, and party-line counts from private HTML fragments. Sponsored-bill and top-issue counts remain planned |
+| 1 | Find my members and what they did | Home ZIP form, member cards after a ZIP | Partial. Gated SSR home includes the existing ZIP flow when its browser API origin is configured. The answer scrolls into view and receives focus. Cards show portraits, seats, parties, term ends, scoped attendance, and party-line counts from private HTML fragments. Congress-scoped sponsored-bill and issue figures are shown, with shared vote rows and complete binary comparison badges |
 | 2 | See my member on an issue, from the member | Official page, issue chips, vote strip | Partial. Planned: strip marks link to the votes (DR2) |
 | 3 | See my member on an issue, from the issue | Issue page, "your members" section | Planned: each issue vote shows my members' casts |
 | 4 | Understand one vote | Vote page: AI summary, result card, "what a Yes meant", party bars, source fold | Partial. Planned: answer first, one fold (DR3) |
@@ -147,8 +149,8 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Issue tiles | Home | Where do I start? | `issue_votes`, `bill_issues` | `/web` shows each configured issue's substantive vote count, bill count, and Congress. Other issue layouts remain planned |
 | Break board | Home, boards | Who breaks from their party? | `official_party_lines` | Official figure served. Board endpoint and UI planned |
 | Latest executive actions | Home | What did the President sign? | `executive_actions` | `/web` shows one row per published document type with count, newest title and signed date. Other executive layouts remain planned |
-| Member card | After a ZIP | Who is my member? | `officials`, `official_attendance`, `official_party_lines`, `official_bill_counts`, `official_issue_counts` | Portrait, seat, party, term end, scoped attendance, and scoped party-line counts implemented. Sponsored-bill and top-issue counts remain planned |
-| Member votes list | After a ZIP, official | How did my members vote? | `votes`, `member_votes` | Partial. The API serves shared vote rows with recorded casts. ZIP display and issue filter chips remain planned |
+| Member card | After a ZIP | Who is my member? | `officials`, `official_attendance`, `official_party_lines`, `official_bill_counts`, `official_issue_counts` | Portrait, seat, party, term end, scoped attendance, and scoped party-line counts implemented. Congress-scoped sponsored-bill and issue figures are shown, with shared vote rows and complete binary comparison badges |
+| Member votes list | After a ZIP, official | How did my members vote? | `votes`, `member_votes` | Partial. The API and private ZIP fragment serve shared vote rows with recorded casts. Issue filter chips remain planned |
 | Compare members | Compare page | How do my members differ? | `official_*` views, `member_votes` | Planned |
 | Profile header, key figures | Official | Who is this? | `officials`, `official_attendance`, `official_party_lines` | API data implemented. Profile UI integration remains planned. |
 | Vote strip | Official | What is their voting pattern? | `member_votes.side` | Planned: marks only breaks and missed votes |

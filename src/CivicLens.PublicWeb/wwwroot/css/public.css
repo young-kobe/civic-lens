@@ -57,6 +57,29 @@ table[data-paged]:focus { outline: none; }
 .home-preview-section { margin-top: var(--s6); }
 .home-preview-section > h2 { margin: 0 0 var(--s4); font-size: var(--t-h2); }
 .home-vote-caption { margin: 0 0 var(--s4); }
+.shared-vote-rows { min-width: 0; padding: 20px 14px; border-radius: 28px; background: var(--vote-surface); }
+.shared-vote-rows > h2 { margin: 0 0 var(--s2); font-size: clamp(var(--t-h2), 3vw, 2rem); font-weight: 800; letter-spacing: -.015em; text-wrap: wrap; }
+.shared-vote-list { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
+.shared-vote-row { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 10px; min-width: 0; padding: 12px 12px 12px 10px; border-radius: 20px; background: var(--surface); }
+.shared-vote-icon { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1.5px solid var(--vote-ink); border-radius: 10px; background: var(--vote-surface); color: var(--vote-ink); }
+.shared-vote-icon .icon { width: 20px; height: 20px; }
+.shared-vote-content, .shared-vote-summary { min-width: 0; }
+.shared-vote-rows .shared-vote-summary h3 { margin: 0; font-family: var(--ui); font-size: var(--t-base); line-height: 1.35; text-wrap: wrap; }
+.shared-vote-summary h3 a { color: var(--info); text-decoration: underline; text-underline-offset: .16em; overflow-wrap: anywhere; }
+.shared-vote-summary h3 a:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.shared-vote-meta { margin: 2px 0 0; color: var(--muted); font-size: .875rem; line-height: 1.45; }
+.shared-vote-label { display: inline-block; margin-inline-start: var(--s1); color: var(--ai-ink); }
+.shared-vote-casts { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin: var(--s2) 0 0; padding: 0; list-style: none; }
+.shared-vote-cast { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.shared-vote-member { font-size: .875rem; }
+.shared-vote-cast-value { display: inline-flex; align-items: center; min-height: 28px; padding: 2px 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font-size: .9rem; font-weight: 700; line-height: 1.25; }
+.shared-vote-cast-value[data-side="yea"] { border-color: var(--info); color: var(--info); }
+.shared-vote-cast-value[data-side="nay"] { border-color: var(--against); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--against) 14%, var(--surface)) 0 3px, var(--surface) 3px 6px); color: var(--against); }
+@media (min-width: 761px) {
+    .shared-vote-rows { padding: 32px; }
+    .shared-vote-row { grid-template-columns: 36px minmax(0, 1fr); gap: 14px; padding: 14px 16px 14px 14px; }
+    .shared-vote-icon { width: 36px; height: 36px; border-radius: 12px; }
+}
 .home-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); font-size: 1rem; }
 .home-grid > * { min-width: 0; }
 .home-grid > section { margin: 0; padding: 24px; border-radius: 28px; }
@@ -143,6 +166,12 @@ table[data-paged]:focus { outline: none; }
 .zip-member-figure p { flex: 1; }
 .zip-member-figure strong { font-variant-numeric: tabular-nums; }
 .zip-member-figure .info-button { flex: none; width: 44px; height: 44px; }
+.zip-member-issues, .zip-member-bills { display: grid; gap: var(--s1); }
+.zip-member-issues h4, .zip-member-bills h4 { margin: 0; font-size: var(--t-base); }
+.zip-member-issues ul { display: grid; gap: var(--s1); margin: 0; padding-inline-start: var(--s4); }
+.zip-member-issues li { padding-inline-start: var(--s1); }
+.zip-member-issues li .info-button { width: 44px; height: 44px; vertical-align: middle; }
+.shared-vote-comparison { display: inline-block; margin-inline-start: var(--s1); padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--ink); font-weight: 700; }
 .zip-count { margin: 0 0 var(--s3); }
 .home-browse { margin: 0; color: var(--bar-muted); }
 .home-browse a { color: var(--bar-ink); }

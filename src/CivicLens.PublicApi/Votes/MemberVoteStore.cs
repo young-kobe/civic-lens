@@ -97,6 +97,12 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
     {
         await using var connection = await views.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        return await ReadSharedAsync(connection, transaction, request, cancellationToken);
+    }
+
+    internal static async Task<SharedMemberVoteAnswer?> ReadSharedAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+        MemberVoteRequest request, CancellationToken cancellationToken)
+    {
         var (release, selected) = await ReadSharedVotesAsync(connection, transaction, request, cancellationToken);
         if (release is not { } active) return null;
         var casts = selected.ToDictionary(vote => vote.RecordId, _ => new List<SharedMemberVoteCast>(), StringComparer.Ordinal);

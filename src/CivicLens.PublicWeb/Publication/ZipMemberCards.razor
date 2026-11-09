@@ -31,6 +31,45 @@
                             <text>Our records show no end date for this term.</text>
                         }
                     </p>
+                    @if (member.Bills is { } bills)
+                    {
+                        <div class="zip-member-bills">
+                            <h4>Bills sponsored in Congress @bills.Congress</h4>
+                            <div class="zip-member-figure">
+                                <p><strong>@bills.Sponsored</strong> @(bills.Sponsored == 1 ? "bill" : "bills")</p>
+                                <InfoPopover Id="@($"zip-bills-{seatIndex}")" Label="@($"About bills sponsored by {member.Name}")">
+                                    <p>@bills.Scope</p>
+                                </InfoPopover>
+                            </div>
+                        </div>
+                    }
+                    @if (member.Issues.Length > 0)
+                    {
+                        <div class="zip-member-issues">
+                            <h4>Most active issues in Congress @member.Issues[0].Congress</h4>
+                            <ul role="list">
+                                @for (var issueIndex = 0; issueIndex < member.Issues.Length; issueIndex++)
+                                {
+                                    var issue = member.Issues[issueIndex];
+                                    <li>
+                                        <span>
+                                            @if (issue.PagePath is { } pagePath)
+                                            {
+                                                <a href="@(RootPath + pagePath)">@issue.Name</a>
+                                            }
+                                            else
+                                            {
+                                                @issue.Name
+                                            }: <strong>@issue.SponsoredBills</strong> @(issue.SponsoredBills == 1 ? "bill" : "bills") sponsored, <strong>@issue.VotesCast</strong> substantive @(issue.VotesCast == 1 ? "vote" : "votes") cast.
+                                        </span>
+                                        <InfoPopover Id="@($"zip-issue-{seatIndex}-{issueIndex}")" Label="@($"About {issue.Name} activity for {member.Name}")">
+                                            <p>@issue.Scope</p>
+                                        </InfoPopover>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    }
                     @if (member.Attendance.Length == 0)
                     {
                         <p class="small muted">No published roll calls list this member.</p>
@@ -70,6 +109,10 @@
     @foreach (var state in Data.StatesWithoutSenators)
     {
         <p class="small muted">@state has no senators.</p>
+    }
+    @foreach (var votes in Data.SharedVotes)
+    {
+        <SharedVoteRows Data="votes" RootPath="RootPath" />
     }
 </div>
 

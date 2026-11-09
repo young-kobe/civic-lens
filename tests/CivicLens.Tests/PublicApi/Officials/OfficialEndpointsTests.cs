@@ -352,6 +352,18 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AnExecutiveWithoutAttendanceDoesNotGetLegislativeFiguresFromTheReleaseDate()
+    {
+        await using var host = await StartAsync();
+
+        using var detail = await GetAsync(host, "/v1/officials/p4");
+
+        Assert.Equal(JsonValueKind.Null, detail.RootElement.GetProperty("congress").ValueKind);
+        Assert.Equal(JsonValueKind.Null, detail.RootElement.GetProperty("bills").ValueKind);
+        Assert.Equal(JsonValueKind.Null, detail.RootElement.GetProperty("issues").ValueKind);
+    }
+
+    [Fact]
     public async Task AnOfficialWithNoVoteShowsNoCongressAndNoBillOrIssueFigure()
     {
         await using var host = await StartAsync();
@@ -364,6 +376,40 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
         Assert.Equal(JsonValueKind.Null, root.GetProperty("bills").ValueKind);
         Assert.Equal(JsonValueKind.Null, root.GetProperty("issues").ValueKind);
         Assert.Empty(root.GetProperty("terms").EnumerateArray());
+    }
+
+    [Theory]
+    [InlineData("2025-01-03T00:01:00+06:00", 118)]
+    [InlineData("2025-01-02T23:59:00-06:00", 119)]
+    [InlineData("1934-12-31T23:59:00Z", null)]
+    public async Task MemberWithoutAttendanceUsesTheReleaseUtcDateForBillAndIssueFigures(string publishedAt, int? expectedCongress)
+    {
+        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, DateTimeOffset.Parse(publishedAt));
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
+            new SeededOfficial("p5", "Fay Fox", new SeededTerm("Representative", "Representative", "2023-01-03") { State = "CA", District = 1, Party = "Democrat" }));
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('f', "2025-01-02") { Congress = 118, BillNumber = 6, Issues = ["health"], Sponsorships = [new("p5", "Sponsor", "2025-01-02")] },
+            new SeededBill('9', "2025-01-03") { Congress = 119, BillNumber = 7, Issues = ["tax"], Sponsorships = [new("p5", "Sponsor", "2025-01-03")] });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health policy', 'Health'), (1, 'tax', 'Tax policy', 'Tax');");
+
+        using var detail = await GetAsync(host, "/v1/officials/p5");
+        var root = detail.RootElement;
+
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("congress").ValueKind);
+        Assert.Empty(root.GetProperty("missedVotes").EnumerateArray());
+        Assert.Empty(root.GetProperty("partyLines").EnumerateArray());
+        if (expectedCongress is not { } congress)
+        {
+            Assert.Equal(JsonValueKind.Null, root.GetProperty("bills").ValueKind);
+            Assert.Equal(JsonValueKind.Null, root.GetProperty("issues").ValueKind);
+            return;
+        }
+        Assert.Equal(congress, root.GetProperty("bills").GetProperty("congress").GetInt32());
+        Assert.Equal(1, root.GetProperty("bills").GetProperty("sponsored").GetInt32());
+        var issue = Assert.Single(root.GetProperty("issues").GetProperty("issues").EnumerateArray());
+        Assert.Equal(congress == 118 ? "health" : "tax", issue.GetProperty("issueId").GetString());
+        Assert.Equal(congress == 118 ? "Health policy" : "Tax policy", issue.GetProperty("name").GetString());
     }
 
     [Fact]

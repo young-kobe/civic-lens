@@ -1,4 +1,5 @@
 using CivicLens.PublicApi.Votes;
+using CivicLens.Tests.PublicApi;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -16,7 +17,7 @@ public sealed class SharedMemberVoteSnapshotTests(PostgresCollection postgres)
     public async Task ReadsReleaseAndSelectedCastFromOneDatabaseSnapshot()
     {
         var database = await postgres.CreateMigratedDatabaseAsync();
-        using var gate = new FirstVoteReadGate(TimeSpan.FromSeconds(15));
+        using var gate = new FirstPublicApiReadGate(TimeSpan.FromSeconds(15));
         using var loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(gate).SetMinimumLevel(LogLevel.Trace));
         Task<SharedMemberVoteAnswer?>? read = null;
         try
@@ -83,42 +84,6 @@ public sealed class SharedMemberVoteSnapshotTests(PostgresCollection postgres)
             }
             try { await ViewsSeed.ExecuteAsync(database, $"ALTER ROLE {PublicRole} NOLOGIN PASSWORD NULL"); }
             finally { await postgres.DropDatabaseAsync(database); }
-        }
-    }
-
-    private sealed class FirstVoteReadGate(TimeSpan timeout) : ILoggerProvider
-    {
-        private readonly TaskCompletionSource firstRead = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly ManualResetEventSlim resume = new(false);
-        private int claimed;
-
-        public Task FirstRead => firstRead.Task;
-        public ILogger CreateLogger(string categoryName) => new GateLogger(this, categoryName);
-
-        public void Resume() => resume.Set();
-        public void Dispose() => resume.Dispose();
-
-        private void Observe(string category, EventId eventId, IReadOnlyList<KeyValuePair<string, object?>> state)
-        {
-            var eventName = eventId.Name ?? string.Empty;
-            if (category != "Npgsql.Command" || eventName != "CommandExecutionCompleted") return;
-            var commandText = state.FirstOrDefault(item => string.Equals(item.Key, "CommandText", StringComparison.OrdinalIgnoreCase)).Value?.ToString();
-            if (commandText is null || !commandText.Contains("public_api.", StringComparison.OrdinalIgnoreCase)) return;
-            if (Interlocked.CompareExchange(ref claimed, 1, 0) != 0) return;
-
-            firstRead.TrySetResult();
-            if (!resume.Wait(timeout)) throw new TimeoutException("Timed out waiting for the snapshot probe release switch.");
-        }
-
-        private sealed class GateLogger(FirstVoteReadGate owner, string category) : ILogger
-        {
-            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-            public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Trace;
-
-            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-            {
-                if (state is IReadOnlyList<KeyValuePair<string, object?>> values) owner.Observe(category, eventId, values);
-            }
         }
     }
 }

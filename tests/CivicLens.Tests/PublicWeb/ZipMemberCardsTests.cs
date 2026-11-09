@@ -57,6 +57,47 @@ public sealed class ZipMemberCardsTests
     }
 
     [Fact]
+    public async Task MemberFiguresUseTheirOwnCongressAndIssueNamesAndScopeDetails()
+    {
+        var member = new ZipMemberIdentityData("pat", "Pat Member", null, null, null, [], [])
+        {
+            Bills = new(119, 1, "Sponsored bills in Congress 119."),
+            Issues = [new("Firearms", 118, 2, 3, "Counts for firearms in Congress 118.", "issues/firearms.html"), new("Issue 7", 118, 0, 0, "Counts for issue 7 in Congress 118.")]
+        };
+        var document = await RenderAsync(new(9, 120, "36009", 1, [new("Representative for Alabama, district 2", member)], []));
+
+        Assert.Contains("Bills sponsored in Congress 119", document.QuerySelector(".zip-member-bills")!.TextContent);
+        Assert.Contains("1 bill", document.QuerySelector(".zip-member-bills")!.TextContent);
+        Assert.Contains("Most active issues in Congress 118", document.QuerySelector(".zip-member-issues")!.TextContent);
+        Assert.Contains("Firearms: 2 bills sponsored, 3 substantive votes cast.", document.QuerySelector(".zip-member-issues")!.TextContent);
+        Assert.Contains("Issue 7: 0 bills sponsored, 0 substantive votes cast.", document.QuerySelector(".zip-member-issues")!.TextContent);
+        Assert.Equal(Root + "issues/firearms.html", document.QuerySelector(".zip-member-issues a")!.GetAttribute("href"));
+        Assert.Equal("Firearms", document.QuerySelector(".zip-member-issues a")!.TextContent);
+        Assert.DoesNotContain(document.QuerySelectorAll(".zip-member-issues a"), link => link.TextContent == "Issue 7");
+        Assert.Equal(3, document.QuerySelectorAll("button[popovertarget]").Length);
+        Assert.Contains("Sponsored bills in Congress 119.", document.QuerySelectorAll(".term-popover")[0].TextContent);
+        Assert.Contains("Counts for firearms in Congress 118.", document.QuerySelectorAll(".term-popover")[1].TextContent);
+    }
+
+    [Fact]
+    public async Task SharedRowsRenderInsideTheSingleZipMemberFragment()
+    {
+        var vote = new SharedVoteRowData(new string('c', 64), new(2026, 9, 16), 119, 2, 314,
+            "House passes a bill", null, "Vote to pass", "Passed", [new("pat", "Yes (Yea)", "Yea")]);
+        var shared = new SharedVoteRowsData(PublishedChamber.House, [new("pat", "Pat Member")], [vote]);
+        var member = new ZipMemberIdentityData("pat", "Pat Member", null, null, null, [], []);
+        var document = await RenderAsync(new ZipMemberCardsData(9, 119, "36009", 1, [new("Representative for Alabama, district 2", member)], [])
+        {
+            SharedVotes = [shared]
+        });
+
+        Assert.Single(document.QuerySelectorAll("[data-zip-member-fragment]"));
+        Assert.Equal(9, int.Parse(document.QuerySelector("[data-zip-member-fragment]")!.GetAttribute("data-release")!));
+        Assert.Single(document.QuerySelectorAll(".shared-vote-rows"));
+        Assert.Equal("Yes (Yea)", document.QuerySelector(".shared-vote-cast-value")!.TextContent);
+    }
+
+    [Fact]
     public async Task BothChambersKeepTheirMetricCongressAndEachScopeButtonTargetsItsOwnEvidence()
     {
         var senate = House with { Chamber = PublishedChamber.Senate, Missed = 0, Held = 1 };

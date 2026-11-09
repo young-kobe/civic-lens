@@ -1,6 +1,10 @@
 using System.Net;
 using System.Text.Json;
+using AngleSharp.Dom;
+using AngleSharp.Html.Parser;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
 
 namespace CivicLens.Tests.PublicApi.ZipDistricts;
@@ -26,12 +30,12 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
         new("dc0", "Dee Delegate", Representative, "DC", 0)
     ];
 
-    private async Task<ApiHost> StartAsync(bool withNames = true)
+    private async Task<ApiHost> StartAsync(bool withNames = true, params string[] additionalDistrictRows)
     {
         var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ZipSeed.AddRecordAsync(host.OperationalDatabase, 1);
-        await ZipSeed.AdmitDistrictsAsync(host.OperationalDatabase);
+        await ZipSeed.AdmitDistrictsAsync(host.OperationalDatabase, additionalDistrictRows);
         if (withNames) await ZipSeed.AddNamesAsync(host.OperationalDatabase, 1, Seats);
         return host;
     }
@@ -173,6 +177,157 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
         using var fragment = await host.Client.GetAsync("/v1/zip-districts/36009/members");
         Assert.Equal(HttpStatusCode.OK, fragment.StatusCode);
         Assert.True(fragment.Headers.CacheControl is { Private: true, NoStore: true, Public: false });
+    }
+
+    [Fact]
+    public async Task SeatHoldersCarryBillAndIssueFiguresFromAttendanceOrTheReleaseDateCongress()
+    {
+        await using var host = await StartAsync(withNames: false);
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2027, 1, 3, 0, 0, 0, TimeSpan.Zero));
+        await ZipSeed.AddRecordAsync(host.OperationalDatabase, 2);
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2,
+            new SeededSeat("p0", "Pat House One", Representative, "AL", 2),
+            new SeededSeat("p1", "Pat House Two", Representative, "AL", 1),
+            new SeededSeat("p2", "Sam Senate One", Senator, "AL", null));
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('7', "2024-05-01") { Congress = 118, Casts = ["Yea"] },
+            new SeededVote('b', "2026-02-01") { Congress = 119, Casts = ["Yea"], PersonIds = ["p1"] });
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('c', "2024-05-02") { Congress = 118, BillNumber = 3, Issues = ["tax"], Sponsorships = [new("p0", "Sponsor", "2024-05-02")] },
+            new SeededBill('d', "2024-05-03") { Congress = 118, BillNumber = 4, Issues = ["health"], Sponsorships = [new("p0", "Sponsor", "2024-05-03")] },
+            new SeededBill('e', "2026-02-02") { Congress = 119, BillNumber = 5, Sponsorships = [new("p1", "Sponsor", "2026-02-02")] },
+            new SeededBill('f', "2027-01-03") { Congress = 120, BillNumber = 6, Issues = ["tax"], Sponsorships = [new("p2", "Sponsor", "2027-01-03")] });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (2, 'health', 'Health policy', 'Health'), (2, 'tax', 'Tax policy', 'Tax');");
+
+        var answer = await GetAsync(host, "/v1/zip-districts/36009");
+        var p0 = answer.GetProperty("districts")[0].GetProperty("representative");
+        var p1 = answer.GetProperty("districts")[1].GetProperty("representative");
+
+        Assert.Equal(118, p0.GetProperty("bills").GetProperty("congress").GetInt32());
+        Assert.Equal([2, 0, 2], [p0.GetProperty("bills").GetProperty("sponsored").GetInt32(), p0.GetProperty("bills").GetProperty("cosponsored").GetInt32(), p0.GetProperty("bills").GetProperty("billsInCongress").GetInt32()]);
+        Assert.Equal(["health", "tax"], p0.GetProperty("issues").GetProperty("issues").EnumerateArray().Select(issue => issue.GetProperty("issueId").GetString()));
+        Assert.Equal(["Health policy", "Tax policy"], p0.GetProperty("issues").GetProperty("issues").EnumerateArray().Select(issue => issue.GetProperty("name").GetString()));
+        Assert.All(p0.GetProperty("issues").GetProperty("issues").EnumerateArray(), issue => Assert.Equal(1, issue.GetProperty("sponsoredBills").GetInt32()));
+        Assert.Equal(119, p1.GetProperty("bills").GetProperty("congress").GetInt32());
+        Assert.Equal([1, 0, 1], [p1.GetProperty("bills").GetProperty("sponsored").GetInt32(), p1.GetProperty("bills").GetProperty("cosponsored").GetInt32(), p1.GetProperty("bills").GetProperty("billsInCongress").GetInt32()]);
+        Assert.Empty(p1.GetProperty("issues").GetProperty("issues").EnumerateArray());
+        var noAttendance = answer.GetProperty("states")[0].GetProperty("senators")[0];
+        Assert.Equal(120, noAttendance.GetProperty("bills").GetProperty("congress").GetInt32());
+        Assert.Equal(1, noAttendance.GetProperty("bills").GetProperty("sponsored").GetInt32());
+        Assert.Equal(1, noAttendance.GetProperty("bills").GetProperty("billsInCongress").GetInt32());
+        var issue = Assert.Single(noAttendance.GetProperty("issues").GetProperty("issues").EnumerateArray());
+        Assert.Equal("tax", issue.GetProperty("issueId").GetString());
+        Assert.Equal(1, issue.GetProperty("sponsoredBills").GetInt32());
+        Assert.Empty(noAttendance.GetProperty("missedVotes").EnumerateArray());
+        Assert.Empty(noAttendance.GetProperty("partyLines").EnumerateArray());
+        Assert.Equal(119, answer.GetProperty("congress").GetInt32());
+    }
+
+    [Fact]
+    public async Task MemberFragmentCombinesSnapshotFiguresAndSharedVotesIncludingMembersWithoutCasts()
+    {
+        await using var host = await StartAsync(withNames: false);
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2027, 1, 3, 0, 0, 0, TimeSpan.Zero));
+        await ZipSeed.AddRecordAsync(host.OperationalDatabase, 2);
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2,
+            new SeededSeat("p0", "Pat House One", Representative, "AL", 2),
+            new SeededSeat("p1", "Pat House Two", Representative, "AL", 1),
+            new SeededSeat("p2", "Sam Senate One", Senator, "AL", null),
+            new SeededSeat("p3", "Sam Senate Two", Senator, "AL", null));
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('a', "2026-05-01") { RecordId = 1.ToString("x64"), Congress = 119, RollCall = 1, Casts = ["Yea", "Nay"], PersonIds = ["p0", "p1"] },
+            new SeededVote('b', "2026-05-02") { RecordId = 2.ToString("x64"), Congress = 119, RollCall = 2, Casts = ["Present"], PersonIds = ["p0"] },
+            new SeededVote('c', "2026-05-03") { RecordId = 3.ToString("x64"), Congress = 119, RollCall = 3, Casts = ["Yea"], PersonIds = ["untracked"] },
+            new SeededVote('d', "2026-05-04") { RecordId = 4.ToString("x64"), Chamber = "Senate", Congress = 119, RollCall = 4, Casts = ["Not Voting"], PersonIds = ["p2"] },
+            new SeededVote('e', "2026-05-05") { RecordId = 5.ToString("x64"), Chamber = "Senate", Congress = 119, RollCall = 5, Casts = ["Yea"], PersonIds = ["untracked"] },
+            new SeededVote('f', "2026-05-06") { RecordId = 6.ToString("x64"), Congress = 119, RollCall = 6, Casts = ["Yea"], PersonIds = ["p2"] });
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('f', "2027-01-03") { Congress = 120, BillNumber = 6, Issues = ["health", "unmapped"], Sponsorships = [new("p3", "Sponsor", "2027-01-03")] });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (2, 'health', 'Health policy', 'Health');");
+
+        using var response = await host.Client.GetAsync("/v1/zip-districts/36009/members");
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, Count(html, "data-chamber=\"house\""));
+        Assert.Equal(1, Count(html, "data-chamber=\"senate\""));
+        Assert.Contains("data-congress=\"119\"", html, StringComparison.Ordinal);
+        Assert.Contains("Most active issues in Congress 120", html, StringComparison.Ordinal);
+        Assert.Contains("Health policy", html, StringComparison.Ordinal);
+        var document = new HtmlParser().ParseDocument(html);
+        var issueLink = Assert.Single(document.QuerySelectorAll(".zip-member-issues a"));
+        Assert.Equal("Health policy", issueLink.TextContent);
+        Assert.Equal("/issues/health.html", issueLink.GetAttribute("href"));
+        var unknownIssue = Assert.Single(document.QuerySelectorAll(".zip-member-issues li"),
+            row => row.TextContent.Contains("unmapped", StringComparison.Ordinal));
+        Assert.Null(unknownIssue.QuerySelector("a"));
+        Assert.Contains("Voted differently", html, StringComparison.Ordinal);
+        Assert.Contains("Present", html, StringComparison.Ordinal);
+        Assert.Contains("Not voting", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Headline c", html, StringComparison.Ordinal);
+        Assert.Contains("Headline e", html, StringComparison.Ordinal);
+        Assert.Contains("Headline f", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("untracked", html, StringComparison.Ordinal);
+        var houseStart = html.IndexOf("<section class=\"shared-vote-rows\" data-chamber=\"house\">", StringComparison.Ordinal);
+        var senateStart = html.IndexOf("<section class=\"shared-vote-rows\" data-chamber=\"senate\">", StringComparison.Ordinal);
+        Assert.True(houseStart >= 0 && senateStart > houseStart);
+        Assert.DoesNotContain("Sam Senate One", html[houseStart..senateStart], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CrossStateComparisonsRequireEveryListedMembersBinaryCast()
+    {
+        await using var host = await StartAsync(withNames: false, DistrictFixtures.Row("1301", "12345", 50));
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 1,
+            new SeededSeat("p0", "Alabama Senator One", Senator, "AL", null),
+            new SeededSeat("p1", "Alabama Senator Two", Senator, "AL", null),
+            new SeededSeat("p2", "Georgia Senator One", Senator, "GA", null),
+            new SeededSeat("p3", "Georgia Senator Two", Senator, "GA", null),
+            new SeededSeat("p4", "Alabama Representative", Representative, "AL", 2));
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('1', "2026-02-01") { RecordId = 1.ToString("x64"), Chamber = "Senate", RollCall = 1, Casts = ["Yea", "Aye", "Yea", "Aye"], PersonIds = ["p0", "p1", "p2", "p3"] },
+            new SeededVote('2', "2026-02-02") { RecordId = 2.ToString("x64"), Chamber = "Senate", RollCall = 2, Casts = ["Yea", "Aye", "Nay", "No"], PersonIds = ["p0", "p1", "p2", "p3"] },
+            new SeededVote('3', "2026-02-03") { RecordId = 3.ToString("x64"), Chamber = "Senate", RollCall = 3, Casts = ["Yea", "Aye", "Present", "Yea"], PersonIds = ["p0", "p1", "p2", "p3"] },
+            new SeededVote('4', "2026-02-04") { RecordId = 4.ToString("x64"), Chamber = "Senate", RollCall = 4, Casts = ["Yea", "Aye", "Yea"], PersonIds = ["p0", "p1", "p2"] },
+            new SeededVote('5', "2026-02-05") { RecordId = 5.ToString("x64"), RollCall = 5, Casts = ["Yea"], PersonIds = ["p4"] });
+
+        using var response = await host.Client.GetAsync("/v1/zip-districts/12345/members");
+        var document = new HtmlParser().ParseDocument(await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var house = Assert.Single(document.QuerySelectorAll("section.shared-vote-rows[data-chamber='house']"));
+        var senate = Assert.Single(document.QuerySelectorAll("section.shared-vote-rows[data-chamber='senate']"));
+        Assert.Single(house.QuerySelectorAll(".shared-vote-row"));
+        Assert.Null(house.QuerySelector(".shared-vote-comparison"));
+        Assert.Equal(4, senate.QuerySelectorAll(".shared-vote-row").Length);
+        var same = senate.QuerySelector(".shared-vote-row h3 a[href$='/" + 1.ToString("x64") + ".html']")!.Closest(".shared-vote-row")!;
+        Assert.Equal("Same vote", same.QuerySelector(".shared-vote-comparison")!.TextContent);
+        Assert.Equal(["Alabama Senator One", "Alabama Senator Two", "Georgia Senator One", "Georgia Senator Two"],
+            same.QuerySelectorAll(".shared-vote-member").Select(member => member.TextContent));
+        Assert.Equal(4, same.QuerySelectorAll(".shared-vote-cast").Length);
+        var different = senate.QuerySelector(".shared-vote-row h3 a[href$='/" + 2.ToString("x64") + ".html']")!.Closest(".shared-vote-row")!;
+        Assert.Equal("Voted differently", different.QuerySelector(".shared-vote-comparison")!.TextContent);
+        Assert.Equal(4, different.QuerySelectorAll(".shared-vote-cast").Length);
+        var present = senate.QuerySelector(".shared-vote-row h3 a[href$='/" + 3.ToString("x64") + ".html']")!.Closest(".shared-vote-row")!;
+        Assert.Null(present.QuerySelector(".shared-vote-comparison"));
+        Assert.Contains("Present", present.TextContent, StringComparison.Ordinal);
+        Assert.Equal(4, present.QuerySelectorAll(".shared-vote-cast").Length);
+        var missing = senate.QuerySelector(".shared-vote-row h3 a[href$='/" + 4.ToString("x64") + ".html']")!.Closest(".shared-vote-row")!;
+        Assert.Null(missing.QuerySelector(".shared-vote-comparison"));
+        Assert.Equal(3, missing.QuerySelectorAll(".shared-vote-cast").Length);
+        Assert.DoesNotContain("Georgia Senator Two", missing.TextContent, StringComparison.Ordinal);
+    }
+
+    private static int Count(string text, string value)
+    {
+        var count = 0;
+        var start = 0;
+        while ((start = text.IndexOf(value, start, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            start += value.Length;
+        }
+        return count;
     }
 
     [Fact]

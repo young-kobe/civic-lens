@@ -26,11 +26,11 @@ internal static class ZipSeed
         DistrictFixtures.Row("0101", "12345", 100)
     ];
 
-    public static async Task AdmitDistrictsAsync(string database)
+    public static async Task AdmitDistrictsAsync(string database, params string[] additionalRows)
     {
         var attempts = PostgresCollectionAttemptStore.FromConnectionString(database);
         var attempt = await RosterFixtures.ImportCaptureAsync(attempts, new string('c', 64), new DateTimeOffset(2026, 11, 3, 6, 0, 0, TimeSpan.Zero), DistrictFixtures.SourceId);
-        var rows = ZctaDistrictParser.Parse(DistrictFixtures.Bytes("﻿" + ZctaDistrictParser.Header + "\n" + string.Join('\n', Rows) + "\n"));
+        var rows = ZctaDistrictParser.Parse(DistrictFixtures.Bytes("﻿" + ZctaDistrictParser.Header + "\n" + string.Join('\n', Rows.Concat(additionalRows)) + "\n"));
         await PostgresZctaDistrictStore.FromConnectionString(database).AdmitAsync(attempt, rows, default);
     }
 
