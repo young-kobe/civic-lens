@@ -62,7 +62,7 @@ public static class Glossary
                 "The record calls it Cloture. This site calls it \"Vote to end debate\". It is a Senate vote to limit further debate. It needs three fifths of all senators, normally 60. For a nomination, it needs a majority of the senators who vote.",
                 "Without cloture, senators can keep debate going and block a final vote. So a bill can have majority support and still fail at this step.",
                 "SMAN Rule XXII; CRS RL30360; nominations: Senate precedent of 2013 and 2017 (CRS R43331, R44819)",
-                LongForm: "a cloture vote on a change to the Senate rules needs two thirds of the senators present and voting. After cloture, the Senate debates for no more than 30 more hours. (SMAN Rule XXII.)"),
+                LongForm: "a cloture vote on a change to the Senate rules needs two thirds of the senators present and voting. After cloture, debate is usually limited to 30 more hours. The Senate can agree to extend that time. (SMAN Rule XXII.)"),
             new("motion-to-proceed", "Motion to proceed",
                 "The record calls it Motion to proceed. This site calls it \"Vote to start debate\". It is a Senate vote on whether to take up a measure.",
                 "It comes before any debate on the measure. A vote against it opposes taking the measure up now, which is not always the same as opposing the measure.",
