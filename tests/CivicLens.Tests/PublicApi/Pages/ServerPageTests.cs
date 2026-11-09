@@ -143,11 +143,13 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        var response = await host.Client.GetAsync(UnknownPage);
-
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        Assert.Null(response.Headers.ETag);
-        Assert.False(response.Headers.Contains("Cache-Control"));
+        foreach (var path in new[] { UnknownPage, ServerPageEndpoints.Prefix + "/compare" })
+        {
+            using var response = await host.Client.GetAsync(path);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            Assert.Null(response.Headers.ETag);
+            Assert.False(response.Headers.Contains("Cache-Control"));
+        }
     }
 
     [Fact]
@@ -239,6 +241,58 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task ComparePageIsPublicAndQueryFreeWhileItsFormUsesTheConfiguredApiOrigin()
+    {
+        await using var host = await StartWithBrowserApiAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
+        using var response = await host.Client.GetAsync("/web/compare?zip=55401");
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("https://civic-lens.test/compare.html", Parse(html).QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
+        Assert.Contains("data-zip-api=\"https://api.civic-lens.test\"", html);
+        Assert.Contains("data-zip-view=\"compare\"", html);
+        Assert.DoesNotContain("55401", html);
+        Assert.Equal(PageCache.CacheControl, response.Headers.CacheControl?.ToString());
+        Assert.NotNull(response.Headers.ETag);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/web/compare");
+        request.Headers.IfNoneMatch.Add(response.Headers.ETag!);
+        using var revalidated = await host.Client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.NotModified, revalidated.StatusCode);
+    }
+
+    [Fact]
+    public async Task ComparePageNeedsOnlyReleaseIdentityEvenWhenTheReleaseIsEmpty()
+    {
+        await using var host = await StartWithBrowserApiAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "REVOKE SELECT ON public_api.votes FROM civic_lens_public");
+
+        using var response = await host.Client.GetAsync("/web/compare");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("r4-", response.Headers.ETag!.ToString());
+        Assert.Empty(Parse(await response.Content.ReadAsStringAsync()).QuerySelectorAll(".zip-member-card"));
+    }
+
+    [Fact]
+    public async Task ComparePageKeepsItsBrowseRouteWhenBrowserApiIsNotConfigured()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
+
+        var html = await host.Client.GetStringAsync("/web/compare");
+        var page = Parse(html);
+
+        Assert.Equal("Compare your members", page.QuerySelector("h1")!.TextContent);
+        Assert.Null(page.QuerySelector("[data-zip-api]"));
+        Assert.Equal("https://civic-lens.test/officials.html", page.QuerySelector(".home-browse a")!.GetAttribute("href"));
+    }
+
+    [Fact]
     public async Task ThePageHoldsNoReaderDataSoItSetsNoCookieAndDoesNotVaryByCookie()
     {
         await using var host = await StartAsync();
@@ -280,7 +334,10 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
         var response = await host.Client.GetAsync(UnknownPage);
         var home = await host.Client.GetAsync(ServerPageEndpoints.Prefix);
+        using var compare = await host.Client.GetAsync(ServerPageEndpoints.Prefix + "/compare");
 
+        Assert.Equal(HttpStatusCode.NotFound, compare.StatusCode);
+        Assert.Null(compare.Headers.ETag);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, home.StatusCode);
         Assert.Null(response.Headers.ETag);
@@ -332,6 +389,8 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     private static Task<HttpResponseMessage> Revalidate(ApiHost host, HttpResponseMessage fresh) => Send(host, fresh.Headers.ETag!.Tag);
+
+    private static AngleSharp.Dom.IDocument Parse(string html) => new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html);
 
     private static async Task<HttpResponseMessage> Send(ApiHost host, string tag)
     {

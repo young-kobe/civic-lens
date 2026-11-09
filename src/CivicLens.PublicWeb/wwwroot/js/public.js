@@ -240,6 +240,7 @@
 
     const initZipLookup = (form, remembered) => {
         const api = form.dataset.zipApi;
+        const view = form.dataset.zipView === "compare" ? "compare" : "";
         const panel = document.querySelector("[data-zip-results]");
         const body = panel.querySelector("[data-zip-body]");
         const notes = panel.querySelector("[data-zip-notes]");
@@ -273,7 +274,7 @@
             const fragment = template.content.firstElementChild;
             const positiveNumber = value => /^[1-9][0-9]*$/.test(value ?? "") && Number(value) <= 2147483647;
             if (template.content.childElementCount !== 1 || !fragment.matches("div[data-zip-member-fragment]")
-                || fragment.dataset.zcta !== zip || fragment.dataset.issue !== (issue ?? "") || !positiveNumber(fragment.dataset.release)
+                || fragment.dataset.zcta !== zip || fragment.dataset.issue !== (issue ?? "") || fragment.dataset.view !== view || !positiveNumber(fragment.dataset.release)
                 || !positiveNumber(fragment.dataset.congress) || !fragment.querySelector(".zip-member-cards > li"))
                 throw new TypeError("Invalid ZIP lookup answer.");
             return fragment;
@@ -307,7 +308,10 @@
                 else showProblem(failure(zip, status));
             };
             try {
-                const query = issue === null ? "" : `?issue=${encodeURIComponent(issue)}`;
+                const params = [];
+                if (view !== "") params.push("view=compare");
+                if (issue !== null) params.push(`issue=${encodeURIComponent(issue)}`);
+                const query = params.length === 0 ? "" : `?${params.join("&")}`;
                 const response = await fetch(`${api}/v1/zip-districts/${zip}/members${query}`, { headers: { Accept: "text/html" } });
                 if (!response.ok) {
                     failed(response.status);
