@@ -7,7 +7,8 @@ namespace CivicLens.PublicApi.ZipDistricts;
 /// <summary>Maps one ZIP snapshot to presentation inputs without reading any data again.</summary>
 internal static class ZipMemberCardsMapper
 {
-    public static ZipMemberCardsData Map(ZipDistrictAnswer answer, SharedMemberVoteAnswer? sharedVotes = null)
+    public static ZipMemberCardsData Map(ZipDistrictAnswer answer, SharedMemberVoteAnswer? sharedVotes,
+        ZipMemberIssueOption[] issueOptions, string? selectedIssue)
     {
         if (sharedVotes is not null && sharedVotes.Release != answer.Release)
             throw new InvalidDataException("ZIP members and shared votes must come from the same release.");
@@ -26,7 +27,9 @@ internal static class ZipMemberCardsMapper
         SharedVoteRowsData[] sharedRows = sharedVotes is null ? [] : SharedRows(answer, seats, sharedVotes);
         return new ZipMemberCardsData(answer.Release, answer.Congress, answer.Zcta, answer.Districts.Length, [.. seats], [.. withoutSenators])
         {
-            SharedVotes = sharedRows
+            SharedVotes = sharedRows,
+            IssueOptions = [.. issueOptions.Select(option => new ZipMemberIssueFilterData(option.IssueId, option.Name))],
+            SelectedIssue = selectedIssue
         };
     }
 

@@ -17,6 +17,30 @@ public sealed class ZipMemberCardsTests
     private static readonly ZipMemberPartyLineData HouseDemocrat = new(PublishedChamber.House, 119, "Democrat", 248, 249,
         new(2025, 1, 3), new(2026, 12, 1), "Yea or Nay casts by the official as Democrat on substantive split roll calls of the House in Congress 119. Party is pinned to each vote.");
 
+    [Theory]
+    [InlineData("health", "Health <script>alert(1)</script>", false)]
+    [InlineData("unknown<issue>", "Health", true)]
+    public async Task IssueControlsRetainTheSelectedFilterAndEscapeNamesWhileAnEmptyResultStaysEmpty(string selected, string name, bool unknown)
+    {
+        var data = new ZipMemberCardsData(8, 119, "36009", 1, [new("Representative for Alabama", null)], [])
+        {
+            IssueOptions = [new("health", name), new("housing", "Housing")],
+            SelectedIssue = selected
+        };
+
+        var document = await RenderAsync(data);
+        var controls = document.QuerySelector("[data-member-issue-filter]")!;
+        Assert.True(controls.HasAttribute("hidden"));
+        Assert.Empty(document.QuerySelectorAll("script"));
+        Assert.Equal(selected, document.QuerySelector("[data-zip-member-fragment]")!.GetAttribute("data-issue"));
+        Assert.Equal(selected, Assert.Single(controls.QuerySelectorAll("[aria-pressed=true]")).GetAttribute("data-member-issue"));
+        Assert.Equal(unknown ? 4 : 3, controls.QuerySelectorAll("button").Length);
+        Assert.Equal(name, controls.QuerySelector("[data-member-issue=health]")!.TextContent);
+        Assert.Equal("false", controls.QuerySelector("[data-member-issue='']")!.GetAttribute("aria-pressed"));
+        Assert.Empty(document.QuerySelectorAll(".shared-vote-row"));
+        Assert.Equal("No records match.", document.QuerySelector("[data-member-votes-empty]")!.TextContent);
+    }
+
     [Fact]
     public async Task ACardNamesTheMemberSeatPartyTermAndScopedAttendanceWhileMissingEvidenceStaysAbsent()
     {

@@ -34,11 +34,12 @@ public static class ZipDistrictEndpoints
         return ApiResults.GuardAsync(async () =>
         {
             var request = ZipDistrictRequest.Parse(zcta, http.Request.Query);
-            var lookup = await zips.FindMembersAsync(request, cancellationToken);
+            var issue = QueryValues.Filter(http.Request.Query, "issue");
+            var lookup = await zips.FindMembersAsync(request, issue, cancellationToken);
             if (lookup.Answer is not { } answer) return Miss(lookup.Miss!.Value);
             var html = await renderer.RenderAsync<ZipMemberCards>(new Dictionary<string, object?>
             {
-                [nameof(ZipMemberCards.Data)] = ZipMemberCardsMapper.Map(answer, lookup.SharedVotes),
+                [nameof(ZipMemberCards.Data)] = ZipMemberCardsMapper.Map(answer, lookup.SharedVotes, lookup.IssueOptions, issue),
                 [nameof(ZipMemberCards.RootPath)] = options.PublicBaseUrl?.Join(string.Empty) ?? "/"
             });
             return Results.Content(html, "text/html; charset=utf-8");

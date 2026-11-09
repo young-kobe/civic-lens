@@ -1,4 +1,4 @@
-<div data-zip-member-fragment data-zcta="@Data.Zcta" data-release="@Data.Release" data-congress="@Data.Congress">
+<div data-zip-member-fragment data-zcta="@Data.Zcta" data-release="@Data.Release" data-congress="@Data.Congress" data-issue="@(Data.SelectedIssue ?? string.Empty)">
     @if (Data.DistrictCount > 1)
     {
         <p class="zip-count">Your ZIP area lies in @Data.DistrictCount districts. The district with the most land is first.</p>
@@ -109,6 +109,27 @@
     @foreach (var state in Data.StatesWithoutSenators)
     {
         <p class="small muted">@state has no senators.</p>
+    }
+    @if (Data.IssueOptions.Length > 0 || Data.SelectedIssue is not null)
+    {
+        <div class="zip-member-issue-filter" role="group" aria-label="Issue" data-member-issue-filter hidden>
+            <span class="field-label">Issue</span>
+            <div class="issue-chips">
+                <button type="button" class="issue-chip" data-member-issue="" aria-pressed="@(Data.SelectedIssue is null ? "true" : "false")">Any</button>
+                @if (Data.SelectedIssue is not null && !Data.IssueOptions.Any(issue => issue.IssueId == Data.SelectedIssue))
+                {
+                    <button type="button" class="issue-chip" data-member-issue="@Data.SelectedIssue" aria-pressed="true">@Data.SelectedIssue</button>
+                }
+                @foreach (var issue in Data.IssueOptions)
+                {
+                    <button type="button" class="issue-chip" data-member-issue="@issue.IssueId" aria-pressed="@(Data.SelectedIssue == issue.IssueId ? "true" : "false")">@issue.Name</button>
+                }
+            </div>
+        </div>
+    }
+    @if (Data.SharedVotes.Length == 0)
+    {
+        <p class="muted" data-member-votes-empty>No records match.</p>
     }
     @foreach (var votes in Data.SharedVotes)
     {

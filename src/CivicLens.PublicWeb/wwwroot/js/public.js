@@ -261,17 +261,19 @@
             panel.scrollIntoView({ block: "start", behavior: reducedMotion.matches ? "auto" : "smooth" });
             heading.focus({ preventScroll: true });
         };
-        const showAnswer = (fragment, revealAnswer) => {
+        const showAnswer = (fragment, revealAnswer, filtered) => {
             show([fragment], true);
+            fragment.querySelectorAll("[data-member-issue-filter]").forEach(controls => { controls.hidden = false; });
+            if (filtered) fragment.querySelector('[data-member-issue][aria-pressed="true"]')?.focus();
             if (revealAnswer) reveal();
         };
-        const memberFragment = (html, zip) => {
+        const memberFragment = (html, zip, issue) => {
             const template = document.createElement("template");
             template.innerHTML = html;
             const fragment = template.content.firstElementChild;
             const positiveNumber = value => /^[1-9][0-9]*$/.test(value ?? "") && Number(value) <= 2147483647;
             if (template.content.childElementCount !== 1 || !fragment.matches("div[data-zip-member-fragment]")
-                || fragment.dataset.zcta !== zip || !positiveNumber(fragment.dataset.release)
+                || fragment.dataset.zcta !== zip || fragment.dataset.issue !== (issue ?? "") || !positiveNumber(fragment.dataset.release)
                 || !positiveNumber(fragment.dataset.congress) || !fragment.querySelector(".zip-member-cards > li"))
                 throw new TypeError("Invalid ZIP lookup answer.");
             return fragment;
@@ -295,29 +297,36 @@
             submit.textContent = busy ? loadingText : submitLabel;
             if (busy) body.setAttribute("aria-busy", "true");
             else body.removeAttribute("aria-busy");
+            body.querySelectorAll("[data-member-issue]").forEach(button => { button.disabled = busy; });
         };
         let lookup = 0;
-        const look = async (zip, request, revealAnswer, persist) => {
+        const look = async (zip, request, revealAnswer, persist, issue, filtered) => {
+            const failed = status => {
+                if (request !== lookup) return;
+                if (filtered) problem.replaceChildren(failure(zip, status));
+                else showProblem(failure(zip, status));
+            };
             try {
-                const response = await fetch(`${api}/v1/zip-districts/${zip}/members`, { headers: { Accept: "text/html" } });
+                const query = issue === null ? "" : `?issue=${encodeURIComponent(issue)}`;
+                const response = await fetch(`${api}/v1/zip-districts/${zip}/members${query}`, { headers: { Accept: "text/html" } });
                 if (!response.ok) {
-                    if (request === lookup) showProblem(failure(zip, response.status));
+                    failed(response.status);
                     return false;
                 }
                 const html = await response.text();
                 if (request !== lookup) return false;
                 if (!/^text\/html(?:;|$)/i.test(response.headers.get("Content-Type") ?? ""))
                     throw new TypeError("Invalid ZIP lookup content type.");
-                showAnswer(memberFragment(html, zip), revealAnswer);
+                showAnswer(memberFragment(html, zip, issue), revealAnswer, filtered);
                 if (request === lookup && persist) remembered.save(zip);
                 return true;
             }
             catch {
-                if (request === lookup) showProblem(failure(zip, 0));
+                failed(0);
                 return false;
             }
         };
-        const runLookup = async (zip, revealAnswer, persist = true) => {
+        const runLookup = async (zip, revealAnswer, persist = true, issue = null, filtered = false) => {
             const request = ++lookup;
             problem.replaceChildren();
             if (!validZip(zip)) {
@@ -327,14 +336,20 @@
                 return;
             }
             setBusy(true);
-            show([element("p", loadingText)]);
+            if (!filtered) show([element("p", loadingText)]);
             try {
-                const found = await look(zip, request, revealAnswer, persist);
+                const found = await look(zip, request, revealAnswer, persist, issue, filtered);
                 if (!found && request === lookup && revealAnswer) input.focus();
             } finally {
                 if (request === lookup) setBusy(false);
             }
         };
+        body.addEventListener("click", event => {
+            const button = event.target.closest("button[data-member-issue]");
+            if (!button || button.disabled) return;
+            const fragment = button.closest("[data-zip-member-fragment]");
+            if (fragment) runLookup(fragment.dataset.zcta, false, false, button.dataset.memberIssue || null, true);
+        });
         form.addEventListener("submit", event => {
             event.preventDefault();
             runLookup(input.value.trim(), true);

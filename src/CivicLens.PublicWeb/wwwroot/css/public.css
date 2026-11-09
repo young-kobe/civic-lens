@@ -172,6 +172,11 @@ table[data-paged]:focus { outline: none; }
 .zip-member-issues li { padding-inline-start: var(--s1); }
 .zip-member-issues li .info-button { width: 44px; height: 44px; vertical-align: middle; }
 .shared-vote-comparison { display: inline-block; margin-inline-start: var(--s1); padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--ink); font-weight: 700; }
+.shared-vote-caption { max-width: var(--measure); margin: 0 0 var(--s3); font-size: var(--t-sm); }
+.zip-member-issue-filter { display: grid; gap: var(--s2); margin-top: var(--s5); }
+.zip-member-issue-filter .issue-chip { max-width: 100%; background: var(--surface); font: inherit; font-size: var(--t-sm); overflow-wrap: anywhere; text-align: start; cursor: pointer; }
+.zip-member-issue-filter .issue-chip[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.zip-member-issue-filter .issue-chip:disabled { opacity: .65; cursor: wait; }
 .zip-count { margin: 0 0 var(--s3); }
 .home-browse { margin: 0; color: var(--bar-muted); }
 .home-browse a { color: var(--bar-ink); }
