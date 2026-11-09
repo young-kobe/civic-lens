@@ -167,7 +167,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Votes on this bill | Bill | How did Congress vote? | `votes.bill_record_id` | Planned: route and UI; vote-to-bill data is available |
 | Executive action page | Executive action, President | What does this document do? | `executive_actions`, `executive_action_notices`, `executive_action_links` | Planned: route and UI; action and notice data are served, links remain pending |
 | Statement page, quotations | Statement | What exactly was said? | `statements`, `statement_speakers`, `statement_quotations` | The API serves statement details with bounded source text, checked quotations, and citations. The reader page remains planned |
-| Document change page | Document change | What changed on this page? | `document_changes` | Planned: views needed |
+| Document change page | Document change | What changed on this page? | `document_changes` and its source, region, edit, citation and official views | Partial. The detail API serves published sources and ordered changes. The API labels model text with the shared approved wording; person text has no AI label. Reader page remains planned |
 | Issue page | Issue | What is there on this issue? | `release_issues`, `issue_votes`, `issue_sponsors` | Partial. Issue counts and sponsor data are available through the API. Planned: page and party line-up |
 | Party boards | Boards | Who breaks from their party most? | `official_party_lines`, `party_agreement` | Agreement data and API endpoint are implemented. Board endpoints and pages remain planned |
 | List pages for votes, bills, executive actions, statements | Lists | Show me all of one kind | Per-kind views | Planned: R-68 list step |
@@ -193,7 +193,7 @@ Remaining planned view columns and views, in the order that R-68 builds them:
 - Bills: `bill_key_terms`. The cited CRS body and version are implemented.
 - Issues: party line-up data.
 - Executive actions: `executive_action_links` and the summary columns.
-- Other kinds: `document_changes` with a changed-region child view and `record_corrections`; withdrawal notices now have a typed public read API.
+- Other kinds: `record_corrections`. Document-change detail and withdrawal notices have typed public read APIs; their reader pages remain planned.
 
 Each AI text column carries its text origin and its label. The roadmap steps under [R-68](../roadmap.md#later) name each view.
 

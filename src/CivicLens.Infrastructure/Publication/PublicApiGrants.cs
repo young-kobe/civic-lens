@@ -54,20 +54,30 @@ internal static class PublicApiGrants
         GRANT SELECT (record_id, revision_number, part, citation_id, position, kind, statement_candidate_id, statement_revision_number,
             action_record_id, action_revision_number, document_change_draft_id, document_change_revision_number) ON brief_revision_citations TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, part, paragraph_position, position, citation_id) ON brief_revision_paragraph_citations TO civic_lens_public_owner;
-        GRANT SELECT (draft_id, revision_number, headline) ON document_change_revisions TO civic_lens_public_owner;
         GRANT SELECT (candidate_id, revision_number, author_kind, headline, summary, statement_date,
             statement_date_evidence_extraction_id, statement_date_evidence_start, statement_date_evidence_length) ON statement_revisions TO civic_lens_public_owner;
         GRANT SELECT (candidate_id, revision_number, official_id, "position") ON statement_revision_speakers TO civic_lens_public_owner;
         GRANT SELECT (candidate_id, revision_number, issue_id, "position") ON statement_revision_issues TO civic_lens_public_owner;
         GRANT SELECT (candidate_id, url, extraction_id, attempt_id) ON statement_candidates TO civic_lens_public_owner;
         GRANT SELECT (extraction_id, attempt_id, text) ON document_extractions TO civic_lens_public_owner;
-        GRANT SELECT (attempt_id, requested_url, observed_at_utc_ticks) ON collection_attempts TO civic_lens_public_owner;
+        GRANT SELECT (attempt_id, requested_url, final_url, observed_at_utc_ticks) ON collection_attempts TO civic_lens_public_owner;
         GRANT SELECT (candidate_id, revision_number, position, quotation_extraction_id, quotation_start, quotation_length, kind)
             ON statement_revision_quotations TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", fact_text) ON vote_revision_facts TO civic_lens_public_owner;
         GRANT SELECT (release_number, record_id, latest_action_text, latest_action_date, read_at_utc_ticks) ON release_bill_statuses TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, kind, document_number, signed_on, published_on, federal_register_citation, document_url,
             person_id, president_name, title) ON executive_action_revisions TO civic_lens_public_owner;
+        GRANT SELECT (draft_id, revision_number, comparison_id, headline, summary, author_kind, significance, limits, institution, change_date)
+            ON document_change_revisions TO civic_lens_public_owner;
+        GRANT SELECT (comparison_id, before_extraction_id, after_extraction_id, hunk_count) ON document_comparisons TO civic_lens_public_owner;
+        GRANT SELECT (comparison_id, position, before_start, before_length, after_start, after_length, before_context_start, before_context_length,
+            after_context_start, after_context_length, word_edit_count) ON document_comparison_hunks TO civic_lens_public_owner;
+        GRANT SELECT (comparison_id, hunk_position, position, before_start, before_length, after_start, after_length)
+            ON document_comparison_word_edits TO civic_lens_public_owner;
+        GRANT SELECT (draft_id, revision_number, position, citation_extraction_id, citation_start, citation_length, is_change_date_evidence)
+            ON document_change_revision_citations TO civic_lens_public_owner;
+        GRANT SELECT (draft_id, revision_number, issue_id, position) ON document_change_revision_issues TO civic_lens_public_owner;
+        GRANT SELECT (draft_id, revision_number, official_id, position) ON document_change_revision_officials TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", source_id, document_number) ON executive_action_revision_notices TO civic_lens_public_owner;
         GRANT SELECT (source_id, document_number, published_on, notice_url) ON executive_action_documents TO civic_lens_public_owner;
         GRANT SELECT (zcta, state, district, land_area_square_meters, attempt_id) ON zcta_districts TO civic_lens_public_owner;
@@ -96,6 +106,8 @@ internal static class PublicApiGrants
             public_api.executive_actions, public_api.executive_action_notices, public_api.withdrawals, public_api.withdrawal_corrections TO civic_lens_public;
         GRANT SELECT ON public_api.statements, public_api.statement_speakers TO civic_lens_public;
         GRANT SELECT ON public_api.statement_sources, public_api.statement_quotations TO civic_lens_public;
+        GRANT SELECT ON public_api.document_changes, public_api.document_change_officials, public_api.document_change_sources,
+            public_api.document_change_hunks, public_api.document_change_word_edits, public_api.document_change_citations TO civic_lens_public;
         """;
 
     public static Task ApplyAsync(DbContext db, CancellationToken cancellationToken) =>

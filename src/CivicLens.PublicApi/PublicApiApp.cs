@@ -4,6 +4,7 @@ using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicApi.Bills;
 using CivicLens.PublicApi.Briefs;
 using CivicLens.PublicApi.ExecutiveActions;
+using CivicLens.PublicApi.DocumentChanges;
 using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Ingest;
@@ -59,6 +60,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new MemberVoteStore(views));
         builder.Services.AddSingleton(new BillStore(views));
         builder.Services.AddSingleton(new StatementStore(views));
+        builder.Services.AddSingleton(new DocumentChangeStore(views));
         builder.Services.AddSingleton(new BriefStore(views));
         builder.Services.AddSingleton(new ZipDistrictStore(views));
         builder.Services.AddSingleton(new IssueStore(views));
@@ -111,6 +113,7 @@ public static class PublicApiApp
         app.MapMemberVotes();
         app.MapBills();
         app.MapStatements();
+        app.MapDocumentChanges();
         app.MapBriefs();
         app.MapZipDistricts();
         app.MapIssues();

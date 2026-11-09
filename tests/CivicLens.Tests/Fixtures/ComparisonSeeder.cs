@@ -14,16 +14,17 @@ namespace CivicLens.Tests.Fixtures;
 internal sealed class ComparisonSeeder(PostgresCollectionAttemptStore attempts, PostgresDocumentExtractionStore extractions,
     PostgresDocumentComparisonStore comparisons, string captureRoot)
 {
-    public async Task<DocumentComparison> SaveAsync(string beforeText, string afterText)
+    public async Task<DocumentComparison> SaveAsync(string beforeText, string afterText,
+        string? beforeFinalUrl = null, string? afterFinalUrl = null)
     {
-        var before = new DocumentExtraction(await ImportAsync(beforeText), "parser", beforeText);
-        var after = new DocumentExtraction(await ImportAsync(afterText), "parser", afterText);
+        var before = new DocumentExtraction(await ImportAsync(beforeText, beforeFinalUrl), "parser", beforeText);
+        var after = new DocumentExtraction(await ImportAsync(afterText, afterFinalUrl), "parser", afterText);
         await extractions.SaveAsync(before, CancellationToken.None);
         await extractions.SaveAsync(after, CancellationToken.None);
         return await comparisons.CompareAndSaveAsync(before.ExtractionId, after.ExtractionId, CancellationToken.None);
     }
 
-    private async Task<CapturedAttemptResult> ImportAsync(string text)
+    private async Task<CapturedAttemptResult> ImportAsync(string text, string? finalUrl)
     {
         var bytes = Encoding.UTF8.GetBytes(text);
         var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
@@ -33,6 +34,8 @@ internal sealed class ComparisonSeeder(PostgresCollectionAttemptStore attempts, 
         var request = Request() with { JobId = Guid.NewGuid().ToString("N"), ArtifactDirectory = captureRoot };
         var receipt = Receipt(request) with
         {
+            FinalUrl = finalUrl ?? request.Url,
+            RequestCount = finalUrl is null ? 2 : 3,
             BytesReceived = bytes.Length,
             Capture = new CaptureArtifact { Sha256 = hash, RelativePath = hash + ".gz", ByteLength = bytes.Length },
             Response = new HttpResponseMetadata { StatusCode = 200, ContentType = "text/plain; charset=utf-8", ContentEncodings = [] }
