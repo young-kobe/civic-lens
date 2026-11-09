@@ -8,14 +8,8 @@
                 <p class="home-lead">See how your representative and senators voted and which bills they introduced. Each fact links to its official source.</p>
                 @if (BrowserApiUrl is not null)
                 {
-                    <noscript><div class="notice notice-warn"><span>The ZIP lookup needs JavaScript. Without it, browse <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">all officials</a>.</span></div></noscript>
-                    <form class="zip-form" hidden data-zip-api="@BrowserApiUrl" data-officials-page="@(RootPath + PublicationProtocol.OfficialsPagePath)">
-                        <Field Label="Your ZIP code" For="zip-code">
-                            <input id="zip-code" name="zip" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="5" placeholder="5 digits" />
-                        </Field>
-                        <Button Type="submit">Find my members</Button>
-                        <div class="zip-error" role="alert" data-zip-error></div>
-                    </form>
+                    <ZipLookupForm BrowserApiUrl="@BrowserApiUrl" RootPath="@RootPath" InputId="zip-code" />
+                    <p class="home-browse"><a href="@(BrowserApiUrl + "/web/compare")">Compare your members</a></p>
                 }
                 <p class="home-browse">Or <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">browse all officials</a></p>
             </div>
@@ -69,12 +63,7 @@
             }
             @if (BrowserApiUrl is not null)
             {
-                <Panel Title="Your officials" Padded="true" Class="zip-member-results" hidden Id="zip-results" data-zip-results>
-                    <div role="status" data-zip-body></div>
-                    <div data-zip-notes hidden>
-                        <ZipDistrictNotes />
-                    </div>
-                </Panel>
+                <ZipLookupResults />
             }
             @if (Data.Brief is { } brief)
             {

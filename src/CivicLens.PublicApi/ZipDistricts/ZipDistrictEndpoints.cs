@@ -35,12 +35,19 @@ public static class ZipDistrictEndpoints
         {
             var request = ZipDistrictRequest.Parse(zcta, http.Request.Query);
             var issue = QueryValues.Filter(http.Request.Query, "issue");
+            var view = QueryValues.Value(http.Request.Query, "view");
+            if (view is not null and not "" and not "compare")
+                throw new ArgumentException("view must be empty or compare.", "view");
             var lookup = await zips.FindMembersAsync(request, issue, cancellationToken);
             if (lookup.Answer is not { } answer) return Miss(lookup.Miss!.Value);
             var html = await renderer.RenderAsync<ZipMemberCards>(new Dictionary<string, object?>
             {
                 [nameof(ZipMemberCards.Data)] = ZipMemberCardsMapper.Map(answer, lookup.SharedVotes, lookup.IssueOptions, issue),
-                [nameof(ZipMemberCards.RootPath)] = options.PublicBaseUrl?.Join(string.Empty) ?? "/"
+                [nameof(ZipMemberCards.RootPath)] = options.PublicBaseUrl?.Join(string.Empty) ?? "/",
+                [nameof(ZipMemberCards.View)] = view == "compare" ? view : string.Empty,
+                [nameof(ZipMemberCards.ComparePageUrl)] = view == "compare" || options.PublicBaseUrl is null
+                    ? null
+                    : options.BrowserApiUrl?.Join("web/compare")
             });
             return Results.Content(html, "text/html; charset=utf-8");
         });

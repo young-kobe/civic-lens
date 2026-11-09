@@ -16,7 +16,7 @@ Every page and component must pass seven owner tests:
 
 This page holds the design rules and the plan for the reader flows. [Publication](publication.md) owns the release data, the page text rules, and the `public_api` views. [Host](host.md) owns the component library rules. The [roadmap](../roadmap.md#active-r-68-redesign) step R-68 owns the order of the work.
 
-Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 palette, type foundation, focus colors, and reduced-motion behavior are implemented. The `/web` home route is a gated PublicApi server-rendered preview. It shows the published featured vote, recent votes, optional brief, configured issue counts, executive action groups, and chamber freshness. Its available-data bento is implemented; map, party bars, and break board remain planned. The existing static home remains live. Each row below says what is implemented and what is planned.
+Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 palette, type foundation, focus colors, and reduced-motion behavior are implemented. The `/web` home and `/web/compare` routes are gated PublicApi server-rendered previews. The home shows the published featured vote, recent votes, optional brief, configured issue counts, executive action groups, and chamber freshness. Its available-data bento is implemented; map, party bars, and break board remain planned. The existing static home remains live. Each row below says what is implemented and what is planned.
 
 ## Decisions
 
@@ -47,9 +47,9 @@ Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 pa
 ### Members and Compare
 
 - Member bill and issue figures use attendance Congress when available, otherwise the Congress on the release's UTC publication date. Each figure names its own Congress and scope.
-- The planned Compare page uses the full current ZIP roster, grouped by chamber, including vacant seats. It offers no subset selector. The link and page title are "Compare your members".
-- Its public page contains no ZIP or personal results. The planned preview route is `/web/compare`, with canonical path `compare.html`. Links use the configured browser API origin while the public root remains static.
-- The planned extension selects Compare through the existing private members endpoint with `view=compare`. It will return only the requested layout, using the same transaction and mapping as the normal layout. Cards, issue options, and votes come from one release snapshot.
+- The Compare preview uses the full current ZIP roster, grouped by chamber, including vacant seats. It offers no subset selector. The link and page title are "Compare your members".
+- Its public page contains no ZIP or personal results. The preview route is `/web/compare`, with canonical path `compare.html`. Links use the configured browser API origin while the public root remains static.
+- The existing private members endpoint selects Compare with `view=compare`. It returns only the requested layout, using the same transaction and mapping as the normal layout. Cards, issue options, and votes come from one release snapshot.
 - The issue filter applies before the ten-vote selection in each chamber. Shared comparisons need at least two current chamber members and a recorded Yes or No from every listed member. Missing and nonbinary casts never establish agreement or disagreement.
 - Each chamber retains the full selection caption: "Up to 10 recent published votes on passage, amendments, conference reports, veto overrides and nominations."
 - The comparison caption is "The comparison includes {compared} votes where every listed member cast Yes or No. Their votes differed on {different}." Use the singular "vote" for one. Compare counts this full selection before showing differing rows only.
@@ -117,12 +117,15 @@ These decisions come from the component audit. The owner accepted every recommen
 - Member cards, issue filter options, and shared vote rows use one private HTML fragment from one published-release snapshot. Enforcer: `ZipDistrictStore.FindMembersAsync`. Test: `ZipMemberSnapshotTests.MemberDataAndSharedVotesStayOnTheReleaseReadByTheFirstDistrictQuery`.
 - Shared comparisons require at least two listed members and an actual binary cast from every listed member. Recorded nonbinary casts remain visible. Missing casts stay absent. Neither supports a comparison. Enforcers: `ZipMemberCardsMapper` and `PublishedOfficialVote.SideOf`. Test: `ZipDistrictEndpointsTests.CrossStateComparisonsRequireEveryListedMembersBinaryCast`.
 - Shared page HTML contains no remembered ZIP or personal lookup results. Enforcer: `PublicPage` emits empty hooks and browser code reads device storage. Tests: `HomePageTests.TheRememberedMembersLinkTargetsTheLookupHeadingInSharedMarkup` and `PublishedHomePageTests.TheResultPanelIsHiddenUntilALookupAndCreditsTheCensusBureauAndSaysAZctaIsNotAZipCode`.
+- The Compare shell reads active release identity only, without the Home highlights or issue queries. Enforcer: `ServerPageResponder`. Test: `ServerPageTests.ComparePageNeedsOnlyReleaseIdentityEvenWhenTheReleaseIsEmpty`.
+- The Compare page is a public, query-free shell. Its form uses the configured browser API origin, while member data arrives only in a private no-store fragment. Enforcers: `ComparePage`, `ServerPageResponder`, and `initZipLookup`. Test: `ServerPageTests.ComparePageIsPublicAndQueryFreeWhileItsFormUsesTheConfiguredApiOrigin`.
+- A member fragment must match the requested ZIP, issue, and view before it replaces the results. Enforcers: `ZipDistrictEndpoints.MembersAsync` and `initZipLookup`. Tests: `ZipMemberCardsEndpointsTests.MembersRouteRejectsRepeatedAndUnsupportedViewsBeforeLookup`; no committed browser test covers stale layout responses.
 
 - The glossary index lists each approved term and the party-count note once, in alphabetical order. Letter links reach focusable index headings. Enforcer: `PublishedGlossaryPage`. Test: `GlossaryTests.TheGlossaryIndexGroupsEveryTermAlphabeticallyAndLinksPopulatedLettersAndDefinitions`.
 
 ## Behavior
 
-Implemented today: the static pages that [publication](publication.md#public-reader-experience) describes. PublicApi also serves `/web` as the first gated server-rendered route when `CIVIC_LENS_PUBLIC_BASE_URL` is configured. It uses one `HomeAnswer` snapshot and its release number for the page validator. A missing active release returns 503 without cache headers. The browser ZIP form appears only when `CIVIC_LENS_PUBLIC_API_URL` is configured; configure that origin before a future live ZIP cutover. The existing static home remains the live route. After a successful current ZIP lookup, the browser stores the five-digit ZIP on this device. The header then shows "Your members" and a Forget control. Returning to the home fragment re-queries the configured ZIP endpoint against current published data. Personal lookup results are added only in the browser. Other pages move to PublicApi one route at a time in R-68. Rows marked "planned" describe accepted design that is not implemented.
+Implemented today: the static pages that [publication](publication.md#public-reader-experience) describes. PublicApi serves `/web` and `/web/compare` as gated server-rendered previews when `CIVIC_LENS_PUBLIC_BASE_URL` is configured. Both pages use the active release number for public ETags. The Compare page has canonical path `compare.html`; its initial HTML contains no ZIP or member results. Its ZIP form and the home form appear only when `CIVIC_LENS_PUBLIC_API_URL` is configured. Home and current member results link to Compare on that configured API origin. Both layouts use the same private member endpoint and repeatable-read snapshot. The `view=compare` layout groups every current seat by chamber. It shows differing votes only when every listed member cast Yes or No. The existing static home remains the live route. After a successful current ZIP lookup, the browser stores the five-digit ZIP on this device. The header then shows "Your members" and a Forget control. Returning to either lookup page re-queries the configured ZIP endpoint against current published data. Personal lookup results are added only in the browser. Other pages move to PublicApi one route at a time in R-68. Rows marked "planned" describe accepted design that is not implemented.
 
 ### Reader flow matrix
 
@@ -145,7 +148,7 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 | 15 | Report a problem | Footer and record report links | Partial. Planned: the footer link names the record |
 | 16 | Reach a useful 404 | Not found page | Implemented |
 | 17 | Return and find my members again | "Your members" chip, Forget, return-visit updates | Partial. ZIP persistence, Forget, and current lookup refresh are implemented. Planned: member votes published since a locally saved release |
-| 18 | Compare my members | Compare page: attendance, party line, bills, issues, differing votes | Planned |
+| 18 | Compare my members | Compare page: attendance, party line, bills, issues, differing votes | Implemented in the gated preview. It shares the current roster and metrics and filters shared vote rows to complete binary comparisons classified as different. |
 
 ### Component inventory
 
@@ -165,7 +168,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Member card | After a ZIP | Who is my member? | `officials`, `official_attendance`, `official_party_lines`, `official_bill_counts`, `official_issue_counts` | Portrait, seat, party, term end, scoped attendance, and scoped party-line counts implemented. Congress-scoped sponsored-bill and issue figures are shown, with shared vote rows and complete binary comparison badges |
 | Member votes list | After a ZIP, official | How did my members vote? | `votes`, `member_votes` | Partial. The API and private ZIP fragment serve shared vote rows with recorded casts. Issue and Any chips refresh the combined private fragment and mark the selected issue. Captions name each chamber's selection and comparison bases |
 | Return-visit updates | Home, members strip | What is new for my members? | Published member votes and a locally saved release marker | Planned: identify votes published since the saved release |
-| Compare members | Compare page | How do my members differ? | `official_*` views, `member_votes` | Planned |
+| Compare members | Compare page | How do my members differ? | `official_*` views, `member_votes` | Implemented in `/web/compare` preview; ZIP member content stays in the private fragment. |
 | Profile header, key figures | Official | Who is this? | `officials`, `official_attendance`, `official_party_lines` | API data implemented. Profile UI integration remains planned. |
 | Vote strip | Official | What is their voting pattern? | `member_votes.side` | Planned: marks only breaks and missed votes |
 | Statement and vote pairs | Official, vote | Did words match votes? | `record_links` | Planned: page content; related-record data is served by the API |
@@ -193,7 +196,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 
 ## Storage and contracts
 
-The public read API and the gated SSR home read `public_api` views. Implemented data covers votes, bills, officials, attendance, party-line figures, ZIP districts, issues, related records, executive actions, and briefs. It includes bill status and action history, public-law numbers, vote-to-bill links, relationship reasons, executive action notices, and brief paragraphs and citations. The `public_api.active_release` view supplies release identity even when the active release has no records. Most public pages still read static releases. [Publication](publication.md#public-api-views) owns the view rules and column reference.
+The public read API and gated SSR Home and Compare pages read `public_api` views. Implemented data covers votes, bills, officials, attendance, party-line figures, ZIP districts, issues, related records, executive actions, and briefs. It includes bill status and action history, public-law numbers, vote-to-bill links, relationship reasons, executive action notices, and brief paragraphs and citations. The `public_api.active_release` view supplies release identity even when the active release has no records. Most public pages still read static releases. [Publication](publication.md#public-api-views) owns the view rules and column reference.
 
 `public_api.bills` exposes the bill summary, its text-origin label, and the cited bill-text summary metadata (`why_it_matters`, version name and date, and characters read and total). The view can serve these fields; the bill-text model setting is off by default, and activation awaits sample approval. See [Publication](publication.md#public-api-views) for the view contract.
 
@@ -221,11 +224,12 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 | Public page components, today | `src/CivicLens.Host/Publication` |
 | Static render of pages | `src/CivicLens.Host/Publication/ReleaseRenderer.cs` |
 | Public API and its views | `src/CivicLens.PublicApi` |
-| Gated SSR home page and inputs | `src/CivicLens.PublicWeb/Publication/HomePage.razor`, `HomePageData.cs`, `src/CivicLens.PublicApi/Home/HomePageReader.cs` |
+| Gated SSR reader pages and inputs | `src/CivicLens.PublicWeb/Publication/HomePage.razor`, `ComparePage.razor`, `ZipLookupForm.razor`, `ZipLookupResults.razor`, `HomePageData.cs`, `src/CivicLens.PublicApi/Home/HomePageReader.cs`, `src/CivicLens.PublicApi/Pages/ServerPageEndpoints.cs` |
+| Shared member layout | `src/CivicLens.PublicWeb/Publication/ZipMemberCards.razor`, `ZipMemberCard.razor`, `ZipMemberIssueFilter.razor`, `SharedVoteRows.razor` |
 | Style files | `src/CivicLens.PublicWeb/wwwroot/css/theme.css`, `src/CivicLens.PublicWeb/wwwroot/css/app.css`, `src/CivicLens.PublicWeb/wwwroot/css/public.css` |
 | Presentation rules test | `tests/CivicLens.Tests/Architecture/PresentationArchitectureTests.cs` |
 
-`PublicApi` renders the gated `/web` home route and the not-found shell under `/web`. Other successful reader routes still use static pages. Shared presentation components use `CivicLens.PublicWeb`, which references `Publication.Contracts` only.
+`PublicApi` renders the gated `/web` home and `/web/compare` routes and the not-found shell under `/web`. Other successful reader routes still use static pages. Shared presentation components use `CivicLens.PublicWeb`, which references `Publication.Contracts` only.
 
 ## Limits and planned work
 

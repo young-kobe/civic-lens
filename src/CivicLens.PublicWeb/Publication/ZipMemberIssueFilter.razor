@@ -1,0 +1,19 @@
+<div class="zip-member-issue-filter" role="group" aria-label="Issue" data-member-issue-filter hidden>
+    <span class="field-label">Issue</span>
+    <div class="issue-chips">
+        <button type="button" class="issue-chip" data-member-issue="" aria-pressed="@(SelectedIssue is null ? "true" : "false")">Any</button>
+        @if (SelectedIssue is not null && !IssueOptions.Any(issue => issue.IssueId == SelectedIssue))
+        {
+            <button type="button" class="issue-chip" data-member-issue="@SelectedIssue" aria-pressed="true">@SelectedIssue</button>
+        }
+        @foreach (var issue in IssueOptions)
+        {
+            <button type="button" class="issue-chip" data-member-issue="@issue.IssueId" aria-pressed="@(SelectedIssue == issue.IssueId ? "true" : "false")">@issue.Name</button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ZipMemberIssueFilterData[] IssueOptions { get; set; } = default!;
+    [Parameter] public string? SelectedIssue { get; set; }
+}

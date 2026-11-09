@@ -1,0 +1,105 @@
+@using CivicLens.Publication.Contracts
+
+<li class="official-card zip-member-card">
+    @if (Seat.Member is { } member)
+    {
+        <div class="zip-member-header">
+            <OfficialPortrait Name="@member.Name" PhotoPath="@member.PhotoPath" RootPath="@RootPath" Compact="true" ShowCredit="false" />
+            <div class="official-card-text">
+                <h3><a href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(member.OfficialId)))">@member.Name</a></h3>
+                <p class="small muted">@Seat.Title</p>
+                @if (member.Party is not null)
+                {
+                    <p class="small muted">@member.Party</p>
+                }
+            </div>
+        </div>
+        <p class="small muted">
+            @if (member.TermEndsOn is { } termEnd)
+            {
+                <text>Current term ends <time datetime="@Moment.Iso(termEnd)">@Moment.Day(termEnd)</time>.</text>
+            }
+            else
+            {
+                <text>Our records show no end date for this term.</text>
+            }
+        </p>
+        @if (member.Bills is { } bills)
+        {
+            <div class="zip-member-bills">
+                <h4>Bills sponsored in Congress @bills.Congress</h4>
+                <div class="zip-member-figure">
+                    <p><strong>@bills.Sponsored</strong> @(bills.Sponsored == 1 ? "bill" : "bills")</p>
+                    <InfoPopover Id="@($"{IdPrefix}-bills")" Label="@($"About bills sponsored by {member.Name}")">
+                        <p>@bills.Scope</p>
+                    </InfoPopover>
+                </div>
+            </div>
+        }
+        @if (member.Issues.Length > 0)
+        {
+            <div class="zip-member-issues">
+                <h4>Most active issues in Congress @member.Issues[0].Congress</h4>
+                <ul role="list">
+                    @for (var issueIndex = 0; issueIndex < member.Issues.Length; issueIndex++)
+                    {
+                        var issue = member.Issues[issueIndex];
+                        <li>
+                            <span>
+                                @if (issue.PagePath is { } pagePath)
+                                {
+                                    <a href="@(RootPath + pagePath)">@issue.Name</a>
+                                }
+                                else
+                                {
+                                    @issue.Name
+                                }: <strong>@issue.SponsoredBills</strong> @(issue.SponsoredBills == 1 ? "bill" : "bills") sponsored, <strong>@issue.VotesCast</strong> substantive @(issue.VotesCast == 1 ? "vote" : "votes") cast.
+                            </span>
+                            <InfoPopover Id="@($"{IdPrefix}-issue-{issueIndex}")" Label="@($"About {issue.Name} activity for {member.Name}")">
+                                <p>@issue.Scope</p>
+                            </InfoPopover>
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+        @if (member.Attendance.Length == 0)
+        {
+            <p class="small muted">No published roll calls list this member.</p>
+        }
+        @for (var figureIndex = 0; figureIndex < member.Attendance.Length; figureIndex++)
+        {
+            var figure = member.Attendance[figureIndex];
+            <div class="zip-member-figure zip-member-attendance">
+                <p>Missed <strong>@figure.Missed of @figure.Held</strong> published @figure.Chamber @(figure.Held == 1 ? "roll call" : "roll calls") listing this member in Congress @figure.Congress.</p>
+                <InfoPopover Id="@($"{IdPrefix}-attendance-{figureIndex}")" Label="@($"About attendance for {member.Name} in the {figure.Chamber}")">
+                    <p>@figure.Scope</p>
+                    <p>From <time datetime="@Moment.Iso(figure.FirstVotedOn)">@Moment.Day(figure.FirstVotedOn)</time> to <time datetime="@Moment.Iso(figure.LastVotedOn)">@Moment.Day(figure.LastVotedOn)</time>.</p>
+                </InfoPopover>
+            </div>
+        }
+        @for (var figureIndex = 0; figureIndex < member.PartyLines.Length; figureIndex++)
+        {
+            var figure = member.PartyLines[figureIndex];
+            if (figure.Cast <= 0) continue;
+            <div class="zip-member-figure zip-member-party-line">
+                <p>With most @PublishedPartyNames.PartyOf(figure.Chamber, figure.Party) on <strong>@figure.WithParty of @figure.Cast</strong> split @(figure.Cast == 1 ? "vote" : "votes") in Congress @figure.Congress.</p>
+                <InfoPopover Id="@($"{IdPrefix}-party-line-{figureIndex}")" Label="@($"About party-line votes for {member.Name}, {figure.Party}, in the {figure.Chamber}")">
+                    <p>@figure.Scope</p>
+                    <p>From <time datetime="@Moment.Iso(figure.FirstVotedOn)">@Moment.Day(figure.FirstVotedOn)</time> to <time datetime="@Moment.Iso(figure.LastVotedOn)">@Moment.Day(figure.LastVotedOn)</time>.</p>
+                </InfoPopover>
+            </div>
+        }
+    }
+    else
+    {
+        <h3>@Seat.Title</h3>
+        <p>No current member is in our records.</p>
+    }
+</li>
+
+@code {
+    [Parameter, EditorRequired] public ZipMemberSeatData Seat { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    [Parameter, EditorRequired] public string IdPrefix { get; set; } = default!;
+}

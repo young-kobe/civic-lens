@@ -20,7 +20,7 @@ R-68 replaces static public serving with pages rendered by `PublicApi` from rest
 
 The restricted views, typed read APIs, shared Razor library, page cache, Home preview, and private ZIP cards and shared votes are merged. APIs also serve CRS bodies, bill histories, statement and document-change evidence, briefs, withdrawals, official figures, and party agreement. Their exact contracts are in [search](architecture/search.md#api) and [publication](architecture/publication.md#public-api-views). A merged API does not complete its reader page or live rollout.
 
-The public root still serves static releases, and `/web` remains a gated Home preview. The Compare page is in development. Its architecture and wording are approved; browser verification, CI, merge, and deployment remain. The two-day all-pages-on-server period has not started.
+The public root still serves static releases. Home and Compare are implemented gated previews under `/web`. The Compare preview has passed focused tests and browser checks with synthetic responses. Its live rollout remains pending, with public-origin routing a separate decision. The two-day all-pages-on-server period has not started.
 
 Finish routes in this order. Each slice includes the data, source evidence, labels, downloads, and checks its reader flow needs.
 

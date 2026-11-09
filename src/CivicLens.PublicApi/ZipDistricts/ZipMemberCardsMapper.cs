@@ -22,7 +22,7 @@ internal static class ZipMemberCardsMapper
             var stateName = UsStates.NameOf(state.State);
             if (state.Senators.Length == 0) withoutSenators.Add(stateName);
             foreach (var senator in state.Senators)
-                seats.Add(new($"Senator for {stateName}", Member(senator)));
+                seats.Add(new($"Senator for {stateName}", Member(senator)) { Chamber = PublishedChamber.Senate });
         }
         SharedVoteRowsData[] sharedRows = sharedVotes is null ? [] : SharedRows(answer, seats, sharedVotes);
         return new ZipMemberCardsData(answer.Release, answer.Congress, answer.Zcta, answer.Districts.Length, [.. seats], [.. withoutSenators])

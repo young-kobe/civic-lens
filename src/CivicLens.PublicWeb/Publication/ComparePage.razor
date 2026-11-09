@@ -1,0 +1,28 @@
+@using CivicLens.Publication.Contracts
+
+<PublicPage CanonicalPath="compare.html" Title="Compare your members" Description="See how your representative and senators voted and which bills they introduced. Each fact links to its official source." RootPath="@RootPath">
+    <Hero>
+        <div class="home-hero home-preview-hero">
+            <div class="home-intro">
+                <h1>Compare your members</h1>
+                <p class="home-lead">See how your representative and senators voted and which bills they introduced. Each fact links to its official source.</p>
+                @if (BrowserApiUrl is not null)
+                {
+                    <ZipLookupForm BrowserApiUrl="@BrowserApiUrl" RootPath="@RootPath" InputId="compare-zip-code" View="compare" />
+                }
+                <p class="home-browse">Or <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">browse all officials</a></p>
+            </div>
+        </div>
+    </Hero>
+    <ChildContent>
+        @if (BrowserApiUrl is not null)
+        {
+            <ZipLookupResults />
+        }
+    </ChildContent>
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    [Parameter] public string? BrowserApiUrl { get; set; }
+}

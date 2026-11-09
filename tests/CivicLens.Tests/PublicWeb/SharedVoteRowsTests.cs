@@ -89,14 +89,47 @@ public sealed class SharedVoteRowsTests
         Assert.DoesNotContain("Not Voting", document.DocumentElement!.TextContent);
     }
 
-    private static async Task<IDocument> RenderAsync(SharedVoteRowsData data)
+    [Fact]
+    public async Task DifferencesOnlyKeepsTheOriginalComparisonCaptionAndShowsTheApprovedEmptyCopy()
+    {
+        var same = new SharedVoteRowData(new string('a', 64), new(2026, 9, 16), 119, 2, 7,
+            "Same", null, "Vote to pass", "Passed", [new("first", "Yes (Yea)", "Yea"), new("second", "Yes (Yea)", "Yea")])
+        {
+            MembersVotedTheSame = true
+        };
+        var different = same with
+        {
+            RecordId = new string('b', 64),
+            Headline = "Different",
+            Casts = [new("first", "Yes (Yea)", "Yea"), new("second", "No (Nay)", "Nay")],
+            MembersVotedTheSame = false
+        };
+        var data = new SharedVoteRowsData(PublishedChamber.Senate, [new("first", "Alex"), new("second", "Sam")], [same, different]);
+
+        var document = await RenderAsync(data, differencesOnly: true);
+
+        Assert.Equal("Votes where your members differed", document.QuerySelector("h2")!.TextContent);
+        Assert.Equal(["Different"], document.QuerySelectorAll(".shared-vote-row h3").Select(node => node.TextContent));
+        Assert.Equal("The comparison includes 2 votes where every listed member cast Yes or No. Their votes differed on 1.",
+            document.QuerySelector(".shared-vote-comparison-caption")!.TextContent);
+
+        var empty = await RenderAsync(new(PublishedChamber.House, data.Members, [same]), differencesOnly: true);
+        Assert.Equal("No differing votes in this selection.", empty.QuerySelector("[data-member-votes-empty]")!.TextContent);
+    }
+
+    private static async Task<IDocument> RenderAsync(SharedVoteRowsData data, bool differencesOnly = false)
     {
         await using var services = new ServiceCollection().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
         var html = await renderer.Dispatcher.InvokeAsync(async () =>
         {
             var output = await renderer.RenderComponentAsync<SharedVoteRows>(ParameterView.FromDictionary(
-                new Dictionary<string, object?> { [nameof(SharedVoteRows.Data)] = data, [nameof(SharedVoteRows.RootPath)] = Root }));
+                new Dictionary<string, object?>
+                {
+                    [nameof(SharedVoteRows.Data)] = data,
+                    [nameof(SharedVoteRows.RootPath)] = Root,
+                    [nameof(SharedVoteRows.DifferencesOnly)] = differencesOnly
+                }));
             return output.ToHtmlString();
         });
         return new HtmlParser().ParseDocument(html);
