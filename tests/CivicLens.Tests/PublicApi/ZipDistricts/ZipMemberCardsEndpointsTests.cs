@@ -14,12 +14,12 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
     private const string Representative = "Representative";
     private const string Senator = "Senator";
 
-    private async Task<ApiHost> StartAsync(bool withNames = true, bool withServerPages = false)
+    private async Task<ApiHost> StartAsync(bool withNames = true, bool withServerPages = false, bool withBrowserApi = true)
     {
         var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with
         {
             PublicBaseUrl = withServerPages ? PublicBaseUrl.Parse("https://civic-lens.test", "test") : null,
-            BrowserApiUrl = withServerPages ? PublicBaseUrl.Parse("https://api.civic-lens.test", "test") : null
+            BrowserApiUrl = withServerPages && withBrowserApi ? PublicBaseUrl.Parse("https://api.civic-lens.test", "test") : null
         });
         try
         {
@@ -49,12 +49,23 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
 
         var home = new HtmlParser().ParseDocument(await host.Client.GetStringAsync("/web"));
         Assert.Equal("https://api.civic-lens.test", home.QuerySelector("[data-zip-api]")!.GetAttribute("data-zip-api"));
-        Assert.Equal("https://api.civic-lens.test/web/compare", home.QuerySelectorAll(".home-browse a").Single(link => link.TextContent == "Compare your members").GetAttribute("href"));
+        Assert.Equal("https://civic-lens.test/compare.html", home.QuerySelectorAll(".home-browse a").Single(link => link.TextContent == "Compare your members").GetAttribute("href"));
         var fragment = await GetDocumentAsync(host, "/v1/zip-districts/36009/members");
 
+        Assert.Equal("https://civic-lens.test/compare.html", fragment.QuerySelector(".home-browse a")!.GetAttribute("href"));
         Assert.Equal("", fragment.QuerySelector("[data-zip-member-fragment]")!.GetAttribute("data-view"));
         Assert.Equal("https://civic-lens.test/officials/al2.html", fragment.QuerySelector(".zip-member-card h3 a")!.GetAttribute("href"));
         Assert.Equal("https://civic-lens.test/" + photo, fragment.QuerySelector(".zip-member-card img")!.GetAttribute("src"));
+    }
+
+    [Fact]
+    public async Task MembersDoNotLinkToCompareWhenTheBrowserApiOriginIsNotConfigured()
+    {
+        await using var host = await StartAsync(withServerPages: true, withBrowserApi: false);
+
+        var fragment = await GetDocumentAsync(host, "/v1/zip-districts/36009/members");
+
+        Assert.Null(fragment.QuerySelector(".home-browse a"));
     }
 
     [Fact]

@@ -9,7 +9,7 @@
                 @if (BrowserApiUrl is not null)
                 {
                     <ZipLookupForm BrowserApiUrl="@BrowserApiUrl" RootPath="@RootPath" InputId="zip-code" />
-                    <p class="home-browse"><a href="@(BrowserApiUrl + "/web/compare")">Compare your members</a></p>
+                    <p class="home-browse"><a href="@(RootPath + "compare.html")">Compare your members</a></p>
                 }
                 <p class="home-browse">Or <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">browse all officials</a></p>
             </div>
