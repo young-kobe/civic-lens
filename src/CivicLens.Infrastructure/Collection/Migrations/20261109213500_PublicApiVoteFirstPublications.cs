@@ -17,7 +17,6 @@ public partial class PublicApiVoteFirstPublications : Migration
          GROUP BY a.record_id, a.revision_number, a.release_number;
 
         ALTER VIEW public_api.vote_first_publications OWNER TO civic_lens_public_owner;
-        GRANT SELECT ON public_api.vote_first_publications TO civic_lens_public;
         """;
 
     private const string DownSql = "DROP VIEW public_api.vote_first_publications;";
