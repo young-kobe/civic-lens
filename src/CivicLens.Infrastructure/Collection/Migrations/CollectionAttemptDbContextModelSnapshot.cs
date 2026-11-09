@@ -5362,9 +5362,21 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssueRow", b =>
                 {
+                    b.Property<long?>("Bills")
+                        .HasColumnType("bigint")
+                        .HasColumnName("bills");
+
+                    b.Property<int?>("CountCongress")
+                        .HasColumnType("integer")
+                        .HasColumnName("count_congress");
+
                     b.Property<int>("ReleaseNumber")
                         .HasColumnType("integer")
                         .HasColumnName("release_number");
+
+                    b.Property<long?>("SubstantiveVotes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("substantive_votes");
 
                     b.Property<string>("IssueId")
                         .HasMaxLength(256)
@@ -5388,6 +5400,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_release_issues_issue_id", "length(btrim(issue_id)) > 0");
 
                             t.HasCheckConstraint("ck_release_issues_name", "length(btrim(name)) > 0");
+
+                            t.HasCheckConstraint("ck_release_issues_home_counts", "(count_congress IS NULL AND substantive_votes IS NULL AND bills IS NULL) OR (count_congress IS NOT NULL AND substantive_votes IS NOT NULL AND bills IS NOT NULL AND count_congress > 0 AND substantive_votes >= 0 AND bills >= 0)");
                         });
                 });
 

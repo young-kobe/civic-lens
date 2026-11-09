@@ -16,12 +16,12 @@ public sealed class HomeStore(NpgsqlDataSource views)
         """;
 
     private static readonly string Sql = $"""
-        SELECT a.release_number, a.published_at_utc_ticks, b.record_id, b.week_start, b.headline, b.label,
+        SELECT a.release_number, b.record_id, b.week_start, b.headline, b.label,
                s.is_featured, s.record_id, s.voted_on, s.chamber, s.congress, s.session_number, s.roll_call_number,
                s.headline, s.label, s.result, s.yea, s.nay, s.bill_type, s.bill_number, s.bill_line, s.summary, s.text_origin, s.alignment,
                s.action_kind, s.action_count, s.newest_record_id, s.newest_title, s.newest_signed_on,
                freshness.house, freshness.senate
-          FROM (SELECT release_number, published_at_utc_ticks FROM public_api.active_release LIMIT 1) a
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           CROSS JOIN LATERAL (
                SELECT max(v.voted_on) FILTER (WHERE v.chamber = 'House') AS house,
                       max(v.voted_on) FILTER (WHERE v.chamber = 'Senate') AS senate
@@ -83,17 +83,9 @@ public sealed class HomeStore(NpgsqlDataSource views)
         """;
 
     private const string IssuesSql = """
-        SELECT i.issue_id, i.name, COALESCE(v.total, 0), COALESCE(b.total, 0)
+        SELECT i.issue_id, i.name, i.count_congress, i.substantive_votes, i.bills
           FROM public_api.release_issues i
-          LEFT JOIN (
-               SELECT issue_id, count(*) AS total FROM public_api.issue_votes
-                WHERE congress = @congress AND kind = ANY(@kinds) GROUP BY issue_id
-          ) v ON v.issue_id = i.issue_id
-          LEFT JOIN (
-               SELECT issue_id, count(*) AS total FROM public_api.bill_issues
-                WHERE congress = @congress GROUP BY issue_id
-          ) b ON b.issue_id = i.issue_id
-         ORDER BY i.name, i.issue_id
+          ORDER BY i.name, i.issue_id
         """;
 
     /// <summary>Reads the home answer. Null means there is no active release.</summary>
@@ -112,30 +104,26 @@ public sealed class HomeStore(NpgsqlDataSource views)
         DateOnly? newestHouseRollCall = null;
         DateOnly? newestSenateRollCall = null;
         int? release = null;
-        DateOnly? publishedOn = null;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
             while (await reader.ReadAsync(cancellationToken))
             {
                 release = reader.GetInt32(0);
-                publishedOn ??= reader.IsDBNull(1) ? null : DateOnly.FromDateTime(new DateTime(reader.GetInt64(1), DateTimeKind.Utc));
-                newestHouseRollCall ??= reader.IsDBNull(29) ? null : reader.GetFieldValue<DateOnly>(29);
-                newestSenateRollCall ??= reader.IsDBNull(30) ? null : reader.GetFieldValue<DateOnly>(30);
-                brief ??= reader.IsDBNull(2) ? null : new(reader.GetString(2), reader.GetFieldValue<DateOnly>(3), reader.GetString(4), ViewColumns.Text(reader, 5));
-                if (!reader.IsDBNull(24))
+                newestHouseRollCall ??= reader.IsDBNull(28) ? null : reader.GetFieldValue<DateOnly>(28);
+                newestSenateRollCall ??= reader.IsDBNull(29) ? null : reader.GetFieldValue<DateOnly>(29);
+                brief ??= reader.IsDBNull(1) ? null : new(reader.GetString(1), reader.GetFieldValue<DateOnly>(2), reader.GetString(3), ViewColumns.Text(reader, 4));
+                if (!reader.IsDBNull(23))
                 {
-                    executiveActions.Add(new(ViewColumns.Enum<PublishedExecutiveActionKind>(reader, 24), reader.GetInt32(25), reader.GetString(26), reader.GetString(27), reader.GetFieldValue<DateOnly>(28)));
+                    executiveActions.Add(new(ViewColumns.Enum<PublishedExecutiveActionKind>(reader, 23), reader.GetInt32(24), reader.GetString(25), reader.GetString(26), reader.GetFieldValue<DateOnly>(27)));
                     continue;
                 }
-                if (reader.IsDBNull(6)) continue;
-                if (reader.GetBoolean(6)) featured = ReadFeaturedVote(reader);
+                if (reader.IsDBNull(5)) continue;
+                if (reader.GetBoolean(5)) featured = ReadFeaturedVote(reader);
                 else votes.Add(ReadVote(reader));
             }
         }
         if (release is not { } active) return null;
-        var issues = publishedOn is { } day && CongressCalendar.CongressOn(day) is { } congress
-            ? await ReadIssuesAsync(connection, transaction, congress, cancellationToken)
-            : Array.Empty<HomeIssue>();
+        var issues = await ReadIssuesAsync(connection, transaction, cancellationToken);
         return new(active, featured, [.. votes], brief)
         {
             ExecutiveActions = [.. executiveActions],
@@ -145,38 +133,39 @@ public sealed class HomeStore(NpgsqlDataSource views)
         };
     }
 
-    private static async Task<HomeIssue[]> ReadIssuesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, int congress, CancellationToken cancellationToken)
+    private static async Task<HomeIssue[]> ReadIssuesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(IssuesSql, connection, transaction);
-        command.Parameters.AddWithValue("congress", congress);
-        command.Parameters.AddWithValue("kinds", PublishedVoteKindExtensions.SubstantiveNames());
         var issues = new List<HomeIssue>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-            issues.Add(new(reader.GetString(0), reader.GetString(1), congress, (int)reader.GetInt64(2), (int)reader.GetInt64(3)));
+        {
+            if (reader.IsDBNull(2)) continue;
+            issues.Add(new(reader.GetString(0), reader.GetString(1), reader.GetInt32(2), checked((int)reader.GetInt64(3)), checked((int)reader.GetInt64(4))));
+        }
         return [.. issues];
     }
 
     private static HomeFeaturedVote ReadFeaturedVote(NpgsqlDataReader reader)
     {
-        var result = reader.GetString(15);
-        var billLine = ViewColumns.Text(reader, 20);
-        return new(reader.GetString(7), reader.GetFieldValue<DateOnly>(8), ViewColumns.Enum<PublishedChamber>(reader, 9), reader.GetInt32(10), reader.GetInt32(11),
-            reader.GetInt32(12), reader.GetString(13), ViewColumns.Text(reader, 14), reader.GetString(21), ViewColumns.Enum<PublishedTextOrigin>(reader, 22),
-            result, PlainVoteWords.Result(result), ViewColumns.Number(reader, 16), ViewColumns.Number(reader, 17), ViewColumns.Text(reader, 18),
-            ViewColumns.Number(reader, 19), billLine, billLine is null ? null : PublishedWording.BillLineSource);
+        var result = reader.GetString(14);
+        var billLine = ViewColumns.Text(reader, 19);
+        return new(reader.GetString(6), reader.GetFieldValue<DateOnly>(7), ViewColumns.Enum<PublishedChamber>(reader, 8), reader.GetInt32(9), reader.GetInt32(10),
+            reader.GetInt32(11), reader.GetString(12), ViewColumns.Text(reader, 13), reader.GetString(20), ViewColumns.Enum<PublishedTextOrigin>(reader, 21),
+            result, PlainVoteWords.Result(result), ViewColumns.Number(reader, 15), ViewColumns.Number(reader, 16), ViewColumns.Text(reader, 17),
+            ViewColumns.Number(reader, 18), billLine, billLine is null ? null : PublishedWording.BillLineSource);
     }
 
     private static HomeVote ReadVote(NpgsqlDataReader reader)
     {
-        var result = reader.GetString(15);
-        var billLine = ViewColumns.Text(reader, 20);
-        return new(reader.GetString(7), reader.GetFieldValue<DateOnly>(8), ViewColumns.Enum<PublishedChamber>(reader, 9), reader.GetInt32(10), reader.GetInt32(11),
-            reader.GetInt32(12), reader.GetString(13), ViewColumns.Text(reader, 14), result, PlainVoteWords.Result(result), ViewColumns.Number(reader, 16)!.Value,
-            ViewColumns.Number(reader, 17)!.Value, ViewColumns.Text(reader, 18), ViewColumns.Number(reader, 19), billLine,
+        var result = reader.GetString(14);
+        var billLine = ViewColumns.Text(reader, 19);
+        return new(reader.GetString(6), reader.GetFieldValue<DateOnly>(7), ViewColumns.Enum<PublishedChamber>(reader, 8), reader.GetInt32(9), reader.GetInt32(10),
+            reader.GetInt32(11), reader.GetString(12), ViewColumns.Text(reader, 13), result, PlainVoteWords.Result(result), ViewColumns.Number(reader, 15)!.Value,
+            ViewColumns.Number(reader, 16)!.Value, ViewColumns.Text(reader, 17), ViewColumns.Number(reader, 18), billLine,
             billLine is null ? null : PublishedWording.BillLineSource)
         {
-            Alignment = reader.IsDBNull(23) ? null : ViewColumns.Enum<PublishedVoteAlignment>(reader, 23)
+            Alignment = reader.IsDBNull(22) ? null : ViewColumns.Enum<PublishedVoteAlignment>(reader, 22)
         };
     }
 }
