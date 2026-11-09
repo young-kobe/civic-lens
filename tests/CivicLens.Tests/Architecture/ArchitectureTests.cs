@@ -97,15 +97,10 @@ public sealed class ArchitectureTests
         {
             var source = File.ReadAllText(path);
             var readsViews = source.Contains("NpgsqlDataSource views", StringComparison.Ordinal)
-                || path == Path.Combine(apiRoot, "Officials", "OfficialAttendanceReader.cs");
-            var commonTables = Regex.Matches(source, @"(?:WITH|,)\s*(\w+) AS \(").Select(match => match.Groups[1].Value).ToHashSet();
-            foreach (var name in SqlLiterals(source).Where(IsStatement).SelectMany(SqlTableNames))
-            {
-                var allowed = readsViews
-                    ? name.StartsWith("public_api.", StringComparison.Ordinal)
-                    : ownTables.Contains(name) || commonTables.Contains(name);
-                if (!allowed) violations.Add($"{Path.GetFileName(path)}: {name}");
-            }
+                || path == Path.Combine(apiRoot, "Officials", "OfficialAttendanceReader.cs")
+                || path == Path.Combine(apiRoot, "Officials", "OfficialActivityReader.cs");
+            violations.AddRange(ForbiddenSqlTables(source, readsViews, ownTables)
+                .Select(name => $"{Path.GetFileName(path)}: {name}"));
         }
 
         Assert.Empty(violations);
@@ -126,6 +121,38 @@ public sealed class ArchitectureTests
     {
         Assert.Equal(expected, string.Join(',', SqlTableNames(sql)));
     }
+
+    [Fact]
+    public void PublicViewQueriesAllowTheirOwnCteAliasesButCannotBorrowAliasesToReadPrivateTables()
+    {
+        const string source = """
+            const string first = "WITH selected AS (SELECT 1 FROM public_api.bills) SELECT 1 FROM selected";
+            const string second = "WITH actions AS (SELECT 1 FROM public_api.bills) SELECT 1 FROM actions";
+            const string privateRead = "SELECT 1 FROM publication_releases";
+            const string borrowedAlias = "SELECT 1 FROM actions";
+            """;
+
+        Assert.Equal(["publication_releases", "actions"], ForbiddenSqlTables(source, true, new HashSet<string>()));
+    }
+
+    private static IEnumerable<string> ForbiddenSqlTables(string source, bool readsViews, HashSet<string> ownTables)
+    {
+        var commonTables = CteNames(source);
+        foreach (var statement in SqlLiterals(source).Where(IsStatement))
+        {
+            var statementCommonTables = CteNames(statement);
+            foreach (var name in SqlTableNames(statement))
+            {
+                var allowed = readsViews
+                    ? name.StartsWith("public_api.", StringComparison.Ordinal) || statementCommonTables.Contains(name)
+                    : ownTables.Contains(name) || commonTables.Contains(name);
+                if (!allowed) yield return name;
+            }
+        }
+    }
+
+    private static HashSet<string> CteNames(string sql) => Regex.Matches(sql, @"(?:WITH|,)\s*(\w+)\s+AS\s*\(", RegexOptions.IgnoreCase)
+        .Select(match => match.Groups[1].Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     private static IEnumerable<string> SqlTableNames(string sql) =>
         Regex.Matches(sql, @"\b(?:FROM|JOIN)\s+(?<list>" + TableItem + @"(?:\s*,\s*" + TableItem + ")*)", RegexOptions.IgnoreCase)

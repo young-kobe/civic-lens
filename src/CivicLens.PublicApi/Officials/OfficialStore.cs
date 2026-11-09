@@ -12,17 +12,12 @@ namespace CivicLens.PublicApi.Officials;
 /// </summary>
 public sealed class OfficialStore(NpgsqlDataSource views)
 {
-    /// <summary>The most issues in one official answer.</summary>
-    public const int MaximumIssues = 10;
-
-    private static readonly string[] SubstantiveKinds = [.. Enum.GetValues<PublishedVoteKind>().Where(kind => kind.IsSubstantive()).Select(kind => kind.ToString())];
-
     private const string Columns = "o.official_id, o.name, o.kind, o.office, o.state, o.district, o.party, o.caucus, o.term_end_on, o.record_count, o.photo_path";
     private const string Order = "o.name, o.official_id";
 
     private const string DetailSql = $"""
-        SELECT a.release_number, {Columns}
-          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+        SELECT a.release_number, a.published_at_utc_ticks, {Columns}
+          FROM (SELECT release_number, published_at_utc_ticks FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (SELECT o.* FROM public_api.officials o WHERE o.official_id = @id) o ON TRUE
         """;
 
@@ -39,22 +34,6 @@ public sealed class OfficialStore(NpgsqlDataSource views)
     private const string PartyLinesSql = """
         SELECT chamber, congress, party, with_party, against_party, cast_count, first_voted_on, last_voted_on
           FROM public_api.official_party_lines WHERE official_id = @id AND congress = @congress ORDER BY chamber, party
-        """;
-
-    private const string BillsSql = """
-        SELECT coalesce(c.sponsored, 0), coalesce(c.cosponsored, 0), (SELECT count(*) FROM public_api.bills WHERE congress = @congress)
-          FROM (SELECT 1) one
-          LEFT JOIN public_api.official_bill_counts c ON c.official_id = @id AND c.congress = @congress
-        """;
-
-    private const string IssuesSql = """
-        SELECT issue_id, coalesce(sum(records) FILTER (WHERE source = 'bill'), 0) AS bills,
-               coalesce(sum(records) FILTER (WHERE source = 'vote' AND vote_kind = ANY(@kinds)), 0) AS votes
-          FROM public_api.official_issue_counts WHERE official_id = @id AND congress = @congress
-         GROUP BY issue_id
-        HAVING sum(records) FILTER (WHERE source = 'bill' OR vote_kind = ANY(@kinds)) > 0
-         ORDER BY coalesce(sum(records) FILTER (WHERE source = 'bill'), 0) + coalesce(sum(records) FILTER (WHERE source = 'vote' AND vote_kind = ANY(@kinds)), 0) DESC, issue_id
-         LIMIT @take
         """;
 
     private const string ExecutiveActionsSql = """
@@ -74,7 +53,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
             while (await reader.ReadAsync(cancellationToken))
             {
                 release = reader.GetInt32(0);
-                if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
+                if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader, 1));
             }
         if (release is not { } active) return null;
         var page = rows.Take(request.Limit).ToArray();
@@ -88,16 +67,20 @@ public sealed class OfficialStore(NpgsqlDataSource views)
     {
         await using var connection = await views.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        var found = await ReadOfficialAsync(connection, officialId, cancellationToken);
-        if (found is not var (release, official)) return null;
-        var terms = await ReadTermsAsync(connection, officialId, cancellationToken);
-        var attendance = await ReadAttendanceAsync(connection, officialId, cancellationToken);
+        var found = await ReadOfficialAsync(connection, transaction, officialId, cancellationToken);
+        if (found is not var (release, publishedAtUtcTicks, official)) return null;
+        var terms = await ReadTermsAsync(connection, transaction, officialId, cancellationToken);
+        var attendance = await ReadAttendanceAsync(connection, transaction, officialId, cancellationToken);
         var congress = attendance.Count == 0 ? (int?)null : attendance[0].Congress;
         var missed = attendance.ToArray();
-        var partyLines = congress is { } partyCongress ? await ReadPartyLinesAsync(connection, officialId, partyCongress, cancellationToken) : [];
-        var bills = congress is { } current ? await ReadBillsAsync(connection, officialId, current, cancellationToken) : null;
-        var issues = congress is { } newest ? await ReadIssuesAsync(connection, officialId, newest, cancellationToken) : null;
-        var executive = official.Kind == PublishedOfficeKind.Executive ? await ReadExecutiveActionsAsync(connection, officialId, cancellationToken) : null;
+        var partyLines = congress is { } partyCongress ? await ReadPartyLinesAsync(connection, transaction, officialId, partyCongress, cancellationToken) : [];
+        var activityCongress = OfficialActivityReader.CongressForActivity(official.Kind, congress, publishedAtUtcTicks);
+        var activity = activityCongress is { } current
+            ? (await OfficialActivityReader.ReadAsync(connection, transaction, [(officialId, current)], cancellationToken))[(officialId, current)]
+            : null;
+        var bills = activity?.Bills;
+        var issues = activity?.Issues;
+        var executive = official.Kind == PublishedOfficeKind.Executive ? await ReadExecutiveActionsAsync(connection, transaction, officialId, cancellationToken) : null;
         return new(release, official, OfficialScopes.RecordCount, terms, congress, missed, partyLines, bills, issues, executive);
     }
 
@@ -132,17 +115,21 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         parameters.AddWithValue("cursor_id", cursor.OfficialId);
     }
 
-    private async Task<(int Release, OfficialRow Official)?> ReadOfficialAsync(NpgsqlConnection connection, string officialId, CancellationToken cancellationToken)
+    private async Task<(int Release, long? PublishedAtUtcTicks, OfficialRow Official)?> ReadOfficialAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(DetailSql, connection);
+        command.Transaction = transaction;
         command.Parameters.AddWithValue("id", officialId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken) && !reader.IsDBNull(1) ? (reader.GetInt32(0), ReadRow(reader)) : null;
+        return await reader.ReadAsync(cancellationToken) && !reader.IsDBNull(2)
+            ? (reader.GetInt32(0), reader.IsDBNull(1) ? (long?)null : reader.GetInt64(1), ReadRow(reader, 2))
+            : null;
     }
 
-    private static async Task<OfficialTerm[]> ReadTermsAsync(NpgsqlConnection connection, string officialId, CancellationToken cancellationToken)
+    private static async Task<OfficialTerm[]> ReadTermsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(TermsSql, connection);
+        command.Transaction = transaction;
         command.Parameters.AddWithValue("id", officialId);
         var terms = new List<OfficialTerm>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -152,9 +139,10 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         return [.. terms];
     }
 
-    private static async Task<List<MissedVotesFigure>> ReadAttendanceAsync(NpgsqlConnection connection, string officialId, CancellationToken cancellationToken)
+    private static async Task<List<MissedVotesFigure>> ReadAttendanceAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(AttendanceSql, connection);
+        command.Transaction = transaction;
         command.Parameters.AddWithValue("attendanceIds", new[] { officialId });
         var figures = new List<MissedVotesFigure>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -165,9 +153,10 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         return figures;
     }
 
-    private static async Task<PartyLineFigure[]> ReadPartyLinesAsync(NpgsqlConnection connection, string officialId, int congress, CancellationToken cancellationToken)
+    private static async Task<PartyLineFigure[]> ReadPartyLinesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, int congress, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(PartyLinesSql, connection);
+        command.Transaction = transaction;
         command.Parameters.AddWithValue("id", officialId);
         command.Parameters.AddWithValue("congress", congress);
         var figures = new List<PartyLineFigure>();
@@ -179,58 +168,35 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         return [.. figures];
     }
 
-    private static async Task<BillCountsFigure> ReadBillsAsync(NpgsqlConnection connection, string officialId, int congress, CancellationToken cancellationToken)
-    {
-        await using var command = new NpgsqlCommand(BillsSql, connection);
-        command.Parameters.AddWithValue("id", officialId);
-        command.Parameters.AddWithValue("congress", congress);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        await reader.ReadAsync(cancellationToken);
-        return new(congress, ViewColumns.Number(reader, 0)!.Value, ViewColumns.Number(reader, 1)!.Value, ViewColumns.Number(reader, 2)!.Value, OfficialScopes.Bills(congress));
-    }
-
-    private static async Task<IssueCountsFigures> ReadIssuesAsync(NpgsqlConnection connection, string officialId, int congress, CancellationToken cancellationToken)
-    {
-        await using var command = new NpgsqlCommand(IssuesSql, connection);
-        command.Parameters.AddWithValue("id", officialId);
-        command.Parameters.AddWithValue("congress", congress);
-        command.Parameters.AddWithValue("kinds", SubstantiveKinds);
-        command.Parameters.AddWithValue("take", MaximumIssues);
-        var issues = new List<IssueCountsFigure>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-            issues.Add(new(reader.GetString(0), ViewColumns.Number(reader, 1)!.Value, ViewColumns.Number(reader, 2)!.Value));
-        return new(congress, OfficialScopes.Issues(congress), [.. issues]);
-    }
-
-    private static async Task<ExecutiveActionsFigure> ReadExecutiveActionsAsync(NpgsqlConnection connection, string officialId, CancellationToken cancellationToken)
+    private static async Task<ExecutiveActionsFigure> ReadExecutiveActionsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
     {
         var counts = new List<ExecutiveActionCount>();
         await using (var command = new NpgsqlCommand(ExecutiveActionsSql, connection))
         {
+            command.Transaction = transaction;
             command.Parameters.AddWithValue("id", officialId);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
                 counts.Add(new(reader.GetString(0), ViewColumns.Number(reader, 1)!.Value));
         }
         await using var baseCommand = new NpgsqlCommand(ExecutiveActionBaseSql, connection);
+        baseCommand.Transaction = transaction;
         var total = Convert.ToInt32(await baseCommand.ExecuteScalarAsync(cancellationToken), System.Globalization.CultureInfo.InvariantCulture);
         return new(OfficialScopes.ExecutiveActions, total, [.. counts]);
     }
 
-    // Column 0 holds the release. The row starts at column 1.
-    private static OfficialRow ReadRow(DbDataReader reader) => new()
+    private static OfficialRow ReadRow(DbDataReader reader, int firstColumn) => new()
     {
-        OfficialId = reader.GetString(1),
-        Name = reader.GetString(2),
-        Kind = reader.IsDBNull(3) ? null : ViewColumns.Enum<PublishedOfficeKind>(reader, 3),
-        Office = ViewColumns.Text(reader, 4),
-        State = ViewColumns.Text(reader, 5),
-        District = ViewColumns.Number(reader, 6),
-        Party = ViewColumns.Text(reader, 7),
-        Caucus = ViewColumns.Text(reader, 8),
-        TermEndsOn = ViewColumns.Date(reader, 9),
-        RecordCount = ViewColumns.Number(reader, 10)!.Value,
-        PhotoPath = ViewColumns.Text(reader, 11)
+        OfficialId = reader.GetString(firstColumn),
+        Name = reader.GetString(firstColumn + 1),
+        Kind = reader.IsDBNull(firstColumn + 2) ? null : ViewColumns.Enum<PublishedOfficeKind>(reader, firstColumn + 2),
+        Office = ViewColumns.Text(reader, firstColumn + 3),
+        State = ViewColumns.Text(reader, firstColumn + 4),
+        District = ViewColumns.Number(reader, firstColumn + 5),
+        Party = ViewColumns.Text(reader, firstColumn + 6),
+        Caucus = ViewColumns.Text(reader, firstColumn + 7),
+        TermEndsOn = ViewColumns.Date(reader, firstColumn + 8),
+        RecordCount = ViewColumns.Number(reader, firstColumn + 9)!.Value,
+        PhotoPath = ViewColumns.Text(reader, firstColumn + 10)
     };
 }

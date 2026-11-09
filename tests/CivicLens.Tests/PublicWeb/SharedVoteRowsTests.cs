@@ -1,0 +1,99 @@
+using AngleSharp.Dom;
+using AngleSharp.Html.Parser;
+using CivicLens.PublicWeb.Publication;
+using CivicLens.Publication.Contracts;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace CivicLens.Tests.PublicWeb;
+
+public sealed class SharedVoteRowsTests
+{
+    private const string Root = "https://civic-lens.test/";
+
+    [Fact]
+    public async Task RowsLinkVotesAndShowOnlyRecordedCastsInRequestedMemberOrder()
+    {
+        var row = new SharedVoteRowData(new string('a', 64), new(2026, 9, 16), 119, 2, 314,
+            "House passes the bill", "AI summary of the official record", "Vote to pass with limited debate", "Passed",
+            [new("second", "No (Nay)", "Nay"), new("first", "Yes (Yea)", "Yea")]);
+        var data = new SharedVoteRowsData(PublishedChamber.House,
+            [new("first", "Alex Member"), new("second", "Sam Member"), new("third", "Missing Member")], [row]);
+
+        var document = await RenderAsync(data);
+
+        Assert.Equal("How your House members voted", document.QuerySelector("h2")!.TextContent);
+        Assert.Equal(Root + PublicationProtocol.RecordPagePath(row.RecordId), document.QuerySelector("h3 a")!.GetAttribute("href"));
+        Assert.Equal("2026-09-16", document.QuerySelector("time")!.GetAttribute("datetime"));
+        Assert.Contains("roll call 314", document.QuerySelector(".shared-vote-meta")!.TextContent);
+        Assert.Contains("119th Congress, session 2", document.QuerySelector(".shared-vote-meta")!.TextContent);
+        Assert.Contains("Vote to pass with limited debate. Result: Passed", document.QuerySelector(".shared-vote-meta")!.TextContent);
+        Assert.Contains("AI summary of the official record", document.QuerySelector(".shared-vote-meta")!.TextContent);
+        var casts = document.QuerySelectorAll(".shared-vote-cast");
+        Assert.Equal(["Alex Member", "Sam Member"], casts.Select(cast => cast.QuerySelector(".shared-vote-member")!.TextContent));
+        Assert.Equal(["Yes (Yea)", "No (Nay)"], casts.Select(cast => cast.QuerySelector(".shared-vote-cast-value")!.TextContent));
+        Assert.Equal(["yea", "nay"], document.QuerySelectorAll(".shared-vote-cast-value").Select(cast => cast.GetAttribute("data-side")));
+        Assert.DoesNotContain("Missing Member", document.DocumentElement!.TextContent);
+    }
+
+    [Fact]
+    public async Task MetadataRemainsWhenNoCastsAreRecordedAndStoredTextIsEscaped()
+    {
+        const string headline = "<script>bad()</script>";
+        var row = new SharedVoteRowData(new string('b', 64), new(2026, 9, 16), 119, 1, 5,
+            headline, null, "Vote to agree to the motion", "Question agreed to", []);
+        var data = new SharedVoteRowsData(PublishedChamber.Senate, [new("member", "Pat Member")], [row]);
+
+        var document = await RenderAsync(data);
+
+        Assert.Equal("How your senators voted", document.QuerySelector("h2")!.TextContent);
+        Assert.Equal(headline, document.QuerySelector("h3 a")!.TextContent);
+        Assert.Empty(document.QuerySelectorAll("script"));
+        Assert.Contains("roll call 5", document.QuerySelector(".shared-vote-meta")!.TextContent);
+        Assert.Contains("Vote to agree to the motion. Result: Question agreed to", document.QuerySelector(".shared-vote-meta")!.TextContent);
+        Assert.Empty(document.QuerySelectorAll(".shared-vote-cast"));
+        Assert.DoesNotContain("Not Voting", document.DocumentElement!.TextContent);
+    }
+
+    [Fact]
+    public async Task ComparisonLabelsRenderOnlyWhenTheComparisonIsEligible()
+    {
+        var same = new SharedVoteRowData(new string('c', 64), new(2026, 9, 16), 119, 2, 7,
+            "Members agree", null, "Vote to pass", "Passed", [new("first", "Yes (Yea)", "Yea"), new("second", "Yes (Aye)", "Yea")])
+        {
+            MembersVotedTheSame = true
+        };
+        var different = same with
+        {
+            RecordId = new string('d', 64),
+            Casts = [new("first", "Yes (Yea)", "Yea"), new("second", "No (Nay)", "Nay")],
+            MembersVotedTheSame = false
+        };
+        var noComparison = same with
+        {
+            RecordId = new string('e', 64),
+            Casts = [new("first", "Yes (Yea)", "Yea")],
+            MembersVotedTheSame = null
+        };
+        var document = await RenderAsync(new(PublishedChamber.House, [new("first", "Alex"), new("second", "Sam")], [same, different, noComparison]));
+
+        Assert.Equal(["Same vote", "Voted differently"], document.QuerySelectorAll(".shared-vote-comparison").Select(node => node.TextContent));
+        Assert.Empty(document.QuerySelectorAll(".shared-vote-counts"));
+        Assert.DoesNotContain("Not Voting", document.DocumentElement!.TextContent);
+    }
+
+    private static async Task<IDocument> RenderAsync(SharedVoteRowsData data)
+    {
+        await using var services = new ServiceCollection().BuildServiceProvider();
+        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
+        var html = await renderer.Dispatcher.InvokeAsync(async () =>
+        {
+            var output = await renderer.RenderComponentAsync<SharedVoteRows>(ParameterView.FromDictionary(
+                new Dictionary<string, object?> { [nameof(SharedVoteRows.Data)] = data, [nameof(SharedVoteRows.RootPath)] = Root }));
+            return output.ToHtmlString();
+        });
+        return new HtmlParser().ParseDocument(html);
+    }
+}
