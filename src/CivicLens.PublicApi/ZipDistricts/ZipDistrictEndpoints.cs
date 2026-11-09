@@ -45,9 +45,9 @@ public static class ZipDistrictEndpoints
                 [nameof(ZipMemberCards.Data)] = ZipMemberCardsMapper.Map(answer, lookup.SharedVotes, lookup.IssueOptions, issue),
                 [nameof(ZipMemberCards.RootPath)] = options.PublicBaseUrl?.Join(string.Empty) ?? "/",
                 [nameof(ZipMemberCards.View)] = view == "compare" ? view : string.Empty,
-                [nameof(ZipMemberCards.ComparePageUrl)] = view == "compare" || options.PublicBaseUrl is null
+                [nameof(ZipMemberCards.ComparePageUrl)] = view == "compare" || options.BrowserApiUrl is null
                     ? null
-                    : options.BrowserApiUrl?.Join("web/compare")
+                    : options.PublicBaseUrl?.Join("compare.html")
             });
             return Results.Content(html, "text/html; charset=utf-8");
         });

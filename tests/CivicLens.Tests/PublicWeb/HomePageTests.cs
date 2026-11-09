@@ -29,6 +29,16 @@ public sealed class HomePageTests
     }
 
     [Fact]
+    public async Task CompareLinkUsesTheConfiguredPublicSiteRootWhileZipLookupUsesTheApiOrigin()
+    {
+        var page = await RenderAsync(new(7, Featured, [], null), "https://api.civic-lens.test");
+
+        Assert.Equal(Root + "compare.html", page.QuerySelectorAll(".home-browse a")
+            .Single(link => link.TextContent == "Compare your members").GetAttribute("href"));
+        Assert.Equal("https://api.civic-lens.test", page.QuerySelector("[data-zip-api]")!.GetAttribute("data-zip-api"));
+    }
+
+    [Fact]
     public async Task UnknownTotalsStayAbsentButThePublishedResultRemainsVisible()
     {
         var page = await RenderAsync(new(7, Featured with { Yea = null, Nay = null }, [], null));
