@@ -54,6 +54,7 @@ Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 pa
 - Each chamber retains the full selection caption: "Up to 10 recent published votes on passage, amendments, conference reports, veto overrides and nominations."
 - The comparison caption is "The comparison includes {compared} votes where every listed member cast Yes or No. Their votes differed on {different}." Use the singular "vote" for one. Compare counts this full selection before showing differing rows only.
 - The Compare vote heading is "Votes where your members differed". Its empty state is "No differing votes in this selection."
+- A planned return-visit indicator shows member votes published since a release marker saved on this device. Keep the release marker local.
 
 ### Reader-flow decisions
 
@@ -112,7 +113,7 @@ These decisions come from the component audit. The owner accepted every recommen
 - Home freshness uses the newest published roll call of each chamber, including procedural votes, and omits a chamber with no published roll calls. Enforcer: `HomeStore` aggregates `public_api.votes` in its highlights statement. Tests: `HomeEndpointsTests.FreshnessUsesNewestPublishedRollCallEvenWhenItIsNotSubstantiveAndOmitsAnEmptyChamber`, `HomeEndpointsTests.NoActiveReleaseHasNoHomeAnswerOrFreshnessDates`, and `HomePageTests.FreshnessOmitsAChamberWithoutPublishedRollCalls`.
 - Home issue and executive rows use the mapped counts and record facts, with shared link, enum label, Congress ordinal, and date format owners. Enforcer: `HomePage`. Test: `HomePageTests.IssuesExecutiveGroupsAndFreshnessRenderTheirScopedPublishedFacts`.
 - The ZIP lookup restores its controls after the current request, including a malformed success response. An older response cannot replace a newer result. Filter failures retain the previous successful fragment. A returned issue must match the requested issue. Enforcer: `initZipLookup`. No committed browser test.
-- The browser remembers only a validated five-digit ZIP after its current lookup answer renders. It stores no member details; the home page re-queries published current data. Enforcer: `initRememberedMembers` and `initZipLookup`. No automated test.
+- The current member lookup remembers only a validated five-digit ZIP after its answer renders. It stores no member details; the home page re-queries published current data. A client-local release marker is planned for return-visit updates. Enforcer of current behavior: `initRememberedMembers` and `initZipLookup`. Test: No test.
 - Member cards, issue filter options, and shared vote rows use one private HTML fragment from one published-release snapshot. Enforcer: `ZipDistrictStore.FindMembersAsync`. Test: `ZipMemberSnapshotTests.MemberDataAndSharedVotesStayOnTheReleaseReadByTheFirstDistrictQuery`.
 - Shared comparisons require at least two listed members and an actual binary cast from every listed member. Recorded nonbinary casts remain visible. Missing casts stay absent. Neither supports a comparison. Enforcers: `ZipMemberCardsMapper` and `PublishedOfficialVote.SideOf`. Test: `ZipDistrictEndpointsTests.CrossStateComparisonsRequireEveryListedMembersBinaryCast`.
 - Shared page HTML contains no remembered ZIP or personal lookup results. Enforcer: `PublicPage` emits empty hooks and browser code reads device storage. Tests: `HomePageTests.TheRememberedMembersLinkTargetsTheLookupHeadingInSharedMarkup` and `PublishedHomePageTests.TheResultPanelIsHiddenUntilALookupAndCreditsTheCensusBureauAndSaysAZctaIsNotAZipCode`.
@@ -139,11 +140,11 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 | 10 | Check a source | "Check the source" fold with an official link first | Partial. Planned: plain labels, raw text one click further (DR3) |
 | 11 | Search a name or a bill | Header search on every page, results page | Partial. Planned: official first, bill number pin, filters after results |
 | 12 | See a search with no results | Results page empty state | Partial. Planned: message and next steps at the top |
-| 13 | Learn a term | `Term` popover, glossary page | Implemented: first-use popovers and alphabetical index with letter shortcuts. Planned: approved definitions for remaining prototype terms |
+| 13 | Learn a term | `Term` popover, glossary page, vote-kind explainer index | Partial. First-use popovers and the alphabetical index are implemented. Planned: remaining approved definitions and the vote-kind index |
 | 14 | Read the method and the about page | Method page, about page | Implemented |
 | 15 | Report a problem | Footer and record report links | Partial. Planned: the footer link names the record |
 | 16 | Reach a useful 404 | Not found page | Implemented |
-| 17 | Return and find my members again | "Your members" header chip with a Forget control | Implemented. A successful ZIP stays in browser local storage; the home fragment refreshes the answer from the current endpoint. |
+| 17 | Return and find my members again | "Your members" chip, Forget, return-visit updates | Partial. ZIP persistence, Forget, and current lookup refresh are implemented. Planned: member votes published since a locally saved release |
 | 18 | Compare my members | Compare page: attendance, party line, bills, issues, differing votes | Planned |
 
 ### Component inventory
@@ -163,12 +164,14 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Latest executive actions | Home | What did the President sign? | `executive_actions` | `/web` shows one row per published document type with count, newest title and signed date. Other executive layouts remain planned |
 | Member card | After a ZIP | Who is my member? | `officials`, `official_attendance`, `official_party_lines`, `official_bill_counts`, `official_issue_counts` | Portrait, seat, party, term end, scoped attendance, and scoped party-line counts implemented. Congress-scoped sponsored-bill and issue figures are shown, with shared vote rows and complete binary comparison badges |
 | Member votes list | After a ZIP, official | How did my members vote? | `votes`, `member_votes` | Partial. The API and private ZIP fragment serve shared vote rows with recorded casts. Issue and Any chips refresh the combined private fragment and mark the selected issue. Captions name each chamber's selection and comparison bases |
+| Return-visit updates | Home, members strip | What is new for my members? | Published member votes and a locally saved release marker | Planned: identify votes published since the saved release |
 | Compare members | Compare page | How do my members differ? | `official_*` views, `member_votes` | Planned |
 | Profile header, key figures | Official | Who is this? | `officials`, `official_attendance`, `official_party_lines` | API data implemented. Profile UI integration remains planned. |
 | Vote strip | Official | What is their voting pattern? | `member_votes.side` | Planned: marks only breaks and missed votes |
 | Statement and vote pairs | Official, vote | Did words match votes? | `record_links` | Planned: page content; related-record data is served by the API |
 | Vote header and AI summary | Vote | What was this vote? | `votes` headline, summary, label | Implemented. Planned: "what this vote decides" |
 | Fixed explainers | Vote, executive action | What did Yes mean? What next? | Code tables in `Publication.Contracts` | Planned: #407 |
+| Vote-kind explainer index | Vote kinds, glossary | What kinds of votes exist? | Shared kind names, record terms, and fixed Yes explainers | Planned: one index covering every vote kind, with approved wording |
 | Result card, party bars | Vote | Did it pass, and by how much? | `votes`, `vote_members.party` | Partial. Party data is available; redesigned bars remain planned |
 | Breakers list | Vote | Who broke ranks? | `votes.alignment`, `vote_members.party` | Planned |
 | Member list with finder | Vote | How did my member vote? | `vote_members`, `officials` | Implemented. Planned: folded table with filters |
