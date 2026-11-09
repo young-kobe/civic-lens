@@ -14,7 +14,7 @@ Every page and component must pass seven owner tests:
 6. Easy to understand: each term, number, and date has its context.
 7. Professional look: one consistent system, with no leftover placeholder.
 
-This page holds the design rules and the plan for the reader flows. [Publication](publication.md) owns the release data, the page text rules, and the `public_api` views. [Host](host.md) owns the component library rules. The [roadmap](../roadmap.md#later) step R-68 owns the order of the work.
+This page holds the design rules and the plan for the reader flows. [Publication](publication.md) owns the release data, the page text rules, and the `public_api` views. [Host](host.md) owns the component library rules. The [roadmap](../roadmap.md#active-r-68-redesign) step R-68 owns the order of the work.
 
 Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 palette, type foundation, focus colors, and reduced-motion behavior are implemented. The `/web` home route is a gated PublicApi server-rendered preview. It shows the published featured vote, recent votes, optional brief, configured issue counts, executive action groups, and chamber freshness. Its available-data bento is implemented; map, party bars, and break board remain planned. The existing static home remains live. Each row below says what is implemented and what is planned.
 
@@ -23,6 +23,7 @@ Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 pa
 ### Theme
 
 - The visual authority is the owner's [Mosaic v2 reference](https://claude.ai/artifact/BNAG2e2nKJVpxfqF2xe2Mr) and its Civic Lens Themes export. Select `mosaic2` when rendering its reader pages. Match the full composition, typography, spacing, colors and responsive behavior. EXAMPLE text requires separate wording approval. The theme-picker toolbar is a prototype control.
+- Working design references are `.claude/prototype-themes/` and `.claude/audit/component-audit.md` from the approved export. Use the `mosaic2` skin.
 - The theme is Mosaic v2. The prototype tokens are in the `mosaic2` block of the prototype skin file. Shared public theme tokens live in `src/CivicLens.PublicWeb/wwwroot/css/theme.css`.
 - Color follows a 60-30-10 split. The page is a warm off-white in light mode and a deep ink in dark mode. Navy `#14213d` is the second color. Civic yellow `#f5b301` is the accent.
 - Yellow marks primary buttons, the current navigation item, and key highlights. Yellow is never text on a white background.
@@ -42,6 +43,17 @@ Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 pa
 - The freshness line names the newest published roll call date for each chamber. A chamber with no published roll calls is omitted.
 - At 1280 px and wider, votes and issues share the first bento row, then executive actions and method share the second. ZIP results and the brief span the grid. Below 1280 px the layout is one column.
 - A weekly brief shows as one "This week" lead line above the latest votes, only when a brief exists (DR5). The server home implements this placement.
+
+### Members and Compare
+
+- Member bill and issue figures use attendance Congress when available, otherwise the Congress on the release's UTC publication date. Each figure names its own Congress and scope.
+- The planned Compare page uses the full current ZIP roster, grouped by chamber, including vacant seats. It offers no subset selector. The link and page title are "Compare your members".
+- Its public page contains no ZIP or personal results. The planned preview route is `/web/compare`, with canonical path `compare.html`. Links use the configured browser API origin while the public root remains static.
+- The planned extension selects Compare through the existing private members endpoint with `view=compare`. It will return only the requested layout, using the same transaction and mapping as the normal layout. Cards, issue options, and votes come from one release snapshot.
+- The issue filter applies before the ten-vote selection in each chamber. Shared comparisons need at least two current chamber members and a recorded Yes or No from every listed member. Missing and nonbinary casts never establish agreement or disagreement.
+- Each chamber retains the full selection caption: "Up to 10 recent published votes on passage, amendments, conference reports, veto overrides and nominations."
+- The comparison caption is "The comparison includes {compared} votes where every listed member cast Yes or No. Their votes differed on {different}." Use the singular "vote" for one. Compare counts this full selection before showing differing rows only.
+- The Compare vote heading is "Votes where your members differed". Its empty state is "No differing votes in this selection."
 
 ### Reader-flow decisions
 
@@ -188,14 +200,14 @@ The views expose the stored member party and vote alignment, normalized member-v
 
 Remaining planned view columns and views, in the order that R-68 builds them:
 
-- Party lines: the board endpoints. `party_agreement` and the official party-line view are implemented.
-- Votes: a second AI text column for "what this vote decides".
+- Party lines: one response for all four chamber and party boards. `party_agreement` and the official party-line view are implemented.
+- Votes: stored validated totals beside immutable member counts, and a second AI text column for "what this vote decides".
 - Bills: `bill_key_terms`. The cited CRS body and version are implemented.
-- Issues: party line-up data.
-- Executive actions: `executive_action_links` and the summary columns.
-- Other kinds: `record_corrections`. Document-change detail and withdrawal notices have typed public read APIs; their reader pages remain planned.
+- Issues: party line-up data. Home issue counts will use immutable release snapshots for the Congress of the release publication day.
+- Executive actions: `executive_action_links` and summary columns. Exact numbered orders and proclamations get typed targets; unsupported or ambiguous references stay cited notes.
+- Other kinds: `record_corrections`, bound to distinct immutable correction-history snapshots. Document-change detail and withdrawal notices have typed public read APIs; their reader pages remain planned.
 
-Each AI text column carries its text origin and its label. The roadmap steps under [R-68](../roadmap.md#later) name each view.
+Each AI text column carries its text origin and its label. The roadmap steps under [R-68](../roadmap.md#active-r-68-redesign) name each view.
 
 ## Code map
 
@@ -214,7 +226,7 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 
 ## Limits and planned work
 
-The roadmap step [R-68](../roadmap.md#later) holds the plan: the views, the route moves, and the accepted design changes. This page holds no second plan.
+The roadmap step [R-68](../roadmap.md#active-r-68-redesign) holds the plan: the views, the route moves, and the accepted design changes. This page holds no second plan.
 
 Open choices:
 

@@ -64,6 +64,14 @@ The publication feature turns approved revisions into immutable, cumulative stat
 - One class, `ReleaseEntryComparison`, owns the rule that two entries agree outside the eight new fields. `ReleaseEntryRewrite` and the entries backfill both call it.
 - The entries backfill runs now, before the other backfills. It reports the counts that it cannot prove, and it does not wait for the other backfills.
 
+### Approved public data extensions
+
+These extensions are approved designs and remain unimplemented. R-68 in the [roadmap](../roadmap.md#active-r-68-redesign) owns their order and completion gates.
+
+- Persist validated vote totals beside immutable `member_count`. Published views read those values rather than reconstructing them for every page request.
+- Snapshot Home issue counts for the Congress of the release's UTC publication day. Bind counts to the exact records selected for that release.
+- Bind each release's correction history to a distinct immutable snapshot. Later corrections cannot change the history returned for an older release.
+
 ## Invariants
 
 Each line gives the rule, what enforces it, and the test that protects it. Cross-feature invariants are in [architecture](../architecture.md#invariants).
@@ -683,6 +691,8 @@ The all-records pages open with one line. The line starts with the words "Search
 
 ### Public API views
 
+Model document-change text uses `PublishedWording.ModelDocumentChange`: "Drafted by an AI model from these source versions. A person checked it before publication." Person text has no AI label.
+
 Document changes expose six views bound to the active published revision: the parent, officials, source versions, changed regions, word edits, and citations. Source URLs are final capture URLs. Observed times and full text come from the exact comparison extractions. A date-evidence flag identifies an existing citation. It never replaces that citation. Region and word-edit completion counts distinguish missing projections from empty lists. Public role access remains limited to views. `DocumentChangeViewsTests` protects revision binding, activation, rollback, ordering, and final URLs.
 
 `PublicApi` reads published data through the restricted `public_api` views. They cover votes, bills, statements, briefs, issues, related records, withdrawals, executive actions, officials, ZIP districts, and release names. Official figures include `official_party_lines` alongside attendance. See [search](search.md#api) for the routes and [the column reference](public-api-columns.txt) for the view columns.
@@ -860,7 +870,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - The approve page shows the correction note box for every approval, also for a first publication, because the page does not read the active release. A note on a first publication is dropped.
 - Expandable evidence and shareable records are planned against published releases.
 - A facet page lists the officials and the event day of each record. It does not list the issues of a record. The all-records page follows the same rule and shows the event day under "Date". A row in the latest lists of the home page shows the event day under its title.
-- R-68 plans to replace static public serving. `PublicApi` will read `public_api` views through a role that can read nothing else. The release manifest will then stop being a data path. The views cover votes, bills, statements and their speakers, and officials. `PublicApi` serves lists and details for votes, bills, officials, and statements, plus withdrawal notices. The statement detail endpoint serves bounded source text, quotations, and citations from the active published revision. The official routes expose the portrait path and attendance figures. Party-vote figures and statement counts by Congress and issue remain planned. Publication already pins official photos, entry Congress, vote parties, and alignment in columns. Counts of sponsored bills use the Congress of the bill number, and the static page uses the Congress of the event date. It also serves the ZIP lookup from `zip_districts` and the name views.
+- R-68 plans to replace static public serving. `PublicApi` will read `public_api` views through a role that can read nothing else. The release manifest will then stop being a data path. The views cover votes, bills, statements and their speakers, and officials. `PublicApi` serves lists and details for votes, bills, officials, and statements, plus withdrawal notices. The statement detail endpoint serves bounded source text, quotations, and citations from the active published revision. The official routes expose the portrait path and attendance figures. Party-vote figures are implemented. Statement counts by Congress and issue remain planned. Publication already pins official photos, entry Congress, vote parties, and alignment in columns. Counts of sponsored bills use the Congress of the bill number, and the static page uses the Congress of the event date. It also serves the ZIP lookup from `zip_districts` and the name views.
 - The manifest is one file, and each publish reads the previous one. R-63 moves its entries to tables, so a publish no longer reads it. Release 910 held 18,281 records in 14.9 MB, about 815 bytes for each record.
 - At 40,000 action entries with 15 cosponsor IDs each, the manifest is 52,280,111 bytes (about 49.9 MiB), about 78% of the 64 MiB cap. That leaves about 370 bytes of headroom for each entry. The 15 IDs and the 114-character title are assumed inputs, not measured from data. `PublicationReleaseTests.AManifestOfTheMaximumNumberOfRealisticActionEntriesWithCosponsorsStaysUnderTheManifestByteCap` measures it. `PublishRelease` refuses a manifest over the cap.
 - A facet ID that the catalog does not name still gets pages, and they show the ID. This keeps a carried record from blocking a later publish after an issue leaves the configuration. `PublicationProtocol.MaximumFacetIdLength` is the one length limit. `IssueConfiguration` applies it to configured issue and policy area IDs, so the configuration fails to load on a longer ID. A carried manifest ID can still be longer or can hold other characters. Such a facet ID gets no pages. The facet list shows its ID with no link.

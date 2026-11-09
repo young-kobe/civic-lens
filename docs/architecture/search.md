@@ -399,7 +399,7 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 
 ## Limits and planned work
 
-- Server pages cover the not found page only. The page routes move one at a time (R-68). A shared file has no hashed name, so it has no long cache value yet.
+- Server pages cover the gated Home preview and not found page. Compare is in development; remaining reader routes move under [R-68](../roadmap.md#active-r-68-redesign). A shared file has no hashed name, so it has no long cache value yet.
 - The API exposes stored vote alignment, member party and caucus, vote side and party-majority cast, and official photo paths. A vote member's party comes from the party pinned to its member list. Caucus comes from the active release's matching chamber term on the vote date; when no matching term exists it remains null. Side maps Yea/Aye and Nay/No to their shared side, leaving other casts null. Party-majority cast uses the stored Democrat or Republican majority for the member's pinned party, leaving other parties and ties null. Photo paths come from the release and are already restricted to publication photo paths.
 - A `/v1/boards` route, issue split and agreed counts, and an agreed or split mark on a home vote are not served yet. The issue count of executive actions is still not built, because release entries for executive actions hold no issue. It waits until executive actions carry issues.
 - The official routes still lack party-line vote counts and statement counts by Congress or issue. Publication stores entry Congress and the API exposes photo paths and vote fields, but the remaining aggregates and routes are not built.

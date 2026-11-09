@@ -32,6 +32,8 @@ The workspace uses Blazor static server-side rendering with a shared Razor compo
 
 A Jetson runs temporary production with Docker Compose; see the [production runbook](docs/operations.md#production-runbook). The long-term cloud move, with Terraform, stays planned; see [production hosting](docs/architecture/host.md#limits-and-planned-work).
 
+The product is deployed and in iterative development. The active plan is the [R-68 public redesign](docs/roadmap.md#active-r-68-redesign).
+
 ## Start here
 
 Install the .NET SDK selected by `global.json`, then run:
