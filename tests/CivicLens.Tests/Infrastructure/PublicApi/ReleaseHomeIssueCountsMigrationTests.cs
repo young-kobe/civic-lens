@@ -58,7 +58,7 @@ public sealed class ReleaseHomeIssueCountsMigrationTests(PostgresCollection post
             var published = new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero);
             await ViewsSeed.ActivateReleaseAsync(database, 1, published, recordCount: 9);
             await ViewsSeed.ActivateReleaseAsync(database, 2, published.AddDays(1), recordCount: 8);
-            await ViewsSeed.AddVotesAsync(database,
+            await ViewsSeed.AddVotesBeforeMemberTotalsAsync(database,
                 new SeededVote('a', "2026-05-01") { FirstRelease = 2, ActiveRevision = 2, EarlierIssues = ["health"], Issues = ["climate"] },
                 new SeededVote('b', "2026-05-02") { Kind = "Rule", Issues = ["health"] },
                 new SeededVote('c', "2026-05-03") { LastRelease = 1, Issues = ["health"] },
