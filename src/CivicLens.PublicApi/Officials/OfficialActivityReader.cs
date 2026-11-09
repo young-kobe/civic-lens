@@ -23,17 +23,20 @@ internal static class OfficialActivityReader
     private const string BillsSql = """
         WITH selected AS (
             SELECT DISTINCT official_id, congress FROM unnest(@officialIds, @congresses) AS pairs(official_id, congress)
-        ), congresses AS (
-            SELECT DISTINCT congress FROM selected
         ), base_bills AS (
-            SELECT congresses.congress, count(bills.congress) AS bills_in_congress
-              FROM congresses LEFT JOIN public_api.bills bills ON bills.congress = congresses.congress
-             GROUP BY congresses.congress
+            SELECT congress, count(*) AS bills_in_congress
+              FROM public_api.bills
+             WHERE congress = ANY(@congresses)
+             GROUP BY congress
+        ), selected_counts AS (
+            SELECT official_id, congress, sponsored, cosponsored
+              FROM public_api.official_bill_counts
+             WHERE official_id = ANY(@officialIds) AND congress = ANY(@congresses)
         )
-        SELECT selected.official_id, selected.congress, coalesce(counts.sponsored, 0), coalesce(counts.cosponsored, 0), base_bills.bills_in_congress
+        SELECT selected.official_id, selected.congress, coalesce(counts.sponsored, 0), coalesce(counts.cosponsored, 0), coalesce(base_bills.bills_in_congress, 0)
           FROM selected
-          JOIN base_bills ON base_bills.congress = selected.congress
-          LEFT JOIN public_api.official_bill_counts counts
+          LEFT JOIN base_bills ON base_bills.congress = selected.congress
+          LEFT JOIN selected_counts counts
             ON counts.official_id = selected.official_id AND counts.congress = selected.congress
          ORDER BY selected.official_id
         """;

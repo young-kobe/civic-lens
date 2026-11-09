@@ -188,7 +188,8 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
         await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2,
             new SeededSeat("p0", "Pat House One", Representative, "AL", 2),
             new SeededSeat("p1", "Pat House Two", Representative, "AL", 1),
-            new SeededSeat("p2", "Sam Senate One", Senator, "AL", null));
+            new SeededSeat("p2", "Sam Senate One", Senator, "AL", null),
+            new SeededSeat("outside", "Other House Member", Representative, "AK", 0));
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
             new SeededVote('7', "2024-05-01") { Congress = 118, Casts = ["Yea"] },
             new SeededVote('b', "2026-02-01") { Congress = 119, Casts = ["Yea"], PersonIds = ["p1"] });
@@ -196,7 +197,8 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
             new SeededBill('c', "2024-05-02") { Congress = 118, BillNumber = 3, Issues = ["tax"], Sponsorships = [new("p0", "Sponsor", "2024-05-02")] },
             new SeededBill('d', "2024-05-03") { Congress = 118, BillNumber = 4, Issues = ["health"], Sponsorships = [new("p0", "Sponsor", "2024-05-03")] },
             new SeededBill('e', "2026-02-02") { Congress = 119, BillNumber = 5, Sponsorships = [new("p1", "Sponsor", "2026-02-02")] },
-            new SeededBill('f', "2027-01-03") { Congress = 120, BillNumber = 6, Issues = ["tax"], Sponsorships = [new("p2", "Sponsor", "2027-01-03")] });
+            new SeededBill('1', "2026-02-03") { Congress = 119, BillNumber = 7, Sponsorships = [new("outside", "Sponsor", "2026-02-03")] },
+            new SeededBill('f', "2021-02-02") { Congress = 117, BillNumber = 6, Issues = ["tax"], Sponsorships = [new("p2", "Sponsor", "2021-02-02")] });
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (2, 'health', 'Health policy', 'Health'), (2, 'tax', 'Tax policy', 'Tax');");
 
         var answer = await GetAsync(host, "/v1/zip-districts/36009");
@@ -209,15 +211,15 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
         Assert.Equal(["Health policy", "Tax policy"], p0.GetProperty("issues").GetProperty("issues").EnumerateArray().Select(issue => issue.GetProperty("name").GetString()));
         Assert.All(p0.GetProperty("issues").GetProperty("issues").EnumerateArray(), issue => Assert.Equal(1, issue.GetProperty("sponsoredBills").GetInt32()));
         Assert.Equal(119, p1.GetProperty("bills").GetProperty("congress").GetInt32());
-        Assert.Equal([1, 0, 1], [p1.GetProperty("bills").GetProperty("sponsored").GetInt32(), p1.GetProperty("bills").GetProperty("cosponsored").GetInt32(), p1.GetProperty("bills").GetProperty("billsInCongress").GetInt32()]);
+        Assert.Equal([1, 0, 2], [p1.GetProperty("bills").GetProperty("sponsored").GetInt32(), p1.GetProperty("bills").GetProperty("cosponsored").GetInt32(), p1.GetProperty("bills").GetProperty("billsInCongress").GetInt32()]);
         Assert.Empty(p1.GetProperty("issues").GetProperty("issues").EnumerateArray());
         var noAttendance = answer.GetProperty("states")[0].GetProperty("senators")[0];
-        Assert.Equal(120, noAttendance.GetProperty("bills").GetProperty("congress").GetInt32());
-        Assert.Equal(1, noAttendance.GetProperty("bills").GetProperty("sponsored").GetInt32());
-        Assert.Equal(1, noAttendance.GetProperty("bills").GetProperty("billsInCongress").GetInt32());
-        var issue = Assert.Single(noAttendance.GetProperty("issues").GetProperty("issues").EnumerateArray());
-        Assert.Equal("tax", issue.GetProperty("issueId").GetString());
-        Assert.Equal(1, issue.GetProperty("sponsoredBills").GetInt32());
+        var bills = noAttendance.GetProperty("bills");
+        Assert.Equal(120, bills.GetProperty("congress").GetInt32());
+        Assert.Equal(0, bills.GetProperty("sponsored").GetInt32());
+        Assert.Equal(0, bills.GetProperty("cosponsored").GetInt32());
+        Assert.Equal(0, bills.GetProperty("billsInCongress").GetInt32());
+        Assert.Empty(noAttendance.GetProperty("issues").GetProperty("issues").EnumerateArray());
         Assert.Empty(noAttendance.GetProperty("missedVotes").EnumerateArray());
         Assert.Empty(noAttendance.GetProperty("partyLines").EnumerateArray());
         Assert.Equal(119, answer.GetProperty("congress").GetInt32());
