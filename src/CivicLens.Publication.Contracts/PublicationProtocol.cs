@@ -100,7 +100,7 @@ public static class PublicationProtocol
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
 
-    internal static bool IsRecordId(PublishedRecordKind kind, string? value) => kind switch
+    public static bool IsRecordId(PublishedRecordKind kind, string? value) => kind switch
     {
         PublishedRecordKind.DocumentChange => IsLowerHex(value, 32),
         PublishedRecordKind.Statement or PublishedRecordKind.Action or PublishedRecordKind.Brief or PublishedRecordKind.Vote

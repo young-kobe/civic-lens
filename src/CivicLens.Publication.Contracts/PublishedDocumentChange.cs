@@ -2,6 +2,9 @@ namespace CivicLens.Publication.Contracts;
 
 public sealed record PublishedDocumentChange
 {
+    public const int MaximumChanges = 2_000;
+    public const int MaximumWordEditsPerChange = 512;
+    public const int MaximumCitations = 64;
     public required string RecordId { get; init; }
     public required int RevisionNumber { get; init; }
     public required string Headline { get; init; }
@@ -41,27 +44,33 @@ public sealed record PublishedDocumentChange
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.DocumentChange, RecordId) || RevisionNumber < 1 || string.IsNullOrWhiteSpace(Headline) ||
             string.IsNullOrWhiteSpace(Summary) || string.IsNullOrWhiteSpace(Institution))
             throw new InvalidDataException("Published record identity or wording is invalid.");
-        PublishedEvidenceRules.RequireVersion(Before);
-        PublishedEvidenceRules.RequireVersion(After);
-        if (Before.ExtractionId == After.ExtractionId)
-            throw new InvalidDataException("Published record versions must differ.");
-        if (Citations is null || Citations.Length is 0 or > 64)
-            throw new InvalidDataException("Published record requires 1 to 64 citations.");
-        foreach (var citation in Citations) ValidateCitation(citation);
-        if ((ChangeDate is null) != (ChangeDateEvidence is null))
-            throw new InvalidDataException("An actual change date requires exact evidence.");
-        if (ChangeDateEvidence is not null) ValidateCitation(ChangeDateEvidence);
+        ValidateContent(Before, After, Citations, Changes, ChangeDate, ChangeDateEvidence);
         ValidateLabels();
-        if (Changes is null || Changes.Length == 0)
-            throw new InvalidDataException("Published record requires at least one change.");
-        foreach (var change in Changes) ValidateChange(change);
     }
 
-    private void ValidateCitation(PublishedCitation? citation)
+    public static void ValidateContent(PublishedDocumentVersion before, PublishedDocumentVersion after,
+        PublishedCitation[] citations, PublishedChange[] changes, DateOnly? changeDate, PublishedCitation? changeDateEvidence)
+    {
+        PublishedEvidenceRules.RequireVersion(before);
+        PublishedEvidenceRules.RequireVersion(after);
+        if (before.ExtractionId == after.ExtractionId)
+            throw new InvalidDataException("Published record versions must differ.");
+        if (citations is null || citations.Length is 0 or > MaximumCitations)
+            throw new InvalidDataException($"Published record requires 1 to {MaximumCitations} citations.");
+        foreach (var citation in citations) ValidateCitation(before, after, citation);
+        if ((changeDate is null) != (changeDateEvidence is null))
+            throw new InvalidDataException("An actual change date requires exact evidence.");
+        if (changeDateEvidence is not null) ValidateCitation(before, after, changeDateEvidence);
+        if (changes is null || changes.Length is 0 or > MaximumChanges)
+            throw new InvalidDataException($"Published record requires 1 to {MaximumChanges} changes.");
+        foreach (var change in changes) ValidateChange(before, after, change);
+    }
+
+    private static void ValidateCitation(PublishedDocumentVersion before, PublishedDocumentVersion after, PublishedCitation? citation)
     {
         if (citation is null) throw new InvalidDataException("Published citation is missing.");
-        var text = citation.ExtractionId == Before.ExtractionId ? Before.Text
-            : citation.ExtractionId == After.ExtractionId ? After.Text
+        var text = citation.ExtractionId == before.ExtractionId ? before.Text
+            : citation.ExtractionId == after.ExtractionId ? after.Text
             : throw new InvalidDataException("Published citation must cite one of the record's versions.");
         PublishedEvidenceRules.RequireQuote(text, citation.Start, citation.Length, citation.Quote);
     }
@@ -78,15 +87,15 @@ public sealed record PublishedDocumentChange
             throw new InvalidDataException("Published record issue ids must be distinct and not blank.");
     }
 
-    private void ValidateChange(PublishedChange? change)
+    private static void ValidateChange(PublishedDocumentVersion before, PublishedDocumentVersion after, PublishedChange? change)
     {
-        if (change is null || change.WordEdits is null ||
-            !PublishedEvidenceRules.IsRange(Before.Text, change.BeforeStart, change.BeforeLength) ||
-            !PublishedEvidenceRules.IsRange(After.Text, change.AfterStart, change.AfterLength) ||
-            !PublishedEvidenceRules.IsRange(Before.Text, change.BeforeContextStart, change.BeforeContextLength) ||
-            !PublishedEvidenceRules.IsRange(After.Text, change.AfterContextStart, change.AfterContextLength) ||
-            change.WordEdits.Any(edit => edit is null || !PublishedEvidenceRules.IsRange(Before.Text, edit.BeforeStart, edit.BeforeLength) ||
-                !PublishedEvidenceRules.IsRange(After.Text, edit.AfterStart, edit.AfterLength)))
+        if (change is null || change.WordEdits is null || change.WordEdits.Length > MaximumWordEditsPerChange ||
+            !PublishedEvidenceRules.IsRange(before.Text, change.BeforeStart, change.BeforeLength) ||
+            !PublishedEvidenceRules.IsRange(after.Text, change.AfterStart, change.AfterLength) ||
+            !PublishedEvidenceRules.IsRange(before.Text, change.BeforeContextStart, change.BeforeContextLength) ||
+            !PublishedEvidenceRules.IsRange(after.Text, change.AfterContextStart, change.AfterContextLength) ||
+            change.WordEdits.Any(edit => edit is null || !PublishedEvidenceRules.IsRange(before.Text, edit.BeforeStart, edit.BeforeLength) ||
+                !PublishedEvidenceRules.IsRange(after.Text, edit.AfterStart, edit.AfterLength)))
             throw new InvalidDataException("Published change offsets are outside their texts.");
     }
 }

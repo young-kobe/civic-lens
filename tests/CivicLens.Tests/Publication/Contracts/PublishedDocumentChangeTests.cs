@@ -13,6 +13,56 @@ public sealed class PublishedDocumentChangeTests
         Record(new() { ExtractionId = AfterId, Start = 1, Length = 2, Quote = "\U0001F600" }).Validate();
     }
 
+    [Fact]
+    public void ValidateContentAllowsTheMaximumChangeCount()
+    {
+        var record = Record(new() { ExtractionId = AfterId, Start = 1, Length = 2, Quote = "\U0001F600" });
+        var maximum = Enumerable.Repeat(record.Changes[0], PublishedDocumentChange.MaximumChanges).ToArray();
+
+        PublishedDocumentChange.ValidateContent(record.Before, record.After, record.Citations, maximum, null, null);
+    }
+
+    [Fact]
+    public void ValidateContentRejectsAnEmptyChangeArray()
+    {
+        var record = Record(new() { ExtractionId = AfterId, Start = 1, Length = 2, Quote = "\U0001F600" });
+
+        Assert.Throws<InvalidDataException>(() => PublishedDocumentChange.ValidateContent(
+            record.Before, record.After, record.Citations, [], null, null));
+    }
+
+    [Fact]
+    public void ValidateContentRejectsOneMoreThanTheChangeCountLimit()
+    {
+        var record = Record(new() { ExtractionId = AfterId, Start = 1, Length = 2, Quote = "\U0001F600" });
+        var tooMany = Enumerable.Repeat(record.Changes[0], PublishedDocumentChange.MaximumChanges + 1).ToArray();
+
+        Assert.Throws<InvalidDataException>(() => PublishedDocumentChange.ValidateContent(
+            record.Before, record.After, record.Citations, tooMany, null, null));
+    }
+
+    [Fact]
+    public void ValidateContentAllowsTheMaximumWordEditCountPerChange()
+    {
+        var record = Record(new() { ExtractionId = AfterId, Start = 1, Length = 2, Quote = "\U0001F600" });
+        var edits = Enumerable.Repeat(new PublishedWordEdit { BeforeStart = 0, BeforeLength = 0, AfterStart = 0, AfterLength = 0 },
+            PublishedDocumentChange.MaximumWordEditsPerChange).ToArray();
+
+        PublishedDocumentChange.ValidateContent(record.Before, record.After, record.Citations,
+            [record.Changes[0] with { WordEdits = edits }], null, null);
+    }
+
+    [Fact]
+    public void ValidateContentRejectsOneMoreThanTheWordEditCountLimit()
+    {
+        var record = Record(new() { ExtractionId = AfterId, Start = 1, Length = 2, Quote = "\U0001F600" });
+        var edits = Enumerable.Repeat(new PublishedWordEdit { BeforeStart = 0, BeforeLength = 0, AfterStart = 0, AfterLength = 0 },
+            PublishedDocumentChange.MaximumWordEditsPerChange + 1).ToArray();
+
+        Assert.Throws<InvalidDataException>(() => PublishedDocumentChange.ValidateContent(record.Before, record.After,
+            record.Citations, [record.Changes[0] with { WordEdits = edits }], null, null));
+    }
+
     [Theory]
     [InlineData("before")]
     [InlineData("after")]

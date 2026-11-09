@@ -33,6 +33,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         ["vote_revisions", "vote_revision_facts", "vote_member_list_entries", "vote_revision_issues", "publication_releases", "publication_record_states", "vote_drafts", "vote_member_lists",
          "brief_revisions", "relationship_revisions", "action_revisions", "action_revision_sponsorships", "action_revision_issues", "action_drafts", "published_entries", "zcta_districts", "roster_snapshots", "collection_attempts",
          "brief_revision_paragraphs", "brief_revision_citations", "brief_revision_paragraph_citations", "document_change_revisions",
+         "document_comparisons", "document_comparison_hunks", "document_comparison_word_edits", "document_change_revision_citations",
+         "document_change_revision_issues", "document_change_revision_officials",
          "document_extractions", "statement_revision_quotations",
          "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas", "published_entry_officials",
          "published_bill_histories", "published_bill_history_actions", "release_bill_histories",
@@ -77,7 +79,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
         foreach (var view in new[] { "active_records", "active_release", "votes", "vote_members", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas",
-            "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "statement_speakers", "statements", "statement_sources", "statement_quotations", "executive_actions", "executive_action_notices", "withdrawals", "withdrawal_corrections" })
+            "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "statement_speakers", "statements", "statement_sources", "statement_quotations", "document_changes", "document_change_officials", "document_change_sources", "document_change_hunks", "document_change_word_edits", "document_change_citations",
+            "executive_actions", "executive_action_notices", "withdrawals", "withdrawal_corrections" })
         {
             // Join and aggregate views reject writes before privilege checks. The simple release identity view reaches the missing-grant check.
             var sqlState = view == "active_release" ? "42501" : "55000";
@@ -119,6 +122,12 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"brief_citations v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"brief_paragraphs v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"briefs v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"document_change_citations v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"document_change_hunks v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"document_change_officials v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"document_change_sources v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"document_change_word_edits v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"document_changes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"executive_action_notices v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"executive_actions v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"issue_sponsors v {Owner} {Role}:SELECT {{security_barrier=true}}",
