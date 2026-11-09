@@ -240,15 +240,15 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Equal(["a", "c", "d"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.votes ORDER BY 1"));
         Assert.Equal(["a 2 2", "c 1 2", "d 1 2"], await PublicAsync("SELECT record_id || ' ' || revision_number || ' ' || release_number FROM public_api.votes ORDER BY 1"));
         Assert.Equal(["2"], await PublicAsync("SELECT DISTINCT release_number FROM public_api.active_records"));
-        Assert.Equal(["a", "c"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.vote_members ORDER BY 1"));
-        Assert.Equal(["a", "c"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.member_votes ORDER BY 1"));
+        Assert.Equal(["a", "c", "d"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.vote_members ORDER BY 1"));
+        Assert.Equal(["a", "c", "d"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.member_votes ORDER BY 1"));
         Assert.Equal(["d"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.vote_issues"));
 
         await ExecuteAsync("UPDATE publication_releases SET is_active = false; UPDATE publication_releases SET is_active = true WHERE release_number = 1");
 
         Assert.Equal(["a 1 1", "b 1 1", "d 1 1"], await PublicAsync("SELECT record_id || ' ' || revision_number || ' ' || release_number FROM public_api.votes ORDER BY 1"));
-        Assert.Equal(["a", "b"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.vote_members ORDER BY 1"));
-        Assert.Equal(["a", "b"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.member_votes ORDER BY 1"));
+        Assert.Equal(["a", "b", "d"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.vote_members ORDER BY 1"));
+        Assert.Equal(["a", "b", "d"], await PublicAsync("SELECT DISTINCT record_id FROM public_api.member_votes ORDER BY 1"));
 
         await ExecuteAsync("UPDATE publication_releases SET is_active = false");
         Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.votes"));
@@ -387,9 +387,18 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         [
             $"a Code {PublishedRecordLabels.CodeWording}", $"c Person none", $"d Model {PublishedRecordLabels.ModelWording}"
         ], await PublicAsync("SELECT record_id || ' ' || text_origin || ' ' || coalesce(label, 'none') FROM public_api.votes ORDER BY 1"));
-        Assert.Equal([$"a Code {PublishedRecordLabels.CodeWording}", "c Person none"],
+        Assert.Equal([$"a Code {PublishedRecordLabels.CodeWording}", "c Person none", $"d Model {PublishedRecordLabels.ModelWording}"],
             await PublicAsync("SELECT DISTINCT m.record_id || ' ' || v.text_origin || ' ' || coalesce(m.label, 'none') FROM public_api.member_votes m JOIN public_api.votes v ON v.record_id = m.record_id ORDER BY 1"));
-        Assert.Equal(["0 0 0 0"], await PublicAsync("SELECT yea || ' ' || nay || ' ' || present || ' ' || not_voting FROM public_api.votes WHERE record_id = 'd'"));
+        Assert.Equal(["0 0 0 1"], await PublicAsync("SELECT yea || ' ' || nay || ' ' || present || ' ' || not_voting FROM public_api.votes WHERE record_id = 'd'"));
+    }
+
+    [Fact]
+    public async Task PublishedVoteTotalsNeedNoRawCastGrantBecauseTheImmutableHeaderOwnsTheirCounts()
+    {
+        await InsertActiveVoteAsync("stored", ["Yea", "Nay", "Present"]);
+        await ExecuteAsync("REVOKE SELECT (vote_cast) ON vote_member_list_entries FROM civic_lens_public_owner");
+
+        Assert.Equal(["1 1 1 0"], await PublicAsync("SELECT concat_ws(' ', yea, nay, present, not_voting) FROM public_api.votes WHERE record_id = 'stored'"));
     }
 
     [Fact]
@@ -899,12 +908,18 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             Revision("a", 1, "Person", "1111111111111111111111111111111111111111111111111111111111111111"), Revision("a", 2, "Code", "2222222222222222222222222222222222222222222222222222222222222222"), Revision("b", 1, "Model", "3333333333333333333333333333333333333333333333333333333333333333"),
             Revision("c", 1, "Person", "4444444444444444444444444444444444444444444444444444444444444444"), Revision("d", 1, "Model", "5555555555555555555555555555555555555555555555555555555555555555")
         }) + """
-            INSERT INTO vote_member_lists (list_id, member_count, created_at_utc_ticks) VALUES ('1111111111111111111111111111111111111111111111111111111111111111', 1, 1), ('2222222222222222222222222222222222222222222222222222222222222222', 8, 1), ('3333333333333333333333333333333333333333333333333333333333333333', 1, 1), ('4444444444444444444444444444444444444444444444444444444444444444', 1, 1), ('5555555555555555555555555555555555555555555555555555555555555555', 1, 1);
+            INSERT INTO vote_member_lists (list_id, member_count, yea_count, nay_count, present_count, not_voting_count, other_count, created_at_utc_ticks) VALUES
+              ('1111111111111111111111111111111111111111111111111111111111111111', 1, 1, 0, 0, 0, 0, 1),
+              ('2222222222222222222222222222222222222222222222222222222222222222', 7, 2, 2, 1, 2, 0, 1),
+              ('3333333333333333333333333333333333333333333333333333333333333333', 1, 0, 1, 0, 0, 0, 1),
+              ('4444444444444444444444444444444444444444444444444444444444444444', 1, 0, 0, 1, 0, 0, 1),
+              ('5555555555555555555555555555555555555555555555555555555555555555', 1, 0, 0, 0, 1, 0, 1);
             """ + string.Join('\n', new[]
         {
             Entry("1111111111111111111111111111111111111111111111111111111111111111", 0, "Yea"), Entry("3333333333333333333333333333333333333333333333333333333333333333", 0, "Nay"), Entry("4444444444444444444444444444444444444444444444444444444444444444", 0, "Present"),
             Entry("2222222222222222222222222222222222222222222222222222222222222222", 0, "Yea"), Entry("2222222222222222222222222222222222222222222222222222222222222222", 1, "Aye"), Entry("2222222222222222222222222222222222222222222222222222222222222222", 2, "Nay"), Entry("2222222222222222222222222222222222222222222222222222222222222222", 3, "No"), Entry("2222222222222222222222222222222222222222222222222222222222222222", 4, "Present"),
-            Entry("2222222222222222222222222222222222222222222222222222222222222222", 5, "Not Voting"), Entry("2222222222222222222222222222222222222222222222222222222222222222", 6, "Not Voting")
+            Entry("2222222222222222222222222222222222222222222222222222222222222222", 5, "Not Voting"), Entry("2222222222222222222222222222222222222222222222222222222222222222", 6, "Not Voting"),
+            Entry("5555555555555555555555555555555555555555555555555555555555555555", 0, "Not Voting")
         }) + """
             INSERT INTO vote_revision_issues (record_id, revision_number, issue_id, position, is_tracked) VALUES ('d', 1, 'health', 0, true), ('b', 1, 'tax', 0, false);
             """);
@@ -941,7 +956,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
               VALUES (1, '000001-00000000000000000000000000000001', 'test', 1, 1, true) ON CONFLICT DO NOTHING;
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('vote', '{record}', 1, 1, NULL);
-            INSERT INTO vote_member_lists (list_id, member_count, created_at_utc_ticks) VALUES ('{list}', {casts.Length}, 1);
+            INSERT INTO vote_member_lists (list_id, {VoteMemberListSeed.Columns}, created_at_utc_ticks) VALUES ('{list}', {VoteMemberListSeed.Values(casts)}, 1);
             {Revision(record, 1, "Person", list, question, result)}
             {string.Join('\n', casts.Select((cast, index) => Entry(list, index, cast)))}
             {string.Join('\n', (facts ?? []).Select((text, position) => Fact(record, position, text)).Reverse())}

@@ -5,6 +5,7 @@ using System.Text;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Votes.Persistence;
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -18,8 +19,8 @@ internal static class VoteMemberLists
 
     private const string InsertSql = """
         WITH inserted AS (
-            INSERT INTO vote_member_lists (list_id, member_count, created_at_utc_ticks)
-            VALUES (@list_id, @member_count, @created_at_utc_ticks)
+            INSERT INTO vote_member_lists (list_id, member_count, yea_count, nay_count, present_count, not_voting_count, other_count, created_at_utc_ticks)
+            VALUES (@list_id, @member_count, @yea_count, @nay_count, @present_count, @not_voting_count, @other_count, @created_at_utc_ticks)
             ON CONFLICT DO NOTHING
             RETURNING list_id)
         INSERT INTO vote_member_list_entries (list_id, position, person_id, bioguide_id, vote_cast, citation_extraction_id, citation_start, citation_length)
@@ -45,10 +46,16 @@ internal static class VoteMemberLists
     public static Task EnsureAsync(CollectionAttemptDbContext db, VoteDraftRevision revision, CancellationToken cancellationToken)
     {
         var members = revision.Members;
+        var (yea, nay, present, notVoting, other) = CountCasts(members);
         return db.Database.ExecuteSqlRawAsync(InsertSql,
         [
             new NpgsqlParameter("list_id", IdOf(members)),
             new NpgsqlParameter("member_count", (short)members.Length),
+            new NpgsqlParameter("yea_count", yea),
+            new NpgsqlParameter("nay_count", nay),
+            new NpgsqlParameter("present_count", present),
+            new NpgsqlParameter("not_voting_count", notVoting),
+            new NpgsqlParameter("other_count", other),
             new NpgsqlParameter("created_at_utc_ticks", revision.CreatedAtUtc.UtcTicks),
             new NpgsqlParameter("positions", Enumerable.Range(0, members.Length).Select(position => (short)position).ToArray()),
             new NpgsqlParameter("person_ids", members.Select(member => member.PersonId).ToArray()),
@@ -58,6 +65,26 @@ internal static class VoteMemberLists
             new NpgsqlParameter("starts", members.Select(member => member.Citation.Start).ToArray()),
             new NpgsqlParameter("lengths", members.Select(member => member.Citation.Length).ToArray())
         ], cancellationToken);
+    }
+
+    private static (short Yea, short Nay, short Present, short NotVoting, short Other) CountCasts(ImmutableArray<MemberVote> members)
+    {
+        var yea = 0;
+        var nay = 0;
+        var present = 0;
+        var notVoting = 0;
+        var other = 0;
+        foreach (var member in members)
+        {
+            var side = PublishedOfficialVote.SideOf(member.Cast);
+            if (side == PublishedPartyMajority.Yea) yea++;
+            else if (side == PublishedPartyMajority.Nay) nay++;
+            else if (member.Cast == PublishedOfficialVote.Present) present++;
+            else if (member.Cast == PublishedOfficialVote.NotVoting) notVoting++;
+            else other++;
+        }
+
+        return ((short)yea, (short)nay, (short)present, (short)notVoting, (short)other);
     }
 
     private static string CanonicalLine(MemberVote member) => string.Create(CultureInfo.InvariantCulture,

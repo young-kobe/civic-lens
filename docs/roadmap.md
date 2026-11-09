@@ -36,7 +36,6 @@ Finish routes in this order. Each slice includes the data, source evidence, labe
 
 Data work below is approved and remains part of R-68. Land each dependency before its consuming route.
 
-- [ ] Persist validated Yes, No, Present, Not Voting, and Other totals beside immutable `member_count`, then expose them through the published views. Require their sum to equal the member count. Preserve raw casts and hide standard public totals when Other is nonzero.
 - [ ] Bind published correction history to distinct immutable snapshots. Never read mutable current history as the history of an older release.
 - [ ] Store typed executive Amends and Revokes targets beside their full cited disposition notes. Resolve only exact numbered executive orders and proclamations. Unsupported or ambiguous references remain notes only. Public links target matching records in the active release.
 - [ ] Serve all four chamber and party boards in one response. Reuse pinned party and Congress rules and the existing agreement data.

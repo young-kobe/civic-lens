@@ -381,7 +381,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
             """));
         await ExecuteAsync($"""
             SET session_replication_role = replica;
-            INSERT INTO vote_member_lists (list_id, member_count, created_at_utc_ticks) VALUES ('{list}', {vote.Members.Length}, 1);
+            INSERT INTO vote_member_lists (list_id, {VoteMemberListSeed.Columns}, created_at_utc_ticks) VALUES ('{list}', {VoteMemberListSeed.Values(vote.Members.Select(member => member.Cast))}, 1);
             {entries}
             INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, created_at_utc_ticks, headline, summary, text_origin, source_id, vote_source,
                 chamber, congress, session_number, roll_call_number, candidate_id, candidate_update_utc_ticks, voted_on, voted_on_citation_extraction_id, voted_on_citation_start,

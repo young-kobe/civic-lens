@@ -29,7 +29,7 @@ internal static class VoteRevisionColumnsSeed
 
     public const string Sql = """
         ;
-        INSERT INTO vote_member_lists (list_id, member_count, created_at_utc_ticks) VALUES (@seed_list, @seed_count, 1) ON CONFLICT DO NOTHING;
+        INSERT INTO vote_member_lists (list_id, member_count, yea_count, nay_count, present_count, not_voting_count, other_count, created_at_utc_ticks) VALUES (@seed_list, @seed_count, @seed_yea, @seed_nay, @seed_present, @seed_not_voting, @seed_other, 1) ON CONFLICT DO NOTHING;
         INSERT INTO vote_member_list_entries (list_id, position, person_id, bioguide_id, vote_cast, citation_extraction_id, citation_start, citation_length)
         SELECT @seed_list, entry.position, entry.person_id, entry.bioguide_id, entry.vote_cast, entry.extraction_id, entry.start, entry.length
         FROM unnest(@seed_positions, @seed_persons, @seed_bioguides, @seed_casts, @seed_extractions, @seed_starts, @seed_lengths)
@@ -59,11 +59,17 @@ internal static class VoteRevisionColumnsSeed
     public static (string Name, object Value)[] Parameters(VoteDraftRevision vote)
     {
         var members = vote.Members;
+        var counts = VoteMemberListSeed.Counts(members.Select(member => member.Cast));
         var issueIds = vote.IssueCandidateIds.IsDefault ? vote.TrackedIssueIds : vote.IssueCandidateIds;
         return
         [
             ("seed_list", Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('|', members.Select(member => member.PersonId + member.Cast).Prepend(vote.RecordId + vote.RevisionNumber)))))),
             ("seed_count", (short)members.Length),
+            ("seed_yea", counts.Yea),
+            ("seed_nay", counts.Nay),
+            ("seed_present", counts.Present),
+            ("seed_not_voting", counts.NotVoting),
+            ("seed_other", counts.Other),
             ("seed_positions", Enumerable.Range(0, members.Length).Select(position => (short)position).ToArray()),
             ("seed_persons", members.Select(member => member.PersonId).ToArray()),
             ("seed_bioguides", members.Select(member => member.BioguideId).ToArray()),
