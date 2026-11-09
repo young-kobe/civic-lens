@@ -13,6 +13,8 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
 {
     private const int SenateSeatsPerState = 2;
 
+    private const string IssueOptionsSql = "SELECT issue_id, name FROM public_api.release_issues ORDER BY name, issue_id";
+
     private const string CurrentTerm = "t.start_on <= current_date AND (t.end_on IS NULL OR t.end_on >= current_date)";
 
     private const string DistrictsSql = $"""
@@ -65,12 +67,12 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
 
     /// <summary>Finds the districts of a ZCTA. The lookup names the miss when no release is active, when the release holds no names, or when the ZCTA has no row for the Congress.
     /// One snapshot serves all reads, so the seats, portraits, and figures come from one release.</summary>
-    public Task<ZipLookup> FindAsync(ZipDistrictRequest request, CancellationToken cancellationToken) => FindCoreAsync(request, false, cancellationToken);
+    public Task<ZipLookup> FindAsync(ZipDistrictRequest request, CancellationToken cancellationToken) => FindCoreAsync(request, false, null, cancellationToken);
 
     /// <summary>Finds the district members and their shared votes from one active-release snapshot.</summary>
-    public Task<ZipLookup> FindMembersAsync(ZipDistrictRequest request, CancellationToken cancellationToken) => FindCoreAsync(request, true, cancellationToken);
+    public Task<ZipLookup> FindMembersAsync(ZipDistrictRequest request, string? issue, CancellationToken cancellationToken) => FindCoreAsync(request, true, issue, cancellationToken);
 
-    private async Task<ZipLookup> FindCoreAsync(ZipDistrictRequest request, bool includeSharedVotes, CancellationToken cancellationToken)
+    private async Task<ZipLookup> FindCoreAsync(ZipDistrictRequest request, bool includeSharedVotes, string? issue, CancellationToken cancellationToken)
     {
         await using var connection = await views.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
@@ -97,11 +99,25 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
             districtAnswers,
             [.. stateAnswers.Select(state => state with { Senators = [.. state.Senators.Select(holder => Enrich(holder, figures, partyLines, activityCongressByOfficial, activity))] })]);
         var lookup = ZipLookup.Of(answer);
-        if (!includeSharedVotes || holderIds.Length == 0) return lookup;
-        var sharedVotes = await MemberVoteStore.ReadSharedAsync(connection, transaction, new MemberVoteRequest { Officials = holderIds }, cancellationToken);
+        if (!includeSharedVotes) return lookup;
+        var issueOptions = await ReadIssueOptionsAsync(connection, transaction, cancellationToken);
+        lookup = lookup with { IssueOptions = issueOptions };
+        if (holderIds.Length == 0) return lookup;
+        var sharedVotes = await MemberVoteStore.ReadSharedAsync(connection, transaction,
+            new MemberVoteRequest { Officials = holderIds, Issue = issue }, cancellationToken);
         if (sharedVotes is null || sharedVotes.Release != release)
             throw new InvalidDataException("The ZIP member votes do not match the active release snapshot.");
         return lookup with { SharedVotes = sharedVotes };
+    }
+
+    private static async Task<ZipMemberIssueOption[]> ReadIssueOptionsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(IssueOptionsSql, connection, transaction);
+        var options = new List<ZipMemberIssueOption>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            options.Add(new(reader.GetString(0), reader.GetString(1)));
+        return [.. options];
     }
 
     private static SeatHolder?[] SenateSeats(string state, Dictionary<string, List<SeatHolder>> senators)

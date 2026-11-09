@@ -1,7 +1,16 @@
 @using CivicLens.Publication.Contracts
+@{
+    var compared = Data.Votes.Count(vote => vote.MembersVotedTheSame is not null);
+    var different = Data.Votes.Count(vote => vote.MembersVotedTheSame == false);
+}
 
 <section class="shared-vote-rows" data-chamber="@Data.Chamber.ToString().ToLowerInvariant()">
     <h2>How your @(Data.Chamber == PublishedChamber.Senate ? "senators" : "House members") voted</h2>
+    <p class="shared-vote-caption">Up to 10 recent published votes on passage, amendments, conference reports, veto overrides and nominations.</p>
+    @if (compared > 0)
+    {
+        <p class="shared-vote-caption shared-vote-comparison-caption">The comparison includes @compared @(compared == 1 ? "vote" : "votes") where every listed member cast Yes or No. Their votes differed on @different.</p>
+    }
     <ul class="shared-vote-list" role="list">
         @foreach (var vote in Data.Votes)
         {

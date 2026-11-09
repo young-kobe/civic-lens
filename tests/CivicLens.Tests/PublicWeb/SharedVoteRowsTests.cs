@@ -55,6 +55,9 @@ public sealed class SharedVoteRowsTests
         Assert.Contains("Vote to agree to the motion. Result: Question agreed to", document.QuerySelector(".shared-vote-meta")!.TextContent);
         Assert.Empty(document.QuerySelectorAll(".shared-vote-cast"));
         Assert.DoesNotContain("Not Voting", document.DocumentElement!.TextContent);
+        Assert.Equal("Up to 10 recent published votes on passage, amendments, conference reports, veto overrides and nominations.",
+            document.QuerySelector(".shared-vote-caption")!.TextContent);
+        Assert.Null(document.QuerySelector(".shared-vote-comparison-caption"));
     }
 
     [Fact]
@@ -80,6 +83,8 @@ public sealed class SharedVoteRowsTests
         var document = await RenderAsync(new(PublishedChamber.House, [new("first", "Alex"), new("second", "Sam")], [same, different, noComparison]));
 
         Assert.Equal(["Same vote", "Voted differently"], document.QuerySelectorAll(".shared-vote-comparison").Select(node => node.TextContent));
+        Assert.Equal("The comparison includes 2 votes where every listed member cast Yes or No. Their votes differed on 1.",
+            document.QuerySelector(".shared-vote-comparison-caption")!.TextContent);
         Assert.Empty(document.QuerySelectorAll(".shared-vote-counts"));
         Assert.DoesNotContain("Not Voting", document.DocumentElement!.TextContent);
     }

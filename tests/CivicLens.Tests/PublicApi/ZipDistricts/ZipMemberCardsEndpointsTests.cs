@@ -102,15 +102,50 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task MembersRouteFiltersSharedVotesAndKeepsAllIssueOptionsIncludingZeroVoteIssues()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health <script>& policy', 'Health'), (1, 'zero', 'Zero votes', 'No votes');");
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('a', "2026-05-01") { RecordId = 1.ToString("x64"), Casts = ["Yea"], PersonIds = ["al2"], Issues = ["health"] },
+            new SeededVote('b', "2026-05-02") { RecordId = 2.ToString("x64"), Casts = ["Nay"], PersonIds = ["al2"], Issues = ["other"] });
+
+        var all = await GetDocumentAsync(host, "/v1/zip-districts/36009/members");
+        var allRoot = all.QuerySelector("[data-zip-member-fragment]")!;
+        Assert.Equal("", allRoot.GetAttribute("data-issue"));
+        Assert.Equal(4, all.QuerySelectorAll(".zip-member-card").Length);
+        Assert.Equal(2, all.QuerySelectorAll(".shared-vote-row").Length);
+        var options = all.QuerySelectorAll("[data-member-issue]");
+        Assert.Equal(["", "health", "zero"], options.Select(option => option.GetAttribute("data-member-issue")));
+        Assert.Equal("Health <script>& policy", options[1].TextContent);
+        Assert.Null(options[1].QuerySelector("script"));
+        Assert.Equal("true", options[0].GetAttribute("aria-pressed"));
+
+        var filtered = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?issue=health");
+        Assert.Equal("health", filtered.QuerySelector("[data-zip-member-fragment]")!.GetAttribute("data-issue"));
+        Assert.Equal(4, filtered.QuerySelectorAll(".zip-member-card").Length);
+        Assert.Single(filtered.QuerySelectorAll(".shared-vote-row"));
+        Assert.Equal("true", Assert.Single(filtered.QuerySelectorAll("[data-member-issue=health]")).GetAttribute("aria-pressed"));
+
+        var noMatch = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?issue=unknown");
+        Assert.Equal("unknown", noMatch.QuerySelector("[data-zip-member-fragment]")!.GetAttribute("data-issue"));
+        Assert.Empty(noMatch.QuerySelectorAll(".shared-vote-row"));
+        Assert.Equal("No records match.", noMatch.QuerySelector("[data-member-votes-empty]")!.TextContent.Trim());
+        Assert.Equal("true", Assert.Single(noMatch.QuerySelectorAll("[data-member-issue=unknown]")).GetAttribute("aria-pressed"));
+    }
+
+    [Fact]
     public async Task MembersRouteFollowsTheActiveReleaseAndRollbackRestoresItsNamesAndPortrait()
     {
         await using var host = await StartAsync();
         await AddSplitPartyLineAsync(host.OperationalDatabase, 'c', 1, "al2", "Democrat", 119, "2026-02-01");
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health One', 'Health');");
         var photo = "photos/" + new string('b', 64) + ".jpg";
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE release_officials SET photo_path = '{photo}' WHERE release_number = 1 AND official_id = 'al2';");
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2027, 6, 9, 0, 0, 0, TimeSpan.Zero));
         await ZipSeed.AddRecordAsync(host.OperationalDatabase, 2);
         await ZipSeed.AddNamesAsync(host.OperationalDatabase, 2, new SeededSeat("al2", "Zoe New", Representative, "AL", 2));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (2, 'tax', 'Tax Two', 'Tax');");
         await AddSplitPartyLineAsync(host.OperationalDatabase, 'd', 2, "al2", "Republican", 120, "2027-02-02");
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
 
@@ -119,6 +154,7 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
         Assert.Equal("Alice <script>alert(1)</script> & \"Two\"", original.QuerySelector(".zip-member-card h3 a")!.TextContent);
         Assert.Equal("/" + photo, original.QuerySelector("img[data-portrait-image]")!.GetAttribute("src"));
         Assert.Contains("House Democrats", original.QuerySelector(".zip-member-party-line")!.TextContent);
+        Assert.Equal(["health"], original.QuerySelectorAll("[data-member-issue]").Select(option => option.GetAttribute("data-member-issue")).Where(issue => issue != ""));
 
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2027, 6, 9, 0, 0, 0, TimeSpan.Zero));
         var newer = await GetDocumentAsync(host, "/v1/zip-districts/36009/members");
@@ -126,6 +162,7 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
         Assert.Equal("Zoe New", newer.QuerySelector(".zip-member-card h3 a")!.TextContent);
         Assert.Null(newer.QuerySelector(".zip-member-card img[data-portrait-image]"));
         Assert.Contains("With most House Republicans on 0 of 1 split vote in Congress 120.", newer.QuerySelector(".zip-member-party-line")!.TextContent);
+        Assert.Equal(["tax"], newer.QuerySelectorAll("[data-member-issue]").Select(option => option.GetAttribute("data-member-issue")).Where(issue => issue != ""));
 
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         var restored = await GetDocumentAsync(host, "/v1/zip-districts/36009/members");
@@ -133,6 +170,7 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
         Assert.Equal("Alice <script>alert(1)</script> & \"Two\"", restored.QuerySelector(".zip-member-card h3 a")!.TextContent);
         Assert.Equal("/" + photo, restored.QuerySelector("img[data-portrait-image]")!.GetAttribute("src"));
         Assert.Contains("House Democrats", restored.QuerySelector(".zip-member-party-line")!.TextContent);
+        Assert.Equal(["health"], restored.QuerySelectorAll("[data-member-issue]").Select(option => option.GetAttribute("data-member-issue")).Where(issue => issue != ""));
     }
 
     [Fact]
@@ -144,6 +182,15 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
         await AssertProblemAsync(host, "/v1/zip-districts/36009/members", HttpStatusCode.ServiceUnavailable);
         await ZipSeed.AddNamesAsync(host.OperationalDatabase, 1, new SeededSeat("al2", "Alice Two", Representative, "AL", 2));
         await AssertProblemAsync(host, "/v1/zip-districts/11111/members", HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task MembersRouteRejectsRepeatedAndOversizedIssueFilters()
+    {
+        await using var host = await StartAsync();
+
+        await AssertProblemAsync(host, "/v1/zip-districts/36009/members?issue=health&issue=tax", HttpStatusCode.BadRequest);
+        await AssertProblemAsync(host, "/v1/zip-districts/36009/members?issue=" + new string('x', PublishedRecordEntry.MaximumFilterValueLength + 1), HttpStatusCode.BadRequest);
     }
 
     [Fact]
