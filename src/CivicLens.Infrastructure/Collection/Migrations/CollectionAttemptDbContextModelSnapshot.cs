@@ -8503,6 +8503,26 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("smallint")
                         .HasColumnName("member_count");
 
+                    b.Property<short>("NayCount")
+                        .HasColumnType("smallint")
+                        .HasColumnName("nay_count");
+
+                    b.Property<short>("NotVotingCount")
+                        .HasColumnType("smallint")
+                        .HasColumnName("not_voting_count");
+
+                    b.Property<short>("OtherCount")
+                        .HasColumnType("smallint")
+                        .HasColumnName("other_count");
+
+                    b.Property<short>("PresentCount")
+                        .HasColumnType("smallint")
+                        .HasColumnName("present_count");
+
+                    b.Property<short>("YeaCount")
+                        .HasColumnType("smallint")
+                        .HasColumnName("yea_count");
+
                     b.HasKey("ListId");
 
                     b.ToTable("vote_member_lists", null, t =>
@@ -8512,6 +8532,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_vote_member_lists_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_vote_member_lists_id", "list_id ~ '^[0-9a-f]{64}$'");
+
+                        t.HasCheckConstraint("ck_vote_member_lists_totals", "yea_count >= 0 AND nay_count >= 0 AND present_count >= 0 AND not_voting_count >= 0 AND other_count >= 0 AND (yea_count::integer + nay_count + present_count + not_voting_count + other_count) = member_count");
                         });
                 });
 

@@ -68,7 +68,6 @@ The publication feature turns approved revisions into immutable, cumulative stat
 
 R-68 in the [roadmap](../roadmap.md#active-r-68-redesign) owns the remaining approved extensions and completion gates.
 
-- Persist validated Yes, No, Present, Not Voting, and Other totals beside immutable `member_count`. Their sum equals the member count. Keep raw casts, and return null standard public totals when Other is nonzero. Published views read the stored values rather than reconstructing them for every page request.
 - Bind each release's correction history to a distinct immutable snapshot. Later corrections cannot change the history returned for an older release.
 
 ## Invariants

@@ -319,7 +319,10 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
             INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
               VALUES (1, '000001-00000000000000000000000000000001', 'test', 1, 1, true);
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('vote', '{Vote1}', 1, 2, NULL);
-            INSERT INTO vote_member_lists (list_id, member_count, created_at_utc_ticks) VALUES ('{Vote1}', 1, 1);
+            INSERT INTO vote_member_lists (list_id, {VoteMemberListSeed.Columns}, created_at_utc_ticks)
+              VALUES ('{Vote1}', {VoteMemberListSeed.Values(["Not Voting"])}, 1);
+            INSERT INTO vote_member_list_entries (list_id, "position", person_id, bioguide_id, vote_cast, citation_extraction_id, citation_start, citation_length)
+              VALUES ('{Vote1}', 0, 'member', 'B000001', 'Not Voting', 'ext', 0, 1);
             INSERT INTO vote_revisions (record_id, revision_number, author_subject, author_kind, created_at_utc_ticks, headline, summary, text_origin, source_id, vote_source,
                 chamber, congress, session_number, roll_call_number, candidate_id, candidate_update_utc_ticks, voted_on, voted_on_citation_extraction_id,
                 voted_on_citation_start, voted_on_citation_length, kind, member_list_id, issue_revision_id, issue_candidates_recorded, result)

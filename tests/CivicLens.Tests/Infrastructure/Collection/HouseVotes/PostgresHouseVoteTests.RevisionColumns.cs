@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json.Nodes;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Documents;
@@ -82,6 +83,28 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_member_lists"));
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_member_list_entries"));
         Assert.Equal(1L, await ScalarAsync("SELECT count(DISTINCT member_list_id) FROM vote_revisions"));
+        Assert.Equal("1|0|0|0|0", await ScalarAsync("SELECT yea_count || '|' || nay_count || '|' || present_count || '|' || not_voting_count || '|' || other_count FROM vote_member_lists"));
+    }
+
+    [Fact]
+    public async Task AStoredMemberListCountsAliasesAndOtherCastsWithoutChangingRawCasts()
+    {
+        var candidate = await PendingCandidateAsync();
+        var basis = await RevisionAsync(candidate, 1);
+        var casts = new[] { "Yea", "Aye", "Nay", "No", "Present", "Not Voting", "Excused", "Jeffries" };
+        var members = casts.Select((cast, index) => basis.Members[0] with
+        {
+            PersonId = $"person-{index}",
+            BioguideId = $"X{index:000000}",
+            Cast = cast
+        }).ToImmutableArray();
+        var revision = basis with { Members = members };
+
+        await SettleAsync(candidate, revision);
+
+        Assert.Equal((short)8, await ScalarAsync("SELECT member_count FROM vote_member_lists"));
+        Assert.Equal("2|2|1|1|2", await ScalarAsync("SELECT yea_count || '|' || nay_count || '|' || present_count || '|' || not_voting_count || '|' || other_count FROM vote_member_lists"));
+        Assert.Equal(casts, await LinesAsync("SELECT vote_cast FROM vote_member_list_entries ORDER BY position"));
     }
 
     [Fact]
@@ -166,7 +189,9 @@ public sealed partial class PostgresHouseVoteTests
     [InlineData("vote_revisions", "candidate_update_utc_ticks = -1", "ck_vote_revisions_candidate_update_utc_ticks")]
     [InlineData("vote_revisions", "chamber = 'Other'", "ck_vote_revisions_chamber")]
     [InlineData("vote_revisions", "chamber = 'Senate', vote_source = 'Bogus'", "ck_vote_revisions_vote_source")]
-    [InlineData("vote_member_lists", "member_count = 601", "ck_vote_member_lists_count")]
+    [InlineData("vote_member_lists", "member_count = 601, yea_count = 601, nay_count = 0, present_count = 0, not_voting_count = 0, other_count = 0", "ck_vote_member_lists_count")]
+    [InlineData("vote_member_lists", "other_count = -1", "ck_vote_member_lists_totals")]
+    [InlineData("vote_member_lists", "other_count = other_count + 1", "ck_vote_member_lists_totals")]
     [InlineData("vote_member_lists", "list_id = 'xyz'", "ck_vote_member_lists_id")]
     [InlineData("vote_member_lists", "created_at_utc_ticks = -1", "ck_vote_member_lists_created_at_utc_ticks")]
     [InlineData("vote_member_list_entries", "position = -1", "ck_vote_member_list_entries_position")]

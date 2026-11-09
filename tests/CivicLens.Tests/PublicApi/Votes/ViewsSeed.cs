@@ -1,4 +1,5 @@
 using System.Globalization;
+using CivicLens.Tests.Fixtures;
 using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Votes;
@@ -42,14 +43,20 @@ internal static class ViewsSeed
         ON CONFLICT (release_number) DO UPDATE SET is_active = true;
         """);
 
-    public static async Task AddVotesAsync(string database, params SeededVote[] votes)
+    public static Task AddVotesAsync(string database, params SeededVote[] votes) => AddVotesAsync(database, false, votes);
+
+    public static Task AddVotesBeforeMemberTotalsAsync(string database, params SeededVote[] votes) => AddVotesAsync(database, true, votes);
+
+    private static async Task AddVotesAsync(string database, bool beforeMemberTotals, SeededVote[] votes)
     {
-        foreach (var vote in votes) await ExecuteAsync(database, Insert(vote));
+        foreach (var vote in votes) await ExecuteAsync(database, Insert(vote, beforeMemberTotals));
     }
 
-    private static string Insert(SeededVote vote)
+    private static string Insert(SeededVote vote, bool beforeMemberTotals)
     {
         var list = vote.RecordId;
+        var headerColumns = beforeMemberTotals ? "member_count" : VoteMemberListSeed.Columns;
+        var headerValues = beforeMemberTotals ? vote.Casts.Length.ToString(CultureInfo.InvariantCulture) : VoteMemberListSeed.Values(vote.Casts);
         var source = vote.Chamber == "House" ? "CongressGov" : "Voteview";
         var bill = vote.BillType is null ? "NULL, NULL" : $"'{vote.BillType}', {vote.BillNumber}";
         var last = vote.LastRelease?.ToString(CultureInfo.InvariantCulture) ?? "NULL";
@@ -57,7 +64,7 @@ internal static class ViewsSeed
             SET session_replication_role = replica;
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
               VALUES ('vote', '{vote.RecordId}', {vote.FirstRelease}, {vote.ActiveRevision}, {last});
-            INSERT INTO vote_member_lists (list_id, member_count, created_at_utc_ticks) VALUES ('{list}', {vote.Casts.Length}, 1);
+            INSERT INTO vote_member_lists (list_id, {headerColumns}, created_at_utc_ticks) VALUES ('{list}', {headerValues}, 1);
             {string.Join('\n', Enumerable.Range(1, vote.ActiveRevision).Select(revision => Revision(vote, revision, list, source, bill)))}
             {string.Join('\n', vote.Casts.Select((cast, index) => $"""
                 INSERT INTO vote_member_list_entries (list_id, "position", person_id, bioguide_id, vote_cast, citation_extraction_id, citation_start, citation_length)
