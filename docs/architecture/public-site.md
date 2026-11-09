@@ -164,10 +164,10 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Who backed it | Bill | Is it bipartisan? | `bill_sponsorships`, `release_official_terms.party` | Partial. Planned: party split |
 | Votes on this bill | Bill | How did Congress vote? | `votes.bill_record_id` | Planned: route and UI; vote-to-bill data is available |
 | Executive action page | Executive action, President | What does this document do? | `executive_actions`, `executive_action_notices`, `executive_action_links` | Planned: route and UI; action and notice data are served, links remain pending |
-| Statement page, quotations | Statement | What exactly was said? | `statements`, `statement_speakers`, `statement_quotations` | Statement lists and speakers are served by the API. Quotations and the reader page remain planned |
+| Statement page, quotations | Statement | What exactly was said? | `statements`, `statement_speakers`, `statement_quotations` | The API serves statement details with bounded source text, checked quotations, and citations. The reader page remains planned |
 | Document change page | Document change | What changed on this page? | `document_changes` | Planned: views needed |
 | Issue page | Issue | What is there on this issue? | `release_issues`, `issue_votes`, `issue_sponsors` | Partial. Issue counts and sponsor data are available through the API. Planned: page and party line-up |
-| Party boards | Boards | Who breaks from their party most? | `official_party_lines`, `party_agreement` | Planned: views needed |
+| Party boards | Boards | Who breaks from their party most? | `official_party_lines`, `party_agreement` | Agreement data and API endpoint are implemented. Board endpoints and pages remain planned |
 | List pages for votes, bills, executive actions, statements | Lists | Show me all of one kind | Per-kind views | Planned: R-68 list step |
 | Record row, status badge | All lists | What is this record? | Per-kind views | Implemented. Planned: event-named date, one bill number format |
 | Search results | Search | Find a person, bill, or vote | Search service | Partial. Planned: ranking and snippets |
@@ -176,7 +176,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 
 ## Storage and contracts
 
-The public read API and the gated SSR home read `public_api` views. Implemented data covers votes, bills, officials, attendance, party-line figures, ZIP districts, issues, related records, executive actions, and briefs. It includes bill status and action history, public-law numbers, vote-to-bill links, relationship reasons, executive action notices, and brief paragraphs and citations. Most public pages still read static releases. [Publication](publication.md#public-api-views) owns the view rules and column reference.
+The public read API and the gated SSR home read `public_api` views. Implemented data covers votes, bills, officials, attendance, party-line figures, ZIP districts, issues, related records, executive actions, and briefs. It includes bill status and action history, public-law numbers, vote-to-bill links, relationship reasons, executive action notices, and brief paragraphs and citations. The `public_api.active_release` view supplies release identity even when the active release has no records. Most public pages still read static releases. [Publication](publication.md#public-api-views) owns the view rules and column reference.
 
 `public_api.bills` exposes the bill summary, its text-origin label, and the cited bill-text summary metadata (`why_it_matters`, version name and date, and characters read and total). The view can serve these fields; the bill-text model setting is off by default, and activation awaits sample approval. See [Publication](publication.md#public-api-views) for the view contract.
 
@@ -186,12 +186,11 @@ The views expose the stored member party and vote alignment, normalized member-v
 
 Remaining planned view columns and views, in the order that R-68 builds them:
 
-- Party lines: `party_agreement` and the board endpoints. The official party-line view is implemented.
+- Party lines: the board endpoints. `party_agreement` and the official party-line view are implemented.
 - Votes: a second AI text column for "what this vote decides".
 - Bills: `bill_key_terms`. The cited CRS body and version are implemented.
 - Issues: party line-up data.
 - Executive actions: `executive_action_links` and the summary columns.
-- Statements: the detail endpoint. Statement lists, speakers, source evidence, and quotation views are implemented.
 - Other kinds: `document_changes` with a changed-region child view and `record_corrections`; withdrawal notices now have a typed public read API.
 
 Each AI text column carries its text origin and its label. The roadmap steps under [R-68](../roadmap.md#later) name each view.
