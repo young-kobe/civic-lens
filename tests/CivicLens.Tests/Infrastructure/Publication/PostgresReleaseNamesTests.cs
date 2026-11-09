@@ -42,6 +42,7 @@ public sealed class PostgresReleaseNamesTests(PostgresCollection postgres) : IAs
                 FROM release_official_terms ORDER BY "position"
                 """));
         Assert.Equal(["1|housing|Housing costs|Rent and home prices."], await ReadAsync("SELECT release_number || '|' || issue_id || '|' || name || '|' || definition FROM release_issues"));
+        Assert.Equal(["0|0"], await ReadAsync("SELECT substantive_votes || '|' || bills FROM release_issues WHERE release_number = 1"));
         Assert.Equal(["0 Rent caps", "1 Eviction rules"], await ReadAsync("""SELECT "position" || ' ' || text FROM release_issue_includes ORDER BY "position" """));
         Assert.Equal(["0 Zoning votes"], await ReadAsync("""SELECT "position" || ' ' || text FROM release_issue_excludes"""));
         Assert.Equal(["1|land-use|Land use"], await ReadAsync("SELECT release_number || '|' || policy_area_id || '|' || name FROM release_policy_areas"));
@@ -58,6 +59,7 @@ public sealed class PostgresReleaseNamesTests(PostgresCollection postgres) : IAs
         Assert.Equal(before, await ReadReleaseAsync(1));
         Assert.Contains("2|mayor|Mayor Renamed", (await ReadReleaseAsync(2)).Single(row => row.StartsWith("official ", StringComparison.Ordinal)));
         Assert.Equal(["1 Old definition.", "2 New definition."], await ReadAsync("SELECT release_number || ' ' || definition FROM release_issues ORDER BY release_number"));
+        Assert.Equal(["1:0:0", "2:0:0"], await ReadAsync("SELECT release_number || ':' || substantive_votes || ':' || bills FROM release_issues ORDER BY release_number"));
     }
 
     [Fact]
@@ -75,6 +77,27 @@ public sealed class PostgresReleaseNamesTests(PostgresCollection postgres) : IAs
         await Assert.ThrowsAsync<PublicationConflictException>(() =>
             publications.CommitAsync("auth0|owner", refused, "key-refused", new string('0', 64), default));
 
+        Assert.Empty(await ReadAsync("SELECT release_number::text FROM release_issues"));
+        Assert.Empty(await ReadAsync("SELECT release_number::text FROM release_officials"));
+    }
+
+    [Fact]
+    public async Task ACountSnapshotFailureRollsBackTheReleaseAndItsNameRows()
+    {
+        await ExecuteAsync("""
+            CREATE FUNCTION fail_home_issue_count_write() RETURNS trigger LANGUAGE plpgsql AS $function$
+            BEGIN
+                RAISE EXCEPTION 'forced issue count write failure';
+            END;
+            $function$;
+            CREATE TRIGGER fail_home_issue_count_write BEFORE UPDATE OF count_congress ON release_issues
+                FOR EACH ROW EXECUTE FUNCTION fail_home_issue_count_write();
+            """);
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => CommitAsync(1, null, Names("Definition.", [], [])));
+
+        Assert.Equal("P0001", failure.SqlState);
+        Assert.Empty(await ReadAsync("SELECT release_number::text FROM publication_releases"));
         Assert.Empty(await ReadAsync("SELECT release_number::text FROM release_issues"));
         Assert.Empty(await ReadAsync("SELECT release_number::text FROM release_officials"));
     }
@@ -123,5 +146,13 @@ public sealed class PostgresReleaseNamesTests(PostgresCollection postgres) : IAs
         var rows = new List<string>();
         while (await reader.ReadAsync()) rows.Add(Convert.ToString(reader.GetValue(0))!);
         return [.. rows];
+    }
+
+    private async Task ExecuteAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
     }
 }

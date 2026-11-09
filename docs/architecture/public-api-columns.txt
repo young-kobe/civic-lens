@@ -178,8 +178,11 @@ release_official_terms caucus
 release_official_terms start_on
 release_official_terms end_on
 release_issues release_number
+release_issues substantive_votes
 release_issues issue_id
 release_issues name
+release_issues bills
+release_issues count_congress
 release_issues definition
 release_issue_includes release_number
 release_issue_includes issue_id
