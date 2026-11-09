@@ -258,7 +258,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
             INSERT INTO release_issues (release_number, issue_id, name, definition, count_congress, substantive_votes, bills)
             VALUES (1, 'health', 'Health before', 'Health policy', 119, 1, 0),
-                   (2, 'health', 'Health after', 'Health policy', 119, 1, 0);
+                   (2, 'health', 'Health after', 'Health policy', 119, 2, 0);
             CREATE FUNCTION wait_for_home_issues() RETURNS boolean LANGUAGE plpgsql
                 SECURITY DEFINER SET search_path = pg_catalog AS $function$
             BEGIN
