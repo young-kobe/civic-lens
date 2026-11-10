@@ -3,6 +3,8 @@ using CivicLens.Infrastructure.Actions;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace CivicLens.Infrastructure.Publication;
 
@@ -161,7 +163,7 @@ internal static class ReleaseBillCounts
             throw new BillCountRefusedException($"Release {releaseNumber} contains a selected vote revision that is not stored.");
 
         await db.Database.ExecuteSqlRawAsync(ExpectedMembersSql, [releaseNumber], cancellationToken);
-        await db.Database.ExecuteSqlRawAsync(ExpectedTotalsSql, [releaseNumber, (object?)releaseCongress ?? DBNull.Value], cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(ExpectedTotalsSql, [releaseNumber, CongressParameter(releaseCongress)], cancellationToken);
         var existing = await db.Database.SqlQueryRaw<bool>(ExistingSql, releaseNumber).SingleAsync(cancellationToken);
         if (existing)
         {
@@ -182,11 +184,14 @@ internal static class ReleaseBillCounts
     public static async Task<BillCountStatus> VerifyAsync(CollectionAttemptDbContext db, int releaseNumber, int? releaseCongress,
         CancellationToken cancellationToken)
     {
-        var row = await db.Database.SqlQueryRaw<VerificationRow>(VerifyReadOnlySql, releaseNumber, (object?)releaseCongress ?? DBNull.Value)
+        var row = await db.Database.SqlQueryRaw<VerificationRow>(VerifyReadOnlySql, releaseNumber, CongressParameter(releaseCongress))
             .SingleAsync(cancellationToken);
         if (!row.HasRows) return BillCountStatus.MissingRows;
         return row.Matches ? BillCountStatus.Verified : BillCountStatus.DifferentRows;
     }
+
+    private static NpgsqlParameter CongressParameter(int? congress) =>
+        new("congress", NpgsqlDbType.Integer) { Value = (object?)congress ?? DBNull.Value };
 
     private sealed class VerificationRow
     {
