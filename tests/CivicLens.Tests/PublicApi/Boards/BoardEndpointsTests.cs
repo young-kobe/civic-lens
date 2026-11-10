@@ -24,7 +24,8 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
             Vote('2', "Senate", 119, 1, ["p2", "p4"], ["Yea", "Yea"], "PartiesAgree"),
             Vote('3', "Senate", 118, 1, ["p3", "p5"], ["Yea", "Nay"], "Split")
         }.Concat(Enumerable.Range(0, 25).Select(index => Vote((char)('A' + index), "Senate", 119, index + 2,
-            ["p2", "p4"], ["Yea", "Nay"], "Split") with { RecordId = (index + 4).ToString("x64") }))).ToArray();
+            ["p2", "p4"], ["Yea", "Nay"], "Split") with
+        { RecordId = (index + 4).ToString("x64") }))).ToArray();
         await using var host = await StartAsync(allVotes);
 
         using var answer = await GetAsync(host);
