@@ -315,7 +315,7 @@ table[data-paged]:focus { outline: none; }
 .public-breadcrumbs { margin: var(--s3) var(--frame-pad) 0; color: var(--muted); font-size: var(--t-sm); }
 .public-breadcrumbs ol { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1); margin: 0; padding: 0; list-style: none; }
 .public-breadcrumbs li { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--s1); min-height: 24px; overflow-wrap: anywhere; }
-.public-breadcrumbs a { display: inline-flex; align-items: center; min-height: 24px; color: var(--ink); text-underline-offset: 0.16em; }
+.public-breadcrumbs a { display: inline-flex; align-items: center; min-height: 24px; color: var(--muted); text-underline-offset: 0.16em; }
 .public-breadcrumb-separator { color: var(--muted); }
 .public-footer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) 28px; padding: var(--s6) var(--frame-pad); background: var(--raised); color: var(--ink); font-size: var(--t-base); }
 .public-footer-name { font-weight: 700; }

@@ -87,13 +87,52 @@ public sealed class PublicNavigationTests
         Assert.Null(current.GetAttribute("href"));
     }
 
-    private static Task<IDocument> RenderAsync() => RenderAsync<PublicPage>(new Dictionary<string, object?>
+    [Fact]
+    public async Task AnInnerPageTrailRunsFromHomeThroughItsSectionToItsOwnTitleAndHomeHasNone()
     {
-        [nameof(PublicPage.Title)] = "Test",
+        var inner = await RenderAsync(section: PublicSection.Officials, title: "Ayanna Pressley");
+        var trail = Assert.Single(inner.QuerySelectorAll("main nav[aria-label=Breadcrumb]"));
+        var links = trail.QuerySelectorAll("a");
+
+        Assert.Equal([Root + PublicationProtocol.HomePath, Root + PublicationProtocol.OfficialsPagePath], links.Select(link => link.GetAttribute("href")));
+        Assert.Equal(["Home", "Officials"], links.Select(link => link.TextContent));
+        Assert.Equal("Ayanna Pressley", Assert.Single(trail.QuerySelectorAll("[aria-current=page]")).TextContent);
+
+        var sectionPage = await RenderAsync(section: PublicSection.Officials, title: "Officials");
+        Assert.Equal(["Home"], sectionPage.QuerySelectorAll("main nav[aria-label=Breadcrumb] a").Select(link => link.TextContent));
+
+        var home = await RenderAsync(section: null, title: "Civic Lens", isHome: true);
+        Assert.Empty(home.QuerySelectorAll("nav[aria-label=Breadcrumb]"));
+    }
+
+    [Fact]
+    public async Task TheFooterReportLinkNamesTheRecordAndBindsItsExactRevisionAndOtherPagesKeepTheGeneralLink()
+    {
+        const string title = "House <b>roll</b> call 308";
+        var record = new ReportedRecord("rec-1", 3, PublishedRecordKind.Vote, title);
+        var page = await RenderAsync(section: PublicSection.AllRecords, title: "Vote", record: record);
+        var link = Assert.Single(page.QuerySelectorAll("footer a[href*='report.html']"));
+
+        Assert.Equal(Root + PublicationProtocol.ReportPageLink("rec-1", 3, title), link.GetAttribute("href"));
+        Assert.Equal("Report a problem with this vote", link.FirstChild!.TextContent);
+        Assert.Equal(": " + title, link.QuerySelector(".visually-hidden")!.TextContent);
+        Assert.Empty(link.QuerySelectorAll("b"));
+
+        var general = await RenderAsync(section: null, title: "About");
+        var generalLink = Assert.Single(general.QuerySelectorAll("footer a[href*='report.html']"));
+        Assert.Equal("Report a problem", generalLink.TextContent);
+        Assert.Equal(Root + PublicationProtocol.ReportPagePath, generalLink.GetAttribute("href"));
+    }
+
+    private static Task<IDocument> RenderAsync(PublicSection? section = PublicSection.Officials, string title = "Test", bool isHome = false, ReportedRecord? record = null) => RenderAsync<PublicPage>(new Dictionary<string, object?>
+    {
+        [nameof(PublicPage.Title)] = title,
         [nameof(PublicPage.Description)] = "Test page",
         [nameof(PublicPage.CanonicalPath)] = null,
         [nameof(PublicPage.RootPath)] = Root,
-        [nameof(PublicPage.Section)] = PublicSection.Officials
+        [nameof(PublicPage.Section)] = section,
+        [nameof(PublicPage.IsHome)] = isHome,
+        [nameof(PublicPage.Record)] = record
     });
 
     private static async Task<IDocument> RenderAsync<TComponent>(Dictionary<string, object?> parameters) where TComponent : IComponent

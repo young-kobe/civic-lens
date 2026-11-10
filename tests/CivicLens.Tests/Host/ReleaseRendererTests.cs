@@ -207,6 +207,30 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task TheFooterReportLinkOfEachRecordKindNamesItsKindAndTitleAndSharesTheBodyLinkTarget()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var record = Record();
+        var vote = Vote();
+
+        var pages = new[]
+        {
+            ("Report a problem with this document change", record.Headline, await renderer.RenderRecordAsync(record, PublicationCatalogs.None, CancellationToken.None)),
+            ("Report a problem with this vote", vote.Headline, await renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None))
+        };
+
+        foreach (var (text, headline, html) in pages)
+        {
+            var document = new HtmlParser().ParseDocument(html);
+            var footer = Assert.Single(document.QuerySelectorAll("footer a[href^='../report.html']"));
+            var body = Assert.Single(document.QuerySelectorAll("main a[href^='../report.html']"));
+            Assert.Equal(body.GetAttribute("href"), footer.GetAttribute("href"));
+            Assert.Equal(text, footer.FirstChild!.TextContent);
+            Assert.Equal(": " + headline, footer.QuerySelector(".visually-hidden")!.TextContent);
+        }
+    }
+
+    [Fact]
     public async Task ARecordPageOffersTheReportLinkOnceBelowTheRecordSoTheTopOfThePageHoldsTheRecord()
     {
         var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);

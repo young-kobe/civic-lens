@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="Section" Title="@Headline" Description="@(string.IsNullOrWhiteSpace(Summary) ? Headline : Summary)" CanonicalPath="@PublicationProtocol.RecordPagePath(RecordId)" IsArticle="true" RootPath="../">
+<PublicPage Section="Section" Title="@Headline" Description="@(string.IsNullOrWhiteSpace(Summary) ? Headline : Summary)" CanonicalPath="@PublicationProtocol.RecordPagePath(RecordId)" IsArticle="true" RootPath="../" Record="record">
     <RecordView HeadingLevel="1" Headline="@Headline" Summary="@Summary" Significance="@Significance"
                 Limits="@Limits" Facts="Facts" />
     <PublishedCorrectionList Corrections="Corrections" />
@@ -10,9 +10,12 @@
 </PublicPage>
 
 @code {
-    private RenderFragment ReportLink => @<p class="muted small"><a href="@("../" + PublicationProtocol.ReportPageLink(RecordId, RevisionNumber, Headline))">@PublishedRecordLabels.ReportRecordLink</a></p>;
+    private ReportedRecord record = default!;
+
+    private RenderFragment ReportLink => @<p class="muted small"><a href="@("../" + record.ReportPath)">@PublishedRecordLabels.ReportRecordLink</a></p>;
 
     [Parameter] public PublicSection? Section { get; set; } = PublicSection.AllRecords;
+    [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
     [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;
     [Parameter, EditorRequired] public int RevisionNumber { get; set; }
     [Parameter, EditorRequired] public string Headline { get; set; } = string.Empty;
@@ -23,4 +26,6 @@
     [Parameter, EditorRequired] public string Caveat { get; set; } = string.Empty;
     [Parameter] public PublishedCorrection[] Corrections { get; set; } = [];
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override void OnParametersSet() => record = new ReportedRecord(RecordId, RevisionNumber, Kind, Headline);
 }

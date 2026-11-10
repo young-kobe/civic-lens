@@ -130,6 +130,8 @@ public static class PublishedRecordLabels
 
     public const string ReportRecordLink = "Report a problem with this record";
 
+    public static string ReportKindLink(PublishedRecordKind kind) => $"Report a problem with this {Kind(kind).ToLowerInvariant()}";
+
     public const string ContactEmail = "contact@civic-lens.info";
 
     public const string Voteview = "Voteview, an academic database at UCLA";
