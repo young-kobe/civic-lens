@@ -19,6 +19,43 @@ public sealed class PublishedVoteTests
     }
 
     [Fact]
+    public void EvidenceValidatorAcceptsASourceCitedOnlyByAMember()
+    {
+        var vote = Vote();
+        const string memberOnlyText = "Member: C000001, Pat Example, I, ZZ, Present\n";
+        var memberOnlySource = Source(new string('3', 64), "https://example.gov/members", memberOnlyText);
+        var memberCitation = Cite(memberOnlySource.ExtractionId, memberOnlyText, "Member: C000001, Pat Example, I, ZZ, Present");
+
+        PublishedVote.ValidateEvidence(
+            [vote.Sources[0], memberOnlySource], vote.VotedOn, vote.Kind, vote.KindCitation,
+            vote.VotedOnCitation, vote.Facts, [memberCitation]);
+    }
+
+    [Fact]
+    public void EvidenceValidatorRejectsMalformedFactsCitationsAndMissingKindOrMemberCitations()
+    {
+        var vote = Vote();
+        const string astralText = "Result: \U0001D11E";
+        var astralSource = Source(new string('3', 64), "https://example.gov/astral", astralText);
+        var splitPair = new PublishedCitation
+        {
+            ExtractionId = astralSource.ExtractionId,
+            Start = "Result: ".Length + 1,
+            Length = 1,
+            Quote = "\uDD1E"
+        };
+
+        Assert.Throws<InvalidDataException>(() => PublishedVote.ValidateEvidence(vote.Sources, vote.VotedOn, vote.Kind,
+            vote.KindCitation, vote.VotedOnCitation, [vote.Facts[0] with { Text = "incorrect" }], vote.Members.Select(member => member.Citation).ToArray()));
+        Assert.Throws<InvalidDataException>(() => PublishedVote.ValidateEvidence([.. vote.Sources, astralSource], vote.VotedOn, vote.Kind,
+            vote.KindCitation, vote.VotedOnCitation, vote.Facts, [.. vote.Members.Select(member => member.Citation), splitPair]));
+        Assert.Throws<InvalidDataException>(() => PublishedVote.ValidateEvidence(vote.Sources, vote.VotedOn, vote.Kind,
+            null, vote.VotedOnCitation, vote.Facts, vote.Members.Select(member => member.Citation).ToArray()));
+        Assert.Throws<InvalidDataException>(() => PublishedVote.ValidateEvidence(vote.Sources, vote.VotedOn, vote.Kind,
+            vote.KindCitation, vote.VotedOnCitation, vote.Facts, [.. vote.Members.Select(member => member.Citation), vote.Members[0].Citation with { ExtractionId = new string('9', 64) }]));
+    }
+
+    [Fact]
     public void TheEntryNamesNoOfficialUntilAnOfficialPageOrSearchServiceIndexesVotesAndDatesTheVoteByItsDay()
     {
         var entry = Vote().ToEntry();
@@ -210,9 +247,11 @@ public sealed class PublishedVoteTests
     {
         var vote = Vote();
         var cast = new string('y', PublishedVote.MaximumCastLength + 1);
-        var member = vote.Members[0] with { Cast = cast, Citation = vote.Members[0].Citation with { Quote = "Member: A000055, Robert Aderholt, R, AL, " + cast } };
+        var quote = "Member: A000055, Robert Aderholt, R, AL, " + cast;
+        var source = vote.Sources[1] with { Text = MembersText + quote + "\n" };
+        var member = vote.Members[0] with { Cast = cast, Citation = Cite(source.ExtractionId, source.Text, quote) };
 
-        var error = Assert.Throws<InvalidDataException>((vote with { Members = [member, vote.Members[1]] }).Validate);
+        var error = Assert.Throws<InvalidDataException>((vote with { Sources = [vote.Sources[0], source], Members = [member, vote.Members[1]] }).Validate);
 
         Assert.Contains($"at most {PublishedVote.MaximumCastLength} characters", error.Message, StringComparison.Ordinal);
     }
