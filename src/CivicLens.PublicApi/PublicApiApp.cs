@@ -73,7 +73,10 @@ public static class PublicApiApp
         if (options.PublicBaseUrl is { } baseUrl)
         {
             builder.Services.AddSingleton(baseUrl);
-            builder.Services.AddSingleton(new MembersStripSlot());
+            builder.Services.AddSingleton(provider => new MembersStripSlot
+            {
+                BrowserApiRoot = provider.GetRequiredService<HomePageReader>().BrowserApiRoot
+            });
             builder.Services.AddSingleton(new PageCache(buildId!, baseUrl, options.BrowserApiUrl));
             builder.Services.AddSingleton<ServerPageResponder>();
         }

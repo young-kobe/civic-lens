@@ -54,7 +54,10 @@ Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 pa
 - Each chamber retains the full selection caption: "Up to 10 recent published votes on passage, amendments, conference reports, veto overrides and nominations."
 - The comparison caption is "The comparison includes {compared} votes where every listed member cast Yes or No. Their votes differed on {different}." Use the singular "vote" for one. Compare counts this full selection before showing differing rows only.
 - The Compare vote heading is "Votes where your members differed". Its empty state is "No differing votes in this selection."
-- A planned return-visit indicator shows member votes published since a release marker saved on this device. Keep the release marker local.
+- The shared members strip uses the existing private members endpoint with `view=strip`. It reuses the current ZIP roster snapshot without reading detailed figures or recent vote lists. Full Home and Compare responses carry its template, avoiding a second lookup.
+- Return updates count each currently published vote once when it involves a current ZIP member and was first published after the device's saved release. Edits and republication do not count again. The count covers all roll-call kinds beyond the recent vote selection.
+- The local marker advances only after a successful unfiltered Home or Compare member lookup. Strip reads and issue filters do not clear updates. The first lookup has no notice. Changing or forgetting the ZIP resets its marker. A response checks the saved ZIP and marker against its starting state before rendering or saving.
+- The approved notice is "{count} newly published votes since your last member lookup." Use the singular "vote" for one. Show it only for a positive count.
 
 ### Reader-flow decisions
 
@@ -113,7 +116,9 @@ These decisions come from the component audit. The owner accepted every recommen
 - Home freshness uses the newest published roll call of each chamber, including procedural votes, and omits a chamber with no published roll calls. Enforcer: `HomeStore` aggregates `public_api.votes` in its highlights statement. Tests: `HomeEndpointsTests.FreshnessUsesNewestPublishedRollCallEvenWhenItIsNotSubstantiveAndOmitsAnEmptyChamber`, `HomeEndpointsTests.NoActiveReleaseHasNoHomeAnswerOrFreshnessDates`, and `HomePageTests.FreshnessOmitsAChamberWithoutPublishedRollCalls`.
 - Home issue and executive rows use the mapped counts and record facts, with shared link, enum label, Congress ordinal, and date format owners. Enforcer: `HomePage`. Test: `HomePageTests.IssuesExecutiveGroupsAndFreshnessRenderTheirScopedPublishedFacts`.
 - The ZIP lookup restores its controls after the current request, including a malformed success response. An older response cannot replace a newer result. Filter failures retain the previous successful fragment. A returned issue must match the requested issue. Enforcer: `initZipLookup`. No committed browser test.
-- The current member lookup remembers only a validated five-digit ZIP after its answer renders. It stores no member details; the home page re-queries published current data. A client-local release marker is planned for return-visit updates. Enforcer of current behavior: `initRememberedMembers` and `initZipLookup`. Test: No test.
+- Return updates count distinct active votes involving current ZIP holders whose original publication follows the saved release. Edits, republication, and withdrawn records do not add events. Enforcers: `vote_first_publications` and `ZipDistrictStore`. Tests: `ZipMemberUpdatesStoreTests.CountsDistinctCurrentMemberVotesFirstPublishedAfterMarkerAcrossRollCallKinds` and `ZipMemberUpdatesStoreTests.StripMembersAndNewVoteCountUseTheReleaseReadBeforeActivationChanges`.
+- Strip reads skip attendance, party, legislative figures, issue options, and shared vote lists. They never advance the device marker. Enforcers: `ZipDistrictStore` and `initMemberStrip`. Test: `ZipMemberUpdatesStoreTests.StripLoadsOnlyCurrentHoldersAndReturnsNullOrZeroForUncountedMarkers` covers the query boundary; no committed browser test covers marker writes.
+- The member lookup stores a validated five-digit ZIP and its release marker on the device after a successful unfiltered answer. It stores no member details. Forget clears both values and personal results; stale responses cannot restore them after an observed storage change. Enforcers: `initRememberedMembers`, `initZipLookup`, and `initMemberStrip`. Test: No committed browser test.
 - Member cards, issue filter options, and shared vote rows use one private HTML fragment from one published-release snapshot. Enforcer: `ZipDistrictStore.FindMembersAsync`. Test: `ZipMemberSnapshotTests.MemberDataAndSharedVotesStayOnTheReleaseReadByTheFirstDistrictQuery`.
 - Shared comparisons require at least two listed members and an actual binary cast from every listed member. Recorded nonbinary casts remain visible. Missing casts stay absent. Neither supports a comparison. Enforcers: `ZipMemberCardsMapper` and `PublishedOfficialVote.SideOf`. Test: `ZipDistrictEndpointsTests.CrossStateComparisonsRequireEveryListedMembersBinaryCast`.
 - Shared page HTML contains no remembered ZIP or personal lookup results. Enforcer: `PublicPage` emits empty hooks and browser code reads device storage. Tests: `HomePageTests.TheRememberedMembersLinkTargetsTheLookupHeadingInSharedMarkup` and `PublishedHomePageTests.TheResultPanelIsHiddenUntilALookupAndCreditsTheCensusBureauAndSaysAZctaIsNotAZipCode`.
@@ -148,7 +153,7 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 | 14 | Read the method and the about page | Method page, about page | Implemented |
 | 15 | Report a problem | Footer and record report links | Partial. Planned: the footer link names the record |
 | 16 | Reach a useful 404 | Not found page | Implemented |
-| 17 | Return and find my members again | "Your members" chip, Forget, return-visit updates | Partial. ZIP persistence, Forget, and current lookup refresh are implemented. Planned: member votes published since a locally saved release |
+| 17 | Return and find my members again | "Your members" chip, Forget, return-visit updates | Implemented on Home, Compare, and server pages with the shared strip. Remaining routes receive the strip as they move to server rendering |
 | 18 | Compare my members | Compare page: attendance, party line, bills, issues, differing votes | Implemented in the gated preview. It shares the current roster and metrics and filters shared vote rows to complete binary comparisons classified as different. |
 
 ### Component inventory
@@ -201,7 +206,7 @@ The public read API and gated SSR Home and Compare pages read `public_api` views
 
 `public_api.bills` exposes the bill summary, its text-origin label, and the cited bill-text summary metadata (`why_it_matters`, version name and date, and characters read and total). The view can serve these fields; the bill-text model setting is off by default, and activation awaits sample approval. See [Publication](publication.md#public-api-views) for the view contract.
 
-The home route reads `HomeAnswer` in one RepeatableRead snapshot and maps it into presentation records beside the PublicWeb component. One statement reads highlights, publication date, and newest published roll call dates across all public votes. One batch query counts configured issues in that publication day's Congress. These are page inputs, not durable publication contracts. `CIVIC_LENS_PUBLIC_API_URL` is an optional bare origin for the browser ZIP lookup. The page cache validator includes the normalized public site and browser API origins because both affect the HTML.
+The home route reads `HomeAnswer` in one RepeatableRead snapshot and maps it into presentation records beside the PublicWeb component. One statement reads highlights, publication date, and newest published roll call dates across all public votes. A second batch query reads the release's immutable issue-count snapshots. These are page inputs, not durable publication contracts. `CIVIC_LENS_PUBLIC_API_URL` is an optional bare origin for the browser ZIP lookup. The page cache validator includes the normalized public site and browser API origins because both affect the HTML.
 
 The views expose the stored member party and vote alignment, normalized member-vote side, party-majority cast, and official photo path. Member caucus comes from the matching chamber term in the active release on the vote date.
 
@@ -210,7 +215,7 @@ Remaining planned view columns and views, in the order that R-68 builds them:
 - Party lines: one response for all four chamber and party boards. `party_agreement` and the official party-line view are implemented.
 - Votes: stored validated totals beside immutable member counts, and a second AI text column for "what this vote decides".
 - Bills: `bill_key_terms`. The cited CRS body and version are implemented.
-- Issues: party line-up data. Home issue counts will use immutable release snapshots for the Congress of the release publication day.
+- Issues: party line-up data. Home issue counts already use immutable release snapshots for the Congress of the release publication day.
 - Executive actions: `executive_action_links` and summary columns. Exact numbered orders and proclamations get typed targets; unsupported or ambiguous references stay cited notes.
 - Other kinds: `record_corrections`, bound to distinct immutable correction-history snapshots. Document-change detail and withdrawal notices have typed public read APIs; their reader pages remain planned.
 

@@ -381,7 +381,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         Assert.Equal(HttpStatusCode.NotModified, second.StatusCode);
     }
 
-    private const string MembersStripHtml = $"""<div class="members-strip" id="{MembersStripSlot.ElementId}" aria-live="polite"></div>""";
+    private static readonly string MembersStripHtml = $"""<div class="members-strip" id="{MembersStripSlot.ElementId}" data-officials-page="{BaseUrl.Join(PublicationProtocol.OfficialsPagePath)}" aria-live="polite"></div>""";
 
     public sealed class BrokenPage : ComponentBase
     {
