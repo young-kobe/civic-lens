@@ -272,11 +272,17 @@ public sealed class DocumentChangeEndpointsTests(PostgresCollection postgres)
     {
         var publications = new PostgresPublicationStore(Factory(host.OperationalDatabase), TestCodeVersion.Current);
         var stateVersion = await ReadStateVersionAsync(host.OperationalDatabase, draft.DraftId);
-        await publications.CommitAsync(Owner.Subject,
+        var commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications,
             new PublicationCommit(release, baseRelease, $"{release:D6}-{Guid.NewGuid():N}",
                 [new(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber)],
                 [new(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber, stateVersion)])
-            { Withdrawals = [], Names = ReleaseNameFixtures.None }, "release-" + release, Hash("release-" + release), default);
+            {
+                Withdrawals = [],
+                Names = ReleaseNameFixtures.None,
+                AddedEntries = [PublishedEntryFixtures.DocumentChange(draft.DraftId, draft.RevisionNumber, draft.Headline,
+                    new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero))]
+            });
+        await publications.CommitAsync(Owner.Subject, commit, "release-" + release, Hash("release-" + release), default);
         await publications.ActivateAsync(release, (_, _) => Task.CompletedTask, default);
     }
 

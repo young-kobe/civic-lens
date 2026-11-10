@@ -246,11 +246,23 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
     private async Task<bool> ChangedAsync(params PublishedRevisionBinding[] release) =>
         (await reviews.GetForPublicationAsync([RecordId], [.. release], default))[RecordId].CitedRecordsChanged;
 
-    private Task<PublicationReleaseSummary> CommitAsync(params PublishedRevisionBinding[] records) =>
-        publications.CommitAsync("auth0|owner", new(2, 1, $"000002-{Guid.NewGuid():N}", [.. records],
+    private async Task<PublicationReleaseSummary> CommitAsync(params PublishedRevisionBinding[] records)
+    {
+        var commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, new(2, 1, $"000002-{Guid.NewGuid():N}", [.. records],
             [new(PublishedRecordKind.Brief, RecordId, 1, 1)])
-        { Withdrawals = [], Names = ReleaseNameFixtures.None }, "commit-1",
+        {
+            Withdrawals = [],
+            Names = ReleaseNameFixtures.None,
+            AddedEntries = [new PublishedRecordEntry
+            {
+                Kind = PublishedRecordKind.Brief, RecordId = RecordId, RevisionNumber = 1,
+                Headline = ReviewableRevision().Headline, FirstPublishedAtUtc = InWeek,
+                Officials = [], IssueIds = [], PolicyAreaIds = []
+            }]
+        });
+        return await publications.CommitAsync("auth0|owner", commit, "commit-1",
             Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("payload"))), default);
+    }
 
     private async Task<PublishRelease> PublisherAsync()
     {

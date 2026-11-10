@@ -705,12 +705,12 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
         await seeder.ActionAsync(A1, 2, 6, "warren", "markey");
         await seeder.ActionAsync(A2, 1, 7, "warren", "markey");
         await seeder.DocumentChangeAsync(D1, 1, "A rule changed");
-        await seeder.ReleaseAsync(1, BeforeWeek, active: false,
+        await seeder.ReleaseTrackedAsync(1, BeforeWeek, active: false,
             Binding(PublishedRecordKind.Statement, S1, 1), Binding(PublishedRecordKind.Action, A1, 1));
-        await seeder.ReleaseAsync(2, InWeek, active: false,
+        await seeder.ReleaseTrackedAsync(2, InWeek, active: false,
             Binding(PublishedRecordKind.Statement, S1, 1), Binding(PublishedRecordKind.Action, A1, 2),
             Binding(PublishedRecordKind.Statement, S2, 1), Binding(PublishedRecordKind.Action, A2, 1), Binding(PublishedRecordKind.DocumentChange, D1, 1));
-        await seeder.ReleaseAsync(3, AfterWeek, active: true,
+        await seeder.ReleaseTrackedAsync(3, AfterWeek, active: true,
             Binding(PublishedRecordKind.Statement, S1, 1), Binding(PublishedRecordKind.Action, A1, 2),
             Binding(PublishedRecordKind.Statement, S2, 1), Binding(PublishedRecordKind.Action, A2, 1), Binding(PublishedRecordKind.DocumentChange, D1, 1),
             Binding(PublishedRecordKind.Statement, S3, 1));
@@ -718,9 +718,14 @@ public sealed class PostgresBriefDraftStoreTests(PostgresCollection postgres) : 
 
     private static readonly string CitesEveryRecord = BriefFixtures.Output(paragraphs: [("Warren backed a cap.", ["R1", "R2", "R3"])]);
 
-    private Task PublishAsync(int number, params PublishedRevisionBinding[] records) => publications.CommitAsync("auth0|owner",
-        new(number, number - 1, $"{number:D6}-{Guid.NewGuid():N}", [.. records], []) { Withdrawals = [], Names = ReleaseNameFixtures.None }, $"key-{number}",
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"payload-{number}"))), default);
+    private async Task PublishAsync(int number, params PublishedRevisionBinding[] records)
+    {
+        await PublishedEntryFixtures.SeedEntriesAsync(connectionString, [.. records.Select(seeder.EntryOf)]);
+        var commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications,
+            new(number, number - 1, $"{number:D6}-{Guid.NewGuid():N}", [.. records], []) { Withdrawals = [], Names = ReleaseNameFixtures.None });
+        await publications.CommitAsync("auth0|owner", commit, $"key-{number}",
+            Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"payload-{number}"))), default);
+    }
 
     private async Task<int?> CitedRevisionAsync(int briefRevision, string recordId)
     {

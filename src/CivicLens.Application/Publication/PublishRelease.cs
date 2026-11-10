@@ -73,7 +73,7 @@ public sealed class PublishRelease
             .Concat(withdrawn.Where(reference => previous.Find(reference.Kind, reference.RecordId) is not null)).ToArray();
         var firstPublished = await publications.ReadFirstPublishedAsync([.. references.Concat(listedWithdrawals).Distinct()], cancellationToken);
         RequireFirstPublished(previous, references, listedWithdrawals, firstPublished);
-        var corrections = await PublicationCorrections.LoadAsync(releases, previous, now, [.. references, .. withdrawn],
+        var corrections = await PublicationCorrections.LoadAsync(publications, releases, state.Active?.ReleaseNumber, previous, now, [.. references, .. withdrawn],
             cancellationToken);
         var newWithdrawals = PublicationWithdrawals.Create(previous, corrections, now, withdrawalNotes);
         var returned = ImmutableArray.CreateRange(references.Where(reference => previous.IsWithdrawn(reference.RecordId)));
@@ -100,6 +100,8 @@ public sealed class PublishRelease
         var billIds = ReleaseBillStatuses.ActionIdsOf(carried.Concat(additions.Select(addition => addition.Entry))).ToHashSet(StringComparer.Ordinal);
         var histories = billInputs.Where(input => billIds.Contains(input.RecordId) && input.History is not null).ToArray();
         await publications.PrepareBillHistoriesAsync([.. histories.Select(input => input.History!).Distinct()], cancellationToken);
+        var correctionHistories = await ReleaseCorrectionHistories.PrepareAsync(publications, releases, state.Active?.ReleaseNumber,
+            previous, carried, additions, cancellationToken);
 
         var historyChanged = billInputs.Any(input => billIds.Contains(input.RecordId) && input.HasHistoryChange);
         var number = state.LatestReleaseNumber + 1;
@@ -116,7 +118,8 @@ public sealed class PublishRelease
             Names = names,
             BillStatuses = ReleaseBillStatuses.RowsOf(ReleaseBillStatuses.ActionIdsOf(entries), statuses),
             BillHistories = [.. histories.Select(input => new BillHistoryBinding(input.RecordId,
-                input.History!.DetailJobId, input.History.ProjectionVersion))]
+                input.History!.DetailJobId, input.History.ProjectionVersion))],
+            CorrectionHistories = correctionHistories
         };
         var summary = await CommitAsync(actor, commit, request.IdempotencyKey, payloadHash, cancellationToken);
         await ServeActiveReleaseAsync(cancellationToken);

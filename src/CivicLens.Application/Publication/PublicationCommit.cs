@@ -23,4 +23,6 @@ public sealed record PublicationCommit(int ReleaseNumber, int? BaseReleaseNumber
     public ImmutableArray<PublishedBillStatus> BillStatuses { get; init; } = [];
 
     public ImmutableArray<BillHistoryBinding> BillHistories { get; init; } = [];
+
+    public ImmutableArray<CorrectionHistoryBinding> CorrectionHistories { get; init; } = [];
 }

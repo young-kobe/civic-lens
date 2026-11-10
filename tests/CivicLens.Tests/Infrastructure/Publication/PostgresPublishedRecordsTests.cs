@@ -116,15 +116,21 @@ public sealed class PostgresPublishedRecordsTests(PostgresCollection postgres) :
 
     private static PublishedRecordReference Reference(string id) => new(PublishedRecordKind.Action, id);
 
-    private Task PublishAsync(int number, int? baseNumber, (string Id, DateTimeOffset FirstPublishedAt)[] added) =>
-        publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
-            [.. added.Select(record => new PublishedRevisionBinding(PublishedRecordKind.Action, record.Id, 1))],
+    private async Task PublishAsync(int number, int? baseNumber, (string Id, DateTimeOffset FirstPublishedAt)[] added)
+    {
+        var records = added.Select(record => new PublishedRevisionBinding(PublishedRecordKind.Action, record.Id, 1)).ToArray();
+        var histories = await publications.PrepareCorrectionHistoriesAsync(
+            [.. records.Select(record => new PublicationCorrectionHistory(record, []))], default);
+        await publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
+            [.. records],
             [.. added.Select(record => new ReviewStateExpectation(PublishedRecordKind.Action, record.Id, 1, 1))])
         {
             Withdrawals = [],
             AddedEntries = [.. added.Select(record => PublishedEntryFixtures.Action(record.Id, record.FirstPublishedAt))],
+            CorrectionHistories = [.. histories],
             Names = ReleaseNameFixtures.None
         }, $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
+    }
 
     private async Task SeedActionsAsync(params string[] ids)
     {

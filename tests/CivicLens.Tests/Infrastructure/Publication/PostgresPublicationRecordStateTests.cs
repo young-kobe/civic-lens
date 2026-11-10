@@ -19,6 +19,7 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
     private static readonly string B = new('b', 64);
     private static readonly string C = new('c', 64);
     private static readonly string X = new('d', 64);
+    private static readonly DateTimeOffset First = new(2026, 3, 1, 0, 0, 0, TimeSpan.Zero);
     private string connectionString = null!;
     private PostgresPublicationStore publications = null!;
     private int commitCount;
@@ -67,6 +68,7 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
     {
         await SeedActionsAsync(A);
         var commit = Commit(1, null, [(A, 1)], [A], []);
+        commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, commit);
         await publications.CommitAsync("auth0|owner", commit, "same-key", new string('1', 64), default);
         var before = await AllRowsAsync();
 
@@ -107,6 +109,7 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
         const string key = "mismatch-key";
         var hash = new string('a', 64);
 
+        commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, commit);
         var failure = await Assert.ThrowsAsync<PublicationStateMismatchException>(() => publications.CommitAsync("auth0|owner", commit, key, hash, default));
         await Assert.ThrowsAsync<PublicationStateMismatchException>(() => publications.CommitAsync("auth0|owner", commit, key, hash, default));
 
@@ -134,7 +137,7 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
     }
 
     [Fact]
-    public async Task ACommitOfFifteenThousandRecordsStaysFastBecauseTheDiffReadsOneReleaseAndWritesInTwoStatements()
+    public async Task TheStateDiffForFifteenThousandPublishedRecordsStaysFast()
     {
         await ExecuteAsync("""
             SET session_replication_role = replica;
@@ -143,10 +146,15 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
             SELECT md5(n::text) || md5('x' || n::text), 'bulk', 119, 'hr', n, 1, 0, 0, 1, 'Approved' FROM generate_series(1, 15000) n
             """);
         var ids = (await PublishedRecordStateReader.ReadAsync(connectionString, "SELECT record_id FROM action_drafts")).Select(row => row[0]).ToArray();
-
-        var opening = await TimeAsync(() => PublishAsync(1, null, [.. ids.Select(id => (id, 1))], added: ids));
+        await SeedRevisionEntriesAsync([.. ids.Select(id => (id, 1))]);
+        var first = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications,
+            Commit(1, null, [.. ids.Select(id => (id, 1))], ids, []));
+        var opening = await TimeAsync(() => publications.CommitAsync("auth0|owner", first, "bulk-first", new string('a', 64), default));
+        await SeedRevisionEntriesAsync([.. ids.Select(id => (id, 2))]);
         await ExecuteAsync("UPDATE action_drafts SET current_revision_number = 2");
-        var revising = await TimeAsync(() => PublishAsync(2, 1, [.. ids.Select(id => (id, 2))], added: ids));
+        var second = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications,
+            Commit(2, 1, [.. ids.Select(id => (id, 2))], ids, []));
+        var revising = await TimeAsync(() => publications.CommitAsync("auth0|owner", second, "bulk-second", new string('b', 64), default));
 
         Assert.True(opening < TimeSpan.FromSeconds(5), $"The first commit took {opening}.");
         Assert.True(revising < TimeSpan.FromSeconds(5), $"The revising commit took {revising}.");
@@ -173,20 +181,27 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
             FROM publication_record_states ORDER BY 1
             """)).Select(row => row[0])];
 
-    private Task PublishAsync(int number, int? baseNumber, (string Id, int Revision)[] records, string[]? added = null, string[]? withdrawn = null) =>
-        publications.CommitAsync("auth0|owner", Commit(number, baseNumber, records, added ?? [], withdrawn ?? []),
+    private async Task PublishAsync(int number, int? baseNumber, (string Id, int Revision)[] records, string[]? added = null, string[]? withdrawn = null)
+    {
+        var commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications,
+            Commit(number, baseNumber, records, added ?? [], withdrawn ?? []));
+        await publications.CommitAsync("auth0|owner", commit,
             $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
+    }
 
-    private static PublicationCommit Commit(int number, int? baseNumber, (string Id, int Revision)[] records, string[] added, string[] withdrawn) =>
-        new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
+    private static PublicationCommit Commit(int number, int? baseNumber, (string Id, int Revision)[] records, string[] added, string[] withdrawn)
+    {
+        var addedIds = added.ToHashSet(StringComparer.Ordinal);
+        return new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
             [.. records.Select(record => new PublishedRevisionBinding(PublishedRecordKind.Action, record.Id, record.Revision))],
-            [.. records.Where(record => added.Contains(record.Id))
+            [.. records.Where(record => addedIds.Contains(record.Id))
                 .Select(record => new ReviewStateExpectation(PublishedRecordKind.Action, record.Id, record.Revision, 1))])
         {
             Withdrawals = [],
             Names = ReleaseNameFixtures.None,
             WithdrawnRecords = [.. withdrawn.Select(id => new PublishedRecordReference(PublishedRecordKind.Action, id))]
         };
+    }
 
     private async Task SeedActionsAsync(params string[] ids)
     {
@@ -197,19 +212,36 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
                     last_revised_at_utc_ticks, review_state_version, review_status)
                 VALUES ('{id}', 'congress-bills', 119, 'hr', {index + 1}, 1, 0, 0, 1, 'Approved')
                 """);
+        await SeedRevisionEntriesAsync([.. ids.Select(id => (id, 1))]);
     }
 
-    private Task SetRevisionAsync(string id, int revision) =>
-        ExecuteAsync($"UPDATE action_drafts SET current_revision_number = {revision} WHERE record_id = '{id}'");
+    private async Task SetRevisionAsync(string id, int revision)
+    {
+        await SeedRevisionEntriesAsync([(id, revision)]);
+        await ExecuteAsync($"UPDATE action_drafts SET current_revision_number = {revision} WHERE record_id = '{id}'");
+    }
+
+    private async Task SeedRevisionEntriesAsync((string Id, int Revision)[] records)
+    {
+        await ExecuteAsync("""
+            SET session_replication_role = replica;
+            INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
+            SELECT k.id, k.revision, 'auth0|fixture', 'Person', '{}', 0 FROM unnest(@ids::text[], @revisions::integer[]) k(id, revision)
+            ON CONFLICT DO NOTHING
+            """, ("ids", records.Select(record => record.Id).ToArray()), ("revisions", records.Select(record => record.Revision).ToArray()));
+        await PublishedEntryFixtures.SeedEntriesAsync(connectionString,
+            [.. records.Select(record => PublishedEntryFixtures.Action(record.Id, First, record.Revision))]);
+    }
 
     private Task SetStatusAsync(string id, string status) =>
         ExecuteAsync($"UPDATE action_drafts SET review_status = '{status}' WHERE record_id = '{id}'");
 
-    private async Task ExecuteAsync(string sql)
+    private async Task ExecuteAsync(string sql, params (string Name, object Value)[] parameters)
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
+        foreach (var (name, value) in parameters) command.Parameters.AddWithValue(name, value);
         await command.ExecuteNonQueryAsync();
     }
 }

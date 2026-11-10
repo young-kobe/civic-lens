@@ -7,6 +7,7 @@ using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Publication;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,7 @@ namespace CivicLens.Tests.Fixtures;
 internal sealed class BriefWorldSeeder(string connectionString)
 {
     private static readonly DateTimeOffset Created = new(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
+    private readonly Dictionary<(PublishedRecordKind Kind, string Id, int Revision), PublishedRecordEntry> entries = [];
 
     public static string StatementId(char c) => new(c, 64);
     public static string ActionId(char c) => new(c, 64);
@@ -28,6 +30,39 @@ internal sealed class BriefWorldSeeder(string connectionString)
         await ReleaseWithoutApprovalsAsync(number, publishedAt, active, records);
         foreach (var record in records) await DecisionAsync(record.Kind, record.RecordId, record.RevisionNumber, record.RevisionNumber, ReviewDecisionKind.Approve);
     }
+
+    public async Task ReleaseWithEntriesAsync(int number, DateTimeOffset publishedAt, bool active,
+        IReadOnlyCollection<PublishedRecordEntry> completeEntries, params PublishedRevisionBinding[] records)
+    {
+        if (!records.ToHashSet().SetEquals(completeEntries.Select(PublishedRevisionBinding.Of)))
+            throw new ArgumentException("A complete fixture release needs the exact entry of every record.");
+        await PublishedEntryFixtures.SeedEntriesAsync(connectionString, completeEntries);
+        var options = new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options;
+        var publications = new PostgresPublicationStore(new Microsoft.EntityFrameworkCore.Infrastructure.PooledDbContextFactory<CollectionAttemptDbContext>(options), TestCodeVersion.Current);
+        var bindings = await publications.PrepareCorrectionHistoriesAsync(
+            [.. records.Select(record => new PublicationCorrectionHistory(record, []))], CancellationToken.None);
+        await ReleaseWithoutApprovalsAsync(number, publishedAt, active, records);
+        await using (var db = new CollectionAttemptDbContext(options))
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync();
+            await InternalMethods.InvokeAsync("CivicLens.Infrastructure.Publication.CorrectionHistoryCopies", "BindAsync",
+                db, number, records, bindings, CancellationToken.None);
+            await transaction.CommitAsync();
+        }
+        foreach (var record in records)
+            await DecisionAsync(record.Kind, record.RecordId, record.RevisionNumber, record.RevisionNumber, ReviewDecisionKind.Approve);
+    }
+
+    public Task ReleaseTrackedAsync(int number, DateTimeOffset publishedAt, bool active, params PublishedRevisionBinding[] records)
+    {
+        var completeEntries = records.Select(EntryOf).ToArray();
+        return ReleaseWithEntriesAsync(number, publishedAt, active, completeEntries, records);
+    }
+
+    public PublishedRecordEntry EntryOf(PublishedRevisionBinding record) =>
+        entries.TryGetValue((record.Kind, record.RecordId, record.RevisionNumber), out var entry)
+            ? entry
+            : throw new InvalidOperationException($"No entry facts were captured for {record.Kind} {record.RecordId} revision {record.RevisionNumber}.");
 
     public async Task ReleaseWithoutApprovalsAsync(int number, DateTimeOffset publishedAt, bool active, params PublishedRevisionBinding[] records)
     {
@@ -69,22 +104,61 @@ internal sealed class BriefWorldSeeder(string connectionString)
             """, ("id", id), ("revision", revision), ("version", version), ("kind", decision.ToString()));
     }
 
-    public Task StatementAsync(string id, int revision, string headline, params string[] officials) =>
-        StatementRevisionSeeder.AddAsync(connectionString, new StatementDraftRevision(id, revision, "auth0|editor", Created,
-            headline, "Summary of " + headline, new DateOnly(2026, 10, 6), new SourceSpan(new string('e', 64), 0, 5), [.. officials], [], [], [], [], []));
+    public Task StatementAsync(string id, int revision, string headline, params string[] officials)
+    {
+        var draft = new StatementDraftRevision(id, revision, "auth0|editor", Created,
+            headline, "Summary of " + headline, new DateOnly(2026, 10, 6), new SourceSpan(new string('e', 64), 0, 5), [.. officials], [], [], [], [], []);
+        entries[(PublishedRecordKind.Statement, id, revision)] = new()
+        {
+            Kind = PublishedRecordKind.Statement,
+            RecordId = id,
+            RevisionNumber = revision,
+            Headline = draft.Headline,
+            FirstPublishedAtUtc = Created,
+            Officials = [.. officials.Select(official => new PublishedOfficial { Id = official, Name = official })],
+            IssueIds = [],
+            PolicyAreaIds = [],
+            ApprovedBy = PublishedApprover.Person,
+            EventDate = draft.StatementDate
+        };
+        return StatementRevisionSeeder.AddAsync(connectionString, draft);
+    }
 
-    public Task DocumentChangeAsync(string id, int revision, string headline, params string[] officials) =>
-        DocumentChangeRevisionSeeder.AddAsync(connectionString, new DocumentChangeDraftRevision(id, revision, new string('c', 64),
-            "auth0|editor", Created, headline, "Summary of " + headline, null, null, "Agency", null, null, [.. officials], [], []));
+    public Task DocumentChangeAsync(string id, int revision, string headline, params string[] officials)
+    {
+        var draft = new DocumentChangeDraftRevision(id, revision, new string('c', 64),
+            "auth0|editor", Created, headline, "Summary of " + headline, null, null, "Agency", null, null, [.. officials], [], []);
+        entries[(PublishedRecordKind.DocumentChange, id, revision)] = new()
+        {
+            Kind = PublishedRecordKind.DocumentChange,
+            RecordId = id,
+            RevisionNumber = revision,
+            Headline = draft.Headline,
+            FirstPublishedAtUtc = Created,
+            Officials = [.. officials.Select(official => new PublishedOfficial { Id = official, Name = official })],
+            IssueIds = [],
+            PolicyAreaIds = []
+        };
+        return DocumentChangeRevisionSeeder.AddAsync(connectionString, draft);
+    }
 
-    public Task ActionAsync(string id, int revision, int billNumber, params string[] sponsors) =>
-        ActionRevisionSeeder.AddAsync(connectionString, ActionRevisionFixtures.Model(revision) with
+    public Task ActionAsync(string id, int revision, int billNumber, params string[] sponsors)
+    {
+        var draft = ActionRevisionFixtures.Model(revision) with
         {
             RecordId = id,
             BillNumber = billNumber,
             Headline = $"Bill {billNumber}",
             Sponsorships = [.. sponsors.Select(sponsor => ActionRevisionFixtures.Sponsorship() with { PersonId = sponsor })]
-        });
+        };
+        entries[(PublishedRecordKind.Action, id, revision)] = PublishedEntryFixtures.Action(id, Created, revision) with
+        {
+            Headline = draft.Headline,
+            Officials = [.. sponsors.Select(sponsor => new PublishedOfficial { Id = sponsor, Name = sponsor })],
+            BillTitle = draft.BillTitle
+        };
+        return ActionRevisionSeeder.AddAsync(connectionString, draft);
+    }
 
     public Task FinishedWeekAsync(DateOnly week) => ExecuteAsync("""
         INSERT INTO brief_analysis (record_id, task, week_start, status, fence, attempts, reserved_tokens, created_at_utc_ticks)
@@ -106,9 +180,14 @@ internal sealed class BriefWorldSeeder(string connectionString)
         await StatementAsync(BriefFixtures.CitedStatement, 1, "Rent cap", "warren");
         await ActionAsync(BriefFixtures.CitedAction, 1, 7, "warren", "markey");
         await DocumentChangeAsync(BriefFixtures.CitedDocumentChange, 1, "A rule changed");
-        await ReleaseAsync(1, BriefFixtures.InWeek, active: true, Binding(PublishedRecordKind.Statement, BriefFixtures.CitedStatement, 1),
+        var records = new[]
+        {
+            Binding(PublishedRecordKind.Statement, BriefFixtures.CitedStatement, 1),
             Binding(PublishedRecordKind.Action, BriefFixtures.CitedAction, 1),
-            Binding(PublishedRecordKind.DocumentChange, BriefFixtures.CitedDocumentChange, 1));
+            Binding(PublishedRecordKind.DocumentChange, BriefFixtures.CitedDocumentChange, 1)
+        };
+        await ReleaseWithEntriesAsync(1, BriefFixtures.InWeek, active: true,
+            [.. records.Select(record => entries[(record.Kind, record.RecordId, record.RevisionNumber)])], records);
     }
 
     public async Task ReviewableBriefAsync(BriefRevision revision, string reviewStatus = "AwaitingReview")

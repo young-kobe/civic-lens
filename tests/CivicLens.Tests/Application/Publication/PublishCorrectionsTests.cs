@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Collections.Immutable;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
@@ -164,18 +165,69 @@ public sealed class PublishCorrectionsTests
     }
 
     [Fact]
-    public async Task ACarriedRecordFileWithoutACorrectionListFailsLoudInsteadOfBindingToNull()
+    public async Task ALegacyRecordFileWithoutACorrectionListFailsInsteadOfFabricatingEmptyHistory()
     {
         var (scenario, action) = await PublishedActionAsync();
+        scenario.Publications.CorrectionHistories.Clear();
         var files = scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName];
         var path = PublicationProtocol.RecordDataPath(action);
-        files[path] = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(files[path]).Replace("\"corrections\":[]", "\"other\":1"));
+        var json = JsonNode.Parse(files[path])!.AsObject();
+        Assert.True(json.Remove("corrections"));
+        files[path] = Encoding.UTF8.GetBytes(json.ToJsonString());
         scenario.ReviseAction(action, 2);
 
-        var error = await Assert.ThrowsAsync<InvalidDataException>(() =>
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
             scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action)));
+        Assert.Single(scenario.Publications.Committed);
+    }
 
-        Assert.Equal("A carried record has no correction list.", error.Message);
+    [Fact]
+    public async Task AReplacementUsesTheBoundHistoryInsteadOfParsingAnObsoleteLegacyActionFile()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        var first = scenario.Publications.Committed.Single();
+        scenario.Releases.Directories[first.DirectoryName][PublicationProtocol.RecordDataPath(action)] = Encoding.UTF8.GetBytes("invalid old JSON");
+        scenario.ReviseAction(action, 2, correctionNote: "Fixed the date.");
+
+        var next = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action));
+
+        var correction = Assert.Single(ReadAction(scenario, next.DirectoryName, action).Corrections);
+        Assert.Equal(1, correction.ReplacedRevisionNumber);
+        Assert.Equal("Fixed the date.", correction.Note);
+    }
+
+    [Fact]
+    public async Task ALegacyHistoryFileMustMatchTheExactPublishedRevision()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        var first = scenario.Publications.Committed.Single();
+        var wrong = ReadAction(scenario, first.DirectoryName, action) with { RevisionNumber = 2 };
+        wrong.Validate();
+        scenario.Publications.CorrectionHistories.Clear();
+        scenario.Releases.Directories[first.DirectoryName][PublicationProtocol.RecordDataPath(action)] =
+            JsonSerializer.SerializeToUtf8Bytes(wrong, PublicationProtocol.JsonOptions);
+        scenario.ReviseAction(action, 2);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action)));
+
+        Assert.Single(scenario.Publications.Committed);
+    }
+
+    [Fact]
+    public async Task AStoredVoteHistoryStillRequiresTheVoteFileUsedForTextComparisonToMatchThePublishedRevision()
+    {
+        var (scenario, vote) = await PublishedVoteAsync();
+        var first = scenario.Publications.Committed.Single();
+        var wrong = ReadVote(scenario, first.DirectoryName, vote) with { RevisionNumber = 2 };
+        wrong.Validate();
+        scenario.Releases.Directories[first.DirectoryName][PublicationProtocol.RecordDataPath(vote)] =
+            JsonSerializer.SerializeToUtf8Bytes(wrong, PublicationProtocol.JsonOptions);
+        scenario.ReviseVote(vote, 2, approverSubject: ReviewAuthor.CodeSubject,
+            change: revision => revision with { Summary = "Updated summary." });
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => scenario.Publisher().ExecuteAsync(Code, VoteRequest("k2", vote)));
+
+        Assert.Single(scenario.Publications.Committed);
     }
 
     [Fact]

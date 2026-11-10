@@ -4853,6 +4853,85 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedCorrectionHistoryEntryRow", b =>
+                {
+                    b.Property<string>("HistoryId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("history_id");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint")
+                        .HasColumnName("position");
+
+                    b.Property<bool>("FactsUnchanged")
+                        .HasColumnType("boolean")
+                        .HasColumnName("facts_unchanged");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<long>("PublishedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("published_at_utc_ticks");
+
+                    b.Property<short>("PublishedOffsetMinutes")
+                        .HasColumnType("smallint")
+                        .HasColumnName("published_offset_minutes");
+
+                    b.Property<int>("ReplacedRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("replaced_revision_number");
+
+                    b.HasKey("HistoryId", "Position");
+
+                    b.ToTable("published_correction_history_entries", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_published_correction_history_entries_local_ticks", "published_at_utc_ticks + published_offset_minutes::bigint * 600000000 BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_published_correction_history_entries_note", "note IS NULL OR length(note) <= 500");
+
+                            t.HasCheckConstraint("ck_published_correction_history_entries_note_facts_unchanged", "note IS NULL OR NOT facts_unchanged");
+
+                            t.HasCheckConstraint("ck_published_correction_history_entries_position", "position BETWEEN 0 AND 61");
+
+                            t.HasCheckConstraint("ck_published_correction_history_entries_published_at_utc_ticks", "published_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_published_correction_history_entries_published_offset_minutes", "published_offset_minutes BETWEEN -840 AND 840");
+
+                            t.HasCheckConstraint("ck_published_correction_history_entries_replaced_revision_number", "replaced_revision_number >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedCorrectionHistoryRow", b =>
+                {
+                    b.Property<string>("HistoryId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("history_id");
+
+                    b.Property<short>("CorrectionCount")
+                        .HasColumnType("smallint")
+                        .HasColumnName("correction_count");
+
+                    b.Property<int>("EncodingVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("encoding_version");
+
+                    b.HasKey("HistoryId");
+
+                    b.ToTable("published_correction_histories", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_published_correction_histories_correction_count", "correction_count BETWEEN 0 AND 62");
+
+                            t.HasCheckConstraint("ck_published_correction_histories_encoding_version", "encoding_version = 1");
+
+                            t.HasCheckConstraint("ck_published_correction_histories_history_id", "history_id ~ '^[0-9a-f]{64}$'");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryIssueRow", b =>
                 {
                     b.Property<string>("Kind")
@@ -5293,6 +5372,50 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_release_bill_statuses_read_at_utc_ticks", "read_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_release_bill_statuses_record_id", "record_id ~ '^[0-9a-f]{64}$'");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseCorrectionHistoryRow", b =>
+                {
+                    b.Property<int>("ReleaseNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("release_number");
+
+                    b.Property<string>("Kind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<string>("HistoryId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("history_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.HasKey("ReleaseNumber", "Kind", "RecordId");
+
+                    b.HasIndex("HistoryId");
+
+                    b.HasIndex("Kind", "RecordId", "RevisionNumber");
+
+                    b.ToTable("release_correction_histories", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_release_correction_histories_history_id", "history_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_release_correction_histories_kind", "kind IN ('documentChange', 'statement', 'action', 'brief', 'vote', 'relationship', 'executiveAction')");
+
+                            t.HasCheckConstraint("ck_release_correction_histories_record_id", "record_id ~ CASE WHEN kind = 'documentChange' THEN '^[0-9a-f]{32}$' ELSE '^[0-9a-f]{64}$' END");
+
+                            t.HasCheckConstraint("ck_release_correction_histories_revision_number", "revision_number >= 1");
                         });
                 });
 
@@ -9773,6 +9896,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedCorrectionHistoryEntryRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedCorrectionHistoryRow", null)
+                        .WithMany()
+                        .HasForeignKey("HistoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryIssueRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryRow", null)
@@ -9875,6 +10007,27 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
                         .WithMany()
                         .HasForeignKey("ReleaseNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseCorrectionHistoryRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedCorrectionHistoryRow", null)
+                        .WithMany()
+                        .HasForeignKey("HistoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedEntryRow", null)
+                        .WithMany()
+                        .HasForeignKey("Kind", "RecordId", "RevisionNumber")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

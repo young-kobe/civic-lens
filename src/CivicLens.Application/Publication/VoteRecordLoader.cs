@@ -42,7 +42,7 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
             Corrections = build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions, textRewritten)
         };
         PublishedCorrection.ValidateAll(record.Corrections, record.RevisionNumber);
-        return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
+        return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record, record.Corrections,
             (related, billLines, cancellationToken) => build.Renderer.RenderVoteAsync(record, billLines.BillOfVote(recordId), related, build.Catalog, cancellationToken));
     }
 

@@ -60,6 +60,12 @@ public interface IPublicationStore
 
     Task PrepareBillHistoriesAsync(IReadOnlyCollection<BillHistoryCapture> histories, CancellationToken cancellationToken);
 
+    Task<IReadOnlyDictionary<PublishedRecordReference, StoredCorrectionHistory>> ReadCorrectionHistoriesAsync(int releaseNumber,
+        IReadOnlyCollection<PublishedRevisionBinding> records, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<CorrectionHistoryBinding>> PrepareCorrectionHistoriesAsync(
+        IReadOnlyCollection<PublicationCorrectionHistory> histories, CancellationToken cancellationToken);
+
     Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken);
 

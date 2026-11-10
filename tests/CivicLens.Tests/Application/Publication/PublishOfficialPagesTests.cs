@@ -340,7 +340,7 @@ public sealed class PublishOfficialPagesTests
             scenario.OfficialNames[id] = id;
             scenario.Offices[id] = offices;
         }
-        scenario.SeedRelease(withFiles: true, [.. ids.Chunk(PublishedRecordEntry.MaximumFilterValues).Select((chunk, index) => new PublishedRecordEntry
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(withFiles: true, [.. ids.Chunk(PublishedRecordEntry.MaximumFilterValues).Select((chunk, index) => new PublishedRecordEntry
         {
             IssueIds = [],
             Kind = PublishedRecordKind.DocumentChange,

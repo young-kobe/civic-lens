@@ -256,9 +256,9 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         await CommitAsync(1, null, PublishedEntryFixtures.Relationship(A, B, C, First), StatementAndAction);
 
         Assert.Equal(["S000001|false", "S000002|true", "S000003|false"],
-            await ReadAsync("SELECT official_id || '|' || is_matched FROM published_entry_officials ORDER BY position"));
+            await ReadAsync($"SELECT official_id || '|' || is_matched FROM published_entry_officials WHERE kind = 'relationship' AND record_id = '{A}' AND revision_number = 1 ORDER BY position"));
         Assert.Equal(["relationship|DescribesOwnBill|" + B + "|action|" + C], await ReadAsync(
-            "SELECT kind || '|' || link_type || '|' || statement_record_id || '|' || target_kind || '|' || target_record_id FROM published_entries"));
+            $"SELECT kind || '|' || link_type || '|' || statement_record_id || '|' || target_kind || '|' || target_record_id FROM published_entries WHERE kind = 'relationship' AND record_id = '{A}' AND revision_number = 1"));
     }
 
     [Fact]
@@ -477,25 +477,37 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
     private Task CommitAsync(int number, int? baseNumber, PublishedRecordEntry first, PublishedRecordEntry second) =>
         CommitAsync(number, baseNumber, [first, second], []);
 
-    private Task CommitAsync(int number, int? baseNumber, PublishedRecordEntry[] entries, PublishedRevisionBinding[] cited) =>
-        publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
-            [.. entries.Select(PublishedRevisionBinding.Of), .. cited],
+    private async Task CommitAsync(int number, int? baseNumber, PublishedRecordEntry[] entries, PublishedRevisionBinding[] cited)
+    {
+        var records = entries.Select(PublishedRevisionBinding.Of).Concat(cited).ToArray();
+        var histories = await publications.PrepareCorrectionHistoriesAsync(
+            [.. records.Select(record => new PublicationCorrectionHistory(record, []))], default);
+        await publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
+            [.. records],
             [.. entries.Select(entry => new ReviewStateExpectation(entry.Kind, entry.RecordId, 1, 1))])
         {
             Withdrawals = [],
             AddedEntries = [.. entries],
+            CorrectionHistories = [.. histories],
             Names = ReleaseNameFixtures.None
         },
             $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
+    }
 
-    private Task CommitRewrittenAsync(int number, int baseNumber, PublishedRecordEntry entry) =>
-        publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
-            [PublishedRevisionBinding.Of(entry)], [])
+    private async Task CommitRewrittenAsync(int number, int baseNumber, PublishedRecordEntry entry)
+    {
+        var record = PublishedRevisionBinding.Of(entry);
+        var histories = await publications.PrepareCorrectionHistoriesAsync(
+            [new PublicationCorrectionHistory(record, [])], default);
+        await publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
+            [record], [])
         {
             Withdrawals = [],
             RewrittenEntries = [entry],
+            CorrectionHistories = [.. histories],
             Names = ReleaseNameFixtures.None
         }, $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
+    }
 
     private async Task SeedActionAsync(params string[] ids)
     {
@@ -544,9 +556,32 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
             VALUES ('{{Guid.NewGuid():N}}', '{{B}}', 1, 1, 'Approve', 'owner', 1);
             INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, kind, actor_subject, created_at_utc_ticks)
             VALUES ('{{Guid.NewGuid():N}}', '{{C}}', 1, 1, 'Approve', 'owner', 1);
+            INSERT INTO statement_revisions (candidate_id, revision_number, revision_json, created_at_utc_ticks, author_kind, author_subject)
+            VALUES ('{{B}}', 1, '{}', 0, 'Person', 'owner');
             INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('statement', '{{B}}', 1)
             """);
-        if (withTargetTime) await ExecuteAsync($"INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('action', '{C}', 1)");
+        if (withTargetTime)
+        {
+            await ExecuteAsync(PublishedEntryFixtures.InsertActionRevisionSql(C));
+            await ExecuteAsync($"INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('action', '{C}', 1)");
+        }
+        var seedEntries = new List<PublishedRecordEntry>
+        {
+            new()
+            {
+                Kind = PublishedRecordKind.Statement,
+                RecordId = B,
+                RevisionNumber = 1,
+                Headline = "A statement about housing",
+                FirstPublishedAtUtc = new DateTimeOffset(1, TimeSpan.Zero),
+                Officials = [],
+                IssueIds = [],
+                PolicyAreaIds = [],
+                ApprovedBy = PublishedApprover.Person
+            }
+        };
+        if (withTargetTime) seedEntries.Add(PublishedEntryFixtures.Action(C, new DateTimeOffset(1, TimeSpan.Zero)));
+        await publications.AddEntriesAsync(seedEntries, default);
     }
 
     private static string ActionDraftSql(string id, int number = 1) => $"""

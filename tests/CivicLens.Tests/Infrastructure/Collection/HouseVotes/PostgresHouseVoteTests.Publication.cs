@@ -15,10 +15,12 @@ public sealed partial class PostgresHouseVoteTests
     {
         var recordId = await ApprovedVoteAsync();
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
+        var staleCommit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, VoteCommit(recordId, reviewStateVersion: 0));
 
         await Assert.ThrowsAsync<PublicationConflictException>(() =>
-            publications.CommitAsync(PublicationScenario.Owner.Subject, VoteCommit(recordId, reviewStateVersion: 0), "stale", Hash(1), default));
-        var committed = await publications.CommitAsync(PublicationScenario.Owner.Subject, VoteCommit(recordId, reviewStateVersion: 1), "fresh",
+            publications.CommitAsync(PublicationScenario.Owner.Subject, staleCommit, "stale", Hash(1), default));
+        var freshCommit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, VoteCommit(recordId, reviewStateVersion: 1));
+        var committed = await publications.CommitAsync(PublicationScenario.Owner.Subject, freshCommit, "fresh",
             Hash(2), default);
 
         Assert.Equal(1, committed.ReleaseNumber);
@@ -31,8 +33,9 @@ public sealed partial class PostgresHouseVoteTests
         var recordId = await ApprovedVoteAsync();
         var ready = Assert.Single(await VoteReviews().ListUnpublishedApprovedAsync(10, [], default));
 
-        await PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current).CommitAsync(PublicationScenario.Owner.Subject,
-            VoteCommit(recordId, reviewStateVersion: 1), "key", Hash(1), default);
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
+        var commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, VoteCommit(recordId, reviewStateVersion: 1));
+        await publications.CommitAsync(PublicationScenario.Owner.Subject, commit, "key", Hash(1), default);
 
         Assert.Empty(await VoteReviews().ListUnpublishedApprovedAsync(10, [], default));
     }
@@ -287,7 +290,11 @@ public sealed partial class PostgresHouseVoteTests
     private static PublicationCommit VoteCommit(string recordId, int reviewStateVersion) =>
         new(1, null, $"000001-{Guid.NewGuid():N}", [new(PublishedRecordKind.Vote, recordId, 1)],
             [new(PublishedRecordKind.Vote, recordId, 1, reviewStateVersion)])
-        { Withdrawals = [], Names = ReleaseNameFixtures.None };
+        {
+            Withdrawals = [],
+            Names = ReleaseNameFixtures.None,
+            AddedEntries = [PublishedEntryFixtures.Vote(recordId, new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero))]
+        };
 
     private static string Hash(int seed) => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(BitConverter.GetBytes(seed)));
 }

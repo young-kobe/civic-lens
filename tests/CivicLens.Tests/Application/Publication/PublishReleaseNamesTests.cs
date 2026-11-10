@@ -10,7 +10,7 @@ public sealed class PublishReleaseNamesTests
     [Fact]
     public async Task TheNamesOfTheCommitAreTheOfficialsAndTheCatalogOfTheReleaseFilesBecauseTheApiMustShowWhatTheReleaseShowed()
     {
-        var scenario = ScenarioWithDefinedIssue();
+        var scenario = await ScenarioWithDefinedIssueAsync();
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k", new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('a'))));
 
@@ -26,7 +26,7 @@ public sealed class PublishReleaseNamesTests
     [Fact]
     public async Task AnIssueNameCarriesTheDefinitionIncludesAndExcludesOfTheConfigurationAndAPolicyAreaCarriesNone()
     {
-        var scenario = ScenarioWithDefinedIssue();
+        var scenario = await ScenarioWithDefinedIssueAsync();
 
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k", new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('a'))));
@@ -39,7 +39,7 @@ public sealed class PublishReleaseNamesTests
         Assert.Null(names.Facets.PolicyAreas.Single().Definition);
     }
 
-    private static PublicationScenario ScenarioWithDefinedIssue()
+    private static async Task<PublicationScenario> ScenarioWithDefinedIssueAsync()
     {
         var scenario = new PublicationScenario
         {
@@ -56,7 +56,7 @@ public sealed class PublishReleaseNamesTests
                 ]
             }
         };
-        scenario.SeedRelease(withFiles: true, [new PublishedRecordEntry
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(withFiles: true, [new PublishedRecordEntry
         {
             Kind = PublishedRecordKind.DocumentChange,
             Officials = [],
