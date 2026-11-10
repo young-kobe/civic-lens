@@ -325,6 +325,58 @@ public sealed class VoteEndpointsTests(PostgresCollection postgres)
         Assert.Empty(withoutIssues.RootElement.GetProperty("issueIds").EnumerateArray());
     }
 
+    [Fact]
+    public async Task DetailReturnsCompleteTalliesOfItsActiveRevisionAndLeavesUnknownTalliesNull()
+    {
+        var revised = new SeededVote('9', "2026-03-01") { ActiveRevision = 2 };
+        await using var host = await StartWithVotesAsync(revised, A, E);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            UPDATE vote_revisions SET party_tally_count = 1 WHERE record_id = '{revised.RecordId}' AND revision_number = 1;
+            INSERT INTO vote_revision_party_tallies (record_id, revision_number, party, yea, nay, present, not_voting, other)
+            VALUES ('{revised.RecordId}', 1, 'Older party', 1, 0, 0, 0, 0);
+            UPDATE vote_revisions SET party_tally_count = 2 WHERE record_id = '{revised.RecordId}' AND revision_number = 2;
+            INSERT INTO vote_revision_party_tallies (record_id, revision_number, party, yea, nay, present, not_voting, other)
+            VALUES ('{revised.RecordId}', 2, 'Independent', 1, 2, 3, 4, 5),
+                   ('{revised.RecordId}', 2, 'Unknown', 0, 0, 0, 0, 1);
+            UPDATE vote_revisions SET party_tally_count = 0 WHERE record_id = '{A.RecordId}' AND revision_number = 1;
+            """);
+
+        using var detail = await GetAsync(host, $"/v1/votes/{revised.RecordId}");
+        using var none = await GetAsync(host, $"/v1/votes/{A.RecordId}");
+        using var unresolved = await GetAsync(host, $"/v1/votes/{E.RecordId}");
+        var tallies = detail.RootElement.GetProperty("partyTallies").EnumerateArray().ToArray();
+        Assert.Equal(2, tallies.Length);
+        Assert.Equal("Independent", tallies[0].GetProperty("party").GetString());
+        Assert.Equal((1, 2, 3, 4, 5), Buckets(tallies[0]));
+        Assert.Equal("Unknown", tallies[1].GetProperty("party").GetString());
+        Assert.Equal((0, 0, 0, 0, 1), Buckets(tallies[1]));
+        Assert.Equal(JsonValueKind.Null, none.RootElement.GetProperty("partyTallies").ValueKind);
+        Assert.Equal(JsonValueKind.Null, unresolved.RootElement.GetProperty("partyTallies").ValueKind);
+    }
+
+    [Fact]
+    public async Task IncompleteOrExtraStoredPartyGroupsFailClosed()
+    {
+        await using var host = await StartWithVotesAsync(A, B);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            UPDATE vote_revisions SET party_tally_count = 2 WHERE record_id = '{A.RecordId}' AND revision_number = 1;
+            INSERT INTO vote_revision_party_tallies (record_id, revision_number, party, yea, nay, present, not_voting, other)
+            VALUES ('{A.RecordId}', 1, 'Only one', 1, 0, 0, 0, 0);
+            UPDATE vote_revisions SET party_tally_count = 16 WHERE record_id = '{B.RecordId}' AND revision_number = 1;
+            INSERT INTO vote_revision_party_tallies (record_id, revision_number, party, yea, nay, present, not_voting, other)
+            VALUES {string.Join(",", Enumerable.Range(0, 17).Select(i => $"('{B.RecordId}', 1, 'Party {i}', 1, 0, 0, 0, 0)"))};
+            """);
+
+        using var missing = await host.Client.GetAsync($"/v1/votes/{A.RecordId}");
+        using var extra = await host.Client.GetAsync($"/v1/votes/{B.RecordId}");
+        Assert.Equal(HttpStatusCode.InternalServerError, missing.StatusCode);
+        Assert.Equal(HttpStatusCode.InternalServerError, extra.StatusCode);
+    }
+
+    private static (int Yea, int Nay, int Present, int NotVoting, int Other) Buckets(JsonElement tally) =>
+        (tally.GetProperty("yea").GetInt32(), tally.GetProperty("nay").GetInt32(), tally.GetProperty("present").GetInt32(),
+         tally.GetProperty("notVoting").GetInt32(), tally.GetProperty("other").GetInt32());
+
     [Theory]
     [InlineData("0000000000000000000000000000000000000000000000000000000000000000")]
     [InlineData("nonsense")]
