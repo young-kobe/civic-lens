@@ -36,7 +36,7 @@ Finish routes in this order. Each slice includes the data, source evidence, labe
 
 Data work below is approved and remains part of R-68. Land each dependency before its consuming route.
 
-- [ ] Bind published correction history to distinct immutable snapshots. Never read mutable current history as the history of an older release.
+- [ ] Bind published correction history to distinct immutable snapshots. Bootstrap the active and retained rollback releases in bounded batches before enabling the shared corrections reader. Existing release JSON is private conversion input only; public requests read typed snapshots. Never read mutable current history as the history of an older release.
 - [ ] Store typed executive Amends and Revokes targets beside their full cited disposition notes. Resolve only exact numbered executive orders and proclamations. Unsupported or ambiguous references remain notes only. Public links target matching records in the active release.
 - [ ] Serve all four chamber and party boards in one response. Reuse pinned party and Congress rules and the existing agreement data.
 - [ ] Add the issue party line-up, bill key terms, and executive document body and summary inputs at their page steps.
@@ -44,7 +44,7 @@ Data work below is approved and remains part of R-68. Land each dependency befor
 
 AI text and vocabulary remain required work, not optional follow-ups.
 
-- [ ] Review the complete #407 wording table separately before shipping its proposed text. Keep the already approved glossary correction about extending post-cloture debate. Add one grade-12 check over fixed page text and AI text, with exact terms explained by first-use popovers.
+- [ ] Implement the approved complete 71-unit vote wording table with its captured-evidence gates and unknown-input fallbacks. Keep the approved correction about extending post-cloture debate. Add one grade-12 check over fixed page text and AI text, with exact terms explained by first-use popovers.
 - [ ] Finish the code tables for what a Yes vote means and what happens next, by kind and result. Add the vote-kind explainer index with each plain name, record term, and Yes meaning.
 - [ ] After static rendering is removed, finish the held #411 bill line and #410 vote summary work. The line reuses the existing CRS summary call, stays within 200 characters, and cites an exact CRS quote of at least four words. The vote summary uses the line and supporting quote from the current approved action revision. The vote freshness workflow reuses the queue, run context, requeue, and input-version checks. It adds no schema or model call. Never acquire `ActionReview` while holding `VoteAnalysis`.
 - [ ] Measure each changed prompt on fixed records within an explicit budget, check its evidence, and obtain the required sample approval. Keep model activation and historical backfills separate from routine implementation and deployment permission. Reuse the established [R-67 measurement flow](architecture/actions.md#limits-and-planned-work).

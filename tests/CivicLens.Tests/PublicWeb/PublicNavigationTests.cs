@@ -46,20 +46,63 @@ public sealed class PublicNavigationTests
         Assert.Equal(ids.Length, ids.Distinct(StringComparer.Ordinal).Count());
     }
 
-    private static async Task<IDocument> RenderAsync()
+    [Fact]
+    public async Task CompareBreadcrumbsUseThePublicRootAndMarkTheCurrentPageWithoutALink()
+    {
+        const string publicRoot = "https://civic-lens.test/";
+        const string privateApi = "https://api.civic-lens.test";
+        var page = await RenderAsync<ComparePage>(new Dictionary<string, object?>
+        {
+            [nameof(ComparePage.RootPath)] = publicRoot,
+            [nameof(ComparePage.BrowserApiUrl)] = privateApi
+        });
+        var breadcrumb = Assert.Single(page.QuerySelectorAll("nav[aria-label=Breadcrumb]"));
+        var links = breadcrumb.QuerySelectorAll("a");
+        var current = Assert.Single(breadcrumb.QuerySelectorAll("[aria-current=page]"));
+
+        Assert.Single(links);
+        Assert.Equal(publicRoot + PublicationProtocol.HomePath, links[0].GetAttribute("href"));
+        Assert.Equal("Home", links[0].TextContent);
+        Assert.Equal("Compare your members", current.TextContent);
+        Assert.Equal("span", current.LocalName);
+        Assert.Null(current.GetAttribute("href"));
+        Assert.Equal(1, breadcrumb.QuerySelectorAll(".public-breadcrumb-separator[aria-hidden=true]").Length);
+        Assert.DoesNotContain(privateApi, breadcrumb.InnerHtml, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task BreadcrumbTextIsRazorEncoded()
+    {
+        var items = new[] { new PublicBreadcrumbItem("A <b>label</b>", "this-page.html") };
+        var page = await RenderAsync<PublicBreadcrumbs>(new Dictionary<string, object?>
+        {
+            [nameof(PublicBreadcrumbs.Items)] = items,
+            [nameof(PublicBreadcrumbs.RootPath)] = Root
+        });
+        var current = Assert.Single(page.QuerySelectorAll("[aria-current=page]"));
+
+        Assert.Equal("A <b>label</b>", current.TextContent);
+        Assert.Empty(current.QuerySelectorAll("b"));
+        Assert.Equal("span", current.LocalName);
+        Assert.Null(current.GetAttribute("href"));
+    }
+
+    private static Task<IDocument> RenderAsync() => RenderAsync<PublicPage>(new Dictionary<string, object?>
+    {
+        [nameof(PublicPage.Title)] = "Test",
+        [nameof(PublicPage.Description)] = "Test page",
+        [nameof(PublicPage.CanonicalPath)] = null,
+        [nameof(PublicPage.RootPath)] = Root,
+        [nameof(PublicPage.Section)] = PublicSection.Officials
+    });
+
+    private static async Task<IDocument> RenderAsync<TComponent>(Dictionary<string, object?> parameters) where TComponent : IComponent
     {
         await using var services = new ServiceCollection().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
         var html = await renderer.Dispatcher.InvokeAsync(async () =>
         {
-            var output = await renderer.RenderComponentAsync<PublicPage>(ParameterView.FromDictionary(new Dictionary<string, object?>
-            {
-                [nameof(PublicPage.Title)] = "Test",
-                [nameof(PublicPage.Description)] = "Test page",
-                [nameof(PublicPage.CanonicalPath)] = null,
-                [nameof(PublicPage.RootPath)] = Root,
-                [nameof(PublicPage.Section)] = PublicSection.Officials
-            }));
+            var output = await renderer.RenderComponentAsync<TComponent>(ParameterView.FromDictionary(parameters));
             return output.ToHtmlString();
         });
         return await new HtmlParser().ParseDocumentAsync(html);

@@ -104,6 +104,7 @@ These decisions come from the component audit. The owner accepted every recommen
 - AI text carries its public label. Enforcer: `PublishedRecordLabels` and the label column of the `public_api` views. Tests: `ReleaseRendererTests.ActionAndVotePagesLabelAnAiSummaryOnlyWhenAModelWroteTheText`, `PublicApiViewsTests.EveryAiOrCodeBillHasItsLabelAndAPersonBillHasNone`.
 - Components have no inline styles. Enforcer: the component markup. Test: `PresentationArchitectureTests.MarkupCannotStyleItselfSoComponentsStayTheOnlyStyleOwners`.
 - Header navigation uses one `PublicSections.Header` link set for desktop and the mobile menu. Both copies keep the configured root path and current section marker. The native menu is closed by default and works without JavaScript. Enforcer: `PublicPage` and responsive header CSS. Test: `PublicNavigationTests`.
+- Compare renders a public breadcrumb trail before its hero. Ancestors use the configured public root; only the final item is current and has no link. Labels are Razor-encoded and separators are hidden from assistive technology. Enforcers: `PublicPage`, `PublicBreadcrumbs`, and `ComparePage`. Tests: `PublicNavigationTests.CompareBreadcrumbsUseThePublicRootAndMarkTheCurrentPageWithoutALink` and `PublicNavigationTests.BreadcrumbTextIsRazorEncoded`.
 - Every vote kind has a glossary term or none. Enforcer: `Glossary`. Test: `ReleaseRendererTests.EveryVoteKindHasItsTermKeyOrNoneForOtherAndEveryKeyIsInTheGlossary`.
 - Page text and AI text read at grade 12 or below. Enforcer: `ReadingGrade` checks AI action text at draft time. No test covers fixed page text yet. Planned: one grade test over page and AI text, in R-68. Test: No test.
 - Every public number names its base and time frame. Enforcer: review of each UI pull request. Test: No test.
@@ -199,6 +200,8 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Search results | Search | Find a person, bill, or vote | Search service | Partial. Planned: ranking and snippets |
 | Weekly brief page | Brief | What happened this week? | `briefs`, `brief_paragraphs`, `brief_citations` | Partial. Brief paragraphs and citations are served through the API. Planned: route and page |
 | Correction and withdrawal pages | Record | What changed on this record? | `record_corrections`, `withdrawals` | The withdrawal read API is implemented at `/v1/records/{kind}/{recordId}/withdrawal`. Record corrections and the reader page remain planned |
+
+The shared public shell has an optional breadcrumb slot before the hero. Compare uses it for Home and its current page. Other inner routes add their trail as they move to server rendering.
 
 ## Storage and contracts
 
