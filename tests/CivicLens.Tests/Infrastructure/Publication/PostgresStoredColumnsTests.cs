@@ -429,13 +429,18 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         new(index, "rep", DateOnly.Parse(start), DateOnly.Parse(end), "MA", 1, null, party, null);
 
     // A vote file of a revision. The revision number and the member parties differ. A later revision swaps the Yea and Nay counts of the parties, so its columns differ too.
-    private static PublishedVote FileOf(PublishedVoteRun published, int revision, string party) =>
-        published.Vote with
+    private static PublishedVote FileOf(PublishedVoteRun published, int revision, string party)
+    {
+        var vote = published.Vote with
         {
             RevisionNumber = revision,
             Members = [.. published.Vote.Members.Select(member => member with { Party = party })],
-            PartyMajorities = [.. published.Vote.PartyMajorities.Select(majority => revision == 1 ? majority : PublishedPartyMajority.Of(majority.Party, majority.NayCount, majority.YeaCount))]
+            PartyMajorities = [.. published.Vote.PartyMajorities.Select(majority => revision == 1 ? majority : PublishedPartyMajority.Of(majority.Party, majority.NayCount, majority.YeaCount))],
+            PartyTallies = published.Vote.PartyTallies?.Select(tally => revision == 1 ? tally : tally with { Yea = tally.Nay, Nay = tally.Yea }).ToArray()
         };
+        vote.Validate();
+        return vote;
+    }
 
     // Revision n sits in release n. A null file leaves the folder of that release without the record file. A null last release leaves the range open.
     private async Task SeedReleasesAsync(PublishedVoteRun published, params (int Revision, PublishedVote? File, int? LastRelease)[] revisions)
