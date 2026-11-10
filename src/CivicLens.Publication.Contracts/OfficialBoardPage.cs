@@ -54,11 +54,11 @@ public sealed record OfficialBoardPage(OfficialBoard Board, int? Congress, Immut
 
     private static (int? Shown, int? Newest) ShownCongress(List<PublishedOfficialSummary> inChamber, PublishedChamber chamber)
     {
-        var current = inChamber.Where(summary => HoldsChamber(summary.FiguresIn(summary.Congress!.Value)!, chamber)).ToList();
-        var newest = current.Max(summary => summary.Congress);
-        if (current.Any(summary => summary.Congress == newest && HasRankableMember(summary.PartyVotes, chamber))) return (newest, newest);
-        var earlier = inChamber.SelectMany(AnyFigures).Where(figures => figures.Congress < newest && HoldsChamber(figures, chamber))
-            .Select(figures => figures.Congress).DefaultIfEmpty().Max();
+        var figures = inChamber.SelectMany(AnyFigures).Where(row => HoldsChamber(row, chamber)).ToArray();
+        var newest = figures.Max(row => (int?)row.Congress);
+        if (figures.Any(row => row.Congress == newest && HasRankableMember(row.PartyVotes, chamber))) return (newest, newest);
+        var earlier = figures.Where(row => row.Congress < newest)
+            .Select(row => row.Congress).DefaultIfEmpty().Max();
         return (earlier > 0 ? earlier : newest, newest);
     }
 

@@ -72,6 +72,31 @@ public sealed class OfficialBoardPageTests
     }
 
     [Fact]
+    public void AChamberRepresentedOnlyByPreviousFiguresKeepsItsKnownCongress()
+    {
+        var page = PageOf(Row("switched", 119, 30, 3, PublishedChamber.Senate,
+            previous: Previous(118, 30, 3)));
+
+        Assert.Equal(118, page.Congress);
+        Assert.Null(page.NewerCongress);
+        var member = Assert.Single(page.Members);
+        Assert.Equal("switched", member.Official.Profile.Id);
+        Assert.Equal("officials/switched/118.html", member.PagePath);
+    }
+
+    [Fact]
+    public void ANewerPreviousChamberCongressStillControlsTheThresholdFallback()
+    {
+        var page = PageOf(Row("switched", 119, 30, 3, PublishedChamber.Senate,
+                previous: Previous(118, MinimumMinusOne, 3)),
+            Row("stayed", 117, 30, 3));
+
+        Assert.Equal(117, page.Congress);
+        Assert.Equal(118, page.NewerCongress);
+        Assert.Equal("stayed", Assert.Single(page.Members).Official.Profile.Id);
+    }
+
+    [Fact]
     public void RankedMembersWithTheSameShareOrderByCountThenNameSoTheOrderNeverDependsOnInputOrder()
     {
         var page = PageOf(Row("b", 119, 50, 5, name: "Adams"), Row("a", 119, 50, 5, name: "Zed"), Row("c", 119, 100, 10), Row("d", 119, 25, 2));
