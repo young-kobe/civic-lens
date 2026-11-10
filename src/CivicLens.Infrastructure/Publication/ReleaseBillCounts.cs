@@ -9,6 +9,8 @@ namespace CivicLens.Infrastructure.Publication;
 /// <summary>Writes the bill counts that belong to one immutable release.</summary>
 internal static class ReleaseBillCounts
 {
+    private const int ValidationBatchSize = 100;
+
     private const string ExpectedMembersSql = """
         DROP TABLE IF EXISTS pg_temp.expected_release_official_bill_counts;
         DROP TABLE IF EXISTS pg_temp.expected_release_bill_counts;
@@ -117,8 +119,8 @@ internal static class ReleaseBillCounts
         var requested = bindings.Distinct().ToArray();
         var actions = requested.Where(binding => binding.Kind == PublishedRecordKind.Action).ToArray();
         var votes = requested.Where(binding => binding.Kind == PublishedRecordKind.Vote).ToArray();
-        for (var offset = 0; offset < actions.Length; offset += 25)
-            await ActionRevisionRows.ValidateBillCountBindingsAsync(db, actions.Skip(offset).Take(25).ToArray(), cancellationToken);
+        foreach (var batch in actions.Chunk(ValidationBatchSize))
+            await ActionRevisionRows.ValidateBillCountBindingsAsync(db, batch, cancellationToken);
         var voteCount = await db.Database.SqlQueryRaw<int>(VoteBindingsSql,
             [votes.Select(binding => binding.RecordId).ToArray(), votes.Select(binding => binding.RevisionNumber).ToArray()]).SingleAsync(cancellationToken);
         if (voteCount != votes.Length)
