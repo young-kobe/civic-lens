@@ -44,7 +44,7 @@ public static class PlainVoteWords
     public static string Kind(PublishedVoteKind kind) => kind switch
     {
         PublishedVoteKind.Rule => "Vote to set the rules for debate",
-        PublishedVoteKind.PreviousQuestion => "Vote to end debate and vote now",
+        PublishedVoteKind.PreviousQuestion => "Vote to move toward a decision",
         PublishedVoteKind.MotionToRecommit => "Vote to send back to committee",
         PublishedVoteKind.Amendment => "Vote to change the text",
         PublishedVoteKind.Suspension => "Vote to pass with limited debate",
