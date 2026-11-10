@@ -26,7 +26,7 @@ internal static class ReleaseBillCountSources
         var members = await ReadMembersAsync(db, releaseNumber, cancellationToken);
         var actions = new List<BillCountActionProjection>();
         foreach (var batch in members.Where(member => member.Kind == PublishedRecordKind.Action).Chunk(ReleaseBillCounts.ValidationBatchSize))
-            actions.AddRange(await ActionRevisionRows.ValidateBillCountBindingsAsync(db, batch, cancellationToken));
+            actions.AddRange(await ActionRevisionRows.ValidateBillCountBindingsAsync(db, batch, returnProjections: true, cancellationToken));
         var votes = await db.Database.SqlQueryRaw<VoteRow>(ReadVotes, releaseNumber).ToArrayAsync(cancellationToken);
         var officials = await db.Database.SqlQueryRaw<string>(ReadOfficials, releaseNumber).ToArrayAsync(cancellationToken);
         return new(members, actions, [.. votes.Select(vote => new BillCountVoteProjection(vote.RecordId, vote.RevisionNumber, vote.Congress))], officials);

@@ -6,7 +6,7 @@ namespace CivicLens.Application.Publication;
 public sealed record ReleaseBillCountSource(IReadOnlyList<PublishedRevisionBinding> Members, IReadOnlyList<BillCountActionProjection> Actions,
     IReadOnlyList<BillCountVoteProjection> Votes, IReadOnlyCollection<string> OfficialIds);
 
-public sealed record BillCountActionProjection(string RecordId, int RevisionNumber, int Congress, bool HasHeadline, DateOnly? EventOn,
+public sealed record BillCountActionProjection(string RecordId, int RevisionNumber, int Congress, DateOnly? EventOn,
     ImmutableArray<string> SponsorIds, ImmutableArray<string> CosponsorIds);
 
 public sealed record BillCountVoteProjection(string RecordId, int RevisionNumber, int Congress);

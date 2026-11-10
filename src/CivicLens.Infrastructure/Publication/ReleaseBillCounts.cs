@@ -154,11 +154,11 @@ internal static class ReleaseBillCounts
         var actions = requested.Where(binding => binding.Kind == PublishedRecordKind.Action).ToArray();
         var votes = requested.Where(binding => binding.Kind == PublishedRecordKind.Vote).ToArray();
         foreach (var batch in actions.Chunk(ValidationBatchSize))
-            await ActionRevisionRows.ValidateBillCountBindingsAsync(db, batch, cancellationToken);
+            await ActionRevisionRows.ValidateBillCountBindingsAsync(db, batch, returnProjections: false, cancellationToken);
         var voteCount = await db.Database.SqlQueryRaw<int>(VoteBindingsSql,
             [votes.Select(binding => binding.RecordId).ToArray(), votes.Select(binding => binding.RevisionNumber).ToArray()]).SingleAsync(cancellationToken);
         if (voteCount != votes.Length)
-            throw new InvalidOperationException($"Release {releaseNumber} contains a selected vote revision that is not stored.");
+            throw new BillCountRefusedException($"Release {releaseNumber} contains a selected vote revision that is not stored.");
 
         await db.Database.ExecuteSqlRawAsync(ExpectedMembersSql, [releaseNumber], cancellationToken);
         await db.Database.ExecuteSqlRawAsync(ExpectedTotalsSql, [releaseNumber, (object?)releaseCongress ?? DBNull.Value], cancellationToken);
@@ -167,14 +167,14 @@ internal static class ReleaseBillCounts
         {
             var exactReplay = await db.Database.SqlQueryRaw<bool>(VerifySql, releaseNumber).SingleAsync(cancellationToken);
             if (!exactReplay)
-                throw new InvalidOperationException($"Release {releaseNumber} already has an incomplete or changed bill count snapshot.");
+                throw new BillCountRefusedException($"Release {releaseNumber} already has an incomplete or changed bill count snapshot.");
             return false;
         }
         await db.Database.ExecuteSqlRawAsync(InsertTotalsSql, [releaseNumber], cancellationToken);
         await db.Database.ExecuteSqlRawAsync(InsertMembersSql, [releaseNumber], cancellationToken);
         var exact = await db.Database.SqlQueryRaw<bool>(VerifySql, releaseNumber).SingleAsync(cancellationToken);
         if (!exact)
-            throw new InvalidOperationException($"Release {releaseNumber} bill count snapshots differ from its published revisions.");
+            throw new BillCountRefusedException($"Release {releaseNumber} bill count snapshots differ from its published revisions.");
         return true;
     }
 

@@ -41,7 +41,7 @@ public sealed partial class PostgresPublicationStore
         await ReleaseBillCountSources.RequireSameMembersAsync(db, release.ReleaseNumber, validatedMembers, cancellationToken);
         var added = await ReleaseBillCounts.FillAsync(db, release.ReleaseNumber, CongressOfRelease(current), validatedMembers, cancellationToken);
         if (!await db.Set<ReleaseBillCountRow>().AnyAsync(row => row.ReleaseNumber == release.ReleaseNumber, cancellationToken))
-            throw new InvalidOperationException($"Release {release.ReleaseNumber} has no Congress to count bills for.");
+            throw new BillCountRefusedException($"Release {release.ReleaseNumber} has no Congress to count bills for.");
         await transaction.CommitAsync(cancellationToken);
         return added;
     }

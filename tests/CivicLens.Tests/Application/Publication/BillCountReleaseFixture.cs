@@ -35,7 +35,7 @@ internal sealed record BillCountReleaseFixture(PublicationReleaseSummary Release
     public PublishedRevisionBinding VoteBinding => new(PublishedRecordKind.Vote, Vote.RecordId, Vote.RevisionNumber);
 
     public ReleaseBillCountSource Source() => new([ActionBinding, VoteBinding],
-        [new(Action.RecordId, Action.RevisionNumber, Action.Congress, true, EventDay, ["o1"], ["o2"])],
+        [new(Action.RecordId, Action.RevisionNumber, Action.Congress, EventDay, ["o1"], ["o2"])],
         [new(Vote.RecordId, Vote.RevisionNumber, Vote.Congress)], ["o1", "o2"]);
 
     public Dictionary<string, byte[]> Files(PublishedAction? action = null, PublicationRelease? manifest = null, string[]? officials = null)

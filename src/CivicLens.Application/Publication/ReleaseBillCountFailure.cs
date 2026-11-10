@@ -11,7 +11,7 @@ public sealed record ReleaseBillCountFailure(int ReleaseNumber, string Reason, s
         new(releaseNumber, "countsDifferent", "The saved bill count rows differ from the expected counts.");
 
     public static bool IsReportable(Exception exception) => exception is IOException or InvalidDataException or JsonException or ArgumentException
-        or UnauthorizedAccessException or InvalidOperationException;
+        or UnauthorizedAccessException or BillCountRefusedException;
 
     public static ReleaseBillCountFailure Of(int releaseNumber, Exception exception) => new(releaseNumber, exception switch
     {

@@ -144,8 +144,7 @@ public sealed class BackfillReleaseBillCountsTests
         {
             stored with { Congress = 118 },
             stored with { SponsorIds = ["o9"] },
-            stored with { EventOn = BillCountReleaseFixture.EventDay.AddDays(1) },
-            stored with { HasHeadline = false }
+            stored with { EventOn = BillCountReleaseFixture.EventDay.AddDays(1) }
         })
         {
             scenario.Publications.BillCountSources[1] = fixture.Source() with { Actions = [changed] };
@@ -227,11 +226,21 @@ public sealed class BackfillReleaseBillCountsTests
     {
         var scenario = new PublicationScenario();
         BillCountReleaseFixture.Add(scenario, 1);
-        scenario.Publications.BillCountCommitFailures[1] = new InvalidOperationException("Release 1 already has an incomplete or changed bill count snapshot.");
+        scenario.Publications.BillCountCommitFailures[1] = new BillCountRefusedException("Release 1 already has an incomplete or changed bill count snapshot.");
 
         var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, 0);
 
         Assert.Equal((0, 1, "countsInvalid"), (result.Added, result.Failed, Assert.Single(result.Failures).Reason));
+    }
+
+    [Fact]
+    public async Task OperationalErrorDuringCommitStopsTheRunInsteadOfBecomingAReleaseFailure()
+    {
+        var scenario = new PublicationScenario();
+        BillCountReleaseFixture.Add(scenario, 1);
+        scenario.Publications.BillCountCommitFailures[1] = new InvalidOperationException("The database connection closed.");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, 0));
     }
 
     [Theory]

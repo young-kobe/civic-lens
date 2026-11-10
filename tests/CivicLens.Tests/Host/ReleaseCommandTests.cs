@@ -244,7 +244,7 @@ public sealed class ReleaseCommandTests
     {
         var scenario = new PublicationScenario();
         BillCountReleaseFixture.Add(scenario, 1);
-        scenario.Publications.BillCountCommitFailures[1] = new InvalidOperationException("Partial snapshot.");
+        scenario.Publications.BillCountCommitFailures[1] = new BillCountRefusedException("Partial snapshot.");
         var backfill = new BackfillReleaseBillCounts(scenario.Publications, scenario.Releases);
 
         var exit = await RunCountsAsync(["releases", "counts", "backfill", "1"], backfill, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null);

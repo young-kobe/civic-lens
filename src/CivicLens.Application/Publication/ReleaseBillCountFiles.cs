@@ -46,7 +46,7 @@ internal static class ReleaseBillCountFiles
         if (!stored.TryGetValue((member.RecordId, member.RevisionNumber), out var projection))
             throw new InvalidDataException("A selected action revision is not stored.");
         var entry = file.ToEntry();
-        if (!projection.HasHeadline || file.Congress != projection.Congress || entry.EventDate != projection.EventOn ||
+        if (file.Congress != projection.Congress || entry.EventDate != projection.EventOn ||
             !SameIds(entry.Officials.Select(official => official.Id), projection.SponsorIds) ||
             !SameIds(entry.CosponsorIds ?? [], projection.CosponsorIds))
             throw new InvalidDataException("An action file differs from its stored bill count projection.");

@@ -82,7 +82,7 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await FillAsync(1, 119);
 
         await ExecuteAsync("UPDATE release_bill_counts SET bills = 0 WHERE release_number = 1 AND congress = 119");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => FillAsync(1, 119));
+        await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
 
         Assert.Equal(["119|0|1"], await TotalsAsync(1));
     }
@@ -96,7 +96,7 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await FillAsync(1, 119);
         await ExecuteAsync("DELETE FROM release_official_bill_counts WHERE release_number = 1 AND official_id = 'p1'");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => FillAsync(1, 119));
+        await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
 
         Assert.Empty(await MembersAsync(1));
     }
@@ -122,7 +122,7 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await ViewsSeed.AddVotesAsync(connectionString, new SeededVote('f', "2026-05-01"));
         await ViewsSeed.ExecuteAsync(connectionString, $"SET session_replication_role = replica; DELETE FROM vote_revisions WHERE record_id = '{new string('f', 64)}'");
 
-        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() => FillAsync(1, 119));
+        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
 
         Assert.Contains("selected vote revision", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(await TotalsAsync(1));
@@ -140,7 +140,7 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await ActionRevisionSeeder.AddAsync(connectionString, action);
         await ExecuteAsync($"INSERT INTO publication_record_states (kind, record_id, first_release, revision_number) VALUES ('action', '{action.RecordId}', 1, 1); DELETE FROM action_revision_sponsorship_citations WHERE record_id = '{action.RecordId}' AND sponsorship_position = 1; DELETE FROM action_revision_sponsorships WHERE record_id = '{action.RecordId}' AND position = 1");
 
-        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() => FillAsync(1, 119));
+        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
 
         Assert.Contains("mismatched bill count projection", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(await TotalsAsync(1));
@@ -154,7 +154,7 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await ActionRevisionSeeder.AddAsync(connectionString, action);
         await ExecuteAsync($"INSERT INTO publication_record_states (kind, record_id, first_release, revision_number) VALUES ('action', '{action.RecordId}', 1, 1); DELETE FROM action_revision_sponsorship_citations WHERE record_id = '{action.RecordId}'");
 
-        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() => FillAsync(1, 119));
+        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
 
         Assert.Contains("cannot produce a valid bill count projection", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(await TotalsAsync(1));
@@ -168,7 +168,7 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await AddActionRevisionAsync(Action('a', 119, [Sponsor("p1")]), 1);
         await ExecuteAsync($"UPDATE action_revisions SET event_on = NULL, cosponsor_count = NULL WHERE record_id = '{new string('a', 64)}'");
 
-        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() => FillAsync(1, 119));
+        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
 
         Assert.Contains("mismatched bill count projection", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(await TotalsAsync(1));
@@ -258,7 +258,7 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await publications.CommitBillCountsAsync(release, members, NoServedDirectory, default);
         await ExecuteAsync("DELETE FROM release_official_bill_counts WHERE official_id = 'p2'");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => publications.CommitBillCountsAsync(release, members, NoServedDirectory, default));
+        await Assert.ThrowsAsync<BillCountRefusedException>(() => publications.CommitBillCountsAsync(release, members, NoServedDirectory, default));
 
         Assert.Equal(["119|p1|1|0"], await MembersAsync(1));
     }
@@ -313,7 +313,7 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await AddReleaseAsync(1, new DateTimeOffset(1900, 1, 1, 0, 0, 0, TimeSpan.Zero));
         var (release, members) = await ReleaseAndMembersAsync(1);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => publications.CommitBillCountsAsync(release, members, NoServedDirectory, default));
+        await Assert.ThrowsAsync<BillCountRefusedException>(() => publications.CommitBillCountsAsync(release, members, NoServedDirectory, default));
 
         Assert.Equal(BillCountStatus.MissingRows, await publications.VerifyBillCountsAsync(release, members, NoServedDirectory, default));
         Assert.Empty(await TotalsAsync(1));
@@ -370,7 +370,7 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
 
         Assert.Equal(2, source.Members.Count);
         var action = Assert.Single(source.Actions);
-        Assert.Equal((119, true), (action.Congress, action.HasHeadline));
+        Assert.Equal(119, action.Congress);
         Assert.Equal(["p1"], action.SponsorIds.ToArray());
         Assert.Equal(["p2"], action.CosponsorIds.ToArray());
         Assert.NotNull(action.EventOn);
