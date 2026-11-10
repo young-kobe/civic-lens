@@ -171,6 +171,15 @@ END
 - check ck_published_records_kind: kind in ('documentChange', 'statement', 'action', 'brief', 'vote', 'relationship', 'executiveAction')
 - check ck_published_records_record_id: record_id ~ '^([0-9a-f]{32}|[0-9a-f]{64})$'
 
+## release_bill_counts
+
+- pk (release_number, congress)
+- fk (release_number) -> publication_releases (release_number) on delete restrict
+- cols release_number integer, congress integer, bills integer, expected_member_row_count integer
+- check ck_release_bill_counts_bills: bills >= 0
+- check ck_release_bill_counts_congress: congress > 0
+- check ck_release_bill_counts_expected_member_row_count: expected_member_row_count >= 0
+
 ## release_bill_histories
 
 - pk (release_number, record_id)
@@ -234,6 +243,19 @@ END
 - check ck_release_issues_home_counts: count_congress IS NULL AND substantive_votes IS NULL AND bills IS NULL OR count_congress IS NOT NULL AND substantive_votes IS NOT NULL AND bills IS NOT NULL AND count_congress > 0 AND substantive_votes >= 0 AND bills >= 0
 - check ck_release_issues_issue_id: length(btrim(issue_id)) > 0
 - check ck_release_issues_name: length(btrim(name)) > 0
+
+## release_official_bill_counts
+
+- pk (release_number, congress, official_id)
+- fk (release_number, congress) -> release_bill_counts (release_number, congress) on delete restrict
+- fk (release_number, official_id) -> release_officials (release_number, official_id) on delete restrict
+- cols release_number integer, congress integer, official_id varchar(256), sponsored integer, cosponsored integer
+- check ck_release_official_bill_counts_congress: congress > 0
+- check ck_release_official_bill_counts_cosponsored: cosponsored >= 0
+- check ck_release_official_bill_counts_nonzero: (sponsored + cosponsored) > 0
+- check ck_release_official_bill_counts_official_id: length(btrim(official_id)) > 0
+- check ck_release_official_bill_counts_sponsored: sponsored >= 0
+- index ix_release_official_bill_counts_release_official (release_number, official_id)
 
 ## release_official_terms
 

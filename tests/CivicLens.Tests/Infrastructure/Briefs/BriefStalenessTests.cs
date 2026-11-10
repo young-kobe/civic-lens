@@ -43,6 +43,7 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
         publications = new PostgresPublicationStore(factory, TestCodeVersion.Current);
         briefs = new PostgresBriefDraftStore(factory);
         seeder = new BriefWorldSeeder(connectionString);
+        await ActionRevisionSeeder.AddAsync(connectionString, ActionRevisionFixtures.Model() with { RecordId = A1, BillNumber = 7 });
         await SeedPublishedEntriesAsync(
             Binding(PublishedRecordKind.Statement, P1, 1), Binding(PublishedRecordKind.Statement, S1, 1),
             Binding(PublishedRecordKind.Statement, S2, 1), Binding(PublishedRecordKind.DocumentChange, D1, 1),

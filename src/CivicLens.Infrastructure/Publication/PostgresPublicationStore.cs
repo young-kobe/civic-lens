@@ -293,6 +293,8 @@ public sealed partial class PostgresPublicationStore : IPublicationStore
         if (commit.Names.Facets.Issues.Length > 0)
             await ReleaseIssueCounts.FillAsync(db, commit.ReleaseNumber,
                 CongressCalendar.CongressOn(publishedAt.Day), cancellationToken);
+        await ReleaseBillCounts.FillAsync(db, commit.ReleaseNumber,
+            CongressCalendar.CongressOn(publishedAt.Day), commit.Records, cancellationToken);
         await PublicationWithdrawalRows.RecordAsync(db, commit, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return summary;
