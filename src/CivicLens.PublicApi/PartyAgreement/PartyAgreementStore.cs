@@ -16,6 +16,19 @@ public sealed class PartyAgreementStore(NpgsqlDataSource views)
     public async Task<PartyAgreementAnswer?> FindAsync(PartyAgreementRequest request, CancellationToken cancellationToken)
     {
         await using var command = views.CreateCommand(Sql);
+        return await FindAsync(command, request, cancellationToken);
+    }
+
+    internal async Task<PartyAgreementAnswer?> FindAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+        PartyAgreementRequest request, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(Sql, connection, transaction);
+        return await FindAsync(command, request, cancellationToken);
+    }
+
+    private static async Task<PartyAgreementAnswer?> FindAsync(NpgsqlCommand command, PartyAgreementRequest request,
+        CancellationToken cancellationToken)
+    {
         command.Parameters.AddWithValue("chamber", request.Chamber.ToString());
         command.Parameters.AddWithValue("congress", request.Congress);
         var kinds = new SortedDictionary<PublishedVoteKind, PartyAgreementKindAnswer>();
