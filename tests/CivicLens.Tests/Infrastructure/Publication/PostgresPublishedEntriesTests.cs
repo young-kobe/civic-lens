@@ -477,25 +477,37 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
     private Task CommitAsync(int number, int? baseNumber, PublishedRecordEntry first, PublishedRecordEntry second) =>
         CommitAsync(number, baseNumber, [first, second], []);
 
-    private Task CommitAsync(int number, int? baseNumber, PublishedRecordEntry[] entries, PublishedRevisionBinding[] cited) =>
-        publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
-            [.. entries.Select(PublishedRevisionBinding.Of), .. cited],
+    private async Task CommitAsync(int number, int? baseNumber, PublishedRecordEntry[] entries, PublishedRevisionBinding[] cited)
+    {
+        var records = entries.Select(PublishedRevisionBinding.Of).Concat(cited).ToArray();
+        var histories = await publications.PrepareCorrectionHistoriesAsync(
+            [.. records.Select(record => new PublicationCorrectionHistory(record, []))], default);
+        await publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
+            [.. records],
             [.. entries.Select(entry => new ReviewStateExpectation(entry.Kind, entry.RecordId, 1, 1))])
         {
             Withdrawals = [],
             AddedEntries = [.. entries],
+            CorrectionHistories = [.. histories],
             Names = ReleaseNameFixtures.None
         },
             $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
+    }
 
-    private Task CommitRewrittenAsync(int number, int baseNumber, PublishedRecordEntry entry) =>
-        publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
-            [PublishedRevisionBinding.Of(entry)], [])
+    private async Task CommitRewrittenAsync(int number, int baseNumber, PublishedRecordEntry entry)
+    {
+        var record = PublishedRevisionBinding.Of(entry);
+        var histories = await publications.PrepareCorrectionHistoriesAsync(
+            [new PublicationCorrectionHistory(record, [])], default);
+        await publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}",
+            [record], [])
         {
             Withdrawals = [],
             RewrittenEntries = [entry],
+            CorrectionHistories = [.. histories],
             Names = ReleaseNameFixtures.None
         }, $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
+    }
 
     private async Task SeedActionAsync(params string[] ids)
     {
@@ -547,6 +559,23 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
             INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('statement', '{{B}}', 1)
             """);
         if (withTargetTime) await ExecuteAsync($"INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('action', '{C}', 1)");
+        var seedEntries = new List<PublishedRecordEntry>
+        {
+            new()
+            {
+                Kind = PublishedRecordKind.Statement,
+                RecordId = B,
+                RevisionNumber = 1,
+                Headline = "A statement about housing",
+                FirstPublishedAtUtc = new DateTimeOffset(1, TimeSpan.Zero),
+                Officials = [],
+                IssueIds = [],
+                PolicyAreaIds = [],
+                ApprovedBy = PublishedApprover.Person
+            }
+        };
+        if (withTargetTime) seedEntries.Add(PublishedEntryFixtures.Action(C, new DateTimeOffset(1, TimeSpan.Zero)));
+        await publications.AddEntriesAsync(seedEntries, default);
     }
 
     private static string ActionDraftSql(string id, int number = 1) => $"""

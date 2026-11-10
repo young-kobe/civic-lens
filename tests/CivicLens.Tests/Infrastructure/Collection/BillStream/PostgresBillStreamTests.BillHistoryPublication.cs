@@ -48,6 +48,7 @@ public sealed partial class PostgresBillStreamTests
             Withdrawals = [],
             AddedEntries = [PublishedEntryFixtures.Action(RecordId, UpdatedAt)]
         };
+        first = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, first);
         await publications.CommitAsync("owner", first, "legacy-binding", new string('0', 64), default);
         await ExecuteAsync(connectionString, $"""
             INSERT INTO release_bill_histories (release_number, record_id, detail_job_id, projection_version)
@@ -64,6 +65,7 @@ public sealed partial class PostgresBillStreamTests
             AddedEntries = [],
             BillHistories = [new(RecordId, capture.DetailJobId, capture.ProjectionVersion)]
         };
+        second = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, second);
         await publications.CommitAsync("owner", second, "verified-binding", new string('1', 64), default);
 
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM public_api.bills"));
@@ -354,6 +356,8 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM publication_releases"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM release_bill_histories"));
         await ExecuteAsync(connectionString, "UPDATE published_bill_histories SET bill_number = bill_number - 1");
+        commit = commit with { AddedEntries = [PublishedEntryFixtures.Action(RecordId, UpdatedAt)] };
+        commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, commit);
         await publications.CommitAsync("owner", commit, "valid-history", new string('2', 64), default);
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM release_bill_histories"));
     }

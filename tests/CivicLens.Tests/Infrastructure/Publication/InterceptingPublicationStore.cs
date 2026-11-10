@@ -95,6 +95,14 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
     public Task PrepareBillHistoriesAsync(IReadOnlyCollection<BillHistoryCapture> histories, CancellationToken cancellationToken) =>
         inner.PrepareBillHistoriesAsync(histories, cancellationToken);
 
+    public Task<IReadOnlyDictionary<PublishedRecordReference, StoredCorrectionHistory>> ReadCorrectionHistoriesAsync(int releaseNumber,
+        IReadOnlyCollection<PublishedRevisionBinding> records, CancellationToken cancellationToken) =>
+        inner.ReadCorrectionHistoriesAsync(releaseNumber, records, cancellationToken);
+
+    public Task<IReadOnlyList<CorrectionHistoryBinding>> PrepareCorrectionHistoriesAsync(
+        IReadOnlyCollection<PublicationCorrectionHistory> histories, CancellationToken cancellationToken) =>
+        inner.PrepareCorrectionHistoriesAsync(histories, cancellationToken);
+
     public Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken) => inner.FindReplayAsync(actorSubject, idempotencyKey, payloadHash, cancellationToken);
 

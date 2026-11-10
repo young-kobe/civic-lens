@@ -128,11 +128,16 @@ public sealed class DocumentChangeViewsTests(PostgresCollection postgres) : IAsy
     {
         var stateVersion = await ReadStateVersionAsync(draft.DraftId);
         var record = new PublishedRevisionBinding(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber);
-        await publications.CommitAsync(Owner.Subject,
+        var commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications,
             new PublicationCommit(release, baseRelease, $"{release:D6}-{Guid.NewGuid():N}", [record],
                 [new(PublishedRecordKind.DocumentChange, draft.DraftId, draft.RevisionNumber, stateVersion)])
-            { Withdrawals = [], Names = ReleaseNameFixtures.None },
-            "release-" + release, Hash(release), default);
+            {
+                Withdrawals = [],
+                Names = ReleaseNameFixtures.None,
+                AddedEntries = [PublishedEntryFixtures.DocumentChange(draft.DraftId, draft.RevisionNumber, draft.Headline,
+                    new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero))]
+            });
+        await publications.CommitAsync(Owner.Subject, commit, "release-" + release, Hash(release), default);
         await publications.ActivateAsync(release, (_, _) => Task.CompletedTask, default);
     }
 

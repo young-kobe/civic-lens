@@ -33,6 +33,7 @@ public sealed class PostgresRelationshipPublicationTests(PostgresCollection post
     private RelationshipWorldSeeder seeder = null!;
     private BriefWorldSeeder releases = null!;
     private string recordId = null!;
+    private PublishedRecordEntry relationshipEntry = null!;
 
     public async Task InitializeAsync()
     {
@@ -46,12 +47,38 @@ public sealed class PostgresRelationshipPublicationTests(PostgresCollection post
         releases = new BriefWorldSeeder(connectionString);
         await seeder.StatementAsync(Statement());
         await seeder.ActionAsync(Action());
-        recordId = ActionPair().PairId;
+        var pair = ActionPair();
+        recordId = pair.PairId;
+        relationshipEntry = new()
+        {
+            Kind = PublishedRecordKind.Relationship,
+            RecordId = recordId,
+            RevisionNumber = 1,
+            Headline = $"{Statement().Revision.Headline} and {Action().Headline}",
+            FirstPublishedAtUtc = ReleasedAt,
+            Officials = [new() { Id = pair.OfficialId, Name = Officials[pair.OfficialId] }],
+            IssueIds = [],
+            PolicyAreaIds = [],
+            LinkType = PublishedRelationshipType.DescribesOwnBill,
+            StatementRecordId = StatementId,
+            TargetKind = PublishedRecordKind.Action,
+            TargetRecordId = ActionId,
+            MatchedOfficialId = pair.OfficialId
+        };
         _ = await drafts.RefreshPairsAsync(default);
         await AnalysisWorkers.RelationshipDrafting(drafts, new PostgresAnalysisStatusStore(factory, RelationshipDraftTask.Task),
             new FakeRelationshipDraftModel().Draft(Output(quote: BillWords)), new RelationshipDraftSettings(10_000_000, concurrency: 1), Officials,
             TimeProvider.System).ExecuteAsync(once: true);
-        await releases.ReleaseAsync(1, ReleasedAt, active: true, StatementBinding, ActionBinding);
+        await releases.ReleaseWithEntriesAsync(1, ReleasedAt, active: true,
+        [
+            new PublishedRecordEntry
+            {
+                Kind = PublishedRecordKind.Statement, RecordId = StatementId, RevisionNumber = 1,
+                Headline = Statement().Revision.Headline, FirstPublishedAtUtc = ReleasedAt, ApprovedBy = PublishedApprover.Person,
+                Officials = [], IssueIds = [], PolicyAreaIds = []
+            },
+            PublishedEntryFixtures.Action(ActionId, ReleasedAt) with { Headline = Action().Headline, BillTitle = Action().BillTitle }
+        ], StatementBinding, ActionBinding);
     }
 
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
@@ -222,9 +249,12 @@ public sealed class PostgresRelationshipPublicationTests(PostgresCollection post
     private async Task<bool> ChangedAsync(params PublishedRevisionBinding[] release) =>
         (await reviews.GetForPublicationAsync([recordId], [.. release], default))[recordId].CitedRecordsChanged;
 
-    private Task<PublicationReleaseSummary> CommitAsync(params PublishedRevisionBinding[] records) =>
-        publications.CommitAsync("auth0|owner", new(2, 1, $"000002-{Guid.NewGuid():N}", [.. records],
+    private async Task<PublicationReleaseSummary> CommitAsync(params PublishedRevisionBinding[] records)
+    {
+        var commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, new(2, 1, $"000002-{Guid.NewGuid():N}", [.. records],
             [new(PublishedRecordKind.Relationship, recordId, 1, 1)])
-        { Withdrawals = [], Names = ReleaseNameFixtures.None }, "commit-1",
+        { Withdrawals = [], Names = ReleaseNameFixtures.None, AddedEntries = [relationshipEntry] });
+        return await publications.CommitAsync("auth0|owner", commit, "commit-1",
             Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("payload"))), default);
+    }
 }

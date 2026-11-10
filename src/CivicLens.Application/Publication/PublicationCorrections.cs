@@ -22,19 +22,44 @@ internal sealed class PublicationCorrections
         this.earlierVotes = earlierVotes;
     }
 
-    public static async Task<PublicationCorrections> LoadAsync(IReleaseDirectory releases, PreviousRelease previous, DateTimeOffset now,
+    public static async Task<PublicationCorrections> LoadAsync(IPublicationStore publications, IReleaseDirectory releases,
+        int? previousReleaseNumber, PreviousRelease previous, DateTimeOffset now,
         ImmutableArray<PublishedRecordReference> records, CancellationToken cancellationToken)
     {
         var earlier = new Dictionary<PublishedRecordReference, PublishedCorrection[]>();
         var earlierVotes = new Dictionary<string, PublishedVote>();
+        var published = records.Select(record => previous.Find(record.Kind, record.RecordId)).OfType<PublishedRecordEntry>()
+            .Select(PublishedRevisionBinding.Of).Distinct().ToArray();
+        var stored = previousReleaseNumber is { } number
+            ? await publications.ReadCorrectionHistoriesAsync(number, published, cancellationToken)
+            : new Dictionary<PublishedRecordReference, StoredCorrectionHistory>();
         foreach (var record in records)
         {
             if (previous.FindWithdrawal(record.RecordId) is { } withdrawal) earlier[record] = withdrawal.Corrections;
             else if (previous.Find(record.Kind, record.RecordId) is not null)
             {
-                var json = await ReadJsonAsync(releases, previous.DirectoryName!, record, cancellationToken);
-                earlier[record] = CorrectionsIn(json);
-                if (record.Kind == PublishedRecordKind.Vote) earlierVotes[record.RecordId] = VoteIn(json);
+                if (stored.TryGetValue(record, out var history)) earlier[record] = history.Corrections;
+                if (history is null || record.Kind == PublishedRecordKind.Vote)
+                {
+                    var json = await ReadJsonAsync(releases, previous.DirectoryName!, record, cancellationToken);
+                    var expected = previous.Find(record.Kind, record.RecordId)!;
+                    if (record.Kind == PublishedRecordKind.Vote)
+                    {
+                        var vote = VoteIn(json);
+                        vote.Validate();
+                        if (new PublishedRevisionBinding(PublishedRecordKind.Vote, vote.RecordId, vote.RevisionNumber) != PublishedRevisionBinding.Of(expected))
+                            throw new InvalidDataException("A previous vote file does not match its published revision.");
+                        earlierVotes[record.RecordId] = vote;
+                        if (history is null) earlier[record] = vote.Corrections;
+                    }
+                    else if (history is null)
+                    {
+                        var content = RecordFileEntry.ReadContent(record.Kind, json);
+                        if (PublishedRevisionBinding.Of(content.Entry) != PublishedRevisionBinding.Of(expected))
+                            throw new InvalidDataException("A previous record file does not match its published revision.");
+                        earlier[record] = content.Corrections;
+                    }
+                }
             }
         }
         return new(previous, now, earlier, earlierVotes);

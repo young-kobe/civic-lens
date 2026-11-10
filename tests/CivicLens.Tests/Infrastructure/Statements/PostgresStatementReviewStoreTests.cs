@@ -479,9 +479,21 @@ public sealed class PostgresStatementReviewStoreTests(PostgresCollection postgre
         await Decide.ExecuteAsync(Owner, new(candidate, 3, 2, ReviewDecisionKind.Approve, "Fixed.", [withdrawal.DecisionId], "approve-new"));
         await briefs.ExecuteAsync("UPDATE brief_analysis SET status = 'Succeeded', attempts = 3");
 
-        await new PostgresPublicationStore(factory, TestCodeVersion.Current).CommitAsync(Owner.Subject, new(2, 1, $"000002-{Guid.NewGuid():N}",
+        var publications = new PostgresPublicationStore(factory, TestCodeVersion.Current);
+        var revision = (await reviews.GetAsync(candidate, default))!.Review.CurrentRevision!;
+        var commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, new(2, 1, $"000002-{Guid.NewGuid():N}",
             [new(PublishedRecordKind.Statement, candidate, 3)], [])
-        { Withdrawals = [], Names = ReleaseNameFixtures.None }, "publish", new string('a', 64), default);
+        {
+            Withdrawals = [],
+            Names = ReleaseNameFixtures.None,
+            AddedEntries = [new PublishedRecordEntry
+            {
+                Kind = PublishedRecordKind.Statement, RecordId = candidate, RevisionNumber = revision.RevisionNumber,
+                Headline = revision.Headline, FirstPublishedAtUtc = BriefFixtures.InWeek, ApprovedBy = PublishedApprover.Person,
+                Officials = [], IssueIds = [], PolicyAreaIds = []
+            }]
+        });
+        await publications.CommitAsync(Owner.Subject, commit, "publish", new string('a', 64), default);
 
         Assert.Equal("Pending:0", await briefs.BriefQueueStatusAsync(BriefFixtures.Week));
         Assert.Equal((1, 0), await BriefSelectionAsync());

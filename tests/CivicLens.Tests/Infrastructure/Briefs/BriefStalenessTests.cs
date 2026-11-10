@@ -25,7 +25,7 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
     private static readonly string S2 = StatementId('2');
     private static readonly string D1 = DocumentChangeId('d');
     private static readonly string A1 = ActionId('a');
-    private static readonly string P1 = StatementId('p');
+    private static readonly string P1 = StatementId('b');
     private static readonly DateTimeOffset InPriorWeek = new(2026, 9, 30, 12, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset InWeek = BriefFixtures.InWeek;
     private static readonly DateOnly PriorWeek = Week.AddDays(-7);
@@ -43,6 +43,10 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
         publications = new PostgresPublicationStore(factory, TestCodeVersion.Current);
         briefs = new PostgresBriefDraftStore(factory);
         seeder = new BriefWorldSeeder(connectionString);
+        await SeedPublishedEntriesAsync(
+            Binding(PublishedRecordKind.Statement, P1, 1), Binding(PublishedRecordKind.Statement, S1, 1),
+            Binding(PublishedRecordKind.Statement, S2, 1), Binding(PublishedRecordKind.DocumentChange, D1, 1),
+            Binding(PublishedRecordKind.Action, A1, 1));
         await seeder.ReleaseAsync(1, InPriorWeek, active: false, Binding(PublishedRecordKind.Statement, P1, 1));
         await seeder.ReleaseAsync(2, InWeek, active: true, Binding(PublishedRecordKind.Statement, P1, 1),
             Binding(PublishedRecordKind.Statement, S1, 1), Binding(PublishedRecordKind.Statement, S2, 1),
@@ -105,10 +109,13 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
             VALUES ('{A1}', 'congress-bills', 119, 'hr', 7, 1, 0, 0, 1, 'ChangesRequested')
             """);
 
-        _ = await publications.CommitAsync("auth0|owner", new(3, 2, $"000003-{Guid.NewGuid():N}",
+        var withdrawnCommit = new PublicationCommit(3, 2, $"000003-{Guid.NewGuid():N}",
             [Binding(PublishedRecordKind.Statement, P1, 1), Binding(PublishedRecordKind.Statement, S1, 1),
              Binding(PublishedRecordKind.Statement, S2, 1), Binding(PublishedRecordKind.DocumentChange, D1, 1)], [])
-        { Withdrawals = [], Names = ReleaseNameFixtures.None, WithdrawnRecords = [new(PublishedRecordKind.Action, A1)] }, "key-3",
+        { Withdrawals = [], Names = ReleaseNameFixtures.None, WithdrawnRecords = [new(PublishedRecordKind.Action, A1)] };
+        await SeedPublishedEntriesAsync(withdrawnCommit.Records.ToArray());
+        withdrawnCommit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, withdrawnCommit);
+        _ = await publications.CommitAsync("auth0|owner", withdrawnCommit, "key-3",
             Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("payload"))), default);
 
         Assert.Equal(("Pending:0", "Succeeded:3"), (await seeder.BriefQueueStatusAsync(Week), await seeder.BriefQueueStatusAsync(PriorWeek)));
@@ -159,6 +166,8 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
     {
         var laterWeek = Week.AddDays(14);
         await seeder.ExecuteAsync("UPDATE publication_releases SET is_active = false WHERE release_number = 2");
+        await SeedPublishedEntriesAsync(Binding(PublishedRecordKind.Statement, P1, 1), Binding(PublishedRecordKind.Statement, S1, 1),
+            Binding(PublishedRecordKind.DocumentChange, D1, 1), Binding(PublishedRecordKind.Action, A1, 1));
         await seeder.ReleaseAsync(3, InWeek.AddDays(7), active: false, Binding(PublishedRecordKind.Statement, P1, 1),
             Binding(PublishedRecordKind.Statement, S1, 1), Binding(PublishedRecordKind.DocumentChange, D1, 1), Binding(PublishedRecordKind.Action, A1, 1));
         await seeder.ReleaseAsync(4, InWeek.AddDays(14), active: true, Binding(PublishedRecordKind.Statement, P1, 1),
@@ -330,8 +339,32 @@ public sealed class BriefStalenessTests(PostgresCollection postgres) : IAsyncLif
     private Task<PublicationReleaseSummary> CommitAsync(params PublishedRevisionBinding[] records) => CommitAsync(3, 2, records);
 
     private Task<PublicationReleaseSummary> CommitAsync(int number, int baseNumber, params PublishedRevisionBinding[] records) =>
-        publications.CommitAsync("auth0|owner", new(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", [.. records], []) { Withdrawals = [], Names = ReleaseNameFixtures.None }, $"key-{number}",
+        CommitWithEntriesAsync(number, baseNumber, records);
+
+    private async Task<PublicationReleaseSummary> CommitWithEntriesAsync(int number, int baseNumber, PublishedRevisionBinding[] records)
+    {
+        await SeedPublishedEntriesAsync(records);
+        var commit = new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", [.. records], [])
+        { Withdrawals = [], Names = ReleaseNameFixtures.None };
+        commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, commit);
+        return await publications.CommitAsync("auth0|owner", commit, $"key-{number}",
             Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("payload"))), default);
+    }
+
+    private Task SeedPublishedEntriesAsync(params PublishedRevisionBinding[] records) => PublishedEntryFixtures.SeedEntriesAsync(connectionString,
+        [.. records.Select(record => new PublishedRecordEntry
+        {
+            Kind = record.Kind,
+            RecordId = record.RecordId,
+            RevisionNumber = record.RevisionNumber,
+            Headline = "Fixture record",
+            FirstPublishedAtUtc = record.RecordId == P1 ? InPriorWeek : InWeek,
+            Officials = [],
+            IssueIds = [],
+            PolicyAreaIds = [],
+            ApprovedBy = record.Kind == PublishedRecordKind.Statement ? PublishedApprover.Person : null,
+            BillTitle = record.Kind == PublishedRecordKind.Action ? "Fixture bill" : null
+        })], allowMissingRevisionParents: true);
 
     private async Task<int> ReadRevisionAsync(string statementId) =>
         (await briefs.ReadEvidenceAsync(BriefWeek.RecordIdOf(Week), default))!.Records.Single(record => record.RecordId == statementId).RevisionNumber;

@@ -722,6 +722,8 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Dictionary<string, PublishedBillStatus> BillStatuses { get; } = [];
     public Dictionary<string, BillHistoryCapture> BillHistories { get; } = [];
     public List<BillHistoryCapture> PreparedHistories { get; } = [];
+    public Dictionary<int, Dictionary<PublishedRecordReference, StoredCorrectionHistory>> CorrectionHistories { get; } = [];
+    public List<PublicationCorrectionHistory> PreparedCorrectionHistories { get; } = [];
     public Action? BeforePreparingHistories { get; set; }
     private readonly Dictionary<int, BillHistoryBinding[]> historyBindings = [];
 
@@ -743,6 +745,23 @@ internal sealed class FakePublicationStore : IPublicationStore
         BeforePreparingHistories?.Invoke();
         PreparedHistories.AddRange(histories);
         return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyDictionary<PublishedRecordReference, StoredCorrectionHistory>> ReadCorrectionHistoriesAsync(int releaseNumber,
+        IReadOnlyCollection<PublishedRevisionBinding> records, CancellationToken cancellationToken)
+    {
+        var stored = CorrectionHistories.GetValueOrDefault(releaseNumber) ?? [];
+        return Task.FromResult<IReadOnlyDictionary<PublishedRecordReference, StoredCorrectionHistory>>(records
+            .Select(record => new PublishedRecordReference(record.Kind, record.RecordId)).Where(stored.ContainsKey)
+            .ToDictionary(record => record, record => stored[record]));
+    }
+
+    public Task<IReadOnlyList<CorrectionHistoryBinding>> PrepareCorrectionHistoriesAsync(
+        IReadOnlyCollection<PublicationCorrectionHistory> histories, CancellationToken cancellationToken)
+    {
+        PreparedCorrectionHistories.AddRange(histories);
+        return Task.FromResult<IReadOnlyList<CorrectionHistoryBinding>>([.. histories.Select(history =>
+            new CorrectionHistoryBinding(history.Record, PublishedCorrectionHistoryIdentity.Of(history.Corrections)))]);
     }
 
     public Dictionary<int, List<PublishedBillStatus>> BackfilledBillStatuses { get; } = [];
@@ -779,6 +798,11 @@ internal sealed class FakePublicationStore : IPublicationStore
         if (ConcurrentWinner is not null) return Task.FromResult(ConcurrentWinner);
         LastCommit = commit;
         historyBindings[commit.ReleaseNumber] = [.. commit.BillHistories];
+        CorrectionHistories[commit.ReleaseNumber] = commit.CorrectionHistories.ToDictionary(
+            binding => new PublishedRecordReference(binding.Record.Kind, binding.Record.RecordId),
+            binding => new StoredCorrectionHistory(binding,
+                PreparedCorrectionHistories.FirstOrDefault(history => PublishedCorrectionHistoryIdentity.Of(history.Corrections) == binding.HistoryId)?.Corrections
+                ?? CorrectionHistories.Values.SelectMany(histories => histories.Values).First(history => history.Binding.HistoryId == binding.HistoryId).Corrections));
         foreach (var entry in commit.AddedEntries) FirstPublished.TryAdd(new(entry.Kind, entry.RecordId), entry.FirstPublishedAtUtc);
         var summary = new PublicationReleaseSummary(commit.ReleaseNumber, commit.DirectoryName, DateTimeOffset.UnixEpoch, commit.Records.Length);
         Committed.Add(summary);

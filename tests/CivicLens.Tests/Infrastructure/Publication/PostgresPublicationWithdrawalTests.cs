@@ -144,6 +144,7 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
         await SetStatusAsync(A, "ApprovalWithdrawn");
         var commit = Commit(2, 1, [B], withdrawn: [Withdrawal(A, "Wrong.", First.AddDays(1), Correction(1, "Early.", false))]);
 
+        commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, commit);
         await publications.CommitAsync("auth0|owner", commit, "replay", new string('1', 64), default);
         await publications.CommitAsync("auth0|owner", commit, "replay", new string('1', 64), default);
 
@@ -316,10 +317,14 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
         FactsUnchanged = factsUnchanged
     };
 
-    private Task PublishAsync(int number, int? baseNumber, string[] records, string[]? added = null,
-        PublishedWithdrawal[]? withdrawn = null, PublishedWithdrawal[]? carried = null) =>
-        publications.CommitAsync("auth0|owner", Commit(number, baseNumber, records, added, withdrawn, carried),
+    private async Task PublishAsync(int number, int? baseNumber, string[] records, string[]? added = null,
+        PublishedWithdrawal[]? withdrawn = null, PublishedWithdrawal[]? carried = null)
+    {
+        var commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications,
+            Commit(number, baseNumber, records, added, withdrawn, carried));
+        await publications.CommitAsync("auth0|owner", commit,
             $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
+    }
 
     private static PublicationCommit Commit(int number, int? baseNumber, string[] records, string[]? added = null,
         PublishedWithdrawal[]? withdrawn = null, PublishedWithdrawal[]? carried = null) =>

@@ -295,6 +295,7 @@ public sealed partial class PostgresPublicationStore : IPublicationStore
         await PublishedRecords.InsertAsync(db, firstPublications, cancellationToken);
         await PublishedRecords.RequireStoredTimesAsync(db, firstPublications, cancellationToken);
         await PublishedEntries.InsertAsync(db, commit.AddedEntries, "Rebuild the release.", cancellationToken);
+        await CorrectionHistoryCopies.BindAsync(db, commit.ReleaseNumber, commit.Records, commit.CorrectionHistories, cancellationToken);
         await PublishedEntries.FillBillLinesAsync(db, commit.RewrittenEntries,
             "A carried action has no entry row or holds another bill line. Run releases entries backfill, then publish again.", cancellationToken);
         await VoteStoredColumnRows.WriteAsync(db, commit.VoteColumns, cancellationToken);
@@ -559,7 +560,7 @@ public sealed partial class PostgresPublicationStore : IPublicationStore
         ReleasePaths.RequireDirectoryName(commit.DirectoryName);
         if (!commit.DirectoryName.StartsWith($"{commit.ReleaseNumber:D6}-", StringComparison.Ordinal))
             throw new ArgumentException("Release directory name does not match the release number.", nameof(commit));
-        if (commit.Records.IsDefault || commit.AddedRecords.IsDefault || commit.WithdrawnRecords.IsDefault || commit.Withdrawals.IsDefault || commit.AddedEntries.IsDefault || commit.RewrittenEntries.IsDefault || commit.VoteColumns.IsDefault || commit.BillHistories.IsDefault)
+        if (commit.Records.IsDefault || commit.AddedRecords.IsDefault || commit.WithdrawnRecords.IsDefault || commit.Withdrawals.IsDefault || commit.AddedEntries.IsDefault || commit.RewrittenEntries.IsDefault || commit.VoteColumns.IsDefault || commit.BillHistories.IsDefault || commit.CorrectionHistories.IsDefault)
             throw new ArgumentException("Release records are required.", nameof(commit));
     }
 }

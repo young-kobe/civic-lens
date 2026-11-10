@@ -38,11 +38,13 @@ public sealed partial class PostgresBillStreamTests
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Approve);
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
+        var staleCommit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, ActionCommit(reviewStateVersion: 0));
 
         await Assert.ThrowsAsync<PublicationConflictException>(() =>
-            publications.CommitAsync(PublicationScenario.Owner.Subject, ActionCommit(reviewStateVersion: 0), "stale", ReleaseHash(1), default));
+            publications.CommitAsync(PublicationScenario.Owner.Subject, staleCommit, "stale", ReleaseHash(1), default));
         Assert.Equal(new PublicationState(0, null), await publications.GetStateAsync(default));
-        var committed = await publications.CommitAsync(PublicationScenario.Owner.Subject, ActionCommit(reviewStateVersion: 1), "fresh",
+        var freshCommit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, ActionCommit(reviewStateVersion: 1));
+        var committed = await publications.CommitAsync(PublicationScenario.Owner.Subject, freshCommit, "fresh",
             ReleaseHash(2), default);
         Assert.Equal(1, committed.ReleaseNumber);
     }
@@ -53,8 +55,9 @@ public sealed partial class PostgresBillStreamTests
         await DraftAsync(UpdatedAt, DraftableOutput);
         Assert.Single(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
 
-        await PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current).CommitAsync(PublicationScenario.Owner.Subject,
-            ActionCommit(reviewStateVersion: 1), "key", ReleaseHash(1), default);
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
+        var commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, ActionCommit(reviewStateVersion: 1));
+        await publications.CommitAsync(PublicationScenario.Owner.Subject, commit, "key", ReleaseHash(1), default);
 
         Assert.Equal("action", await ScalarAsync("SELECT kind FROM publication_record_states"));
         Assert.Empty(await ActionReviews().ListUnpublishedApprovedAsync(10, [], default));
@@ -256,7 +259,7 @@ public sealed partial class PostgresBillStreamTests
     private static PublicationCommit ActionCommit(int reviewStateVersion) =>
         new(1, null, $"000001-{Guid.NewGuid():N}", [new(PublishedRecordKind.Action, RecordId, 1)],
             [new(PublishedRecordKind.Action, RecordId, 1, reviewStateVersion)])
-        { Withdrawals = [], Names = ReleaseNameFixtures.None };
+        { Withdrawals = [], Names = ReleaseNameFixtures.None, AddedEntries = [PublishedEntryFixtures.Action(RecordId, ReleasedAt)] };
 
     private static string ReleaseHash(int seed) => Convert.ToHexStringLower(SHA256.HashData(BitConverter.GetBytes(seed)));
 }

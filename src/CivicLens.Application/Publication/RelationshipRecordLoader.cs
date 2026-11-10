@@ -38,7 +38,7 @@ internal sealed class RelationshipRecordLoader(IRelationshipReviewStore relation
             throw new ArgumentException(
                 $"Relationship {recordId} cites a record that the new release does not hold at the cited revision, or that is not approved.");
         var record = new PublishedRelationshipBuilder(build.Rules).Build(addition, build.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions), build.Now);
-        return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record,
+        return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record, record.Corrections,
             (_, _, cancellationToken) => build.Renderer.RenderRelationshipAsync(record, build.Catalog, cancellationToken));
     }
 
