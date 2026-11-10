@@ -36,7 +36,7 @@ internal static class ReleaseSplice
             .Select(entry => new PublishedRecordReference(entry.Kind, entry.RecordId)).FirstOrDefault();
     }
 
-    private static PublishedRecordEntry EntryOf(StoredReleaseRecord row, PublishedRecordEntry fromFile)
+    internal static PublishedRecordEntry EntryOf(StoredReleaseRecord row, PublishedRecordEntry fromFile)
     {
         var facts = row.Facts!;
         var names = fromFile.Officials.ToDictionary(official => official.Id, official => official.Name);

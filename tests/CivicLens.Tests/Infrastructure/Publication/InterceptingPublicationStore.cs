@@ -103,6 +103,22 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
         IReadOnlyCollection<PublicationCorrectionHistory> histories, CancellationToken cancellationToken) =>
         inner.PrepareCorrectionHistoriesAsync(histories, cancellationToken);
 
+    public Task<CorrectionHistoryBootstrapPage> ReadCorrectionHistoryBootstrapPageAsync(CorrectionHistoryBootstrapCursor? after, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.ReadCorrectionHistoryBootstrapPageAsync(after, limit, readServedDirectory, cancellationToken);
+
+    public Task<CorrectionHistoryVerificationPage> ReadCorrectionHistoryVerificationPageAsync(CorrectionHistoryVerificationCursor? after, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.ReadCorrectionHistoryVerificationPageAsync(after, limit, readServedDirectory, cancellationToken);
+
+    public Task<string> ReadCorrectionHistoryVerificationFingerprintAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken) => inner.ReadCorrectionHistoryVerificationFingerprintAsync(readServedDirectory, cancellationToken);
+
+    public Task<(int Added, int AlreadyPresent)> CommitCorrectionHistoryBootstrapAsync(PublicationReleaseSummary release,
+        IReadOnlyCollection<CorrectionHistoryBinding> bindings, Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken) =>
+        inner.CommitCorrectionHistoryBootstrapAsync(release, bindings, readServedDirectory, cancellationToken);
+
     public Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken) => inner.FindReplayAsync(actorSubject, idempotencyKey, payloadHash, cancellationToken);
 
