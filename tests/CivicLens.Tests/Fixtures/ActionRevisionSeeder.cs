@@ -46,11 +46,18 @@ internal static class ActionRevisionSeeder
         var numbers = revisions.Select(revision => revision.RevisionNumber).ToArray();
         await using var transaction = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlRawAsync("SET LOCAL session_replication_role = replica");
-        foreach (var table in new[] { "action_revision_sponsorship_citations", "action_revision_sponsorships", "action_revision_issues", "action_revision_text_citations", "action_revisions" })
-            await db.Database.ExecuteSqlRawAsync($$"""
-                DELETE FROM {{table}} child USING unnest({0}::text[], {1}::integer[]) AS named(id, number)
-                 WHERE child.record_id = named.id AND child.revision_number = named.number
-                """, ids, numbers);
+        await db.Database.ExecuteSqlRawAsync("""
+            DELETE FROM action_revision_sponsorship_citations child USING unnest({0}::text[], {1}::integer[]) AS named(id, number)
+             WHERE child.record_id = named.id AND child.revision_number = named.number;
+            DELETE FROM action_revision_sponsorships child USING unnest({0}::text[], {1}::integer[]) AS named(id, number)
+             WHERE child.record_id = named.id AND child.revision_number = named.number;
+            DELETE FROM action_revision_issues child USING unnest({0}::text[], {1}::integer[]) AS named(id, number)
+             WHERE child.record_id = named.id AND child.revision_number = named.number;
+            DELETE FROM action_revision_text_citations child USING unnest({0}::text[], {1}::integer[]) AS named(id, number)
+             WHERE child.record_id = named.id AND child.revision_number = named.number;
+            DELETE FROM action_revisions child USING unnest({0}::text[], {1}::integer[]) AS named(id, number)
+             WHERE child.record_id = named.id AND child.revision_number = named.number;
+            """, ids, numbers);
         db.AddRange(rows);
         await db.SaveChangesAsync();
         await transaction.CommitAsync();
