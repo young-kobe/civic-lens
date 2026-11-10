@@ -138,6 +138,36 @@ internal static class ActionRevisionRows
         return revisions.Length == requested.Length ? revisions : throw CitedRevisions.NotStored(PublishedRecordKind.Action);
     }
 
+    /// <summary>Reads an exact bounded batch and validates the stored count projection against its rebuilt revision.</summary>
+    public static async Task ValidateBillCountBindingsAsync(CollectionAttemptDbContext db,
+        IReadOnlyCollection<PublishedRevisionBinding> named, CancellationToken cancellationToken)
+    {
+        var requested = named.Distinct().ToArray();
+        if (requested.Length == 0) return;
+        CitedRevisions.RequireKind(PublishedRecordKind.Action, requested, nameof(named));
+        var rows = db.Set<ActionRevisionRow>().FromSqlRaw("""
+            SELECT r.* FROM action_revisions r JOIN unnest({0}, {1}) AS k(id, number) ON r.record_id = k.id AND r.revision_number = k.number
+            """, requested.Select(binding => binding.RecordId).ToArray(), requested.Select(binding => binding.RevisionNumber).ToArray()).AsNoTracking();
+        var page = await ReadPageAsync(db, rows, cancellationToken);
+        if (page.Rows.Count != requested.Length)
+            throw CitedRevisions.NotStored(PublishedRecordKind.Action);
+        foreach (var row in page.Rows)
+        {
+            ActionDraftRevision rebuilt;
+            try
+            {
+                rebuilt = page.Rebuild(row);
+                rebuilt.ValidateShape();
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidDataException or InvalidOperationException)
+            {
+                throw new InvalidOperationException($"Action revision {row.RecordId} {row.RevisionNumber} cannot produce a valid bill count projection.", exception);
+            }
+            if (row.EventOn != rebuilt.EventOn() || row.CosponsorCount != rebuilt.CosponsorCount())
+                throw new InvalidOperationException($"Action revision {row.RecordId} {row.RevisionNumber} has a mismatched bill count projection.");
+        }
+    }
+
     private static IEnumerable<string> IssueIds(ActionDraftRevision revision) =>
         revision.IssueCandidateIds.IsDefault ? revision.TrackedIssueIds : revision.IssueCandidateIds;
 

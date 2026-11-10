@@ -191,7 +191,7 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
             [new(PublishedRecordKind.Action, A, 10, 1), new(PublishedRecordKind.Action, B, 20, 1)],
             [PublishedEntryFixtures.Action(A, PublishedAt, 10), PublishedEntryFixtures.Action(B, PublishedAt, 20)], histories);
 
-        await ExecuteAsync(PublishedEntryFixtures.InsertActionRevisionSql(A, 11));
+        await ActionRevisionSeeder.AddAsync(connectionString, ActionRevisionFixtures.Model(11) with { RecordId = A });
         await ExecuteAsync("UPDATE action_drafts SET current_revision_number = 11, review_state_version = 2 WHERE record_id = @id", ("id", A));
         var revised = Binding(A, 11);
         var nextHistories = await publications.PrepareCorrectionHistoriesAsync([new(revised, []), new(second, [])], default);
@@ -242,7 +242,7 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
         await CommitAsync(1, null, [firstRecord], [new(PublishedRecordKind.Action, A, 10, 1)],
             [PublishedEntryFixtures.Action(A, PublishedAt, 10)],
             await publications.PrepareCorrectionHistoriesAsync([new(firstRecord, [])], default));
-        await ExecuteAsync(PublishedEntryFixtures.InsertActionRevisionSql(A, 11));
+        await ActionRevisionSeeder.AddAsync(connectionString, ActionRevisionFixtures.Model(11) with { RecordId = A });
         await ExecuteAsync("UPDATE action_drafts SET current_revision_number = 11, review_state_version = 2 WHERE record_id = @id", ("id", A));
         var secondRecord = Binding(A, 11);
         await CommitAsync(2, 1, [secondRecord], [new(PublishedRecordKind.Action, A, 11, 2)],
@@ -512,7 +512,7 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
         foreach (var (id, revision) in actions)
         {
             billNumber++;
-            await ExecuteAsync(PublishedEntryFixtures.InsertActionRevisionSql(id, revision));
+            await ActionRevisionSeeder.AddAsync(connectionString, ActionRevisionFixtures.Model(revision) with { RecordId = id });
             await ExecuteAsync($"""
                 SET session_replication_role = replica;
                 INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number,

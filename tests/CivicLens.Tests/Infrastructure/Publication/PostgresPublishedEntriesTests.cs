@@ -513,7 +513,7 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
     {
         foreach (var (id, index) in ids.Select((id, index) => (id, index)))
         {
-            await ExecuteAsync(PublishedEntryFixtures.InsertActionRevisionSql(id));
+            await ActionRevisionSeeder.AddAsync(connectionString, ActionRevisionFixtures.Model() with { RecordId = id });
             await ExecuteAsync(ActionDraftSql(id, index + 1));
         }
     }
@@ -562,7 +562,7 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
             """);
         if (withTargetTime)
         {
-            await ExecuteAsync(PublishedEntryFixtures.InsertActionRevisionSql(C));
+            await ActionRevisionSeeder.AddAsync(connectionString, ActionRevisionFixtures.Model() with { RecordId = C });
             await ExecuteAsync($"INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('action', '{C}', 1)");
         }
         var seedEntries = new List<PublishedRecordEntry>

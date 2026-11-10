@@ -47,7 +47,8 @@ public sealed partial class SchemaReferenceTests(PostgresCollection postgres) : 
         ("publication", ["publication_record_states", "publication_releases", "publication_withdrawal_corrections", "publication_withdrawals",
             "published_entries", "published_entry_issues", "published_entry_officials", "published_entry_policy_areas", "published_records",
             "published_bill_histories", "published_bill_history_actions", "published_correction_histories", "published_correction_history_entries",
-            "release_correction_histories", "release_bill_histories", "release_bill_statuses", "release_issue_excludes", "release_issue_includes", "release_issues", "release_official_terms", "release_officials", "release_policy_areas"])
+            "release_correction_histories", "release_bill_histories", "release_bill_statuses", "release_bill_counts", "release_official_bill_counts",
+            "release_issue_excludes", "release_issue_includes", "release_issues", "release_official_terms", "release_officials", "release_policy_areas"])
     ];
 
     private string connectionString = null!;

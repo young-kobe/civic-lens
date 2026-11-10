@@ -136,7 +136,7 @@ public sealed class PostgresPublishedRecordsTests(PostgresCollection postgres) :
     {
         foreach (var (id, index) in ids.Select((id, index) => (id, index)))
         {
-            await ExecuteAsync(PublishedEntryFixtures.InsertActionRevisionSql(id));
+            await ActionRevisionSeeder.AddAsync(connectionString, ActionRevisionFixtures.Model() with { RecordId = id });
             await ExecuteAsync($"""
                 SET session_replication_role = replica;
                 INSERT INTO action_drafts (record_id, source_id, congress, bill_type, bill_number, current_revision_number, created_at_utc_ticks,

@@ -146,11 +146,11 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
             SELECT md5(n::text) || md5('x' || n::text), 'bulk', 119, 'hr', n, 1, 0, 0, 1, 'Approved' FROM generate_series(1, 15000) n
             """);
         var ids = (await PublishedRecordStateReader.ReadAsync(connectionString, "SELECT record_id FROM action_drafts")).Select(row => row[0]).ToArray();
-        await SeedRevisionEntriesAsync([.. ids.Select(id => (id, 1))]);
+        await SeedRevisionEntriesAsync(ids.Select(id => (id, 1)));
         var first = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications,
             Commit(1, null, [.. ids.Select(id => (id, 1))], ids, []));
         var opening = await TimeAsync(() => publications.CommitAsync("auth0|owner", first, "bulk-first", new string('a', 64), default));
-        await SeedRevisionEntriesAsync([.. ids.Select(id => (id, 2))]);
+        await SeedRevisionEntriesAsync(ids.Select(id => (id, 2)));
         await ExecuteAsync("UPDATE action_drafts SET current_revision_number = 2");
         var second = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications,
             Commit(2, 1, [.. ids.Select(id => (id, 2))], ids, []));
@@ -221,14 +221,10 @@ public sealed class PostgresPublicationRecordStateTests(PostgresCollection postg
         await ExecuteAsync($"UPDATE action_drafts SET current_revision_number = {revision} WHERE record_id = '{id}'");
     }
 
-    private async Task SeedRevisionEntriesAsync((string Id, int Revision)[] records)
+    private async Task SeedRevisionEntriesAsync(IEnumerable<(string Id, int Revision)> records)
     {
-        await ExecuteAsync("""
-            SET session_replication_role = replica;
-            INSERT INTO action_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
-            SELECT k.id, k.revision, 'auth0|fixture', 'Person', '{}', 0 FROM unnest(@ids::text[], @revisions::integer[]) k(id, revision)
-            ON CONFLICT DO NOTHING
-            """, ("ids", records.Select(record => record.Id).ToArray()), ("revisions", records.Select(record => record.Revision).ToArray()));
+        await ActionRevisionSeeder.AddManyAsync(connectionString,
+            records.Select(record => ActionRevisionFixtures.Model(record.Revision) with { RecordId = record.Id }));
         await PublishedEntryFixtures.SeedEntriesAsync(connectionString,
             [.. records.Select(record => PublishedEntryFixtures.Action(record.Id, First, record.Revision))]);
     }
