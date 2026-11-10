@@ -347,6 +347,31 @@ public sealed class PublishedVoteTests
     }
 
     [Fact]
+    public void PartyTalliesPreserveZeroSideCountsAndMustMatchTheWholeChamberTotals()
+    {
+        var vote = Vote() with
+        {
+            Totals = new() { Yea = 1, Nay = 1, Present = 1, NotVoting = 0 },
+            PartyTallies =
+            [
+                new() { Party = "Democrat", Yea = 0, Nay = 1, Present = 0, NotVoting = 0, Other = 0 },
+                new() { Party = "Republican", Yea = 1, Nay = 0, Present = 0, NotVoting = 0, Other = 0 },
+                new() { Party = "Independent", Yea = 0, Nay = 0, Present = 1, NotVoting = 0, Other = 0 }
+            ],
+            PartyMajorities =
+            [
+                PublishedPartyMajority.Of("Democrat", 0, 1),
+                PublishedPartyMajority.Of("Republican", 1, 0),
+                PublishedPartyMajority.Of("Independent", 0, 0)
+            ]
+        };
+
+        vote.Validate();
+        Assert.Throws<InvalidDataException>((vote with { PartyTallies = [.. vote.PartyTallies!, vote.PartyTallies![2]] }).Validate);
+        Assert.Throws<InvalidDataException>((vote with { PartyTallies = [vote.PartyTallies![0], vote.PartyTallies[1] with { Present = 1 }, vote.PartyTallies[2]] }).Validate);
+    }
+
+    [Fact]
     public void RejectsAMemberWhoseNamedPartyHasNoMajorityEntry()
     {
         var vote = Vote();
@@ -425,6 +450,50 @@ public sealed class PublishedVoteTests
     public void ACandidateTotalVoteHasNoTotalsAndNoPartyMajorities()
     {
         CandidateVote().Validate();
+    }
+
+    [Fact]
+    public void CandidateVoteTalliesMustMatchTheCitedCandidateTotalCounts()
+    {
+        var vote = CandidateVote() with
+        {
+            PartyTallies = [new() { Party = "Republican", Yea = 0, Nay = 0, Present = 0, NotVoting = 0, Other = 219 }]
+        };
+        vote.Validate();
+
+        Assert.Throws<InvalidDataException>(() => (vote with
+        {
+            PartyTallies = [vote.PartyTallies![0] with { Other = 4 }]
+        }).Validate());
+        Assert.Throws<InvalidDataException>(() => (vote with
+        {
+            PartyTallies = [vote.PartyTallies![0] with { Other = 218, Present = 1 }]
+        }).Validate());
+    }
+
+    [Fact]
+    public void CandidateVoteTalliesPreserveCitedPresentAndNotVotingCounts()
+    {
+        var vote = CandidateVote();
+        var detail = vote.Sources[0].Text + "Candidate total Present: 1\nCandidate total Not Voting: 1\n";
+        (vote with
+        {
+            PartyTallies = [new() { Party = "Republican", Yea = 0, Nay = 0, Present = 1, NotVoting = 1, Other = 219 }],
+            Facts = [.. vote.Facts,
+                new() { Text = "Candidate total Present: 1", Citation = Cite(DetailId, detail, "Candidate total Present: 1") },
+                new() { Text = "Candidate total Not Voting: 1", Citation = Cite(DetailId, detail, "Candidate total Not Voting: 1") }],
+            Sources = [vote.Sources[0] with { Text = detail }, vote.Sources[1]]
+        }).Validate();
+    }
+
+    [Fact]
+    public void OldVoteJsonKeepsItsSerializedShapeUntilTalliesAreKnown()
+    {
+        var vote = Vote();
+        var json = JsonSerializer.Serialize(vote, PublicationProtocol.JsonOptions);
+
+        Assert.DoesNotContain("partyTallies", json, StringComparison.Ordinal);
+        Assert.Contains("\"partyTallies\"", JsonSerializer.Serialize(vote with { PartyTallies = [] }, PublicationProtocol.JsonOptions), StringComparison.Ordinal);
     }
 
     [Fact]

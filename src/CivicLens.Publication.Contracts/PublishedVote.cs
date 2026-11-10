@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace CivicLens.Publication.Contracts;
 
@@ -38,6 +39,8 @@ public sealed record PublishedVote
     public required string Result { get; init; }
     public PublishedVoteTotals? Totals { get; init; }
     public required PublishedPartyMajority[] PartyMajorities { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PublishedPartyTally[]? PartyTallies { get; init; }
     public required PublishedCitation VotedOnCitation { get; init; }
     public required PublishedVoteFact[] Facts { get; init; }
     public required PublishedMemberVote[] Members { get; init; }
@@ -56,6 +59,25 @@ public sealed record PublishedVote
         var texts = factTexts.ToArray();
         return texts.Any(text => text.StartsWith(CandidateTotalPrefix, StringComparison.Ordinal)) &&
             !texts.Any(text => text.StartsWith(PartyTotalPrefix, StringComparison.Ordinal));
+    }
+
+    public static IReadOnlyDictionary<string, int>? CandidateCountsOf(IEnumerable<string> factTexts)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var total = 0;
+        foreach (var text in factTexts.Where(text => text.StartsWith(CandidateTotalPrefix, StringComparison.Ordinal)))
+        {
+            var separator = text.LastIndexOf(": ", StringComparison.Ordinal);
+            if (separator <= CandidateTotalPrefix.Length) return null;
+            var label = text[CandidateTotalPrefix.Length..separator];
+            if (label.Contains(", ", StringComparison.Ordinal) || !PublishedEvidenceRules.IsBoundedText(label) ||
+                !int.TryParse(text.AsSpan(separator + 2), NumberStyles.None, CultureInfo.InvariantCulture, out var count) ||
+                count is < 0 or > MaximumMembers || !counts.TryAdd(label, count))
+                return null;
+            total += count;
+            if (total > MaximumMembers) return null;
+        }
+        return total > 0 ? counts : null;
     }
 
     /// <summary>True when only the headline or the summary differs from the earlier revision of the same record. Computed party data counts as a vote fact.</summary>
@@ -156,6 +178,7 @@ public sealed record PublishedVote
         {
             if (Totals is not null || PartyMajorities is not { Length: 0 })
                 throw new InvalidDataException("A published vote with candidate totals has no totals and no party majorities.");
+            ValidateCandidatePartyTallies();
             return;
         }
         if (Totals is null || PartyMajorities is null || PartyMajorities.Length is 0 or > MaximumParties || PartyMajorities.Any(party => party is null))
@@ -165,6 +188,40 @@ public sealed record PublishedVote
         if (!PublishedEvidenceRules.AreDistinctAndNotBlank(PartyMajorities.Select(party => party.Party)) ||
             PartyMajorities.Sum(party => party.YeaCount) != Totals.Yea || PartyMajorities.Sum(party => party.NayCount) != Totals.Nay)
             throw new InvalidDataException("Published party majorities must name distinct parties and add up to the vote totals.");
+        ValidatePartyTallies();
+    }
+
+    private void ValidatePartyTallies()
+    {
+        if (PartyTallies is null) return;
+        if (PartyTallies.Length is 0 or > MaximumParties || PartyTallies.Any(tally => tally is null))
+            throw new InvalidDataException($"Published vote requires 1 to {MaximumParties} party tallies when they are available.");
+        foreach (var tally in PartyTallies) tally.Validate();
+        if (!PublishedEvidenceRules.AreDistinctAndNotBlank(PartyTallies.Select(tally => tally.Party)))
+            throw new InvalidDataException("Published party tallies must name distinct parties.");
+
+        var majorities = PartyMajorities.ToDictionary(party => party.Party, StringComparer.Ordinal);
+        if (PartyTallies.Length != majorities.Count || PartyTallies.Any(tally => !majorities.TryGetValue(tally.Party, out var majority) ||
+                tally.Yea != majority.YeaCount || tally.Nay != majority.NayCount || tally.Other != 0) ||
+            PartyTallies.Sum(tally => tally.Yea) != Totals!.Yea || PartyTallies.Sum(tally => tally.Nay) != Totals.Nay ||
+            PartyTallies.Sum(tally => tally.Present) != Totals.Present || PartyTallies.Sum(tally => tally.NotVoting) != Totals.NotVoting)
+            throw new InvalidDataException("Published party tallies must match the party majorities and vote totals.");
+    }
+
+    private void ValidateCandidatePartyTallies()
+    {
+        if (PartyTallies is null) return;
+        if (PartyTallies.Length is 0 or > MaximumParties || PartyTallies.Any(tally => tally is null))
+            throw new InvalidDataException($"Published candidate vote requires 1 to {MaximumParties} party tallies when they are available.");
+        foreach (var tally in PartyTallies) tally.Validate();
+        var counts = CandidateCountsOf(Facts.Select(fact => fact.Text));
+        if (!PublishedEvidenceRules.AreDistinctAndNotBlank(PartyTallies.Select(tally => tally.Party)) ||
+            PartyTallies.Any(tally => tally.Yea != 0 || tally.Nay != 0) || counts is null ||
+            counts.Any(pair => pair.Value > 0 && PublishedOfficialVote.SideOf(pair.Key) is not null) ||
+            PartyTallies.Sum(tally => tally.Present) != counts.GetValueOrDefault("Present") ||
+            PartyTallies.Sum(tally => tally.NotVoting) != counts.GetValueOrDefault("Not Voting") ||
+            PartyTallies.Sum(tally => tally.Present + tally.NotVoting + tally.Other) != counts.Values.Sum())
+            throw new InvalidDataException("Published candidate party tallies must match the cited candidate cast counts under distinct parties.");
     }
 
     private bool IsKnownParty(string? party) =>
