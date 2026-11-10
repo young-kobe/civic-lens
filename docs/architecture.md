@@ -55,7 +55,7 @@ Implemented:
 - record withdrawals, the member roster, and member photos
 - the public search service with its own Postgres database, fed from published releases, and the search page of each release
 
-Pending: live Auth0 tenant verification, migration of the remaining public routes, the long-term cloud hosting move, AI classification, and MCP. A Jetson with Docker Compose runs temporary production. The public root remains static; `/web` and `/web/compare` are gated Home and Compare previews configured with the public base URL. The [roadmap](roadmap.md) holds the order.
+Pending: live Auth0 tenant verification, migration of the remaining public routes, the long-term cloud hosting move, AI classification, and MCP. A Jetson with Docker Compose runs temporary production. The public root remains static, and `/web` remains a gated Home preview. The public `/compare.html` route serves server-rendered Compare. Both use the configured public base URL. The [roadmap](roadmap.md) holds the order.
 
 ## Layers and dependency rules
 
