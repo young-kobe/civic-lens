@@ -23,7 +23,7 @@ Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 pa
 ### Theme
 
 - The visual authority is the owner's [Mosaic v2 reference](https://claude.ai/artifact/BNAG2e2nKJVpxfqF2xe2Mr) and its Civic Lens Themes export. Select `mosaic2` when rendering its reader pages. Match the full composition, typography, spacing, colors and responsive behavior. EXAMPLE text requires separate wording approval. The theme-picker toolbar is a prototype control.
-- Working design references are `.claude/prototype-themes/` and `.claude/audit/component-audit.md` from the approved export. Use the `mosaic2` skin.
+- The working design reference is [docs/design/mosaic-v2/](../design/mosaic-v2/index.html), the approved Civic Lens Themes export of 2026-11-06. Its `data/` files are excerpts of published release 1027. Use the `mosaic2` skin. Each UI change uses the Impeccable skill. It also compares screenshots of the rendered page with the matching reference page. Use 360 and 1280 px, in light and dark themes.
 - The theme is Mosaic v2. The prototype tokens are in the `mosaic2` block of the prototype skin file. Shared public theme tokens live in `src/CivicLens.PublicWeb/wwwroot/css/theme.css`.
 - Color follows a 60-30-10 split. The page is a warm off-white in light mode and a deep ink in dark mode. Navy `#14213d` is the second color. Civic yellow `#f5b301` is the accent.
 - Yellow marks primary buttons, the current navigation item, and key highlights. Yellow is never text on a white background.
