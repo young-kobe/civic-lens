@@ -911,7 +911,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-sta
 - A future mobile client would read public release contracts through an API, not operational storage.
 - Public MCP will expose `search_records`, `get_record`, `get_official_timeline`, and `compare_document_versions`. It returns published data with IDs, citations, dates, review status, coverage caveats, and the release ID.
 - Public MCP cannot start collection, inference, or edits. It bounds and pages responses, limits requests, and accepts record IDs, not arbitrary fetch URLs. It treats source passages as untrusted attributed content.
-- Public MCP will search through the search service API, over the same entries as the website. The website and public MCP will share one release, and clients can pin it across calls.
+- Public MCP will run in a separate deployment and call the public API for published data. It uses no public release-file feed. The website and public MCP share the same release, and clients can pin it across calls.
 - Public MCP needs request compute, but never the local database or AI inference.
 - Postgres and capture files need coordinated backups and a tested restore. Production backup rules are in [host](host.md#limits-and-planned-work).
 - Retention must keep the evidence that published releases reference. Disposable captures follow an explicit policy, which is not agreed yet.
