@@ -181,7 +181,7 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
     }
 
     [Fact]
-    public async Task BootstrapPagingContinuesAcrossReleasesWithoutReturningCompleteBindings()
+    public async Task CorrectionPagingContinuesAcrossReleasesAndVerificationIncludesCompleteBindings()
     {
         await SeedActionsAsync((A, 10), (B, 20));
         var first = Binding(A, 10);
@@ -211,6 +211,27 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
         Assert.Equal([(2, A, 11)], secondPage.Candidates.Select(candidate =>
             (candidate.Release.ReleaseNumber, candidate.Record.RecordId, candidate.Record.RevisionNumber)).ToArray());
         Assert.Null(secondPage.NextCursor);
+
+        var verificationCandidates = new List<(int ReleaseNumber, string RecordId, int RevisionNumber)>();
+        CorrectionHistoryVerificationCursor? verificationCursor = null;
+        var expectedMemberships = new[]
+        {
+            (1, A, 10), (1, B, 20), (2, A, 11), (2, B, 20)
+        };
+        for (var pageNumber = 0; pageNumber < expectedMemberships.Length; pageNumber++)
+        {
+            var page = await publications.ReadCorrectionHistoryVerificationPageAsync(verificationCursor, 1,
+                _ => Task.FromResult<string?>(null), default);
+            Assert.False(page.StaleCursor);
+            Assert.Single(page.Candidates);
+            verificationCandidates.AddRange(page.Candidates.Select(candidate =>
+                (candidate.Release.ReleaseNumber, candidate.Record.RecordId, candidate.Record.RevisionNumber)));
+            verificationCursor = page.NextCursor;
+            if (pageNumber < expectedMemberships.Length - 1) Assert.NotNull(verificationCursor);
+            else Assert.Null(verificationCursor);
+        }
+
+        Assert.Equal(expectedMemberships, verificationCandidates);
     }
 
     [Fact]
