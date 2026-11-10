@@ -29,7 +29,7 @@ Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 pa
 - Yellow marks primary buttons, the current navigation item, and key highlights. Yellow is never text on a white background.
 - Four record types have four colors: vote teal, bill green, statement brown, and executive slate. The four colors have equal OKLCH lightness and chroma. A record color marks only the icon square, a thin edge, and the tint.
 - Purple marks AI text only. Red marks errors only.
-- The brand has no red and no saturated blue, because party colors may become red and blue.
+- The brand has no red and no saturated blue. Party data uses the approved red and blue palette.
 - Type: Archivo 900 condensed for the h1 and large numbers, Gabarito for headings, Figtree for body text. Font files and OFL texts are self-hosted in PublicWeb.
 - At 1280 px and wider, the page has a 1440 px maximum width. Home uses a 12-column bento grid. Vote, bill, and official pages have a sticky 320 px right rail of key facts. Below 1280 px, every page is one column.
 
@@ -66,7 +66,7 @@ These decisions come from the component audit. The owner accepted every recommen
 - DR1: Member cards show attendance and one party-line count with its base. They show no bare Yes and No totals. ZIP cards show each positive party-line figure with the party pinned to its votes, its Congress, scope, and dates. Figures with no qualifying split votes are absent.
 - DR2: The official vote strip marks only a vote against most of the party and a missed vote. Each mark is a link. The caption names the scope.
 - DR3: A vote page puts the answer first. The fact rows and the source texts go into one "Check the source" fold on the same page.
-- DR4: The first map layer colors by cast only. The party layer waits for its own step. Then the owner picks the party colors.
+- DR4: The first map layer colors by cast only. The party layer uses the approved red and blue palette when its step begins.
 - DR5: See Home above.
 - DR6: Per-kind list pages replace "All records" in the navigation. The navigation includes Votes, Bills, Executive actions, Statements, and Issues. Policy area pages and old URLs stay, outside the navigation.
 - DR7: A record row shows the link type, reason, quote, and fact. The relationship URL stays for old links.
@@ -95,7 +95,7 @@ These decisions come from the component audit. The owner accepted every recommen
 - Every public number names who and what it counts, and its time frame.
 - AI text always carries its label.
 - A fixed rule in code picks featured content. A person never picks it.
-- Party colors stay open until the map party layer. Vote Yes and No colors and party colors are chosen together.
+- Party colors use red and blue, with patterns and an explicit legend. Vote Yes and No colors remain an owner choice at the map step.
 - Every UI pull request attaches screenshots at 360 px and 1280 px, light and dark.
 - Components have no inline styles. One component owns each markup rule.
 
@@ -245,5 +245,5 @@ The roadmap step [R-68](../roadmap.md#active-r-68-redesign) holds the plan: the 
 
 Open choices:
 
-- The party colors, chosen together with the vote Yes and No colors at the map party layer.
+- The vote Yes and No colors and their map legend. Party red and blue are approved.
 - The approved text for each glossary term that still shows example wording.
