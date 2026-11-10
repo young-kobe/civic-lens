@@ -174,13 +174,13 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Latest executive actions | Home | What did the President sign? | `executive_actions` | `/web` shows one row per published document type with count, newest title and signed date. Other executive layouts remain planned |
 | Member card | After a ZIP | Who is my member? | `officials`, `official_attendance`, `official_party_lines`, `official_bill_counts`, `official_issue_counts` | Portrait, seat, party, term end, scoped attendance, and scoped party-line counts implemented. Congress-scoped sponsored-bill and issue figures are shown, with shared vote rows and complete binary comparison badges |
 | Member votes list | After a ZIP, official | How did my members vote? | `votes`, `member_votes` | Partial. The API and private ZIP fragment serve shared vote rows with recorded casts. Issue and Any chips refresh the combined private fragment and mark the selected issue. Captions name each chamber's selection and comparison bases |
-| Return-visit updates | Home, members strip | What is new for my members? | Published member votes and a locally saved release marker | Planned: identify votes published since the saved release |
+| Return-visit updates | Home, members strip | What is new for my members? | Published member votes and a locally saved release marker | Implemented: distinct currently published votes first published since the saved release, with marker advancement only after successful unfiltered Home or Compare lookups |
 | Compare members | Compare page | How do my members differ? | `official_*` views, `member_votes` | Implemented in `/web/compare` preview; ZIP member content stays in the private fragment. |
 | Profile header, key figures | Official | Who is this? | `officials`, `official_attendance`, `official_party_lines` | API data implemented. Profile UI integration remains planned. |
 | Vote strip | Official | What is their voting pattern? | `member_votes.side` | Planned: marks only breaks and missed votes |
 | Statement and vote pairs | Official, vote | Did words match votes? | `record_links` | Planned: page content; related-record data is served by the API |
 | Vote header and AI summary | Vote | What was this vote? | `votes` headline, summary, label | Implemented. Planned: "what this vote decides" |
-| Fixed explainers | Vote, executive action | What did Yes mean? What next? | Code tables in `Publication.Contracts` | Planned: #407 |
+| Fixed explainers | Vote, executive action | What did Yes mean? What next? | Code tables in `Publication.Contracts` | Vote wording implements the approved 71-unit table with captured-evidence gates and unknown-input fallbacks. Redesigned page integration remains planned |
 | Vote-kind explainer index | Vote kinds, glossary | What kinds of votes exist? | Shared kind names, record terms, and fixed Yes explainers | Planned: one index covering every vote kind, with approved wording |
 | Result card, party bars | Vote | Did it pass, and by how much? | `votes`, `vote_members.party` | Partial. Party data is available; redesigned bars remain planned |
 | Breakers list | Vote | Who broke ranks? | `votes.alignment`, `vote_members.party` | Planned |
@@ -199,7 +199,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Record row, status badge | All lists | What is this record? | Per-kind views | Implemented. Planned: event-named date, one bill number format |
 | Search results | Search | Find a person, bill, or vote | Search service | Partial. Planned: ranking and snippets |
 | Weekly brief page | Brief | What happened this week? | `briefs`, `brief_paragraphs`, `brief_citations` | Partial. Brief paragraphs and citations are served through the API. Planned: route and page |
-| Correction and withdrawal pages | Record | What changed on this record? | `record_corrections`, `withdrawals` | The withdrawal read API is implemented at `/v1/records/{kind}/{recordId}/withdrawal`. Record corrections and the reader page remain planned |
+| Correction and withdrawal pages | Record | What changed on this record? | `record_correction_histories`, `record_correction_history_entries`, `withdrawals` | Shared typed correction and withdrawal APIs are implemented. Correction-reader deployment waits for the active and retained release bootstrap. Reader pages remain planned |
 
 The shared public shell has an optional breadcrumb slot before the hero. Compare uses it for Home and its current page. Other inner routes add their trail as they move to server rendering.
 
@@ -216,11 +216,11 @@ The views expose the stored member party and vote alignment, normalized member-v
 Remaining planned view columns and views, in the order that R-68 builds them:
 
 - Party lines: one response for all four chamber and party boards. `party_agreement` and the official party-line view are implemented.
-- Votes: stored validated totals beside immutable member counts, and a second AI text column for "what this vote decides".
+- Votes: a second AI text column for "what this vote decides". Validated immutable revision totals are already stored beside member-list counts.
 - Bills: `bill_key_terms`. The cited CRS body and version are implemented.
 - Issues: party line-up data. Home issue counts already use immutable release snapshots for the Congress of the release publication day.
 - Executive actions: `executive_action_links` and summary columns. Exact numbered orders and proclamations get typed targets; unsupported or ambiguous references stay cited notes.
-- Other kinds: `record_corrections`, bound to distinct immutable correction-history snapshots. Document-change detail and withdrawal notices have typed public read APIs; their reader pages remain planned.
+- Other kinds: deploy the shared correction-history reader after retained-release bootstrap. New publications already bind exact revisions to immutable histories. Document-change detail and withdrawal notices have typed public read APIs; their reader pages remain planned.
 
 Each AI text column carries its text origin and its label. The roadmap steps under [R-68](../roadmap.md#active-r-68-redesign) name each view.
 
