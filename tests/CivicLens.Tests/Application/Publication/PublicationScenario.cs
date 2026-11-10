@@ -756,6 +756,8 @@ internal sealed class FakePublicationStore : IPublicationStore
     public List<BillHistoryCapture> PreparedHistories { get; } = [];
     public Dictionary<int, Dictionary<PublishedRecordReference, StoredCorrectionHistory>> CorrectionHistories { get; } = [];
     public List<PublicationCorrectionHistory> PreparedCorrectionHistories { get; } = [];
+    public List<CorrectionHistoryBootstrapCandidate> CorrectionBootstrapCandidates { get; } = [];
+    public int CorrectionBootstrapPageReads { get; private set; }
     public Action? BeforePreparingHistories { get; set; }
     private readonly Dictionary<int, BillHistoryBinding[]> historyBindings = [];
 
@@ -795,6 +797,38 @@ internal sealed class FakePublicationStore : IPublicationStore
         return Task.FromResult<IReadOnlyList<CorrectionHistoryBinding>>([.. histories.Select(history =>
             new CorrectionHistoryBinding(history.Record, PublishedCorrectionHistoryIdentity.Of(history.Corrections)))]);
     }
+
+    public Task<CorrectionHistoryBootstrapPage> ReadCorrectionHistoryBootstrapPageAsync(CorrectionHistoryBootstrapCursor? after, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        ReadBootstrapPage(after, limit);
+
+    private Task<CorrectionHistoryBootstrapPage> ReadBootstrapPage(CorrectionHistoryBootstrapCursor? after, int limit)
+    {
+        CorrectionBootstrapPageReads++;
+        var ordered = CorrectionBootstrapCandidates.OrderBy(candidate => candidate.Release.ReleaseNumber)
+            .ThenBy(candidate => PublishedRecordReference.NameOf(candidate.Record.Kind), StringComparer.Ordinal)
+            .ThenBy(candidate => candidate.Record.RecordId, StringComparer.Ordinal)
+            .Where(candidate => after is null || Compare(candidate, after) > 0).Take(limit + 1).ToArray();
+        var hasMore = ordered.Length > limit;
+        var page = ordered.Take(limit).ToArray();
+        var last = hasMore ? page[^1] : null;
+        return Task.FromResult(new CorrectionHistoryBootstrapPage(page, last is null ? null :
+            new(last.Release.ReleaseNumber, last.Record.Kind, last.Record.RecordId)));
+    }
+
+    private static int Compare(CorrectionHistoryBootstrapCandidate candidate, CorrectionHistoryBootstrapCursor cursor)
+    {
+        var release = candidate.Release.ReleaseNumber.CompareTo(cursor.ReleaseNumber);
+        if (release != 0) return release;
+        var kind = StringComparer.Ordinal.Compare(PublishedRecordReference.NameOf(candidate.Record.Kind),
+            PublishedRecordReference.NameOf(cursor.Kind));
+        return kind != 0 ? kind : StringComparer.Ordinal.Compare(candidate.Record.RecordId, cursor.RecordId);
+    }
+
+    public Task<(int Added, int AlreadyPresent)> CommitCorrectionHistoryBootstrapAsync(PublicationReleaseSummary release,
+        IReadOnlyCollection<CorrectionHistoryBinding> bindings, Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken) =>
+        Task.FromResult((bindings.Count, 0));
 
     public Dictionary<int, List<PublishedBillStatus>> BackfilledBillStatuses { get; } = [];
 
@@ -859,6 +893,7 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
     public int BeginCount { get; private set; }
     public int DiscardedStagings { get; set; }
     public string? Active { get; set; }
+    public Dictionary<string, Exception> ReadFailures { get; } = [];
     public Exception? FailOnDelete { get; set; }
     public Exception? FailOnDeleteRetired { get; set; }
     public List<string> Retired { get; } = [];
@@ -876,6 +911,7 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
         CancellationToken cancellationToken)
     {
         ReadPaths.Add(relativePath);
+        if (ReadFailures.TryGetValue(relativePath, out var failure)) throw failure;
         Events?.Add($"read {relativePath.Split('/', '.')[^2][..1]}");
         var content = Directories.TryGetValue(directoryName, out var directory) && directory.TryGetValue(relativePath, out var file)
             ? file

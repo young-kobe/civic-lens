@@ -17,7 +17,7 @@ public static class ReleaseCommand
     public static bool IsPublish(string[] args) => args is ["releases", "publish", ..];
 
     public static Task<int> ExecuteAsync(string[] args, PublishRelease publish,
-        ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, BackfillFirstPublished backfill, BackfillPublishedEntries entries, BackfillStoredColumns columns, VerifyPublishedEntries verify, ReviewActor owner,
+        ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, BackfillFirstPublished backfill, BackfillPublishedEntries entries, BackfillStoredColumns columns, VerifyPublishedEntries verify, BackfillCorrectionHistories corrections, ReviewActor owner,
         TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
         OwnerCommand.RunAsync(async () =>
         {
@@ -47,6 +47,17 @@ public static class ReleaseCommand
                         var result = await entries.ExecuteAsync(owner, entriesCount, cancellationToken);
                         CommandOutput.Write(output, result);
                         return result.Skipped == 0 && result.OpenRangesWithoutRow == 0 && result.ReadyRangesWithoutRow == 0 && result.OpenStatementsWithoutApprover == 0 ? 0 : 1;
+                    case ["releases", "corrections", "backfill", var correctionLimit] when TryParsePositive(correctionLimit, out var correctionCount):
+                        var resultWithoutCursor = await corrections
+                            .ExecuteAsync(owner, correctionCount, null, cancellationToken);
+                        CommandOutput.Write(output, resultWithoutCursor);
+                        return resultWithoutCursor.Failed == 0 ? 0 : 1;
+                    case ["releases", "corrections", "backfill", var correctionLimitWithCursor, var cursorText] when TryParsePositive(correctionLimitWithCursor, out var correctionCountWithCursor):
+                        var cursor = CorrectionHistoryBootstrapCursor.Parse(cursorText);
+                        var correctionResult = await corrections
+                            .ExecuteAsync(owner, correctionCountWithCursor, cursor, cancellationToken);
+                        CommandOutput.Write(output, correctionResult);
+                        return correctionResult.Failed == 0 ? 0 : 1;
                     case ["releases", "columns", "backfill"]:
                         var filled = await columns.ExecuteAsync(owner, cancellationToken);
                         CommandOutput.Write(output, filled);
@@ -56,7 +67,7 @@ public static class ReleaseCommand
                         CommandOutput.Write(output, verification);
                         return verification.Failed == 0 ? 0 : 1;
                     default:
-                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases columns backfill, or releases entries verify.");
+                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases columns backfill, or releases entries verify.");
                         return 2;
                 }
             }

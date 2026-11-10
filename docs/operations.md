@@ -1043,6 +1043,20 @@ The command prints JSON with these keys:
 
 The exit code is 0 only when `skipped`, `openRangesWithoutRow`, and `readyRangesWithoutRow` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
 
+### Correction history bootstrap
+
+Run this owner command before deploying the shared corrections reader. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. First fill missing entry and first-publication rows with the commands above.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases corrections backfill <limit> [cursor]
+```
+
+The limit caps candidate files examined, including failed reads. The command uses small keyset pages and prepares immutable history copies before taking final publication locks. It includes the current active and served releases and the releases kept by the retention policy. It reads private immutable record JSON, checks the exact revision and typed entry facts, and binds verified histories. Empty histories get bindings. It never rewrites a file, an existing history, or a conflicting binding.
+
+The JSON result contains `examined`, `added`, `alreadyPresent`, `failed`, `failures`, and `nextCursor`. The failure list holds at most 50 entries with release, kind, record ID, and a reason. Reasons are `recordMissing`, `recordUnreadable`, or `recordInvalid`. `alreadyPresent` counts exact bindings another run inserted before finalization. Copy the opaque `nextCursor` string into the next invocation. A null cursor ends this scan. The exit code is 1 when this run reports failed files, and 0 otherwise; it does not prove complete coverage.
+
+Continue from the cursor to reach later valid files. Inspect each reported failure. After an authorized repair, run again without a cursor to retry earlier failures. A fresh scan with zero examined files proves only that no missing bindings were selected. Verify existing typed histories and full coverage separately before enabling the reader. A changed retention or revision check stops binding rather than guessing; start a fresh scan after resolving the cause. No public request reads the conversion files.
+
 ### Stored columns backfill
 
 The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, and the Congress of each entry. This command fills them for rows that earlier releases wrote.

@@ -28,6 +28,48 @@ internal static class PublishedEntries
         WHERE s.first_release <= {0} AND (s.last_release IS NULL OR s.last_release >= {0})
         """;
 
+    private const string ReadCorrectionBootstrapCandidates = """
+        SELECT r.release_number AS "ReleaseNumber", r.directory_name AS "DirectoryName", r.published_at_utc_ticks AS "PublishedAtUtcTicks",
+               r.record_count AS "RecordCount", s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber"
+          FROM publication_releases r
+          JOIN publication_record_states s ON s.first_release <= r.release_number AND (s.last_release IS NULL OR s.last_release >= r.release_number)
+          LEFT JOIN release_correction_histories h ON h.release_number = r.release_number AND h.kind = s.kind AND h.record_id = s.record_id
+         WHERE r.release_number = ANY({0}) AND h.record_id IS NULL
+           AND ({1} = 0 OR (r.release_number, s.kind, s.record_id) > ({1}, {2}, {3}))
+         ORDER BY r.release_number, s.kind, s.record_id
+         LIMIT {4}
+        """;
+
+    public static async Task<CorrectionHistoryBootstrapPage> ReadCorrectionBootstrapPageAsync(CollectionAttemptDbContext db,
+        CorrectionHistoryBootstrapCursor? after, IReadOnlyCollection<int> releaseNumbers, int limit, CancellationToken cancellationToken)
+    {
+        if (limit == int.MaxValue) throw new ArgumentOutOfRangeException(nameof(limit));
+        if (releaseNumbers.Count == 0) return new([], null);
+        var rows = await db.Database.SqlQueryRaw<CorrectionBootstrapRow>(ReadCorrectionBootstrapCandidates,
+            releaseNumbers.ToArray(), after?.ReleaseNumber ?? 0, after is null ? "" : PublishedRecordReference.NameOf(after.Kind),
+            after?.RecordId ?? "", limit + 1).ToArrayAsync(cancellationToken);
+        var hasMore = rows.Length > limit;
+        if (hasMore) rows = rows[..limit];
+        var distinctKeys = rows.Select(row => (row.Kind, row.RecordId, row.RevisionNumber)).Distinct().ToArray();
+        var keys = KeyArrays(distinctKeys);
+        var facts = rows.Length == 0 ? new Dictionary<(string Kind, string RecordId, int RevisionNumber), PublishedEntryFacts>()
+            : await ReadFactsAsync(db, keys, cancellationToken);
+        var firstPublished = rows.Length == 0 ? new Dictionary<PublishedRecordReference, DateTimeOffset>()
+            : await PublishedRecords.ReadAsync(db, distinctKeys.Select(key => new PublishedRecordReference(KindOf(key.Kind), key.RecordId)).Distinct().ToArray(), cancellationToken);
+        var candidates = rows.Select(row =>
+        {
+            firstPublished.TryGetValue(new PublishedRecordReference(KindOf(row.Kind), row.RecordId), out var firstTime);
+            return new CorrectionHistoryBootstrapCandidate(
+                new PublicationReleaseSummary(row.ReleaseNumber, row.DirectoryName,
+                    new DateTimeOffset(row.PublishedAtUtcTicks, TimeSpan.Zero), row.RecordCount),
+                new StoredReleaseRecord(KindOf(row.Kind), row.RecordId, row.RevisionNumber,
+                    firstPublished.ContainsKey(new PublishedRecordReference(KindOf(row.Kind), row.RecordId)) ? firstTime : null,
+                    facts.GetValueOrDefault((row.Kind, row.RecordId, row.RevisionNumber))));
+        }).ToArray();
+        var last = hasMore && rows.Length > 0 ? rows[^1] : null;
+        return new(candidates, last is null ? null : new(last.ReleaseNumber, KindOf(last.Kind), last.RecordId));
+    }
+
     private const string FillBillLines = """
         WITH locked AS (
             SELECT e.kind, e.record_id, e.revision_number, k.bill_line
@@ -316,6 +358,17 @@ internal static class PublishedEntries
 
     private sealed class ReleaseStateRow
     {
+        public string Kind { get; set; } = "";
+        public string RecordId { get; set; } = "";
+        public int RevisionNumber { get; set; }
+    }
+
+    private sealed class CorrectionBootstrapRow
+    {
+        public int ReleaseNumber { get; set; }
+        public string DirectoryName { get; set; } = "";
+        public long PublishedAtUtcTicks { get; set; }
+        public int RecordCount { get; set; }
         public string Kind { get; set; } = "";
         public string RecordId { get; set; } = "";
         public int RevisionNumber { get; set; }
