@@ -1,6 +1,4 @@
-using CivicLens.Publication.Contracts;
-
-namespace CivicLens.Application.Publication;
+namespace CivicLens.Publication.Contracts;
 
 /// <summary>One public board page: the officials of one party in one chamber.</summary>
 public sealed record OfficialBoard(PublishedChamber Chamber, string Party)

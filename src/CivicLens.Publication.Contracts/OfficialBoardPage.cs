@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
-using CivicLens.Publication.Contracts;
 
-namespace CivicLens.Application.Publication;
+namespace CivicLens.Publication.Contracts;
 
 /// <summary>
 /// The lists of one board page, built from the figures of one Congress in the chamber of the board. That is the newest Congress while any member holds MinimumSplitVotes split votes in it. Until then it is the next older Congress that the summary rows hold. Members hold the officials
@@ -80,7 +79,6 @@ public sealed record OfficialBoardPage(OfficialBoard Board, int? Congress, Immut
         .Select(pair => (pair.Official, pair.Summary, pair.Figures, Party: pair.Figures.PartyVotes.SingleOrDefault(row => row.Chamber == board.Chamber && row.Party == board.Party),
             Attendance: pair.Figures.Attendance.SingleOrDefault(row => row.Chamber == board.Chamber)))
         .Where(pair => pair.Party is not null)
-        .Select(pair => new BoardMember(pair.Official, pair.Party!.SplitVotesCast, pair.Party.Breaks, pair.Attendance is { } attendance
-            ? new MissedVotes(board.Chamber, attendance.Missed, attendance.Held, attendance.First, attendance.Last) : null, PagePathOf(pair.Official, pair.Figures.Congress, pair.Summary)))
+        .Select(pair => new BoardMember(pair.Official, pair.Party!.SplitVotesCast, pair.Party.Breaks, pair.Attendance, PagePathOf(pair.Official, pair.Figures.Congress, pair.Summary)))
         .OrderBy(Name, StringComparer.Ordinal)];
 }

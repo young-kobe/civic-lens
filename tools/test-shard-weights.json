@@ -98,7 +98,7 @@
   "CivicLens.Tests.Application.Publication.LinkedPairTests": 0.0,
   "CivicLens.Tests.Application.Publication.ListBlockedPublishedTests": 0.1,
   "CivicLens.Tests.Application.Publication.MissedVotesTests": 0.0,
-  "CivicLens.Tests.Application.Publication.OfficialBoardPageTests": 0.0,
+  "CivicLens.Tests.Publication.Contracts.OfficialBoardPageTests": 0.0,
   "CivicLens.Tests.Application.Publication.PruneReleasesTests": 0.0,
   "CivicLens.Tests.Application.Publication.PublicationReleaseHandlersTests": 0.0,
   "CivicLens.Tests.Application.Publication.PublishActionTests": 0.0,
