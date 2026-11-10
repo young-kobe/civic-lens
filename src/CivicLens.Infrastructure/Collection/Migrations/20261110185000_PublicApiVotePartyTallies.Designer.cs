@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CivicLens.Infrastructure.Collection.Migrations
 {
     [DbContext(typeof(CollectionAttemptDbContext))]
-    [Migration("20261110200000_PublicApiVotePartyTallies")]
+    [Migration("20261110185000_PublicApiVotePartyTallies")]
     partial class PublicApiVotePartyTallies
     {
         /// <inheritdoc />
