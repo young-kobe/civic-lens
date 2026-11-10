@@ -448,5 +448,6 @@ Planned: `/v1/records/{kind}/{recordId}/corrections` will serve ordinary correct
 - A search without text returns no snippet.
 - A snippet scans the first 50,000 characters of the record body. A match later in the body gives a snippet from the start of the body.
 - The `Dockerfile` target `search` builds the service image. [Container images](../operations.md#container-images) describes it. [R-24](../roadmap.md#later) adds the cloud deployment.
-- After the first deploy, public MCP ([R-25](../roadmap.md#later)) will use this API and the same release pinning.
+- Planned under R-68: search ingestion moves from public release files to typed published data before static retirement. Then public `release.json` and its unused serving code are removed. Private snapshots remain while verification or recovery use them.
+- Planned public MCP ([R-25](../roadmap.md#later)) uses the public API and the same release pinning from a separate deployment.
 - A row that was indexed before `004_record_bill_line.sql` holds no bill line, and no code fills it. A new revision gets its line when the ingest stores it. A vote hit holds no line, because the line of a vote comes from the action of its bill in the release build.
