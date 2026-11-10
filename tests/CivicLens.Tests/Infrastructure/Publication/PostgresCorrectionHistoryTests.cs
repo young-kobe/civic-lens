@@ -263,7 +263,12 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
         Assert.Null(Assert.Single(page.Candidates, candidate => candidate.Record.RecordId == B).StoredHistory);
         Assert.Equal(PublishedAt, Assert.Single(page.Candidates, candidate => candidate.Record.RecordId == A).Record.FirstPublishedAtUtc);
 
-        await ExecuteAsync("DELETE FROM published_records WHERE kind = 'action' AND record_id = @id", ("id", A));
+        // Simulate damaged storage while keeping the release entry that references its missing publication time.
+        await ExecuteAsync("""
+            SET session_replication_role = replica;
+            DELETE FROM published_records WHERE kind = 'action' AND record_id = @id;
+            SET session_replication_role = origin;
+            """, ("id", A));
         var missingFirstPublication = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 10,
             _ => Task.FromResult<string?>(null), default);
         Assert.Null(Assert.Single(missingFirstPublication.Candidates, candidate => candidate.Record.RecordId == A).Record.FirstPublishedAtUtc);
