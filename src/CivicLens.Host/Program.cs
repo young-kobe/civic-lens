@@ -106,6 +106,8 @@ if (args is [] or ["--help"] or ["help"])
           votes draft requeue --refused
           executive-actions revisions backfill <limit>
           executive-actions revisions verify
+          executive-actions targets backfill <limit>
+          executive-actions targets verify
           document-changes revisions backfill <limit>
           document-changes revisions verify
           bills subjects backfill [limit]
@@ -384,7 +386,9 @@ try
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var backfillStore = new PostgresExecutiveActionRevisionBackfillStore(AnalysisDbContextFactory.Create(connectionString));
-        var executiveActions = new ExecutiveActionCommand(new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
+        var targetStore = new PostgresExecutiveActionTargetBackfillStore(AnalysisDbContextFactory.Create(connectionString));
+        var executiveActions = new ExecutiveActionCommand(new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore),
+            new BackfillRevisions(targetStore), new VerifyRevisions(targetStore), owner);
         executing = true;
         return await executiveActions.ExecuteAsync(args, cancellation.Token);
     }

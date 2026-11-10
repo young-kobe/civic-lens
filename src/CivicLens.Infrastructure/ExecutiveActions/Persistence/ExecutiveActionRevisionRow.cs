@@ -30,4 +30,5 @@ internal sealed class ExecutiveActionRevisionRow : IReviewRevisionRow
     public int? DispositionNotesLength { get; set; }
     public List<ExecutiveActionRevisionFactRow> Facts { get; set; } = [];
     public List<ExecutiveActionRevisionNoticeRow> Notices { get; set; } = [];
+    public List<ExecutiveActionRevisionDispositionTargetRow> DispositionTargets { get; set; } = [];
 }

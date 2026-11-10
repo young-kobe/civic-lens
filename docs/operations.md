@@ -770,6 +770,21 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ex
 
 Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every executive action read fails until it ends. For a manual run, start the new code only when `verify` exits 0. Every reader fails on a row with null columns. Production held 688 revisions when the survey was made. A rollback past the migration rebuilds `notice_json` from the notice columns.
 
+### Executive action disposition target backfill
+
+The table `executive_action_revision_disposition_targets` holds the typed Amends and Revokes targets of each revision. Current code writes them with each new revision. Revisions from before the migration `ExecutiveActionDispositionTargets` that hold notes need a backfill. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions targets backfill 500
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions targets verify
+```
+
+`backfill <limit>` walks the revisions that have notes and no target row, in key order, in batches of 25. Each batch is one short transaction that holds the executive action review lock. It parses the stored notes with `ExecutiveActionDispositionTargets` and writes the target rows. `moved` counts the revisions that got at least one target. A revision whose notes hold no target stays in the walk, so each run examines it again and writes nothing. A rerun changes nothing. The exit code is 0.
+
+`verify` parses the notes of each revision again and compares the result to the stored rows. It writes nothing and takes no lock. A revision that has a target in its notes and no stored row counts as `legacy`. A revision whose stored rows differ from its notes, or that has rows and no notes, counts as a mismatch with the field name `dispositionTargets`. `verify` exits 1 while a legacy row or a mismatch remains.
+
+Run order: `db migrate`, then `backfill`, then `verify`. The public pages and the API do not read the table yet.
+
 ### Statement revision backfill
 
 R-63 step 3 moves old statement revisions into columns and child rows. A revision written by current code already has them. The migration `StatementRevisionColumns` adds the columns and tables. It does not read any JSON. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
