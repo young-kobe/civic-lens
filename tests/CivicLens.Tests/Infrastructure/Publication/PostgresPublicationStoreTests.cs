@@ -811,7 +811,9 @@ public sealed class PostgresPublicationStoreTests(PostgresCollection postgres) :
             case PublishedRecordKind.ExecutiveAction:
                 await ExecuteAsync("""
                     INSERT INTO executive_action_drafts (record_id, current_revision_number, review_state_version, review_status, created_at_utc_ticks, last_revised_at_utc_ticks)
-                    VALUES (@id, 1, 1, 'Approved', 0, 0)
+                    VALUES (@id, 1, 1, 'Approved', 0, 0);
+                    INSERT INTO executive_action_revisions (record_id, revision_number, revision_json, created_at_utc_ticks, author_kind, author_subject)
+                    VALUES (@id, 1, '{}', 0, 'Code', 'civic-lens:code')
                     """, id);
                 break;
             default:
