@@ -639,6 +639,8 @@ internal sealed class FakePublicationStore : IPublicationStore
 
     public List<PublicationReleaseSummary> Committed { get; } = [];
     public PublicationCommit? LastCommit { get; private set; }
+    public List<VoteColumnGap> VoteColumnGaps { get; } = [];
+    public List<VoteStoredColumns[]> VoteColumnWrites { get; } = [];
     public bool ConflictOnCommit { get; set; }
     public Exception? FailOnCommit { get; set; }
     public PublicationReleaseSummary? ConcurrentWinner { get; set; }
@@ -735,16 +737,20 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Task<int> FillBillLinesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
-    public Task<IReadOnlyList<VoteColumnGap>> ReadVoteColumnGapsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<IReadOnlyList<VoteColumnGap>> ReadVoteColumnGapsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<VoteColumnGap>>([.. VoteColumnGaps]);
 
-    public Task WriteVoteColumnsAsync(IReadOnlyCollection<VoteStoredColumns> columns, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+    public Task WriteVoteColumnsAsync(IReadOnlyCollection<VoteStoredColumns> columns, CancellationToken cancellationToken)
+    {
+        VoteColumnWrites.Add([.. columns]);
+        return Task.CompletedTask;
+    }
 
     public Task<int> FillOfficialPhotoPathsAsync(int releaseNumber, IReadOnlyDictionary<string, string> photoPaths, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
     public Task<IReadOnlyList<PublishedEntryDay>> ReadEntryDaysWithoutCongressAsync(PublishedEntryDay? after, int limit, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+        Task.FromResult<IReadOnlyList<PublishedEntryDay>>([]);
 
     public Task<int> FillEntryCongressesAsync(IReadOnlyCollection<PublishedEntryDay> entries, CancellationToken cancellationToken) => throw new NotSupportedException();
 

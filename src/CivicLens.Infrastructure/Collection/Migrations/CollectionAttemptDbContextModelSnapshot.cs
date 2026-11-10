@@ -8813,6 +8813,33 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionPartyTallyRow", b =>
+                {
+                    b.Property<string>("RecordId").HasMaxLength(64).HasColumnType("character varying(64)").HasColumnName("record_id");
+                    b.Property<int>("RevisionNumber").HasColumnType("integer").HasColumnName("revision_number");
+                    b.Property<string>("Party").HasMaxLength(256).HasColumnType("character varying(256)").HasColumnName("party");
+                    b.Property<short>("Yea").HasColumnType("smallint").HasColumnName("yea");
+                    b.Property<short>("Nay").HasColumnType("smallint").HasColumnName("nay");
+                    b.Property<short>("Present").HasColumnType("smallint").HasColumnName("present");
+                    b.Property<short>("NotVoting").HasColumnType("smallint").HasColumnName("not_voting");
+                    b.Property<short>("Other").HasColumnType("smallint").HasColumnName("other");
+                    b.HasKey("RecordId", "RevisionNumber", "Party").HasName("PK_vote_revision_party_tallies");
+                    b.ToTable("vote_revision_party_tallies", null, t =>
+                    {
+                        t.HasCheckConstraint("ck_vote_revision_party_tallies_party", "length(btrim(party)) > 0 AND length(party) <= 256");
+                        t.HasCheckConstraint("ck_vote_revision_party_tallies_buckets", "yea >= 0 AND nay >= 0 AND present >= 0 AND not_voting >= 0 AND other >= 0");
+                        t.HasCheckConstraint("ck_vote_revision_party_tallies_total", "yea + nay + present + not_voting + other BETWEEN 1 AND 600");
+                    });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionPartyTallyRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionRow", null)
+                        .WithMany("PartyTallies").HasForeignKey("RecordId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict).IsRequired()
+                        .HasConstraintName("FK_vote_revision_party_tallies_vote_revisions_record_id_revisi~");
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionRow", b =>
                 {
                     b.Property<string>("RecordId")
@@ -8865,6 +8892,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("chamber");
+
+                    b.Property<short?>("PartyTallyCount").HasColumnType("smallint").HasColumnName("party_tally_count");
 
                     b.Property<bool>("ColumnsWritten")
                         .ValueGeneratedOnAdd()
@@ -9052,6 +9081,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_vote_revisions_chamber_source", "(chamber = 'House') = (vote_source = 'CongressGov')");
 
                             t.HasCheckConstraint("ck_vote_revisions_columns_written", "columns_written OR (alignment IS NULL AND democrat_majority IS NULL AND republican_majority IS NULL)");
+
+                            t.HasCheckConstraint("ck_vote_revisions_party_tally_count", "party_tally_count IS NULL OR party_tally_count BETWEEN 0 AND 16");
 
                             t.HasCheckConstraint("ck_vote_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
@@ -10815,6 +10846,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Navigation("Facts");
 
                     b.Navigation("Issues");
+
+                    b.Navigation("PartyTallies");
                 });
 #pragma warning restore 612, 618
         }
