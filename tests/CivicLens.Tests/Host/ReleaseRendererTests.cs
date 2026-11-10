@@ -910,6 +910,36 @@ public sealed class ReleaseRendererTests
         Assert.DoesNotContain("<b>", html, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task VotePageShowsApprovedMeaningAndAlwaysNamesTheUnknownNextStepWhenTheSourceDoesNotEstablishOne()
+    {
+        var vote = VoteWithResult("Passed") with { Kind = PublishedVoteKind.Other };
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], HousingCatalog, CancellationToken.None);
+
+        var meaning = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='meaning-title']")!;
+        Assert.Equal("What this vote meant", meaning.QuerySelector("h2")!.TextContent);
+        Assert.Equal("A Yes vote supported the question before the chamber.", meaning.QuerySelector("p")!.TextContent);
+        Assert.Equal("What happens next", meaning.QuerySelector("h3")!.TextContent);
+        Assert.Equal("This record does not show what happens next.", meaning.QuerySelector("h3 + p")!.TextContent);
+    }
+
+    [Fact]
+    public async Task VotePageKeepsTheUnknownNextStepVisibleWhenCitedWordingInputsAreMissing()
+    {
+        var source = VoteWithResult("Passed");
+        var vote = source with
+        {
+            Kind = PublishedVoteKind.Other,
+            KindCitation = null,
+            Facts = [.. source.Facts.Where(fact => !fact.Text.StartsWith("Question:", StringComparison.Ordinal))]
+        };
+        var html = await new ReleaseRenderer(null, null).RenderVoteAsync(vote, null, [], HousingCatalog, CancellationToken.None);
+
+        var meaning = new HtmlParser().ParseDocument(html).QuerySelector("[aria-labelledby='meaning-title']")!;
+        Assert.Equal("What happens next", meaning.QuerySelector("h3")!.TextContent);
+        Assert.Equal("This record does not show what happens next.", meaning.QuerySelector("h3 + p")!.TextContent);
+    }
+
     // A bare count could mean the tracked members or all members who voted Yea, so each total names the whole body and what it counts.
     [Theory]
     [InlineData(PublishedChamber.House, "Casts of all House members: Yes 218, No 210, Present 1, Not voting 5")]

@@ -5,6 +5,17 @@
 
 <PublishedRecordFrame Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedVoteView.Facts(Record, Catalog)"
                       Caveat="@PublishedVoteView.Caveat(Record)">
+    @{ var wording = PublishedVoteView.Wording(Record); }
+    <Panel Title="@VoteMeaning.Heading" Id="meaning-title" Padded="true">
+        @if (wording is { } meaning)
+        {
+            <p>@meaning.Yes</p>
+            <p>@meaning.No</p>
+        }
+        <h3>@NextStep.Heading</h3>
+        <p>@(wording?.NextStep ?? NextStep.NotShown)</p>
+    </Panel>
+
     @if (PublishedVoteView.Badge(Record) is { } badge)
     {
         <Panel Title="How the parties voted" Id="parties-title" Padded="true">

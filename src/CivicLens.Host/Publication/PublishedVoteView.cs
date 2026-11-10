@@ -32,6 +32,8 @@ internal static class PublishedVoteView
         new("Revision", vote.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
 
+    public static (string Yes, string No, string NextStep)? Wording(PublishedVote vote) => VoteWording.Of(vote);
+
     private static string KindValue(PublishedVote vote) =>
         vote.Kind == PublishedVoteKind.Other && vote.KindCitation is null
             ? $"{PlainVoteWords.OtherKind}. The source gives no question."

@@ -76,7 +76,7 @@ public static class Glossary
                 "It is the last chance in the House to stop a bill before passage. If it passes, the bill does not pass at that point.",
                 "HMAN rule XIX clause 2"),
             new("previous-question", "Previous question",
-                "The record calls it Previous question. This site calls it \"Vote to end debate and vote now\". It is a House vote to end debate and vote on the pending question now.",
+                $"The record calls it Previous question. This site calls it \"{PlainVoteWords.Kind(PublishedVoteKind.PreviousQuestion)}\". It is a House vote to end debate and vote on the pending question now.",
                 "If it fails, the House does not vote on the question then, and debate continues. So the vote decides whether the question is settled now or stays open.",
                 "HMAN rule XIX clause 1; Jefferson's Manual Sec. 462"),
             new("house-rule", "Rule (House vote)",
