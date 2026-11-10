@@ -756,6 +756,9 @@ internal sealed class FakePublicationStore : IPublicationStore
     public List<BillHistoryCapture> PreparedHistories { get; } = [];
     public Dictionary<int, Dictionary<PublishedRecordReference, StoredCorrectionHistory>> CorrectionHistories { get; } = [];
     public List<PublicationCorrectionHistory> PreparedCorrectionHistories { get; } = [];
+    public List<CorrectionHistoryBootstrapCandidate> CorrectionBootstrapCandidates { get; } = [];
+    public int CorrectionBootstrapPageReads { get; private set; }
+    public Action? BeforeReadingVerificationFingerprint { get; set; }
     public Action? BeforePreparingHistories { get; set; }
     private readonly Dictionary<int, BillHistoryBinding[]> historyBindings = [];
 
@@ -795,6 +798,80 @@ internal sealed class FakePublicationStore : IPublicationStore
         return Task.FromResult<IReadOnlyList<CorrectionHistoryBinding>>([.. histories.Select(history =>
             new CorrectionHistoryBinding(history.Record, PublishedCorrectionHistoryIdentity.Of(history.Corrections)))]);
     }
+
+    public Task<CorrectionHistoryBootstrapPage> ReadCorrectionHistoryBootstrapPageAsync(CorrectionHistoryBootstrapCursor? after, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        ReadBootstrapPage(after, limit);
+
+    public Task<CorrectionHistoryVerificationPage> ReadCorrectionHistoryVerificationPageAsync(CorrectionHistoryVerificationCursor? after, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var fingerprint = VerificationFingerprint();
+        if (after is not null && after.SelectionFingerprint != fingerprint)
+            return Task.FromResult(new CorrectionHistoryVerificationPage([], fingerprint, null, true));
+        var ordered = CorrectionBootstrapCandidates.OrderBy(candidate => candidate.Release.ReleaseNumber)
+            .ThenBy(candidate => PublishedRecordReference.NameOf(candidate.Record.Kind), StringComparer.Ordinal)
+            .ThenBy(candidate => candidate.Record.RecordId, StringComparer.Ordinal)
+            .Where(candidate => after is null || Compare(candidate, new(after.ReleaseNumber, after.Kind, after.RecordId)) > 0)
+            .Take(limit + 1).ToArray();
+        var more = ordered.Length > limit;
+        var candidates = ordered.Take(limit).Select(candidate =>
+        {
+            var histories = CorrectionHistories.GetValueOrDefault(candidate.Release.ReleaseNumber) ?? [];
+            histories.TryGetValue(new(candidate.Record.Kind, candidate.Record.RecordId), out var stored);
+            return new CorrectionHistoryVerificationCandidate(candidate.Release, candidate.Record, stored);
+        }).ToArray();
+        var last = more ? ordered[limit - 1] : null;
+        return Task.FromResult(new CorrectionHistoryVerificationPage(candidates, fingerprint, last is null ? null :
+            new(fingerprint, last.Release.ReleaseNumber, last.Record.Kind, last.Record.RecordId)));
+    }
+
+    public Task<string> ReadCorrectionHistoryVerificationFingerprintAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        BeforeReadingVerificationFingerprint?.Invoke();
+        return Task.FromResult(VerificationFingerprint());
+    }
+
+    private string VerificationFingerprint()
+    {
+        var selection = CorrectionBootstrapCandidates.Select(candidate => candidate.Release).DistinctBy(release => release.ReleaseNumber)
+            .OrderBy(release => release.ReleaseNumber);
+        var fields = selection.Select(release => string.Concat(release.ReleaseNumber.ToString(System.Globalization.CultureInfo.InvariantCulture), ":",
+            release.DirectoryName.Length.ToString(System.Globalization.CultureInfo.InvariantCulture), ":", release.DirectoryName));
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(string.Join("\n", fields))))
+            .ToLowerInvariant();
+    }
+
+    private Task<CorrectionHistoryBootstrapPage> ReadBootstrapPage(CorrectionHistoryBootstrapCursor? after, int limit)
+    {
+        CorrectionBootstrapPageReads++;
+        var ordered = CorrectionBootstrapCandidates.OrderBy(candidate => candidate.Release.ReleaseNumber)
+            .ThenBy(candidate => PublishedRecordReference.NameOf(candidate.Record.Kind), StringComparer.Ordinal)
+            .ThenBy(candidate => candidate.Record.RecordId, StringComparer.Ordinal)
+            .Where(candidate => after is null || Compare(candidate, after) > 0).Take(limit + 1).ToArray();
+        var hasMore = ordered.Length > limit;
+        var page = ordered.Take(limit).ToArray();
+        var last = hasMore ? page[^1] : null;
+        return Task.FromResult(new CorrectionHistoryBootstrapPage(page, last is null ? null :
+            new(last.Release.ReleaseNumber, last.Record.Kind, last.Record.RecordId)));
+    }
+
+    private static int Compare(CorrectionHistoryBootstrapCandidate candidate, CorrectionHistoryBootstrapCursor cursor)
+    {
+        var release = candidate.Release.ReleaseNumber.CompareTo(cursor.ReleaseNumber);
+        if (release != 0) return release;
+        var kind = StringComparer.Ordinal.Compare(PublishedRecordReference.NameOf(candidate.Record.Kind),
+            PublishedRecordReference.NameOf(cursor.Kind));
+        return kind != 0 ? kind : StringComparer.Ordinal.Compare(candidate.Record.RecordId, cursor.RecordId);
+    }
+
+    public Task<(int Added, int AlreadyPresent)> CommitCorrectionHistoryBootstrapAsync(PublicationReleaseSummary release,
+        IReadOnlyCollection<CorrectionHistoryBinding> bindings, Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken) =>
+        Task.FromResult((bindings.Count, 0));
 
     public Dictionary<int, List<PublishedBillStatus>> BackfilledBillStatuses { get; } = [];
 
@@ -859,6 +936,7 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
     public int BeginCount { get; private set; }
     public int DiscardedStagings { get; set; }
     public string? Active { get; set; }
+    public Dictionary<string, Exception> ReadFailures { get; } = [];
     public Exception? FailOnDelete { get; set; }
     public Exception? FailOnDeleteRetired { get; set; }
     public List<string> Retired { get; } = [];
@@ -876,6 +954,7 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
         CancellationToken cancellationToken)
     {
         ReadPaths.Add(relativePath);
+        if (ReadFailures.TryGetValue(relativePath, out var failure)) throw failure;
         Events?.Add($"read {relativePath.Split('/', '.')[^2][..1]}");
         var content = Directories.TryGetValue(directoryName, out var directory) && directory.TryGetValue(relativePath, out var file)
             ? file
