@@ -32,11 +32,14 @@ public sealed class ReleaseCommandTests
     [InlineData("releases", "entries", "backfill", "0")]
     [InlineData("releases", "entries", "backfill", "x")]
     [InlineData("releases", "entries", "backfill", "5", "6")]
+    [InlineData("releases", "corrections", "verify")]
+    [InlineData("releases", "corrections", "verify", "0")]
+    [InlineData("releases", "corrections", "verify", "5", "bad-cursor")]
     public async Task InvalidInputExitsWithTwoBeforeAnyHandlerRuns(params string[] args)
     {
         var owner = new ReviewActor("auth0|owner", ReviewRole.Owner);
 
-        var exit = await ReleaseCommand.ExecuteAsync(args, null!, null!, null!, null!, null!, null!, null!, null!, null!, owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+        var exit = await ReleaseCommand.ExecuteAsync(args, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal(2, exit);
     }
@@ -130,7 +133,7 @@ public sealed class ReleaseCommandTests
         var owner = new ReviewActor("auth0|owner", ReviewRole.Owner);
         var list = new ListPublicationReleases(null!, null!);
         var error = new StringWriter();
-        var exit = await ReleaseCommand.ExecuteAsync(["releases", "list", "101"], null!, list, null!, null!, null!, null!, null!, null!, null!, owner, TextWriter.Null, error, CancellationToken.None);
+        var exit = await ReleaseCommand.ExecuteAsync(["releases", "list", "101"], null!, list, null!, null!, null!, null!, null!, null!, null!, null!, owner, TextWriter.Null, error, CancellationToken.None);
 
         Assert.Equal(2, exit);
         Assert.Contains("Page limit must be from 1 to 100.", error.ToString(), StringComparison.Ordinal);
@@ -143,7 +146,7 @@ public sealed class ReleaseCommandTests
         var error = new StringWriter();
 
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "entries", "backfill", "5"], null!, null!, null!, null!, null!,
-            new BackfillPublishedEntries(null!, null!), null!, null!, null!, reviewer, TextWriter.Null, error, CancellationToken.None);
+            new BackfillPublishedEntries(null!, null!), null!, null!, null!, null!, reviewer, TextWriter.Null, error, CancellationToken.None);
 
         Assert.Equal(2, exit);
         Assert.Contains("not the owner", error.ToString(), StringComparison.Ordinal);
@@ -156,8 +159,21 @@ public sealed class ReleaseCommandTests
         var error = new StringWriter();
 
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "corrections", "backfill", "5"], null!, null!, null!, null!, null!,
-            null!, null!, null!,
+            null!, null!, null!, null!,
             new BackfillCorrectionHistories(null!, null!), reviewer, TextWriter.Null, error, CancellationToken.None);
+
+        Assert.Equal(2, exit);
+        Assert.Contains("not the owner", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CorrectionHistoryVerificationIsOwnerOnly()
+    {
+        var reviewer = new ReviewActor("auth0|reviewer", ReviewRole.Reviewer);
+        var error = new StringWriter();
+
+        var exit = await ReleaseCommand.ExecuteAsync(["releases", "corrections", "verify", "5"], null!, null!, null!, null!, null!,
+            null!, null!, null!, new VerifyCorrectionHistories(null!, null!), null!, reviewer, TextWriter.Null, error, CancellationToken.None);
 
         Assert.Equal(2, exit);
         Assert.Contains("not the owner", error.ToString(), StringComparison.Ordinal);
@@ -172,14 +188,14 @@ public sealed class ReleaseCommandTests
         var backfill = new BackfillCorrectionHistories(scenario.Publications, scenario.Releases);
         var firstOutput = new StringWriter();
         var firstExit = await ReleaseCommand.ExecuteAsync(["releases", "corrections", "backfill", "1"], null!, null!, null!, null!,
-            null!, null!, null!, null!, backfill, PublicationScenario.Owner, firstOutput, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, backfill, PublicationScenario.Owner, firstOutput, TextWriter.Null, CancellationToken.None);
         using var firstJson = JsonDocument.Parse(firstOutput.ToString());
         var cursor = firstJson.RootElement.GetProperty("nextCursor").GetString();
         Assert.NotNull(CorrectionHistoryBootstrapCursor.Parse(cursor));
 
         var secondOutput = new StringWriter();
         var secondExit = await ReleaseCommand.ExecuteAsync(["releases", "corrections", "backfill", "1", cursor!], null!, null!, null!, null!,
-            null!, null!, null!, null!, backfill, PublicationScenario.Owner, secondOutput, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, backfill, PublicationScenario.Owner, secondOutput, TextWriter.Null, CancellationToken.None);
         using var secondJson = JsonDocument.Parse(secondOutput.ToString());
 
         Assert.Equal(1, firstExit);
@@ -205,9 +221,9 @@ public sealed class ReleaseCommandTests
         var output = new StringWriter();
 
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "first-published", "backfill"], null!, null!, null!, null!, backfill,
-            null!, null!, null!, null!, PublicationScenario.Owner, output, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, PublicationScenario.Owner, output, TextWriter.Null, CancellationToken.None);
         var extra = await ReleaseCommand.ExecuteAsync(["releases", "first-published", "backfill", "5"], null!, null!, null!, null!, backfill,
-            null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal((0, 2), (exit, extra));
         using var json = JsonDocument.Parse(output.ToString());
@@ -222,13 +238,13 @@ public sealed class ReleaseCommandTests
         var action = scenario.AddAction('a');
         var reference = $"action:{action}";
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", reference], scenario.Publisher(), null!, null!, null!, null!,
-            null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         scenario.Publications.FirstPublished.Clear();
         scenario.ReviseAction(action, 2);
         var error = new StringWriter();
 
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", reference], scenario.Publisher(), null!, null!, null!, null!,
-            null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, error, CancellationToken.None);
+            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, error, CancellationToken.None);
 
         Assert.Equal(1, exit);
         Assert.Contains("releases first-published backfill", error.ToString(), StringComparison.Ordinal);
@@ -242,7 +258,7 @@ public sealed class ReleaseCommandTests
         var statement = scenario.AddStatement('b');
         var exit = await ReleaseCommand.ExecuteAsync(
             ["releases", "publish", "key", $"statement:{statement}", $"documentChange:{change}"],
-            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal(0, exit);
 
@@ -258,14 +274,14 @@ public sealed class ReleaseCommandTests
         var action = scenario.AddAction('a');
         var reference = $"action:{action}";
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", reference], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         scenario.ReviseAction(action, 2, correctionNote: null);
 
         var missing = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", reference], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         scenario.ReviseAction(action, 3, correctionNote: "Fixed the issue.");
         var noted = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", reference],
-            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal((2, 0), (missing, noted));
         var record = JsonSerializer.Deserialize<PublishedAction>(
@@ -279,14 +295,14 @@ public sealed class ReleaseCommandTests
     {
         var scenario = new PublicationScenario();
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"vote:{scenario.AddVote('a')}"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         scenario.Releases.WriteOrder.Clear();
 
         var plain = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         scenario.Releases.WriteOrder.Clear();
         var rewritten = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", "--rewrite-officials"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal((2, 0), (plain, rewritten));
         Assert.Contains(PublicationProtocol.OfficialPagePath("mayor"), scenario.Releases.WriteOrder);
@@ -298,7 +314,7 @@ public sealed class ReleaseCommandTests
         var scenario = new PublicationScenario();
         var vote = scenario.AddVote('a');
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"vote:{vote}"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         var first = scenario.Publications.Committed[^1].DirectoryName;
         var manifest = JsonSerializer.Deserialize<PublicationRelease>(scenario.Releases.Directories[first][PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
         scenario.Releases.Directories[first][PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(
@@ -306,7 +322,7 @@ public sealed class ReleaseCommandTests
             PublicationProtocol.JsonOptions);
 
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--rewrite-entries"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal(0, exit);
         var rewritten = JsonSerializer.Deserialize<PublicationRelease>(
@@ -320,13 +336,13 @@ public sealed class ReleaseCommandTests
         var scenario = new PublicationScenario();
         var statement = scenario.AddStatement('a');
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"statement:{statement}"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         scenario.PageLayout = " layout-2";
 
         var plain = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         var rewritten = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", "--rewrite-pages"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal((2, 0), (plain, rewritten));
         var page = scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.RecordPagePath(statement)];
@@ -339,11 +355,11 @@ public sealed class ReleaseCommandTests
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('a');
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"action:{action}"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.RecordDataPath(action)] = "not json"u8.ToArray();
         var error = new StringWriter();
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--rewrite-pages"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, error, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, error, CancellationToken.None);
 
         Assert.Equal(1, exit);
         Assert.Contains($"Action {action}", error.ToString(), StringComparison.Ordinal);
@@ -357,11 +373,11 @@ public sealed class ReleaseCommandTests
         var action = scenario.AddAction('b');
         var relationship = scenario.AddRelationship('e', statement, action);
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"statement:{statement}", $"action:{action}", $"relationship:{relationship}"],
-            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.RecordDataPath(relationship)] = "not json"u8.ToArray();
         var error = new StringWriter();
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--rewrite-pages"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, error, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, error, CancellationToken.None);
 
         Assert.Equal(1, exit);
         Assert.Contains($"Relationship {relationship}", error.ToString(), StringComparison.Ordinal);
@@ -373,7 +389,7 @@ public sealed class ReleaseCommandTests
         var scenario = new PublicationScenario();
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"vote:{scenario.AddVote('a')}", $"action:{scenario.AddAction('b', cosponsorWithdrawn: false)}",
             $"statement:{scenario.AddStatement('c', speakerIds: ["chair"])}"],
-            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         var first = scenario.Publications.Committed[^1].DirectoryName;
         var manifest = JsonSerializer.Deserialize<PublicationRelease>(scenario.Releases.Directories[first][PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
         scenario.Releases.Directories[first][PublicationProtocol.ManifestPath] = JsonSerializer.SerializeToUtf8Bytes(
@@ -382,7 +398,7 @@ public sealed class ReleaseCommandTests
         scenario.Releases.WriteOrder.Clear();
 
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--rewrite-entries", "--rewrite-officials"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal(0, exit);
         var directory = scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName];
@@ -400,12 +416,12 @@ public sealed class ReleaseCommandTests
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('b', cosponsorWithdrawn: false);
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"action:{action}"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         var first = scenario.Publications.Committed[^1].DirectoryName;
         scenario.Releases.Directories[first][PublicationProtocol.RecordDataPath(action)] = "not json"u8.ToArray();
         var error = new StringWriter();
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--rewrite-entries"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, error, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, error, CancellationToken.None);
 
         Assert.Equal(1, exit);
         Assert.Contains($"Action {action}", error.ToString(), StringComparison.Ordinal);
@@ -419,11 +435,11 @@ public sealed class ReleaseCommandTests
         scenario.Photos = [new("mayor", MemberPhotoFixtures.PhotoUrl(), MemberPhoto.MemberGuideCredit, "attempt-1", new string('a', 64))];
         var vote = $"vote:{scenario.AddVote('a')}";
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", vote], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         scenario.WithheldPhotos.Add("mayor");
 
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal(0, exit);
         var files = scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName];
@@ -438,12 +454,12 @@ public sealed class ReleaseCommandTests
         var action = scenario.AddAction('a');
         var reference = $"action:{action}";
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", reference], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         var unknown = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--withdraw", $"action:{new string('b', 64)}", "Wrong."],
-            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         var withdrawn = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", "--withdraw", reference, "Wrong bill."],
-            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal((2, 0), (unknown, withdrawn));
         var manifest = JsonSerializer.Deserialize<PublicationRelease>(
@@ -460,16 +476,16 @@ public sealed class ReleaseCommandTests
         var action = scenario.AddAction('a');
         var reference = $"action:{action}";
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", reference], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--withdraw", reference, "Wrong bill."], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         scenario.ReviseAction(action, 2, correctionNote: null);
 
         var missing = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", reference], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         scenario.ReviseAction(action, 3, correctionNote: "Bill fixed.");
         var returned = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k4", reference],
-            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal((2, 0), (missing, returned));
         var manifest = JsonSerializer.Deserialize<PublicationRelease>(
@@ -487,7 +503,7 @@ public sealed class ReleaseCommandTests
         scenario.Publications.FailOnCommit = new PublicationStateMismatchException("Release 2 lists 1 records, but the state table holds 2 rows for it.");
         var error = new StringWriter();
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "key", $"statement:{statement}"],
-            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, error, CancellationToken.None);
+            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, error, CancellationToken.None);
 
         Assert.Equal(1, exit);
         Assert.Contains("lists 1 records, but the state table holds 2 rows", error.ToString(), StringComparison.Ordinal);
@@ -501,7 +517,7 @@ public sealed class ReleaseCommandTests
         scenario.Publications.ConflictOnCommit = true;
         var error = new StringWriter();
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "key", $"statement:{statement}"],
-            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, error, CancellationToken.None);
+            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, error, CancellationToken.None);
 
         Assert.Equal(1, exit);
         Assert.Contains("Review state changed.", error.ToString(), StringComparison.Ordinal);
@@ -512,7 +528,7 @@ public sealed class ReleaseCommandTests
     {
         var error = new StringWriter();
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "key", "draft:" + new string('a', 32)],
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, new ReviewActor("auth0|owner", ReviewRole.Owner), TextWriter.Null, error, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, new ReviewActor("auth0|owner", ReviewRole.Owner), TextWriter.Null, error, CancellationToken.None);
 
         Assert.Equal(2, exit);
         Assert.Contains("documentChange, statement, action", error.ToString(), StringComparison.Ordinal);
@@ -580,7 +596,7 @@ public sealed class ReleaseCommandTests
     {
         var output = new StringWriter();
         var exit = await ReleaseCommand.ExecuteAsync(args, null!, null!, scenario.BlockedLister(), scenario.Activator(),
-            null!, null!, null!, null!, null!, PublicationScenario.Owner, output, TextWriter.Null, CancellationToken.None);
+            null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, output, TextWriter.Null, CancellationToken.None);
         Assert.Equal(0, exit);
         return JsonDocument.Parse(output.ToString());
     }

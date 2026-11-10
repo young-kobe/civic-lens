@@ -458,7 +458,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
     }
 
     private async Task<int> ExitOfBackfillAsync(FakeReleaseDirectory releases) => await ReleaseCommand.ExecuteAsync(["releases", "columns", "backfill"], null!, null!, null!, null!, null!,
-        null!, new BackfillStoredColumns(publications, releases), null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+        null!, new BackfillStoredColumns(publications, releases), null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
     private async Task ExecuteAsync(string sql)
     {

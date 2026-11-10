@@ -17,8 +17,9 @@ public static class ReleaseCommand
     public static bool IsPublish(string[] args) => args is ["releases", "publish", ..];
 
     public static Task<int> ExecuteAsync(string[] args, PublishRelease publish,
-        ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, BackfillFirstPublished backfill, BackfillPublishedEntries entries, BackfillStoredColumns columns, VerifyPublishedEntries verify, BackfillCorrectionHistories corrections, ReviewActor owner,
-        TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
+        ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, BackfillFirstPublished backfill, BackfillPublishedEntries entries,
+        BackfillStoredColumns columns, VerifyPublishedEntries verify, VerifyCorrectionHistories verifyCorrections,
+        BackfillCorrectionHistories corrections, ReviewActor owner, TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
         OwnerCommand.RunAsync(async () =>
         {
             try
@@ -58,16 +59,25 @@ public static class ReleaseCommand
                             .ExecuteAsync(owner, correctionCountWithCursor, cursor, cancellationToken);
                         CommandOutput.Write(output, correctionResult);
                         return correctionResult.Failed == 0 ? 0 : 1;
+                    case ["releases", "corrections", "verify", var verifyLimit] when TryParsePositive(verifyLimit, out var verifyCount):
+                        var verification = await verifyCorrections.ExecuteAsync(owner, verifyCount, null, cancellationToken);
+                        CommandOutput.Write(output, verification);
+                        return verification.Failed == 0 && !verification.StaleCursor ? 0 : 1;
+                    case ["releases", "corrections", "verify", var verifyLimitWithCursor, var verifyCursorText] when TryParsePositive(verifyLimitWithCursor, out var verifyCountWithCursor):
+                        var verifyCursor = CorrectionHistoryVerificationCursor.Parse(verifyCursorText);
+                        var continuedVerification = await verifyCorrections.ExecuteAsync(owner, verifyCountWithCursor, verifyCursor, cancellationToken);
+                        CommandOutput.Write(output, continuedVerification);
+                        return continuedVerification.Failed == 0 && !continuedVerification.StaleCursor ? 0 : 1;
                     case ["releases", "columns", "backfill"]:
                         var filled = await columns.ExecuteAsync(owner, cancellationToken);
                         CommandOutput.Write(output, filled);
                         return filled.OpenVoteRevisionsWithoutKeptFile == 0 ? 0 : 1;
                     case ["releases", "entries", "verify"]:
-                        var verification = await verify.ExecuteAsync(owner, cancellationToken);
-                        CommandOutput.Write(output, verification);
-                        return verification.Failed == 0 ? 0 : 1;
+                        var publishedVerification = await verify.ExecuteAsync(owner, cancellationToken);
+                        CommandOutput.Write(output, publishedVerification);
+                        return publishedVerification.Failed == 0 ? 0 : 1;
                     default:
-                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases columns backfill, or releases entries verify.");
+                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases corrections verify <limit> [cursor], releases columns backfill, or releases entries verify.");
                         return 2;
                 }
             }

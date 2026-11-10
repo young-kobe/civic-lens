@@ -239,6 +239,133 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
     }
 
     [Fact]
+    public async Task VerificationPageReadsBoundAndMissingHistoriesAndIsolatesCorruptRows()
+    {
+        var healthyRecordId = new string('c', 64);
+        await SeedActionsAsync((A, 10), (B, 10), (healthyRecordId, 10));
+        var first = Binding(A, 10);
+        var second = Binding(B, 10);
+        var healthy = Binding(healthyRecordId, 10);
+        var histories = await publications.PrepareCorrectionHistoriesAsync(
+            [new(first, []), new(second, []), new(healthy, [Correction(9, PublishedAt, "Healthy peer")])], default);
+        await CommitAsync(1, null, [first, second, healthy],
+            [new(PublishedRecordKind.Action, A, 10, 1), new(PublishedRecordKind.Action, B, 10, 1), new(PublishedRecordKind.Action, healthyRecordId, 10, 1)],
+            [PublishedEntryFixtures.Action(A, PublishedAt, 10), PublishedEntryFixtures.Action(B, PublishedAt, 10),
+                PublishedEntryFixtures.Action(healthyRecordId, PublishedAt, 10)], histories);
+        await ExecuteAsync("DELETE FROM release_correction_histories WHERE release_number = 1 AND kind = 'action' AND record_id = @id",
+            ("id", B));
+
+        var page = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 10,
+            _ => Task.FromResult<string?>(null), default);
+
+        Assert.Equal(3, page.Candidates.Count);
+        Assert.NotNull(Assert.Single(page.Candidates, candidate => candidate.Record.RecordId == A).StoredHistory);
+        Assert.Null(Assert.Single(page.Candidates, candidate => candidate.Record.RecordId == B).StoredHistory);
+        Assert.Equal(PublishedAt, Assert.Single(page.Candidates, candidate => candidate.Record.RecordId == A).Record.FirstPublishedAtUtc);
+
+        await ExecuteAsync("DELETE FROM published_records WHERE kind = 'action' AND record_id = @id", ("id", A));
+        var missingFirstPublication = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 10,
+            _ => Task.FromResult<string?>(null), default);
+        Assert.Null(Assert.Single(missingFirstPublication.Candidates, candidate => candidate.Record.RecordId == A).Record.FirstPublishedAtUtc);
+
+        await ExecuteAsync("UPDATE published_correction_histories SET correction_count = 1 WHERE history_id = @id",
+            ("id", Assert.Single(histories, history => history.Record.RecordId == A).HistoryId));
+        var corrupted = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 10,
+            _ => Task.FromResult<string?>(null), default);
+
+        Assert.Equal("recordInvalid", Assert.Single(corrupted.Candidates, candidate => candidate.Record.RecordId == A).StoredHistoryError);
+        Assert.Null(Assert.Single(corrupted.Candidates, candidate => candidate.Record.RecordId == B).StoredHistoryError);
+        var healthyCandidate = Assert.Single(corrupted.Candidates, candidate => candidate.Record.RecordId == healthyRecordId);
+        Assert.Null(healthyCandidate.StoredHistoryError);
+        Assert.Equal("Healthy peer", Assert.Single(healthyCandidate.StoredHistory!.Corrections).Note);
+    }
+
+    [Fact]
+    public async Task VerificationSelectionIncludesRetainedActiveAndServedReleasesAndCursorDetectsSelectionChange()
+    {
+        await SeedActionsAsync((A, 10));
+        var record = Binding(A, 10);
+        var history = Assert.Single(await publications.PrepareCorrectionHistoriesAsync([new(record, [])], default));
+        await CommitAsync(1, null, [record], [new(PublishedRecordKind.Action, A, 10, 1)],
+            [PublishedEntryFixtures.Action(A, PublishedAt, 10)], [history]);
+        await ExecuteAsync("""
+            UPDATE publication_releases SET published_at_utc_ticks = @old_time WHERE release_number = 1;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            SELECT n, lpad(n::text, 6, '0') || '-' || md5(n::text), 'test', @old_time + n, 1, false
+              FROM generate_series(2, 40) n;
+            """, ("old_time", DateTimeOffset.UtcNow.AddDays(-40).UtcTicks));
+        var releases = await publications.ListAllAsync(default);
+        var served = releases.Single(release => release.ReleaseNumber == 2);
+        var anotherServed = releases.Single(release => release.ReleaseNumber == 3);
+
+        var page = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 100,
+            _ => Task.FromResult<string?>(served.DirectoryName), default);
+
+        Assert.Equal(new[] { 1, 2 }.Concat(Enumerable.Range(11, 30)), page.Candidates.Select(candidate => candidate.Release.ReleaseNumber));
+        Assert.Equal(page.SelectionFingerprint, await publications.ReadCorrectionHistoryVerificationFingerprintAsync(
+            _ => Task.FromResult<string?>(served.DirectoryName), default));
+        var first = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 1,
+            _ => Task.FromResult<string?>(served.DirectoryName), default);
+        var stale = await publications.ReadCorrectionHistoryVerificationPageAsync(first.NextCursor, 1,
+            _ => Task.FromResult<string?>(anotherServed.DirectoryName), default);
+        Assert.True(stale.StaleCursor);
+        Assert.Null(stale.NextCursor);
+    }
+
+    [Fact]
+    public async Task VerificationPageKeepsOneSnapshotWhileActivationChangesDuringItsReads()
+    {
+        await SeedActionsAsync((A, 10));
+        var record = Binding(A, 10);
+        var history = Assert.Single(await publications.PrepareCorrectionHistoriesAsync([new(record, [])], default));
+        await CommitAsync(1, null, [record], [new(PublishedRecordKind.Action, A, 10, 1)],
+            [PublishedEntryFixtures.Action(A, PublishedAt, 10)], [history]);
+        await ExecuteAsync("""
+            UPDATE publication_releases SET published_at_utc_ticks = @old_time WHERE release_number = 1;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            SELECT n, lpad(n::text, 6, '0') || '-' || md5(n::text), 'test', @old_time + n, 1, false
+              FROM generate_series(2, 40) n;
+            """, ("old_time", DateTimeOffset.UtcNow.AddDays(-40).UtcTicks));
+        var before = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 100,
+            _ => Task.FromResult<string?>(null), default);
+
+        var during = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 100, async _ =>
+        {
+            // The retention read has established its snapshot; this separate connection commits a concurrent activation.
+            await ExecuteAsync("UPDATE publication_releases SET is_active = false WHERE release_number = 1; UPDATE publication_releases SET is_active = true WHERE release_number = 3");
+            return null;
+        }, default);
+
+        Assert.Equal(before.SelectionFingerprint, during.SelectionFingerprint);
+        Assert.Equal(before.Candidates.Select(candidate => candidate.Release.ReleaseNumber),
+            during.Candidates.Select(candidate => candidate.Release.ReleaseNumber));
+        var first = during.Candidates[0];
+        var cursor = new CorrectionHistoryVerificationCursor(during.SelectionFingerprint,
+            first.Release.ReleaseNumber, first.Record.Kind, first.Record.RecordId);
+        var resumed = await publications.ReadCorrectionHistoryVerificationPageAsync(cursor, 1,
+            _ => Task.FromResult<string?>(null), default);
+        Assert.True(resumed.StaleCursor);
+    }
+
+    [Fact]
+    public async Task VerificationPageMarksTamperedHistoryIdentityAsMalformed()
+    {
+        await SeedActionsAsync((A, 10));
+        var record = Binding(A, 10);
+        var corrections = new[] { Correction(9, PublishedAt.ToOffset(TimeSpan.FromHours(3)), "Stored note") };
+        var history = Assert.Single(await publications.PrepareCorrectionHistoriesAsync([new(record, corrections)], default));
+        await CommitAsync(1, null, [record], [new(PublishedRecordKind.Action, A, 10, 1)],
+            [PublishedEntryFixtures.Action(A, PublishedAt, 10)], [history]);
+        await ExecuteAsync("UPDATE published_correction_history_entries SET note = 'Tampered note' WHERE history_id = @id",
+            ("id", history.HistoryId));
+
+        var page = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 10,
+            _ => Task.FromResult<string?>(null), default);
+
+        Assert.Equal("recordInvalid", Assert.Single(page.Candidates).StoredHistoryError);
+    }
+
+    [Fact]
     public async Task BootstrapRefusesARecordWhoseReleaseMembershipChangedAfterPreparation()
     {
         await SeedActionsAsync((A, 10));

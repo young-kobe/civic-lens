@@ -107,6 +107,13 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
         Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
         inner.ReadCorrectionHistoryBootstrapPageAsync(after, limit, readServedDirectory, cancellationToken);
 
+    public Task<CorrectionHistoryVerificationPage> ReadCorrectionHistoryVerificationPageAsync(CorrectionHistoryVerificationCursor? after, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.ReadCorrectionHistoryVerificationPageAsync(after, limit, readServedDirectory, cancellationToken);
+
+    public Task<string> ReadCorrectionHistoryVerificationFingerprintAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken) => inner.ReadCorrectionHistoryVerificationFingerprintAsync(readServedDirectory, cancellationToken);
+
     public Task<(int Added, int AlreadyPresent)> CommitCorrectionHistoryBootstrapAsync(PublicationReleaseSummary release,
         IReadOnlyCollection<CorrectionHistoryBinding> bindings, Func<CancellationToken, Task<string?>> readServedDirectory,
         CancellationToken cancellationToken) =>

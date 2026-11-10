@@ -69,6 +69,12 @@ public interface IPublicationStore
     Task<CorrectionHistoryBootstrapPage> ReadCorrectionHistoryBootstrapPageAsync(CorrectionHistoryBootstrapCursor? after, int limit,
         Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
 
+    Task<CorrectionHistoryVerificationPage> ReadCorrectionHistoryVerificationPageAsync(CorrectionHistoryVerificationCursor? after, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
+
+    Task<string> ReadCorrectionHistoryVerificationFingerprintAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken);
+
     Task<(int Added, int AlreadyPresent)> CommitCorrectionHistoryBootstrapAsync(PublicationReleaseSummary release,
         IReadOnlyCollection<CorrectionHistoryBinding> bindings, Func<CancellationToken, Task<string?>> readServedDirectory,
         CancellationToken cancellationToken);

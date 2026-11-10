@@ -1057,6 +1057,20 @@ The JSON result contains `examined`, `added`, `alreadyPresent`, `failed`, `failu
 
 Continue from the cursor to reach later valid files. Inspect each reported failure. After an authorized repair, run again without a cursor to retry earlier failures. A fresh scan with zero examined files proves only that no missing bindings were selected. Verify existing typed histories and full coverage separately before enabling the reader. A changed retention or revision check stops binding rather than guessing; start a fresh scan after resolving the cause. No public request reads the conversion files.
 
+### Correction history verification
+
+Run `releases entries verify` to prove stored membership against the kept manifests. After correction bootstrap, verify every selected history before enabling the reader:
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases corrections verify <limit> [cursor]
+```
+
+The limit caps record files examined. The command includes existing bindings and checks the retained, active, and served releases. It compares exact revision facts and correction content, including order, UTC ticks, and original offsets. It writes nothing. Each database page uses a short read-only repeatable-read transaction. File reads follow that transaction; the command checks the selection again after the terminal file batch.
+
+The JSON result contains `examined`, `verified`, `failed`, `failures`, `nextCursor`, `staleCursor`, and `selectionFingerprint`. The first 50 failures give the release, kind, record ID, and the same reasons as bootstrap. `recordInvalid` also covers missing or corrupt typed histories. All failures count in `failed`, even when the list is full.
+
+Copy `nextCursor` into the next invocation until it is null. A change to the selected release set sets `staleCursor` and gives no continuation. Restart without a cursor and discard coverage totals from the old fingerprint. Keep every batch result for the current fingerprint and resolve every failed record before claiming complete coverage. A zero exit code means this batch passed, not that earlier batches passed. Exit code 1 means a failed record or stale cursor; invalid input or owner identity gives 2. A terminal result with no failures across its complete scan proves agreement for that selected membership. It does not replace manifest membership verification.
+
 ### Stored columns backfill
 
 The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, and the Congress of each entry. This command fills them for rows that earlier releases wrote.

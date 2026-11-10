@@ -129,6 +129,7 @@ if (args is [] or ["--help"] or ["help"])
           releases first-published backfill
           releases entries backfill <limit>
           releases corrections backfill <limit> [cursor]
+          releases corrections verify <limit> [cursor]
           review [port]
         The review workspace binds only to 127.0.0.1 and defaults to port 5081.
         New admissions default to today in UTC; existing keys retain their saved date when --as-of is omitted.
@@ -485,7 +486,8 @@ try
             new ListBlockedPublished(publications, releases, blocked),
             new ActivatePublicationRelease(publications, releases, blocked, loggers.CreateLogger<ActivatePublicationRelease>()),
             new BackfillFirstPublished(publications, releases), new BackfillPublishedEntries(publications, releases),
-            new BackfillStoredColumns(publications, releases), new VerifyPublishedEntries(publications, releases), new BackfillCorrectionHistories(publications, releases), owner,
+            new BackfillStoredColumns(publications, releases), new VerifyPublishedEntries(publications, releases),
+            new VerifyCorrectionHistories(publications, releases), new BackfillCorrectionHistories(publications, releases), owner,
             Console.Out, Console.Error, cancellation.Token);
     }
 
