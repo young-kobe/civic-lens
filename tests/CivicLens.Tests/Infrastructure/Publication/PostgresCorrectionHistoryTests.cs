@@ -109,7 +109,7 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
         Assert.Equal((second.HistoryId, "Second correction", TimeSpan.FromHours(-4)),
             (secondRead.Value.Binding.HistoryId, secondRead.Value.Corrections[0].Note, secondRead.Value.Corrections[0].PublishedAtUtc.Offset));
 
-        var release = Assert.Single((await publications.ListAllAsync(default)).Where(item => item.ReleaseNumber == 1));
+        var release = Assert.Single(await publications.ListAllAsync(default), item => item.ReleaseNumber == 1);
         await Assert.ThrowsAsync<InvalidDataException>(() => publications.CommitCorrectionHistoryBootstrapAsync(release, [second],
             _ => Task.FromResult<string?>(null), default));
         var unchanged = Assert.Single(await publications.ReadCorrectionHistoriesAsync(1, [record], default));
