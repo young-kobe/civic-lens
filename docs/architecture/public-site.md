@@ -167,7 +167,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Freshness line | All | How current is this? | `active_release`, newest `votes.voted_on` per chamber | Partial. `/web` shows newest published roll call dates; other pages remain planned |
 | ZIP form and notices | Home | Who represents me? | `zip_districts`, `officials` | Implemented: visible busy state, answer scroll and focus, and error recovery |
 | Featured vote tile | Home | What did Congress just decide? | `votes` | Partial. Gated SSR preview shows the published summary, wording label, result, and Yea/Nay counts. Planned: map and party bars |
-| Party tally bar | Home, vote, bill | How did the chamber split? | `votes` chamber totals; published whole-party tallies | Planned: bars and typed whole-party counts. Tracked member casts cannot supply whole-party counts |
+| Party tally bar | Home, vote, bill | How did the chamber split? | `votes` chamber totals; published whole-party tallies | Typed whole-party counts are available in the vote detail API for exact active revisions. Bars remain planned. Tracked member casts cannot supply whole-party counts |
 | Latest votes list | Home | What was voted on lately? | `votes` | Partial. Gated SSR preview shows up to two recent substantive votes per chamber, excluding the featured vote, with their published labels and counts |
 | Issue tiles | Home | Where do I start? | `issue_votes`, `bill_issues` | `/web` shows each configured issue's substantive vote count, bill count, and Congress. Other issue layouts remain planned |
 | Break board | Home, boards | Who breaks from their party? | `official_party_lines`, `/v1/boards` | Official figures and the four-board API response are served. Home panel and board pages remain planned |
@@ -182,7 +182,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Vote header and AI summary | Vote | What was this vote? | `votes` headline, summary, label | Implemented. Planned: "what this vote decides" |
 | Fixed explainers | Vote, executive action | What did Yes mean? What next? | Code tables in `Publication.Contracts` | Planned: #407 |
 | Vote-kind explainer index | Vote kinds, glossary | What kinds of votes exist? | Shared kind names, record terms, and fixed Yes explainers | Planned: one index covering every vote kind, with approved wording |
-| Result card, party bars | Vote | Did it pass, and by how much? | `votes` chamber totals; published whole-party tallies | Partial. Chamber totals are stored. Typed whole-party counts and redesigned bars remain planned |
+| Result card, party bars | Vote | Did it pass, and by how much? | `votes` chamber totals; published whole-party tallies | Partial. Chamber totals and typed whole-party counts are served by the API. Redesigned bars remain planned |
 | Breakers list | Vote | Who broke ranks? | `votes.alignment`, `vote_members.party` | Planned |
 | Member list with finder | Vote | How did my member vote? | `vote_members`, `officials` | Implemented. Planned: folded table with filters |
 | Vote map | Vote, home | Where did Yes and No come from? | `vote_members`, `release_official_terms` | Planned: R-68 map step |

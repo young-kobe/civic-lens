@@ -50,12 +50,67 @@ public sealed class VoteStore(NpgsqlDataSource views)
                    ARRAY(SELECT i.issue_id FROM public_api.vote_issues i
                           WHERE i.record_id = v.record_id AND i.revision_number = v.revision_number ORDER BY i.issue_id),
                    ARRAY(SELECT f.fact_text FROM public_api.vote_facts f
-                          WHERE f.record_id = v.record_id AND f.revision_number = v.revision_number ORDER BY f."position")
-              FROM public_api.votes v WHERE v.record_id = @id
+                          WHERE f.record_id = v.record_id AND f.revision_number = v.revision_number ORDER BY f."position"),
+                   p.party_tally_count, p.party, p.yea, p.nay, p.present, p.not_voting, p.other
+              FROM public_api.votes v
+              LEFT JOIN LATERAL (
+                   SELECT t.party_tally_count, t.party, t.yea, t.nay, t.present, t.not_voting, t.other
+                     FROM public_api.vote_party_tallies t
+                    WHERE t.record_id = v.record_id AND t.revision_number = v.revision_number
+                    ORDER BY t.party LIMIT {PublishedVote.MaximumParties + 1}) p ON TRUE
+             WHERE v.record_id = @id
+             ORDER BY p.party NULLS FIRST
             """);
         command.Parameters.AddWithValue("id", recordId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken) ? new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(23), reader.GetFieldValue<string[]>(24)) : null;
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+        var release = reader.GetInt32(0);
+        var vote = ReadRow(reader);
+        var issueIds = reader.GetFieldValue<string[]>(23);
+        var facts = reader.GetFieldValue<string[]>(24);
+        var marker = reader.IsDBNull(25) ? (short?)null : reader.GetInt16(25);
+        var partyTallies = new List<PublishedPartyTally>();
+        do
+        {
+            var next = ReadPartyTally(reader);
+            if (next is not null) partyTallies.Add(next);
+        }
+        while (await reader.ReadAsync(cancellationToken));
+        ValidatePartyTallies(partyTallies, marker);
+        return new VoteDetail(release, vote, issueIds, facts)
+        {
+            PartyTallies = partyTallies.Count == 0 ? null : partyTallies.ToArray()
+        };
+    }
+
+    private static PublishedPartyTally? ReadPartyTally(DbDataReader reader)
+    {
+        if (reader.IsDBNull(26)) return null;
+        var tally = new PublishedPartyTally
+        {
+            Party = reader.GetString(26),
+            Yea = ViewColumns.Number(reader, 27) ?? throw InvalidPartyTally(),
+            Nay = ViewColumns.Number(reader, 28) ?? throw InvalidPartyTally(),
+            Present = ViewColumns.Number(reader, 29) ?? throw InvalidPartyTally(),
+            NotVoting = ViewColumns.Number(reader, 30) ?? throw InvalidPartyTally(),
+            Other = ViewColumns.Number(reader, 31) ?? throw InvalidPartyTally()
+        };
+        tally.Validate();
+        return tally;
+    }
+
+    private static InvalidDataException InvalidPartyTally() => new("Stored vote party tally is incomplete.");
+
+    private static void ValidatePartyTallies(List<PublishedPartyTally> tallies, short? marker)
+    {
+        if (marker is null or 0)
+        {
+            if (tallies.Count != 0) throw new InvalidDataException("Stored vote party tallies do not match their completeness marker.");
+            return;
+        }
+        if (marker is < 1 or > PublishedVote.MaximumParties || tallies.Count != marker ||
+            tallies.Select(tally => tally.Party).Distinct(StringComparer.Ordinal).Count() != tallies.Count)
+            throw new InvalidDataException("Stored vote party tallies do not match their completeness marker.");
     }
 
     /// <summary>Reads one page of members. Null means that the active release holds no such vote. The caller compares the release of the page with the release of the cursor.</summary>
