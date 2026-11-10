@@ -14,6 +14,9 @@ public sealed record PublishedVote
     public const int MaximumMembers = 600;
     public const int MaximumSources = 3;
     public const int MaximumParties = 16;
+    public const string QuestionPrefix = "Question: ";
+    public const string LegislationPrefix = "Legislation: ";
+    public const string TitlePrefix = "Title: ";
     public const string ResultPrefix = "Result: ";
     public const string CountPrefix = "Count: ";
     public const string CandidateTotalPrefix = "Candidate total ";
