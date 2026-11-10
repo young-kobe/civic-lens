@@ -135,7 +135,9 @@ internal sealed class PublicationScenario
     };
 
     public void SeedRelease(int recordCount, bool withFiles, PublishedWithdrawal[]? withdrawals = null) =>
-        SeedRelease(withFiles, withdrawals: withdrawals, entries: [.. Enumerable.Range(0, recordCount).Select(index => new PublishedRecordEntry
+        SeedRelease(withFiles, withdrawals: withdrawals, entries: SeedEntries(recordCount));
+
+    private static PublishedRecordEntry[] SeedEntries(int recordCount) => [.. Enumerable.Range(0, recordCount).Select(index => new PublishedRecordEntry
         {
             IssueIds = [],
             Kind = PublishedRecordKind.DocumentChange,
@@ -145,7 +147,7 @@ internal sealed class PublicationScenario
             RevisionNumber = 1,
             Headline = $"Seeded {index}",
             FirstPublishedAtUtc = ApprovedAt.AddMinutes(-index)
-        })]);
+        })];
 
     public void SeedRelease(bool withFiles, PublishedRecordEntry[] entries, PublishedWithdrawal[]? withdrawals = null)
     {
@@ -175,8 +177,25 @@ internal sealed class PublicationScenario
         Publications.ActiveReleaseNumber = 1;
     }
 
+    public async Task SeedReleaseWithEmptyCorrectionHistoriesAsync(bool withFiles, PublishedRecordEntry[] entries,
+        PublishedWithdrawal[]? withdrawals = null)
+    {
+        SeedRelease(withFiles, entries, withdrawals);
+        await PrepareEmptyCorrectionHistoriesAsync(Publications.ActiveReleaseNumber!.Value, entries);
+    }
+
+    public Task SeedReleaseWithEmptyCorrectionHistoriesAsync(int recordCount, bool withFiles,
+        PublishedWithdrawal[]? withdrawals = null) =>
+        SeedReleaseWithEmptyCorrectionHistoriesAsync(withFiles, SeedEntries(recordCount), withdrawals);
+
     // Adds filler entries to the active release, so that it leaves the given number of free slots.
-    public void FillActiveReleaseToTheCap(int freeSlots)
+    public async Task FillActiveReleaseToTheCapWithEmptyCorrectionHistoriesAsync(int freeSlots)
+    {
+        var fillers = FillActiveReleaseToTheCapCore(freeSlots);
+        await PrepareEmptyCorrectionHistoriesAsync(Publications.ActiveReleaseNumber!.Value, fillers);
+    }
+
+    private PublishedRecordEntry[] FillActiveReleaseToTheCapCore(int freeSlots)
     {
         var directory = Releases.Directories[Publications.Committed[^1].DirectoryName];
         var manifest = JsonSerializer.Deserialize<PublicationRelease>(directory[PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
@@ -199,6 +218,19 @@ internal sealed class PublicationScenario
         }
         directory[PublicationProtocol.ManifestPath] =
             JsonSerializer.SerializeToUtf8Bytes(manifest with { Records = [.. manifest.Records, .. fillers] }, PublicationProtocol.JsonOptions);
+        return fillers;
+    }
+
+    private async Task PrepareEmptyCorrectionHistoriesAsync(int releaseNumber, PublishedRecordEntry[] entries)
+    {
+        var histories = entries.Select(entry => new PublicationCorrectionHistory(
+            new PublishedRevisionBinding(entry.Kind, entry.RecordId, entry.RevisionNumber), [])).ToArray();
+        var bindings = await Publications.PrepareCorrectionHistoriesAsync(histories, default);
+        var stored = Publications.CorrectionHistories.GetValueOrDefault(releaseNumber) ?? [];
+        foreach (var binding in bindings)
+            if (!stored.TryAdd(new(binding.Record.Kind, binding.Record.RecordId), new(binding, [])))
+                throw new InvalidDataException("A synthetic history cannot replace an existing record history.");
+        Publications.CorrectionHistories[releaseNumber] = stored;
     }
 
     public void SeedReleaseOfAnotherSchemaVersion()

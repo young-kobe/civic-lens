@@ -97,7 +97,7 @@ public sealed class PublishReleaseTests
     public async Task EveryReleaseHoldsASearchPageThatIsWrittenBeforeTheManifestAndListsTheReleaseRecords()
     {
         var scenario = new PublicationScenario();
-        scenario.SeedRelease(2, withFiles: true);
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(2, withFiles: true);
         var draft = scenario.AddDraft('a');
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));
@@ -112,7 +112,7 @@ public sealed class PublishReleaseTests
     public async Task PrecompressedManifestsHoldExactlyTheManifestBytesSoTheServerNeverSendsADifferentRelease()
     {
         var scenario = new PublicationScenario();
-        scenario.SeedRelease(3, withFiles: true);
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(3, withFiles: true);
         var draft = scenario.AddDraft('a');
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));
@@ -127,7 +127,7 @@ public sealed class PublishReleaseTests
     public async Task EveryIndexPageIsWrittenBeforeTheManifestSoALongReleaseIsNeverTruncated()
     {
         var scenario = new PublicationScenario();
-        scenario.SeedRelease(119, withFiles: true);
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(119, withFiles: true);
         var draft = scenario.AddDraft('a');
         scenario.Releases.WriteOrder.Clear();
 
@@ -171,7 +171,7 @@ public sealed class PublishReleaseTests
     public async Task AReleaseAtTheRecordLimitOfFilledStatementEntriesKeepsTheManifestUnderThreeQuartersOfTheManifestCap()
     {
         var scenario = new PublicationScenario();
-        scenario.SeedRelease(withFiles: true, [.. Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease - 1)
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(withFiles: true, [.. Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease - 1)
             .Select(index => PublicationScenario.FilledStatementEntry(index, StatementDraftRevision.MaximumHeadlineLength))]);
         var draft = scenario.AddDraft('a');
 
@@ -187,7 +187,7 @@ public sealed class PublishReleaseTests
     public async Task AReleaseAtTheRecordLimitOfFilledActionEntriesKeepsTheManifestUnderThreeQuartersOfTheManifestCap()
     {
         var scenario = new PublicationScenario();
-        scenario.SeedRelease(withFiles: true, [.. Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease - 1)
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(withFiles: true, [.. Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease - 1)
             .Select(index => PublicationScenario.FilledActionEntry(index, ActionDraftRevision.MaximumHeadlineLength))]);
         var draft = scenario.AddDraft('a');
 
@@ -210,7 +210,7 @@ public sealed class PublishReleaseTests
             "The fat entry must reach the cap before the record limit does.");
         var fillerLength = PublicationProtocol.MaximumManifestBytes - SeededRoom - fatCount * (entrySize + 1);
         var filler = PublicationScenario.FilledStatementEntry(fatCount, 1) with { Headline = new string('x', fillerLength) };
-        scenario.SeedRelease(withFiles: true, [.. Enumerable.Range(0, fatCount).Select(FatEntry), filler]);
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(withFiles: true, [.. Enumerable.Range(0, fatCount).Select(FatEntry), filler]);
         var seededBytes = scenario.Releases.Directories["seeded"][PublicationProtocol.ManifestPath].Length;
         Assert.InRange(seededBytes, PublicationProtocol.MaximumManifestBytes - SeededRoom - 400, PublicationProtocol.MaximumManifestBytes);
 
@@ -328,7 +328,7 @@ public sealed class PublishReleaseTests
     public async Task PublishServesTheRecordedActiveReleaseSoAnOlderPublishCannotUndoANewerActivation()
     {
         var scenario = new PublicationScenario();
-        scenario.SeedRelease(1, withFiles: true);
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(1, withFiles: true);
         scenario.Publications.BeforeServe = () => scenario.Publications.ActiveReleaseNumber = 1;
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,

@@ -295,9 +295,9 @@ public sealed partial class PostgresPublicationStore : IPublicationStore
         await PublishedRecords.InsertAsync(db, firstPublications, cancellationToken);
         await PublishedRecords.RequireStoredTimesAsync(db, firstPublications, cancellationToken);
         await PublishedEntries.InsertAsync(db, commit.AddedEntries, "Rebuild the release.", cancellationToken);
-        await CorrectionHistoryCopies.BindAsync(db, commit.ReleaseNumber, commit.Records, commit.CorrectionHistories, cancellationToken);
         await PublishedEntries.FillBillLinesAsync(db, commit.RewrittenEntries,
             "A carried action has no entry row or holds another bill line. Run releases entries backfill, then publish again.", cancellationToken);
+        await CorrectionHistoryCopies.BindAsync(db, commit.ReleaseNumber, commit.Records, commit.CorrectionHistories, cancellationToken);
         await VoteStoredColumnRows.WriteAsync(db, commit.VoteColumns, cancellationToken);
         if (commit.Names.Facets.Issues.Length > 0)
             await ReleaseIssueCounts.FillAsync(db, commit.ReleaseNumber,

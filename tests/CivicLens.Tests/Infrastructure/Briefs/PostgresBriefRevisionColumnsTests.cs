@@ -317,17 +317,26 @@ public sealed class PostgresBriefRevisionColumnsTests(PostgresCollection postgre
     public async Task ABriefCitationKeepsItsStatementRevision()
     {
         await SeedAsync();
+        var unpublishedStatement = new string('d', 64);
+        await seeder.StatementAsync(unpublishedStatement, 1, "Unpublished statement");
         await ExecuteAsync("""
-            DELETE FROM statement_review_decisions;
-            DELETE FROM statement_revision_speakers;
-            DELETE FROM statement_revision_other_speakers;
-            DELETE FROM statement_revision_issues;
-            DELETE FROM statement_revision_policy_areas;
-            DELETE FROM statement_revision_quotations;
-            DELETE FROM statement_revision_bill_numbers
-            """);
+            UPDATE brief_revision_citations
+            SET statement_candidate_id = @candidateId
+            WHERE kind = 'Statement' AND part = 'Text'
+            """, ("candidateId", unpublishedStatement));
+        await ExecuteAsync("""
+            DELETE FROM statement_review_decisions WHERE candidate_id = @candidateId;
+            DELETE FROM statement_revision_speakers WHERE candidate_id = @candidateId;
+            DELETE FROM statement_revision_other_speakers WHERE candidate_id = @candidateId;
+            DELETE FROM statement_revision_issues WHERE candidate_id = @candidateId;
+            DELETE FROM statement_revision_policy_areas WHERE candidate_id = @candidateId;
+            DELETE FROM statement_revision_quotations WHERE candidate_id = @candidateId;
+            DELETE FROM statement_revision_bill_numbers WHERE candidate_id = @candidateId
+            """, ("candidateId", unpublishedStatement));
 
-        var thrown = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync("DELETE FROM statement_revisions"));
+        var thrown = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(
+            "DELETE FROM statement_revisions WHERE candidate_id = @candidateId AND revision_number = 1",
+            ("candidateId", unpublishedStatement)));
 
         Assert.Equal(PostgresErrorCodes.RestrictViolation, thrown.SqlState);
         Assert.Equal("FK_brief_revision_citations_statement_revisions_statement_cand~", thrown.ConstraintName);

@@ -54,7 +54,7 @@ public sealed class PublishSiteFilesTests
     public async Task TheSitemapListsAFacetPageBeyondTheFirstAndAPastCongressPageOfAnOfficialSoSearchEnginesFindDeepPages()
     {
         var scenario = new PublicationScenario { BaseUrl = PublicBaseUrl.Parse(Base, "V") };
-        scenario.SeedRelease(withFiles: true, [.. Enumerable.Range(0, PublicationProtocol.PageSize + 1).Select(index => new PublishedRecordEntry
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(withFiles: true, [.. Enumerable.Range(0, PublicationProtocol.PageSize + 1).Select(index => new PublishedRecordEntry
         {
             Kind = PublishedRecordKind.DocumentChange,
             Officials = [],
@@ -111,7 +111,7 @@ public sealed class PublishSiteFilesTests
     public async Task ThePublishFailsInsteadOfWritingASitemapThatSearchEnginesRejectForHavingTooManyAddresses()
     {
         var scenario = new PublicationScenario { BaseUrl = PublicBaseUrl.Parse(Base, "V") };
-        scenario.SeedRelease(withFiles: true, [.. Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease - 1).Select(index => new PublishedRecordEntry
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(withFiles: true, [.. Enumerable.Range(0, PublicationProtocol.MaximumRecordsPerRelease - 1).Select(index => new PublishedRecordEntry
         {
             Kind = PublishedRecordKind.DocumentChange,
             Officials = [],

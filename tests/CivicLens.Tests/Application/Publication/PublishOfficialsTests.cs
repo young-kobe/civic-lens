@@ -247,7 +247,7 @@ public sealed class PublishOfficialsTests
                 Issues = [new() { Id = "housing", Name = "Housing costs", Definition = "d", PolicyAreaIds = ["land-use"] }]
             }
         };
-        scenario.SeedRelease(withFiles: true, [new PublishedRecordEntry
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(withFiles: true, entries: [new PublishedRecordEntry
         {
             Kind = PublishedRecordKind.DocumentChange,
             Officials = [],

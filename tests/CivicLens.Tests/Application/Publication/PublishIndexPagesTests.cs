@@ -11,7 +11,8 @@ public sealed class PublishIndexPagesTests
     public async Task AnIssuePageListsOnlyTheRecordsThatHoldItsIdSoReadersDoNotSeeOtherTopics()
     {
         var scenario = new PublicationScenario();
-        scenario.SeedRelease(withFiles: true, [Seeded(0, issueIds: ["transit"]), Seeded(1, issueIds: ["housing"])]);
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(withFiles: true, entries:
+            [Seeded(0, issueIds: ["transit"]), Seeded(1, issueIds: ["housing"])]);
         var draft = scenario.AddDraft('a');
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));
@@ -31,7 +32,8 @@ public sealed class PublishIndexPagesTests
                 Issues = [new() { Id = "housing", Name = "Housing costs", Definition = "d", PolicyAreaIds = ["land-use"] }]
             }
         };
-        scenario.SeedRelease(withFiles: true, [Seeded(0, issueIds: ["retired-issue"], policyAreaIds: ["land-use", "retired-area"])]);
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(withFiles: true, entries:
+            [Seeded(0, issueIds: ["retired-issue"], policyAreaIds: ["land-use", "retired-area"])]);
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k", scenario.AddDraft('a')));
@@ -46,7 +48,8 @@ public sealed class PublishIndexPagesTests
     public async Task AFacetIdThatCannotBeAPathSegmentGetsNoPageAndDoesNotFailThePublish()
     {
         var scenario = new PublicationScenario();
-        scenario.SeedRelease(withFiles: true, [Seeded(0, issueIds: ["Not A Path/Id", new string('x', PublicationProtocol.MaximumFacetIdLength + 1)])]);
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(withFiles: true, entries:
+            [Seeded(0, issueIds: ["Not A Path/Id", new string('x', PublicationProtocol.MaximumFacetIdLength + 1)])]);
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k", scenario.AddDraft('a')));
@@ -73,7 +76,8 @@ public sealed class PublishIndexPagesTests
     public async Task AFacetPageSetStaysAtOnePagePerFiftyRecordsSoThePageCountIsBounded()
     {
         var scenario = new PublicationScenario();
-        scenario.SeedRelease(withFiles: true, [.. Enumerable.Range(0, 119).Select(index => Seeded(index, issueIds: ["housing"]))]);
+        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(withFiles: true, entries:
+            [.. Enumerable.Range(0, 119).Select(index => Seeded(index, issueIds: ["housing"]))]);
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k", scenario.AddDraft('a')));

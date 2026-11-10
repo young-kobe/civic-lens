@@ -305,7 +305,7 @@ public sealed class PublishWithdrawalsTests
     {
         var (scenario, action) = await PublishedActionAsync();
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
-        scenario.FillActiveReleaseToTheCap(0);
+        await scenario.FillActiveReleaseToTheCapWithEmptyCorrectionHistoriesAsync(0);
         scenario.ReviseAction(action, 2, correctionNote: "Bill fixed.");
         var other = scenario.AddDraft('b');
         var both = new PublishReleaseRequest([Reference(action), new(PublishedRecordKind.DocumentChange, other)], "k3");

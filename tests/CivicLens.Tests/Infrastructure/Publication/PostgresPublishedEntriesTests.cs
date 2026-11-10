@@ -256,9 +256,9 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
         await CommitAsync(1, null, PublishedEntryFixtures.Relationship(A, B, C, First), StatementAndAction);
 
         Assert.Equal(["S000001|false", "S000002|true", "S000003|false"],
-            await ReadAsync("SELECT official_id || '|' || is_matched FROM published_entry_officials ORDER BY position"));
+            await ReadAsync($"SELECT official_id || '|' || is_matched FROM published_entry_officials WHERE kind = 'relationship' AND record_id = '{A}' AND revision_number = 1 ORDER BY position"));
         Assert.Equal(["relationship|DescribesOwnBill|" + B + "|action|" + C], await ReadAsync(
-            "SELECT kind || '|' || link_type || '|' || statement_record_id || '|' || target_kind || '|' || target_record_id FROM published_entries"));
+            $"SELECT kind || '|' || link_type || '|' || statement_record_id || '|' || target_kind || '|' || target_record_id FROM published_entries WHERE kind = 'relationship' AND record_id = '{A}' AND revision_number = 1"));
     }
 
     [Fact]
@@ -556,9 +556,15 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
             VALUES ('{{Guid.NewGuid():N}}', '{{B}}', 1, 1, 'Approve', 'owner', 1);
             INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, kind, actor_subject, created_at_utc_ticks)
             VALUES ('{{Guid.NewGuid():N}}', '{{C}}', 1, 1, 'Approve', 'owner', 1);
+            INSERT INTO statement_revisions (candidate_id, revision_number, revision_json, created_at_utc_ticks, author_kind, author_subject)
+            VALUES ('{{B}}', 1, '{}', 0, 'Person', 'owner');
             INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('statement', '{{B}}', 1)
             """);
-        if (withTargetTime) await ExecuteAsync($"INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('action', '{C}', 1)");
+        if (withTargetTime)
+        {
+            await ExecuteAsync(PublishedEntryFixtures.InsertActionRevisionSql(C));
+            await ExecuteAsync($"INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('action', '{C}', 1)");
+        }
         var seedEntries = new List<PublishedRecordEntry>
         {
             new()

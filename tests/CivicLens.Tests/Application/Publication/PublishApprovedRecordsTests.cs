@@ -687,7 +687,7 @@ public sealed class PublishApprovedRecordsTests
         var action = scenario.AddAction('a', ApprovedByCode('a'));
         scenario.Publications.BillStatuses[action] = Status(action, "Passed House.");
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new([new(PublishedRecordKind.Action, action)], "k1"));
-        scenario.FillActiveReleaseToTheCap(freeSlots);
+        await scenario.FillActiveReleaseToTheCapWithEmptyCorrectionHistoriesAsync(freeSlots);
         return scenario;
     }
 

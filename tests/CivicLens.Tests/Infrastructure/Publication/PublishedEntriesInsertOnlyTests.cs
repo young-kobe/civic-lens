@@ -26,8 +26,8 @@ public sealed class PublishedEntriesInsertOnlyTests
         Assert.Contains("WHERE e.bill_line IS NULL", fill);
         Assert.Matches(@"ORDER BY e\.kind, e\.record_id, e\.revision_number\s+FOR UPDATE OF e", fill);
         Assert.Matches(@"WHERE e\.approved_by IS NULL\s+ORDER BY e\.kind, e\.record_id, e\.revision_number FOR UPDATE OF e\)\s+UPDATE published_entries e SET approved_by = locked\.approved_by\s+FROM locked", files[writer]);
-        // The grants file names the table once, to give the public role a read grant on its columns.
-        Assert.Equal(["CivicLens.Infrastructure/Publication/PublicApiGrants.cs", writer], files.Where(file => Regex.IsMatch(file.Value, @"\bpublished_entr(ies|y_\w+)\b")
+        // History binding reads exact entry keys. Only the entry writer updates their facts.
+        Assert.Equal(["CivicLens.Infrastructure/Publication/CorrectionHistoryCopies.cs", "CivicLens.Infrastructure/Publication/PublicApiGrants.cs", writer], files.Where(file => Regex.IsMatch(file.Value, @"\bpublished_entr(ies|y_\w+)\b")
             && !file.Key.Contains("/Persistence/", StringComparison.Ordinal)).Select(file => file.Key).Order(StringComparer.Ordinal));
         Assert.Equal([writer], files.Where(file => Regex.IsMatch(file.Value, @"\bPublishedEntry\w*Row\b")
             && !file.Key.Contains("/Persistence/", StringComparison.Ordinal)).Select(file => file.Key));
