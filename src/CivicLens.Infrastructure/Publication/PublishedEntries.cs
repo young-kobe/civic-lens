@@ -30,13 +30,21 @@ internal static class PublishedEntries
 
     private const string ReadCorrectionBootstrapCandidates = """
         SELECT r.release_number AS "ReleaseNumber", r.directory_name AS "DirectoryName", r.published_at_utc_ticks AS "PublishedAtUtcTicks",
-               r.record_count AS "RecordCount", s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber"
-          FROM publication_releases r
-          JOIN publication_record_states s ON s.first_release <= r.release_number AND (s.last_release IS NULL OR s.last_release >= r.release_number)
-          LEFT JOIN release_correction_histories h ON h.release_number = r.release_number AND h.kind = s.kind AND h.record_id = s.record_id
-         WHERE r.release_number = ANY({0}) AND h.record_id IS NULL
-           AND ({1} = 0 OR (r.release_number, s.kind, s.record_id) > ({1}, {2}, {3}))
-         ORDER BY r.release_number, s.kind, s.record_id
+               r.record_count AS "RecordCount", candidate."Kind", candidate."RecordId", candidate."RevisionNumber"
+          FROM unnest({0}::integer[]) AS selected(release_number)
+          JOIN publication_releases r ON r.release_number = selected.release_number
+          CROSS JOIN LATERAL (
+              SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber"
+                FROM publication_record_states s
+                LEFT JOIN release_correction_histories h ON h.release_number = r.release_number AND h.kind = s.kind AND h.record_id = s.record_id
+               WHERE s.first_release <= r.release_number AND (s.last_release IS NULL OR s.last_release >= r.release_number)
+                 AND h.record_id IS NULL
+                 AND ({1} = 0 OR (r.release_number, s.kind, s.record_id) > ({1}, {2}, {3}))
+               ORDER BY s.kind, s.record_id
+               LIMIT {4}
+          ) candidate
+         WHERE r.release_number >= {1}
+         ORDER BY r.release_number, candidate."Kind", candidate."RecordId"
          LIMIT {4}
         """;
 
