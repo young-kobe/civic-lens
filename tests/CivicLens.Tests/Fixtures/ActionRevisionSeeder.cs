@@ -14,19 +14,56 @@ internal static class ActionRevisionSeeder
 {
     public static async Task AddAsync(string connectionString, ActionDraftRevision revision, string? runId = null)
     {
-        runId ??= ReviewAuthor.KindOf(revision.AuthorSubject) == ReviewAuthorKind.Person ? null : Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes($"{revision.RecordId}:{revision.RevisionNumber}")));
-        var row = typeof(PostgresActionReviewStore).Assembly.GetType($"{typeof(PostgresActionReviewStore).Namespace}.ActionRevisionRows")!
-            .GetMethod("Create")!.Invoke(null, [revision, runId, TestCodeVersion.Current])!;
+        await AddManyAsync(connectionString, [revision], item => runId ?? DefaultRunId(item));
+    }
+
+    public static async Task AddManyAsync(string connectionString, IEnumerable<ActionDraftRevision> revisions)
+        => await AddManyAsync(connectionString, revisions, DefaultRunId);
+
+    private static async Task AddManyAsync(string connectionString, IEnumerable<ActionDraftRevision> revisions,
+        Func<ActionDraftRevision, string?> runIdOf)
+    {
         await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
         await db.Database.OpenConnectionAsync();
-        await db.Database.ExecuteSqlRawAsync("SET session_replication_role = replica");
-        await db.Database.ExecuteSqlRawAsync("""
-            DELETE FROM action_revision_sponsorship_citations WHERE record_id = {0} AND revision_number = {1};
-            DELETE FROM action_revision_sponsorships WHERE record_id = {0} AND revision_number = {1};
-            DELETE FROM action_revision_issues WHERE record_id = {0} AND revision_number = {1};
-            DELETE FROM action_revisions WHERE record_id = {0} AND revision_number = {1}
-            """, revision.RecordId, revision.RevisionNumber);
-        db.Add(row);
+        var batch = new List<ActionDraftRevision>(128);
+        foreach (var revision in revisions)
+        {
+            batch.Add(revision);
+            if (batch.Count == batch.Capacity)
+            {
+                await WriteBatchAsync(db, batch, runIdOf);
+                batch.Clear();
+            }
+        }
+        if (batch.Count > 0) await WriteBatchAsync(db, batch, runIdOf);
+    }
+
+    private static async Task WriteBatchAsync(CollectionAttemptDbContext db, IReadOnlyCollection<ActionDraftRevision> revisions,
+        Func<ActionDraftRevision, string?> runIdOf)
+    {
+        var rows = revisions.Select(revision => CreateRow(revision, runIdOf(revision))).ToArray();
+        var ids = revisions.Select(revision => revision.RecordId).ToArray();
+        var numbers = revisions.Select(revision => revision.RevisionNumber).ToArray();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlRawAsync("SET LOCAL session_replication_role = replica");
+        foreach (var table in new[] { "action_revision_sponsorship_citations", "action_revision_sponsorships", "action_revision_issues", "action_revision_text_citations", "action_revisions" })
+            await db.Database.ExecuteSqlRawAsync($$"""
+                DELETE FROM {{table}} child USING unnest({0}::text[], {1}::integer[]) AS named(id, number)
+                 WHERE child.record_id = named.id AND child.revision_number = named.number
+                """, ids, numbers);
+        db.AddRange(rows);
         await db.SaveChangesAsync();
+        await transaction.CommitAsync();
+        db.ChangeTracker.Clear();
+    }
+
+    private static string? DefaultRunId(ActionDraftRevision revision) =>
+        ReviewAuthor.KindOf(revision.AuthorSubject) == ReviewAuthorKind.Person ? null :
+            Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes($"{revision.RecordId}:{revision.RevisionNumber}")));
+
+    private static object CreateRow(ActionDraftRevision revision, string? runId)
+    {
+        return typeof(PostgresActionReviewStore).Assembly.GetType($"{typeof(PostgresActionReviewStore).Namespace}.ActionRevisionRows")!
+            .GetMethod("Create")!.Invoke(null, [revision, runId, TestCodeVersion.Current])!;
     }
 }
