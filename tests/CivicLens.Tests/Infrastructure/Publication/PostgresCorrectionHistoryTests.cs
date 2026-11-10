@@ -191,7 +191,7 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
             [new(PublishedRecordKind.Action, A, 10, 1), new(PublishedRecordKind.Action, B, 20, 1)],
             [PublishedEntryFixtures.Action(A, PublishedAt, 10), PublishedEntryFixtures.Action(B, PublishedAt, 20)], histories);
 
-        await ExecuteAsync(PublishedEntryFixtures.InsertActionRevisionSql(A, 11));
+        await ActionRevisionSeeder.AddAsync(connectionString, ActionRevisionFixtures.Model(11) with { RecordId = A });
         await ExecuteAsync("UPDATE action_drafts SET current_revision_number = 11, review_state_version = 2 WHERE record_id = @id", ("id", A));
         var revised = Binding(A, 11);
         var nextHistories = await publications.PrepareCorrectionHistoriesAsync([new(revised, []), new(second, [])], default);
