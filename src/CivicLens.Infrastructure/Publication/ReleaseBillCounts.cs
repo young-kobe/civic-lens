@@ -9,7 +9,7 @@ namespace CivicLens.Infrastructure.Publication;
 /// <summary>Writes the bill counts that belong to one immutable release.</summary>
 internal static class ReleaseBillCounts
 {
-    private const int ValidationBatchSize = 100;
+    private const int ValidationBatchSize = 256;
 
     private const string ExpectedMembersSql = """
         DROP TABLE IF EXISTS pg_temp.expected_release_official_bill_counts;
