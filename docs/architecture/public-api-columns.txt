@@ -120,6 +120,15 @@ vote_members official_id
 vote_members vote_cast
 vote_members party
 vote_members caucus
+vote_party_tallies record_id
+vote_party_tallies revision_number
+vote_party_tallies party_tally_count
+vote_party_tallies party
+vote_party_tallies yea
+vote_party_tallies nay
+vote_party_tallies present
+vote_party_tallies not_voting
+vote_party_tallies other
 votes record_id
 votes revision_number
 votes release_number
