@@ -28,7 +28,7 @@ public sealed class PublishedVoteTests
 
         PublishedVote.ValidateEvidence(
             [vote.Sources[0], memberOnlySource], vote.VotedOn, vote.Kind, vote.KindCitation,
-            vote.VotedOnCitation, vote.Facts, [memberCitation]);
+            vote.VotedOnCitation, vote.Result, vote.Facts, [("Present", memberCitation)]);
     }
 
     [Fact]
@@ -45,15 +45,23 @@ public sealed class PublishedVoteTests
             Quote = "\uDD1E"
         };
 
+        var mismatchedFacts = vote.Facts.ToArray();
+        mismatchedFacts[0] = mismatchedFacts[0] with { Text = "incorrect" };
         Assert.Throws<InvalidDataException>(() => PublishedVote.ValidateEvidence(vote.Sources, vote.VotedOn, vote.Kind,
-            vote.KindCitation, vote.VotedOnCitation, [vote.Facts[0] with { Text = "incorrect" }], vote.Members.Select(member => member.Citation).ToArray()));
+            vote.KindCitation, vote.VotedOnCitation, vote.Result, mismatchedFacts, MemberEvidence(vote)));
         Assert.Throws<InvalidDataException>(() => PublishedVote.ValidateEvidence([.. vote.Sources, astralSource], vote.VotedOn, vote.Kind,
-            vote.KindCitation, vote.VotedOnCitation, vote.Facts, [.. vote.Members.Select(member => member.Citation), splitPair]));
+            vote.KindCitation, vote.VotedOnCitation, vote.Result,
+            [.. vote.Facts, new PublishedVoteFact { Text = "\uDD1E", Citation = splitPair }], MemberEvidence(vote)));
         Assert.Throws<InvalidDataException>(() => PublishedVote.ValidateEvidence(vote.Sources, vote.VotedOn, vote.Kind,
-            null, vote.VotedOnCitation, vote.Facts, vote.Members.Select(member => member.Citation).ToArray()));
+            null, vote.VotedOnCitation, vote.Result, vote.Facts, MemberEvidence(vote)));
         Assert.Throws<InvalidDataException>(() => PublishedVote.ValidateEvidence(vote.Sources, vote.VotedOn, vote.Kind,
-            vote.KindCitation, vote.VotedOnCitation, vote.Facts, [.. vote.Members.Select(member => member.Citation), vote.Members[0].Citation with { ExtractionId = new string('9', 64) }]));
+            vote.KindCitation, vote.VotedOnCitation, vote.Result, vote.Facts, [.. MemberEvidence(vote), ("Yea", vote.Members[0].Citation with { ExtractionId = new string('9', 64) })]));
+        Assert.Throws<InvalidDataException>(() => PublishedVote.ValidateEvidence(vote.Sources, vote.VotedOn, vote.Kind,
+            vote.KindCitation, vote.VotedOnCitation, "Missing", vote.Facts, MemberEvidence(vote)));
     }
+
+    private static (string? Cast, PublishedCitation? Citation)[] MemberEvidence(PublishedVote vote) =>
+        vote.Members.Select(member => ((string?)member.Cast, (PublishedCitation?)member.Citation)).ToArray();
 
     [Fact]
     public void TheEntryNamesNoOfficialUntilAnOfficialPageOrSearchServiceIndexesVotesAndDatesTheVoteByItsDay()

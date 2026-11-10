@@ -2,8 +2,9 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.PublicApi.Votes;
 
-/// <summary><c>Facts</c> holds the fact texts of the vote record in position order.</summary>
-public sealed record VoteDetail(int Release, VoteRow Vote, string[] IssueIds, string[] Facts)
+/// <summary>Returns ordered cited facts and the exact published source evidence.</summary>
+public sealed record VoteDetail(int Release, VoteRow Vote, string[] IssueIds, PublishedVoteFact[] Facts,
+    PublishedVoteSource Source, PublishedDocumentVersion[] Sources, PublishedCitation VotedOnCitation, PublishedCitation? KindCitation)
 {
     public PublishedPartyTally[]? PartyTallies { get; init; }
 }
