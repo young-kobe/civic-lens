@@ -34,7 +34,9 @@ internal static class PublicApiGrants
         GRANT SELECT (kind, record_id, first_published_at_utc_ticks) ON published_records TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, first_release, revision_number, last_release) ON publication_record_states TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, chamber, congress, session_number, roll_call_number, voted_on, kind,
-            bill_type, bill_number, headline, summary, text_origin, member_list_id, question, result, alignment, democrat_majority, republican_majority, columns_written) ON vote_revisions TO civic_lens_public_owner;
+            bill_type, bill_number, headline, summary, text_origin, member_list_id, question, result, alignment, democrat_majority, republican_majority, columns_written, party_tally_count) ON vote_revisions TO civic_lens_public_owner;
+        GRANT SELECT (record_id, revision_number, party, yea, nay, present, not_voting, other)
+            ON vote_revision_party_tallies TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, revision_number, event_date, link_type, statement_kind, statement_record_id, target_kind, target_record_id, bill_line, document_type, approved_by)
             ON published_entries TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, reason) ON relationship_revisions TO civic_lens_public_owner;
@@ -106,7 +108,7 @@ internal static class PublicApiGrants
             public_api.official_party_lines, public_api.official_bill_counts, public_api.official_issue_counts, public_api.official_executive_actions,
             public_api.bill_status, public_api.record_headlines, public_api.record_links, public_api.vote_facts,
             public_api.executive_actions, public_api.executive_action_notices, public_api.withdrawals, public_api.withdrawal_corrections,
-            public_api.vote_first_publications TO civic_lens_public;
+            public_api.vote_first_publications, public_api.vote_party_tallies TO civic_lens_public;
         GRANT SELECT ON public_api.statements, public_api.statement_speakers TO civic_lens_public;
         GRANT SELECT ON public_api.statement_sources, public_api.statement_quotations TO civic_lens_public;
         GRANT SELECT ON public_api.document_changes, public_api.document_change_officials, public_api.document_change_sources,
