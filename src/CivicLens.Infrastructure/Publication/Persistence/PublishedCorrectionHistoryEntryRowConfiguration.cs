@@ -1,3 +1,4 @@
+using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -11,7 +12,7 @@ internal sealed class PublishedCorrectionHistoryEntryRowConfiguration : IEntityT
     {
         builder.ToTable("published_correction_history_entries", table =>
         {
-            table.HasCheckConstraint("ck_published_correction_history_entries_position", "position BETWEEN 0 AND 61");
+            table.HasCheckConstraint("ck_published_correction_history_entries_position", $"position BETWEEN 0 AND {PublishedCorrection.MaximumEntries - 1}");
             table.HasCheckConstraint("ck_published_correction_history_entries_replaced_revision_number", "replaced_revision_number >= 1");
             table.HasCheckConstraint("ck_published_correction_history_entries_published_offset_minutes",
                 "published_offset_minutes BETWEEN -840 AND 840");
