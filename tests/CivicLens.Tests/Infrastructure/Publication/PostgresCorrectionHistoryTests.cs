@@ -181,6 +181,60 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
     }
 
     [Fact]
+    public async Task CorrectionPagingContinuesAcrossReleasesAndVerificationIncludesCompleteBindings()
+    {
+        await SeedActionsAsync((A, 10), (B, 20));
+        var first = Binding(A, 10);
+        var second = Binding(B, 20);
+        var histories = await publications.PrepareCorrectionHistoriesAsync([new(first, []), new(second, [])], default);
+        await CommitAsync(1, null, [first, second],
+            [new(PublishedRecordKind.Action, A, 10, 1), new(PublishedRecordKind.Action, B, 20, 1)],
+            [PublishedEntryFixtures.Action(A, PublishedAt, 10), PublishedEntryFixtures.Action(B, PublishedAt, 20)], histories);
+
+        await ExecuteAsync(PublishedEntryFixtures.InsertActionRevisionSql(A, 11));
+        await ExecuteAsync("UPDATE action_drafts SET current_revision_number = 11, review_state_version = 2 WHERE record_id = @id", ("id", A));
+        var revised = Binding(A, 11);
+        var nextHistories = await publications.PrepareCorrectionHistoriesAsync([new(revised, []), new(second, [])], default);
+        await CommitAsync(2, 1, [revised, second],
+            [new(PublishedRecordKind.Action, A, 11, 2)], [PublishedEntryFixtures.Action(A, PublishedAt, 11)], nextHistories);
+        await ExecuteAsync("DELETE FROM release_correction_histories WHERE release_number = 1 AND record_id = @id", ("id", B));
+        await ExecuteAsync("DELETE FROM release_correction_histories WHERE release_number = 2 AND record_id = @id", ("id", A));
+
+        var firstPage = await publications.ReadCorrectionHistoryBootstrapPageAsync(null, 1,
+            _ => Task.FromResult<string?>(null), default);
+        Assert.Equal([(1, B, 20)], firstPage.Candidates.Select(candidate =>
+            (candidate.Release.ReleaseNumber, candidate.Record.RecordId, candidate.Record.RevisionNumber)).ToArray());
+        Assert.NotNull(firstPage.NextCursor);
+
+        var secondPage = await publications.ReadCorrectionHistoryBootstrapPageAsync(firstPage.NextCursor, 1,
+            _ => Task.FromResult<string?>(null), default);
+        Assert.Equal([(2, A, 11)], secondPage.Candidates.Select(candidate =>
+            (candidate.Release.ReleaseNumber, candidate.Record.RecordId, candidate.Record.RevisionNumber)).ToArray());
+        Assert.Null(secondPage.NextCursor);
+
+        var verificationCandidates = new List<(int ReleaseNumber, string RecordId, int RevisionNumber)>();
+        CorrectionHistoryVerificationCursor? verificationCursor = null;
+        var expectedMemberships = new[]
+        {
+            (1, A, 10), (1, B, 20), (2, A, 11), (2, B, 20)
+        };
+        for (var pageNumber = 0; pageNumber < expectedMemberships.Length; pageNumber++)
+        {
+            var page = await publications.ReadCorrectionHistoryVerificationPageAsync(verificationCursor, 1,
+                _ => Task.FromResult<string?>(null), default);
+            Assert.False(page.StaleCursor);
+            Assert.Single(page.Candidates);
+            verificationCandidates.AddRange(page.Candidates.Select(candidate =>
+                (candidate.Release.ReleaseNumber, candidate.Record.RecordId, candidate.Record.RevisionNumber)));
+            verificationCursor = page.NextCursor;
+            if (pageNumber < expectedMemberships.Length - 1) Assert.NotNull(verificationCursor);
+            else Assert.Null(verificationCursor);
+        }
+
+        Assert.Equal(expectedMemberships, verificationCandidates);
+    }
+
+    [Fact]
     public async Task BootstrapPageReadsOneFirstPublicationForDifferentRetainedRevisionsOfTheSameRecord()
     {
         await SeedActionsAsync((A, 10));

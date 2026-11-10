@@ -68,7 +68,7 @@ public sealed class BackfillStoredColumns(IPublicationStore publications, IRelea
         {
             var vote = ReleaseRecordFiles.Deserialize<PublishedVote>(await ReleaseRecordFiles.ReadAsync(releases, release.DirectoryName, gap.RecordId, cancellationToken));
             vote.Validate();
-            return vote.RevisionNumber == gap.RevisionNumber ? vote : null;
+            return vote.RecordId == gap.RecordId && vote.RevisionNumber == gap.RevisionNumber ? vote : null;
         }
         catch (Exception exception) when (exception is FileNotFoundException or InvalidDataException or JsonException)
         {

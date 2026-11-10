@@ -1,6 +1,5 @@
 using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Votes;
@@ -37,7 +36,7 @@ internal static class VoteStoredColumnRows
             min(s.first_release) AS "FirstRelease", CASE WHEN bool_or(s.last_release IS NULL) THEN NULL ELSE max(s.last_release) END AS "LastRelease"
         FROM vote_revisions r
         JOIN publication_record_states s ON s.kind = 'vote' AND s.record_id = r.record_id AND s.revision_number = r.revision_number
-        WHERE r.member_list_id IS NOT NULL AND NOT r.columns_written
+        WHERE r.member_list_id IS NOT NULL AND (NOT r.columns_written OR r.party_tally_count IS NULL)
         GROUP BY r.record_id, r.revision_number, r.member_list_id
         ORDER BY r.member_list_id, r.record_id, r.revision_number
         """;
@@ -55,6 +54,7 @@ internal static class VoteStoredColumnRows
         await db.Database.ExecuteSqlRawAsync(FillRevisions, [columns.Select(column => column.RecordId).ToArray(), columns.Select(column => column.RevisionNumber).ToArray(),
             columns.Select(column => column.Alignment?.ToString()).ToArray(), columns.Select(column => column.DemocratMajority).ToArray(),
             columns.Select(column => column.RepublicanMajority).ToArray()], cancellationToken);
+        await VotePartyTallyRows.WriteAsync(db, columns, cancellationToken);
     }
 
     // Two party sets for one list in one call would race inside one UPDATE. The caller chooses the one revision that owns the list.

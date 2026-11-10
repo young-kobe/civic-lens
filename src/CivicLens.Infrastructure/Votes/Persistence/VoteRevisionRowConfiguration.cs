@@ -27,6 +27,7 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
             table.HasCheckConstraint("ck_vote_revisions_subjects_hash", "subjects_hash ~ '^[0-9a-f]{64}$'");
             table.HasCheckConstraint("ck_vote_revisions_columns_written",
                 "columns_written OR (alignment IS NULL AND democrat_majority IS NULL AND republican_majority IS NULL)");
+            table.HasCheckConstraint("ck_vote_revisions_party_tally_count", $"party_tally_count IS NULL OR party_tally_count BETWEEN 0 AND {PublishedVote.MaximumParties}");
             table.HasCheckConstraint("ck_vote_revisions_alignment", $"alignment IS NULL OR {EnumChecks.InList("alignment", Enum.GetNames<PublishedVoteAlignment>())}");
             table.HasCheckConstraint("ck_vote_revisions_majorities",
                 $"(democrat_majority IS NULL OR democrat_majority IN ('{PublishedPartyMajority.Yea}', '{PublishedPartyMajority.Nay}')) AND " +
@@ -58,6 +59,7 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
         builder.Property(row => row.Question).HasColumnName("question").HasMaxLength(VoteDraftRevision.MaximumFactLength);
         builder.Property(row => row.Result).HasColumnName("result").HasMaxLength(VoteDraftRevision.MaximumFactLength).IsRequired();
         builder.Property(row => row.ColumnsWritten).HasColumnName("columns_written").HasDefaultValue(false);
+        builder.Property(row => row.PartyTallyCount).HasColumnName("party_tally_count");
         builder.Property(row => row.Alignment).HasColumnName("alignment").HasConversion<string>().HasMaxLength(16);
         builder.Property(row => row.DemocratMajority).HasColumnName("democrat_majority").HasMaxLength(8);
         builder.Property(row => row.RepublicanMajority).HasColumnName("republican_majority").HasMaxLength(8);
@@ -78,5 +80,7 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
             .HasPrincipalKey(draft => new { draft.RecordId, draft.Chamber, draft.Congress, draft.SessionNumber, draft.RollCallNumber }).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.Facts).WithOne().HasForeignKey(fact => new { fact.RecordId, fact.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.Issues).WithOne().HasForeignKey(issue => new { issue.RecordId, issue.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
+        builder.HasMany(row => row.PartyTallies).WithOne().HasForeignKey(tally => new { tally.RecordId, tally.RevisionNumber }).OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("FK_vote_revision_party_tallies_vote_revisions_record_id_revisi~");
     }
 }
