@@ -156,6 +156,7 @@ public sealed record PublishedVote
         ValidateFacts();
         ValidateResult();
         ValidateMembers();
+        ValidateTrackedPartyTallies();
         if (TrackedIssueIds is null || !PublishedEvidenceRules.AreDistinctAndNotBlank(TrackedIssueIds))
             throw new InvalidDataException("Published vote tracked issue ids must be distinct and not blank.");
         foreach (var citation in Citations()) PublishedEvidenceRules.RequireCitation(Sources, citation, "vote");
@@ -218,10 +219,29 @@ public sealed record PublishedVote
         if (!PublishedEvidenceRules.AreDistinctAndNotBlank(PartyTallies.Select(tally => tally.Party)) ||
             PartyTallies.Any(tally => tally.Yea != 0 || tally.Nay != 0) || counts is null ||
             counts.Any(pair => pair.Value > 0 && PublishedOfficialVote.SideOf(pair.Key) is not null) ||
-            PartyTallies.Sum(tally => tally.Present) != counts.GetValueOrDefault("Present") ||
-            PartyTallies.Sum(tally => tally.NotVoting) != counts.GetValueOrDefault("Not Voting") ||
+            PartyTallies.Sum(tally => tally.Present) != counts.GetValueOrDefault(PublishedOfficialVote.Present) ||
+            PartyTallies.Sum(tally => tally.NotVoting) != counts.GetValueOrDefault(PublishedOfficialVote.NotVoting) ||
             PartyTallies.Sum(tally => tally.Present + tally.NotVoting + tally.Other) != counts.Values.Sum())
             throw new InvalidDataException("Published candidate party tallies must match the cited candidate cast counts under distinct parties.");
+    }
+
+    private void ValidateTrackedPartyTallies()
+    {
+        if (PartyTallies is null) return;
+        var tallies = PartyTallies.ToDictionary(tally => tally.Party, StringComparer.Ordinal);
+        foreach (var group in Members.GroupBy(member => member.Party, StringComparer.Ordinal))
+        {
+            if (!tallies.TryGetValue(group.Key, out var tally))
+                throw new InvalidDataException("Published party tallies must include every tracked member's party.");
+            var casts = group.ToLookup(member => PublishedOfficialVote.SideOf(member.Cast) ?? member.Cast);
+            var yea = casts[PublishedPartyMajority.Yea].Count();
+            var nay = casts[PublishedPartyMajority.Nay].Count();
+            var present = casts[PublishedOfficialVote.Present].Count();
+            var notVoting = casts[PublishedOfficialVote.NotVoting].Count();
+            if (yea > tally.Yea || nay > tally.Nay || present > tally.Present || notVoting > tally.NotVoting ||
+                group.Count() - yea - nay - present - notVoting > tally.Other)
+                throw new InvalidDataException("Published party tallies must cover every tracked member's cast.");
+        }
     }
 
     private bool IsKnownParty(string? party) =>

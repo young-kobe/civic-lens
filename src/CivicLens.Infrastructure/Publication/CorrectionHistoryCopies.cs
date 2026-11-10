@@ -116,6 +116,22 @@ internal static class CorrectionHistoryCopies
         }
     }
 
+    public static async Task<(int Added, int AlreadyPresent)> BindBootstrapAsync(CollectionAttemptDbContext db, int releaseNumber,
+        IReadOnlyCollection<CorrectionHistoryBinding> bindings, CancellationToken cancellationToken)
+    {
+        var records = bindings.Select(binding => binding.Record).ToArray();
+        var existing = await ReadAsync(db, releaseNumber, records, cancellationToken);
+        foreach (var binding in bindings)
+        {
+            if (existing.TryGetValue(new PublishedRecordReference(binding.Record.Kind, binding.Record.RecordId), out var stored) &&
+                stored.Binding.HistoryId != binding.HistoryId)
+                throw new InvalidDataException("A correction history bootstrap conflicts with an existing binding.");
+        }
+        var missing = bindings.Where(binding => !existing.ContainsKey(new PublishedRecordReference(binding.Record.Kind, binding.Record.RecordId))).ToArray();
+        if (missing.Length > 0) await BindAsync(db, releaseNumber, missing.Select(binding => binding.Record).ToArray(), missing, cancellationToken);
+        return (missing.Length, bindings.Count - missing.Length);
+    }
+
     private static PreparedHistory Prepare(PublicationCorrectionHistory history)
     {
         ArgumentNullException.ThrowIfNull(history);
