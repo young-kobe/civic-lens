@@ -19,11 +19,13 @@ internal sealed record VoteMemberLine(string SourceId, string SourceParty, strin
         return new(fields[0], fields[^3], fields[^1]);
     }
 
-    public VoteCastKind Cast => CastOf(CastText);
+    public VoteCastKind Cast => KnownCast ?? throw new ArgumentException($"The cast '{CastText}' is not Yea, Nay, Present, or Not Voting.");
+
+    public VoteCastKind? KnownCast => KnownCastOf(CastText);
 
     public string? SourcePartyName => PartyLetters.NameOf(SourceParty);
 
-    private static VoteCastKind CastOf(string cast) => PublishedOfficialVote.SideOf(cast) switch
+    private static VoteCastKind? KnownCastOf(string cast) => PublishedOfficialVote.SideOf(cast) switch
     {
         PublishedPartyMajority.Yea => VoteCastKind.Yea,
         PublishedPartyMajority.Nay => VoteCastKind.Nay,
@@ -31,7 +33,7 @@ internal sealed record VoteMemberLine(string SourceId, string SourceParty, strin
         {
             "Present" => VoteCastKind.Present,
             "Not Voting" => VoteCastKind.NotVoting,
-            _ => throw new ArgumentException($"The cast '{cast}' is not Yea, Nay, Present, or Not Voting.")
+            _ => null
         }
     };
 }

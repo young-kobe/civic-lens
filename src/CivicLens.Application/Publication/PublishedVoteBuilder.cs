@@ -47,6 +47,7 @@ internal sealed class PublishedVoteBuilder(PublishedRecordRules rules)
             Result = VoteFacts.ResultOf(revision.RecordId, revision.Facts),
             Totals = tally.Totals,
             PartyMajorities = tally.PartyMajorities,
+            PartyTallies = tally.PartyTallies,
             Facts = [.. revision.Facts.Select(fact => new PublishedVoteFact { Text = fact.Text, Citation = Cite(fact.Citation) })],
             Members = [.. revision.Members.Select(Member)],
             BillType = revision.BillType,
