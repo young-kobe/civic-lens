@@ -35,17 +35,24 @@ public static class ZipDistrictEndpoints
         {
             var request = ZipDistrictRequest.Parse(zcta, http.Request.Query);
             var issue = QueryValues.Filter(http.Request.Query, "issue");
-            var view = QueryValues.Value(http.Request.Query, "view");
-            if (view is not null and not "" and not "compare")
-                throw new ArgumentException("view must be empty or compare.", "view");
-            var lookup = await zips.FindMembersAsync(request, issue, cancellationToken);
+            var view = QueryValues.Value(http.Request.Query, "view") ?? string.Empty;
+            if (view is not "" and not "compare" and not "strip")
+                throw new ArgumentException("view must be empty, compare, or strip.", "view");
+            if (view == "strip" && issue is not null)
+                throw new ArgumentException("The strip view has no issue filter.", "issue");
+            var sinceRelease = QueryValues.Number(http.Request.Query, "sinceRelease", 1, int.MaxValue);
+            var lookup = view == "strip"
+                ? await zips.FindStripAsync(request, sinceRelease, cancellationToken)
+                : await zips.FindMembersAsync(request, issue, sinceRelease, cancellationToken);
             if (lookup.Answer is not { } answer) return Miss(lookup.Miss!.Value);
             var html = await renderer.RenderAsync<ZipMemberCards>(new Dictionary<string, object?>
             {
                 [nameof(ZipMemberCards.Data)] = ZipMemberCardsMapper.Map(answer, lookup.SharedVotes, lookup.IssueOptions, issue),
                 [nameof(ZipMemberCards.RootPath)] = options.PublicBaseUrl?.Join(string.Empty) ?? "/",
-                [nameof(ZipMemberCards.View)] = view == "compare" ? view : string.Empty,
-                [nameof(ZipMemberCards.ComparePageUrl)] = view == "compare" || options.BrowserApiUrl is null
+                [nameof(ZipMemberCards.View)] = view,
+                [nameof(ZipMemberCards.SinceRelease)] = sinceRelease,
+                [nameof(ZipMemberCards.NewVoteCount)] = lookup.NewVoteCount,
+                [nameof(ZipMemberCards.ComparePageUrl)] = view != string.Empty || options.BrowserApiUrl is null
                     ? null
                     : options.PublicBaseUrl?.Join("compare.html")
             });

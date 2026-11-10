@@ -65,14 +65,29 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
          ORDER BY lines.official_id, lines.chamber, lines.party
         """;
 
+    private const string NewVoteCountSql = """
+        SELECT count(*)
+          FROM public_api.vote_first_publications p
+         WHERE p.release_number = @release AND p.first_release > @sinceRelease
+           AND EXISTS (
+               SELECT 1 FROM public_api.vote_members m
+                WHERE m.record_id = p.record_id AND m.revision_number = p.revision_number
+                  AND m.official_id = ANY(@officialIds))
+        """;
+
     /// <summary>Finds the districts of a ZCTA. The lookup names the miss when no release is active, when the release holds no names, or when the ZCTA has no row for the Congress.
     /// One snapshot serves all reads, so the seats, portraits, and figures come from one release.</summary>
-    public Task<ZipLookup> FindAsync(ZipDistrictRequest request, CancellationToken cancellationToken) => FindCoreAsync(request, false, null, cancellationToken);
+    public Task<ZipLookup> FindAsync(ZipDistrictRequest request, CancellationToken cancellationToken) => FindCoreAsync(request, LookupShape.Figures, null, null, cancellationToken);
 
-    /// <summary>Finds the district members and their shared votes from one active-release snapshot.</summary>
-    public Task<ZipLookup> FindMembersAsync(ZipDistrictRequest request, string? issue, CancellationToken cancellationToken) => FindCoreAsync(request, true, issue, cancellationToken);
+    /// <summary>Finds district members and shared votes, with an optional count of vote records first published after a release.</summary>
+    public Task<ZipLookup> FindMembersAsync(ZipDistrictRequest request, string? issue, int? sinceRelease, CancellationToken cancellationToken) =>
+        FindCoreAsync(request, LookupShape.Members, issue, sinceRelease, cancellationToken);
 
-    private async Task<ZipLookup> FindCoreAsync(ZipDistrictRequest request, bool includeSharedVotes, string? issue, CancellationToken cancellationToken)
+    /// <summary>Finds current district members without loading their attendance, party, activity, or shared-vote details.</summary>
+    public Task<ZipLookup> FindStripAsync(ZipDistrictRequest request, int? sinceRelease, CancellationToken cancellationToken) =>
+        FindCoreAsync(request, LookupShape.Strip, null, sinceRelease, cancellationToken);
+
+    private async Task<ZipLookup> FindCoreAsync(ZipDistrictRequest request, LookupShape shape, string? issue, int? sinceRelease, CancellationToken cancellationToken)
     {
         await using var connection = await views.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
@@ -86,6 +101,14 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         var holderIds = districts.Rows.Select(row => row.Representative?.OfficialId)
             .Concat(stateAnswers.SelectMany(state => state.Senators).Select(holder => holder?.OfficialId))
             .OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
+        var newVoteCount = await ReadNewVoteCountAsync(connection, transaction, release, holderIds, sinceRelease, cancellationToken);
+        if (shape == LookupShape.Strip)
+        {
+            var stripAnswer = new ZipDistrictAnswer(release, districts.Congress, request.Zcta,
+                [.. districts.Rows.Select(row => new ZipDistrict(row.State, row.District, row.Representative))],
+                [.. stateAnswers]);
+            return ZipLookup.Of(stripAnswer) with { NewVoteCount = newVoteCount };
+        }
         var figures = await ReadHolderFiguresAsync(connection, transaction, holderIds, cancellationToken);
         var partyLines = await ReadHolderPartyLinesAsync(connection, transaction, holderIds, figures, cancellationToken);
         var activitySelections = figures.Select(pair => (OfficialId: pair.Key,
@@ -99,7 +122,8 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
             districtAnswers,
             [.. stateAnswers.Select(state => state with { Senators = [.. state.Senators.Select(holder => Enrich(holder, figures, partyLines, activityCongressByOfficial, activity))] })]);
         var lookup = ZipLookup.Of(answer);
-        if (!includeSharedVotes) return lookup;
+        lookup = lookup with { NewVoteCount = newVoteCount };
+        if (shape == LookupShape.Figures) return lookup;
         var issueOptions = await ReadIssueOptionsAsync(connection, transaction, cancellationToken);
         lookup = lookup with { IssueOptions = issueOptions };
         if (holderIds.Length == 0) return lookup;
@@ -108,6 +132,18 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         if (sharedVotes is null || sharedVotes.Release != release)
             throw new InvalidDataException("The ZIP member votes do not match the active release snapshot.");
         return lookup with { SharedVotes = sharedVotes };
+    }
+
+    private static async Task<long?> ReadNewVoteCountAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, int release,
+        string[] officialIds, int? sinceRelease, CancellationToken cancellationToken)
+    {
+        if (sinceRelease is null) return null;
+        if (officialIds.Length == 0 || sinceRelease.Value >= release) return 0;
+        await using var command = new NpgsqlCommand(NewVoteCountSql, connection, transaction);
+        command.Parameters.AddWithValue("release", release);
+        command.Parameters.AddWithValue("sinceRelease", sinceRelease.Value);
+        command.Parameters.AddWithValue("officialIds", officialIds);
+        return (long)(await command.ExecuteScalarAsync(cancellationToken))!;
     }
 
     private static async Task<ZipMemberIssueOption[]> ReadIssueOptionsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
@@ -232,6 +268,8 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
     private sealed record DistrictRow(string State, int District, SeatHolder? Representative);
 
     private sealed record DistrictRows(int? Release, long? PublishedAtUtcTicks, bool HasNames, int Congress, List<DistrictRow> Rows);
+
+    private enum LookupShape { Figures, Members, Strip }
 
     private sealed class HolderFigures(string? photoPath, int? attendanceCongress)
     {

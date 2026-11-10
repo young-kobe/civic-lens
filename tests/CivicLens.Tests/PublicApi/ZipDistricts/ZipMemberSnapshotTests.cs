@@ -68,7 +68,7 @@ public sealed class ZipMemberSnapshotTests(PostgresCollection postgres)
             {
                 var store = new ZipDistrictStore(views);
                 var request = new ZipDistrictRequest { Zcta = "36009" };
-                read = Task.Run(() => store.FindMembersAsync(request, "health", default));
+                read = Task.Run(() => store.FindMembersAsync(request, "health", null, default));
 
                 await gate.FirstRead.WaitAsync(TimeSpan.FromSeconds(15));
                 await ViewsSeed.ActivateReleaseAsync(database, 2, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
@@ -97,7 +97,7 @@ public sealed class ZipMemberSnapshotTests(PostgresCollection postgres)
                 Assert.Equal((1.ToString("x64"), "Yea", "p0"), (firstHouse.RecordId, firstHouse.Casts[0].Cast, firstHouse.Casts[0].OfficialId));
                 Assert.Equal((2.ToString("x64"), "Nay", "p1"), (firstSenate.RecordId, firstSenate.Casts[0].Cast, firstSenate.Casts[0].OfficialId));
 
-                var second = await store.FindMembersAsync(request, "health", default);
+                var second = await store.FindMembersAsync(request, "health", null, default);
                 Assert.NotNull(second.Answer);
                 Assert.Equal([new ZipMemberIssueOption("health", "Health Release Two"), new ZipMemberIssueOption("zero", "New Zero Votes")], second.IssueOptions);
                 Assert.Equal(2, second.Answer.Release);

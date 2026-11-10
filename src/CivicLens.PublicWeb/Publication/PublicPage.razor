@@ -58,12 +58,16 @@
             </details>
         </div>
     </header>
-    @if (showMembersStrip)
+    @if (membersStrip is not null)
     {
-        <div class="members-strip" id="@MembersStripSlot.ElementId" aria-live="polite"></div>
+        <div class="members-strip" id="@MembersStripSlot.ElementId" data-members-api="@membersStrip.BrowserApiRoot" data-officials-page="@(RootPath + PublicationProtocol.OfficialsPagePath)" aria-live="polite"></div>
     }
     <main id="main" tabindex="-1">
         <CascadingValue Value="glossaryUse" IsFixed="true">
+            @if (Breadcrumbs is not null)
+            {
+                @Breadcrumbs
+            }
             @if (Hero is not null)
             {
                 <div class="public-hero">@Hero</div>
@@ -82,7 +86,7 @@
     private string documentTitle = string.Empty;
     private string description = string.Empty;
     private string? canonicalUrl;
-    private bool showMembersStrip;
+    private MembersStripSlot? membersStrip;
     private readonly GlossaryPageUse glossaryUse = new();
 
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
@@ -95,6 +99,7 @@
     [Parameter, EditorRequired] public string? CanonicalPath { get; set; }
     [Parameter] public string? ExternalScript { get; set; }
     [Parameter] public string RootPath { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? Breadcrumbs { get; set; }
     [Parameter] public RenderFragment? Hero { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
@@ -111,7 +116,7 @@
     {
         documentTitle = PublicHead.DocumentTitle(Title, Page, PageCount);
         description = PublicHead.Description(Description);
-        showMembersStrip = Services.GetService<MembersStripSlot>() is not null;
+        membersStrip = Services.GetService<MembersStripSlot>();
         canonicalUrl = CanonicalPath is null ? null : Services.GetService<PublicBaseUrl>()?.Join(CanonicalPath);
     }
 }
