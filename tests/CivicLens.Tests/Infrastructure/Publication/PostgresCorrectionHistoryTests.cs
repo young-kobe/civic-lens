@@ -16,7 +16,7 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
 {
     private static readonly string A = new('a', 64);
     private static readonly string B = new('b', 64);
-    private static readonly DateTimeOffset PublishedAt = new(2026, 4, 5, 6, 7, 8, TimeSpan.Zero).AddTicks(47);
+    private static readonly DateTimeOffset PublishedAt = new DateTimeOffset(2026, 4, 5, 6, 7, 8, TimeSpan.Zero).AddTicks(47);
     private string connectionString = null!;
     private PostgresPublicationStore publications = null!;
     private int commitCount;
@@ -84,7 +84,8 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
 
         Assert.Equal(utc.UtcTicks, east.UtcTicks);
         Assert.NotEqual(bindings[0].HistoryId, bindings[1].HistoryId);
-        Assert.Equal([0, 300], (await ReadOffsetsAsync(bindings.Select(binding => binding.HistoryId).ToArray())).Order().ToArray());
+        var offsets = await ReadOffsetsAsync(bindings.Select(binding => binding.HistoryId).ToArray());
+        Assert.Equal([0, 300], offsets.Order().ToArray());
     }
 
     [Fact]
