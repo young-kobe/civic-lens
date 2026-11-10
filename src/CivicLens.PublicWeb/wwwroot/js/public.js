@@ -354,11 +354,9 @@
             panel.scrollIntoView({ block: "start", behavior: reducedMotion.matches ? "auto" : "smooth" });
             heading.focus({ preventScroll: true });
         };
-        const showAnswer = (fragment, revealAnswer, filtered) => {
+        const showAnswer = fragment => {
             show([fragment], true);
             fragment.querySelectorAll("[data-member-issue-filter]").forEach(controls => { controls.hidden = false; });
-            if (filtered) fragment.querySelector('[data-member-issue][aria-pressed="true"]')?.focus();
-            if (revealAnswer) reveal();
         };
         let strip = document.querySelector("#members-strip");
         const stripTemplate = fragment => fragment.querySelector("template[data-member-strip-template]");
@@ -402,14 +400,17 @@
                 if (request !== lookup) return false;
                 if (fragment === null) { failed(status); return false; }
                 if (!remembered.current(startingState)) { remembered.refresh(); return false; }
-                showAnswer(fragment, revealAnswer, filtered);
+                showAnswer(fragment);
                 if (request === lookup) {
                     mountStrip(fragment);
                     if (!filtered) {
                         renderedSinceRelease = since;
-                        if (!remembered.complete(zip, Number(fragment.dataset.release), startingState, persist)) remembered.refresh();
+                        if (!remembered.complete(zip, Number(fragment.dataset.release), startingState, persist)) { remembered.refresh(); return false; }
                     }
                 }
+                if (request !== lookup) return false;
+                if (filtered) fragment.querySelector('[data-member-issue][aria-pressed="true"]')?.focus();
+                if (revealAnswer) reveal();
                 return true;
             }
             catch {
