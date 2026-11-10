@@ -16,7 +16,7 @@ Every page and component must pass seven owner tests:
 
 This page holds the design rules and the plan for the reader flows. [Publication](publication.md) owns the release data, the page text rules, and the `public_api` views. [Host](host.md) owns the component library rules. The [roadmap](../roadmap.md#active-r-68-redesign) step R-68 owns the order of the work.
 
-Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 palette, type foundation, focus colors, and reduced-motion behavior are implemented. The `/web` home and `/web/compare` routes are gated PublicApi server-rendered previews. The home shows the published featured vote, recent votes, optional brief, configured issue counts, executive action groups, and chamber freshness. Its available-data bento is implemented; map, party bars, and break board remain planned. The existing static home remains live. Deployment configuration now proxies `/compare.html` to the server-rendered Compare page; live rollout is pending. Each row below says what is implemented and what is planned.
+Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 palette, type foundation, focus colors, and reduced-motion behavior are implemented. The `/web` home and `/web/compare` routes are gated PublicApi server-rendered previews. The home shows the published featured vote, recent votes, optional brief, configured issue counts, executive action groups, and chamber freshness. Its available-data bento is implemented; map, party bars, and break board remain planned. The existing static home remains live. The public `/compare.html` route now serves the server-rendered Compare page. Each row below says what is implemented and what is planned.
 
 ## Decisions
 
@@ -132,7 +132,7 @@ These decisions come from the component audit. The owner accepted every recommen
 
 ## Behavior
 
-Implemented today: the static pages that [publication](publication.md#public-reader-experience) describes. PublicApi serves `/web` and `/web/compare` as gated server-rendered previews when `CIVIC_LENS_PUBLIC_BASE_URL` is configured. Caddy configuration maps `/compare.html` on the public site to the Compare preview and preserves its response headers. Live rollout is pending. Both preview pages use the active release number for public ETags. The Compare page has canonical path `compare.html`; its initial HTML contains no ZIP or member results. Its ZIP form and the home form appear only when `CIVIC_LENS_PUBLIC_API_URL` is configured. Home and current member results link to `/compare.html` on the configured public site root. Both layouts use the same private member endpoint and repeatable-read snapshot. The `view=compare` layout groups every current seat by chamber. It shows differing votes only when every listed member cast Yes or No. The existing static home remains the live route. After a successful current ZIP lookup, the browser stores the five-digit ZIP on this device. The header then shows "Your members" and a Forget control. Returning to either lookup page re-queries the configured ZIP endpoint against current published data. Personal lookup results are added only in the browser. Other pages move to PublicApi one route at a time in R-68. Rows marked "planned" describe accepted design that is not implemented.
+Implemented today: the static pages that [publication](publication.md#public-reader-experience) describes. PublicApi serves `/web` and `/web/compare` as gated server-rendered previews when `CIVIC_LENS_PUBLIC_BASE_URL` is configured. Caddy maps `/compare.html` on the public site to the Compare renderer and preserves its response headers. Both preview pages use the active release number for public ETags. The Compare page has canonical path `compare.html`; its initial HTML contains no ZIP or member results. Its ZIP form and the home form appear only when `CIVIC_LENS_PUBLIC_API_URL` is configured. Home and current member results link to `/compare.html` on the configured public site root. Both layouts use the same private member endpoint and repeatable-read snapshot. The `view=compare` layout groups every current seat by chamber. It shows differing votes only when every listed member cast Yes or No. The existing static home remains the live route. After a successful current ZIP lookup, the browser stores the five-digit ZIP on this device. The header then shows "Your members" and a Forget control. Returning to either lookup page re-queries the configured ZIP endpoint against current published data. Personal lookup results are added only in the browser. Other pages move to PublicApi one route at a time in R-68. Rows marked "planned" describe accepted design that is not implemented.
 
 ### Reader flow matrix
 
@@ -155,7 +155,7 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 | 15 | Report a problem | Footer and record report links | Partial. Planned: the footer link names the record |
 | 16 | Reach a useful 404 | Not found page | Implemented |
 | 17 | Return and find my members again | "Your members" chip, Forget, return-visit updates | Implemented on Home, Compare, and server pages with the shared strip. Remaining routes receive the strip as they move to server rendering |
-| 18 | Compare my members | Compare page: attendance, party line, bills, issues, differing votes | Implemented in the gated preview. It shares the current roster and metrics and filters shared vote rows to complete binary comparisons classified as different. |
+| 18 | Compare my members | Compare page: attendance, party line, bills, issues, differing votes | Implemented on the public Compare page. It shares the current roster and metrics and filters shared vote rows to complete binary comparisons classified as different. |
 
 ### Component inventory
 
@@ -167,7 +167,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Freshness line | All | How current is this? | `active_release`, newest `votes.voted_on` per chamber | Partial. `/web` shows newest published roll call dates; other pages remain planned |
 | ZIP form and notices | Home | Who represents me? | `zip_districts`, `officials` | Implemented: visible busy state, answer scroll and focus, and error recovery |
 | Featured vote tile | Home | What did Congress just decide? | `votes` | Partial. Gated SSR preview shows the published summary, wording label, result, and Yea/Nay counts. Planned: map and party bars |
-| Party tally bar | Home, vote, bill | How did the chamber split? | `votes` counts, `vote_members.party` | Planned: bars; the party column is available |
+| Party tally bar | Home, vote, bill | How did the chamber split? | `votes` chamber totals; published whole-party tallies | Planned: bars and typed whole-party counts. Tracked member casts cannot supply whole-party counts |
 | Latest votes list | Home | What was voted on lately? | `votes` | Partial. Gated SSR preview shows up to two recent substantive votes per chamber, excluding the featured vote, with their published labels and counts |
 | Issue tiles | Home | Where do I start? | `issue_votes`, `bill_issues` | `/web` shows each configured issue's substantive vote count, bill count, and Congress. Other issue layouts remain planned |
 | Break board | Home, boards | Who breaks from their party? | `official_party_lines` | Official figure served. Board endpoint and UI planned |
@@ -182,7 +182,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Vote header and AI summary | Vote | What was this vote? | `votes` headline, summary, label | Implemented. Planned: "what this vote decides" |
 | Fixed explainers | Vote, executive action | What did Yes mean? What next? | Code tables in `Publication.Contracts` | Planned: #407 |
 | Vote-kind explainer index | Vote kinds, glossary | What kinds of votes exist? | Shared kind names, record terms, and fixed Yes explainers | Planned: one index covering every vote kind, with approved wording |
-| Result card, party bars | Vote | Did it pass, and by how much? | `votes`, `vote_members.party` | Partial. Party data is available; redesigned bars remain planned |
+| Result card, party bars | Vote | Did it pass, and by how much? | `votes` chamber totals; published whole-party tallies | Partial. Chamber totals are stored. Typed whole-party counts and redesigned bars remain planned |
 | Breakers list | Vote | Who broke ranks? | `votes.alignment`, `vote_members.party` | Planned |
 | Member list with finder | Vote | How did my member vote? | `vote_members`, `officials` | Implemented. Planned: folded table with filters |
 | Vote map | Vote, home | Where did Yes and No come from? | `vote_members`, `release_official_terms` | Planned: R-68 map step |

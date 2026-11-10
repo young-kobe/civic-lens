@@ -20,7 +20,7 @@ R-68 replaces static public serving with pages rendered by `PublicApi` from rest
 
 The restricted views, typed read APIs, shared Razor library, page cache, Home preview, and private ZIP cards and shared votes are merged. APIs also serve CRS bodies, bill histories, statement and document-change evidence, briefs, withdrawals, official figures, and party agreement. Their exact contracts are in [search](architecture/search.md#api) and [publication](architecture/publication.md#public-api-views). A merged API does not complete its reader page or live rollout.
 
-The public root still serves static releases. Home and Compare are implemented gated previews under `/web`. The Compare preview has passed focused tests and browser checks with synthetic responses. Its live rollout remains pending. The approved public route is `/compare.html`, proxied to the existing server renderer while Home stays static. The two-day all-pages-on-server period has not started.
+The public root still serves static releases. Home remains a gated preview under `/web`. The public `/compare.html` route now serves Compare through the existing server renderer. The member strip and both private ZIP layouts are deployed. Cold-read and larger-selection performance checks remain open, including the member bill-count timeout. The two-day all-pages-on-server period has not started.
 
 Finish routes in this order. Each slice includes the data, source evidence, labels, downloads, and checks its reader flow needs.
 
@@ -44,8 +44,8 @@ Data work below is approved and remains part of R-68. Land each dependency befor
 
 AI text and vocabulary remain required work, not optional follow-ups.
 
-- [ ] Implement the approved complete 71-unit vote wording table with its captured-evidence gates and unknown-input fallbacks. Keep the approved correction about extending post-cloture debate. Add one grade-12 check over fixed page text and AI text, with exact terms explained by first-use popovers.
-- [ ] Finish the code tables for what a Yes vote means and what happens next, by kind and result. Add the vote-kind explainer index with each plain name, record term, and Yes meaning.
+- [ ] Add one grade-12 check over fixed page text and AI text, with exact terms explained by first-use popovers. The approved vote wording table, captured-evidence gates, unknown-input fallbacks, and glossary corrections are implemented; retain them during the route migration.
+- [ ] Add the vote-kind explainer index with each plain name, record term, and Yes meaning. Reuse the implemented vote meaning and next-step tables.
 - [ ] After static rendering is removed, finish the held #411 bill line and #410 vote summary work. The line reuses the existing CRS summary call, stays within 200 characters, and cites an exact CRS quote of at least four words. The vote summary uses the line and supporting quote from the current approved action revision. The vote freshness workflow reuses the queue, run context, requeue, and input-version checks. It adds no schema or model call. Never acquire `ActionReview` while holding `VoteAnalysis`.
 - [ ] Measure each changed prompt on fixed records within an explicit budget, check its evidence, and obtain the required sample approval. Keep model activation and historical backfills separate from routine implementation and deployment permission. Reuse the established [R-67 measurement flow](architecture/actions.md#limits-and-planned-work).
 - [ ] Add up to five bill key terms, defined only by exact quotations from the definitions section. Executive summaries describe what the document states, never its motive. Amendment-purpose summaries wait for amendment data under R-58.
