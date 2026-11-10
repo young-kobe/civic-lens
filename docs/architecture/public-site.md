@@ -170,7 +170,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Party tally bar | Home, vote, bill | How did the chamber split? | `votes` chamber totals; published whole-party tallies | Planned: bars and typed whole-party counts. Tracked member casts cannot supply whole-party counts |
 | Latest votes list | Home | What was voted on lately? | `votes` | Partial. Gated SSR preview shows up to two recent substantive votes per chamber, excluding the featured vote, with their published labels and counts |
 | Issue tiles | Home | Where do I start? | `issue_votes`, `bill_issues` | `/web` shows each configured issue's substantive vote count, bill count, and Congress. Other issue layouts remain planned |
-| Break board | Home, boards | Who breaks from their party? | `official_party_lines` | Official figure served. Board endpoint and UI planned |
+| Break board | Home, boards | Who breaks from their party? | `official_party_lines`, `/v1/boards` | Official figures and the four-board API response are served. Home panel and board pages remain planned |
 | Latest executive actions | Home | What did the President sign? | `executive_actions` | `/web` shows one row per published document type with count, newest title and signed date. Other executive layouts remain planned |
 | Member card | After a ZIP | Who is my member? | `officials`, `official_attendance`, `official_party_lines`, `official_bill_counts`, `official_issue_counts` | Portrait, seat, party, term end, scoped attendance, and scoped party-line counts implemented. Congress-scoped sponsored-bill and issue figures are shown, with shared vote rows and complete binary comparison badges |
 | Member votes list | After a ZIP, official | How did my members vote? | `votes`, `member_votes` | Partial. The API and private ZIP fragment serve shared vote rows with recorded casts. Issue and Any chips refresh the combined private fragment and mark the selected issue. Captions name each chamber's selection and comparison bases |
@@ -194,7 +194,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Statement page, quotations | Statement | What exactly was said? | `statements`, `statement_speakers`, `statement_quotations` | The API serves statement details with bounded source text, checked quotations, and citations. The reader page remains planned |
 | Document change page | Document change | What changed on this page? | `document_changes` and its source, region, edit, citation and official views | Partial. The detail API serves published sources and ordered changes. The API labels model text with the shared approved wording; person text has no AI label. Reader page remains planned |
 | Issue page | Issue | What is there on this issue? | `release_issues`, `issue_votes`, `issue_sponsors` | Partial. Issue counts and sponsor data are available through the API. Planned: page and party line-up |
-| Party boards | Boards | Who breaks from their party most? | `official_party_lines`, `party_agreement` | Agreement data and API endpoint are implemented. Board endpoints and pages remain planned |
+| Party boards | Boards | Who breaks from their party most? | `official_party_lines`, `party_agreement`, `/v1/boards` | One API response serves all four boards and one agreement per chamber. Board pages remain planned |
 | List pages for votes, bills, executive actions, statements | Lists | Show me all of one kind | Per-kind views | Planned: R-68 list step |
 | Record row, status badge | All lists | What is this record? | Per-kind views | Implemented. Planned: event-named date, one bill number format |
 | Search results | Search | Find a person, bill, or vote | Search service | Partial. Planned: ranking and snippets |
@@ -211,11 +211,10 @@ The public read API and gated SSR Home and Compare pages read `public_api` views
 
 The home route reads `HomeAnswer` in one RepeatableRead snapshot and maps it into presentation records beside the PublicWeb component. One statement reads highlights, publication date, and newest published roll call dates across all public votes. A second batch query reads the release's immutable issue-count snapshots. These are page inputs, not durable publication contracts. `CIVIC_LENS_PUBLIC_API_URL` is an optional bare origin for the browser ZIP lookup. The page cache validator includes the normalized public site and browser API origins because both affect the HTML.
 
-The views expose the stored member party and vote alignment, normalized member-vote side, party-majority cast, and official photo path. Member caucus comes from the matching chamber term in the active release on the vote date.
+The views expose the stored member party and vote alignment, normalized member-vote side, party-majority cast, and official photo path. Member caucus comes from the matching chamber term in the active release on the vote date. `/v1/boards` uses one repeatable-read snapshot and the shared `OfficialBoardPage.All` policy to return each chamber and party board with its chamber agreement. Known member-party groups with no eligible split casts have a zero count. An unknown party pin, unwritten alignment, or unknown vote Congress makes the board results and agreements null.
 
 Remaining planned view columns and views, in the order that R-68 builds them:
 
-- Party lines: one response for all four chamber and party boards. `party_agreement` and the official party-line view are implemented.
 - Votes: stored validated totals beside immutable member counts, and a second AI text column for "what this vote decides".
 - Bills: `bill_key_terms`. The cited CRS body and version are implemented.
 - Issues: party line-up data. Home issue counts already use immutable release snapshots for the Congress of the release publication day.
