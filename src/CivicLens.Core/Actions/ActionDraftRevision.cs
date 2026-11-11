@@ -54,12 +54,17 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
 
     public DateOnly EventOn() => Sponsorships.Max(item => item.WithdrawnOn ?? item.SponsoredOn);
 
-    public int CosponsorCount()
+    public ImmutableArray<string> SponsorIds() =>
+        [.. Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor).Select(item => item.PersonId).Distinct(StringComparer.Ordinal)];
+
+    public ImmutableArray<string> CosponsorIds()
     {
-        var sponsorIds = Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor).Select(item => item.PersonId).ToHashSet(StringComparer.Ordinal);
-        return Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Cosponsor && item.WithdrawnOn is null && !sponsorIds.Contains(item.PersonId))
-            .Select(item => item.PersonId).Distinct(StringComparer.Ordinal).Count();
+        var sponsorIds = SponsorIds().ToHashSet(StringComparer.Ordinal);
+        return [.. Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Cosponsor && item.WithdrawnOn is null && !sponsorIds.Contains(item.PersonId))
+            .Select(item => item.PersonId).Distinct(StringComparer.Ordinal)];
     }
+
+    public int CosponsorCount() => CosponsorIds().Length;
 
     public ImmutableArray<string> OfficialIds() => [.. Sponsorships.Select(item => item.PersonId).Distinct(StringComparer.Ordinal)];
 

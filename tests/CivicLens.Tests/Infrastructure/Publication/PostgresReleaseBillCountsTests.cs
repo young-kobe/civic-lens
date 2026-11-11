@@ -82,7 +82,7 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await FillAsync(1, 119);
 
         await ExecuteAsync("UPDATE release_bill_counts SET bills = 0 WHERE release_number = 1 AND congress = 119");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => FillAsync(1, 119));
+        await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
 
         Assert.Equal(["119|0|1"], await TotalsAsync(1));
     }
@@ -96,7 +96,7 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await FillAsync(1, 119);
         await ExecuteAsync("DELETE FROM release_official_bill_counts WHERE release_number = 1 AND official_id = 'p1'");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => FillAsync(1, 119));
+        await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
 
         Assert.Empty(await MembersAsync(1));
     }
@@ -109,9 +109,9 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await ActionRevisionSeeder.AddAsync(connectionString, action);
         await ViewsSeed.ExecuteAsync(connectionString, $"SET session_replication_role = replica; INSERT INTO publication_record_states (kind, record_id, first_release, revision_number) VALUES ('action', '{action.RecordId}', 1, 1); DELETE FROM action_revisions WHERE record_id = '{action.RecordId}'");
 
-        var refusal = await Assert.ThrowsAsync<InvalidDataException>(() => FillAsync(1, 119));
+        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
 
-        Assert.Contains("not stored", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("selected action revision", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(await TotalsAsync(1));
     }
 
@@ -122,14 +122,14 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await ViewsSeed.AddVotesAsync(connectionString, new SeededVote('f', "2026-05-01"));
         await ViewsSeed.ExecuteAsync(connectionString, $"SET session_replication_role = replica; DELETE FROM vote_revisions WHERE record_id = '{new string('f', 64)}'");
 
-        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() => FillAsync(1, 119));
+        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
 
         Assert.Contains("selected vote revision", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(await TotalsAsync(1));
     }
 
     [Fact]
-    public async Task ActiveCosponsorProjectionMismatchRefusesTheSnapshot()
+    public async Task TheOwnerSourceReadRefusesAnActiveCosponsorProjectionMismatch()
     {
         await AddReleaseAsync(1, Published);
         var action = ActionRevisionFixtures.Model() with
@@ -140,39 +140,35 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await ActionRevisionSeeder.AddAsync(connectionString, action);
         await ExecuteAsync($"INSERT INTO publication_record_states (kind, record_id, first_release, revision_number) VALUES ('action', '{action.RecordId}', 1, 1); DELETE FROM action_revision_sponsorship_citations WHERE record_id = '{action.RecordId}' AND sponsorship_position = 1; DELETE FROM action_revision_sponsorships WHERE record_id = '{action.RecordId}' AND position = 1");
 
-        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() => FillAsync(1, 119));
+        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => publications.ReadBillCountSourceAsync(1, default));
 
         Assert.Contains("mismatched bill count projection", refusal.Message, StringComparison.Ordinal);
-        Assert.Empty(await TotalsAsync(1));
     }
 
     [Fact]
-    public async Task ActionWithMissingSponsorshipCitationRefusesTheSnapshot()
+    public async Task TheOwnerSourceReadRefusesAnActionWithAMissingSponsorshipCitation()
     {
         await AddReleaseAsync(1, Published);
         var action = Action('a', 119, [Sponsor("p1")]);
         await ActionRevisionSeeder.AddAsync(connectionString, action);
         await ExecuteAsync($"INSERT INTO publication_record_states (kind, record_id, first_release, revision_number) VALUES ('action', '{action.RecordId}', 1, 1); DELETE FROM action_revision_sponsorship_citations WHERE record_id = '{action.RecordId}'");
 
-        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() => FillAsync(1, 119));
+        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => publications.ReadBillCountSourceAsync(1, default));
 
         Assert.Contains("cannot produce a valid bill count projection", refusal.Message, StringComparison.Ordinal);
-        Assert.Empty(await TotalsAsync(1));
     }
 
     [Fact]
-    public async Task IncompleteActionProjectionRefusesTheSnapshotBeforeWritingAnyRows()
+    public async Task TheOwnerSourceReadRefusesAnIncompleteActionProjection()
     {
         await AddReleaseAsync(1, Published);
         await AddReleaseOfficialsAsync(1, "p1");
         await AddActionRevisionAsync(Action('a', 119, [Sponsor("p1")]), 1);
         await ExecuteAsync($"UPDATE action_revisions SET event_on = NULL, cosponsor_count = NULL WHERE record_id = '{new string('a', 64)}'");
 
-        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() => FillAsync(1, 119));
+        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => publications.ReadBillCountSourceAsync(1, default));
 
         Assert.Contains("mismatched bill count projection", refusal.Message, StringComparison.Ordinal);
-        Assert.Empty(await TotalsAsync(1));
-        Assert.Empty(await MembersAsync(1));
     }
 
     [Fact]
@@ -202,6 +198,193 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         Assert.Empty(await TotalsAsync(1));
         Assert.Empty(await MembersAsync(1));
     }
+
+    [Fact]
+    public async Task OwnerBackfillWritesTheRowsThatTheReadOnlyVerifierAcceptsAndReplayChangesNothing()
+    {
+        await SeedConvertibleReleaseAsync();
+        var (release, members) = await ReleaseAndMembersAsync(1);
+
+        var first = await publications.CommitBillCountsAsync(release, members, NoServedDirectory, default);
+        var replay = await publications.CommitBillCountsAsync(release, members, NoServedDirectory, default);
+
+        Assert.True(first);
+        Assert.False(replay);
+        Assert.Equal(["119|1|2"], await TotalsAsync(1));
+        Assert.Equal(["119|p1|1|0", "119|p2|0|1"], await MembersAsync(1));
+        Assert.Equal(BillCountStatus.Verified, await publications.VerifyBillCountsAsync(release, members, NoServedDirectory, default));
+    }
+
+    [Theory]
+    [InlineData("UPDATE release_bill_counts SET bills = 0 WHERE release_number = 1", BillCountStatus.DifferentRows)]
+    [InlineData("UPDATE release_bill_counts SET expected_member_row_count = 1 WHERE release_number = 1", BillCountStatus.DifferentRows)]
+    [InlineData("UPDATE release_official_bill_counts SET sponsored = 2 WHERE official_id = 'p1'", BillCountStatus.DifferentRows)]
+    [InlineData("DELETE FROM release_official_bill_counts WHERE official_id = 'p2'", BillCountStatus.DifferentRows)]
+    [InlineData("INSERT INTO release_officials (release_number, official_id, name) VALUES (1, 'p3', 'p3'); INSERT INTO release_official_bill_counts (release_number, congress, official_id, sponsored, cosponsored) VALUES (1, 119, 'p3', 1, 0)", BillCountStatus.DifferentRows)]
+    [InlineData("INSERT INTO release_bill_counts (release_number, congress, bills, expected_member_row_count) VALUES (1, 118, 0, 0)", BillCountStatus.DifferentRows)]
+    [InlineData("DELETE FROM release_official_bill_counts; DELETE FROM release_bill_counts", BillCountStatus.MissingRows)]
+    public async Task VerifierFindsMissingExtraAndChangedRowsInBothDirectionsAndTreatsNoRowsAsAFailure(string mutation, BillCountStatus expected)
+    {
+        await SeedConvertibleReleaseAsync();
+        var (release, members) = await ReleaseAndMembersAsync(1);
+        await publications.CommitBillCountsAsync(release, members, NoServedDirectory, default);
+        await ExecuteAsync(mutation);
+
+        Assert.Equal(expected, await publications.VerifyBillCountsAsync(release, members, NoServedDirectory, default));
+    }
+
+    [Fact]
+    public async Task VerifierOnAReleaseWithNoRowsWritesNothing()
+    {
+        await SeedConvertibleReleaseAsync();
+        var (release, members) = await ReleaseAndMembersAsync(1);
+
+        var status = await publications.VerifyBillCountsAsync(release, members, NoServedDirectory, default);
+
+        Assert.Equal(BillCountStatus.MissingRows, status);
+        Assert.Empty(await TotalsAsync(1));
+        Assert.Empty(await MembersAsync(1));
+    }
+
+    [Fact]
+    public async Task PartialExistingSnapshotIsRefusedByTheOwnerWriteAndNotRepaired()
+    {
+        await SeedConvertibleReleaseAsync();
+        var (release, members) = await ReleaseAndMembersAsync(1);
+        await publications.CommitBillCountsAsync(release, members, NoServedDirectory, default);
+        await ExecuteAsync("DELETE FROM release_official_bill_counts WHERE official_id = 'p2'");
+
+        await Assert.ThrowsAsync<BillCountRefusedException>(() => publications.CommitBillCountsAsync(release, members, NoServedDirectory, default));
+
+        Assert.Equal(["119|p1|1|0"], await MembersAsync(1));
+    }
+
+    [Fact]
+    public async Task OwnerWriteRefusesAReleaseThatWasRetiredAfterItsFilesWereChecked()
+    {
+        await SeedConvertibleReleaseAsync();
+        var (release, members) = await ReleaseAndMembersAsync(1);
+        for (var number = 2; number <= 31; number++) await AddReleaseAsync(number, Published);
+
+        var refusal = await Assert.ThrowsAsync<InvalidDataException>(() => publications.CommitBillCountsAsync(release, members, NoServedDirectory, default));
+
+        Assert.Contains("no longer retained", refusal.Message, StringComparison.Ordinal);
+        Assert.Empty(await TotalsAsync(1));
+    }
+
+    [Fact]
+    public async Task OwnerWriteRefusesAReleaseWhoseDirectoryChangedOrThatNoLongerExists()
+    {
+        await SeedConvertibleReleaseAsync();
+        var (release, members) = await ReleaseAndMembersAsync(1);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => publications.CommitBillCountsAsync(
+            release with { DirectoryName = "000001-changed" }, members, NoServedDirectory, default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => publications.CommitBillCountsAsync(
+            release with { ReleaseNumber = 99 }, members, NoServedDirectory, default));
+
+        Assert.Empty(await TotalsAsync(1));
+    }
+
+    [Fact]
+    public async Task OwnerWriteAndVerifierRefuseMembershipThatDiffersFromWhatTheFilesWereCheckedAgainstInEitherDirection()
+    {
+        await SeedConvertibleReleaseAsync();
+        var (release, members) = await ReleaseAndMembersAsync(1);
+        var missing = members.Take(members.Length - 1).ToArray();
+        var extra = members.Append(members[0] with { RecordId = new string('f', 64) }).ToArray();
+
+        foreach (var checkedMembers in new[] { missing, extra })
+        {
+            await Assert.ThrowsAsync<InvalidDataException>(() => publications.CommitBillCountsAsync(release, checkedMembers, NoServedDirectory, default));
+            await Assert.ThrowsAsync<InvalidDataException>(() => publications.VerifyBillCountsAsync(release, checkedMembers, NoServedDirectory, default));
+        }
+
+        Assert.Empty(await TotalsAsync(1));
+    }
+
+    [Fact]
+    public async Task ReleaseWithoutAnyCongressCoverageIsRefusedByTheWriteAndFailsTheVerifier()
+    {
+        await AddReleaseAsync(1, new DateTimeOffset(1900, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var (release, members) = await ReleaseAndMembersAsync(1);
+
+        await Assert.ThrowsAsync<BillCountRefusedException>(() => publications.CommitBillCountsAsync(release, members, NoServedDirectory, default));
+
+        Assert.Equal(BillCountStatus.MissingRows, await publications.VerifyBillCountsAsync(release, members, NoServedDirectory, default));
+        Assert.Empty(await TotalsAsync(1));
+    }
+
+    [Fact]
+    public async Task ACountWriteFailureRollsBackBothTablesOfTheOwnerWrite()
+    {
+        await SeedConvertibleReleaseAsync();
+        var (release, members) = await ReleaseAndMembersAsync(1);
+        await ExecuteAsync("""
+            CREATE FUNCTION fail_member_count_write() RETURNS trigger LANGUAGE plpgsql AS $function$
+            BEGIN
+                RAISE EXCEPTION 'forced member count failure';
+            END;
+            $function$;
+            CREATE TRIGGER fail_member_count_write BEFORE INSERT ON release_official_bill_counts
+                FOR EACH ROW EXECUTE FUNCTION fail_member_count_write();
+            """);
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => publications.CommitBillCountsAsync(release, members, NoServedDirectory, default));
+
+        Assert.Equal("P0001", failure.SqlState);
+        Assert.Empty(await TotalsAsync(1));
+        Assert.Empty(await MembersAsync(1));
+    }
+
+    [Fact]
+    public async Task ReleasePagesFollowTheCursorPinTheSelectionAndGoStaleWhenItChanges()
+    {
+        foreach (var number in new[] { 1, 2, 3 }) await AddReleaseAsync(number, Published.AddDays(number));
+
+        var first = await publications.ReadBillCountReleasePageAsync(0, null, 2, NoServedDirectory, default);
+        var second = await publications.ReadBillCountReleasePageAsync(2, first.SelectionFingerprint, 2, NoServedDirectory, default);
+        await AddReleaseAsync(4, Published.AddDays(4));
+        var stale = await publications.ReadBillCountReleasePageAsync(2, first.SelectionFingerprint, 2, NoServedDirectory, default);
+
+        Assert.Equal(new[] { 1, 2 }, first.Releases.Select(release => release.ReleaseNumber));
+        Assert.True(first.HasMore);
+        Assert.Equal(new[] { 3 }, second.Releases.Select(release => release.ReleaseNumber));
+        Assert.False(second.HasMore);
+        Assert.True(stale.StaleCursor);
+        Assert.Empty(stale.Releases);
+        Assert.NotEqual(first.SelectionFingerprint, await publications.ReadRetainedReleaseFingerprintAsync(NoServedDirectory, default));
+    }
+
+    [Fact]
+    public async Task SourceHoldsTheMembersProjectionsVotesAndOfficialsOfOneRelease()
+    {
+        await SeedConvertibleReleaseAsync();
+        await ViewsSeed.AddVotesAsync(connectionString, new SeededVote('d', "2026-05-05") { Congress = 118, FirstRelease = 1 });
+
+        var source = await publications.ReadBillCountSourceAsync(1, default);
+
+        Assert.Equal(2, source.Members.Count);
+        var action = Assert.Single(source.Actions);
+        Assert.Equal(119, action.Congress);
+        Assert.Equal(["p1"], action.SponsorIds.ToArray());
+        Assert.Equal(["p2"], action.CosponsorIds.ToArray());
+        Assert.NotNull(action.EventOn);
+        Assert.Equal(118, Assert.Single(source.Votes).Congress);
+        Assert.Equal(["p1", "p2"], source.OfficialIds.Order().ToArray());
+    }
+
+    private static Task<string?> NoServedDirectory(CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+
+    private async Task SeedConvertibleReleaseAsync()
+    {
+        await AddReleaseAsync(1, Published);
+        await AddReleaseOfficialsAsync(1, "p1", "p2");
+        await AddActionRevisionAsync(Action('a', 119, [Sponsor("p1"), Cosponsor("p2")]), 1);
+    }
+
+    private async Task<(PublicationReleaseSummary Release, PublishedRevisionBinding[] Members)> ReleaseAndMembersAsync(int number) =>
+        ((await publications.ListAllAsync(default)).Single(release => release.ReleaseNumber == number), await SelectedBindingsAsync(number));
 
     private static ActionDraftRevision Action(char id, int congress, ActionSponsorship[] sponsorships, int revision = 1)
     {
