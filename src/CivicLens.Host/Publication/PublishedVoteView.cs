@@ -181,10 +181,10 @@ internal static class PublishedVoteView
     }
 
     public static string Anchor(PublishedVote vote, PublishedCitation citation) =>
-        PublishedRecordView.CitationAnchor(vote.Citations().TakeWhile(item => item != citation).Count());
+        CitedText.Anchor(vote.Citations().TakeWhile(item => item != citation).Count());
 
     public static IReadOnlyList<CitedRange> RangesIn(PublishedVote vote, PublishedDocumentVersion source) =>
-    [.. vote.Citations().Select((citation, index) => (citation, anchor: PublishedRecordView.CitationAnchor(index)))
+    [.. vote.Citations().Select((citation, index) => (citation, anchor: CitedText.Anchor(index)))
         .DistinctBy(item => item.citation).Where(item => item.citation.ExtractionId == source.ExtractionId)
         .Select(item => new CitedRange(item.anchor, item.citation.Start, item.citation.Length))];
 }

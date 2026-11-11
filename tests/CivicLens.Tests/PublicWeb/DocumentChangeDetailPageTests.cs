@@ -66,12 +66,41 @@ public sealed class DocumentChangeDetailPageTests
         var model = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change());
         var person = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change(PublishedTextOrigin.Person));
 
-        Assert.Equal(DocumentChangeWords.AiLabel, model.QuerySelector(".detail-ai-label")!.TextContent);
-        Assert.Contains("A model wrote only this summary.", model.QuerySelector(".detail-check")!.TextContent);
-        Assert.Null(person.QuerySelector(".detail-ai"));
-        Assert.DoesNotContain("model", person.QuerySelector(".detail-check")!.TextContent, StringComparison.OrdinalIgnoreCase);
-        Assert.All([model, person], page => Assert.Contains(DocumentChangeWords.Limit, page.QuerySelector(".detail-check")!.TextContent));
+        Assert.Equal(ChangeLabel, model.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Contains("A model wrote only this summary.", model.QuerySelector(".ai-summary-check")!.TextContent);
+        Assert.Null(person.QuerySelector(".ai-summary-ai"));
+        Assert.DoesNotContain("model", person.QuerySelector(".ai-summary-check")!.TextContent, StringComparison.OrdinalIgnoreCase);
+        Assert.All([model, person], page => Assert.Contains(DocumentChangeWords.Limit, page.QuerySelector(".ai-summary-check")!.TextContent));
         Assert.All([model, person], page => Assert.Null(page.QuerySelector(".caveat")));
+    }
+
+    [Fact]
+    public async Task ThePageShowsTheLabelOfTheViewAndNoLabelWhenTheViewSetsNone()
+    {
+        var page = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change(label: null));
+
+        Assert.Null(page.QuerySelector(".ai-summary-label"));
+        Assert.Null(page.QuerySelector(".ai-summary-ai"));
+    }
+
+    [Fact]
+    public async Task AnIssueThatTheReleaseDoesNotHoldIsPlainTextInTheFold()
+    {
+        var data = Change() with { Issues = [new("budget", "Federal budget and debt", true), new("unlisted", "unlisted", false)] };
+        var page = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(data);
+
+        var issues = page.QuerySelectorAll("#source dd").Single(value => value.TextContent.Contains("unlisted"));
+        Assert.Equal(["Federal budget and debt"], issues.QuerySelectorAll("a").Select(link => link.TextContent));
+    }
+
+    [Fact]
+    public async Task ACitationLinkNamesItsNumberOnlyWhenThereIsMoreThanOneCitation()
+    {
+        var one = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change(citations: 1));
+        var two = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change());
+
+        Assert.Equal(": later version, quote", one.QuerySelector("#source .choices a .visually-hidden")!.TextContent);
+        Assert.Equal(": later version, quote 1", two.QuerySelector("#source .choices a .visually-hidden")!.TextContent);
     }
 
     [Fact]
@@ -79,7 +108,7 @@ public sealed class DocumentChangeDetailPageTests
     {
         var page = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change());
 
-        var box = page.QuerySelector(".detail-ai")!;
+        var box = page.QuerySelector(".ai-summary-ai")!;
         Assert.Equal(["Why it matters", "What the evidence cannot establish"], box.QuerySelectorAll("h3").Select(heading => heading.TextContent));
         Assert.Contains("The text alone does not show the reason.", box.TextContent);
     }

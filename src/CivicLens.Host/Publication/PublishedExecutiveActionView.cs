@@ -35,12 +35,12 @@ internal static class PublishedExecutiveActionView
             PublishedRecordView.SourceLineTarget("Correction notice", index, action.CorrectionNotices.Length));
 
     public static IReadOnlyList<CitedRange> RangesIn(PublishedExecutiveAction action, PublishedDocumentVersion source) =>
-    [.. action.Citations().Select((citation, index) => (citation, anchor: PublishedRecordView.CitationAnchor(index)))
+    [.. action.Citations().Select((citation, index) => (citation, anchor: CitedText.Anchor(index)))
         .Where(item => item.citation.ExtractionId == source.ExtractionId)
         .Select(item => new CitedRange(item.anchor, item.citation.Start, item.citation.Length))];
 
     private static string Anchor(PublishedExecutiveAction action, PublishedExecutiveActionFact fact) =>
-        PublishedRecordView.CitationAnchor(Array.IndexOf(action.Facts, fact));
+        CitedText.Anchor(Array.IndexOf(action.Facts, fact));
 
     private static string? AnchorOf(PublishedExecutiveAction action, string label, string? value = null) =>
         action.Facts.FirstOrDefault(fact => fact.Label == label && (value is null || fact.Value == value)) is { } found ? Anchor(action, found) : null;

@@ -2,7 +2,7 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.PublicWeb.Publication;
 
-/// <summary>Everything that the statement page shows, read from one active release. The source holds the saved text that every quote and the date evidence cite.</summary>
+/// <summary>Everything that the statement page shows, read from one active release. The label is the label column of the public view. The source holds the saved text that every quote and the date evidence cite.</summary>
 public sealed record StatementPageData(
     int Release,
     string RecordId,
@@ -12,6 +12,7 @@ public sealed record StatementPageData(
     string Summary,
     PublishedTextOrigin TextOrigin,
     string? Label,
+    PublishedApprover ApprovedBy,
     RecordOfficialData[] Speakers,
     RecordIssueData[] Issues,
     PublishedDocumentVersion Source,

@@ -1,0 +1,22 @@
+<div class="@(Label is null ? "ai-summary" : "ai-summary ai-summary-ai")">
+    @if (Label is not null)
+    {
+        <span id="@LabelId" class="ai-summary-label">@Label</span>
+    }
+    @ChildContent
+    @if (Check is not null)
+    {
+        <p class="ai-summary-check">@Check</p>
+    }
+</div>
+
+@code {
+    /// <summary>The public label of the text, as the public view sets it. Null shows plain text with no label.</summary>
+    [Parameter] public string? Label { get; set; }
+    /// <summary>The ID of the label, for a heading that names it with aria-describedby.</summary>
+    [Parameter] public string? LabelId { get; set; }
+    /// <summary>The text of the summary. A page with no summary shows only its check line.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    /// <summary>The check line under the text. It holds the caveats of the page.</summary>
+    [Parameter] public RenderFragment? Check { get; set; }
+}

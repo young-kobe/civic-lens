@@ -35,7 +35,10 @@ public static class ServerPageEndpoints
                 }, cancellationToken)));
         routes.MapRecordPages(baseUrl);
         routes.MapGet(Prefix + "/{**path}", (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
-            responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,
-                new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken));
+            NotFoundAsync(context, responder, baseUrl, cancellationToken));
     }
+
+    internal static Task<IResult> NotFoundAsync(HttpContext context, ServerPageResponder responder, PublicBaseUrl baseUrl, CancellationToken cancellationToken) =>
+        responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,
+            new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken);
 }

@@ -11,10 +11,10 @@
         </header>
         <div class="detail-layout">
             <div class="detail-main">
-                <DetailSummary Label="@StatementPageView.Label(Data)">
-                    <Paragraphs><p>@Data.Summary</p></Paragraphs>
-                    <Check>@StatementPageView.CheckFor(Data.TextOrigin) <a href="#source">@DetailWords.CheckSource</a></Check>
-                </DetailSummary>
+                <AiSummary Label="@Data.Label">
+                    <ChildContent><p>@Data.Summary</p></ChildContent>
+                    <Check>@StatementPageView.CheckFor(Data.TextOrigin) <a href="#source">@SourceFold.Title</a></Check>
+                </AiSummary>
                 <section class="detail-section" aria-labelledby="statement-quotes-title">
                     <h2 id="statement-quotes-title">@StatementPageView.QuotationsHeading</h2>
                     <p class="muted">@StatementPageView.QuotationsNote(Data)</p>
@@ -26,7 +26,7 @@
                             <li>
                                 <CitationQuote Label="@StatementPageView.QuotationLabel(position)" Quote="@quotation.Quote">
                                     <span>@StatementPageView.QuotationNote(quotation)</span>
-                                    <ContextLink Href="@("#" + StatementPageView.QuotationAnchor(position))" Target="@($"{StatementPageView.QuotationLabel(position).ToLowerInvariant()}, quote")" />
+                                    <ContextLink Href="@("#" + CitedText.Anchor(position))" Target="@ContextLink.QuoteTarget("statement", position, Data.Quotations.Length)" />
                                 </CitationQuote>
                             </li>
                         }
@@ -54,22 +54,31 @@
                         <ul class="detail-chips" role="list">
                             @foreach (var issue in Data.Issues)
                             {
-                                <li><a class="detail-chip" href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">@issue.Name</a></li>
+                                <li>
+                                    @if (issue.IsConfigured)
+                                    {
+                                        <LinkChip Href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">@issue.Name</LinkChip>
+                                    }
+                                    else
+                                    {
+                                        @issue.Name
+                                    }
+                                </li>
                             }
                         </ul>
                     </section>
                 }
             </aside>
         </div>
-        <DetailSourceFold>
+        <SourceFold>
             <Facts Items="StatementPageView.Facts(Data)" />
             @if (Data.ArticleUrl is not null)
             {
                 <p class="muted small">@StatementPageView.FeedNote</p>
             }
             <SourceLinesNote>saved source</SourceLinesNote>
-            <DocumentText Label="Source text" Runs="CitedText.Split(Data.Source.Text, StatementPageView.Ranges(Data))" />
-        </DetailSourceFold>
+            <DocumentText Label="Source text" Runs="CitedText.Split(Data.Source.Text, StatementPageView.Ranges(Data.Quotations, Data.DateEvidence))" />
+        </SourceFold>
     </article>
 </PublicPage>
 

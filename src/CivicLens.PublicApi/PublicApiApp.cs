@@ -61,11 +61,11 @@ public static class PublicApiApp
         builder.Services.AddSingleton(provider => new BoardStore(views, provider.GetRequiredService<PartyAgreementStore>()));
         builder.Services.AddSingleton(new MemberVoteStore(views));
         builder.Services.AddSingleton(new BillStore(views));
-        builder.Services.AddSingleton(new RecordNames(views));
+        builder.Services.AddSingleton(new RecordSnapshot(views));
         builder.Services.AddSingleton(new StatementStore(views));
-        builder.Services.AddSingleton(provider => new StatementPageReader(provider.GetRequiredService<StatementStore>(), provider.GetRequiredService<RecordNames>()));
+        builder.Services.AddSingleton(provider => new StatementPageReader(provider.GetRequiredService<StatementStore>(), provider.GetRequiredService<RecordSnapshot>()));
         builder.Services.AddSingleton(new DocumentChangeStore(views));
-        builder.Services.AddSingleton(provider => new DocumentChangePageReader(provider.GetRequiredService<DocumentChangeStore>(), provider.GetRequiredService<RecordNames>()));
+        builder.Services.AddSingleton(provider => new DocumentChangePageReader(provider.GetRequiredService<DocumentChangeStore>(), provider.GetRequiredService<RecordSnapshot>()));
         builder.Services.AddSingleton(new BriefStore(views));
         builder.Services.AddSingleton(new ZipDistrictStore(views));
         builder.Services.AddSingleton(new IssueStore(views));

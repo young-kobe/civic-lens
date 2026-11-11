@@ -11,10 +11,11 @@ public sealed class StatementDetailPageTests
     {
         var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement());
 
-        var summary = page.QuerySelector(".detail-ai")!;
-        Assert.Equal(StatementPageView.AiLabel, summary.QuerySelector(".detail-ai-label")!.TextContent);
-        Assert.Contains("A model wrote only the summary above.", summary.QuerySelector(".detail-check")!.TextContent);
-        Assert.Equal("#source", summary.QuerySelector(".detail-check a")!.GetAttribute("href"));
+        var summary = page.QuerySelector(".ai-summary-ai")!;
+        Assert.Equal(StatementLabel, summary.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Contains("A model wrote only the summary above.", summary.QuerySelector(".ai-summary-check")!.TextContent);
+        Assert.Contains(StatementPageView.CaptureCaveat, summary.QuerySelector(".ai-summary-check")!.TextContent);
+        Assert.Equal("#source", summary.QuerySelector(".ai-summary-check a")!.GetAttribute("href"));
         Assert.Null(page.QuerySelector(".caveat"));
     }
 
@@ -23,10 +24,55 @@ public sealed class StatementDetailPageTests
     {
         var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement(PublishedTextOrigin.Person));
 
-        Assert.Null(page.QuerySelector(".detail-ai"));
-        Assert.Null(page.QuerySelector(".detail-ai-label"));
-        Assert.DoesNotContain("model", page.QuerySelector(".detail-check")!.TextContent, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("code checked each one", page.QuerySelector(".detail-check")!.TextContent);
+        Assert.Null(page.QuerySelector(".ai-summary-ai"));
+        Assert.Null(page.QuerySelector(".ai-summary-label"));
+        Assert.DoesNotContain("model", page.QuerySelector(".ai-summary-check")!.TextContent, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("code checked each one", page.QuerySelector(".ai-summary-check")!.TextContent);
+        Assert.Contains(StatementPageView.CaptureCaveat, page.QuerySelector(".ai-summary-check")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ThePageShowsTheLabelOfTheViewAndNoLabelWhenTheViewSetsNone()
+    {
+        var withLabel = await RenderAsync<StatementDetailPage, StatementPageData>(Statement());
+        var withoutLabel = await RenderAsync<StatementDetailPage, StatementPageData>(Statement(label: null, approver: PublishedApprover.Person));
+
+        Assert.Equal(StatementLabel, withLabel.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Null(withoutLabel.QuerySelector(".ai-summary-label"));
+        Assert.Null(withoutLabel.QuerySelector(".ai-summary-ai"));
+    }
+
+    [Fact]
+    public async Task OnlyACodeApprovedDateNamesTheCodeCheckOnTheSharedLabelRule()
+    {
+        var code = await RenderAsync<StatementDetailPage, StatementPageData>(Statement());
+        var person = await RenderAsync<StatementDetailPage, StatementPageData>(Statement(label: null, approver: PublishedApprover.Person));
+
+        Assert.Contains(PublishedRecordLabels.ModelDateCheckedByCode, code.QuerySelector("#source")!.TextContent);
+        Assert.DoesNotContain(PublishedRecordLabels.ModelDateCheckedByCode, person.QuerySelector("#source")!.TextContent);
+        Assert.Contains("29 Oct 2026", person.QuerySelector("#source")!.TextContent);
+    }
+
+    [Fact]
+    public async Task AnIssueThatTheReleaseDoesNotHoldIsPlainTextAndAConfiguredIssueIsALink()
+    {
+        var data = Statement() with { Issues = [new("budget", "Federal budget and debt", true), new("unlisted", "unlisted", false)] };
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(data);
+
+        var items = page.QuerySelectorAll(".detail-chips li");
+        Assert.Equal(["Federal budget and debt", "unlisted"], items.Select(item => item.TextContent.Trim()));
+        Assert.NotNull(items[0].QuerySelector("a.link-chip"));
+        Assert.Null(items[1].QuerySelector("a"));
+    }
+
+    [Fact]
+    public async Task EachQuoteLinkNamesItsNumberOnlyWhenThereIsMoreThanOneQuote()
+    {
+        var one = await RenderAsync<StatementDetailPage, StatementPageData>(Statement(quotes: 1));
+        var many = await RenderAsync<StatementDetailPage, StatementPageData>(Statement());
+
+        Assert.Equal(": statement, quote", one.QuerySelector(".detail-quotes a .visually-hidden")!.TextContent);
+        Assert.Equal(": statement, quote 1", many.QuerySelector(".detail-quotes a .visually-hidden")!.TextContent);
     }
 
     [Fact]
@@ -94,8 +140,8 @@ public sealed class StatementDetailPageTests
         var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement());
 
         Assert.Equal(Root + "officials/official-a.html", page.QuerySelector(".detail-list a")!.GetAttribute("href"));
-        Assert.Equal(Root + PublicationProtocol.IssuePagePath("budget", 1), page.QuerySelector(".detail-chip")!.GetAttribute("href"));
-        Assert.Equal("A model wrote this <b>summary</b>.", page.QuerySelector(".detail-ai p")!.TextContent);
-        Assert.Empty(page.QuerySelectorAll(".detail-ai b"));
+        Assert.Equal(Root + PublicationProtocol.IssuePagePath("budget", 1), page.QuerySelector(".link-chip")!.GetAttribute("href"));
+        Assert.Equal("A model wrote this <b>summary</b>.", page.QuerySelector(".ai-summary-ai p")!.TextContent);
+        Assert.Empty(page.QuerySelectorAll(".ai-summary-ai b"));
     }
 }

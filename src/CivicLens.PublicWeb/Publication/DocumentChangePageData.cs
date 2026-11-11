@@ -2,7 +2,7 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.PublicWeb.Publication;
 
-/// <summary>Everything that the document change page shows, read from one active release. The two versions hold the saved texts that the changes and citations point into.</summary>
+/// <summary>Everything that the document change page shows, read from one active release. The label is the label column of the public view. The two versions hold the saved texts that the changes and citations point into.</summary>
 public sealed record DocumentChangePageData(
     int Release,
     string RecordId,
@@ -10,6 +10,7 @@ public sealed record DocumentChangePageData(
     string Headline,
     string Summary,
     PublishedTextOrigin TextOrigin,
+    string? Label,
     string? Significance,
     string? Limits,
     string Institution,

@@ -32,12 +32,11 @@ public static class RecordPageEndpoints
             CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
         {
             if (!PublicationProtocol.IsAnyRecordId(recordId) || await read(reader, recordId, cancellationToken) is not { } data)
-                return await responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,
-                    new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken);
+                return await ServerPageEndpoints.NotFoundAsync(context, responder, baseUrl, cancellationToken);
             return await responder.RespondAsync<TPage>(context, StatusCodes.Status200OK, release(data), new Dictionary<string, object?>
             {
-                ["Data"] = data,
-                ["RootPath"] = baseUrl.Join(string.Empty)
+                [nameof(StatementDetailPage.Data)] = data,
+                [nameof(StatementDetailPage.RootPath)] = baseUrl.Join(string.Empty)
             }, cancellationToken);
         }));
 }

@@ -37,8 +37,8 @@ public static class ExecutiveActionWords
     public static IReadOnlyList<Fact> KeyFacts(ExecutiveActionPageData data, string rootPath) =>
     [
         new("Signed", Moment.Day(data.SignedOn)),
-        new("Printed in the Federal Register", Moment.Day(data.PublishedOn)),
-        new("Citation", data.FederalRegisterCitation),
+        new("Published in the Federal Register", Moment.Day(data.PublishedOn)),
+        new("Federal Register citation", data.FederalRegisterCitation),
         Fact.LinkList("President", [new FactLink(data.PresidentName, rootPath + PublicationProtocol.OfficialPagePath(data.OfficialId))]),
         .. data.Notices.Select(Correction)
     ];

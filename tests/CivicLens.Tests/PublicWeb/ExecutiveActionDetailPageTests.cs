@@ -15,6 +15,7 @@ public sealed class ExecutiveActionDetailPageTests
             page.QuerySelector(".detail-lede")!.TextContent);
         Assert.Equal(["Executive order", "Federal Register document 2026-21599"], page.QuerySelectorAll(".detail-badges .badge").Select(badge => badge.TextContent));
         Assert.Equal(["16 Oct 2026", "21 Oct 2026", "91 FR 66627"], page.QuerySelectorAll(".detail-facts dd").Take(3).Select(value => value.TextContent.Trim()));
+        Assert.Equal(["Signed", "Published in the Federal Register", "Federal Register citation"], page.QuerySelectorAll(".detail-facts dt").Take(3).Select(name => name.TextContent.Trim()));
     }
 
     [Fact]
@@ -22,10 +23,10 @@ public sealed class ExecutiveActionDetailPageTests
     {
         var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(Action());
 
-        Assert.Contains(ExecutiveActionWords.Caveat, page.QuerySelector(".detail-check")!.TextContent);
-        Assert.Null(page.QuerySelector(".detail-ai"));
+        Assert.Contains(ExecutiveActionWords.Caveat, page.QuerySelector(".ai-summary-check")!.TextContent);
+        Assert.Null(page.QuerySelector(".ai-summary-ai"));
         Assert.Null(page.QuerySelector(".caveat"));
-        Assert.Contains("Civic Lens did not summarize this document", page.QuerySelector(".detail-check")!.TextContent);
+        Assert.Contains("Civic Lens did not summarize this document", page.QuerySelector(".ai-summary-check")!.TextContent);
     }
 
     [Fact]

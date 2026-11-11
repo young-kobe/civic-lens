@@ -18,7 +18,7 @@ namespace CivicLens.Tests.PublicApi.Pages;
 public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
 {
     private static readonly PublicBaseUrl BaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test")!;
-    private static readonly SeededStatement Statement = new('a', "2026-03-02", ["official-z", "official-a"], ["health"], "Analysis", "Code");
+    private static readonly SeededStatement Statement = new('a', "2026-03-02", ["official-z", "official-a"], ["health", "unlisted"], "Analysis", "Code");
     private static readonly string ActionId = new('e', 64);
     private const string Source = "Intro. Ann said \"exact quote\" on Friday. End.";
     private const string ExtractionId = "1111111111111111111111111111111111111111111111111111111111111111";
@@ -51,11 +51,12 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         Assert.Equal("Headline a", page.QuerySelector("h1")!.TextContent);
         Assert.Equal("Zed Zane, Ann Able", page.QuerySelector(".public-breadcrumbs [aria-current=page]")!.TextContent);
         Assert.Equal(["Zed Zane", "Ann Able"], page.QuerySelectorAll(".detail-list a").Select(link => link.TextContent));
-        Assert.Equal("Health care", page.QuerySelector(".detail-chip")!.TextContent);
+        Assert.Equal("Health care", page.QuerySelector(".link-chip")!.TextContent);
+        Assert.Equal(["Health care", "unlisted"], page.QuerySelectorAll(".detail-chips li").Select(item => item.TextContent.Trim()));
         Assert.Equal("exact quote", page.QuerySelector(".detail-quotes blockquote")!.TextContent);
         Assert.Equal(["exact quote", "Friday"], page.QuerySelectorAll("#source mark").Select(mark => mark.TextContent));
         Assert.Contains("Said on 2 Mar 2026.", page.QuerySelector(".detail-lede")!.TextContent);
-        Assert.NotNull(page.QuerySelector(".detail-ai-label"));
+        Assert.NotNull(page.QuerySelector(".ai-summary-label"));
     }
 
     [Fact]

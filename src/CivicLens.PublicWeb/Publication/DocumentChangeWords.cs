@@ -15,8 +15,6 @@ public static class DocumentChangeWords
 
     public const string LaterAnchor = "later-version";
 
-    public const string AiLabel = "AI summary. Drafted by an AI model from both saved versions.";
-
     public const string CheckLine = "Code found the changed words.";
 
     public const string ModelCheckLine = CheckLine + " A model wrote only this summary.";
@@ -36,8 +34,6 @@ public static class DocumentChangeWords
     public const string EvidenceLimits = "What the evidence cannot establish";
 
     public static string Eyebrow(DocumentChangePageData data) => $"Document change | {data.Institution}";
-
-    public static string? Label(DocumentChangePageData data) => DetailWords.SummaryLabel(data.TextOrigin, AiLabel);
 
     public static string Check(PublishedTextOrigin origin) =>
         $"{(origin == PublishedTextOrigin.Model ? ModelCheckLine : CheckLine)} {Limit}";
@@ -61,15 +57,14 @@ public static class DocumentChangeWords
 
     public static string SavedLine(PublishedDocumentVersion version) => $"Saved {Moment.Full(version.ObservedAtUtc)}";
 
-    public static string CitationAnchor(int index) => $"cite-{index + 1}";
-
     public static string VersionName(DocumentChangePageData data, PublishedCitation citation) =>
         citation.ExtractionId == data.Before.ExtractionId ? "Earlier version" : "Later version";
 
-    public static IReadOnlyList<CitedRange> RangesIn(DocumentChangePageData data, PublishedDocumentVersion version)
+    /// <summary>The marks of one saved version: its citations and the change date evidence. The static page and the server page both call it.</summary>
+    public static IReadOnlyList<CitedRange> RangesIn(PublishedCitation[] citations, PublishedCitation? changeDateEvidence, PublishedDocumentVersion version)
     {
-        var cited = data.Citations.Select((citation, index) => (citation, anchor: CitationAnchor(index)));
-        if (data.ChangeDateEvidence is { } evidence) cited = cited.Append((evidence, ChangeDateAnchor));
+        var cited = citations.Select((citation, index) => (citation, anchor: CitedText.Anchor(index)));
+        if (changeDateEvidence is not null) cited = cited.Append((changeDateEvidence, ChangeDateAnchor));
         return [.. cited.Where(item => item.citation.ExtractionId == version.ExtractionId)
             .Select(item => new CitedRange(item.anchor, item.citation.Start, item.citation.Length))];
     }
@@ -83,7 +78,7 @@ public static class DocumentChangeWords
         if (data.Officials.Length > 0)
             facts.Add(Fact.LinkList("Officials", [.. data.Officials.Select(official => new FactLink(official.Name, rootPath + PublicationProtocol.OfficialPagePath(official.OfficialId)))]));
         if (data.Issues.Length > 0)
-            facts.Add(Fact.LinkList("Issues", [.. data.Issues.Select(issue => new FactLink(issue.Name, rootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1)))]));
+            facts.Add(Fact.LinkList("Issues", [.. data.Issues.Select(issue => new FactLink(issue.Name, issue.IsConfigured ? rootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1) : null))]));
         facts.Add(new("Revision", data.RevisionNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         return facts;
     }

@@ -11,11 +11,14 @@ public static class StatementPageView
 
     public const string DateEvidenceAnchor = "cite-statement-date";
 
-    public const string AiLabel = "AI summary. Drafted by an AI model from the source text.";
+    public const string SourceSeen = "Source seen";
 
     public const string CheckLine = "The quotes below come straight from the source and code checked each one.";
 
     public const string ModelCheckLine = CheckLine + " A model wrote only the summary above.";
+
+    /// <summary>The caveat of the static statement page. It sits in the check line, so no separate caveat shows.</summary>
+    public const string CaptureCaveat = "The observation time shows when the source was captured. It does not show when the statement was first made.";
 
     public const string QuotationsHeading = "What was said";
 
@@ -23,11 +26,7 @@ public static class StatementPageView
 
     public const string FeedNote = "The source below is the feed that lists the article. It holds a copy of the article text.";
 
-    public static string CheckFor(PublishedTextOrigin origin) => origin == PublishedTextOrigin.Model ? ModelCheckLine : CheckLine;
-
-    public static string? Label(StatementPageData data) => DetailWords.SummaryLabel(data.TextOrigin, AiLabel);
-
-    public static string QuotationAnchor(int index) => $"cite-{index + 1}";
+    public static string CheckFor(PublishedTextOrigin origin) => $"{(origin == PublishedTextOrigin.Model ? ModelCheckLine : CheckLine)} {CaptureCaveat}";
 
     public static string Eyebrow(StatementPageData data) => data.Speakers.Length == 0 ? "Statement" : $"Statement | {data.ShortName}";
 
@@ -46,10 +45,11 @@ public static class StatementPageView
 
     public static string AllQuotationsLink(StatementPageData data) => $"See all {data.Quotations.Length} quotes in the source fold";
 
-    public static IReadOnlyList<CitedRange> Ranges(StatementPageData data)
+    /// <summary>The marks of the saved text: one per quote and one for the date evidence. The static page and the server page both call it.</summary>
+    public static IReadOnlyList<CitedRange> Ranges(PublishedQuotation[] quotations, PublishedCitation? dateEvidence)
     {
-        var ranges = data.Quotations.Select((quotation, index) => new CitedRange(QuotationAnchor(index), quotation.Start, quotation.Length));
-        if (data.DateEvidence is { } evidence) ranges = ranges.Append(new CitedRange(DateEvidenceAnchor, evidence.Start, evidence.Length));
+        var ranges = quotations.Select((quotation, index) => new CitedRange(CitedText.Anchor(index), quotation.Start, quotation.Length));
+        if (dateEvidence is not null) ranges = ranges.Append(new CitedRange(DateEvidenceAnchor, dateEvidence.Start, dateEvidence.Length));
         return [.. ranges];
     }
 
@@ -57,7 +57,7 @@ public static class StatementPageView
     {
         var facts = new List<Fact> { Fact.LinkList("Original page", [new FactLink(data.OriginalUrl, data.OriginalUrl)]) };
         if (data.ArticleUrl is not null) facts.Add(Fact.LinkList("Saved copy from", [new FactLink(data.Source.Url, data.Source.Url)]));
-        facts.Add(new(DetailWords.SourceSeen, Moment.Full(data.Source.ObservedAtUtc)));
+        facts.Add(new(SourceSeen, Moment.Full(data.Source.ObservedAtUtc)));
         facts.Add(new("Date of the statement", DateFact(data)));
         if (data.DateEvidence is { } evidence)
             facts.Add(new Fact("Evidence for the statement date", evidence.Quote).CitedAt(DateEvidenceAnchor));
@@ -65,11 +65,8 @@ public static class StatementPageView
         return facts;
     }
 
-    /// <summary>The date line names an AI date only when the model found it and code checked it against the quote. The model summary label marks that case.</summary>
-    private static string DateFact(StatementPageData data) => data.StatementDate switch
-    {
-        null => "Not stated in the source",
-        { } date when data.DateEvidence is not null && data.Label is not null => $"{Moment.Day(date)}. {PublishedRecordLabels.ModelDateCheckedByCode}.",
-        { } date => Moment.Day(date)
-    };
+    /// <summary>The date rule has one owner: the label of the static page. It names an AI date only when code approved the statement and the date has evidence.</summary>
+    private static string DateFact(StatementPageData data) => data.StatementDate is { } date
+        ? PublishedRecordLabels.StatementDate(data.ApprovedBy, data.DateEvidence is not null, Moment.Day(date))
+        : "Not stated in the source";
 }

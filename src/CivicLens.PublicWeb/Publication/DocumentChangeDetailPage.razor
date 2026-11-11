@@ -44,8 +44,8 @@
                     </div>
                 </div>
             </section>
-            <DetailSummary Label="@DocumentChangeWords.Label(Data)">
-                <Paragraphs>
+            <AiSummary Label="@Data.Label">
+                <ChildContent>
                     <p>@Data.Summary</p>
                     @if (Data.Significance is { Length: > 0 } significance)
                     {
@@ -57,11 +57,11 @@
                         <h3>@DocumentChangeWords.EvidenceLimits</h3>
                         <p>@limits</p>
                     }
-                </Paragraphs>
-                <Check>@DocumentChangeWords.Check(Data.TextOrigin) <a href="#source">@DetailWords.CheckSource</a></Check>
-            </DetailSummary>
+                </ChildContent>
+                <Check>@DocumentChangeWords.Check(Data.TextOrigin) <a href="#source">@SourceFold.Title</a></Check>
+            </AiSummary>
         </div>
-        <DetailSourceFold>
+        <SourceFold>
             <Facts Items="DocumentChangeWords.Facts(Data, RootPath)" />
             <h3>Citations</h3>
             <p class="muted small">Each quote is the exact text of the source version. Follow its link to see it marked in the full version.</p>
@@ -73,7 +73,7 @@
                     var version = DocumentChangeWords.VersionName(Data, citation);
                     <li>
                         <CitationQuote Label="@version" Quote="@citation.Quote">
-                            <ContextLink Href="@("#" + DocumentChangeWords.CitationAnchor(position))" Text="@ContextLink.FullVersionText" Target="@($"{version.ToLowerInvariant()}, quote {position + 1}")" />
+                            <ContextLink Href="@("#" + CitedText.Anchor(position))" Text="@ContextLink.FullVersionText" Target="@ContextLink.QuoteTarget(version.ToLowerInvariant(), position, Data.Citations.Length)" />
                         </CitationQuote>
                     </li>
                 }
@@ -86,11 +86,11 @@
             </ul>
             <h3 id="@DocumentChangeWords.EarlierAnchor">Earlier version</h3>
             <p class="muted small">@DocumentChangeWords.SavedLine(Data.Before). Source: <a href="@Data.Before.Url" rel="noopener noreferrer nofollow">@Data.Before.Url</a></p>
-            <DocumentText Label="Earlier version text" Runs="CitedText.Split(Data.Before.Text, DocumentChangeWords.RangesIn(Data, Data.Before))" />
+            <DocumentText Label="Earlier version text" Runs="CitedText.Split(Data.Before.Text, DocumentChangeWords.RangesIn(Data.Citations, Data.ChangeDateEvidence, Data.Before))" />
             <h3 id="@DocumentChangeWords.LaterAnchor">Later version</h3>
             <p class="muted small">@DocumentChangeWords.SavedLine(Data.After). Source: <a href="@Data.After.Url" rel="noopener noreferrer nofollow">@Data.After.Url</a></p>
-            <DocumentText Label="Later version text" Runs="CitedText.Split(Data.After.Text, DocumentChangeWords.RangesIn(Data, Data.After))" />
-        </DetailSourceFold>
+            <DocumentText Label="Later version text" Runs="CitedText.Split(Data.After.Text, DocumentChangeWords.RangesIn(Data.Citations, Data.ChangeDateEvidence, Data.After))" />
+        </SourceFold>
     </article>
 </PublicPage>
 
