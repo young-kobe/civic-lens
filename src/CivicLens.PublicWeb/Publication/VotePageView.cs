@@ -29,7 +29,7 @@ public static class VotePageView
             : null;
 
     public static string ChamberCaption(VotePageData vote, PartyBarData bar) =>
-        $"The bar counts the {vote.Chamber} members by their vote on {Moment.Day(vote.VotedOn)}: {PlainVoteWords.Yes}, {PlainVoteWords.No}, {PlainVoteWords.Present}, or {PlainVoteWords.NotVoting}. {bar.Total} members have a recorded position, including {vote.Totals?.NotVoting} who did not vote.";
+        $"The bar counts the {vote.Chamber} members by their vote on {Moment.Day(vote.VotedOn)}: {PlainVoteWords.Yes}, {PlainVoteWords.No}, {PlainVoteWords.Present}, or {PlainVoteWords.NotVoting}. {bar.Total} members have a recorded position, including {bar.Segments.Single(segment => segment.Label == PlainVoteWords.NotVoting).Count} who did not vote.";
 
     /// <summary>One bar for each party group, from the whole-party counts of the exact revision. Empty when the release holds no party counts.</summary>
     public static IReadOnlyList<PartyBarData> PartyBars(VotePageData vote) =>

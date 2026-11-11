@@ -3,6 +3,7 @@ using AngleSharp.Html.Parser;
 using CivicLens.PublicApi;
 using CivicLens.PublicApi.Pages;
 using CivicLens.PublicApi.Votes;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -105,13 +106,18 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
         var connections = 0;
-        await using var views = new NpgsqlDataSourceBuilder(host.Options.PublicViewsDatabase)
+        var commands = new CommandLog();
+        var views = new NpgsqlConnectionStringBuilder(host.Options.PublicViewsDatabase) { Pooling = false }.ConnectionString;
+        await using var source = new NpgsqlDataSourceBuilder(views)
+            .UseLoggerFactory(new CommandLogFactory(commands)).EnableParameterLogging()
             .UsePhysicalConnectionInitializer(_ => connections++, _ => { connections++; return Task.CompletedTask; }).Build();
-        var reader = new VotePageReader(new VoteStore(views), views);
+        var reader = new VotePageReader(new VoteStore(source), source);
 
         var page = await reader.ReadAsync(House.RecordId, CancellationToken.None);
 
         Assert.Equal(1, connections);
+        var memberRead = Assert.Single(commands.Lines, line => line.StartsWith("Executing", StringComparison.Ordinal) && line.Contains("selected AS MATERIALIZED", StringComparison.Ordinal));
+        Assert.EndsWith(", False]", memberRead.TrimEnd());  // The last parameter is with_sources: the member read skips the source texts.
         Assert.Equal(["Ann Able", "Ben Baker", "Cy Cole", "Di Dole"], page!.Members.Select(member => member.Name));
         Assert.Equal("Health care", Assert.Single(page.Issues).Name);
         Assert.NotEmpty(page.Sources);
@@ -139,5 +145,21 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
 
         Assert.Equal(HttpStatusCode.OK, fresh.StatusCode);
         Assert.Equal(HttpStatusCode.NotModified, revalidated.StatusCode);
+    }
+
+    private sealed class CommandLog
+    {
+        public List<string> Lines { get; } = [];
+    }
+
+    private sealed class CommandLogFactory(CommandLog log) : ILoggerFactory, ILogger
+    {
+        public ILogger CreateLogger(string categoryName) => this;
+        public void AddProvider(ILoggerProvider provider) { }
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public void Dispose() { }
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            log.Lines.Add(formatter(state, exception));
     }
 }
