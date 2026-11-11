@@ -87,6 +87,20 @@ ul.notes{margin:0;padding-left:20px;display:grid;gap:6px}
 <p class="muted" style="margin-top:10px">Real: the President's action counts (605, by type), executive order 14436, the Kelly statement, the four party boards, the search results for "5334" and "Pressley", the officials list (542), and the records used in the brief. EXAMPLE: the AI summaries and wording marked so, the amended-order links, every document change, the brief text, the withdrawal, the linked vote slot, and the "Records as of" time. The live site holds no document change and no weekly brief today (search checked 6 Nov 2026).</p>
 </section>
 <section>
+<h2>Added in round 4: list pages</h2>
+<p class="muted">One list page for each kind of record, for owner approval before code. Each page has the same layout: filters, a count that names what it counts, 25 rows a page, and an empty state. The header nav links to the Votes, Bills, Statements and Executive actions lists. Tabs on each list link to the other lists.</p>
+<ul class="pages">
+<li><a href="votes.html"><b>Votes</b><span>Chamber, kind of vote, issue, bill number and dates. Tally bar on each row. Two pages, so the pager works.</span></a></li>
+<li><a href="votes.html?chamber=senate&amp;kind=Amendment"><b>Votes: filtered</b><span>Senate votes to change the text. The count names the chamber and the kind.</span></a></li>
+<li><a href="votes.html?issue=Firearms"><b>Votes: no match</b><span>The empty state with next steps.</span></a></li>
+<li><a href="bills.html"><b>Bills</b><span>Bill type, status, issue, policy area, sponsor, bill number and dates. Status badge on each row.</span></a></li>
+<li><a href="statements.html"><b>Statements</b><span>Official, issue and dates. Shows "Date not stated" rows last.</span></a></li>
+<li><a href="executive-actions.html"><b>Executive actions</b><span>Type of document and dates. Real rows from the President's page.</span></a></li>
+<li><a href="document-changes.html"><b>Document changes</b><span>Office, issue and dates, with example rows.</span></a></li>
+<li><a href="document-changes.html#live"><b>Document changes: none yet</b><span>The page as the live site is today, with no records.</span></a></li>
+</ul>
+</section>
+<section>
 <h2>What is real and what is EXAMPLE</h2>
 <ul class="notes">
 <li>Real: the vote kinds and casts on the vote rows, the Pressley casts and vote titles in the statement rows, the live finding that Pressley has no published statements, the 542 officials count, and the bill status time (5 Nov 2026, 09:57 UTC).</li>
