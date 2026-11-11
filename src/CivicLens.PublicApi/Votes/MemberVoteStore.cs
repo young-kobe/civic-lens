@@ -77,9 +77,23 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
     public async Task<MemberVoteAnswer?> FindAsync(MemberVoteRequest request, CancellationToken cancellationToken)
     {
         await using var command = views.CreateCommand(Sql(request));
+        return await ReadAsync(command, request, MaximumVotes, cancellationToken);
+    }
+
+    /// <summary>Reads the newest votes inside the caller's snapshot. <paramref name="take"/> is the most votes of each official, at most <see cref="MaximumVotes"/>, so a page reads only the votes it shows.</summary>
+    internal static async Task<MemberVoteAnswer?> ReadAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, MemberVoteRequest request, int take,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(take, MaximumVotes);
+        await using var command = new NpgsqlCommand(Sql(request), connection, transaction);
+        return await ReadAsync(command, request, take, cancellationToken);
+    }
+
+    private static async Task<MemberVoteAnswer?> ReadAsync(NpgsqlCommand command, MemberVoteRequest request, int take, CancellationToken cancellationToken)
+    {
         command.Parameters.AddWithValue("officials", request.Officials);
         command.Parameters.AddWithValue("kinds", PublishedVoteKindExtensions.SubstantiveNames());
-        command.Parameters.AddWithValue("take", MaximumVotes);
+        command.Parameters.AddWithValue("take", take);
         if (request.Issue is not null) command.Parameters.AddWithValue("issue", request.Issue);
         var votes = request.Officials.ToDictionary(official => official, _ => new List<MemberVote>(), StringComparer.Ordinal);
         int? release = null;
