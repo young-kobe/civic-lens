@@ -1096,10 +1096,11 @@ Copy `nextCursor` into the next invocation until it is null. A null cursor ends 
 The controller keeps a ledger outside the database. The ledger maps each release number to a directory name. Follow these rules:
 
 1. After each call, add every entry of `verifiedReleases` to the ledger.
-2. Never add a release that is not in `verifiedReleases`. Never remove a failed release from the work list. Repair the cause, then verify the release again from its `selection` cursor.
+2. Never add a release that is not in `verifiedReleases`. Never remove a failed release that the selection still holds from the work list. Repair the cause, then verify the release again from its `selection` cursor. Failures of a release that the selection no longer holds need no repair.
 3. Declare completion only when `nextCursor` is null and every entry of `selection` is in the ledger with the same `directoryName`. A ledger entry that the selection no longer holds does not matter.
-4. When `nextCursor` is null but a selected release is not in the ledger, start the next call with the `cursor` of the first such release in `selection`. Do this when a release is published during a long walk, or when a release was reported in `skippedReleases`.
+4. When `nextCursor` is null but a selected release is not in the ledger, start the next call with the `cursor` of the first such release in `selection`. Do this when a release is published during a long walk, or when a release was reported in `skippedReleases`. When that release appears in `verifiedReleases` or in `failures`, discard `nextCursor`. Then continue with the next selected release that is not in the ledger. A cursor walks on through every later release, so this rule stops repeated work.
 5. Do not restart without a cursor after the first complete walk. A full restart repeats work that the ledger already holds.
+6. The cursor is trusted. Pass back only a `nextCursor` or `selection` cursor value, unchanged. The command does not check that an edited cursor still covers every record of its release.
 
 A complete ledger proves agreement for the selected membership. It does not replace manifest membership verification.
 

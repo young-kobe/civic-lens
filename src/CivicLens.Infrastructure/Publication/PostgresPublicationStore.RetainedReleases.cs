@@ -19,7 +19,7 @@ public sealed partial class PostgresPublicationStore
         ArgumentNullException.ThrowIfNull(readServedDirectory);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await BeginVerificationReadAsync(db, cancellationToken);
-        var selection = await ReadRetainedReleaseSelectionAsync(db, readServedDirectory, cancellationToken);
+        var selection = await ReadFingerprintedSelectionAsync(db, readServedDirectory, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return selection.Fingerprint;
     }
@@ -42,7 +42,7 @@ public sealed partial class PostgresPublicationStore
         return transaction;
     }
 
-    private static async Task<RetainedReleaseSelection> ReadRetainedReleaseSelectionAsync(CollectionAttemptDbContext db,
+    private static async Task<RetainedReleaseSelection> ReadFingerprintedSelectionAsync(CollectionAttemptDbContext db,
         Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
     {
         var selected = await ReadRetainedReleasesAsync(db, readServedDirectory, cancellationToken);
@@ -78,6 +78,5 @@ public sealed partial class PostgresPublicationStore
 
     private sealed record RetainedReleaseSelection(PublicationReleaseSummary[] Releases, string Fingerprint)
     {
-        public int[] ReleaseNumbers => [.. Releases.Select(release => release.ReleaseNumber)];
     }
 }
