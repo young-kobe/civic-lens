@@ -131,6 +131,12 @@ These decisions come from the component audit. The owner accepted every recommen
 - A member fragment must match the requested ZIP, issue, and view before it replaces the results. Enforcers: `ZipDistrictEndpoints.MembersAsync` and `initZipLookup`. Tests: `ZipMemberCardsEndpointsTests.MembersRouteRejectsRepeatedAndUnsupportedViewsBeforeLookup`; no committed browser test covers stale layout responses.
 - Compare links use the public site root. Private member fragments require both configured origins before adding the link. Enforcers: `HomePage` and `ZipDistrictEndpoints.MembersAsync`. Tests: `HomePageTests.CompareLinkUsesTheConfiguredPublicSiteRootWhileZipLookupUsesTheApiOrigin`, `ZipMemberCardsEndpointsTests.MembersRouteUsesThePublicSiteOriginForLinksAndPhotosWhenTheHomePreviewRunsOnTheApiHost`, and `ZipMemberCardsEndpointsTests.MembersDoNotLinkToCompareWhenTheBrowserApiOriginIsNotConfigured`.
 
+- Officials and boards pages use the shared page cache with the release ETag. The search page holds the reader's words, so it sends `Cache-Control: private, no-store` and no validator. Enforcers: `ServerPageResponder`, `SearchPageEndpoint`. Tests: `ListPageTests.TheOfficialsPagePagesByTwentyFiveKeepsItsFiltersAndUsesTheSharedPageCache`, `ListPageTests.SearchShowsTheOfficialFirstPinsTheBillNumberAndNeverEntersASharedCache`.
+- An official row names seat, party, term end, and one record count with its scope. A cursor of another release redirects to the first page. Enforcers: `OfficialsPage`, `OfficialsPageEndpoint`. Tests: `OfficialsPageTests.EachRowNamesSeatPartyTermEndAndOneRecordCountWhileTheScopeAppearsOnce`, `ListPageTests.ACursorOfAnotherReleaseRedirectsToTheFirstPageOfTheSameFilters`.
+- Boards show count, then base, then share, and label delegates. Agreement shows once per chamber outside the party panels. Enforcer: `BoardsPage`. Tests: `BoardsPageTests.ARowGivesTheCountFirstThenItsBaseAndTheShareAndNamesADelegateSeat`, `BoardsPageTests.AgreementAppearsOncePerChamberOutsideThePartyPanels`.
+- Search puts empty-state guidance first, shows the official, then the bill pin, then results, then filters. Only a query that is wholly a bill number pins a bill. Enforcers: `SearchResultsPage`, `SearchBillNumber`. Tests: `SearchResultsPageTests.NoResultsShowGuidanceFirstAndLeaveOutTheResultListAndTheStatusLine`, `SearchResultsPageTests.OfficialThenBillPinThenResultsThenFiltersInThatOrder`, `SearchBillNumberTests`.
+- Snippets and typed text are encoded. Enforcer: Razor encoding in `SearchResultsPage`. Test: `SearchResultsPageTests.ASnippetMarksItsMatchesAndStoredTextCannotBecomeMarkup`.
+
 - The glossary index lists each approved term and the party-count note once, in alphabetical order. Letter links reach focusable index headings. Enforcer: `PublishedGlossaryPage`. Test: `GlossaryTests.TheGlossaryIndexGroupsEveryTermAlphabeticallyAndLinksPopulatedLettersAndDefinitions`.
 
 ## Behavior
@@ -149,10 +155,10 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 | 6 | Read one executive action | Executive action page, document links | Partial. Planned: body text and an AI "what it states" |
 | 7 | See what the President did | President page with per-type sections | Planned: count row becomes jump links |
 | 8 | Follow an issue | Issue page: figures, votes, bills, party line-up | Partial. Planned: one count line and party line-up |
-| 9 | Compare parties | Party boards, per-kind list pages | Partial. Planned: boards link from the nav, list pages (DR6) |
+| 9 | Compare parties | Party boards, per-kind list pages | Partial. Gated SSR `/web/boards` shows four panels and one agreement card per chamber. Planned: boards link from the nav, list pages (DR6) |
 | 10 | Check a source | "Check the source" fold with an official link first | Partial. Planned: plain labels, raw text one click further (DR3) |
-| 11 | Search a name or a bill | Header search on every page, results page | Partial. Planned: official first, bill number pin, filters after results |
-| 12 | See a search with no results | Results page empty state | Partial. Planned: message and next steps at the top |
+| 11 | Search a name or a bill | Header search on every page, results page | Partial. Gated SSR `/web/search` shows the official first, pins an exact bill number, and puts filters after the results. Not yet a public route |
+| 12 | See a search with no results | Results page empty state | Implemented on the gated SSR search page: message and next steps come first |
 | 13 | Learn a term | `Term` popover, glossary page, vote-kind explainer index | Partial. First-use popovers and the alphabetical index are implemented. Planned: remaining approved definitions and the vote-kind index |
 | 14 | Read the method and the about page | Method page, about page | Implemented |
 | 15 | Report a problem | Footer and record report links | Partial. A record page shows the report link in its body and in the footer. The footer link names the record kind and title. Both links carry the ID, revision, and title. Other pages show "Report a problem with this page". Planned: the withdrawal page, which shows one withdrawn record and keeps the fixed page link |
@@ -197,10 +203,11 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Statement page, quotations | Statement | What exactly was said? | `statements`, `statement_speakers`, `statement_quotations` | The API serves statement details with bounded source text, checked quotations, and citations. The reader page remains planned |
 | Document change page | Document change | What changed on this page? | `document_changes` and its source, region, edit, citation and official views | Partial. The detail API serves published sources and ordered changes. The API labels model text with the shared approved wording; person text has no AI label. Reader page remains planned |
 | Issue page | Issue | What is there on this issue? | `release_issues`, `issue_votes`, `issue_sponsors` | Partial. Issue counts and sponsor data are available through the API. Planned: page and party line-up |
-| Party boards | Boards | Who breaks from their party most? | `official_party_lines`, `party_agreement`, `/v1/boards` | One API response serves all four boards and one agreement per chamber. Board pages remain planned |
+| Party boards | Boards | Who breaks from their party most? | `official_party_lines`, `party_agreement`, `/v1/boards` | Implemented in `/web/boards`: ten members per panel with count, base, share and delegate seats; one agreement card per chamber outside the panels. The full static board pages stay linked |
 | List pages for votes, bills, executive actions, statements | Lists | Show me all of one kind | Per-kind views | Planned: R-68 list step |
 | Record row, status badge | All lists | What is this record? | Per-kind views | Implemented. Planned: event-named date, one bill number format |
-| Search results | Search | Find a person, bill, or vote | Search service | Partial. Planned: ranking and snippets |
+| Search results | Search | Find a person, bill, or vote | Search service, `public_api.officials`, `public_api.bills` | Implemented in `/web/search`: official first, bill number pin, index snippet or bill line, filters after results. Snippets come from the whole record body. Planned: summary-only snippets |
+| Officials list | Officials | Who is on this site? | `public_api.officials` | Implemented in `/web/officials`: 25 rows a page with chamber, state, party and name filters, seat, party, term end and one scoped record count |
 | Weekly brief page | Brief | What happened this week? | `briefs`, `brief_paragraphs`, `brief_citations` | Partial. Brief paragraphs and citations are served through the API. Planned: route and page |
 | Correction and withdrawal pages | Record | What changed on this record? | `record_corrections`, `withdrawals` | The withdrawal read API is implemented at `/v1/records/{kind}/{recordId}/withdrawal`. Record corrections and the reader page remain planned |
 
@@ -235,12 +242,12 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 | Public page components, today | `src/CivicLens.Host/Publication` |
 | Static render of pages | `src/CivicLens.Host/Publication/ReleaseRenderer.cs` |
 | Public API and its views | `src/CivicLens.PublicApi` |
-| Gated SSR reader pages and inputs | `src/CivicLens.PublicWeb/Publication/HomePage.razor`, `ComparePage.razor`, `ZipLookupForm.razor`, `ZipLookupResults.razor`, `HomePageData.cs`, `src/CivicLens.PublicApi/Home/HomePageReader.cs`, `src/CivicLens.PublicApi/Pages/ServerPageEndpoints.cs` |
+| Gated SSR reader pages and inputs | `src/CivicLens.PublicWeb/Publication/OfficialsPage.razor`, `BoardsPage.razor`, `SearchResultsPage.razor`, `OfficialSeat.cs`, `src/CivicLens.PublicApi/Officials/OfficialsPageReader.cs`, `Boards/BoardsPageReader.cs`, `Search/SearchPageReader.cs`, `HomePage.razor`, `ComparePage.razor`, `ZipLookupForm.razor`, `ZipLookupResults.razor`, `HomePageData.cs`, `src/CivicLens.PublicApi/Home/HomePageReader.cs`, `src/CivicLens.PublicApi/Pages/ServerPageEndpoints.cs` |
 | Shared member layout | `src/CivicLens.PublicWeb/Publication/ZipMemberCards.razor`, `ZipMemberCard.razor`, `ZipMemberIssueFilter.razor`, `SharedVoteRows.razor` |
 | Style files | `src/CivicLens.PublicWeb/wwwroot/css/theme.css`, `src/CivicLens.PublicWeb/wwwroot/css/app.css`, `src/CivicLens.PublicWeb/wwwroot/css/public.css` |
 | Presentation rules test | `tests/CivicLens.Tests/Architecture/PresentationArchitectureTests.cs` |
 
-`PublicApi` renders the gated `/web` home and `/web/compare` routes and the not-found shell under `/web`. Other successful reader routes still use static pages. Shared presentation components use `CivicLens.PublicWeb`, which references `Publication.Contracts` only.
+`PublicApi` renders the gated `/web` home, `/web/compare`, `/web/officials`, `/web/boards`, and `/web/search` routes and the not-found shell under `/web`. Other successful reader routes still use static pages. Shared presentation components use `CivicLens.PublicWeb`, which references `Publication.Contracts` only.
 
 ## Limits and planned work
 

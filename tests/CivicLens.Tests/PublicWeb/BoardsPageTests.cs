@@ -1,0 +1,100 @@
+using CivicLens.PublicWeb.Publication;
+using CivicLens.Publication.Contracts;
+
+namespace CivicLens.Tests.PublicWeb;
+
+public sealed class BoardsPageTests
+{
+    private static BoardPanelData Panel(PublishedChamber chamber, string party, int? congress, params BoardRowData[] rows) =>
+        new(chamber, party, congress, rows, rows.Length == 0 ? null : "Scope words of the party line.");
+
+    private static BoardRowData Row(string id, string name, string? seat, int cast, int breaks) => new(id, name, seat, cast, breaks);
+
+    private static BoardAgreementData Agreement(PublishedChamber chamber, int total = 450, int nominations = 0) =>
+        new(chamber, 119, [new(PublishedVoteKind.Passage, 15, 201)], 196, total - 196, 0, total, nominations);
+
+    private static BoardsPageData Data(BoardPanelData[]? boards = null, BoardAgreementData[]? agreements = null) => new(7,
+        boards ?? [Panel(PublishedChamber.House, "Democrat", 119, Row("cuellar", "Henry Cuellar", null, 254, 160))],
+        agreements ?? [Agreement(PublishedChamber.House), Agreement(PublishedChamber.Senate, 387)]);
+
+    private static Task<AngleSharp.Dom.IDocument> RenderAsync(BoardsPageData data) =>
+        ListPageRender.RenderAsync<BoardsPage>(data, nameof(BoardsPage.Data));
+
+    [Fact]
+    public async Task ARowGivesTheCountFirstThenItsBaseAndTheShareAndNamesADelegateSeat()
+    {
+        var page = await RenderAsync(Data([Panel(PublishedChamber.House, "Democrat", 119,
+            Row("cuellar", "Henry Cuellar", null, 254, 160), Row("moylan", "James Moylan", "Delegate for GU", 51, 26))]));
+
+        var rows = page.QuerySelectorAll(".board-panel .list-row");
+        Assert.Equal("160 of 254 split votes", rows[0].QuerySelector(".list-row-figure")!.TextContent);
+        Assert.Equal("63%", rows[0].QuerySelector(".badge")!.TextContent);
+        Assert.Equal(["House Democrats"], rows[0].QuerySelectorAll(".list-row-meta span").Select(span => span.TextContent));
+        Assert.Equal(["House Democrats", "Delegate for GU"], rows[1].QuerySelectorAll(".list-row-meta span").Select(span => span.TextContent));
+        Assert.Contains("Count first, then the base it comes from.", page.QuerySelector(".board-lede")!.TextContent);
+        Assert.Contains("Scope words of the party line.", page.QuerySelector(".board-panel details")!.TextContent);
+    }
+
+    [Fact]
+    public async Task AgreementAppearsOncePerChamberOutsideThePartyPanels()
+    {
+        var page = await RenderAsync(Data([
+            Panel(PublishedChamber.House, "Democrat", 119, Row("a", "Ann", null, 30, 10)),
+            Panel(PublishedChamber.House, "Republican", 119, Row("b", "Bob", null, 30, 5))]));
+
+        var cards = page.QuerySelectorAll(".board-agreement");
+        Assert.Equal(2, cards.Length);
+        Assert.Equal(["When both parties agreed (House, 119th Congress)", "When both parties agreed (Senate, 119th Congress)"],
+            cards.Select(card => card.QuerySelector("h2")!.TextContent));
+        Assert.Empty(page.QuerySelectorAll(".board-panel .board-agreement, .board-panel .board-kinds"));
+        Assert.Equal("Vote to pass or agree to", cards[0].QuerySelector(".board-kind dt")!.TextContent);
+        Assert.Equal("196 of 450", cards[0].QuerySelectorAll(".board-kind dd").Last().TextContent);
+    }
+
+    [Fact]
+    public async Task ABoardWithoutVoteFiguresSaysSoAndABoardWithoutRankedMembersNamesTheMinimum()
+    {
+        var page = await RenderAsync(Data([
+            Panel(PublishedChamber.House, "Democrat", null),
+            Panel(PublishedChamber.Senate, "Republican", 119)], []));
+
+        var panels = page.QuerySelectorAll(".board-panel");
+        Assert.Contains("No vote figures are in this release yet.", panels[0].TextContent);
+        Assert.Contains("No member of the Senate Republicans has 25 split votes cast in the 119th Congress.", panels[1].TextContent);
+        Assert.Empty(page.QuerySelectorAll(".board-panel .list-row"));
+    }
+
+    [Fact]
+    public async Task EachTabLinksToTheHeadingOfItsPanelAndNoTabClaimsToBeCurrent()
+    {
+        var page = await RenderAsync(Data([
+            Panel(PublishedChamber.House, "Democrat", 119, Row("a", "Ann", null, 30, 10)),
+            Panel(PublishedChamber.Senate, "Republican", 119, Row("b", "Bob", null, 30, 5))]));
+
+        var tabs = page.QuerySelectorAll(".segmented a");
+        Assert.Equal(["#h-house-democrat", "#h-senate-republican"], tabs.Select(tab => tab.GetAttribute("href")));
+        Assert.All(tabs, tab => Assert.NotNull(page.QuerySelector(tab.GetAttribute("href")!)));
+        Assert.All(tabs, tab => Assert.Null(tab.GetAttribute("aria-current")));
+    }
+
+    [Theory]
+    [InlineData(1, 1000, "under 1%")]
+    [InlineData(999, 1000, "over 99%")]
+    [InlineData(1, 2, "50%")]
+    public async Task TheShareUsesTheRoundingWordsOfTheStaticBoards(int breaks, int cast, string share)
+    {
+        var page = await RenderAsync(Data([Panel(PublishedChamber.House, "Democrat", 119, Row("a", "Ann", null, cast, breaks))]));
+
+        Assert.Equal(share, page.QuerySelector(".list-row .badge")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheNominationNoteAppearsOnlyWhenMostAgreementVotesAreNominations()
+    {
+        var most = await RenderAsync(Data(agreements: [Agreement(PublishedChamber.Senate, 387, nominations: 200)]));
+        var few = await RenderAsync(Data(agreements: [Agreement(PublishedChamber.Senate, 387, nominations: 193)]));
+
+        Assert.Contains("Most of these 387 votes are on nominations.", most.QuerySelector(".board-agreement")!.TextContent);
+        Assert.DoesNotContain("nominations", few.QuerySelector(".board-agreement")!.TextContent);
+    }
+}

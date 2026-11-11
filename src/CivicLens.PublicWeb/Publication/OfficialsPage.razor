@@ -1,0 +1,99 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSection.Officials" CanonicalPath="@PublicationProtocol.OfficialsPagePath" Title="Officials" Description="Every official with a published record or vote. Each page lists the records and votes that name one official." RootPath="@RootPath">
+    <PageHeader Title="Officials" Lede="Each page lists the published records that name the official. A member of Congress also has their votes in the current Congress. Looking for the parties?">
+        <Actions><a href="@(RootPath + PublicationProtocol.BoardPagePath(PublishedChamber.House, PublishedPartyMajority.Democrat))">Compare the parties</a></Actions>
+    </PageHeader>
+    @if (Data.Officials.Count == 0)
+    {
+        <EmptyState Title="No official matches these filters." Text="Clear one filter, such as the party. Check the spelling of the name.">
+            <Action><a href="@(RootPath + PublicationProtocol.SearchPagePath)">Search all records</a></Action>
+        </EmptyState>
+    }
+    <form class="lists-filter" method="get" aria-label="Filter officials">
+        <Field Label="Chamber" For="officials-chamber">
+            <select id="officials-chamber" name="chamber">
+                @foreach (var (value, label) in Chambers)
+                {
+                    <option value="@value" selected="@(Data.Filter.Chamber == value || (value == string.Empty && Data.Filter.Chamber is null))">@label</option>
+                }
+            </select>
+        </Field>
+        <Field Label="State or territory" For="officials-state">
+            <select id="officials-state" name="state">
+                <option value="">All</option>
+                @foreach (var state in UsStates.NameByCode.Keys.Order(StringComparer.Ordinal))
+                {
+                    <option value="@state" selected="@(Data.Filter.State == state)">@state</option>
+                }
+            </select>
+        </Field>
+        <Field Label="Party" For="officials-party">
+            <select id="officials-party" name="party">
+                <option value="">All</option>
+                @foreach (var party in Parties)
+                {
+                    <option value="@party.ToLowerInvariant()" selected="@(Data.Filter.Party == party.ToLowerInvariant())">@party</option>
+                }
+            </select>
+        </Field>
+        <Field Label="Name" For="officials-name">
+            <input id="officials-name" type="search" name="name" maxlength="@MaximumNameLength" value="@Data.Filter.Name" placeholder="Type a name" autocomplete="off" />
+        </Field>
+        <div class="lists-filter-actions">
+            <Button Type="submit" Variant="ButtonVariant.Primary">Apply filters</Button>
+            @if (Data.Filter.IsActive)
+            {
+                <a href="?">Clear filters</a>
+            }
+        </div>
+    </form>
+    @if (Data.Officials.Count > 0)
+    {
+        <p class="list-status" role="status">Showing @Data.Officials.Count @(Data.Officials.Count == 1 ? "official" : "officials")@(Data.Filter.IsActive ? " that match your filters" : string.Empty). Release @Data.Release.</p>
+        <p class="list-scope muted small">Each figure counts: @Data.RecordCountScope</p>
+        <ul class="list-rows" role="list">
+            @foreach (var official in Data.Officials)
+            {
+                <li class="list-row">
+                    <div>
+                        <a class="list-row-title" href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(official.OfficialId)))">@official.Name</a>
+                        <div class="list-row-meta">
+                            <span>@OfficialSeat.Text(official.Kind, official.Office, official.State, official.District)</span>
+                            @if (official.Party is { } party)
+                            {
+                                <span>@party</span>
+                            }
+                            <span>@TermEnd(official)</span>
+                        </div>
+                    </div>
+                    <div class="list-row-side"><span class="muted small"><b>@official.RecordCount</b> @(official.RecordCount == 1 ? "record" : "records") other than votes</span></div>
+                </li>
+            }
+        </ul>
+        <Pager Label="Officials pages" OlderHref="@NextHref" OlderText="@($"Next {Data.Officials.Count}")" />
+    }
+</PublicPage>
+
+@code {
+    public const int MaximumNameLength = 100;
+
+    private static readonly (string Value, string Label)[] Chambers =
+        [("", "All"), ("senate", "Senate"), ("house", "House"), ("executive", "Executive")];
+
+    private static readonly string[] Parties = ["Democrat", "Republican", "Independent"];
+
+    [Parameter, EditorRequired] public OfficialsPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    private string? NextHref => Data.NextCursor is null ? null : "?" + string.Join('&', new (string Name, string? Value)[]
+        {
+            ("chamber", Data.Filter.Chamber), ("state", Data.Filter.State), ("party", Data.Filter.Party),
+            ("name", Data.Filter.Name), ("cursor", Data.NextCursor)
+        }.Where(pair => pair.Value is not null).Select(pair => $"{pair.Name}={Uri.EscapeDataString(pair.Value!)}"));
+
+    private static string TermEnd(OfficialListRowData official) => official.TermEndsOn is { } end
+        ? $"Term ends {Moment.Day(end)}"
+        : "Our records show no end date for this term.";
+}

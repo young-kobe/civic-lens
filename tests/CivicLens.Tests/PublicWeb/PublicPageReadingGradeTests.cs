@@ -41,6 +41,28 @@ public sealed class PublicPageReadingGradeTests
     }
 
     [Fact]
+    public async Task ListAndBoardIntroPassagesReadAtOrBelowTheSharedGradeLimit()
+    {
+        var officials = await RenderAsync<OfficialsPage>(new Dictionary<string, object?>
+        {
+            [nameof(OfficialsPage.Data)] = new OfficialsPageData(7, "x", [], OfficialsFilterData.None, null),
+            [nameof(OfficialsPage.RootPath)] = Root
+        });
+        var boards = await RenderAsync<BoardsPage>(new Dictionary<string, object?>
+        {
+            [nameof(BoardsPage.Data)] = new BoardsPageData(7, [], []),
+            [nameof(BoardsPage.RootPath)] = Root
+        });
+
+        foreach (var page in new[] { officials, boards })
+        {
+            var header = Assert.Single(page.QuerySelectorAll(".page-header"));
+            var grade = PassageGrade(Assert.Single(header.QuerySelectorAll("h1")), Assert.Single(header.QuerySelectorAll(".page-header-lede")));
+            Assert.True(grade <= ReadingGrade.MaximumGrade, $"A list page intro reads at grade {ReadingGrade.Format(grade)}.");
+        }
+    }
+
+    [Fact]
     public async Task FeaturedModelHeadlineAndSummaryReadAsOnePassageAtOrBelowTheSharedGradeLimit()
     {
         // Civic Lens model text captured on 2026-11-10, release 1050.
