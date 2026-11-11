@@ -1233,6 +1233,18 @@ To use the report page, also set `CIVIC_LENS_TURNSTILE_SITE_KEY` in the environm
 
 Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (empty in development) and `CIVIC_LENS_REQUESTS_PER_MINUTE` (default 60). In production, set the ranges to `127.0.0.0/8,::1/128`. Each range needs a prefix length, and the service stops at start when one has none. The tunnel and Caddy run on the same machine, so the peer is loopback. Caddy passes the `CF-Connecting-IP` header that Cloudflare sets. The container image of the search service is in [Container images](#container-images).
 
+### Reset the search index
+
+Do this after a deploy that adds a column that only the ingest fills, such as `summary` of `records` (`005_record_summary.sql`). The ingest never fetches a stored revision again, so old rows keep a null column until the index is empty. The reset removes the indexed releases and records. It keeps `reader_reports` and `report_pull_state`. It also drops the earlier releases, so a search pinned to an older release answers 404 until the ingest stores it again. The ingest stores the active release only. The owner runs these steps on the production host:
+
+1. Deploy the commit. The new search service applies the migration at startup.
+2. Stop the search service: `sudo deploy/scripts/compose.sh stop search`. This stops the whole public API and the server pages until step 4. All `/v1` routes and all `/web` pages, such as `/compare.html`, are down.
+3. Empty the index tables: `sudo deploy/scripts/compose.sh exec -T search-postgres sh -c 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --command="TRUNCATE active_release, records, releases"'`.
+4. Start the service: `sudo deploy/scripts/compose.sh up --detach search`. The start empties the cached manifest validators, so the first poll ingests the active release. Search answers 503 until that ingest ends.
+5. Check that the column is filled: `sudo deploy/scripts/compose.sh exec -T search-postgres sh -c 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --tuples-only --command="SELECT count(*) FROM records WHERE summary IS NULL AND kind IN ('"'"'statement'"'"', '"'"'documentChange'"'"', '"'"'action'"'"', '"'"'vote'"'"')"'` must print 0.
+
+On the dev machine, remove the search database as in [Run the search service](#run-the-search-service) and start it again.
+
 ## Container images
 
 The `Dockerfile` in the repository root builds two images for linux-arm64. The workflow `.github/workflows/release.yml` builds them on a native ARM64 runner. On main, from a push or a manual run, it pushes them to ghcr.io and adds a build provenance attestation to each. On a pull request that changes the build inputs, it builds them and does not push or attest. The workflow passes the commit SHA as the build argument `SOURCE_REVISION_ID`, and the `Dockerfile` fails without it. Each `dotnet publish` gets it as `SourceRevisionId`, and `CodeVersion` reads it from the assembly. A local `docker build` needs `--build-arg SOURCE_REVISION_ID=<40 hex digits>`. Pull request runs never wait for or cancel main runs. A newer main run can cancel a queued main run, so deploy only a commit whose image tag exists.
