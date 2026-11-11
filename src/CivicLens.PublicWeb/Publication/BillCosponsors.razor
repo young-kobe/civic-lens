@@ -12,13 +12,7 @@
     </p>
     @if (Cosponsors.Total > 0)
     {
-        <p class="bill-party-caption">Tracked cosponsors by party, as the release lists each party:</p>
-        <ul class="bill-party" role="list">
-            @foreach (var party in Cosponsors.ByParty())
-            {
-                <li><b>@party.Count</b> @party.Name</li>
-            }
-        </ul>
+        <PartyBar Id="cosponsors" Data="Cosponsors.PartyBar()" />
         <dl class="bill-kv">
             @if (Cosponsors.Original.Length > 0)
             {

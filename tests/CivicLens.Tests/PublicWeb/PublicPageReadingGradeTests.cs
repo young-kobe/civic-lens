@@ -49,6 +49,9 @@ public sealed class PublicPageReadingGradeTests
             Sponsors = [sponsor],
             Cosponsors = new("House", [sponsor], [sponsor]),
             Status = "Passed the House. Now in the Senate.",
+            StatusLabel = "Passed the House",
+            CongressGovUrl = "https://www.congress.gov/bill/119th-congress/house-bill/7",
+            Votes = [new(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "Vote headline", null, "Vote to pass or agree to", "Passed", [])],
             StatusReadAtUtc = new(2026, 11, 5, 9, 57, 0, TimeSpan.Zero)
         };
         var page = await RenderAsync<BillDetailPage>(new Dictionary<string, object?>
@@ -60,7 +63,11 @@ public sealed class PublicPageReadingGradeTests
         var grade = PassageGrade(page.QuerySelector(".bill-lede")!, page.QuerySelector(".bill-legend")!);
         var backers = PassageGrade(page.QuerySelector("#bill-backers-title")!, page.QuerySelector("#bill-backers-title")!.ParentElement!.QuerySelector(".bill-lede")!);
 
-        Assert.True(Math.Max(grade, backers) <= ReadingGrade.MaximumGrade, $"The bill page prose reads at grade {ReadingGrade.Format(Math.Max(grade, backers))}.");
+        var split = PassageGrade(page.QuerySelector("#bill-backers-title")!.ParentElement!.QuerySelector(".bill-lede")!, page.QuerySelector(".party-bar figcaption")!);
+        var votes = PassageGrade(page.QuerySelector("#bill-votes-title")!, page.QuerySelector("#bill-votes-title")!.ParentElement!.QuerySelector(".bill-lede")!);
+        var worst = new[] { grade, backers, split, votes }.Max();
+
+        Assert.True(worst <= ReadingGrade.MaximumGrade, $"The bill page prose reads at grade {ReadingGrade.Format(worst)}.");
     }
 
     [Fact]

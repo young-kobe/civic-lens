@@ -103,15 +103,22 @@ public sealed class BillStore(NpgsqlDataSource views)
         return new(active, history, page, next);
     }
 
-    /// <summary>Reads every sponsorship of a bill with the name and party of its official in one statement. Null means that no release is active.
-    /// The count is bounded by the officials that the release tracks.</summary>
+    /// <summary>Reads every sponsorship of a bill with the name of its official and the party that the official's term held on the sponsorship date, in one statement.
+    /// A day that no term holds, a blank term party, and terms of two parties on one day give no party. The rule is the one of the issue line-up in <c>ReleaseIssuePartyCounts</c>.
+    /// Null means that no release is active. The count is bounded by the officials that the release tracks.</summary>
     public async Task<BillSponsors?> ListSponsorsAsync(string recordId, CancellationToken cancellationToken)
     {
         await using var command = views.CreateCommand("""
-            SELECT a.release_number, s."position", s.official_id, o.name, o.party, s.role, s.is_original, s.sponsored_on, s.withdrawn_on
+            SELECT a.release_number, s."position", s.official_id, o.name, term.party, s.role, s.is_original, s.sponsored_on, s.withdrawn_on
               FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
               LEFT JOIN public_api.bill_sponsorships s ON s.record_id = @id
               LEFT JOIN public_api.officials o ON o.official_id = s.official_id
+              LEFT JOIN LATERAL (
+                   SELECT CASE WHEN count(DISTINCT held.party) = 1 AND count(held.party) = count(*) THEN min(held.party) END AS party
+                     FROM (SELECT CASE WHEN btrim(t.party) <> '' THEN t.party END AS party
+                             FROM public_api.release_official_terms t
+                            WHERE t.official_id = s.official_id
+                              AND t.start_on <= s.sponsored_on AND (t.end_on IS NULL OR t.end_on >= s.sponsored_on)) held) term ON TRUE
              ORDER BY s."position"
             """);
         command.Parameters.AddWithValue("id", recordId);

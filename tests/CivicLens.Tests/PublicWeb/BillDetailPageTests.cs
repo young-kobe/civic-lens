@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.PublicWeb.Publication;
@@ -26,13 +27,16 @@ public sealed class BillDetailPageTests
         PublicLaw = "119-111",
         BecameLawOn = new(2026, 9, 18),
         Status = "Became law: Public Law 119-111.",
+        StatusLabel = "Became law",
+        CongressGovUrl = "https://www.congress.gov/bill/119th-congress/house-bill/5334",
         StatusDate = new(2026, 9, 18),
         StatusReadAtUtc = new(2026, 11, 5, 9, 57, 0, TimeSpan.Zero),
         CrsText = "This bill imposes sanctions.\nIt extends a law.",
         CrsVersion = "55",
         Issues = [new("foreign-policy", "Foreign policy and war")],
         PolicyArea = "International Affairs",
-        Votes = [new(new string('b', 64), PublishedChamber.House, new(2026, 9, 16), "House agrees to Senate changes", "Passed", 262, 159, 12, PublishedVoteAlignment.Split)]
+        BillLine = "This bill imposes sanctions.",
+        Votes = [new(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "House agrees to Senate changes", "AI summary. Drafted by an AI model from reviewed records.", "Vote to pass or agree to", "Passed", [])]
     };
 
     [Fact]
@@ -43,7 +47,7 @@ public sealed class BillDetailPageTests
         Assert.Equal("H.R. 5334, The Example Act of 2026", page.QuerySelector("main h1")!.TextContent);
         var trail = page.QuerySelectorAll(".public-breadcrumbs li").Select(item => (item.QuerySelector("a") ?? item).TextContent.Trim()).ToArray();
         Assert.Equal(["Home", "Bills", "H.R. 5334"], trail);
-        Assert.Contains("Bill in the 119th Congress | Became law", page.QuerySelector(".bill-eyebrow")!.TextContent);
+        Assert.Equal("Bill in the 119th Congress", page.QuerySelector(".bill-eyebrow")!.TextContent);
         Assert.Equal("Sponsored by Pat One, a Democrat. Introduced 11 Sep 2025. Became law on 18 Sep 2026 as Public Law 119-111.", page.QuerySelector(".bill-head .bill-lede")!.TextContent);
     }
 
@@ -101,28 +105,73 @@ public sealed class BillDetailPageTests
     }
 
     [Fact]
-    public async Task TheCosponsorSplitNamesTheChamberTheBaseAndEachPartyCount()
+    public async Task TheCosponsorSplitIsOneSharedPartyBarThatNamesTheChamberTheBaseAndEachPartyCount()
     {
         var page = await RenderAsync(Bill);
         var section = page.QuerySelector("#bill-backers-title")!.ParentElement!;
+        var bar = section.QuerySelector(".party-bar")!;
 
         Assert.Contains("This site tracks 4 House members who cosponsored it: 2 on the day it was introduced and 2 who joined later.", section.QuerySelector(".bill-lede")!.TextContent);
-        Assert.Equal(["2 Democrats", "1 No party listed", "1 Republicans"], section.QuerySelectorAll(".bill-party li").Select(item => item.TextContent.Trim()));
+        Assert.Equal("Tracked House cosponsors by party on the day each one joined", bar.QuerySelector("figcaption")!.TextContent);
+        Assert.Equal(["2 Democrats", "1 Republicans", "1 No party listed"], bar.QuerySelectorAll(".party-bar-legend li").Select(item => Regex.Replace(item.TextContent, @"\s+", " ").Trim()));
+        Assert.Equal(["solid", "stripes", "open"], bar.QuerySelectorAll(".party-bar-legend rect").Select(rect => rect.GetAttribute("data-fill")));
+        Assert.Null(section.QuerySelector(".bill-party"));
         Assert.Contains("Cy Four (2 Oct 2025)", section.QuerySelector("dd:last-of-type")!.TextContent);
     }
 
     [Fact]
-    public async Task LinkedVotesShowTheirTotalsAndASplitBadgeOnlyForASplitVote()
+    public async Task ABillWithNoTrackedCosponsorShowsNoPartyBar()
+    {
+        var page = await RenderAsync(Bill with { Cosponsors = new("House", [], []) });
+
+        Assert.Null(page.QuerySelector(".party-bar"));
+    }
+
+    [Fact]
+    public async Task LinkedVotesAreSharedSingleMemberRowsWithTheirAiLabelAndNoCastBecauseThePageNamesNoMember()
     {
         var page = await RenderAsync(Bill);
-        var vote = page.QuerySelector(".bill-vote")!;
+        var row = page.QuerySelector(".bill-votes .shared-vote-rows.single .shared-vote-row")!;
 
-        Assert.Equal(Root + $"records/{new string('b', 64)}.html", vote.QuerySelector("a")!.GetAttribute("href"));
-        Assert.Equal("House members: 262 Yes, 159 No, 12 not voting", vote.QuerySelector(".bill-tally-bar")!.GetAttribute("aria-label"));
-        Assert.NotNull(vote.QuerySelector(".bill-badge"));
-        var agreed = await RenderAsync(Bill with { Votes = [Bill.Votes[0] with { Alignment = PublishedVoteAlignment.PartiesAgree, Yea = null }] });
-        Assert.Null(agreed.QuerySelector(".bill-badge"));
-        Assert.Null(agreed.QuerySelector(".bill-tally"));
+        Assert.Equal(Root + $"records/{new string('b', 64)}.html", row.QuerySelector("h3 a")!.GetAttribute("href"));
+        Assert.Contains("roll call 410, 119th Congress, session 2. Vote to pass or agree to. Result: Passed", row.QuerySelector(".shared-vote-meta")!.TextContent);
+        Assert.Equal("AI summary. Drafted by an AI model from reviewed records.", row.QuerySelector(".shared-vote-label")!.TextContent);
+        Assert.Null(row.QuerySelector(".shared-vote-casts"));
+        Assert.Null(page.QuerySelector(".bill-tally, .bill-badge, .shared-vote-rows > h2"));
+    }
+
+    [Fact]
+    public async Task TheStatusBadgeIsTheSharedLabelAndAnActionThatNoRuleMatchesGetsNoBadge()
+    {
+        var page = await RenderAsync(Bill);
+        var none = await RenderAsync(Bill with { StatusLabel = null });
+
+        Assert.Equal("Became law", page.QuerySelector(".bill-head .badge")!.TextContent);
+        Assert.Null(none.QuerySelector(".badge"));
+        Assert.Contains("Became law: Public Law 119-111.", none.QuerySelector("details#source")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheBillLineShowsUnderTheOfficialTitleWithTheSharedNoteOnceAndNoLineLeavesOnlyTheTitle()
+    {
+        var page = await RenderAsync(Bill);
+        var none = await RenderAsync(Bill with { BillLine = null });
+
+        Assert.Equal("H.R. 5334, The Example Act of 2026", page.QuerySelector("main h1")!.TextContent);
+        Assert.Equal("This bill imposes sanctions.", page.QuerySelector(".bill-head .bill-line")!.TextContent);
+        Assert.Single(page.QuerySelectorAll("main p"), note => note.TextContent == PublishedWording.BillLineSource);
+        Assert.Null(none.QuerySelector(".bill-line"));
+        Assert.DoesNotContain(PublishedWording.BillLineSource, none.Body!.TextContent);
+        Assert.Equal("H.R. 5334, The Example Act of 2026", none.QuerySelector("main h1")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheSourceFoldLinksTheCongressGovPageOfTheBill()
+    {
+        var link = (await RenderAsync(Bill)).QuerySelector("details#source a")!;
+
+        Assert.Equal("Bill on Congress.gov", link.TextContent);
+        Assert.Equal(Bill.CongressGovUrl, link.GetAttribute("href"));
     }
 
     [Fact]
@@ -154,7 +203,7 @@ public sealed class BillDetailPageTests
         Assert.Contains("Status read 5 Nov 2026, 09:57 UTC. The bill can change after this time.", text);
         Assert.Contains("Version 55", text);
         Assert.Contains(Bill.Label!, text);
-        Assert.Contains("2", fold.QuerySelector("dt:nth-of-type(3) + dd")!.TextContent);
+        Assert.Equal("2", fold.QuerySelectorAll("dt").Single(term => term.TextContent == "Revision").NextElementSibling!.TextContent);
     }
 
     private static async Task<IDocument> RenderAsync(BillPageData data)

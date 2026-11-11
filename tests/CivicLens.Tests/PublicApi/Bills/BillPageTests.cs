@@ -28,13 +28,13 @@ public sealed class BillPageTests(PostgresCollection postgres)
         ]
     };
 
-    private async Task<ApiHost> StartAsync()
+    private async Task<ApiHost> StartAsync(SeededOfficial? thirdMember = null)
     {
         var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await BillsSeed.AddBillsAsync(host.OperationalDatabase, Bill);
-        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, Official("p1", "Pat One", "Democrat"), Official("p2", "Ann Two", "Democrat"),
-            Official("p3", "Bob Three", "Republican"), Official("p4", "Cy Four", "Republican"));
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, Official("p1", "Pat One", "Democrat"), PartySwitcher(), thirdMember ?? Official("p3", "Bob Three", "Republican"),
+            Official("p4", "Cy Four", "Republican"));
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
             INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health care', 'Care.');
             """);
@@ -45,6 +45,11 @@ public sealed class BillPageTests(PostgresCollection postgres)
 
     private static SeededOfficial Official(string id, string name, string party) =>
         new(id, name, new SeededTerm("House", "Representative", "2020-01-01") { Party = party, State = "MA", District = 1 });
+
+    /// <summary>Ann Two joined as a Democrat and held the seat as a Republican on the publication day.</summary>
+    private static SeededOfficial PartySwitcher() => new("p2", "Ann Two",
+        new SeededTerm("House", "Representative", "2020-01-01") { Party = "Democrat", State = "MA", District = 1, EndsOn = "2026-03-10" },
+        new SeededTerm("House", "Representative", "2026-03-11") { Party = "Republican", State = "MA", District = 1 });
 
     [Fact]
     public async Task TheServerPageShowsTheBillFromOnePublishedReleaseWithItsStepsBackersAndVotes()
@@ -63,18 +68,39 @@ public sealed class BillPageTests(PostgresCollection postgres)
         Assert.Contains("Sponsored by Pat One, a Democrat.", page.QuerySelector(".bill-head .bill-lede")!.TextContent);
         Assert.Contains("This site tracks 2 House members who cosponsored it: 1 on the day it was introduced and 1 who joined later.", page.QuerySelector("#bill-backers-title")!.ParentElement!.TextContent);
         Assert.DoesNotContain("Cy Four", page.QuerySelector("#bill-backers-title")!.ParentElement!.TextContent);
-        Assert.Equal(["1 Democrats", "1 Republicans"], page.QuerySelectorAll(".bill-party li").Select(item => item.TextContent.Trim()));
+        Assert.Equal(["1 Democrats", "1 Republicans"], page.QuerySelectorAll(".party-bar-legend li").Select(item => System.Text.RegularExpressions.Regex.Replace(item.TextContent, @"\s+", " ").Trim()));
+        Assert.Equal("Bill on Congress.gov", page.QuerySelector("details#source a")!.TextContent);
+        Assert.Equal("https://www.congress.gov/bill/119th-congress/house-bill/7", page.QuerySelector("details#source a")!.GetAttribute("href"));
         Assert.Equal(["Health care"], page.QuerySelectorAll(".bill-chip").Select(chip => chip.TextContent));
-        var votes = page.QuerySelectorAll(".bill-vote a").ToArray();
+        var votes = page.QuerySelectorAll(".bill-votes h3 a").ToArray();
         Assert.Equal([$"https://civic-lens.test/records/{new string('e', 64)}.html"], votes.Select(link => link.GetAttribute("href")));
     }
 
     [Fact]
-    public async Task AVoteRecordAndAnUnknownRecordGetTheNotFoundPage()
+    public async Task ACosponsorWhoseTermsGiveNoSinglePartyOnTheJoinDayCountsUnderNoPartyListedAndNeverUnderTheCurrentParty()
+    {
+        var noTermOnThatDay = new SeededOfficial("p3", "Bob Three", new SeededTerm("House", "Representative", "2026-05-01") { Party = "Republican", State = "MA", District = 1 });
+        var twoPartiesOnThatDay = new SeededOfficial("p3", "Bob Three",
+            new SeededTerm("House", "Representative", "2020-01-01") { Party = "Republican", State = "MA", District = 1 },
+            new SeededTerm("Senate", "Senator", "2026-03-20") { Party = "Democrat", State = "MA" });
+
+        foreach (var member in new[] { noTermOnThatDay, twoPartiesOnThatDay })
+        {
+            await using var host = await StartAsync(member);
+            var response = await host.Client.GetAsync($"{ServerPageEndpoints.Prefix}/records/{BillId}.html");
+            var page = await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
+            var legend = page.QuerySelectorAll(".party-bar-legend li").Select(item => System.Text.RegularExpressions.Regex.Replace(item.TextContent, @"\s+", " ").Trim());
+
+            Assert.Equal(["1 Democrats", "1 No party listed"], legend);
+        }
+    }
+
+    [Fact]
+    public async Task AnUnknownRecordAndAMalformedRecordIdGetTheNotFoundPage()
     {
         await using var host = await StartAsync();
 
-        foreach (var id in new[] { new string('e', 64), new string('9', 64), "not-an-id" })
+        foreach (var id in new[] { new string('9', 64), "not-an-id" })
         {
             var response = await host.Client.GetAsync($"{ServerPageEndpoints.Prefix}/records/{id}.html");
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);

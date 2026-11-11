@@ -63,7 +63,7 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes)
         var sponsors = sponsorships.Where(row => row.Role == PublishedSponsorshipRole.Sponsor).Select(Person).ToArray();
         var cosponsors = sponsorships.Where(row => row.Role == PublishedSponsorshipRole.Cosponsor && row.WithdrawnOn is null).ToArray();
         var steps = BillSteps.Of(bill, sponsors.FirstOrDefault()?.Name, actions);
-        return new(detail.Release, bill.RecordId, bill.RevisionNumber, bill.Congress, BillNumberLabel.Of(bill.BillType, bill.BillNumber), bill.BillTitle, bill.Headline,
+        return new(detail.Release, bill.RecordId, bill.RevisionNumber, bill.Congress, BillNumbers.Of(bill.BillType, bill.BillNumber), bill.BillTitle, bill.Headline,
             bill.BillType.StartsWith('h') ? "House" : "Senate", bill.Summary, bill.TextOrigin, bill.Label, bill.EventDate)
         {
             BillLine = bill.BillLine,
@@ -71,17 +71,19 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes)
             PublicLaw = bill.PublicLaw,
             BecameLawOn = BillSteps.LawAction(actions)?.ActionDate,
             Status = detail.LatestAction is { } latest ? BillStatusMeaning.Of(latest.Text, bill.BillType) : null,
+            StatusLabel = detail.LatestAction is { } labeled ? BillStatusMeaning.Label(labeled.Text, bill.BillType) : null,
             StatusDate = detail.LatestAction?.Date,
             StatusReadAtUtc = detail.LatestAction?.ReadAtUtc,
             Sponsors = sponsors,
             Cosponsors = new(bill.BillType.StartsWith('h') ? "House" : "Senate",
                 [.. cosponsors.Where(row => row.IsOriginal).Select(Person)], [.. cosponsors.Where(row => !row.IsOriginal).Select(Person)]),
             Steps = steps,
-            Votes = [.. voteRows.Select(vote => new BillVoteData(vote.RecordId, vote.Chamber, vote.VotedOn, vote.Headline, PlainVoteWords.Result(vote.Result),
-                vote.Yea, vote.Nay, vote.NotVoting, vote.Alignment))],
+            Votes = [.. voteRows.Select(vote => new SharedVoteRowData(vote.RecordId, vote.VotedOn, vote.Congress, vote.Session, vote.RollCall, vote.Headline, vote.Label,
+                PlainVoteWords.Kind(vote.Kind), PlainVoteWords.Result(vote.Result), []))],
             Issues = issues,
             CrsText = detail.CrsSummaryText,
-            CrsVersion = detail.CrsSummaryVersion
+            CrsVersion = detail.CrsSummaryVersion,
+            CongressGovUrl = CongressGovBillPage.Url(bill.Congress, bill.BillType, bill.BillNumber)
         };
     }
 

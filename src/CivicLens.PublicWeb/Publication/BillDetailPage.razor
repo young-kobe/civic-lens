@@ -6,8 +6,17 @@
             Record="record" RootPath="@RootPath">
     <div class="bill-page">
         <header class="bill-head">
-            <p class="bill-eyebrow">Bill in the @CongressCalendar.Ordinal(Data.Congress) Congress@(Data.PublicLaw is null ? null : " | Became law")</p>
+            <p class="bill-eyebrow">Bill in the @CongressCalendar.Ordinal(Data.Congress) Congress</p>
             <h1>@Data.Number, @Data.Title</h1>
+            @if (Data.StatusLabel is not null)
+            {
+                <p class="bill-status"><StatusBadge Text="@Data.StatusLabel" /></p>
+            }
+            @if (Data.BillLine is not null)
+            {
+                <p class="bill-line-row"><PublishedBillLine Line="@Data.BillLine" /></p>
+                <PublishedBillLineNote />
+            }
             <p class="bill-lede">@Lede()</p>
             @if (Data.Status is not null && Data.StatusReadAtUtc is { } statusRead)
             {
@@ -45,10 +54,6 @@
                             {
                                 <p>@paragraph</p>
                             }
-                            @if (Data.BillLine is not null)
-                            {
-                                <p class="small muted">@PublishedWording.BillLineSource</p>
-                            }
                         </div>
                     </details>
                 }
@@ -57,28 +62,7 @@
                     <section class="bill-section bill-votes" aria-labelledby="bill-votes-title">
                         <h2 id="bill-votes-title">Votes on this bill</h2>
                         <p class="bill-lede">Votes on this site that name @Data.Number.</p>
-                        <svg class="bill-hatch-defs" aria-hidden="true" focusable="false" width="0" height="0"><defs><pattern id="bill-hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="bill-hatch-ink" width="4" height="7" /></pattern></defs></svg>
-                        <ul class="bill-vote-list" role="list">
-                            @foreach (var vote in Data.Votes)
-                            {
-                                <li class="bill-vote">
-                                    <span class="bill-vote-icon"><Icon Name="IconName.Vote" /></span>
-                                    <div>
-                                        <a class="bill-vote-title" href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))">@vote.Headline</a>
-                                        <p class="small muted bill-vote-meta"><span>@vote.Chamber, @Moment.Day(vote.VotedOn)</span> <span>Result: @vote.ResultWords</span>
-                                            @if (vote.Alignment == PublishedVoteAlignment.Split)
-                                            {
-                                                <span class="bill-badge">Split vote</span>
-                                            }
-                                        </p>
-                                        @if (vote.Yea is { } yea && vote.Nay is { } nay)
-                                        {
-                                            @Tally(vote, yea, nay)
-                                        }
-                                    </div>
-                                </li>
-                            }
-                        </ul>
+                        <SharedVoteRows Data="voteRows" RootPath="@RootPath" SingleMember="true" />
                     </section>
                 }
                 @if (Data.Cosponsors is { } cosponsors)
@@ -116,6 +100,8 @@
                                 <dt>CRS summary</dt>
                                 <dd>Version @Data.CrsVersion</dd>
                             }
+                            <dt>Official bill page</dt>
+                            <dd><a href="@Data.CongressGovUrl" rel="noopener noreferrer">Bill on Congress.gov</a></dd>
                             <dt>Revision</dt>
                             <dd>@Data.RevisionNumber.ToString(CultureInfo.InvariantCulture)</dd>
                             @if (SummaryLabel is not null)
@@ -133,6 +119,7 @@
 
 @code {
     private ReportedRecord record = default!;
+    private SharedVoteRowsData voteRows = default!;
 
     [Parameter, EditorRequired] public BillPageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
@@ -140,8 +127,11 @@
     private string? SummaryLabel => Data.Label ?? (Data.TextOrigin is PublishedTextOrigin.Model or PublishedTextOrigin.Code
         ? PublishedRecordLabels.Wording(Data.TextOrigin).First().Value : null);
 
-    protected override void OnParametersSet() =>
+    protected override void OnParametersSet()
+    {
         record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.Action, Data.Headline, Data.Number);
+        voteRows = new SharedVoteRowsData(Data.Chamber == "Senate" ? PublishedChamber.Senate : PublishedChamber.House, [], Data.Votes);
+    }
 
     private string Lede()
     {
@@ -155,27 +145,4 @@
     }
 
     private static string Article(string word) => "AEIOUaeiou".Contains(word[0]) ? "an" : "a";
-
-    private RenderFragment Tally(BillVoteData vote, int yea, int nay) => @<div class="bill-tally">
-        @{
-            var notVoting = vote.NotVoting ?? 0;
-            var total = Math.Max(1, yea + nay + notVoting);
-            var summary = $"{vote.Chamber} members: {yea} Yes, {nay} No" + (vote.NotVoting is null ? "" : $", {notVoting} not voting");
-        }
-        <svg class="bill-tally-bar" role="img" aria-label="@summary">
-            <rect class="y" x="0%" width="@Percent(yea, total)" height="100%" />
-            <rect class="n" x="@Percent(yea, total)" width="@Percent(nay, total)" height="100%" />
-            <rect class="nv" x="@Percent(yea + nay, total)" width="@Percent(notVoting, total)" height="100%" />
-        </svg>
-        <ul class="bill-legend-list" role="list">
-            <li><span class="bill-sw y"></span><b>@yea</b> Yes</li>
-            <li><span class="bill-sw n"></span><b>@nay</b> No</li>
-            @if (vote.NotVoting is not null)
-            {
-                <li><span class="bill-sw nv"></span><b>@notVoting</b> not voting</li>
-            }
-        </ul>
-    </div>;
-
-    private static string Percent(int part, int total) => (part * 100.0 / total).ToString("0.##", CultureInfo.InvariantCulture) + "%";
 }
