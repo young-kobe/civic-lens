@@ -37,7 +37,7 @@ public static class ServerPageEndpoints
         routes.MapGet(VoteRoute("{recordId}"), (string recordId, HttpContext context, VotePageReader votes, ServerPageResponder responder,
             CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
         {
-            var filter = new VoteMemberFilter(QueryValues.Filter(context.Request.Query, "q")?.Trim(), QueryValues.Filter(context.Request.Query, "cast"),
+            var filter = new VoteMemberFilter(QueryValues.FilterValue(QueryValues.Value(context.Request.Query, "q")?.Trim(), "q"), QueryValues.Filter(context.Request.Query, "cast"),
                 QueryValues.Filter(context.Request.Query, "party"));
             if (!PublicationProtocol.IsAnyRecordId(recordId) || await votes.ReadAsync(recordId, cancellationToken) is not { } page)
                 return await NotFoundAsync(context, responder, baseUrl, cancellationToken);

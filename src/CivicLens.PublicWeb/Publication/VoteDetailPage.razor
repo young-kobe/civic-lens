@@ -28,7 +28,7 @@
         <div class="vote-layout">
             <section class="vote-result" aria-labelledby="vote-result-title">
                 <h2 id="vote-result-title">@VotePageView.ResultHeading</h2>
-                <p class="vote-result-word">@VotePageView.ResultWords(Data)@if (VoteWords.Badge(Data.Alignment) is { } badge){<StatusBadge Text="@badge.Text" />}</p>
+                <p class="vote-result-word">@VotePageView.ResultWords(Data)@if (VoteWords.Badge(Data.Alignment) is { } badge){@(" ")<StatusBadge Text="@badge.Text" />}</p>
                 @if (chamberBar is not null)
                 {
                     <p class="muted small">@VotePageView.ChamberCaption(Data, chamberBar)</p>
@@ -70,14 +70,15 @@
                         <p class="muted small">@VoteWords.BreakMeaning</p>
                         @foreach (var group in breakers)
                         {
+                            var board = RootPath + PublicationProtocol.BoardPagePath(Data.Chamber, group.Party);
                             <div class="vote-breaker-group">
-                                <h3><a href="@(RootPath + PublicationProtocol.BoardPagePath(Data.Chamber, group.Party))">@group.Name</a>: @VoteBreakers.Headline(group.Members.Length)</h3>
                                 @if (group.Members.Length == 0)
                                 {
-                                    <p class="small">@VoteBreakers.None(group.Name)</p>
+                                    <p class="small"><a href="@board">@group.Name</a>: @VoteBreakers.None(group.Name)</p>
                                 }
                                 else
                                 {
+                                    <h3><a href="@board">@group.Name</a>: @VoteBreakers.Headline(group.Members.Length)</h3>
                                     <ul class="vote-breaker-list">
                                         @foreach (var member in group.Members)
                                         {

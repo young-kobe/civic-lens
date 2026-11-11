@@ -42,16 +42,30 @@ public sealed class VoteDetailPageTests
     [Theory]
     [InlineData(PublishedVoteKind.Passage, true)]
     [InlineData(PublishedVoteKind.Rule, true)]
+    [InlineData(PublishedVoteKind.Nomination, true)]
     [InlineData(PublishedVoteKind.Suspension, false)]
     [InlineData(PublishedVoteKind.VetoOverride, false)]
     [InlineData(PublishedVoteKind.Cloture, false)]
-    public async Task OnlyAVoteThatNeedsASimpleMajorityDrawsTheHalfLineOnTheChamberBar(PublishedVoteKind kind, bool drawsLine)
+    [InlineData(PublishedVoteKind.Other, false)]
+    public async Task OnlyAVoteKnownToNeedASimpleMajorityDrawsTheHalfLineOnTheChamberBar(PublishedVoteKind kind, bool drawsLine)
     {
         var page = await RenderAsync(Vote() with { Kind = kind, KindCitation = null });
 
         var chamber = page.QuerySelector(".vote-result .party-bar")!;
         Assert.Equal(drawsLine, chamber.QuerySelector("line.party-bar-mark") is not null);
         Assert.Equal(drawsLine, chamber.TextContent.Contains("Half of Yes and No votes", StringComparison.Ordinal));
+        Assert.NotNull(page.QuerySelector(".vote-parties line.party-bar-mark"));
+    }
+
+    [Fact]
+    public async Task APassageThatMayAmendTheConstitutionDrawsNoHalfLineOnTheChamberBar()
+    {
+        var vote = Vote();
+        var title = new PublishedVoteFact { Text = PublishedVote.TitlePrefix + "Proposing an amendment to the Constitution of the United States.", Citation = vote.Facts[0].Citation };
+
+        var page = await RenderAsync(vote with { Facts = [.. vote.Facts, title] });
+
+        Assert.Null(page.QuerySelector(".vote-result .party-bar line.party-bar-mark"));
         Assert.NotNull(page.QuerySelector(".vote-parties line.party-bar-mark"));
     }
 
@@ -83,7 +97,7 @@ public sealed class VoteDetailPageTests
     {
         var page = await RenderAsync(Vote() with { Totals = null });
 
-        Assert.Equal("Passed", page.QuerySelector(".vote-result-word")!.TextContent.Trim()[..6]);
+        Assert.Equal("Passed Split vote", page.QuerySelector(".vote-result-word")!.TextContent);
         Assert.Null(page.QuerySelector(".vote-result .party-bar"));
     }
 
@@ -98,6 +112,22 @@ public sealed class VoteDetailPageTests
         Assert.Equal(["Ada Able"], groups[0].QuerySelectorAll("li a").Select(link => link.TextContent));
         Assert.Equal(Root + "board-house-democrat.html", groups[0].QuerySelector("h3 a")!.GetAttribute("href"));
         Assert.Equal(["Di Dole"], groups[1].QuerySelectorAll("li a").Select(link => link.TextContent));
+    }
+
+    [Fact]
+    public async Task AGroupWithNoBreakerShowsOneLineWithItsBoardLinkAndNoHeading()
+    {
+        var vote = Vote();
+        var page = await RenderAsync(vote with { Members = [.. vote.Members.Where(member => member.Party != "Republican")] });
+
+        var groups = page.QuerySelectorAll(".vote-breaker-group");
+        Assert.Equal(2, groups.Length);
+        Assert.NotNull(groups[0].QuerySelector("h3"));
+        Assert.Null(groups[1].QuerySelector("h3"));
+        Assert.Null(groups[1].QuerySelector("ul"));
+        Assert.Equal("House Republicans: No tracked member of this party voted against most House Republicans.", groups[1].TextContent.Trim());
+        Assert.Equal(Root + "board-house-republican.html", groups[1].QuerySelector("a")!.GetAttribute("href"));
+        Assert.DoesNotContain("0 tracked", page.QuerySelector(".vote-breakers")!.TextContent);
     }
 
     [Fact]

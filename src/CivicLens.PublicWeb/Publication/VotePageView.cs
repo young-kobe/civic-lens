@@ -19,13 +19,19 @@ public static class VotePageView
 
     public const string MarkLabel = "Half of Yes and No votes";
 
-    /// <summary>True for a vote kind that needs more than half of the Yes and No casts. The chamber bar of such a vote draws no line until the owner approves the threshold wording.</summary>
-    public static bool NeedsMoreThanMajority(PublishedVoteKind kind) => kind is PublishedVoteKind.Suspension or PublishedVoteKind.VetoOverride or PublishedVoteKind.Cloture;
+    /// <summary>True only for a vote known to need a simple majority of the Yes and No casts. Other and an unlisted kind never draw the line. A suspension, a veto override, and a cloture vote need more. So does a passage of a measure that may amend the Constitution.</summary>
+    public static bool NeedsSimpleMajority(VotePageData vote) => vote.Kind switch
+    {
+        PublishedVoteKind.Passage => !vote.WordingSource.PossibleConstitutionalPurpose,
+        PublishedVoteKind.Rule or PublishedVoteKind.PreviousQuestion or PublishedVoteKind.MotionToRecommit or PublishedVoteKind.Amendment
+            or PublishedVoteKind.ConferenceReport or PublishedVoteKind.Nomination or PublishedVoteKind.MotionToProceed => true,
+        _ => false
+    };
 
     /// <summary>The bar of all casts of the chamber. Null when the source gives no totals, as for a vote for a candidate.</summary>
     public static PartyBarData? ChamberBar(VotePageData vote) =>
         vote.Totals is { } totals && totals.Yea + totals.Nay + totals.Present + totals.NotVoting > 0
-            ? CastBar($"{vote.Chamber} members", PartyTone.Neutral, totals.Yea, totals.Nay, totals.Present, totals.NotVoting, 0, !NeedsMoreThanMajority(vote.Kind))
+            ? CastBar($"{vote.Chamber} members", PartyTone.Neutral, totals.Yea, totals.Nay, totals.Present, totals.NotVoting, 0, NeedsSimpleMajority(vote))
             : null;
 
     public static string ChamberCaption(VotePageData vote, PartyBarData bar) =>
@@ -59,13 +65,15 @@ public static class VotePageView
     {
         var tally = vote.PartyTallies!.SingleOrDefault(item => item.Party == party);
         if (tally is null || PublishedPartyMajority.Of(party, tally.Yea, tally.Nay).Majority is not { } majority) return null;
-        var members = vote.Members.Where(member => member.Party == party && PublishedPartyMajority.IsAgainstPartyMajority(party, member.Cast, majority))
-            .OrderBy(member => member.Name, StringComparer.OrdinalIgnoreCase).ThenBy(member => member.OfficialId, StringComparer.Ordinal).ToArray();
-        return new(party, PublishedPartyNames.PartyOf(vote.Chamber, party), members);
+        var members = ByName(vote.Members.Where(member => member.Party == party && PublishedPartyMajority.IsAgainstPartyMajority(party, member.Cast, majority)));
+        return new(party, PublishedPartyNames.PartyOf(vote.Chamber, party), [.. members]);
     }
 
     public static IReadOnlyList<VoteMemberData> Filtered(VotePageData vote, VoteMemberFilter filter) =>
-        [.. vote.Members.Where(filter.Matches).OrderBy(member => member.Name, StringComparer.OrdinalIgnoreCase).ThenBy(member => member.OfficialId, StringComparer.Ordinal)];
+        [.. ByName(vote.Members.Where(filter.Matches))];
+
+    private static IOrderedEnumerable<VoteMemberData> ByName(IEnumerable<VoteMemberData> members) =>
+        members.OrderBy(member => member.Name, StringComparer.OrdinalIgnoreCase).ThenBy(member => member.OfficialId, StringComparer.Ordinal);
 
     public static IReadOnlyList<string> CastOptions(VotePageData vote) => [.. vote.Members.Select(member => member.Cast).Distinct().Order(StringComparer.Ordinal)];
 

@@ -16,14 +16,11 @@ internal sealed record VoteWordingInput(string Question, string? Result, string?
         var questions = new List<PublishedVoteFact>(1);
         var results = new List<PublishedVoteFact>(1);
         var legislation = new List<PublishedVoteFact>(1);
-        var possibleConstitutionalPurpose = false;
         foreach (var fact in source.Facts)
         {
             if (fact.Text.StartsWith(PublishedVote.QuestionPrefix, StringComparison.OrdinalIgnoreCase)) questions.Add(fact);
             if (fact.Text.StartsWith(PublishedVote.ResultPrefix, StringComparison.OrdinalIgnoreCase)) results.Add(fact);
             if (fact.Text.StartsWith(PublishedVote.LegislationPrefix, StringComparison.OrdinalIgnoreCase)) legislation.Add(fact);
-            if (fact.Text.StartsWith(PublishedVote.TitlePrefix + "Proposing an amendment to the Constitution", StringComparison.OrdinalIgnoreCase))
-                possibleConstitutionalPurpose = true;
         }
 
         if (questions.Count != 1 || !questions[0].Text.StartsWith(PublishedVote.QuestionPrefix, StringComparison.Ordinal) ||
@@ -40,7 +37,7 @@ internal sealed record VoteWordingInput(string Question, string? Result, string?
         if (!TryBillType(source, legislation, out var billType)) return false;
         var result = PlainVoteWords.ResultWord(source.Result);
         if (!HasCompatibleResult(source.Kind, result)) result = null;
-        input = new(question, result, billType, QuestionMatches(source.Kind, source.Chamber, question), possibleConstitutionalPurpose);
+        input = new(question, result, billType, QuestionMatches(source.Kind, source.Chamber, question), source.PossibleConstitutionalPurpose);
         return true;
     }
 

@@ -76,6 +76,18 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task ABlankNameQueryIsNoFilterSoTheFoldStaysClosedAndAllRowsShow()
+    {
+        await using var host = await StartAsync();
+
+        var page = await GetPageAsync(host, Path + "?q=%20");
+
+        Assert.Null(page.QuerySelector(".vote-members details")!.GetAttribute("open"));
+        Assert.Null(page.QuerySelector(".vote-filter-actions a"));
+        Assert.Equal(4, page.QuerySelectorAll(".vote-members tbody td:first-child").Length);
+    }
+
+    [Fact]
     public async Task TheQueryFiltersTheMemberTableAndALongNameFilterAnswers400()
     {
         await using var host = await StartAsync();
@@ -102,7 +114,7 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheReaderBuildsThePageOnOneConnectionAndOneSnapshot()
+    public async Task TheReaderBuildsThePageOnOneConnectionAndTheMemberReadSkipsTheSourceTexts()
     {
         await using var host = await StartAsync();
         var connections = 0;
