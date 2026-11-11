@@ -257,14 +257,14 @@ public sealed class VoteStore(NpgsqlDataSource views)
 
     /// <summary>Reads one page of members. Null means that the active release holds no such vote. The caller compares the release of the page with the release of the cursor.</summary>
     public Task<VoteMemberPage?> ListMembersAsync(string recordId, VoteMemberRequest request, CancellationToken cancellationToken) =>
-        ReadMembersAsync(views.CreateCommand(MemberSql(request, true)), recordId, request, null, cancellationToken);
+        ReadMembersAsync(views.CreateCommand(MemberSql(request)), recordId, request, null, cancellationToken);
 
     /// <summary>Reads one page of members inside the transaction of the caller. The sources are the ones that the detail of the same transaction already read, so no source text is read again.</summary>
     public Task<VoteMemberPage?> ListMembersAsync(NpgsqlTransaction transaction, string recordId, VoteMemberRequest request,
         PublishedDocumentVersion[] knownSources, CancellationToken cancellationToken) =>
-        ReadMembersAsync(new NpgsqlCommand(MemberSql(request, false), transaction.Connection, transaction), recordId, request, knownSources, cancellationToken);
+        ReadMembersAsync(new NpgsqlCommand(MemberSql(request), transaction.Connection, transaction), recordId, request, knownSources, cancellationToken);
 
-    private static string MemberSql(VoteMemberRequest request, bool withSources) => $"""
+    private static string MemberSql(VoteMemberRequest request) => $"""
         WITH active AS (
             SELECT x.release_number, x.revision_number FROM public_api.active_records x
              WHERE x.kind = 'vote' AND x.record_id = @id
@@ -280,19 +280,16 @@ public sealed class VoteStore(NpgsqlDataSource views)
                         'party', m.party, 'caucus', m.caucus, 'id', m.extraction_id,
                         'start', m.citation_start, 'length', m.citation_length) ORDER BY m."position")
                   FROM selected m),
-               {(withSources ? MemberSourcesSql : "NULL::json")}
-          FROM active a
-        """;
-
-    private static readonly string MemberSourcesSql = $"""
-        (SELECT json_agg(json_build_object('id', s.extraction_id, 'url', s.url,
+               CASE WHEN @with_sources THEN
+                (SELECT json_agg(json_build_object('id', s.extraction_id, 'url', s.url,
                         'observedAt', s.observed_at_utc_ticks,
                         'text', CASE WHEN length(s.text) <= {PublishedDocumentVersion.MaximumTextLength} THEN s.text END)
                         ORDER BY s.extraction_id)
                   FROM (SELECT s.* FROM public_api.vote_sources s
                          WHERE s.record_id = @id AND s.revision_number = a.revision_number
                            AND s.extraction_id IN (SELECT extraction_id FROM selected)
-                         ORDER BY s.extraction_id LIMIT {PublishedVote.MaximumSources + 1}) s)
+                         ORDER BY s.extraction_id LIMIT {PublishedVote.MaximumSources + 1}) s) END
+          FROM active a
         """;
 
     private static async Task<VoteMemberPage?> ReadMembersAsync(NpgsqlCommand command, string recordId, VoteMemberRequest request,
@@ -301,6 +298,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
         await using var _ = command;
         command.Parameters.AddWithValue("id", recordId);
         command.Parameters.AddWithValue("take", request.Limit + 1);
+        command.Parameters.AddWithValue("with_sources", knownSources is null);
         if (request.Cast is not null) command.Parameters.AddWithValue("cast", request.Cast);
         if (request.Officials.Length > 0) command.Parameters.AddWithValue("officials", request.Officials);
         if (request.Cursor is { } cursor) command.Parameters.AddWithValue("after", cursor.Position);
