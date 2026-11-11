@@ -25,10 +25,10 @@
             @if (agreement.Total > 0)
             {
                 <DataTable Roles="true" Items="PublishedBoardView.AgreementRows(agreement)" Caption="@PublishedBoardView.AgreementCaption">
-                    <Head><TableCell Header>@PublishedBoardView.AgreementKindHeader</TableCell><TableCell Header>@PublishedVoteView.PartiesAgreedText</TableCell></Head>
+                    <Head><TableCell Header>@PublishedBoardView.AgreementKindHeader</TableCell><TableCell Header>@VoteWords.PartiesAgreedBadge</TableCell></Head>
                     <Row Context="row">
                         <TableCell Main>@row.Label</TableCell>
-                        <TableCell Label="@PublishedVoteView.PartiesAgreedText">@row.Count</TableCell>
+                        <TableCell Label="@VoteWords.PartiesAgreedBadge">@row.Count</TableCell>
                     </Row>
                 </DataTable>
                 <p>@PublishedBoardView.AgreementSplit(agreement)</p>
@@ -41,7 +41,7 @@
                     <p class="muted small">@PublishedBoardView.NominationNote(agreement)</p>
                 }
             }
-            <p class="muted small">@PublishedOfficialView.PartiesAgreedMeaning @PublishedBoardView.AgreementCaution</p>
+            <p class="muted small">@VoteWords.PartiesAgreedMeaning @PublishedBoardView.AgreementCaution</p>
             <p class="muted small"><a href="@(PublicationProtocol.MethodPagePath + PublishedBoardView.AgreementAnchor)">@PublishedBoardView.AgreementLinkText</a></p>
         </Panel>
     }
@@ -56,7 +56,7 @@
             <p class="muted small">@PublishedBoardView.NewestRollCall(congress, newest)</p>
         }
         <Panel Title="@PublishedBoardView.BreakersTitle(Board)" Padded="true">
-            <p>@PublishedOfficialView.SplitVoteMeaning</p>
+            <p>@VoteWords.SplitMeaning</p>
             <p class="muted small">@PublishedBoardView.RankingRule(Board) @PublishedBoardView.ReadingNote</p>
             @Split(Page.Breakers, PublishedBoardView.BreakersTitle(Board), PublishedBoardView.AgainstShareHeader(Board), member => member.Breaks, member => member.BreakShare, congress)
         </Panel>
