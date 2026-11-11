@@ -88,32 +88,26 @@ internal static class CorrectionHistoryCopies
         if (bindings.Any(binding => !IsHistoryId(binding.HistoryId)))
             throw new InvalidDataException("A correction history binding has an invalid content identity.");
 
-        foreach (var batch in bindings.Chunk(BatchSize))
-        {
-            var matched = await db.Database.SqlQueryRaw<HistoryIdRow>("""
-                SELECT k.kind AS "Kind", k.record_id AS "RecordId", k.revision_number AS "RevisionNumber", k.history_id AS "HistoryId"
-                  FROM unnest({0}::text[], {1}::text[], {2}::int[], {3}::text[]) AS k(kind, record_id, revision_number, history_id)
-                  JOIN published_entries e ON e.kind = k.kind AND e.record_id = k.record_id AND e.revision_number = k.revision_number
-                  JOIN published_correction_histories h ON h.history_id = k.history_id
-                 WHERE NOT EXISTS (
-                       SELECT 1 FROM published_correction_history_entries c
-                        WHERE c.history_id = h.history_id AND c.replaced_revision_number >= k.revision_number)
-                """, batch.Select(binding => PublishedRecordReference.NameOf(binding.Record.Kind)).ToArray(),
-                batch.Select(binding => binding.Record.RecordId).ToArray(), batch.Select(binding => binding.Record.RevisionNumber).ToArray(),
-                batch.Select(binding => binding.HistoryId).ToArray()).ToArrayAsync(cancellationToken);
-            if (matched.Length != batch.Length)
-                throw new InvalidDataException("A correction history binding does not reference a published entry and prepared history.");
-        }
-        foreach (var batch in bindings.Chunk(BatchSize))
-        {
-            await db.Database.ExecuteSqlRawAsync("""
-                INSERT INTO release_correction_histories (release_number, kind, record_id, revision_number, history_id)
-                SELECT {0}, k.kind, k.record_id, k.revision_number, k.history_id
-                  FROM unnest({1}::text[], {2}::text[], {3}::int[], {4}::text[]) AS k(kind, record_id, revision_number, history_id)
-            """, new object[] { releaseNumber, batch.Select(binding => PublishedRecordReference.NameOf(binding.Record.Kind)).ToArray(),
-                batch.Select(binding => binding.Record.RecordId).ToArray(), batch.Select(binding => binding.Record.RevisionNumber).ToArray(),
-                batch.Select(binding => binding.HistoryId).ToArray() }, cancellationToken);
-        }
+        var kinds = bindings.Select(binding => PublishedRecordReference.NameOf(binding.Record.Kind)).ToArray();
+        var recordIds = bindings.Select(binding => binding.Record.RecordId).ToArray();
+        var revisions = bindings.Select(binding => binding.Record.RevisionNumber).ToArray();
+        var historyIds = bindings.Select(binding => binding.HistoryId).ToArray();
+        var matched = await db.Database.SqlQueryRaw<int>("""
+            SELECT count(*)::int AS "Value"
+              FROM unnest({0}::text[], {1}::text[], {2}::int[], {3}::text[]) AS k(kind, record_id, revision_number, history_id)
+              JOIN published_entries e ON e.kind = k.kind AND e.record_id = k.record_id AND e.revision_number = k.revision_number
+              JOIN published_correction_histories h ON h.history_id = k.history_id
+             WHERE NOT EXISTS (
+                   SELECT 1 FROM published_correction_history_entries c
+                    WHERE c.history_id = h.history_id AND c.replaced_revision_number >= k.revision_number)
+            """, kinds, recordIds, revisions, historyIds).SingleAsync(cancellationToken);
+        if (matched != bindings.Count)
+            throw new InvalidDataException("A correction history binding does not reference a published entry and prepared history.");
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO release_correction_histories (release_number, kind, record_id, revision_number, history_id)
+            SELECT {0}, k.kind, k.record_id, k.revision_number, k.history_id
+              FROM unnest({1}::text[], {2}::text[], {3}::int[], {4}::text[]) AS k(kind, record_id, revision_number, history_id)
+            """, new object[] { releaseNumber, kinds, recordIds, revisions, historyIds }, cancellationToken);
     }
 
     public static async Task<(int Added, int AlreadyPresent)> BindBootstrapAsync(CollectionAttemptDbContext db, int releaseNumber,
@@ -304,12 +298,5 @@ internal static class CorrectionHistoryCopies
         public string? HistoryId { get; set; }
         public int? EncodingVersion { get; set; }
         public short? CorrectionCount { get; set; }
-    }
-    private sealed class HistoryIdRow
-    {
-        public string Kind { get; set; } = "";
-        public string RecordId { get; set; } = "";
-        public int RevisionNumber { get; set; }
-        public string HistoryId { get; set; } = "";
     }
 }
