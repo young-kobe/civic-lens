@@ -770,6 +770,21 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ex
 
 Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every executive action read fails until it ends. For a manual run, start the new code only when `verify` exits 0. Every reader fails on a row with null columns. Production held 688 revisions when the survey was made. A rollback past the migration rebuilds `notice_json` from the notice columns.
 
+### Executive action disposition target backfill
+
+The table `executive_action_revision_disposition_targets` holds the typed Amends and Revokes targets of each revision. Current code writes them with each new revision. Revisions from before the migration `ExecutiveActionDispositionTargets` that hold notes need a backfill. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions targets backfill 500
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions targets verify
+```
+
+`backfill <limit>` walks the revisions that have notes and no target row, in key order, in batches of 25. Each batch is one short transaction that holds the executive action review lock. It parses the stored notes with `ExecutiveActionDispositionTargets` and writes the target rows. `examined` and `moved` count the revisions that the run read, and `limit` bounds that count. They do not show how many revisions got a target. A revision whose notes hold no target stays in the walk, so each run examines it again and writes nothing. A run stops at `limit` or when the walk reaches the last revision, so it always ends. A rerun changes nothing. The exit code is 0.
+
+`verify` parses the notes of each revision again and compares the result to the stored rows. It writes nothing and takes no lock. A revision that has a target in its notes and no stored row counts as `legacy`. A revision whose stored rows differ from its notes, or that has rows and no notes, counts as a mismatch with the field name `dispositionTargets`. `verify` exits 1 while a legacy row or a mismatch remains.
+
+Run order: `db migrate`, then `backfill`, then `verify`. The public pages and the API do not read the table yet.
+
 ### Statement revision backfill
 
 R-63 step 3 moves old statement revisions into columns and child rows. A revision written by current code already has them. The migration `StatementRevisionColumns` adds the columns and tables. It does not read any JSON. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
@@ -1071,6 +1086,21 @@ The JSON result contains `examined`, `verified`, `failed`, `failures`, `nextCurs
 
 Copy `nextCursor` into the next invocation until it is null. A change to the selected release set sets `staleCursor` and gives no continuation. Restart without a cursor and discard coverage totals from the old fingerprint. Keep every batch result for the current fingerprint and resolve every failed record before claiming complete coverage. A zero exit code means this batch passed, not that earlier batches passed. Exit code 1 means a failed record or stale cursor; invalid input or owner identity gives 2. A terminal result with no failures across its complete scan proves agreement for that selected membership. It does not replace manifest membership verification.
 
+### Bill count backfill and verification
+
+Run these owner commands for the active and retained rollback releases before any public reader uses the bill count tables. They need `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. A release published before the migration `20261110190000` has no rows in `release_bill_counts` and `release_official_bill_counts`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases counts backfill <limit> [release-number]
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases counts verify <limit> [cursor]
+```
+
+The limit caps releases examined. Each release is one write transaction. Before the write, the command reads the manifest, the officials file, and every action and vote record file of the release. It checks them against the tables. The write transaction then checks again that the release is still retained and that the same revisions are members. A release that already holds an exact snapshot counts as `alreadyPresent`. A partial or changed snapshot fails and the command never repairs it. A release with no Congress to count fails and writes nothing.
+
+The backfill JSON result holds `examined`, `added`, `alreadyPresent`, `failed`, `failures`, and `nextCursor`. A failure holds the release number, a reason, and a detail text. Reasons are `recordMissing`, `recordUnreadable`, `recordInvalid`, and `countsInvalid`. `nextCursor` is the last release number examined. Pass it as `[release-number]` to continue after it. The exit code is 1 when a release failed.
+
+The verifier writes nothing. It repeats the file checks of the backfill. Then it compares the expected counts with the saved rows in both directions in one read-only transaction. A release with no saved rows fails as `countsMissing`. A release with a missing, extra, or changed row fails as `countsDifferent`. The result holds `examined`, `verified`, `failed`, `failures`, `nextCursor`, `staleCursor`, and `selectionFingerprint`. Copy `nextCursor` into the next run until it is null. A stale cursor means the selected release set changed. Restart without a cursor. The exit code is 1 for a failure or a stale cursor. Readers may switch only after one complete scan under one fingerprint verifies every selected release.
+
 ### Stored columns backfill
 
 The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, and the Congress of each entry. This command fills them for rows that earlier releases wrote.
@@ -1199,7 +1229,7 @@ To use the search page, set `CIVIC_LENS_PUBLIC_API_URL=http://127.0.0.1:8100` in
 
 To give each page a canonical address, set `CIVIC_LENS_PUBLIC_BASE_URL` in the same environment, for example `https://civic-lens.info`. The value must be a bare origin: https, or http only for `localhost` and `127.0.0.1`, with no user, path, query, or fragment. Use a host name, not an IPv6 address, and do not end the host with a dot. A trailing slash is removed. The stored value is in lower case, with a punycode host and no default port. A blank value counts as unset. An invalid value stops `releases publish` with exit code 2. It also stops the worker at start when publishing is on, because that composition reads the value then. It stops the review workspace at start when `CIVIC_LENS_RELEASE_DIRECTORY` is set. With the variable set, a release holds `sitemap.xml`, `robots.txt`, `404.html`, and a canonical link and `og:url` on every page except `404.html`. Without it, a release holds none of these. The process reads the variable once, so restart the review workspace and the worker after a change. Set the variable before the first production publish. A page that a publish carries by hard link keeps the address it was written with.
 
-To use the report page, also set `CIVIC_LENS_TURNSTILE_SITE_KEY` in the environment of the process that publishes. For a local trial use the Cloudflare test site key `1x00000000000000000000AA`, which always passes. Publish, serve the release root, and open a record page. Use its link "Report a problem with this record". Send the report, then run the pull command above to see it. Without the API address or the site key, `report.html` says that reporting is not available.
+To use the report page, also set `CIVIC_LENS_TURNSTILE_SITE_KEY` in the environment of the process that publishes. For a local trial use the Cloudflare test site key `1x00000000000000000000AA`, which always passes. Publish, serve the release root, and open a record page. Use the footer link that starts with "Report a problem with this". Send the report, then run the pull command above to see it. Without the API address or the site key, `report.html` says that reporting is not available.
 
 Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (empty in development) and `CIVIC_LENS_REQUESTS_PER_MINUTE` (default 60). In production, set the ranges to `127.0.0.0/8,::1/128`. Each range needs a prefix length, and the service stops at start when one has none. The tunnel and Caddy run on the same machine, so the peer is loopback. Caddy passes the `CF-Connecting-IP` header that Cloudflare sets. The container image of the search service is in [Container images](#container-images).
 
