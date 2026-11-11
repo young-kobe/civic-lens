@@ -19,6 +19,10 @@ public sealed record PublishedPartyMajority
 
     public static bool IsMajorParty(string party) => party is Democrat or Republican;
 
+    /// <summary>True when a member of a major party cast Yes or No on the other side from the majority of the party. Present, Not voting, and a candidate name never count.</summary>
+    public static bool IsAgainstPartyMajority(string party, string cast, string partyMajority) =>
+        IsMajorParty(party) && PublishedOfficialVote.SideOf(cast) is { } side && side != partyMajority;
+
     public static PublishedPartyMajority Of(string party, int yeaCount, int nayCount) =>
         new() { Party = party, YeaCount = yeaCount, NayCount = nayCount, Majority = MajorityOf(yeaCount, nayCount) };
 
