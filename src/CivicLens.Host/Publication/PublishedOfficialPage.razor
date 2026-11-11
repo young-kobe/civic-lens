@@ -39,10 +39,10 @@
         @if (Page.TalkAndAction is not null)
         {
             <Panel Title="What they said and what they did" Padded="true">
-                <p class="muted small">@PublishedOfficialView.LinkMeaning <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">What a link is</a></p>
+                <p class="muted small">@OfficialPageText.LinkMeaning <a href="@(Page.RootPath + PublicationProtocol.MethodPagePath)">What a link is</a></p>
                 @if (Page.Pairs.IsDefaultOrEmpty)
                 {
-                    <p>@PublishedOfficialView.NoLinks</p>
+                    <p>@OfficialPageText.NoLinks</p>
                 }
                 else
                 {
