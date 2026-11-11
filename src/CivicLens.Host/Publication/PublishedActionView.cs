@@ -1,5 +1,4 @@
 using System.Globalization;
-using CivicLens.Application.Actions;
 using CivicLens.Application.Publication;
 using CivicLens.Host.Actions;
 using CivicLens.Host.Collection;
@@ -12,7 +11,7 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedActionView
 {
-    public static string ShortName(PublishedAction action) => ActionCodeText.BillNumber(action.BillType, action.BillNumber);
+    public static string ShortName(PublishedAction action) => BillNumbers.Of(action.BillType, action.BillNumber);
 
     public static IReadOnlyList<Fact> Facts(PublishedAction action, PublishedBillStatus? billStatus, PublicationCatalog catalog) =>
     [
@@ -34,7 +33,7 @@ internal static class PublishedActionView
         [
             new("Latest action on Congress.gov", $"{BillStatusMeaning.Of(billStatus.Text, action.BillType)} Action date: {Moment.Day(billStatus.Date)}."),
             new("Status read on", $"{Moment.Full(billStatus.ObservedAtUtc)}. The bill can change after this time."),
-            Fact.LinkList("Official bill page", [new FactLink("Bill on Congress.gov", SourcePages.Bill(action.Congress, action.BillType, action.BillNumber))])
+            Fact.LinkList("Official bill page", [new FactLink("Bill on Congress.gov", CongressGovBillPage.Url(action.Congress, action.BillType, action.BillNumber))])
         ];
     }
 
