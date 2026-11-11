@@ -1,6 +1,7 @@
 using CivicLens.PublicApi.Bills;
 using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.Http;
+using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Votes;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
@@ -15,7 +16,7 @@ public static class ServerPageEndpoints
     /// <summary>The path prefix of the server pages. No live route uses it, so the static pages stay the production path until a route moves.</summary>
     public const string Prefix = "/web";
 
-    /// <summary>Maps the gated home, Compare, vote, and bill previews and the not found page under the server-page prefix.</summary>
+    /// <summary>Maps the gated home, Compare, official, vote, and bill previews and the not found page under the server-page prefix.</summary>
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         routes.MapGet(Prefix, (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
@@ -39,7 +40,7 @@ public static class ServerPageEndpoints
         routes.MapGet(VoteRoute("{recordId}"), (string recordId, HttpContext context, VotePageReader votes, BillPageReader bills, ServerPageResponder responder,
             CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
         {
-            if (!PublicationProtocol.IsAnyRecordId(recordId)) return await NotFoundAsync(context, responder, baseUrl, cancellationToken);
+            if (!PublicationProtocol.IsAnyRecordId(recordId)) return await RespondNotFoundAsync(context, responder, baseUrl, cancellationToken);
             if (await votes.ReadAsync(recordId, cancellationToken) is { } vote)
                 return await RespondVoteAsync(context, responder, baseUrl, vote, recordId, cancellationToken);
             return await bills.ReadAsync(recordId, cancellationToken) is { } bill
@@ -49,10 +50,14 @@ public static class ServerPageEndpoints
                         [nameof(BillDetailPage.Data)] = bill,
                         [nameof(BillDetailPage.RootPath)] = baseUrl.Join(string.Empty)
                     }, cancellationToken)
-                : await NotFoundAsync(context, responder, baseUrl, cancellationToken);
+                : await RespondNotFoundAsync(context, responder, baseUrl, cancellationToken);
         }));
+        routes.MapGet(Prefix + "/officials/{id}", (string id, HttpContext context, OfficialPageReader officials, ServerPageResponder responder, CancellationToken cancellationToken) =>
+            ApiResults.GuardAsync(async () => PublicationProtocol.IsPathSegment(id) && await officials.ReadAsync(id, cancellationToken) is { } page
+                ? await RespondOfficialAsync(context, responder, page, baseUrl, cancellationToken)
+                : await RespondNotFoundAsync(context, responder, baseUrl, cancellationToken)));
         routes.MapGet(Prefix + "/{**path}", (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
-            NotFoundAsync(context, responder, baseUrl, cancellationToken));
+            RespondNotFoundAsync(context, responder, baseUrl, cancellationToken));
     }
 
     /// <summary>The route of the server-rendered vote page. The page uses it as an origin-relative form action, so a filter stays on the origin that served the page. The public base URL can name another origin.</summary>
@@ -72,7 +77,19 @@ public static class ServerPageEndpoints
         }, cancellationToken);
     }
 
-    private static Task<IResult> NotFoundAsync(HttpContext context, ServerPageResponder responder, PublicBaseUrl baseUrl, CancellationToken cancellationToken) =>
+    private static Task<IResult> RespondNotFoundAsync(HttpContext context, ServerPageResponder responder, PublicBaseUrl baseUrl, CancellationToken cancellationToken) =>
         responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,
             new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken);
+
+    /// <summary>An official with executive actions gets the President layout. Every other official gets the member layout.</summary>
+    private static Task<IResult> RespondOfficialAsync(HttpContext context, ServerPageResponder responder, OfficialPageData page, PublicBaseUrl baseUrl,
+        CancellationToken cancellationToken) => page.Executive is null
+        ? responder.RespondAsync<OfficialProfilePage>(context, StatusCodes.Status200OK, page.Release, OfficialParameters(page, baseUrl), cancellationToken)
+        : responder.RespondAsync<PresidentPage>(context, StatusCodes.Status200OK, page.Release, OfficialParameters(page, baseUrl), cancellationToken);
+
+    private static Dictionary<string, object?> OfficialParameters(OfficialPageData page, PublicBaseUrl baseUrl) => new()
+    {
+        [nameof(OfficialProfilePage.Data)] = page,
+        [nameof(OfficialProfilePage.RootPath)] = baseUrl.Join(string.Empty)
+    };
 }
