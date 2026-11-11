@@ -115,6 +115,8 @@
     --warn: #7a4d00;
     --warn-bg: #fcf0d9;
     --info: #1f5fbf;
+    --party-dem: #1d63c9;
+    --party-rep: #c4302b;
     --info-bg: #e9f0fa;
 
     --hairlight: rgba(255, 255, 255, .10);
@@ -175,6 +177,8 @@ body.public {
     --focus: #2747d9;
     --focus-halo: rgba(39, 71, 217, .25);
     --info: #2747d9;
+    --party-dem: #1d63c9;
+    --party-rep: #c4302b;
     --info-bg: #e7ecfc;
     --against: #b86300;
     --r-control: 12px;
@@ -212,6 +216,8 @@ body.public {
         --focus: light-dark(#2747d9, #f5b301);
         --focus-halo: light-dark(rgba(39, 71, 217, .25), rgba(245, 179, 1, .3));
         --info: light-dark(#2747d9, #9db2ff);
+        --party-dem: light-dark(#1d63c9, #6ea8ff);
+        --party-rep: light-dark(#c4302b, #ff7a70);
         --info-bg: light-dark(#e7ecfc, rgba(111, 140, 255, .16));
         --against: light-dark(#b86300, #f5a623);
     }
@@ -266,6 +272,8 @@ body.public .btn-primary:hover { filter: brightness(1.04); }
         --warn: #efc678;
         --warn-bg: rgba(222, 164, 46, .15);
         --info: #8fb5f4;
+        --party-dem: #6ea8ff;
+        --party-rep: #ff7a70;
         --info-bg: rgba(98, 145, 232, .16);
         --hairlight: rgba(255, 255, 255, .06);
         --ring: 0 0 0 1px rgba(255, 255, 255, .07);
@@ -309,6 +317,8 @@ body.public .btn-primary:hover { filter: brightness(1.04); }
     --warn: #efc678;
     --warn-bg: rgba(222, 164, 46, .15);
     --info: #8fb5f4;
+    --party-dem: #6ea8ff;
+    --party-rep: #ff7a70;
     --info-bg: rgba(98, 145, 232, .16);
     --hairlight: rgba(255, 255, 255, .06);
     --ring: 0 0 0 1px rgba(255, 255, 255, .07);
