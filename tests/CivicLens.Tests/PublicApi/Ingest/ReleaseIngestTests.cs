@@ -153,6 +153,19 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Fact]
+    public async Task AReturningRevisionKeepsTheSummaryOfItsStoredRow()
+    {
+        var statement = PublishedSamples.Statement('a', "Rent cap", summary: "Tenants gain a rent cap.");
+        var other = PublishedSamples.Statement('b', "Zoning");
+        await world.PublishAndIngestAsync(5, statement);
+        await world.PublishAndIngestAsync(6, other);
+
+        await world.PublishAndIngestAsync(7, statement, other);
+
+        Assert.Equal(2L, await CountAsync("SELECT count(*) FROM records WHERE summary = 'Tenants gain a rent cap.'"));
+    }
+
+    [Fact]
     public async Task AWithdrawnRecordClosesItsRangeLikeADroppedOneAndAPinnedEarlierSearchStillFindsIt()
     {
         var withdrawn = PublishedSamples.Statement('a', "Rent cap");

@@ -39,6 +39,32 @@ public sealed class RecordReaderTests
     }
 
     [Fact]
+    public void EachKindWithAPublishedSummaryGivesItAsTheSnippetTextAndNeverTheQuotationsOrTheSource()
+    {
+        Assert.Equal("The rule changed.", Read(PublishedSamples.DocumentChange("Rule changed", "The rule changed.", "New.", "Old.")).SnippetText);
+        Assert.Equal("A short account.", Read(PublishedSamples.Statement('a', "Rent cap", summary: "A short account.", source: "Xq raw.")).SnippetText);
+        Assert.Equal("Doe sponsored it.", Read(PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001")).SnippetText);
+        Assert.Equal("The House passed it.", Read(PublishedSamples.Vote("Passage", "The House passed it.", "Roll call raw.")).SnippetText);
+    }
+
+    [Fact]
+    public void AnActionGivesItsBillLineAsTheSnippetTextBecauseTheLineIsTheApprovedWordsAboutTheBill()
+    {
+        var sample = PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001");
+
+        var read = Read(sample with { Entry = sample.Entry with { BillLine = "This bill funds housing." } });
+
+        Assert.Equal("This bill funds housing.", read.SnippetText);
+    }
+
+    [Fact]
+    public void AKindWithNoPublishedSummaryGivesNoSnippetTextSoTheBodySnippetStaysTheFallback()
+    {
+        Assert.Null(Read(PublishedSamples.ExecutiveAction("Ending the Weaponization", "Tail text.")).SnippetText);
+        Assert.Null(Read(PublishedSamples.Brief("Weekly brief", "A paragraph.")).SnippetText);
+    }
+
+    [Fact]
     public void AnExecutiveActionIndexesNoSummaryAndItsSavedRecordAsSourceSoSearchAcceptsTheNewKind()
     {
         var sample = PublishedSamples.ExecutiveAction("Ending the Weaponization", "Tail text.");
