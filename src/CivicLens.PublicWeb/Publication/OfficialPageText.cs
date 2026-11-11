@@ -50,9 +50,12 @@ public static class OfficialPageText
     public static string MarkName(OfficialMarkData mark) => mark switch
     {
         { IsMissed: true } => PlainVoteWords.Cast(PublishedOfficialVote.NotVoting),
-        { Party: { } party } => $"Voted against most {PublishedPartyNames.Members(party)}",
+        { Party: { } party } => "Voted " + VoteBreakers.AgainstMost(PublishedPartyNames.Members(party)),
         _ => throw new InvalidDataException("A mark that is not a missed vote names the party that it broke from.")
     };
+
+    public static string AgainstPartyLegend(OfficialPartyLineData line) =>
+        $"{line.AgainstParty} {(line.AgainstParty == 1 ? "vote" : "votes")} {VoteBreakers.AgainstMost(PublishedPartyNames.PartyOf(line.Chamber, line.Party))}";
 
     public static string ExecutivePlural(PublishedExecutiveActionKind kind, int count) => (kind, count) switch
     {

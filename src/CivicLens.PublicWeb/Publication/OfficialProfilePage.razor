@@ -84,7 +84,7 @@
                     <ul class="official-legend" role="list">
                         @if (party is not null)
                         {
-                            <li><span class="swatch against" aria-hidden="true"></span>@party.AgainstParty @(party.AgainstParty == 1 ? "vote" : "votes") against most @PublishedPartyNames.PartyOf(party.Chamber, party.Party)</li>
+                            <li><span class="swatch against" aria-hidden="true"></span>@OfficialPageText.AgainstPartyLegend(party)</li>
                         }
                         @foreach (var figure in Data.Attendance)
                         {
