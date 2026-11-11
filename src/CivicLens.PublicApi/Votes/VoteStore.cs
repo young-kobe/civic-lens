@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Text.Json;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
 using Npgsql;
@@ -49,17 +50,35 @@ public sealed class VoteStore(NpgsqlDataSource views)
             SELECT v.release_number, {Columns},
                    ARRAY(SELECT i.issue_id FROM public_api.vote_issues i
                           WHERE i.record_id = v.record_id AND i.revision_number = v.revision_number ORDER BY i.issue_id),
-                   ARRAY(SELECT f.fact_text FROM public_api.vote_facts f
-                          WHERE f.record_id = v.record_id AND f.revision_number = v.revision_number ORDER BY f."position"),
-                   p.party_tally_count, p.party, p.yea, p.nay, p.present, p.not_voting, p.other
+                   (SELECT json_agg(json_build_object('position', f."position", 'text', f.fact_text, 'id', f.extraction_id,
+                            'start', f.citation_start, 'length', f.citation_length) ORDER BY f."position")
+                      FROM (SELECT f.* FROM public_api.vote_facts f
+                             WHERE f.record_id = v.record_id AND f.revision_number = v.revision_number
+                             ORDER BY f."position" LIMIT {PublishedVote.MaximumFacts + 1}) f),
+                   e.vote_source, e.voted_on_citation_extraction_id, e.voted_on_citation_start, e.voted_on_citation_length,
+                   e.kind_citation_extraction_id, e.kind_citation_start, e.kind_citation_length,
+                   (SELECT json_agg(json_build_object('id', s.extraction_id, 'url', s.url,
+                            'observedAt', s.observed_at_utc_ticks,
+                            'text', CASE WHEN length(s.text) <= {PublishedDocumentVersion.MaximumTextLength} THEN s.text END)
+                            ORDER BY s.extraction_id)
+                      FROM (SELECT s.* FROM public_api.vote_sources s
+                             WHERE s.record_id = v.record_id AND s.revision_number = v.revision_number
+                             ORDER BY s.extraction_id LIMIT {PublishedVote.MaximumSources + 1}) s),
+                   (SELECT json_agg(json_build_object('position', m."position", 'cast', m.vote_cast, 'id', m.extraction_id,
+                            'start', m.citation_start, 'length', m.citation_length) ORDER BY m."position")
+                      FROM (SELECT m.* FROM public_api.vote_members m
+                             WHERE m.record_id = v.record_id AND m.revision_number = v.revision_number
+                             ORDER BY m."position" LIMIT {PublishedVote.MaximumMembers + 1}) m),
+                   (SELECT t.party_tally_count FROM public_api.vote_party_tallies t
+                     WHERE t.record_id = v.record_id AND t.revision_number = v.revision_number LIMIT 1),
+                   (SELECT json_agg(json_build_object('party', t.party, 'yea', t.yea, 'nay', t.nay,
+                            'present', t.present, 'notVoting', t.not_voting, 'other', t.other) ORDER BY t.party)
+                      FROM (SELECT t.* FROM public_api.vote_party_tallies t
+                             WHERE t.record_id = v.record_id AND t.revision_number = v.revision_number AND t.party IS NOT NULL
+                             ORDER BY t.party LIMIT {PublishedVote.MaximumParties + 1}) t)
               FROM public_api.votes v
-              LEFT JOIN LATERAL (
-                   SELECT t.party_tally_count, t.party, t.yea, t.nay, t.present, t.not_voting, t.other
-                     FROM public_api.vote_party_tallies t
-                    WHERE t.record_id = v.record_id AND t.revision_number = v.revision_number
-                    ORDER BY t.party LIMIT {PublishedVote.MaximumParties + 1}) p ON TRUE
+              LEFT JOIN public_api.vote_evidence e ON e.record_id = v.record_id AND e.revision_number = v.revision_number
              WHERE v.record_id = @id
-             ORDER BY p.party NULLS FIRST
             """);
         command.Parameters.AddWithValue("id", recordId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -67,36 +86,39 @@ public sealed class VoteStore(NpgsqlDataSource views)
         var release = reader.GetInt32(0);
         var vote = ReadRow(reader);
         var issueIds = reader.GetFieldValue<string[]>(23);
-        var facts = reader.GetFieldValue<string[]>(24);
-        var marker = reader.IsDBNull(25) ? (short?)null : reader.GetInt16(25);
-        var partyTallies = new List<PublishedPartyTally>();
-        do
-        {
-            var next = ReadPartyTally(reader);
-            if (next is not null) partyTallies.Add(next);
-        }
-        while (await reader.ReadAsync(cancellationToken));
+        var evidence = ReadDetailEvidence(reader, vote);
+        var facts = evidence.Facts;
+        var marker = reader.IsDBNull(34) ? (short?)null : reader.GetInt16(34);
+        var partyTallies = ReadPartyTallies(reader);
         ValidatePartyTallies(partyTallies, marker);
-        return new VoteDetail(release, vote, issueIds, facts)
+        return new VoteDetail(release, vote, issueIds, facts, evidence.Source, evidence.Sources, evidence.VotedOnCitation, evidence.KindCitation)
         {
             PartyTallies = partyTallies.Count == 0 ? null : partyTallies.ToArray()
         };
     }
 
-    private static PublishedPartyTally? ReadPartyTally(DbDataReader reader)
+    private static List<PublishedPartyTally> ReadPartyTallies(DbDataReader reader)
     {
-        if (reader.IsDBNull(26)) return null;
-        var tally = new PublishedPartyTally
+        if (reader.IsDBNull(35)) return [];
+        var rows = ReadJson<TallyRow[]>(reader, 35, "party tallies");
+        if (rows.Length > PublishedVote.MaximumParties || rows.Any(row => row is null)) throw InvalidPartyTally();
+        var tallies = rows.Select(row =>
         {
-            Party = reader.GetString(26),
-            Yea = ViewColumns.Number(reader, 27) ?? throw InvalidPartyTally(),
-            Nay = ViewColumns.Number(reader, 28) ?? throw InvalidPartyTally(),
-            Present = ViewColumns.Number(reader, 29) ?? throw InvalidPartyTally(),
-            NotVoting = ViewColumns.Number(reader, 30) ?? throw InvalidPartyTally(),
-            Other = ViewColumns.Number(reader, 31) ?? throw InvalidPartyTally()
-        };
-        tally.Validate();
-        return tally;
+            if (row.Yea is null || row.Nay is null || row.Present is null || row.NotVoting is null || row.Other is null)
+                throw InvalidPartyTally();
+            var tally = new PublishedPartyTally
+            {
+                Party = row.Party,
+                Yea = row.Yea.Value,
+                Nay = row.Nay.Value,
+                Present = row.Present.Value,
+                NotVoting = row.NotVoting.Value,
+                Other = row.Other.Value
+            };
+            tally.Validate();
+            return tally;
+        }).ToList();
+        return tallies;
     }
 
     private static InvalidDataException InvalidPartyTally() => new("Stored vote party tally is incomplete.");
@@ -113,37 +135,168 @@ public sealed class VoteStore(NpgsqlDataSource views)
             throw new InvalidDataException("Stored vote party tallies do not match their completeness marker.");
     }
 
+    private static DetailEvidence ReadDetailEvidence(DbDataReader reader, VoteRow vote)
+    {
+        if (reader.IsDBNull(25)) throw new InvalidDataException("Published vote evidence is missing.");
+        var sources = ReadSources(reader, 32, "sources");
+        var votedOnCitation = ReadCitation(sources, ViewColumns.Text(reader, 26), ViewColumns.Number(reader, 27), ViewColumns.Number(reader, 28));
+        var kindCitation = NullableCitation(sources, reader, 29, 30, 31);
+        var memberRows = ReadJson<MemberEvidenceRow[]>(reader, 33, "member citations");
+        if (memberRows.Length > PublishedVote.MaximumMembers || memberRows.Any(row => row is null) ||
+            !memberRows.Select(row => row.Position).SequenceEqual(Enumerable.Range(0, memberRows.Length)))
+            throw new InvalidDataException("Published vote member citations are incomplete, misordered, or exceed their limit.");
+        var memberEvidence = memberRows.Select(row => (Cast: (string?)row.Cast, Citation: (PublishedCitation?)ReadCitation(sources, row.Id, row.Start, row.Length))).ToArray();
+        var facts = ReadFacts(reader, sources);
+        PublishedVote.ValidateEvidence(sources, vote.VotedOn, vote.Kind, kindCitation, votedOnCitation, vote.Result, facts, memberEvidence);
+        return new(ViewColumns.Enum<PublishedVoteSource>(reader, 25), sources, votedOnCitation, kindCitation, facts);
+    }
+
+    private static PublishedVoteFact[] ReadFacts(DbDataReader reader, PublishedDocumentVersion[] sources)
+    {
+        var rows = ReadJson<FactRow[]>(reader, 24, "facts");
+        if (rows.Length > PublishedVote.MaximumFacts || rows.Any(row => row is null) ||
+            !rows.Select(row => row.Position).SequenceEqual(Enumerable.Range(0, rows.Length)))
+            throw new InvalidDataException("Published vote facts are incomplete, misordered, or exceed their limit.");
+        return rows.Select(row => new PublishedVoteFact
+        {
+            Text = row.Text,
+            Citation = ReadCitation(sources, row.Id, row.Start, row.Length)
+        }).ToArray();
+    }
+
+    private static PublishedDocumentVersion[] ReadSources(DbDataReader reader, int ordinal, string noun) =>
+        ReadSources(ReadJson<SourceRow[]>(reader, ordinal, noun));
+
+    private static PublishedDocumentVersion[] ReadSources(string json, string noun) =>
+        ReadSources(DeserializeJson<SourceRow[]>(json, noun));
+
+    private static PublishedDocumentVersion[] ReadSources(SourceRow[] rows)
+    {
+        if (rows.Length > PublishedVote.MaximumSources || rows.Any(row => row is null))
+            throw new InvalidDataException($"A published vote has more than {PublishedVote.MaximumSources} sources.");
+        return rows.Select(row =>
+        {
+            if (row.Id is null || row.Url is null || row.ObservedAt is null || row.Text is null || row.Text.Length > PublishedDocumentVersion.MaximumTextLength)
+                throw new InvalidDataException("Published vote source metadata or bounded text is missing.");
+            return new PublishedDocumentVersion
+            {
+                ExtractionId = row.Id,
+                Url = row.Url,
+                ObservedAtUtc = ObservedAtUtc(row.ObservedAt.Value),
+                Text = row.Text
+            };
+        }).ToArray();
+    }
+
+    private static PublishedCitation? NullableCitation(PublishedDocumentVersion[] sources, DbDataReader reader, int id, int start, int length)
+    {
+        if (reader.IsDBNull(id) && reader.IsDBNull(start) && reader.IsDBNull(length)) return null;
+        return ReadCitation(sources, ViewColumns.Text(reader, id), ViewColumns.Number(reader, start), ViewColumns.Number(reader, length));
+    }
+
+    private static PublishedCitation ReadCitation(PublishedDocumentVersion[] sources, string? extractionId, int? start, int? length)
+    {
+        if (extractionId is null || start is null || length is null)
+            throw new InvalidDataException("Published vote citation is incomplete.");
+        var source = sources.FirstOrDefault(item => item.ExtractionId == extractionId)
+            ?? throw new InvalidDataException("Published citation must cite one of the vote's sources.");
+        return new PublishedCitation
+        {
+            ExtractionId = extractionId,
+            Start = start.Value,
+            Length = length.Value,
+            Quote = QuoteAt(source.Text, start.Value, length.Value)
+        };
+    }
+
+    private static string QuoteAt(string text, int start, int length) =>
+        start >= 0 && length > 0 && start <= text.Length - length
+            ? text.Substring(start, length)
+            : throw new InvalidDataException("Published citation quote does not match its offsets.");
+
+    private static T ReadJson<T>(DbDataReader reader, int ordinal, string noun) => reader.IsDBNull(ordinal)
+        ? throw new InvalidDataException($"The vote {noun} view returned no content.")
+        : DeserializeJson<T>(reader.GetString(ordinal), noun);
+
+    private static T DeserializeJson<T>(string json, string noun)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<T>(json, PublicationProtocol.JsonOptions)
+                ?? throw new InvalidDataException($"The vote {noun} view returned invalid content.");
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException($"The vote {noun} view returned invalid content.", exception);
+        }
+    }
+
+    private static DateTimeOffset ObservedAtUtc(long ticks)
+    {
+        try { return new(ticks, TimeSpan.Zero); }
+        catch (ArgumentOutOfRangeException exception)
+        { throw new InvalidDataException("Published source observation time is invalid.", exception); }
+    }
+
+    private sealed record FactRow(int Position, string Text, string Id, int Start, int Length);
+    private sealed record SourceRow(string? Id, string? Url, long? ObservedAt, string? Text);
+    private sealed record MemberEvidenceRow(int Position, string Cast, string Id, int Start, int Length);
+    private sealed record RawVoteMember(int Position, string OfficialId, string Cast, string? Party, string? Caucus, string? Id, int? Start, int? Length);
+    private sealed record TallyRow(string Party, int? Yea, int? Nay, int? Present, int? NotVoting, int? Other);
+    private sealed record DetailEvidence(PublishedVoteSource Source, PublishedDocumentVersion[] Sources, PublishedCitation VotedOnCitation,
+        PublishedCitation? KindCitation, PublishedVoteFact[] Facts);
+
     /// <summary>Reads one page of members. Null means that the active release holds no such vote. The caller compares the release of the page with the release of the cursor.</summary>
     public async Task<VoteMemberPage?> ListMembersAsync(string recordId, VoteMemberRequest request, CancellationToken cancellationToken)
     {
         await using var command = views.CreateCommand($"""
-            SELECT a.release_number, m."position", m.official_id, m.vote_cast, m.party, m.caucus
-              FROM (SELECT x.release_number, x.revision_number FROM public_api.active_records x
-                     WHERE x.kind = 'vote' AND x.record_id = @id
-                       AND EXISTS (SELECT 1 FROM public_api.vote_members h WHERE h.record_id = x.record_id AND h.revision_number = x.revision_number)) a
-              LEFT JOIN LATERAL (
-                   SELECT m.* FROM public_api.vote_members m
-                    WHERE m.record_id = @id AND m.revision_number = a.revision_number{MemberFilters(request)}
-                    ORDER BY m."position" LIMIT @take) m
-                ON TRUE
-             ORDER BY m."position"
+            WITH active AS (
+                SELECT x.release_number, x.revision_number FROM public_api.active_records x
+                 WHERE x.kind = 'vote' AND x.record_id = @id
+                   AND EXISTS (SELECT 1 FROM public_api.vote_members h WHERE h.record_id = x.record_id AND h.revision_number = x.revision_number)
+            ), selected AS MATERIALIZED (
+                SELECT m.* FROM public_api.vote_members m
+                  JOIN active a ON a.revision_number = m.revision_number
+                 WHERE m.record_id = @id{MemberFilters(request)}
+                 ORDER BY m."position" LIMIT @take
+            )
+            SELECT a.release_number,
+                   (SELECT json_agg(json_build_object('position', m."position", 'officialId', m.official_id, 'cast', m.vote_cast,
+                            'party', m.party, 'caucus', m.caucus, 'id', m.extraction_id,
+                            'start', m.citation_start, 'length', m.citation_length) ORDER BY m."position")
+                      FROM selected m),
+                   (SELECT json_agg(json_build_object('id', s.extraction_id, 'url', s.url,
+                            'observedAt', s.observed_at_utc_ticks,
+                            'text', CASE WHEN length(s.text) <= {PublishedDocumentVersion.MaximumTextLength} THEN s.text END)
+                            ORDER BY s.extraction_id)
+                      FROM (SELECT s.* FROM public_api.vote_sources s
+                             WHERE s.record_id = @id AND s.revision_number = a.revision_number
+                               AND s.extraction_id IN (SELECT extraction_id FROM selected)
+                             ORDER BY s.extraction_id LIMIT {PublishedVote.MaximumSources + 1}) s)
+              FROM active a
             """);
         command.Parameters.AddWithValue("id", recordId);
         command.Parameters.AddWithValue("take", request.Limit + 1);
         if (request.Cast is not null) command.Parameters.AddWithValue("cast", request.Cast);
         if (request.Officials.Length > 0) command.Parameters.AddWithValue("officials", request.Officials);
         if (request.Cursor is { } cursor) command.Parameters.AddWithValue("after", cursor.Position);
-        var rows = new List<VoteMember>();
         int? release = null;
+        RawVoteMember[] rows = [];
+        string? sourceJson = null;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
-            while (await reader.ReadAsync(cancellationToken))
+            if (await reader.ReadAsync(cancellationToken))
             {
                 release = reader.GetInt32(0);
-                if (!reader.IsDBNull(1)) rows.Add(new(reader.GetInt32(1), reader.GetString(2), reader.GetString(3), ViewColumns.Text(reader, 4), ViewColumns.Text(reader, 5)));
+                if (!reader.IsDBNull(1)) rows = ReadJson<RawVoteMember[]>(reader, 1, "member rows");
+                if (!reader.IsDBNull(2)) sourceJson = reader.GetString(2);
             }
         if (release is not { } active) return null;
-        var page = rows.Take(request.Limit).ToArray();
-        var next = rows.Count > request.Limit ? new VoteMemberCursor(active, page[^1].Position).Encode() : null;
+        PublishedDocumentVersion[] sources = sourceJson is null ? [] : ReadSources(sourceJson, "member vote sources");
+        var evidenceRows = rows.Select(row => (Cast: (string?)row.Cast, Citation: (PublishedCitation?)ReadCitation(sources, row.Id, row.Start, row.Length))).ToArray();
+        if (evidenceRows.Length > 0) PublishedVote.ValidateMemberEvidence(sources, evidenceRows);
+        var members = rows.Select((row, index) => new VoteMember(row.Position, row.OfficialId, row.Cast, row.Party, row.Caucus, evidenceRows[index].Citation!)).ToArray();
+        var page = members.Take(request.Limit).ToArray();
+        var next = rows.Length > request.Limit ? new VoteMemberCursor(active, page[^1].Position).Encode() : null;
         return new(active, page, next);
     }
 

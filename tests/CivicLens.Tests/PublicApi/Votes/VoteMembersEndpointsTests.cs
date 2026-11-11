@@ -69,6 +69,7 @@ public sealed class VoteMembersEndpointsTests(PostgresCollection postgres)
         Assert.Equal(1, member.GetProperty("position").GetInt32());
         Assert.Equal("p1", member.GetProperty("officialId").GetString());
         Assert.Equal("Smith", member.GetProperty("cast").GetString());
+        Assert.Equal("Member: p1, Official 1, I, ZZ, Smith", member.GetProperty("citation").GetProperty("quote").GetString());
         Assert.False(member.TryGetProperty("bioguideId", out _));
     }
 

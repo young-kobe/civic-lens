@@ -19,7 +19,7 @@ public static class ReleaseCommand
     public static Task<int> ExecuteAsync(string[] args, PublishRelease publish,
         ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, BackfillFirstPublished backfill, BackfillPublishedEntries entries,
         BackfillStoredColumns columns, VerifyPublishedEntries verify, VerifyCorrectionHistories verifyCorrections,
-        BackfillCorrectionHistories corrections, ReviewActor owner, TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
+        BackfillCorrectionHistories corrections, BackfillReleaseBillCounts billCounts, VerifyReleaseBillCounts verifyBillCounts, ReviewActor owner, TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
         OwnerCommand.RunAsync(async () =>
         {
             try
@@ -68,6 +68,17 @@ public static class ReleaseCommand
                         var continuedVerification = await verifyCorrections.ExecuteAsync(owner, verifyCountWithCursor, verifyCursor, cancellationToken);
                         CommandOutput.Write(output, continuedVerification);
                         return continuedVerification.Failed == 0 && !continuedVerification.StaleCursor ? 0 : 1;
+                    case ["releases", "counts", "backfill", var countLimit, .. var countCursor]
+                        when TryParsePositive(countLimit, out var countTotal) && TryParseOptionalPositive(countCursor, out var countAfter):
+                        var counted = await billCounts.ExecuteAsync(owner, countTotal, countAfter, cancellationToken);
+                        CommandOutput.Write(output, counted);
+                        return counted.Failed == 0 ? 0 : 1;
+                    case ["releases", "counts", "verify", var countVerifyLimit, .. var countVerifyCursor]
+                        when TryParsePositive(countVerifyLimit, out var countVerifyTotal) && countVerifyCursor.Length <= 1:
+                        var countVerification = await verifyBillCounts.ExecuteAsync(owner, countVerifyTotal,
+                            ReleaseBillCountVerificationCursor.Parse(countVerifyCursor.FirstOrDefault()), cancellationToken);
+                        CommandOutput.Write(output, countVerification);
+                        return countVerification.Failed == 0 && !countVerification.StaleCursor ? 0 : 1;
                     case ["releases", "columns", "backfill"]:
                         var filled = await columns.ExecuteAsync(owner, cancellationToken);
                         CommandOutput.Write(output, filled);
@@ -77,7 +88,7 @@ public static class ReleaseCommand
                         CommandOutput.Write(output, publishedVerification);
                         return publishedVerification.Failed == 0 ? 0 : 1;
                     default:
-                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases corrections verify <limit> [cursor], releases columns backfill, or releases entries verify.");
+                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases corrections verify <limit> [cursor], releases counts backfill <limit> [release-number], releases counts verify <limit> [cursor], releases columns backfill, or releases entries verify.");
                         return 2;
                 }
             }
@@ -125,6 +136,12 @@ public static class ReleaseCommand
             index += 2;
         }
         return new PublishReleaseRequest([.. records], key) { Withdrawals = [.. withdrawals], RewriteOfficials = rewriteOfficials, RewriteEntries = rewriteEntries, RewritePages = rewritePages };
+    }
+
+    private static bool TryParseOptionalPositive(string[] arguments, out int value)
+    {
+        value = 0;
+        return arguments is [] || arguments is [var text] && TryParsePositive(text, out value);
     }
 
     private static bool TryParsePositive(string text, out int value) =>

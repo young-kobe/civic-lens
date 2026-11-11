@@ -58,7 +58,7 @@ public sealed class VerifyCorrectionHistories(IPublicationStore publications, IR
         if (next is null)
         {
             // File reads run outside the short database snapshot, so refresh selection once before declaring the scan terminal.
-            var currentFingerprint = await publications.ReadCorrectionHistoryVerificationFingerprintAsync(releases.GetActiveAsync, cancellationToken);
+            var currentFingerprint = await publications.ReadRetainedReleaseFingerprintAsync(releases.GetActiveAsync, cancellationToken);
             if (currentFingerprint != selectionFingerprint)
                 return new(examined, verified, failed, failures, null, true) { SelectionFingerprint = currentFingerprint };
         }
