@@ -176,6 +176,30 @@ public sealed class ConfiguredCollectionSource
         return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template, [.. documents]);
     }
 
+    public ConfiguredCollectionSource? EnabledFederalRegisterTextSource() =>
+        Revision.Configuration.SourceOf(ApiParser.FederalRegisterText) is { Enabled: true } source
+            ? new ConfiguredCollectionSource(Revision, source.Id, AsOf)
+            : null;
+
+    /// <summary>The source of the documents whose text this text source reads. Its ID is the source ID of the document rows.</summary>
+    public string FederalRegisterDocumentsSourceId =>
+        Revision.Configuration.SourceOf(ApiParser.FederalRegisterDocuments)?.Id
+            ?? throw new InvalidDataException("The configuration has no Federal Register documents source.");
+
+    public ApiJobBatch CreateFederalRegisterTextBatch(string documentNumber, DateOnly publishedOn, DateOnly currentDate)
+    {
+        var source = ReadFederalRegisterTextSource();
+        var template = PrepareDefinition(source, currentDate, null, article: false);
+        var job = new ApiJob(FederalRegisterJobKeys.Text(SourceId, documentNumber),
+            template with
+            {
+                ApiResource = ApiResource.FederalRegisterText,
+                Url = FederalRegisterTextUrl.Body(source.Url, publishedOn, documentNumber),
+                Priority = CollectionJobPriority.OfDay(publishedOn, currentDate)
+            });
+        return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template, [job]);
+    }
+
     public ApiJobBatch CreateVoteviewFollowOnBatch(ApiResource finished, string jobId, int congress, DateOnly currentDate)
     {
         var source = ReadVoteviewSource();
@@ -304,6 +328,7 @@ public sealed class ConfiguredCollectionSource
             case ApiParser.MemberPhotos:
             case ApiParser.CongressBillText:
             case ApiParser.FederalRegisterDocuments:
+            case ApiParser.FederalRegisterText:
             case ApiParser.SenateVoteList:
                 return null;
             default:
@@ -322,6 +347,11 @@ public sealed class ConfiguredCollectionSource
         ReadSource() is { ApiParser: ApiParser.FederalRegisterDocuments } source
             ? source
             : throw new ArgumentException("Federal Register admission requires a configured Federal Register source.");
+
+    private WatchedSourceConfiguration ReadFederalRegisterTextSource() =>
+        ReadSource() is { ApiParser: ApiParser.FederalRegisterText } source
+            ? source
+            : throw new ArgumentException("Federal Register text admission requires a configured Federal Register text source.");
 
     private WatchedSourceConfiguration ReadVoteviewSource() =>
         ReadSource() is { ApiParser: ApiParser.VoteviewSenateVoteList } source

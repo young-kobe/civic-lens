@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The executive actions feature records presidential documents from the Federal Register. A record holds the official title and the facts of one document: its type, number, dates, citation, and President. Code approves each record after it checks the citations, because the facts come from the Federal Register. A person can only withdraw a record or approve it again. This slice holds no document text and no summary.
+The executive actions feature records presidential documents from the Federal Register. A record holds the official title and the facts of one document: its type, number, dates, citation, and President. Code approves each record after it checks the citations, because the facts come from the Federal Register. A person can only withdraw a record or approve it again. The record of an original document also has the body text of the document, which a separate text job reads. This slice holds no summary.
 
 ## Decisions
 
@@ -19,12 +19,24 @@ The executive actions feature records presidential documents from the Federal Re
 - Admission writes revision 1 and the code approval in one transaction. This follows the roster admission, which writes a snapshot in one transaction, and `ReviewRecords.AppendCodeApprovedAsync`. No analysis queue exists, because no model writes text.
 - The headline is the official title. Public pages say that it is the title from the Federal Register.
 - The signer is the configured person whose `President` office covers the signing date. The person ID must equal the President identifier that the Federal Register cites. Both Presidents hold office on 2025-01-20, so the cited identifier picks one. A document with no match is invalid data and blocks the job.
+- The body text comes from the HTML body of the document at the Federal Register `body_html_url`, for example `https://www.federalregister.gov/documents/full_text/html/2026/10/28/2026-22051.html`. The path is `/documents/full_text/html/{yyyy}/{MM}/{dd}/{number}.html`. Code builds the URL from the publication date and the number, and the job definition accepts no other form.
+- Only an original document has text. A correction has none.
+- A separate source `federal-register-text` with `apiParser` `federalRegisterText` owns the text jobs. The path of the body is outside `/api/v1/`, and the binding supports one allowed path prefix for each source. The precedent is the source `congress-bill-text`, which owns the second origin of [bill text](bills.md#bill-text). The source keeps the default byte budget of 2,000,000 bytes, so the document source keeps its small budget.
+- Admission of an original admits its text job in the same transaction, like a bill detail admits its text versions job. The key is `federal-register/{text source}/text/{number}`. A known key is a duplicate.
+- One text job saves one immutable capture of the body and one extraction. The extraction version is `federal-register-text-v1+html-text-v1`. The extraction keeps the first 60,000 characters, the `TextWindowLength` of `CongressBillRenderer`, cut at the last whitespace inside the window. `chars_total` keeps the full length.
+- The extraction drops the printed page markers of the body, which hold `unprinted-element`. It keeps the end matter: the FR Doc number, the filed date, and the billing code. The bill text extractor also drops no administrative line. A signature image has no text.
 - Issue and policy area lists are empty at launch.
 - The published kind is `executiveAction`. It adds no manifest version bump.
 - A reviewer or the owner can withdraw approval on the review page, as for a vote. The page has the decision panel and, for the owner, Take off site; see [review](review.md#take-off-site). Withdrawing approval alone does not change the public site.
 
 ## Invariants
 
+- Printed page markers never reach the body text. Enforced by `FederalRegisterTextParser.Profile`, which excludes `unprinted-element`. Test: `FederalRegisterTextExtractionTests.ThePrintedPageMarkersNeverReachTheTextButTheOrderAndItsEndMatterDo`.
+- Text over 60,000 characters keeps its honest total, and the window is cut at a space. Enforced by `FederalRegisterRenderer.RenderText`, `CongressBillRenderer.TextWindow`, and `ck_executive_action_texts_chars`. Tests: `FederalRegisterTextTests.TextOverTheWindowKeepsTheFirstWindowCutAtASpaceAndTheHonestTotal`, `PostgresFederalRegisterTextTests.TheDatabaseRefusesCountsThatBreakTheWindowRule`.
+- A text job fetches the body URL of its source and no other URL. Enforced by `CollectionJobDefinition` and `FederalRegisterTextUrl`. Tests: `FederalRegisterTextTests.AnyOtherUrlFormIsRefusedAsAJobOfTheTextSource`, `FederalRegisterTextTests.ADocumentUrlOrAListUrlIsRefusedForTheTextResourceAndTheBodyUrlIsRefusedForTheDocumentResource`.
+- An original document admits exactly one text job, in the transaction that records it. A correction admits none. Enforced by `PostgresCollectionJobStore.AdmitDocumentAsync` and the job key. Tests: `PostgresFederalRegisterTextTests.AnOriginalDocumentAdmitsExactlyOneTextJobInTheTransactionThatRecordsItAndAReplayAdmitsNone`, `PostgresFederalRegisterTextTests.ACorrectionAdmitsNoTextJobAndTheOriginalThatFollowsItAdmitsOne`.
+- A replay of the text admission adds no row. A text row names an original document of the publication date in the URL, and an extraction of its own job. Enforced by `PostgresCollectionJobStore.AdmitTextAsync` and the key and foreign keys of `executive_action_texts`. Tests: `PostgresFederalRegisterTextTests.TheTextIsStoredOnceWithItsCountsAndAReplayAddsNoRow`, `PostgresFederalRegisterTextTests.AnExtractionOfAnotherJobACorrectionNoticeAndAnotherPublicationDateAreInvalidDataAndStoreNothing`.
+- The text backfill is bounded and idempotent. It admits at most `limit` jobs, newest first, and lists no document that has a text row or a text job. Enforced by `BackfillFederalRegisterText` and `PostgresCollectionJobStore.ListNewestOriginalsWithoutTextAsync`. Tests: `PostgresFederalRegisterTextTests.TheBackfillAdmitsAtMostTheLimitNewestOriginalsFirstAndARerunAdmitsTheRest`, `PostgresFederalRegisterTextTests.TheBackfillSkipsADocumentThatHasItsTextRowOrItsTextJobAndRefusesAConfigurationWithNoTextSource`.
 - Disposition notes cite the complete original source block and survive correction revisions. Enforcers: `ExecutiveActionRevision` and its typed revision columns. Tests: `ExecutiveActionRevisionTests`, `PublishExecutiveActionTests`, and the disposition cases in `PostgresExecutiveActionRevisionColumnsTests`.
 
 Each line gives the rule, what enforces it, and the test that protects it.
@@ -65,6 +77,8 @@ Each line gives the rule, what enforces it, and the test that protects it.
 
 ### Source configuration
 
+The text source `federal-register-text` has `apiParser` `federalRegisterText`. Its URL is `https://www.federalregister.gov/documents/full_text/html` and its allowed path prefix is `/documents/full_text/html`. It sets no `maxBytes`, so the default of 2,000,000 bytes holds. It sets no credential, no coverage list, no validator, and no `backfillFrom`. Its admission policy holds exactly one job, like the bill text source. It ships with `enabled: false`. A disabled or missing text source makes no text job. It shares the origin and so the pacing key of the document source.
+
 One `api` source with `apiParser` `federalRegisterDocuments` follows the Federal Register. The source URL is `https://www.federalregister.gov/api/v1/documents.json`. The allowed path prefix is `/api/v1/`, because the list path and the document path need one prefix.
 
 The source sets `backfillFrom` and no credential, no coverage list, no validator, and no Congress option. It covers no people and stays eligible every day. The shipped source `federal-register-documents` sets `backfillFrom` 2024-10-29 and `checkIntervalSeconds` 21600. It ships with `enabled: false`, like the other `api` sources. The admission policy holds 1,000 jobs. [Operations](../operations.md#federal-register-stream) holds the enable steps.
@@ -98,11 +112,17 @@ Document URL: https://www.federalregister.gov/documents/2025/01/28/2025-01900/en
 
 A notice or memorandum has no number line. The extraction of a correction document adds the line `Correction notice`, which holds its own number, date, and link. The record cites that line.
 
+### Text
+
+The text job fetches the body HTML. Preparation reads the number and the publication date from the job URL. It extracts the text with `IDocumentTextExtractor.ExtractAsync` and `FederalRegisterTextParser.Profile`, which drops each element with the class `unprinted-element`. `FederalRegisterRenderer.RenderText` keeps the first window. The extraction has the lines `Federal Register document`, `Characters read: {read} of {total}`, and `Text:`, then the window. Empty text is invalid data.
+
+`AdmitTextAsync` checks that the extraction belongs to an attempt of the text job. It also checks that the document is an original with the publication date of the URL. It then adds the `executive_action_texts` row. A repeat adds no row. The record and its revisions do not change, because the text is evidence beside the record. Publication does not read the text yet.
+
 ### Admission
 
 Preparation of a document job parses the body, finds the signer, saves the extraction, and calls `AdmitDocumentAsync`. The store takes the job lock. It looks for the document in `executive_action_documents` under that lock, and a known document ends the work as a duplicate. Then the store takes the executive action review lock.
 
-An original creates the draft row and revision 1, with the notices that waited. A correction adds its notice to the current revision and appends the next revision. A correction with no draft waits. Code approves each revision when the rules allow it. The store writes the document row in the same transaction. The extraction must belong to an attempt of the job.
+An original creates the draft row and revision 1, with the notices that waited. It also admits its text job, when an enabled text source exists. A correction adds its notice to the current revision and appends the next revision. A correction with no draft waits. Code approves each revision when the rules allow it. The store writes the document row in the same transaction. The extraction must belong to an attempt of the job.
 
 ### Disposition targets
 
@@ -126,9 +146,10 @@ The release holds the record file and a page for each record. The headline is th
 - `executive_action_revision_facts` holds one row for each fact line of a revision: its position and the citation span. It stores no label and no value. A reader builds the lines with `ExecutiveActionFacts.Of` from the columns of the revision.
 - `executive_action_revision_notices` holds one row for each notice of a revision: its position and the key of the notice document. The document row holds the notice.
 - `executive_action_revision_disposition_targets` holds one row for each target of the notes of a revision. A row has its position, relation, kind, and number. It also has the span of the reference inside the note value. It stores no note text. A revision with no notes has no row.
+- `executive_action_texts` holds one row for each original document that has its text read: the extraction ID, `chars_read`, and `chars_total`. The key is the document key, and a foreign key to `executive_action_documents` holds it. It stores no text. The extraction holds it. The precedent is `bill_text_versions`.
 - `executive_action_review_decisions` holds the decisions, including the code approval.
 - `executive_action_documents` has one row for each document. It holds the publication date, which sets the next window. It holds the first revision that has the document. A correction row keeps its notice as `notice_url` and an optional citation span, both null or both set. It has no revision while it waits. A revision never changes a document row that it cites, because the revision reads the notice from that row.
-- `IFederalRegisterAdmissionStore` is the port of list and document admission. `PostgresCollectionJobStore` implements it. `IExecutiveActionReviewStore` is the review and publication port. `PostgresExecutiveActionReviewStore` implements it.
+- `IFederalRegisterAdmissionStore` is the port of list, document, and text admission. `PostgresCollectionJobStore` implements it. `IFederalRegisterTextBackfillStore` is the port of the text backfill, and the same store implements it. `IExecutiveActionReviewStore` is the review and publication port. `PostgresExecutiveActionReviewStore` implements it.
 - `PublishedExecutiveAction` is the published record. It has the kind `executiveAction`.
 
 ## Code map
@@ -141,6 +162,7 @@ The release holds the record file and a page for each record. The headline is th
 | Preparation | `src/CivicLens.Application/Collection/Processing/JobPreparation.cs` |
 | Configuration and job binding | `src/CivicLens.Application/Collection/CollectionConfiguration.cs`, `src/CivicLens.Application/Collection/ConfiguredCollectionSource.cs`, `src/CivicLens.Application/Collection/Jobs/CollectionJobDefinition.cs` |
 | Admission and scheduling | `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.FederalRegister.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.Scheduling.cs` |
+| Text: URL, extraction rule, rendering, backfill | `src/CivicLens.Application/Collection/FederalRegister/FederalRegisterTextUrl.cs`, `FederalRegisterTextParser.cs`, `FederalRegisterRenderer.cs`, `BackfillFederalRegisterText.cs`, `src/CivicLens.Infrastructure/Collection/Jobs/PostgresCollectionJobStore.FederalRegisterTextBackfill.cs`, `src/CivicLens.Infrastructure/ExecutiveActions/Persistence/ExecutiveActionTextRow.cs` |
 | Rows and review store | `src/CivicLens.Infrastructure/ExecutiveActions/` |
 | Revision mapping and backfill | `src/CivicLens.Infrastructure/ExecutiveActions/ExecutiveActionRevisionRows.cs`, `src/CivicLens.Infrastructure/ExecutiveActions/ExecutiveActionRevisionPage.cs`, `src/CivicLens.Infrastructure/ExecutiveActions/PostgresExecutiveActionRevisionBackfillStore.cs`, `src/CivicLens.Infrastructure/ExecutiveActions/PostgresExecutiveActionTargetBackfillStore.cs`, `src/CivicLens.Host/ExecutiveActions/ExecutiveActionCommand.cs` |
 | Publication | `src/CivicLens.Application/Publication/ExecutiveActionRecordLoader.cs`, `src/CivicLens.Application/Publication/PublishedExecutiveActionBuilder.cs`, `src/CivicLens.Publication.Contracts/PublishedExecutiveAction.cs` |
@@ -150,7 +172,10 @@ The release holds the record file and a page for each record. The headline is th
 
 ## Limits and planned work
 
-- A record holds no document text and no summary. The next slice adds the body text. An AI summary and issue tags follow.
+- A record holds no summary. An AI summary of the body text is the next slice, and issue tags follow. Publication does not read the text yet.
+- Text over 60,000 characters keeps only the first window. A long order is read in part, and `chars_total` says so.
+- The text job builds the body URL from the publication date. It does not read `body_html_url` from the API. If the Federal Register changes the path form, the job fails with a fetch error and the source needs a change.
+- A document recorded before the text source existed has no text until `executive-actions text backfill` runs. See [operations](../operations.md#executive-action-text-backfill).
 - A President's page lists the record. The talk and action counts do not count it.
 - Determinations, presidential orders, and other documents are out of scope. The list filter leaves them out.
 - The R-63 pilot has four steps for this kind too; see [roadmap](../roadmap.md). Steps 1 to 3 are done in code. Both write paths write the columns and `revision_json`. The commands `executive-actions revisions backfill` and `executive-actions revisions verify` move and check old revisions. The runbook is in [operations](../operations.md#executive-action-revision-backfill). Step 3 stays open until production runs this code. Step 4 drops the JSON. It needs a migration and a change of `ExecutiveActionRevisionRows.Create`.

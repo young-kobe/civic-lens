@@ -97,12 +97,13 @@ public static class CongressBillRenderer
         return new CongressBillTextReading(string.Join('\n', lines), window.Length, text.Length);
     }
 
-    private static string TextWindow(string text)
+    /// <summary>The first <see cref="TextWindowLength"/> characters, cut at the last whitespace inside the window. The one owner of the window rule.</summary>
+    internal static string TextWindow(string text)
     {
         if (text.Length <= TextWindowLength) return text;
         for (var index = TextWindowLength; index > 0; index--)
             if (char.IsWhiteSpace(text[index])) return text[..index];
-        throw new InvalidDataException("Bill text has no whitespace inside the window.");
+        throw new InvalidDataException("Text has no whitespace inside the window.");
     }
 
     private static string SummaryBlock(CongressBillSummaryText item)

@@ -4571,6 +4571,42 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionTextRow", b =>
+                {
+                    b.Property<string>("SourceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("source_id");
+
+                    b.Property<string>("DocumentNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("document_number");
+
+                    b.Property<int>("CharsRead")
+                        .HasColumnType("integer")
+                        .HasColumnName("chars_read");
+
+                    b.Property<int>("CharsTotal")
+                        .HasColumnType("integer")
+                        .HasColumnName("chars_total");
+
+                    b.Property<string>("ExtractionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("extraction_id");
+
+                    b.HasKey("SourceId", "DocumentNumber");
+
+                    b.HasIndex("ExtractionId");
+
+                    b.ToTable("executive_action_texts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_executive_action_texts_chars", "chars_read >= 1 AND chars_read <= 60000 AND chars_read <= chars_total AND (chars_read = chars_total OR chars_total > 60000)");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.People.Persistence.PersonOfficeRevisionRow", b =>
                 {
                     b.Property<string>("PersonId")
@@ -5727,40 +5763,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_release_issue_includes_position", "position >= 0");
 
                             t.HasCheckConstraint("ck_release_issue_includes_text", "length(btrim(text)) > 0");
-                        });
-                });
-
-            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseBillCountRow", b =>
-                {
-                    b.Property<int>("ReleaseNumber").HasColumnType("integer").HasColumnName("release_number");
-                    b.Property<int>("Congress").HasColumnType("integer").HasColumnName("congress");
-                    b.Property<int>("Bills").HasColumnType("integer").HasColumnName("bills");
-                    b.Property<int>("ExpectedMemberRowCount").HasColumnType("integer").HasColumnName("expected_member_row_count");
-                    b.HasKey("ReleaseNumber", "Congress");
-                    b.ToTable("release_bill_counts", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_release_bill_counts_bills", "bills >= 0");
-                            t.HasCheckConstraint("ck_release_bill_counts_congress", "congress > 0");
-                            t.HasCheckConstraint("ck_release_bill_counts_expected_member_row_count", "expected_member_row_count >= 0");
-                        });
-                });
-
-            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialBillCountRow", b =>
-                {
-                    b.Property<int>("ReleaseNumber").HasColumnType("integer").HasColumnName("release_number");
-                    b.Property<int>("Congress").HasColumnType("integer").HasColumnName("congress");
-                    b.Property<string>("OfficialId").IsRequired().HasMaxLength(256).HasColumnType("character varying(256)").HasColumnName("official_id");
-                    b.Property<int>("Sponsored").HasColumnType("integer").HasColumnName("sponsored");
-                    b.Property<int>("Cosponsored").HasColumnType("integer").HasColumnName("cosponsored");
-                    b.HasKey("ReleaseNumber", "Congress", "OfficialId");
-                    b.HasIndex("ReleaseNumber", "OfficialId").HasDatabaseName("ix_release_official_bill_counts_release_official");
-                    b.ToTable("release_official_bill_counts", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_release_official_bill_counts_congress", "congress > 0");
-                            t.HasCheckConstraint("ck_release_official_bill_counts_cosponsored", "cosponsored >= 0");
-                            t.HasCheckConstraint("ck_release_official_bill_counts_nonzero", "sponsored + cosponsored > 0");
-                            t.HasCheckConstraint("ck_release_official_bill_counts_official_id", "length(btrim(official_id)) > 0");
-                            t.HasCheckConstraint("ck_release_official_bill_counts_sponsored", "sponsored >= 0");
                         });
                 });
 
@@ -10255,6 +10257,21 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionDraftRow", null)
                         .WithMany()
                         .HasForeignKey("RecordId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionTextRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionDocumentRow", null)
+                        .WithOne()
+                        .HasForeignKey("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionTextRow", "SourceId", "DocumentNumber")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

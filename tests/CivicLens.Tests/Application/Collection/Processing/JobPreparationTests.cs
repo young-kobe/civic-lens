@@ -376,8 +376,12 @@ public sealed class JobPreparationTests
         { ApiResource.ZctaDistricts, DistrictFixtures.SourceUrl, DistrictFixtures.Text },
         { ApiResource.MemberPhoto, MemberPhotoFixtures.PhotoUrl(), "the photo fixture replaces this text" },
         { ApiResource.FederalRegisterList, FederalRegisterListUrl, FederalRegisterFixtures.List },
-        { ApiResource.FederalRegisterDocument, FederalRegisterDocumentUrl, FederalRegisterFixtures.TrumpOrder }
+        { ApiResource.FederalRegisterDocument, FederalRegisterDocumentUrl, FederalRegisterFixtures.TrumpOrder },
+        { ApiResource.FederalRegisterText, FederalRegisterTextUrlOfOrder, FederalRegisterFixtures.OrderBodyHtml }
     };
+
+    private static readonly string FederalRegisterTextUrlOfOrder = FederalRegisterTextUrl.Body(FederalRegisterFixtures.TextSourceUrl,
+        new DateOnly(2026, 10, 28), "2026-22051");
 
     private static readonly string FederalRegisterListUrl = FederalRegisterUrl.List(FederalRegisterFixtures.SourceUrl,
         new FederalRegisterWindow(FederalRegisterFixtures.Backfill, Backfill));
@@ -428,6 +432,44 @@ public sealed class JobPreparationTests
         Assert.Equal("text", error.ParamName);
         Assert.Empty(extractions.Saved);
         Assert.Empty(federalRegister.Documents);
+    }
+
+    [Fact]
+    public async Task AFederalRegisterTextIsRenderedWithItsWindowSavedAsOneExtractionAndPassedToTheStore()
+    {
+        var result = await Prepare(ApiResource.FederalRegisterText, FederalRegisterTextUrlOfOrder, FederalRegisterFixtures.OrderBodyHtml, null,
+            extractedText: "Order text.", contentType: "text/html");
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        var saved = Assert.Single(extractions.Saved);
+        AssertPinned(saved, "federal-register-text-v1+fake-extraction", "FederalRegisterTextParser.ExtractionVersion",
+            saved.Text == "Federal Register document: 2026-22051\nCharacters read: 11 of 11\nText:\nOrder text.");
+        var call = Assert.Single(federalRegister.Texts);
+        Assert.Equal(("job", "2026-22051", new DateOnly(2026, 10, 28), saved.ExtractionId, 11, 11),
+            (call.JobId, call.Evidence.DocumentNumber, call.Evidence.PublishedOn, call.Evidence.ExtractionId,
+                call.Evidence.Reading.CharsRead, call.Evidence.Reading.CharsTotal));
+    }
+
+    [Fact]
+    public async Task AFederalRegisterTextOverTheWindowKeepsItsTotalInTheEvidence()
+    {
+        var longText = string.Join(' ', Enumerable.Range(1, 20_000).Select(number => $"word{number}"));
+
+        _ = await Prepare(ApiResource.FederalRegisterText, FederalRegisterTextUrlOfOrder, "x", null, extractedText: longText, contentType: "text/html");
+
+        var reading = Assert.Single(federalRegister.Texts).Evidence.Reading;
+        Assert.Equal(longText.Length, reading.CharsTotal);
+        Assert.True(reading.CharsRead < reading.CharsTotal);
+    }
+
+    [Fact]
+    public async Task AFederalRegisterTextWithNoTextIsInvalidAndSavesNothing()
+    {
+        await Assert.ThrowsAsync<InvalidDataException>(() => Prepare(ApiResource.FederalRegisterText, FederalRegisterTextUrlOfOrder,
+            FederalRegisterFixtures.OrderBodyHtml, null, extractedText: "", contentType: "text/html"));
+
+        Assert.Empty(extractions.Saved);
+        Assert.Empty(federalRegister.Texts);
     }
 
     [Fact]
@@ -794,6 +836,8 @@ public sealed class JobPreparationTests
                 MemberPhotoFixtures.Configuration(RosterFixtures.Person("a-person", "A Person", MemberPhotoFixtures.Bioguide)),
                 MemberPhotoFixtures.SourceId, Backfill),
             ApiResource.BillText => new ConfiguredCollectionSource(BillTextFixtures.Configuration(), BillTextFixtures.SourceId, Backfill),
+            ApiResource.FederalRegisterText =>
+                new ConfiguredCollectionSource(FederalRegisterFixtures.Configuration(withTextSource: true), FederalRegisterFixtures.TextSourceId, Backfill),
             ApiResource.FederalRegisterList or ApiResource.FederalRegisterDocument =>
                 new ConfiguredCollectionSource(FederalRegisterFixtures.Configuration(), FederalRegisterFixtures.SourceId, Backfill),
             ApiResource.SenateVoteMenu or ApiResource.SenateVote =>
@@ -962,6 +1006,7 @@ public sealed class JobPreparationTests
     {
         public List<FederalRegisterListPage> Lists { get; } = [];
         public List<(string JobId, FederalRegisterEvidence Evidence)> Documents { get; } = [];
+        public List<(string JobId, FederalRegisterTextEvidence Evidence)> Texts { get; } = [];
 
         public Task<DiscoveryAdmissionResult> AdmitListPageAsync(ConfiguredCollectionSource source, FederalRegisterListPage page,
             CancellationToken cancellationToken)
@@ -975,6 +1020,13 @@ public sealed class JobPreparationTests
         {
             Documents.Add((documentJobId, evidence));
             return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
+        }
+
+        public Task AdmitTextAsync(ConfiguredCollectionSource textSource, string textJobId, FederalRegisterTextEvidence evidence,
+            CancellationToken cancellationToken)
+        {
+            Texts.Add((textJobId, evidence));
+            return Task.CompletedTask;
         }
     }
 

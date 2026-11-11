@@ -1,12 +1,14 @@
+using CivicLens.Application.Collection.FederalRegister;
 using CivicLens.Application.Review;
 using CivicLens.Core.Review;
 
 namespace CivicLens.Host.ExecutiveActions;
 
 internal sealed class ExecutiveActionCommand(BackfillRevisions backfill, VerifyRevisions verify, BackfillRevisions backfillTargets, VerifyRevisions verifyTargets,
-    ReviewActor owner)
+    Func<BackfillFederalRegisterText> createText, ReviewActor owner)
 {
-    private const string Usage = "Use executive-actions revisions backfill <limit>, executive-actions revisions verify, executive-actions targets backfill <limit>, or executive-actions targets verify.";
+    private const string Usage = "Use executive-actions revisions backfill <limit>, executive-actions revisions verify, executive-actions targets backfill <limit>, executive-actions targets verify, or executive-actions text backfill [limit].";
+    private const int DefaultTextLimit = 100;
 
     public static bool Matches(string[] args) => args is ["executive-actions", ..];
 
@@ -23,6 +25,10 @@ internal sealed class ExecutiveActionCommand(BackfillRevisions backfill, VerifyR
                     return await OwnerCommand.BackfillRevisionsAsync(backfillTargets, owner, limit, Usage, cancellationToken);
                 case ["executive-actions", "targets", "verify"]:
                     return await OwnerCommand.VerifyRevisionsAsync(verifyTargets, owner, cancellationToken);
+                case ["executive-actions", "text", "backfill", ..] when args.Length <= 4:
+                    var textLimit = args.Length == 4 ? OwnerCommand.ParseLimit(args[3], Usage) : DefaultTextLimit;
+                    CommandOutput.Write(await createText().ExecuteAsync(owner, textLimit, cancellationToken));
+                    return 0;
                 default:
                     Console.Error.WriteLine(Usage);
                     return 2;

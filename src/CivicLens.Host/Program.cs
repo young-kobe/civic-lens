@@ -12,6 +12,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Discovery;
+using CivicLens.Application.Collection.FederalRegister;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
@@ -388,7 +389,10 @@ try
         var backfillStore = new PostgresExecutiveActionRevisionBackfillStore(AnalysisDbContextFactory.Create(connectionString));
         var targetStore = new PostgresExecutiveActionTargetBackfillStore(AnalysisDbContextFactory.Create(connectionString));
         var executiveActions = new ExecutiveActionCommand(new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore),
-            new BackfillRevisions(targetStore), new VerifyRevisions(targetStore), owner);
+            new BackfillRevisions(targetStore), new VerifyRevisions(targetStore),
+            () => new BackfillFederalRegisterText(CreateJobs(codeVersion), CollectionConfigurationRevision.Create(
+                ConfigurationFile.ReadCollectionFromEnvironment() ?? throw new ArgumentException("The text backfill requires CIVIC_LENS_COLLECTION_CONFIG."))),
+            owner);
         executing = true;
         return await executiveActions.ExecuteAsync(args, cancellation.Token);
     }

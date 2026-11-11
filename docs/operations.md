@@ -208,6 +208,8 @@ A release that holds the correction field `factsUnchanged` needs the same order.
 
 To stop the source, set `enabled` to `false` and restart the worker.
 
+The source `federal-register-text` reads the body text of each original document. It ships with `enabled: false`. Set it to `true` with `federal-register-documents` and restart the worker. Each new original then admits one text job. A document that was recorded earlier needs the [text backfill](#executive-action-text-backfill).
+
 The first run lists every document from `backfillFrom` 2024-10-29. It admits one job for each document, about 700 over two years. Each check after that runs every 6 hours and lists from 2 days before the newest stored publication date. Run `jobs list` and `jobs get` as in [managed collection jobs](#managed-collection-jobs) to see progress. A blocked job names its reason.
 
 To withdraw a record, open `/Review/ExecutiveActions/{id}` and use Take off site; see [take a record off the site](#take-a-record-off-the-site). Withdrawing approval alone does not change the public site.
@@ -754,6 +756,16 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ac
 `verify` rebuilds every revision from its rows and compares it to its JSON as trees. It reports unfinished CRS derivations as legacy. Completed CRS bodies are checked during the backfill write; verification does not derive them again. It writes nothing and takes no lock. It prints `checked`, `legacy`, `mismatched`, and the first 20 mismatches as record ID, revision number, and JSON key names. It never prints text. The exit code is 1 while `legacy` or `mismatched` is above 0. No key is allowed to be absent.
 
 Run order: `db migrate`, then `backfill`, then `verify`. Every action reader reads the columns and fails on a row with null columns. That includes the review pages, the queue, the relationship and brief readers, and the redraft skip. On production, `deploy` restarts the worker and the review host, so run `backfill` right after the deploy. For a manual run, start the new code only when `verify` exits 0, so `legacy` and `mismatched` are both 0.
+
+### Executive action text backfill
+
+Original documents that were recorded before the text source was enabled have no text. The command needs the variables of the other owner commands. It also needs `CIVIC_LENS_COLLECTION_CONFIG` for a configuration where `federal-register-text` has `enabled` set to `true`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions text backfill 100
+```
+
+The limit is 100 when you give none. The command admits one text job for each of the newest original documents that have no text row and no text job, up to the limit. It prints `examined` and `admitted`. A rerun lists only the documents that still have no job, so it is safe to repeat. About 700 documents since 2024-10-29 need 7 runs of 100. The jobs use the current configuration, not the configuration of the old document jobs. The worker fetches the bodies at the pacing of the origin. A text job uses no model budget. [Executive actions](architecture/executive-actions.md#text) holds the rules.
 
 ### Executive action revision backfill
 

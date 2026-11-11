@@ -34,6 +34,35 @@ internal static class FederalRegisterFixtures
         {"description":"Documents published from 01/28/2025 to 01/28/2025, of type Presidential Document, and of presidential document type Executive Order","count":3,"total_pages":1,"results":[{"document_number":"2025-01900","publication_date":"2025-01-28"},{"document_number":"2025-01901","publication_date":"2025-01-28"},{"document_number":"2025-01902","publication_date":"2025-01-28"}]}
         """;
 
+    public const string TextSourceId = "federal-register-text";
+    public const string TextSourceUrl = "https://www.federalregister.gov/documents/full_text/html";
+
+    /// <summary>The structure of the HTML body of an executive order at body_html_url, as the owner session measured it on 2026-11-11 for
+    /// 2026-22051 (about 13,500 bytes, about 8,000 characters of text). The words are shortened and invented. The markup is the real shape: plain
+    /// p, h1, div, em, strong, a, img, span and svg, two kinds of printed page marker, an end-matter block, and a signature image.
+    /// The page marker text "printed page 68007" must never reach the extracted text.</summary>
+    public const string OrderBodyHtml = """
+        <html><body>
+        <h1 id="h-1">Executive Order 14999 of October 27, 2026</h1>
+        <p>Strengthening the Test of Page Markers</p>
+        <span class="printed-page-details unprinted-element document-markup" data-page="68007"><svg viewBox="0 0 8 8"><path d="M0 0"/></svg></span>
+        <p>By the authority vested in me as President, it is hereby ordered as follows:</p>
+        <p><strong>Section 1</strong>. <em>Policy</em>. It is the policy of the United States to read the <a href="https://example.gov/rule">rule</a> in full.
+        <span class="printed-page-inline unprinted-element document-markup" data-page="68007">(<svg viewBox="0 0 8 8"><path d="M0 0"/></svg> printed page 68007)</span>
+        Each agency shall report in 30 days.</p>
+        <div class="signature"><img class="document-graphic-image" src="https://www.federalregister.gov/signature.gif" alt="Signature"/></div>
+        <div class="end-matter"><p>[FR Doc. 2026-22051 Filed 10-28-26; 8:45 am]</p><p>Billing code 3395-F4-P</p></div>
+        </body></html>
+        """;
+
+    /// <summary>The text of <see cref="OrderBodyHtml"/> with each page marker removed.</summary>
+    public const string OrderBodyText = "Executive Order 14999 of October 27, 2026 Strengthening the Test of Page Markers " +
+        "By the authority vested in me as President, it is hereby ordered as follows: Section 1. Policy. " +
+        "It is the policy of the United States to read the rule in full. Each agency shall report in 30 days.";
+
+    /// <summary>The end-matter block stays in the text. The bill text extractor drops no administrative line either.</summary>
+    public const string OrderEndMatterText = "[FR Doc. 2026-22051 Filed 10-28-26; 8:45 am] Billing code 3395-F4-P";
+
     public static byte[] Bytes(string json) => Encoding.UTF8.GetBytes(json);
 
     public static FederalRegisterDocument Document(string json) =>
@@ -46,7 +75,28 @@ internal static class FederalRegisterFixtures
         return json[start..json.IndexOf('"', start)];
     }
 
-    public static CollectionConfiguration Configuration(DiscoveryAdmissionPolicy? policy = null) => new()
+    public static CollectionConfiguration Configuration(DiscoveryAdmissionPolicy? policy = null, bool withTextSource = false)
+    {
+        var configuration = DocumentsConfiguration(policy);
+        return withTextSource ? configuration with { Sources = [.. configuration.Sources, TextSource()] } : configuration;
+    }
+
+    public static WatchedSourceConfiguration TextSource() => new()
+    {
+        Id = TextSourceId,
+        Url = TextSourceUrl,
+        AllowedOrigin = "https://www.federalregister.gov",
+        AllowedPathPrefix = "/documents/full_text/html",
+        Mode = CollectionMode.Api,
+        ApiParser = ApiParser.FederalRegisterText,
+        CheckIntervalSeconds = 86_400,
+        AdmissionPolicy = new DiscoveryAdmissionPolicy { MaxJobs = 1, MaxTotalRequests = 4, MaxTotalBytes = 4_000_000, MaxTotalTimeoutSeconds = 60 },
+        JobPolicy = new CollectionJobPolicy { MaxAttempts = 2 },
+        MaxRequests = 2,
+        TimeoutSeconds = 30
+    };
+
+    private static CollectionConfiguration DocumentsConfiguration(DiscoveryAdmissionPolicy? policy) => new()
     {
         Version = 1,
         People =
