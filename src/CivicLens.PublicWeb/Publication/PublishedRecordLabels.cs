@@ -128,7 +128,9 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Relationship type has no label.")
     };
 
-    public const string ReportRecordLink = "Report a problem with this record";
+    public const string ReportLinkStart = "Report a problem with this";
+
+    public static string ReportKindLink(PublishedRecordKind kind) => $"{ReportLinkStart} {Kind(kind).ToLowerInvariant()}";
 
     public const string ContactEmail = "contact@civic-lens.info";
 

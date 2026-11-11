@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-<PublicPage CanonicalPath="@PublicationProtocol.ReportPagePath" NoIndex="true" Title="Report a problem" Description="Tell Civic Lens what is wrong with a published record. A person checks each report." ExternalScript="@(IsAvailable ? TurnstileScript : null)">
+<PublicPage Section="null" CanonicalPath="@PublicationProtocol.ReportPagePath" NoIndex="true" Title="Report a problem" Description="Tell Civic Lens what is wrong with a published record. A person checks each report." ExternalScript="@(IsAvailable ? TurnstileScript : null)">
     <PageHeader Title="Report a problem" Lede="Tell us what is wrong with a published record. A person checks each report." />
     @if (!IsAvailable)
     {
@@ -39,7 +39,7 @@
         <div role="alert" tabindex="-1" data-report-failure></div>
         <Panel Label="Find the record first" Padded="true" hidden data-report-missing>
             <EmptyState Title="Find the record first"
-                        Text="@($"To report a record, open the record. Each record page has the link \"{PublishedRecordLabels.ReportRecordLink}\" below the record. Use that link to come back here. Search for a record, or start with an official.")">
+                        Text="@($"To report a record, open the record. Each record page has a link in the footer that starts with \"{PublishedRecordLabels.ReportLinkStart}\". Use that link to come back here. Search for a record, or start with an official.")">
                 <Action>
                     <Button Href="@PublicationProtocol.SearchPagePath">Search records</Button>
                     <Button Href="@PublicationProtocol.OfficialsPagePath">Officials</Button>

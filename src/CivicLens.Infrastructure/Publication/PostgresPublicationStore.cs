@@ -291,8 +291,11 @@ public sealed partial class PostgresPublicationStore : IPublicationStore
         await CorrectionHistoryCopies.BindAsync(db, commit.ReleaseNumber, commit.Records, commit.CorrectionHistories, cancellationToken);
         await VoteStoredColumnRows.WriteAsync(db, commit.VoteColumns, cancellationToken);
         if (commit.Names.Facets.Issues.Length > 0)
-            await ReleaseIssueCounts.FillAsync(db, commit.ReleaseNumber,
-                CongressCalendar.CongressOn(publishedAt.Day), cancellationToken);
+        {
+            var congress = CongressCalendar.CongressOn(publishedAt.Day);
+            await ReleaseIssueCounts.FillAsync(db, commit.ReleaseNumber, congress, cancellationToken);
+            await ReleaseIssuePartyCounts.FillAsync(db, commit.ReleaseNumber, congress, cancellationToken);
+        }
         await ReleaseBillCounts.FillAsync(db, commit.ReleaseNumber,
             CongressCalendar.CongressOn(publishedAt.Day), commit.Records, cancellationToken);
         await PublicationWithdrawalRows.RecordAsync(db, commit, cancellationToken);

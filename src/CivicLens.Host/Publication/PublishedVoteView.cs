@@ -13,6 +13,8 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedVoteView
 {
+    public static string RollCall(PublishedChamber chamber, int rollCallNumber) => $"{chamber} roll call {rollCallNumber}";
+
     public static IReadOnlyList<Fact> Facts(PublishedVote vote, PublicationCatalog catalog) =>
     [
         new Fact("Voted on", Moment.Day(vote.VotedOn)).CitedAt(Anchor(vote, vote.VotedOnCitation)),
