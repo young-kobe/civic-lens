@@ -1,1 +1,13 @@
-<p class="muted small">@PublishedWording.BillLineSource</p>
+@if (Inline)
+{
+    <span>@(" " + PublishedWording.BillLineSource)</span>
+}
+else
+{
+    <p class="muted small">@PublishedWording.BillLineSource</p>
+}
+
+@code {
+    /// <summary>True prints the note as a span for the end of a bill line paragraph. False prints it as its own paragraph.</summary>
+    [Parameter] public bool Inline { get; set; }
+}

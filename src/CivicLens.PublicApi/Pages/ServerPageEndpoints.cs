@@ -1,6 +1,7 @@
 using CivicLens.PublicApi.Boards;
 using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.Http;
+using CivicLens.PublicApi.Issues;
 using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Search;
 using CivicLens.PublicApi.Votes;
@@ -17,7 +18,7 @@ public static class ServerPageEndpoints
     /// <summary>The path prefix of the server pages. No live route uses it, so the static pages stay the production path until a route moves.</summary>
     public const string Prefix = "/web";
 
-    /// <summary>Maps the gated home, Compare, officials, boards, search, official, and vote previews and the not found page under the server-page prefix.</summary>
+    /// <summary>Maps the gated home, Compare, officials, boards, search, official, issue, and vote previews and the not found page under the server-page prefix.</summary>
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         routes.MapGet(Prefix, (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
@@ -40,6 +41,17 @@ public static class ServerPageEndpoints
         routes.MapGet(Prefix + "/officials", OfficialsPageEndpoint.RespondAsync);
         routes.MapGet(Prefix + "/boards", BoardsPageEndpoint.RespondAsync);
         routes.MapGet(Prefix + "/search", SearchPageEndpoint.RespondAsync);
+        routes.MapGet(Prefix + "/issues/{issueId}", (string issueId, HttpContext context, IssuePageReader issues, HomePageReader home, ServerPageResponder responder,
+            CancellationToken cancellationToken) =>
+            ApiResults.GuardAsync(async () => await issues.ReadAsync(issueId, cancellationToken) is { } data
+                ? await responder.RespondAsync<IssuePage>(context, StatusCodes.Status200OK, data.Release,
+                    new Dictionary<string, object?>
+                    {
+                        [nameof(IssuePage.Data)] = data,
+                        [nameof(IssuePage.RootPath)] = baseUrl.Join(string.Empty),
+                        [nameof(IssuePage.BrowserApiUrl)] = home.BrowserApiRoot
+                    }, cancellationToken)
+                : await NotFoundAsync(context, responder, baseUrl, cancellationToken)));
         routes.MapGet(Prefix + "/officials/{id}", (string id, HttpContext context, OfficialPageReader officials, ServerPageResponder responder, CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () => PublicationProtocol.IsPathSegment(id) && await officials.ReadAsync(id, cancellationToken) is { } page
                 ? await RespondOfficialAsync(context, responder, page, baseUrl, cancellationToken)

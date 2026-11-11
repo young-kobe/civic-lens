@@ -201,7 +201,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
         var response = await host.Client.GetAsync(ServerPageEndpoints.Prefix);
         var page = await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
-        var row = Assert.Single(page.QuerySelectorAll(".latest-rows li"));
+        var row = Assert.Single(page.QuerySelectorAll(".record-rows li"));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("Headline f", row.TextContent);

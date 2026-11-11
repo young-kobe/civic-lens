@@ -1,0 +1,106 @@
+@using CivicLens.Publication.Contracts
+
+<PublicPage Section="PublicSection.Issues" CanonicalPath="@PublicationProtocol.IssuePagePath(Data.IssueId, 1)" Title="@Data.Name" Description="@description" RootPath="@RootPath">
+    <Hero>
+        <div class="issue-hero">
+            <h1>@Data.Name</h1>
+            @if (Data.Definition is not null)
+            {
+                <p class="issue-definition">@Data.Definition</p>
+            }
+            <p class="issue-counts" data-issue-counts>@CountLine</p>
+            <p class="small muted">@PublishedWording.IssueTagCaveat</p>
+        </div>
+    </Hero>
+    <ChildContent>
+        <div class="issue-grid">
+            <section class="issue-section" id="your-members" aria-labelledby="issue-members-title">
+                <h2 id="issue-members-title">Your members on this issue</h2>
+                <p class="issue-members-prompt" data-issue-members-prompt>Enter your ZIP to see how your members voted on this issue. <a href="@(RootPath + PublicationProtocol.HomePath)#zip-results">Find my members</a></p>
+                @if (BrowserApiUrl is not null)
+                {
+                    <div class="issue-members" data-issue-members="@Data.IssueId" data-members-api="@BrowserApiUrl" data-officials-page="@(RootPath + PublicationProtocol.OfficialsPagePath)" aria-live="polite" hidden></div>
+                }
+            </section>
+            <section class="issue-section" id="votes" aria-labelledby="issue-votes-title">
+                <h2 id="issue-votes-title">Roll call votes on @Data.Name</h2>
+                @if (Data.Votes.Length == 0)
+                {
+                    <p>No substantive roll call vote in this release is tagged @Data.Name.</p>
+                }
+                else
+                {
+                    <p class="issue-note">Each vote below is about its own question, not about the whole issue. A vote does not show a position on the issue.</p>
+                    <ul class="record-rows" role="list">
+                        @foreach (var vote in Data.Votes)
+                        {
+                            <PublicRecordRow Icon="IconName.Vote" Href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))" Headline="@vote.Headline" Label="@vote.Label"
+                                             Meta="@($"{vote.Chamber}, {Moment.Day(vote.VotedOn)}")" Yea="vote.Yea" Nay="vote.Nay" ResultWords="@vote.ResultWords" />
+                        }
+                    </ul>
+                    @if (Data.SubstantiveVotes > Data.Votes.Length)
+                    {
+                        <p class="small muted">Showing the newest @Data.Votes.Length of @Data.SubstantiveVotes substantive roll call votes.</p>
+                    }
+                }
+            </section>
+            <section class="issue-section" id="bills" aria-labelledby="issue-bills-title">
+                <h2 id="issue-bills-title">Bills tagged @Data.Name</h2>
+                @if (Data.Bills.Length == 0)
+                {
+                    <p>No bill or resolution in this release is tagged @Data.Name.</p>
+                }
+                else
+                {
+                    <p class="issue-note">The date is the day of the latest event, not the day the bill began.</p>
+                    <ul class="record-rows" role="list">
+                        @foreach (var bill in Data.Bills)
+                        {
+                            <PublicRecordRow Icon="IconName.Bill" IconClass="record-row-icon-bill" Href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" Headline="@bill.Headline" Label="@bill.Label"
+                                             Meta="@($"Latest event on {Moment.Day(bill.EventDate)}")" BillLine="@bill.BillLine" />
+                        }
+                    </ul>
+                    @if (Data.BillCount > Data.Bills.Length)
+                    {
+                        <p class="small muted">Showing the newest @Data.Bills.Length of @Data.BillCount @BillsNoun.</p>
+                    }
+                }
+            </section>
+            @if (Data.LineUp is { Bills: > 0 } lineUp)
+            {
+                <section class="issue-section" id="parties" aria-labelledby="issue-parties-title">
+                    <h2 id="issue-parties-title">How the parties line up</h2>
+                    <p>@lineUp.Bills @Noun(lineUp.Bills, BillNoun, BillsNoun) tagged @Data.Name in the @CongressCalendar.Ordinal(lineUp.Congress) Congress, by the party of the sponsor on the day of sponsorship. The count is of @BillsNoun, not votes and not cosponsors.</p>
+                    <ul class="issue-lineup" role="list" data-issue-lineup>
+                        @foreach (var party in lineUp.Parties)
+                        {
+                            <li><span>@party.Party sponsor</span> <b>@party.Bills</b> <span>@Noun(party.Bills, BillNoun, BillsNoun)</span></li>
+                        }
+                        @if (lineUp.UnknownBills > 0)
+                        {
+                            <li><span>Sponsor party not known</span> <b>@lineUp.UnknownBills</b> <span>@Noun(lineUp.UnknownBills, BillNoun, BillsNoun)</span></li>
+                        }
+                    </ul>
+                </section>
+            }
+        </div>
+    </ChildContent>
+</PublicPage>
+
+@code {
+    private string description = string.Empty;
+
+    [Parameter, EditorRequired] public IssuePageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+    [Parameter] public string? BrowserApiUrl { get; set; }
+
+    private string CountLine =>
+        $"This release holds {Data.SubstantiveVotes} substantive roll call {Noun(Data.SubstantiveVotes, "vote", "votes")} and {Data.BillCount} {Noun(Data.BillCount, BillNoun, BillsNoun)} tagged {Data.Name}.";
+
+    protected override void OnParametersSet() => description = CountLine;
+
+    private const string BillNoun = "bill or resolution";
+    private const string BillsNoun = "bills and resolutions";
+
+    private static string Noun(int count, string one, string many) => count == 1 ? one : many;
+}
