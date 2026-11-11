@@ -1141,6 +1141,20 @@ The command prints JSON with these keys:
 
 The exit code is 0 only when `openVoteRevisionsWithoutKeptFile` is 0. Otherwise it is 1.
 
+### Vote party tally verification
+
+`releases columns backfill` already converts the party cast tallies of retained vote revisions. It reads the immutable vote file of each revision and writes the typed group rows and the group count marker. Run the verifier after that backfill and before the vote page reads the typed tallies.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases tallies verify <limit> [cursor]
+```
+
+The command needs `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`. It reads no release file and writes nothing. The limit caps the revisions examined. It reads in batches of 25 revisions, each in one read-only transaction. For each revision it rebuilds the groups from the member list rows of the exact revision with the rule that publication uses. Then it compares them with the stored rows in both directions.
+
+The JSON result holds `examined`, `verified`, `unavailable`, `unresolved`, `failed`, `failures`, and `nextCursor`. A failure holds the record, the revision number, a reason, and a detail text. The list holds at most 50 failures, and `failed` counts every failed revision. Reasons are `missingGroup`, `extraGroup`, `differentCounts`, `markerDiffersFromRows`, `rowsWithoutMarker`, and `memberPartyMissing`. `nextCursor` reads as `revision:recordId`. Pass it as `[cursor]` to continue after that revision. Revisions never change, so a cursor stays valid while new revisions arrive.
+
+An unknown count stays unknown. A revision with no marker counts as `unresolved`. This is normal for a revision that no kept folder holds. A revision with marker zero counts as `unavailable`, because its file had no complete tally. The command never writes a zero for an unknown count, and a member list does not prove a count that the file did not give. Group rows on such a revision are failures. The exit code is 1 only when `failed` is above 0. Before the vote page cutover, `failed` must be 0 and `unresolved` must hold only revisions that you accept as unknown.
+
 ### Entries verify
 
 This command proves that the entry, state, first publication, and withdrawal tables hold what each kept `release.json` holds. Run it after `releases entries backfill` exits with 0. It writes nothing and takes no lock, so it is safe beside the worker. It needs the same three variables as the backfill.

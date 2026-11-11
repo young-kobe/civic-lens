@@ -19,7 +19,7 @@ public static class ReleaseCommand
     public static Task<int> ExecuteAsync(string[] args, PublishRelease publish,
         ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, BackfillFirstPublished backfill, BackfillPublishedEntries entries,
         BackfillStoredColumns columns, VerifyPublishedEntries verify, VerifyCorrectionHistories verifyCorrections,
-        BackfillCorrectionHistories corrections, BackfillReleaseBillCounts billCounts, VerifyReleaseBillCounts verifyBillCounts, ReviewActor owner, TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
+        BackfillCorrectionHistories corrections, BackfillReleaseBillCounts billCounts, VerifyReleaseBillCounts verifyBillCounts, VerifyVotePartyTallies verifyTallies, ReviewActor owner, TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
         OwnerCommand.RunAsync(async () =>
         {
             try
@@ -79,6 +79,12 @@ public static class ReleaseCommand
                             ReleaseBillCountVerificationCursor.Parse(countVerifyCursor.FirstOrDefault()), cancellationToken);
                         CommandOutput.Write(output, countVerification);
                         return countVerification.Failed == 0 && !countVerification.StaleCursor ? 0 : 1;
+                    case ["releases", "tallies", "verify", var tallyLimit, .. var tallyCursor]
+                        when TryParsePositive(tallyLimit, out var tallyTotal) && tallyCursor.Length <= 1:
+                        var tallyVerification = await verifyTallies.ExecuteAsync(owner, tallyTotal,
+                            VotePartyTallyVerificationCursor.Parse(tallyCursor.FirstOrDefault()), cancellationToken);
+                        CommandOutput.Write(output, tallyVerification);
+                        return tallyVerification.Failed == 0 ? 0 : 1;
                     case ["releases", "columns", "backfill"]:
                         var filled = await columns.ExecuteAsync(owner, cancellationToken);
                         CommandOutput.Write(output, filled);
@@ -88,7 +94,7 @@ public static class ReleaseCommand
                         CommandOutput.Write(output, publishedVerification);
                         return publishedVerification.Failed == 0 ? 0 : 1;
                     default:
-                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases corrections verify <limit> [cursor], releases counts backfill <limit> [release-number], releases counts verify <limit> [cursor], releases columns backfill, or releases entries verify.");
+                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases corrections verify <limit> [cursor], releases counts backfill <limit> [release-number], releases counts verify <limit> [cursor], releases tallies verify <limit> [cursor], releases columns backfill, or releases entries verify.");
                         return 2;
                 }
             }

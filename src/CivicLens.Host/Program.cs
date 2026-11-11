@@ -492,7 +492,7 @@ try
             new BackfillFirstPublished(publications, releases), new BackfillPublishedEntries(publications, releases),
             new BackfillStoredColumns(publications, releases), new VerifyPublishedEntries(publications, releases),
             new VerifyCorrectionHistories(publications, releases), new BackfillCorrectionHistories(publications, releases),
-            new BackfillReleaseBillCounts(publications, releases), new VerifyReleaseBillCounts(publications, releases), owner,
+            new BackfillReleaseBillCounts(publications, releases), new VerifyReleaseBillCounts(publications, releases), new VerifyVotePartyTallies(publications), owner,
             Console.Out, Console.Error, cancellation.Token);
     }
 

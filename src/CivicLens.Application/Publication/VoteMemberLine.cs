@@ -25,7 +25,7 @@ internal sealed record VoteMemberLine(string SourceId, string SourceParty, strin
 
     public string? SourcePartyName => PartyLetters.NameOf(SourceParty);
 
-    private static VoteCastKind? KnownCastOf(string cast) => PublishedOfficialVote.SideOf(cast) switch
+    public static VoteCastKind? KnownCastOf(string cast) => PublishedOfficialVote.SideOf(cast) switch
     {
         PublishedPartyMajority.Yea => VoteCastKind.Yea,
         PublishedPartyMajority.Nay => VoteCastKind.Nay,
