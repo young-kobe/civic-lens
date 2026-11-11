@@ -1,3 +1,4 @@
+using CivicLens.PublicApi.Bills;
 using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicWeb.Publication;
@@ -13,7 +14,7 @@ public static class ServerPageEndpoints
     /// <summary>The path prefix of the server pages. No live route uses it, so the static pages stay the production path until a route moves.</summary>
     public const string Prefix = "/web";
 
-    /// <summary>Maps the gated home and Compare previews and the not found page under the server-page prefix.</summary>
+    /// <summary>Maps the gated home, Compare, and bill previews and the not found page under the server-page prefix.</summary>
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         routes.MapGet(Prefix, (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
@@ -33,6 +34,17 @@ public static class ServerPageEndpoints
                     [nameof(ComparePage.RootPath)] = baseUrl.Join(string.Empty),
                     [nameof(ComparePage.BrowserApiUrl)] = home.BrowserApiRoot
                 }, cancellationToken)));
+        // The preview path of a static record page "records/{id}.html". A record that is no bill in the active release gets the not found page.
+        routes.MapGet(Prefix + "/records/{recordId}.html", (string recordId, HttpContext context, BillPageReader reader, ServerPageResponder responder, CancellationToken cancellationToken) =>
+            ApiResults.GuardAsync(async () => PublicationProtocol.IsAnyRecordId(recordId) && await reader.ReadAsync(recordId, cancellationToken) is { } page
+                ? await responder.RespondAsync<BillDetailPage>(context, StatusCodes.Status200OK, page.Release,
+                    new Dictionary<string, object?>
+                    {
+                        [nameof(BillDetailPage.Data)] = page,
+                        [nameof(BillDetailPage.RootPath)] = baseUrl.Join(string.Empty)
+                    }, cancellationToken)
+                : await responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,
+                    new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken)));
         routes.MapGet(Prefix + "/{**path}", (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
             responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,
                 new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken));

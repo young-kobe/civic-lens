@@ -1,0 +1,181 @@
+@using System.Globalization
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSection.AllRecords" CanonicalPath="@PublicationProtocol.RecordPagePath(Data.RecordId)" Title="@Data.Headline" Description="@(Data.BillLine ?? Data.Title)" IsArticle="true"
+            Record="record" RootPath="@RootPath">
+    <div class="bill-page">
+        <header class="bill-head">
+            <p class="bill-eyebrow">Bill in the @CongressCalendar.Ordinal(Data.Congress) Congress@(Data.PublicLaw is null ? null : " | Became law")</p>
+            <h1>@Data.Number, @Data.Title</h1>
+            <p class="bill-lede">@Lede()</p>
+            @if (Data.Status is not null && Data.StatusReadAtUtc is { } statusRead)
+            {
+                <p class="small muted">Status read @Moment.Full(statusRead). The bill can change after this time.</p>
+            }
+        </header>
+        @if (Data.Steps.Length > 0)
+        {
+            <BillStepper Steps="Data.Steps" />
+        }
+        <p class="bill-legend"><b>How a bill becomes law.</b> @Glossary.Term("bill").WhyItMatters <a href="@(RootPath + PublicationProtocol.GlossaryPagePath + "#" + Glossary.Term("bill").AnchorId)">Open the glossary</a></p>
+
+        <div class="bill-layout">
+            <div class="bill-main">
+                @if (!string.IsNullOrWhiteSpace(Data.Summary))
+                {
+                    <div class="bill-summary @(Data.TextOrigin == PublishedTextOrigin.Model ? "bill-ai" : null)">
+                        @if (SummaryLabel is not null)
+                        {
+                            <span class="bill-tag">@SummaryLabel</span>
+                        }
+                        <p>@Data.Summary</p>
+                        @if (Data.CrsText is not null)
+                        {
+                            <p class="bill-check">The text above summarizes the Congressional Research Service summary. <a href="#source">Check the source</a></p>
+                        }
+                    </div>
+                }
+                @if (Data.CrsText is not null)
+                {
+                    <details class="bill-fold">
+                        <summary>From the Congressional Research Service (CRS)</summary>
+                        <div class="bill-fold-body">
+                            @foreach (var paragraph in Data.CrsText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                            {
+                                <p>@paragraph</p>
+                            }
+                            @if (Data.BillLine is not null)
+                            {
+                                <p class="small muted">@PublishedWording.BillLineSource</p>
+                            }
+                        </div>
+                    </details>
+                }
+                @if (Data.Votes.Length > 0)
+                {
+                    <section class="bill-section bill-votes" aria-labelledby="bill-votes-title">
+                        <h2 id="bill-votes-title">Votes on this bill</h2>
+                        <p class="bill-lede">Votes on this site that name @Data.Number.</p>
+                        <svg class="bill-hatch-defs" aria-hidden="true" focusable="false" width="0" height="0"><defs><pattern id="bill-hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="bill-hatch-ink" width="4" height="7" /></pattern></defs></svg>
+                        <ul class="bill-vote-list" role="list">
+                            @foreach (var vote in Data.Votes)
+                            {
+                                <li class="bill-vote">
+                                    <span class="bill-vote-icon"><Icon Name="IconName.Vote" /></span>
+                                    <div>
+                                        <a class="bill-vote-title" href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))">@vote.Headline</a>
+                                        <p class="small muted bill-vote-meta"><span>@vote.Chamber, @Moment.Day(vote.VotedOn)</span> <span>Result: @vote.ResultWords</span>
+                                            @if (vote.Alignment == PublishedVoteAlignment.Split)
+                                            {
+                                                <span class="bill-badge">Split vote</span>
+                                            }
+                                        </p>
+                                        @if (vote.Yea is { } yea && vote.Nay is { } nay)
+                                        {
+                                            @Tally(vote, yea, nay)
+                                        }
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                    </section>
+                }
+                @if (Data.Cosponsors is { } cosponsors)
+                {
+                    <BillCosponsors Cosponsors="cosponsors" Sponsor="Data.Sponsors.FirstOrDefault()" Introduced="Data.Introduced" RootPath="@RootPath" />
+                }
+            </div>
+
+            <aside class="bill-rail" aria-label="Key facts">
+                @if (Data.Issues.Length > 0 || Data.PolicyArea is not null)
+                {
+                    <div class="bill-card">
+                        <h2 class="bill-card-title">Issues and area</h2>
+                        @foreach (var issue in Data.Issues)
+                        {
+                            <a class="bill-chip" href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">@issue.Name</a>
+                        }
+                        @if (Data.PolicyArea is not null)
+                        {
+                            <p class="small muted">Policy area from Congress.gov: @Data.PolicyArea.</p>
+                        }
+                    </div>
+                }
+                <details class="bill-fold" id="source">
+                    <summary>Check the source</summary>
+                    <div class="bill-fold-body">
+                        <dl class="bill-kv">
+                            @if (Data.Status is not null && Data.StatusDate is { } statusDate)
+                            {
+                                <dt>Latest action</dt>
+                                <dd>@Data.Status Action date @Moment.Day(statusDate).@if (Data.StatusReadAtUtc is { } read){<text> Status read @Moment.Full(read). The bill can change after this time.</text>}</dd>
+                            }
+                            @if (Data.CrsVersion is not null)
+                            {
+                                <dt>CRS summary</dt>
+                                <dd>Version @Data.CrsVersion</dd>
+                            }
+                            <dt>Revision</dt>
+                            <dd>@Data.RevisionNumber.ToString(CultureInfo.InvariantCulture)</dd>
+                            @if (SummaryLabel is not null)
+                            {
+                                <dt>Wording</dt>
+                                <dd>@SummaryLabel</dd>
+                            }
+                        </dl>
+                    </div>
+                </details>
+            </aside>
+        </div>
+    </div>
+</PublicPage>
+
+@code {
+    private ReportedRecord record = default!;
+
+    [Parameter, EditorRequired] public BillPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+
+    private string? SummaryLabel => Data.Label ?? (Data.TextOrigin is PublishedTextOrigin.Model or PublishedTextOrigin.Code
+        ? PublishedRecordLabels.Wording(Data.TextOrigin).First().Value : null);
+
+    protected override void OnParametersSet() =>
+        record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.Action, Data.Headline, Data.Number);
+
+    private string Lede()
+    {
+        var parts = new List<string>();
+        if (Data.Sponsors.FirstOrDefault() is { } sponsor)
+            parts.Add(sponsor.Party is { } party ? $"Sponsored by {sponsor.Name}, {Article(party)} {party}." : $"Sponsored by {sponsor.Name}.");
+        parts.Add($"Introduced {Moment.Day(Data.Introduced)}.");
+        if (Data.PublicLaw is { } law)
+            parts.Add(Data.BecameLawOn is { } on ? $"Became law on {Moment.Day(on)} as Public Law {law}." : $"Became law as Public Law {law}.");
+        return string.Join(' ', parts);
+    }
+
+    private static string Article(string word) => "AEIOUaeiou".Contains(word[0]) ? "an" : "a";
+
+    private RenderFragment Tally(BillVoteData vote, int yea, int nay) => @<div class="bill-tally">
+        @{
+            var notVoting = vote.NotVoting ?? 0;
+            var total = Math.Max(1, yea + nay + notVoting);
+            var summary = $"{vote.Chamber} members: {yea} Yes, {nay} No" + (vote.NotVoting is null ? "" : $", {notVoting} not voting");
+        }
+        <svg class="bill-tally-bar" role="img" aria-label="@summary">
+            <rect class="y" x="0%" width="@Percent(yea, total)" height="100%" />
+            <rect class="n" x="@Percent(yea, total)" width="@Percent(nay, total)" height="100%" />
+            <rect class="nv" x="@Percent(yea + nay, total)" width="@Percent(notVoting, total)" height="100%" />
+        </svg>
+        <ul class="bill-legend-list" role="list">
+            <li><span class="bill-sw y"></span><b>@yea</b> Yes</li>
+            <li><span class="bill-sw n"></span><b>@nay</b> No</li>
+            @if (vote.NotVoting is not null)
+            {
+                <li><span class="bill-sw nv"></span><b>@notVoting</b> not voting</li>
+            }
+        </ul>
+    </div>;
+
+    private static string Percent(int part, int total) => (part * 100.0 / total).ToString("0.##", CultureInfo.InvariantCulture) + "%";
+}

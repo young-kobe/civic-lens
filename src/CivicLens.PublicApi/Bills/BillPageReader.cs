@@ -1,0 +1,89 @@
+using CivicLens.PublicApi.Votes;
+using CivicLens.PublicWeb.Publication;
+using CivicLens.Publication.Contracts;
+
+namespace CivicLens.PublicApi.Bills;
+
+/// <summary>
+/// Reads what the bill page shows and maps it to the public presentation contract. Every part comes from the same active release as the bill.
+/// When a release change splits the parts, the read starts again. Each part is one read that no other part repeats.
+/// </summary>
+public sealed class BillPageReader(BillStore bills, VoteStore votes)
+{
+    private const int ActionsPerRead = 500;
+    private const int Attempts = 3;
+
+    /// <summary>Reads the page of one bill. Null means that no active release holds the bill.</summary>
+    public async Task<BillPageData?> ReadAsync(string recordId, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < Attempts; attempt++)
+        {
+            if (await bills.FindAsync(recordId, cancellationToken) is not { } detail) return null;
+            if (await ReadPartsAsync(detail, cancellationToken) is { } page) return page;
+        }
+        throw new InvalidOperationException("The active release changed on every read of the bill page.");
+    }
+
+    private async Task<BillPageData?> ReadPartsAsync(BillDetail detail, CancellationToken cancellationToken)
+    {
+        var bill = detail.Bill;
+        if (await ReadActionsAsync(bill.RecordId, detail.Release, cancellationToken) is not { } actions) return null;
+        if (await bills.ListSponsorsAsync(bill.RecordId, cancellationToken) is not { } sponsors || sponsors.Release != detail.Release) return null;
+        if (await ReadIssuesAsync(detail, cancellationToken) is not { } issues) return null;
+        var voteRequest = new VoteRequest { Congress = bill.Congress, BillType = bill.BillType, BillNumber = bill.BillNumber, Limit = PublicationProtocol.PageSize };
+        if (await votes.ListAsync(voteRequest, cancellationToken) is not { } voteRows || voteRows.Release != detail.Release) return null;
+        return Map(detail, actions, sponsors.Rows, issues, voteRows.Votes);
+    }
+
+    private async Task<BillActionRow[]?> ReadActionsAsync(string recordId, int release, CancellationToken cancellationToken)
+    {
+        var rows = new List<BillActionRow>();
+        ActionHistoryCursor? cursor = null;
+        do
+        {
+            var page = await bills.ListActionsAsync(new() { RecordId = recordId, Cursor = cursor, Limit = ActionsPerRead }, cancellationToken);
+            if (page is null || page.Release != release) return null;
+            rows.AddRange(page.Actions);
+            cursor = ActionHistoryCursor.Parse(page.NextCursor);
+        }
+        while (cursor is not null);
+        return [.. rows];
+    }
+
+    private async Task<BillIssueData[]?> ReadIssuesAsync(BillDetail detail, CancellationToken cancellationToken)
+    {
+        if (detail.IssueIds.Length == 0) return [];
+        var names = await bills.ListIssueNamesAsync(detail.IssueIds, cancellationToken);
+        return names is { } read && read.Release == detail.Release ? read.Issues : null;
+    }
+
+    private static BillPageData Map(BillDetail detail, BillActionRow[] actions, BillSponsorRow[] sponsorships, BillIssueData[] issues, VoteRow[] voteRows)
+    {
+        var bill = detail.Bill;
+        var sponsors = sponsorships.Where(row => row.Role == PublishedSponsorshipRole.Sponsor).Select(Person).ToArray();
+        var cosponsors = sponsorships.Where(row => row.Role == PublishedSponsorshipRole.Cosponsor && row.WithdrawnOn is null).ToArray();
+        var steps = BillSteps.Of(bill, sponsors.FirstOrDefault()?.Name, actions);
+        return new(detail.Release, bill.RecordId, bill.RevisionNumber, bill.Congress, BillNumberLabel.Of(bill.BillType, bill.BillNumber), bill.BillTitle, bill.Headline,
+            bill.BillType.StartsWith('h') ? "House" : "Senate", bill.Summary, bill.TextOrigin, bill.Label, bill.EventDate)
+        {
+            BillLine = bill.BillLine,
+            PolicyArea = bill.PolicyArea,
+            PublicLaw = bill.PublicLaw,
+            BecameLawOn = BillSteps.LawAction(actions)?.ActionDate,
+            Status = detail.LatestAction is { } latest ? BillStatusMeaning.Of(latest.Text, bill.BillType) : null,
+            StatusDate = detail.LatestAction?.Date,
+            StatusReadAtUtc = detail.LatestAction?.ReadAtUtc,
+            Sponsors = sponsors,
+            Cosponsors = new(bill.BillType.StartsWith('h') ? "House" : "Senate",
+                [.. cosponsors.Where(row => row.IsOriginal).Select(Person)], [.. cosponsors.Where(row => !row.IsOriginal).Select(Person)]),
+            Steps = steps,
+            Votes = [.. voteRows.Select(vote => new BillVoteData(vote.RecordId, vote.Chamber, vote.VotedOn, vote.Headline, PlainVoteWords.Result(vote.Result),
+                vote.Yea, vote.Nay, vote.NotVoting, vote.Alignment))],
+            Issues = issues,
+            CrsText = detail.CrsSummaryText,
+            CrsVersion = detail.CrsSummaryVersion
+        };
+    }
+
+    private static BillSponsorData Person(BillSponsorRow row) => new(row.OfficialId, row.Name, row.Party, row.SponsoredOn);
+}

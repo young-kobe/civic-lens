@@ -41,6 +41,29 @@ public sealed class PublicPageReadingGradeTests
     }
 
     [Fact]
+    public async Task TheBillPageFixedProseReadsAtOrBelowTheSharedGradeLimit()
+    {
+        var sponsor = new BillSponsorData("p1", "Pat One", "Democrat", new(2025, 9, 11));
+        var data = new BillPageData(7, new string('a', 64), 1, 119, "H.R. 7", "Title", "Headline", "House", "Summary.", PublishedTextOrigin.Code, null, new(2025, 9, 11))
+        {
+            Sponsors = [sponsor],
+            Cosponsors = new("House", [sponsor], [sponsor]),
+            Status = "Passed the House. Now in the Senate.",
+            StatusReadAtUtc = new(2026, 11, 5, 9, 57, 0, TimeSpan.Zero)
+        };
+        var page = await RenderAsync<BillDetailPage>(new Dictionary<string, object?>
+        {
+            [nameof(BillDetailPage.Data)] = data,
+            [nameof(BillDetailPage.RootPath)] = Root
+        });
+
+        var grade = PassageGrade(page.QuerySelector(".bill-lede")!, page.QuerySelector(".bill-legend")!);
+        var backers = PassageGrade(page.QuerySelector("#bill-backers-title")!, page.QuerySelector("#bill-backers-title")!.ParentElement!.QuerySelector(".bill-lede")!);
+
+        Assert.True(Math.Max(grade, backers) <= ReadingGrade.MaximumGrade, $"The bill page prose reads at grade {ReadingGrade.Format(Math.Max(grade, backers))}.");
+    }
+
+    [Fact]
     public async Task FeaturedModelHeadlineAndSummaryReadAsOnePassageAtOrBelowTheSharedGradeLimit()
     {
         // Civic Lens model text captured on 2026-11-10, release 1050.

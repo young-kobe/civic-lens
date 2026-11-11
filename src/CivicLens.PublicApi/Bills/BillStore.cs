@@ -1,3 +1,4 @@
+using CivicLens.PublicWeb.Publication;
 using System.Data.Common;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
@@ -6,7 +7,7 @@ using NpgsqlTypes;
 
 namespace CivicLens.PublicApi.Bills;
 
-/// <summary>Reads the views <c>public_api.bills</c>, <c>public_api.bill_sponsorships</c>, and <c>public_api.bill_issues</c>. Every answer takes its release from the query that reads its rows.</summary>
+/// <summary>Reads the views <c>public_api.bills</c>, <c>public_api.bill_sponsorships</c>, <c>public_api.bill_issues</c>, <c>public_api.officials</c>, and <c>public_api.release_issues</c>. Every answer takes its release from the query that reads its rows.</summary>
 public sealed class BillStore(NpgsqlDataSource views)
 {
     private const string Columns = """
@@ -100,6 +101,50 @@ public sealed class BillStore(NpgsqlDataSource views)
         var page = rows.Take(request.Limit).ToArray();
         var next = rows.Count > request.Limit ? ActionHistoryCursor.Of(active, page[^1]).Encode() : null;
         return new(active, history, page, next);
+    }
+
+    /// <summary>Reads every sponsorship of a bill with the name and party of its official in one statement. Null means that no release is active.
+    /// The count is bounded by the officials that the release tracks.</summary>
+    public async Task<BillSponsors?> ListSponsorsAsync(string recordId, CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand("""
+            SELECT a.release_number, s."position", s.official_id, o.name, o.party, s.role, s.is_original, s.sponsored_on, s.withdrawn_on
+              FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+              LEFT JOIN public_api.bill_sponsorships s ON s.record_id = @id
+              LEFT JOIN public_api.officials o ON o.official_id = s.official_id
+             ORDER BY s."position"
+            """);
+        command.Parameters.AddWithValue("id", recordId);
+        var rows = new List<BillSponsorRow>();
+        int? release = null;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            release = reader.GetInt32(0);
+            if (!reader.IsDBNull(1) && !reader.IsDBNull(3)) rows.Add(ReadBillSponsor(reader));
+        }
+        return release is { } active ? new(active, [.. rows]) : null;
+    }
+
+    /// <summary>Reads the configured names of the given issue IDs. Null means that no release is active.</summary>
+    public async Task<BillIssueNames?> ListIssueNamesAsync(string[] issueIds, CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand("""
+            SELECT a.release_number, i.issue_id, i.name
+              FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+              LEFT JOIN public_api.release_issues i ON i.issue_id = ANY(@ids)
+             ORDER BY i.name, i.issue_id
+            """);
+        command.Parameters.AddWithValue("ids", issueIds);
+        var issues = new List<BillIssueData>();
+        int? release = null;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            release = reader.GetInt32(0);
+            if (!reader.IsDBNull(1)) issues.Add(new(reader.GetString(1), reader.GetString(2)));
+        }
+        return release is { } active ? new(active, [.. issues]) : null;
     }
 
     private static string ListSql(BillRequest request) => $"""
@@ -205,6 +250,11 @@ public sealed class BillStore(NpgsqlDataSource views)
         SponsoredOn = reader.GetFieldValue<DateOnly>(6),
         WithdrawnOn = ViewColumns.Date(reader, 7)
     };
+
+    // Column 0 holds the release. The row starts at column 1.
+    private static BillSponsorRow ReadBillSponsor(DbDataReader reader) => new(
+        reader.GetInt32(1), reader.GetString(2), reader.GetString(3), ViewColumns.Text(reader, 4), ViewColumns.Enum<PublishedSponsorshipRole>(reader, 5),
+        reader.GetBoolean(6), reader.GetFieldValue<DateOnly>(7), ViewColumns.Date(reader, 8));
 
     private static string ActionHistorySql(ActionHistoryRequest request) => $"""
         SELECT a.release_number, b.history_observed_at_utc_ticks, b.history_action_count,

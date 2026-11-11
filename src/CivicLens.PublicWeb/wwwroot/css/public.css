@@ -453,3 +453,98 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
     .home-grid > .home-votes, .home-grid > .home-executive { grid-column: span 8; }
     .home-grid > .home-issues, .home-grid > .home-method { grid-column: span 4; }
 }
+
+/* Bill page. */
+.bill-page {
+    display: grid;
+    gap: var(--s5);
+    min-width: 0;
+}
+.bill-page > * { min-width: 0; }
+.bill-head { display: grid; gap: var(--s3); }
+.bill-eyebrow { margin: 0; color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.bill-head h1 { font-size: clamp(2.125rem, 4.5vw, 3.5rem); line-height: 1; text-wrap: balance; overflow-wrap: anywhere; }
+.bill-lede { max-width: var(--measure, 46rem); margin: 0; color: var(--muted); font-size: 1.125rem; line-height: 1.5; }
+.bill-stepper { display: grid; margin: 0; padding: 0; list-style: none; }
+.bill-stepper li { position: relative; padding: 0 0 18px 40px; }
+.bill-stepper li::before { content: ""; position: absolute; left: 11px; top: 24px; bottom: 0; width: 2px; background: var(--line-strong); }
+.bill-stepper li:last-child { padding-bottom: 0; }
+.bill-stepper li:last-child::before { display: none; }
+.bill-stepper li::after { content: ""; position: absolute; left: 0; top: 2px; width: 24px; height: 24px; border: 2px solid var(--info); border-radius: 50%; background: var(--info); }
+.bill-stepper li[aria-current="step"]::after { box-shadow: 0 0 0 3px var(--ground), 0 0 0 5px var(--info); }
+.bill-stepper b { display: block; font-family: var(--heading); }
+.bill-step-detail { color: var(--muted); font-size: .875rem; }
+.bill-legend { max-width: 46rem; margin: 0; color: var(--muted); font-size: var(--t-sm); }
+.bill-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s5); }
+.bill-main { display: grid; gap: var(--s4); align-content: start; min-width: 0; }
+.bill-rail { display: grid; gap: var(--s4); align-content: start; min-width: 0; }
+.bill-summary { padding: var(--s4) 18px; border-radius: 20px; background: var(--surface); }
+.bill-summary > p { margin: 0; line-height: 1.55; }
+.bill-ai { border: 1.5px solid var(--ai-line); background: var(--ai-surface); color: var(--ai-ink); }
+.bill-tag { display: inline-block; text-transform: uppercase; margin-bottom: var(--s2); padding: 5px 10px; border-radius: 999px; background: var(--ai-line); color: var(--ai-label-ink); font-size: .75rem; font-weight: 700; }
+.bill-summary:not(.bill-ai) .bill-tag { background: var(--raised); color: var(--ink); }
+.bill-check { margin-top: var(--s3) !important; font-size: var(--t-sm); }
+.bill-fold { border-radius: 20px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+.bill-fold > summary { display: flex; align-items: center; min-height: 44px; padding: var(--s3) var(--s4); border-radius: inherit; font-weight: 700; cursor: pointer; }
+.bill-fold > summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.bill-fold[open] > summary { border-bottom: 1px solid var(--line); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.bill-fold-body { display: grid; gap: var(--s3); padding: var(--s4); }
+.bill-fold-body > p { margin: 0; max-width: 46rem; line-height: 1.55; }
+.bill-section { padding: 20px 14px; border-radius: 28px; background: var(--surface); }
+.bill-section > h2 { margin: 0 0 var(--s2); font-size: clamp(var(--t-h2), 3vw, 2rem); font-weight: 800; letter-spacing: -.015em; }
+.bill-votes { background: var(--vote-surface); }
+.bill-vote-list { display: grid; gap: var(--s2); margin: var(--s4) 0 0; padding: 0; list-style: none; }
+.bill-vote { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; padding: 12px 12px 12px 10px; border-radius: 20px; background: var(--surface); }
+.bill-vote-icon { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1.5px solid var(--vote-ink); border-radius: 10px; background: var(--vote-surface); color: var(--vote-ink); }
+.bill-vote-icon .icon { width: 20px; height: 20px; }
+.bill-vote-title { font-weight: 700; overflow-wrap: anywhere; }
+.bill-vote-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--s3); margin: 2px 0 0; }
+.bill-badge { display: inline-block; padding: 4px 8px; border: 1px solid var(--against); border-radius: 999px; color: var(--against); font-size: .75rem; font-weight: 700; }
+.bill-tally { margin-top: var(--s2); }
+.bill-tally-bar { display: block; width: 100%; height: 12px; border-radius: 6px; background: var(--line); overflow: hidden; }
+.bill-tally-bar rect { stroke: var(--surface); stroke-width: 2px; }
+.bill-tally-bar .y { fill: var(--info); }
+.bill-tally-bar .n { fill: url(#bill-hatch); stroke: var(--against); }
+.bill-tally-bar .nv { fill: var(--line-strong); opacity: .45; }
+.bill-hatch-defs { position: absolute; }
+.bill-hatch-ink { fill: var(--against); }
+.bill-legend-list { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0 0; padding: 0; list-style: none; font-size: .875rem; }
+.bill-legend-list b { font-variant-numeric: tabular-nums; }
+.bill-sw { display: inline-block; width: 12px; height: 12px; margin-right: 4px; border-radius: 3px; vertical-align: -1px; }
+.bill-sw.y { background: var(--info); }
+.bill-sw.n { border: 1.5px solid var(--against); background: repeating-linear-gradient(135deg, var(--against) 0 3px, transparent 3px 5px); }
+.bill-sw.nv { background: var(--line-strong); opacity: .5; }
+.bill-party-caption { margin: var(--s4) 0 var(--s2); font-weight: 700; }
+.bill-party { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); margin: 0 0 var(--s4); padding: 0; list-style: none; }
+.bill-party b { font-family: var(--display); font-size: 1.75rem; font-weight: 900; font-stretch: 62%; font-variant-numeric: tabular-nums; }
+.bill-kv { display: grid; gap: 2px var(--s4); margin: 0; }
+.bill-kv dt { margin-top: var(--s3); color: var(--muted); font-size: .85rem; }
+.bill-kv dd { margin: 0; overflow-wrap: anywhere; }
+.bill-card { display: grid; gap: var(--s3); justify-items: start; padding: var(--s5); border-radius: 20px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+.bill-card p { margin: 0; }
+.bill-card-title { margin: 0; color: var(--muted); font-family: var(--ui); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.bill-chip { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 999px; background: var(--surface); box-shadow: 0 0 0 1.5px var(--line-strong); color: var(--ink); font-weight: 650; text-decoration: none; }
+.bill-chip:hover { box-shadow: 0 0 0 2px var(--info); }
+@media (min-width: 761px) {
+    .bill-section { padding: 32px; }
+    .bill-vote { grid-template-columns: 36px minmax(0, 1fr); gap: 14px; padding: 14px 16px 14px 14px; }
+    .bill-vote-icon { width: 36px; height: 36px; border-radius: 12px; }
+    .bill-kv { grid-template-columns: 200px minmax(0, 1fr); }
+    .bill-kv dt { margin-top: 0; padding: 6px 0; }
+    .bill-kv dd { padding: 6px 0; }
+}
+@media (min-width: 900px) {
+    .bill-stepper { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+    .bill-stepper li { padding: 36px 12px 0 0; }
+    .bill-stepper li::before { left: 28px; right: 0; top: 11px; bottom: auto; width: auto; height: 2px; }
+    .bill-stepper li:last-child { padding-bottom: 0; }
+    .bill-stepper li::after { left: 0; top: 0; }
+}
+@media (min-width: 1280px) {
+    .bill-layout { grid-template-columns: minmax(0, 1fr) 320px; gap: var(--s6); }
+    .bill-rail { position: sticky; top: 88px; max-height: calc(100vh - 104px); overflow-y: auto; overscroll-behavior: contain; padding: 4px; margin: -4px; }
+    .bill-card, .bill-rail .bill-fold { flex: none; }
+    .bill-rail .bill-kv { grid-template-columns: minmax(0, 1fr); }
+    .bill-rail .bill-kv dt { padding: 0; margin-top: var(--s3); }
+    .bill-rail .bill-kv dd { padding: 0; }
+}

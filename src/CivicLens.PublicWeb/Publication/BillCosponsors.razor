@@ -1,0 +1,52 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<section class="bill-section" aria-labelledby="bill-backers-title">
+    <h2 id="bill-backers-title">Who backed it</h2>
+    <p class="bill-lede">
+        @if (Sponsor is not null)
+        {
+            <text>@Sponsor.Name sponsored the bill. </text>
+        }
+        This site tracks <b>@Cosponsors.Total</b> @Cosponsors.Chamber members who cosponsored it: <b>@Cosponsors.Original.Length</b> on the day it was introduced and <b>@Cosponsors.Later.Length</b> who joined later. Cosponsors we do not track are not counted.
+    </p>
+    @if (Cosponsors.Total > 0)
+    {
+        <p class="bill-party-caption">Tracked cosponsors by party, as the release lists each party:</p>
+        <ul class="bill-party" role="list">
+            @foreach (var party in Cosponsors.ByParty())
+            {
+                <li><b>@party.Count</b> @party.Name</li>
+            }
+        </ul>
+        <dl class="bill-kv">
+            @if (Cosponsors.Original.Length > 0)
+            {
+                <dt>Added on @Moment.Day(Introduced)</dt>
+                <dd>@Names(Cosponsors.Original, false)</dd>
+            }
+            @if (Cosponsors.Later.Length > 0)
+            {
+                <dt>Added later</dt>
+                <dd>@Names(Cosponsors.Later, true)</dd>
+            }
+        </dl>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public BillCosponsorsData Cosponsors { get; set; } = default!;
+    [Parameter] public BillSponsorData? Sponsor { get; set; }
+    [Parameter, EditorRequired] public DateOnly Introduced { get; set; }
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+
+    private RenderFragment Names(BillSponsorData[] members, bool withDates) => @<text>
+        @for (var index = 0; index < members.Length; index++)
+        {
+            var member = members[index];
+            if (index > 0) { <text>, </text> }
+            <a href="@(RootPath + PublicationProtocol.OfficialPagePath(member.OfficialId))">@member.Name</a>
+            if (withDates) { <text> (@Moment.Day(member.SponsoredOn))</text> }
+        }
+    </text>;
+}

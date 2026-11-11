@@ -16,7 +16,7 @@ Every page and component must pass seven owner tests:
 
 This page holds the design rules and the plan for the reader flows. [Publication](publication.md) owns the release data, the page text rules, and the `public_api` views. [Host](host.md) owns the component library rules. The [roadmap](../roadmap.md#active-r-68-redesign) step R-68 owns the order of the work.
 
-Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 palette, type foundation, focus colors, and reduced-motion behavior are implemented. The `/web` home and `/web/compare` routes are gated PublicApi server-rendered previews. The home shows the published featured vote, recent votes, optional brief, configured issue counts, executive action groups, and chamber freshness. Its available-data bento is implemented; map, party bars, and break board remain planned. The existing static home remains live. The public `/compare.html` route now serves the server-rendered Compare page. Each row below says what is implemented and what is planned.
+Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 palette, type foundation, focus colors, and reduced-motion behavior are implemented. The `/web` home and `/web/compare` routes are gated PublicApi server-rendered previews. The home shows the published featured vote, recent votes, optional brief, configured issue counts, executive action groups, and chamber freshness. Its available-data bento is implemented; map, party bars, and break board remain planned. The `/web/records/{recordId}.html` route is a gated server-rendered bill page preview. The existing static home and static record pages remain live. The public `/compare.html` route now serves the server-rendered Compare page. Each row below says what is implemented and what is planned.
 
 ## Decisions
 
@@ -132,6 +132,10 @@ These decisions come from the component audit. The owner accepted every recommen
 - Compare links use the public site root. Private member fragments require both configured origins before adding the link. Enforcers: `HomePage` and `ZipDistrictEndpoints.MembersAsync`. Tests: `HomePageTests.CompareLinkUsesTheConfiguredPublicSiteRootWhileZipLookupUsesTheApiOrigin`, `ZipMemberCardsEndpointsTests.MembersRouteUsesThePublicSiteOriginForLinksAndPhotosWhenTheHomePreviewRunsOnTheApiHost`, and `ZipMemberCardsEndpointsTests.MembersDoNotLinkToCompareWhenTheBrowserApiOriginIsNotConfigured`.
 
 - The glossary index lists each approved term and the party-count note once, in alphabetical order. Letter links reach focusable index headings. Enforcer: `PublishedGlossaryPage`. Test: `GlossaryTests.TheGlossaryIndexGroupsEveryTermAlphabeticallyAndLinksPopulatedLettersAndDefinitions`.
+- The bill page reads one release. Enforcer: `BillPageReader` compares the release of every part with the release of the bill and reads again when they differ. Test: `BillPageTests.TheServerPageShowsTheBillFromOnePublishedReleaseWithItsStepsBackersAndVotes`.
+- A bill step shows only when a whole known official action text proves it. A disagreement or a conference report never counts as agreement to changes. Enforcer: `BillSteps`. Tests: `BillStepsTests`.
+- The bill number display repeats the Application table. Enforcer: `BillNumberLabel`. Test: `BillNumberLabelTests.ThePublicApiTableMatchesTheApplicationTableForEveryBillType`.
+- The bill page shows the CRS text only in a fold under the summary. It has no cost or date slot. It counts only cosponsors that did not withdraw. Enforcers: `BillDetailPage`, `BillCosponsors`, `BillPageReader`. Tests: `BillDetailPageTests`, `BillPageTests`.
 
 ## Behavior
 
@@ -145,7 +149,7 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 | 2 | See my member on an issue, from the member | Official page, issue chips, vote strip | Partial. Planned: strip marks link to the votes (DR2) |
 | 3 | See my member on an issue, from the issue | Issue page, "your members" section | Planned: each issue vote shows my members' casts |
 | 4 | Understand one vote | Vote page: AI summary, result card, "what a Yes meant", party bars, source fold | Partial. Planned: answer first, one fold (DR3) |
-| 5 | Understand one bill | Bill page: status stepper, AI summary, "who backed it", votes on the bill | Partial. Planned: stepper and party split of cosponsors |
+| 5 | Understand one bill | Bill page: status stepper, AI summary, CRS fold, linked votes, "who backed it" | Partial. Gated SSR preview at `/web/records/{recordId}.html` shows all five. Planned: the "your members and this bill" card and the Congress.gov link |
 | 6 | Read one executive action | Executive action page, document links | Partial. Planned: body text and an AI "what it states" |
 | 7 | See what the President did | President page with per-type sections | Planned: count row becomes jump links |
 | 8 | Follow an issue | Issue page: figures, votes, bills, party line-up | Partial. Planned: one count line and party line-up |
@@ -189,10 +193,10 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Breakers list | Vote | Who broke ranks? | `votes.alignment`, `vote_members.party` | Planned |
 | Member list with finder | Vote | How did my member vote? | `vote_members`, `officials` | Implemented. Planned: folded table with filters |
 | Vote map | Vote, home | Where did Yes and No come from? | `vote_members`, `release_official_terms` | Planned: R-68 map step |
-| Bill status stepper | Bill | Where is the bill now? | `bill_actions`, `bills.public_law` | Planned: route and UI; bill actions and public law data are available |
-| Bill summary and CRS fold | Bill | What would the bill do? | `bills.summary`, CRS text and bill-text metadata; see [Publication](publication.md#public-api-views) | The API serves the summary, exact cited CRS body and version, and bill-text metadata. The fold, key terms and server-rendered bill page remain planned |
-| Who backed it | Bill | Is it bipartisan? | `bill_sponsorships`, `release_official_terms.party` | Partial. Planned: party split |
-| Votes on this bill | Bill | How did Congress vote? | `votes.bill_record_id` | Planned: route and UI; vote-to-bill data is available |
+| Bill status stepper | Bill | Where is the bill now? | `bill_actions`, `bills.public_law` | Implemented in the gated SSR preview. It lists only the reached steps that a whole known action text proves: introduction, passage in each chamber, agreement to the other chamber's changes, and became law. A veto or a presentation to the President shows only in the latest action line |
+| Bill summary and CRS fold | Bill | What would the bill do? | `bills.summary`, CRS text and bill-text metadata; see [Publication](publication.md#public-api-views) | Implemented in the gated SSR preview: the labeled summary, then one closed CRS fold with the exact CRS text. The bill text summary and key terms remain planned. The cost and date slot is cut (B4) |
+| Who backed it | Bill | Is it bipartisan? | `bill_sponsorships`, `officials.party` | Implemented in the gated SSR preview: sponsor, tracked cosponsors by day joined, and a count for each party as the release lists it on its publication day. Withdrawn cosponsors are not counted |
+| Votes on this bill | Bill | How did Congress vote? | `votes` by bill type and number | Implemented in the gated SSR preview: up to 50 newest votes that name the bill, with Yes, No, and not voting totals |
 | Executive action page | Executive action, President | What does this document do? | `executive_actions`, `executive_action_notices`, `executive_action_links` | Planned: route and UI; action and notice data are served, links remain pending |
 | Statement page, quotations | Statement | What exactly was said? | `statements`, `statement_speakers`, `statement_quotations` | The API serves statement details with bounded source text, checked quotations, and citations. The reader page remains planned |
 | Document change page | Document change | What changed on this page? | `document_changes` and its source, region, edit, citation and official views | Partial. The detail API serves published sources and ordered changes. The API labels model text with the shared approved wording; person text has no AI label. Reader page remains planned |
@@ -235,7 +239,7 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 | Public page components, today | `src/CivicLens.Host/Publication` |
 | Static render of pages | `src/CivicLens.Host/Publication/ReleaseRenderer.cs` |
 | Public API and its views | `src/CivicLens.PublicApi` |
-| Gated SSR reader pages and inputs | `src/CivicLens.PublicWeb/Publication/HomePage.razor`, `ComparePage.razor`, `ZipLookupForm.razor`, `ZipLookupResults.razor`, `HomePageData.cs`, `src/CivicLens.PublicApi/Home/HomePageReader.cs`, `src/CivicLens.PublicApi/Pages/ServerPageEndpoints.cs` |
+| Gated SSR reader pages and inputs | `src/CivicLens.PublicWeb/Publication/HomePage.razor`, `ComparePage.razor`, `BillDetailPage.razor`, `BillStepper.razor`, `BillCosponsors.razor`, `src/CivicLens.PublicApi/Bills/BillPageReader.cs`, `BillSteps.cs`, `ZipLookupForm.razor`, `ZipLookupResults.razor`, `HomePageData.cs`, `src/CivicLens.PublicApi/Home/HomePageReader.cs`, `src/CivicLens.PublicApi/Pages/ServerPageEndpoints.cs` |
 | Shared member layout | `src/CivicLens.PublicWeb/Publication/ZipMemberCards.razor`, `ZipMemberCard.razor`, `ZipMemberIssueFilter.razor`, `SharedVoteRows.razor` |
 | Style files | `src/CivicLens.PublicWeb/wwwroot/css/theme.css`, `src/CivicLens.PublicWeb/wwwroot/css/app.css`, `src/CivicLens.PublicWeb/wwwroot/css/public.css` |
 | Presentation rules test | `tests/CivicLens.Tests/Architecture/PresentationArchitectureTests.cs` |
