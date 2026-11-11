@@ -149,7 +149,7 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 | 5 | Understand one bill | Bill page: status stepper, AI summary, "who backed it", votes on the bill | Partial. Planned: stepper and party split of cosponsors |
 | 6 | Read one executive action | Executive action page, document links | Partial. Planned: body text and an AI "what it states" |
 | 7 | See what the President did | President page with per-type sections | Planned: count row becomes jump links |
-| 8 | Follow an issue | Issue page: figures, votes, bills, party line-up | Partial. Planned: one count line and party line-up |
+| 8 | Follow an issue | Issue page: figures, votes, bills, party line-up | Partial. The API sends the party line-up. Planned: one count line and the line-up on the page |
 | 9 | Compare parties | Party boards, per-kind list pages | Partial. Planned: boards link from the nav, list pages (DR6) |
 | 10 | Check a source | "Check the source" fold with an official link first | Partial. Planned: plain labels, raw text one click further (DR3) |
 | 11 | Search a name or a bill | Header search on every page, results page | Partial. Planned: official first, bill number pin, filters after results |
@@ -197,7 +197,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Executive action page | Executive action, President | What does this document do? | `executive_actions`, `executive_action_notices`, `executive_action_links` | Planned: route and UI; action and notice data are served, links remain pending |
 | Statement page, quotations | Statement | What exactly was said? | `statements`, `statement_speakers`, `statement_quotations` | The API serves statement details with bounded source text, checked quotations, and citations. The reader page remains planned |
 | Document change page | Document change | What changed on this page? | `document_changes` and its source, region, edit, citation and official views | Partial. The detail API serves published sources and ordered changes. The API labels model text with the shared approved wording; person text has no AI label. Reader page remains planned |
-| Issue page | Issue | What is there on this issue? | `release_issues`, `issue_votes`, `issue_sponsors` | Partial. Issue counts and sponsor data are available through the API. Planned: page and party line-up |
+| Issue page | Issue | What is there on this issue? | `release_issues`, `issue_votes`, `issue_sponsors`, `release_issue_party_lineups` | Partial. Issue counts, sponsor data, and the party line-up are available through the API. Planned: page |
 | Party boards | Boards | Who breaks from their party most? | `official_party_lines`, `party_agreement`, `/v1/boards` | One API response serves all four boards and one agreement per chamber. Board pages remain planned |
 | List pages for votes, bills, executive actions, statements | Lists | Show me all of one kind | Per-kind views | Planned: R-68 list step |
 | Record row, status badge | All lists | What is this record? | Per-kind views | Implemented. Planned: event-named date, one bill number format |
@@ -221,7 +221,7 @@ Remaining planned view columns and views, in the order that R-68 builds them:
 
 - Votes: stored validated totals beside immutable member counts, and a second AI text column for "what this vote decides".
 - Bills: `bill_key_terms`. The cited CRS body and version are implemented.
-- Issues: party line-up data. Home issue counts already use immutable release snapshots for the Congress of the release publication day.
+- Issues: the party line-up is stored per release and served as `lineUp`. It counts bills by sponsor party, in the Congress of the release day, and its base is the Home tile count. The page must name who and what each number counts, and the Congress, as the number rule requires. The page shows an unknown count when it is above 0. A null `lineUp` means that the release holds no snapshot, so the page hides the section and shows no zero.
 - Executive actions: `executive_action_links` and summary columns. Exact numbered orders and proclamations get typed targets; unsupported or ambiguous references stay cited notes.
 - Other kinds: `record_corrections`, bound to distinct immutable correction-history snapshots. Document-change detail and withdrawal notices have typed public read APIs; their reader pages remain planned.
 
