@@ -15,8 +15,6 @@ namespace CivicLens.Infrastructure.Actions;
 
 internal static class ActionRevisionRows
 {
-    public const int BillCountBatchSize = 256;
-
     public static ActionRevisionRow Create(ActionDraftRevision revision, string? runId, CodeVersion codeVersion)
     {
         var authorKind = ReviewAuthor.KindOf(revision.AuthorSubject);

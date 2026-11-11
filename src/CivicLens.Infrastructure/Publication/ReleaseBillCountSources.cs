@@ -10,6 +10,8 @@ namespace CivicLens.Infrastructure.Publication;
 /// <summary>Reads what the tables hold for the bill counts of one release, so a caller can compare it with the files of the release.</summary>
 internal static class ReleaseBillCountSources
 {
+    private const int BatchSize = 256;
+
     private const string ReadVotes = """
         SELECT s.record_id AS "RecordId", s.revision_number AS "RevisionNumber", v.congress AS "Congress"
           FROM publication_record_states s
@@ -25,7 +27,7 @@ internal static class ReleaseBillCountSources
     {
         var members = await ReadMembersAsync(db, releaseNumber, cancellationToken);
         var actions = new List<BillCountActionProjection>();
-        foreach (var batch in members.Where(member => member.Kind == PublishedRecordKind.Action).Chunk(ActionRevisionRows.BillCountBatchSize))
+        foreach (var batch in members.Where(member => member.Kind == PublishedRecordKind.Action).Chunk(BatchSize))
             actions.AddRange(await ActionRevisionRows.ValidateBillCountBindingsAsync(db, batch, cancellationToken));
         var votes = await db.Database.SqlQueryRaw<VoteRow>(ReadVotes, releaseNumber).ToArrayAsync(cancellationToken);
         var officials = await db.Database.SqlQueryRaw<string>(ReadOfficials, releaseNumber).ToArrayAsync(cancellationToken);

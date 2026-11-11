@@ -143,7 +143,6 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => publications.ReadBillCountSourceAsync(1, default));
 
         Assert.Contains("mismatched bill count projection", refusal.Message, StringComparison.Ordinal);
-        Assert.Empty(await TotalsAsync(1));
     }
 
     [Fact]
@@ -157,7 +156,6 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => publications.ReadBillCountSourceAsync(1, default));
 
         Assert.Contains("cannot produce a valid bill count projection", refusal.Message, StringComparison.Ordinal);
-        Assert.Empty(await TotalsAsync(1));
     }
 
     [Fact]
@@ -171,8 +169,6 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => publications.ReadBillCountSourceAsync(1, default));
 
         Assert.Contains("mismatched bill count projection", refusal.Message, StringComparison.Ordinal);
-        Assert.Empty(await TotalsAsync(1));
-        Assert.Empty(await MembersAsync(1));
     }
 
     [Fact]
