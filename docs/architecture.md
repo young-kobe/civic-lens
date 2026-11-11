@@ -190,6 +190,8 @@ Use the fixtures of the legacy crawler and its lessons about normalization, robo
 
 A refused renewal cancels the work at once. A failed renewal is tried again while time is left before the lease deadline. The deadline counts from when the last successful renewal request was sent. Each attempt stops at that deadline.
 
+`RenewLeaseAsync` takes a `TimeProvider` for its waits, its deadline, and its attempt time limit. It defaults to the system clock. A test passes a manual clock, so no test waits on real time.
+
 The collection and evidence workers keep their own claim, checkpoint, and progress logic. `AnalysisWorker` owns that logic, and the budget and pause logic, for every analysis feature; see [analysis](architecture/analysis.md#behavior).
 
 `IWorkerWakeup` is the one wakeup port. `DatabaseClock`, at the Infrastructure project root, owns the database clock expression and its read. Every store that reads database time uses it, and so does `PostgresDeadlineWakeup`. `PostgresDeadlineWakeup`, also at the project root, implements the port with a LISTEN connection and a deadline query.
