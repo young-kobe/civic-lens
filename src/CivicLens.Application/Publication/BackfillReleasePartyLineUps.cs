@@ -6,7 +6,7 @@ namespace CivicLens.Application.Publication;
 /// <summary>
 /// Fills the party line-up rows of retained releases that earlier publications wrote without them. One release is one write transaction.
 /// It checks the files of the release as the bill count backfill does, because the line-up counts the same bills. An exact existing snapshot is a replay,
-/// and a partial or changed one fails. A release with no counted issue needs no rows and counts as already present.
+/// and a partial or changed one fails. A release with no counted issue needs no rows and counts as skipped, apart from a release that already holds its exact rows.
 /// </summary>
 public sealed class BackfillReleasePartyLineUps(IPublicationStore publications, IReleaseDirectory releases)
 {

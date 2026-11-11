@@ -391,6 +391,29 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
+    public async Task PartyLineUpBackfillAndVerifyReportSkippedReleasesApartFromConvertedOnes()
+    {
+        var scenario = new PublicationScenario();
+        BillCountReleaseFixture.Add(scenario, 1);
+        scenario.Publications.NoPartyLineUpRows.Add(1);
+        scenario.Publications.PartyLineUpStatuses[1] = BillCountStatus.NothingExpected;
+        var backfillOutput = new StringWriter();
+        var verifyOutput = new StringWriter();
+
+        var backfillExit = await RunLineUpsAsync(["releases", "lineups", "backfill", "5"], new BackfillReleasePartyLineUps(scenario.Publications, scenario.Releases),
+            null!, PublicationScenario.Owner, backfillOutput, TextWriter.Null);
+        var verifyExit = await RunLineUpsAsync(["releases", "lineups", "verify", "5"], null!, new VerifyReleasePartyLineUps(scenario.Publications, scenario.Releases),
+            PublicationScenario.Owner, verifyOutput, TextWriter.Null);
+
+        using var backfillJson = JsonDocument.Parse(backfillOutput.ToString());
+        using var verifyJson = JsonDocument.Parse(verifyOutput.ToString());
+        Assert.Equal((0, 0), (backfillExit, verifyExit));
+        Assert.Equal((1, 0, 0), (backfillJson.RootElement.GetProperty("skipped").GetInt32(), backfillJson.RootElement.GetProperty("added").GetInt32(),
+            backfillJson.RootElement.GetProperty("alreadyPresent").GetInt32()));
+        Assert.Equal((1, 0), (verifyJson.RootElement.GetProperty("skipped").GetInt32(), verifyJson.RootElement.GetProperty("verified").GetInt32()));
+    }
+
+    [Fact]
     public async Task PartyLineUpVerifyExitsWithOneOnAMissingRowAndTwoOnABadCursorAndItsCursorContinuesTheScan()
     {
         var scenario = new PublicationScenario();

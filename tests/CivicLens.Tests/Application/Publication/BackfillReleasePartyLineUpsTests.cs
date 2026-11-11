@@ -7,7 +7,7 @@ namespace CivicLens.Tests.Application.Publication;
 public sealed class BackfillReleasePartyLineUpsTests
 {
     [Fact]
-    public async Task EachReleaseIsCommittedOnceAndAnExactOrEmptySnapshotCountsAsAlreadyPresent()
+    public async Task EachReleaseIsCommittedOnceAndAnExactSnapshotCountsAsAlreadyPresent()
     {
         var scenario = new PublicationScenario();
         BillCountReleaseFixture.Add(scenario, 1);
@@ -16,9 +16,22 @@ public sealed class BackfillReleasePartyLineUpsTests
 
         var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, 0);
 
-        Assert.Equal((2, 1, 1, 0), (result.Examined, result.Added, result.AlreadyPresent, result.Failed));
+        Assert.Equal((2, 1, 1, 0, 0), (result.Examined, result.Added, result.AlreadyPresent, result.Skipped, result.Failed));
         Assert.Equal(new[] { 1, 2 }, scenario.Publications.CommittedPartyLineUps);
         Assert.Empty(scenario.Publications.CommittedBillCounts);
+    }
+
+    [Fact]
+    public async Task AReleaseThatNeedsNoRowsCountsAsSkippedAndNotAsAddedOrAlreadyPresent()
+    {
+        var scenario = new PublicationScenario();
+        BillCountReleaseFixture.Add(scenario, 1);
+        BillCountReleaseFixture.Add(scenario, 2);
+        scenario.Publications.NoPartyLineUpRows.Add(2);
+
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, 0);
+
+        Assert.Equal((2, 1, 0, 1, 0), (result.Examined, result.Added, result.AlreadyPresent, result.Skipped, result.Failed));
     }
 
     [Fact]
@@ -46,7 +59,7 @@ public sealed class BackfillReleasePartyLineUpsTests
 
         var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, 0);
 
-        Assert.Equal((2, 0, 2), (result.Examined, result.Added, result.Failed));
+        Assert.Equal((2, 0, 0, 2), (result.Examined, result.Added, result.Skipped, result.Failed));
         Assert.Equal(new[] { (1, "recordMissing"), (2, "lineUpsInvalid") }, result.Failures.Select(failure => (failure.ReleaseNumber, failure.Reason)));
         Assert.Empty(scenario.Publications.CommittedPartyLineUps);
     }

@@ -99,7 +99,7 @@ internal static class ReleaseIssuePartyCounts
         """;
 
     /// <summary>The read-only check. It computes the expected rows as CTEs, because a read-only transaction cannot create tables with a query.
-    /// It returns 0 for a verified release, 1 when expected rows are not saved, and 2 when saved rows differ.</summary>
+    /// It returns 0 for a verified release, 1 when expected rows are not saved, 2 when saved rows differ, and 3 when the release expects no rows and holds none.</summary>
     private const string VerifyStatusSql = $$"""
         WITH {{ReleaseIssueCounts.EligibleBillsTable}} AS ({{ReleaseIssueCounts.EligibleBillsSelectSql}}),
              expected_release_issue_party_bills AS ({{ExpectedBillsSelect}}),
@@ -109,7 +109,7 @@ internal static class ReleaseIssuePartyCounts
                    OR EXISTS (SELECT 1 FROM release_issue_party_counts WHERE release_number = {0})
                    THEN CASE WHEN {{ExactCondition}} THEN 0 ELSE 2 END
                  WHEN EXISTS (SELECT 1 FROM expected_release_issue_party_lineups) THEN 1
-                 ELSE 0
+                 ELSE 3
                END AS "Value"
         """;
 
@@ -117,25 +117,27 @@ internal static class ReleaseIssuePartyCounts
         SELECT EXISTS (SELECT 1 FROM expected_release_issue_party_lineups) AS "Value"
         """;
 
-    /// <summary>Writes the line-up of a release once. It returns true when it wrote rows. It returns false for an exact replay and for a release that has no
-    /// Congress or no counted issue. A changed or incomplete snapshot fails and nothing changes.</summary>
-    public static async Task<bool> FillAsync(CollectionAttemptDbContext db, int releaseNumber, int? congress,
+    /// <summary>Writes the line-up of a release once. It returns Added when it wrote rows and AlreadyPresent for an exact replay. A release that has no
+    /// Congress or no counted issue returns NothingExpected. A changed or incomplete snapshot fails and nothing changes.</summary>
+    public static async Task<ReleaseSnapshotWrite> FillAsync(CollectionAttemptDbContext db, int releaseNumber, int? congress,
         CancellationToken cancellationToken)
     {
-        if (congress is not { } selectedCongress) return false;
+        if (congress is not { } selectedCongress) return ReleaseSnapshotWrite.NothingExpected;
         await db.Database.ExecuteSqlRawAsync(DropExpectedSql, cancellationToken);
         await PrepareExpectedAsync(db, releaseNumber, selectedCongress, cancellationToken);
         if (await ExistsAsync(db, releaseNumber, cancellationToken))
         {
             if (!await IsExactAsync(db, releaseNumber, cancellationToken))
                 throw new BillCountRefusedException($"Release {releaseNumber} already has an incomplete or changed party line-up snapshot.");
-            return false;
+            return ReleaseSnapshotWrite.AlreadyPresent;
         }
         await db.Database.ExecuteSqlRawAsync(InsertLineupsSql, [releaseNumber], cancellationToken);
         await db.Database.ExecuteSqlRawAsync(InsertCountsSql, [releaseNumber], cancellationToken);
         if (!await IsExactAsync(db, releaseNumber, cancellationToken))
             throw new BillCountRefusedException($"Release {releaseNumber} party line-up snapshot differs from its published revisions.");
-        return await db.Database.SqlQueryRaw<bool>(ExpectedAnyIssueSql).SingleAsync(cancellationToken);
+        return await db.Database.SqlQueryRaw<bool>(ExpectedAnyIssueSql).SingleAsync(cancellationToken)
+            ? ReleaseSnapshotWrite.Added
+            : ReleaseSnapshotWrite.NothingExpected;
     }
 
     /// <summary>Compares the saved rows of a release with the expected rows, in both directions, in one read-only statement.</summary>
@@ -143,9 +145,15 @@ internal static class ReleaseIssuePartyCounts
         CancellationToken cancellationToken)
     {
         if (congress is not { } selectedCongress)
-            return await ExistsAsync(db, releaseNumber, cancellationToken) ? BillCountStatus.DifferentRows : BillCountStatus.Verified;
+            return await ExistsAsync(db, releaseNumber, cancellationToken) ? BillCountStatus.DifferentRows : BillCountStatus.NothingExpected;
         var status = await db.Database.SqlQueryRaw<int>(VerifyStatusSql, releaseNumber, selectedCongress).SingleAsync(cancellationToken);
-        return status switch { 0 => BillCountStatus.Verified, 1 => BillCountStatus.MissingRows, _ => BillCountStatus.DifferentRows };
+        return status switch
+        {
+            0 => BillCountStatus.Verified,
+            1 => BillCountStatus.MissingRows,
+            3 => BillCountStatus.NothingExpected,
+            _ => BillCountStatus.DifferentRows
+        };
     }
 
     private static async Task PrepareExpectedAsync(CollectionAttemptDbContext db, int releaseNumber, int congress, CancellationToken cancellationToken)

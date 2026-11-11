@@ -47,7 +47,7 @@ public sealed class PostgresReleasePartyLineUpBackfillTests(PostgresCollection p
         var (release, members) = await ReleaseAndMembersAsync(2);
         var added = await publications.CommitPartyLineUpsAsync(release, members, NoServedDirectory, default);
 
-        Assert.True(added);
+        Assert.Equal(ReleaseSnapshotWrite.Added, added);
         Assert.Equal(["health|Democratic|2", "health|Republican|1", "tax|Democratic|1"], await PartiesAsync(1));
         Assert.Equal(["health|2", "tax|0"], await UnknownAsync(1));
         Assert.Equal(await PartiesAsync(1), await PartiesAsync(2));
@@ -66,8 +66,8 @@ public sealed class PostgresReleasePartyLineUpBackfillTests(PostgresCollection p
         var before = await SnapshotAsync(1);
         var replay = await publications.CommitPartyLineUpsAsync(release, members, NoServedDirectory, default);
 
-        Assert.True(first);
-        Assert.False(replay);
+        Assert.Equal(ReleaseSnapshotWrite.Added, first);
+        Assert.Equal(ReleaseSnapshotWrite.AlreadyPresent, replay);
         Assert.Equal(before, await SnapshotAsync(1));
         Assert.Equal(["health|Republican|1"], await PartiesAsync(1));
     }
@@ -131,10 +131,10 @@ public sealed class PostgresReleasePartyLineUpBackfillTests(PostgresCollection p
 
         var added = await publications.CommitPartyLineUpsAsync(release, members, NoServedDirectory, default);
 
-        Assert.False(added);
+        Assert.Equal(ReleaseSnapshotWrite.NothingExpected, added);
         Assert.Empty(await UnknownAsync(1));
         Assert.Empty(await Read("SELECT issue_id FROM public_api.release_issue_party_lineups"));
-        Assert.Equal(BillCountStatus.Verified, await publications.VerifyPartyLineUpsAsync(release, members, NoServedDirectory, default));
+        Assert.Equal(BillCountStatus.NothingExpected, await publications.VerifyPartyLineUpsAsync(release, members, NoServedDirectory, default));
     }
 
     [Fact]

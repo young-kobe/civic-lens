@@ -67,8 +67,8 @@ internal static class ReleaseIssueCounts
          WHERE i.release_number = {0} AND i.issue_id = s.issue_id AND i.count_congress IS NULL
         """;
 
-    /// <summary>Gives the line-up of parties the eligible bills that <see cref="FillAsync"/> built in the same transaction. Outside a transaction,
-    /// the table is already gone, and this call builds it again. This call never drops a table, so the read-only verifier can use it.</summary>
+    /// <summary>Gives the line-up of parties the eligible bills that <see cref="FillAsync"/> built in the same transaction. When
+    /// the table is gone, this call builds it again. The line-up backfill uses this call in its write transaction. The read-only verifier builds its own CTE.</summary>
     internal static async Task EnsureEligibleBillsAsync(CollectionAttemptDbContext db, int releaseNumber, int congress,
         CancellationToken cancellationToken)
     {

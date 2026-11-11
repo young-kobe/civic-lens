@@ -11,7 +11,7 @@ internal static class RetainedReleaseScan
     private const int MaximumReportedFailures = 50;
 
     public static async Task<ReleaseBillCountBackfillResult> BackfillAsync(IPublicationStore publications, IReleaseDirectory releases,
-        ReleaseSnapshotKind kind, int limit, int after, Func<PublicationReleaseSummary, IReadOnlyList<PublishedRevisionBinding>, Task<bool>> commit,
+        ReleaseSnapshotKind kind, int limit, int after, Func<PublicationReleaseSummary, IReadOnlyList<PublishedRevisionBinding>, Task<ReleaseSnapshotWrite>> commit,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
@@ -19,6 +19,7 @@ internal static class RetainedReleaseScan
         var examined = 0;
         var added = 0;
         var alreadyPresent = 0;
+        var skipped = 0;
         var failures = new List<ReleaseBillCountFailure>();
         var failed = 0;
         var cursor = after;
@@ -34,8 +35,12 @@ internal static class RetainedReleaseScan
                 try
                 {
                     var members = await ReleaseBillCountFiles.ReadValidatedMembersAsync(publications, releases, release, cancellationToken);
-                    if (await commit(release, members)) added++;
-                    else alreadyPresent++;
+                    switch (await commit(release, members))
+                    {
+                        case ReleaseSnapshotWrite.Added: added++; break;
+                        case ReleaseSnapshotWrite.AlreadyPresent: alreadyPresent++; break;
+                        default: skipped++; break;
+                    }
                 }
                 catch (Exception exception) when (ReleaseBillCountFailure.IsReportable(exception))
                 {
@@ -46,7 +51,7 @@ internal static class RetainedReleaseScan
             if (!page.HasMore) break;
             if (examined == limit) continuation = cursor;
         }
-        return new(examined, added, alreadyPresent, failed, failures, continuation);
+        return new(examined, added, alreadyPresent, skipped, failed, failures, continuation);
     }
 
     public static async Task<ReleaseBillCountVerificationResult> VerifyAsync(IPublicationStore publications, IReleaseDirectory releases,
@@ -56,6 +61,7 @@ internal static class RetainedReleaseScan
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         var examined = 0;
         var verified = 0;
+        var skipped = 0;
         var failures = new List<ReleaseBillCountFailure>();
         var failed = 0;
         var cursor = after?.ReleaseNumber ?? 0;
@@ -66,14 +72,18 @@ internal static class RetainedReleaseScan
             var page = await publications.ReadBillCountReleasePageAsync(cursor, selectionFingerprint, Math.Min(BatchSize, limit - examined),
                 releases.GetActiveAsync, cancellationToken);
             if (page.StaleCursor)
-                return new(examined, verified, failed, failures, null, true) { SelectionFingerprint = page.SelectionFingerprint };
+                return new(examined, verified, skipped, failed, failures, null, true) { SelectionFingerprint = page.SelectionFingerprint };
             selectionFingerprint = page.SelectionFingerprint;
             foreach (var release in page.Releases)
             {
                 examined++;
                 cursor = release.ReleaseNumber;
-                var failure = await VerifyOneAsync(publications, releases, kind, release, verify, cancellationToken);
-                if (failure is null) verified++;
+                var (failure, status) = await VerifyOneAsync(publications, releases, kind, release, verify, cancellationToken);
+                if (failure is null)
+                {
+                    if (status == BillCountStatus.NothingExpected) skipped++;
+                    else verified++;
+                }
                 else
                 {
                     failed++;
@@ -88,28 +98,29 @@ internal static class RetainedReleaseScan
             // File reads run outside the short database snapshot, so refresh the selection once before declaring the scan terminal.
             var currentFingerprint = await publications.ReadRetainedReleaseFingerprintAsync(releases.GetActiveAsync, cancellationToken);
             if (currentFingerprint != selectionFingerprint)
-                return new(examined, verified, failed, failures, null, true) { SelectionFingerprint = currentFingerprint };
+                return new(examined, verified, skipped, failed, failures, null, true) { SelectionFingerprint = currentFingerprint };
         }
-        return new(examined, verified, failed, failures, next, false) { SelectionFingerprint = selectionFingerprint ?? "" };
+        return new(examined, verified, skipped, failed, failures, next, false) { SelectionFingerprint = selectionFingerprint ?? "" };
     }
 
-    private static async Task<ReleaseBillCountFailure?> VerifyOneAsync(IPublicationStore publications, IReleaseDirectory releases,
+    private static async Task<(ReleaseBillCountFailure? Failure, BillCountStatus Status)> VerifyOneAsync(IPublicationStore publications, IReleaseDirectory releases,
         ReleaseSnapshotKind kind, PublicationReleaseSummary release,
         Func<PublicationReleaseSummary, IReadOnlyList<PublishedRevisionBinding>, Task<BillCountStatus>> verify, CancellationToken cancellationToken)
     {
         try
         {
             var members = await ReleaseBillCountFiles.ReadValidatedMembersAsync(publications, releases, release, cancellationToken);
-            return await verify(release, members) switch
+            var status = await verify(release, members);
+            return (status switch
             {
-                BillCountStatus.Verified => null,
+                BillCountStatus.Verified or BillCountStatus.NothingExpected => null,
                 BillCountStatus.MissingRows => ReleaseBillCountFailure.Missing(release.ReleaseNumber, kind),
                 _ => ReleaseBillCountFailure.Different(release.ReleaseNumber, kind)
-            };
+            }, status);
         }
         catch (Exception exception) when (ReleaseBillCountFailure.IsReportable(exception))
         {
-            return ReleaseBillCountFailure.Of(release.ReleaseNumber, exception, kind);
+            return (ReleaseBillCountFailure.Of(release.ReleaseNumber, exception, kind), BillCountStatus.DifferentRows);
         }
     }
 }

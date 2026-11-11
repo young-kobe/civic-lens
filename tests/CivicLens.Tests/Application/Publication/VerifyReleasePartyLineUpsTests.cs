@@ -16,10 +16,24 @@ public sealed class VerifyReleasePartyLineUpsTests
 
         var result = await Verify(scenario).ExecuteAsync(PublicationScenario.Owner, 5, null);
 
-        Assert.Equal((2, 1, 1), (result.Examined, result.Verified, result.Failed));
+        Assert.Equal((2, 1, 0, 1), (result.Examined, result.Verified, result.Skipped, result.Failed));
         Assert.Equal((1, reason), (result.Failures[0].ReleaseNumber, result.Failures[0].Reason));
         Assert.Equal(new[] { 1, 2 }, scenario.Publications.VerifiedPartyLineUps);
         Assert.Empty(scenario.Publications.CommittedPartyLineUps);
+    }
+
+    [Fact]
+    public async Task AReleaseThatExpectsNoRowsAndHoldsNoneIsSkippedAndNotCountedAsVerified()
+    {
+        var scenario = new PublicationScenario();
+        BillCountReleaseFixture.Add(scenario, 1);
+        BillCountReleaseFixture.Add(scenario, 2);
+        scenario.Publications.PartyLineUpStatuses[1] = BillCountStatus.NothingExpected;
+
+        var result = await Verify(scenario).ExecuteAsync(PublicationScenario.Owner, 5, null);
+
+        Assert.Equal((2, 1, 1, 0), (result.Examined, result.Verified, result.Skipped, result.Failed));
+        Assert.Empty(result.Failures);
     }
 
     [Fact]
