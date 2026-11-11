@@ -19,16 +19,16 @@
             {
                 var citation = Record.Citations[index];
                 var anchor = "#" + CitedText.Anchor(index);
-                var target = ContextLink.QuoteTarget(VersionLabel(citation).ToLowerInvariant(), index, Record.Citations.Length);
+                var target = ContextLink.QuoteTarget(DocumentChangeWords.VersionName(Record.Before, citation).ToLowerInvariant(), index, Record.Citations.Length);
                 <li>
-                    <CitationQuote Label="@VersionLabel(citation)" Quote="@citation.Quote">
+                    <CitationQuote Label="@DocumentChangeWords.VersionName(Record.Before, citation)" Quote="@citation.Quote">
                         <ContextLink Href="@anchor" Text="@ContextLink.FullVersionText" Target="@target" />
                     </CitationQuote>
                 </li>
             }
             @if (Record.ChangeDateEvidence is { } evidence)
             {
-                <DateEvidenceLine Label="@($"Evidence for the actual change date, {VersionLabel(evidence).ToLowerInvariant()}")" Quote="@evidence.Quote">
+                <DateEvidenceLine Label="@($"Evidence for the actual change date, {DocumentChangeWords.VersionName(Record.Before, evidence).ToLowerInvariant()}")" Quote="@evidence.Quote">
                     <ContextLink Href="@($"#{DocumentChangeWords.ChangeDateAnchor}")" Text="@ContextLink.FullVersionText" Target="@ContextLink.QuoteTarget("actual change date")" />
                 </DateEvidenceLine>
             }
@@ -48,9 +48,6 @@
 @code {
     [Parameter, EditorRequired] public PublishedDocumentChange Record { get; set; } = default!;
     [Parameter, EditorRequired] public PublicationCatalog Catalog { get; set; } = default!;
-
-    private string VersionLabel(PublishedCitation citation) =>
-        citation.ExtractionId == Record.Before.ExtractionId ? "Earlier version" : "Later version";
 
     private IReadOnlyList<Fact> RecordFacts
     {

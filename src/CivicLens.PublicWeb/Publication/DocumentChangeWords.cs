@@ -57,8 +57,9 @@ public static class DocumentChangeWords
 
     public static string SavedLine(PublishedDocumentVersion version) => $"Saved {Moment.Full(version.ObservedAtUtc)}";
 
-    public static string VersionName(DocumentChangePageData data, PublishedCitation citation) =>
-        citation.ExtractionId == data.Before.ExtractionId ? "Earlier version" : "Later version";
+    /// <summary>The version that a citation quotes. The static page and the server page both call it.</summary>
+    public static string VersionName(PublishedDocumentVersion before, PublishedCitation citation) =>
+        citation.ExtractionId == before.ExtractionId ? "Earlier version" : "Later version";
 
     /// <summary>The marks of one saved version: its citations and the change date evidence. The static page and the server page both call it.</summary>
     public static IReadOnlyList<CitedRange> RangesIn(PublishedCitation[] citations, PublishedCitation? changeDateEvidence, PublishedDocumentVersion version)

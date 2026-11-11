@@ -1,10 +1,10 @@
 using System.Net;
 using System.Text.RegularExpressions;
-using CivicLens.PublicWeb.Publication;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.PublicApi;
 using CivicLens.PublicApi.Pages;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -36,7 +36,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         return await new HtmlParser().ParseDocumentAsync(body);
     }
 
-    private static string Path(string kind, string id) => $"{ServerPageEndpoints.Prefix}/{kind}/{id}";
+    private static string Path(string id) => $"{ServerPageEndpoints.Prefix}/{PublicationProtocol.RecordPagePath(id)}";
 
     [Fact]
     public async Task TheStatementRouteRendersTheSavedQuoteWithOrderedSpeakerNamesAndIssueNames()
@@ -49,7 +49,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("official-a", "Ann Able"), new SeededOfficial("official-z", "Zed Zane"));
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health care', 'Defined');");
 
-        var page = await GetPageAsync(host, Path(RecordPageEndpoints.StatementPath, Statement.RecordId));
+        var page = await GetPageAsync(host, Path(Statement.RecordId));
 
         Assert.Equal("Headline a", page.QuerySelector("h1")!.TextContent);
         Assert.Equal("Zed Zane, Ann Able", page.QuerySelector(".public-breadcrumbs [aria-current=page]")!.TextContent);
@@ -69,7 +69,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + PublicRecordPageRows.ExecutiveAction(ActionId));
 
-        var page = await GetPageAsync(host, Path(RecordPageEndpoints.ExecutiveActionPath, ActionId));
+        var page = await GetPageAsync(host, Path(ActionId));
 
         Assert.Equal("Title two", page.QuerySelector("h1")!.TextContent);
         Assert.Contains("Signed by President Jane Roe on 20 Jan 2026. Printed in the Federal Register on 23 Jan 2026, citation 91 FR 1.", page.QuerySelector(".detail-lede")!.TextContent);
@@ -87,7 +87,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         await DocumentChangeEndpointsTests.ApproveAsync(host, saved);
         await DocumentChangeEndpointsTests.CommitAsync(host, 1, null, saved);
 
-        var page = await GetPageAsync(host, Path(RecordPageEndpoints.DocumentChangePath, saved.DraftId));
+        var page = await GetPageAsync(host, Path(saved.DraftId));
 
         Assert.Equal("Headline", page.QuerySelector("h1")!.TextContent);
         Assert.Equal("seven", page.QuerySelector(".redline del")!.TextContent.Replace("Removed: ", ""));
@@ -96,77 +96,52 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheBriefRouteRendersItsParagraphsAndPinnedCitationsInOrder()
-    {
-        await using var host = await StartAsync();
-        await PublishedBriefContentSeed.SeedAsync(host.OperationalDatabase);
-
-        var page = await GetPageAsync(host, Path(RecordPageEndpoints.BriefPath, BriefFixtures.RecordId));
-
-        Assert.Equal("Published brief headline", page.QuerySelector("h1")!.TextContent);
-        Assert.Equal(["Textparagraphone[R1]", "Textparagraphtwo[R2][R3]"], page.QuerySelectorAll(".ai-summary p.record-body").Select(text => Regex.Replace(text.TextContent, @"\s+", "")));
-        Assert.Equal(["Pinned statement headline", "Pinned document headline", "Bill 7"], page.QuerySelectorAll(".detail-cited li a").Select(link => link.TextContent));
-        Assert.Equal("Starts Monday 5 Oct 2026, New York time", page.QuerySelector(".detail-lede")!.TextContent);
-        Assert.NotNull(page.QuerySelector(".ai-summary-label"));
-    }
-
-    public static TheoryData<string, PublishedRecordKind> WithdrawableRoutes => new()
-    {
-        { RecordPageEndpoints.StatementPath, PublishedRecordKind.Statement },
-        { RecordPageEndpoints.ExecutiveActionPath, PublishedRecordKind.ExecutiveAction },
-        { RecordPageEndpoints.DocumentChangePath, PublishedRecordKind.DocumentChange },
-        { RecordPageEndpoints.BriefPath, PublishedRecordKind.Brief }
-    };
-
-    [Theory]
-    [MemberData(nameof(WithdrawableRoutes))]
-    public async Task AWithdrawnRecordOnItsKindRouteAnswersTheNoticeWithTheExactRevisionDatesNoteAndCorrectionHistoryAndAnotherKindRouteAnswersNotFound(string route, PublishedRecordKind kind)
-    {
-        await using var host = await StartAsync();
-        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 6, new DateTimeOffset(2026, 6, 6, 0, 0, 0, TimeSpan.Zero));
-        var id = new string('c', kind == PublishedRecordKind.DocumentChange ? 32 : 64);
-        var first = new DateTimeOffset(2026, 1, 2, 3, 4, 0, TimeSpan.Zero).UtcTicks;
-        var withdrawn = new DateTimeOffset(2026, 6, 2, 12, 30, 0, TimeSpan.Zero).UtcTicks;
-        var edit = new DateTimeOffset(2026, 3, 3, 0, 0, 0, TimeSpan.Zero).UtcTicks;
-        var text = PublicationProtocol.KindText(kind);
-        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
-            SET session_replication_role = replica;
-            INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('{text}', '{id}', {first});
-            INSERT INTO publication_withdrawals (kind, record_id, withdrawn_revision_number, withdrawn_at_utc_ticks, note, first_release, last_release) VALUES
-                ('{text}', '{id}', 5, {withdrawn}, 'Withdrawn after a report', 6, NULL);
-            INSERT INTO publication_withdrawal_corrections (kind, record_id, first_release, "position", replaced_revision_number, published_at_utc_ticks, note, facts_unchanged) VALUES
-                ('{text}', '{id}', 6, 0, 4, {edit}, 'A person fixed the date', false),
-                ('{text}', '{id}', 6, 1, 2, {edit}, NULL, false);
-            """);
-
-        var page = await GetPageAsync(host, Path(route, id));
-
-        Assert.Equal("This record was withdrawn", page.QuerySelector("h1")!.TextContent);
-        Assert.Equal([PublishedRecordLabels.Kind(kind), id, "5", "2 Jan 2026, 03:04 UTC", "2 Jun 2026, 12:30 UTC", "Withdrawn after a report"],
-            page.QuerySelectorAll("dd").Select(value => value.TextContent.Trim()));
-        var history = page.QuerySelectorAll(".corrections li").Select(item => item.TextContent).ToArray();
-        Assert.Equal(2, history.Length);
-        Assert.Contains("Replaces revision 4.", history[0]);
-        Assert.Contains("A person fixed the date", history[0]);
-        Assert.Contains("Replaces revision 2.", history[1]);
-        Assert.StartsWith(BaseUrl.Join(string.Empty), page.QuerySelector(".public-breadcrumbs a")!.GetAttribute("href"));
-        foreach (var other in WithdrawableRoutes.Select(row => (string)row[0]).Where(path => path != route))
-            await GetPageAsync(host, Path(other, id), HttpStatusCode.NotFound);
-    }
-
-    [Fact]
-    public async Task ARecordOfAnotherKindAMalformedIdAndAnUnknownIdAnswerTheNotFoundPageOnEveryKindRoute()
+    public async Task OneRecordRouteReadsTheKindOnceAndServesEveryKindItHasAPageFor()
     {
         await using var host = await StartAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await StatementsSeed.AddAsync(host.OperationalDatabase, Statement);
+        await StatementEndpointsTests.AddDetailEvidenceAsync(host.OperationalDatabase, Statement.RecordId, ExtractionId, Source,
+            Source.IndexOf("exact quote", StringComparison.Ordinal), "exact quote".Length, Source.IndexOf("Friday", StringComparison.Ordinal), 6);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("official-a", "Ann Able"), new SeededOfficial("official-z", "Zed Zane"));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + PublicRecordPageRows.ExecutiveAction(ActionId));
 
-        foreach (var kind in new[] { RecordPageEndpoints.ExecutiveActionPath, RecordPageEndpoints.DocumentChangePath })
-            await GetPageAsync(host, Path(kind, Statement.RecordId), HttpStatusCode.NotFound);
-        foreach (var kind in new[] { RecordPageEndpoints.StatementPath, RecordPageEndpoints.ExecutiveActionPath, RecordPageEndpoints.DocumentChangePath, RecordPageEndpoints.BriefPath })
-        {
-            await GetPageAsync(host, Path(kind, "bad-id"), HttpStatusCode.NotFound);
-            await GetPageAsync(host, Path(kind, new string('f', 64)), HttpStatusCode.NotFound);
-        }
+        Assert.Equal("Headline a", (await GetPageAsync(host, Path(Statement.RecordId))).QuerySelector("h1")!.TextContent);
+        Assert.Equal("Title two", (await GetPageAsync(host, Path(ActionId))).QuerySelector("h1")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ACodeApprovedStatementNamesTheCodeCheckOfItsDateAndAPersonApprovedOneDoesNot()
+    {
+        var person = new SeededStatement('b', "2026-03-02", ["official-z", "official-a"], ["health", "unlisted"], "Analysis", "Person");
+
+        Assert.Contains(PublishedRecordLabels.ModelDateCheckedByCode, await ReadSourceFoldAsync(Statement));
+        Assert.DoesNotContain(PublishedRecordLabels.ModelDateCheckedByCode, await ReadSourceFoldAsync(person));
+    }
+
+    private async Task<string> ReadSourceFoldAsync(SeededStatement seeded)
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        await StatementsSeed.AddAsync(host.OperationalDatabase, seeded);
+        await StatementEndpointsTests.AddDetailEvidenceAsync(host.OperationalDatabase, seeded.RecordId, ExtractionId, Source,
+            Source.IndexOf("exact quote", StringComparison.Ordinal), "exact quote".Length, Source.IndexOf("Friday", StringComparison.Ordinal), 6);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("official-a", "Ann Able"), new SeededOfficial("official-z", "Zed Zane"));
+        return (await GetPageAsync(host, Path(seeded.RecordId))).QuerySelector("#source")!.TextContent;
+    }
+
+    [Fact]
+    public async Task ARecordOfAKindWithoutAPageAMalformedIdAndAnUnknownIdAnswerTheNotFoundPage()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        await StatementsSeed.AddAsync(host.OperationalDatabase, Statement);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE publication_record_states SET kind = 'brief' WHERE record_id = '{Statement.RecordId}';");
+
+        await GetPageAsync(host, Path(Statement.RecordId), HttpStatusCode.NotFound);
+        await GetPageAsync(host, $"{ServerPageEndpoints.Prefix}/records/bad-id.html", HttpStatusCode.NotFound);
+        await GetPageAsync(host, Path(new string('f', 64)), HttpStatusCode.NotFound);
+        foreach (var kindRoute in new[] { "statements", "executive-actions", "document-changes" })
+            await GetPageAsync(host, $"{ServerPageEndpoints.Prefix}/{kindRoute}/{Statement.RecordId}", HttpStatusCode.NotFound);
     }
 }

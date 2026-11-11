@@ -16,10 +16,7 @@ public sealed class StatementPageReader(StatementStore statements, RecordSnapsho
         if ((await statements.FindAsync(transaction, recordId, cancellationToken)).Detail is not { } detail) return null;
         var row = detail.Statement;
         var (speakers, issues) = await snapshot.ReadNamesAsync(transaction, row.SpeakerIds, row.IssueIds, cancellationToken);
-        return new(detail.Release, row.RecordId, row.RevisionNumber, row.StatementDate, row.Headline, row.Summary, row.TextOrigin, row.Label, ApproverOf(row),
+        return new(detail.Release, row.RecordId, row.RevisionNumber, row.StatementDate, row.Headline, row.Summary, row.TextOrigin, row.Label, detail.ApprovedBy,
             speakers, issues, detail.Source, detail.ArticleUrl, detail.StatementDateEvidence, detail.Quotations);
     }
-
-    /// <summary>The view has no approver column. It sets the label only for a model summary that code approved, so a label stands for code approval and no label for a person.</summary>
-    private static PublishedApprover ApproverOf(StatementRow row) => row.Label is null ? PublishedApprover.Person : PublishedApprover.Code;
 }

@@ -1,0 +1,250 @@
+using System.Net;
+using AngleSharp.Dom;
+using AngleSharp.Html.Parser;
+using CivicLens.PublicWeb.Publication;
+using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
+using CivicLens.Tests.Infrastructure.Collection;
+using CivicLens.Tests.PublicApi.Bills;
+using CivicLens.Tests.PublicApi.Home;
+using CivicLens.Tests.PublicApi.Statements;
+using CivicLens.Tests.PublicApi.Votes;
+
+namespace CivicLens.Tests.PublicApi.Officials;
+
+[Collection(PostgresCollection.Name)]
+[Trait("Category", "Postgres")]
+public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
+{
+    private static readonly PublicBaseUrl BaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test")!;
+    private static readonly string Linked = new('5', 64);
+    private static readonly string Unlinked = new('6', 64);
+
+    private static readonly SeededOfficial[] Officials =
+    [
+        new("p0", "Ann Able", new SeededTerm("Representative", "Representative", "2025-01-03") { State = "MA", District = 7, Party = "Democrat", EndsOn = "2027-01-03" }),
+        new("p1", "Ben Baker", new SeededTerm("Representative", "Representative", "2025-01-03") { State = "TX", District = 3, Party = "Republican" }),
+        new("p2", "Cy Cole", new SeededTerm("Representative", "Representative", "2025-01-03") { State = "MA", District = 1, Party = "Democrat" }),
+        new("president", "Eve East", new SeededTerm("President", "Executive", "2025-01-20") { Party = "Republican" })
+    ];
+
+    // p0 votes against the Democratic majority on a (split), misses b, votes with the party on c (split), and breaks on d, which is not a split vote.
+    private static readonly SeededVote[] Votes =
+    [
+        new('a', "2026-02-01") { Casts = ["Nay", "Nay", "Yea"], PersonIds = ["p0", "p1", "p2"], RollCall = 1 },
+        new('b', "2026-02-03") { Casts = ["Not Voting", "Nay", "Yea"], PersonIds = ["p0", "p1", "p2"], RollCall = 2 },
+        new('c', "2026-02-05") { Casts = ["Yea", "Nay", "Yea"], PersonIds = ["p0", "p1", "p2"], RollCall = 3 },
+        new('d', "2026-02-06") { Casts = ["Nay", "Nay", "Yea"], PersonIds = ["p0", "p1", "p2"], RollCall = 4 }
+    ];
+
+    private async Task<ApiHost> StartAsync()
+    {
+        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
+        var database = host.OperationalDatabase;
+        await ViewsSeed.ActivateReleaseAsync(database, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        await OfficialsSeed.AddOfficialsAsync(database, Officials);
+        await ViewsSeed.AddVotesAsync(database, Votes);
+        await ViewsSeed.ExecuteAsync(database, $"""
+            SET session_replication_role = replica;
+            UPDATE vote_member_list_entries SET party = CASE person_id WHEN 'p0' THEN 'Democrat' WHEN 'p1' THEN 'Republican' WHEN 'p2' THEN 'Democrat' END;
+            UPDATE vote_revisions SET columns_written = true, alignment = 'Split', democrat_majority = 'Yea', republican_majority = 'Nay'
+              WHERE record_id IN ('{new string('a', 64)}', '{new string('b', 64)}', '{new string('c', 64)}');
+            UPDATE vote_revisions SET columns_written = true, alignment = 'PartiesAgree', democrat_majority = 'Yea', republican_majority = 'Yea'
+              WHERE record_id = '{new string('d', 64)}';
+            """);
+        await StatementsSeed.AddAsync(database, new SeededStatement('5', "2026-02-10", ["p0"], [], "Analysis", "Code"),
+            new SeededStatement('6', "2026-02-11", ["p0"], [], "Person", "Person"));
+        await ViewsSeed.ExecuteAsync(database, $"""
+            SET session_replication_role = replica;
+            {PublicRecordPageRows.Link(new string('7', 64), Linked, new string('c', 64), "vote", "StatementAboutVote", "2026-02-10")}
+            {PublicRecordPageRows.RelationshipRevision(new string('7', 64), 1, Linked, new string('c', 64), "vote", "StatementAboutVote", "The statement names this vote.")}
+            """);
+        await BillsSeed.AddBillsAsync(database,
+            new SeededBill('1', "2026-03-02") { BillNumber = 1, Sponsorships = [new("p0", "Sponsor", "2026-01-10")] },
+            new SeededBill('2', "2026-03-03") { BillNumber = 2, BillLine = "Pays landlords.", Sponsorships = [new("p0", "Sponsor", "2026-03-03"), new("p1", "Cosponsor", "2026-03-03")] },
+            new SeededBill('3', "2026-03-04") { BillNumber = 3, Sponsorships = [new("p1", "Sponsor", "2026-03-04")] });
+        return host;
+    }
+
+    private static async Task<IDocument> GetPageAsync(ApiHost host, string path, HttpStatusCode expected = HttpStatusCode.OK)
+    {
+        using var response = await host.Client.GetAsync(path);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.StatusCode == expected, $"{path} gave {(int)response.StatusCode}: {body}");
+        return await new HtmlParser().ParseDocumentAsync(body);
+    }
+
+    [Fact]
+    public async Task TheStripLinksOnlyThePartyBreakAndTheMissedVoteNewestFirstAndMatchesTheFigures()
+    {
+        await using var host = await StartAsync();
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        var marks = page.QuerySelectorAll(".official-strip a").Select(link => (link.GetAttribute("href")!, link.ClassList.Contains("missed"))).ToArray();
+        Assert.Equal([(BaseUrl.Join($"records/{new string('b', 64)}.html"), true), (BaseUrl.Join($"records/{new string('a', 64)}.html"), false)], marks);
+        var figures = string.Join('|', page.QuerySelectorAll(".official-figs li").Select(item => item.TextContent));
+        Assert.Contains("3roll calls voted on, of 4 House roll calls", figures);
+        Assert.Contains("1of 2 split votes", figures);
+        Assert.Contains("1 vote against most House Democrats", page.QuerySelector(".official-legend")!.TextContent);
+        Assert.Contains("1 missed House roll call", page.QuerySelector(".official-legend")!.TextContent);
+    }
+
+    [Fact]
+    public async Task NoStripSquareTextNamesAVoteHeadlineBecauseTheHeadlineIsAiText()
+    {
+        await using var host = await StartAsync();
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        var headlines = page.QuerySelectorAll("#votes .shared-vote-row h3 a").Select(link => link.TextContent).ToArray();
+        Assert.NotEmpty(headlines);
+        var strip = page.QuerySelector(".official-strip")!;
+        Assert.All(headlines, headline => Assert.DoesNotContain(headline, strip.TextContent));
+        Assert.All(strip.QuerySelectorAll("a"), mark => Assert.Equal(mark.GetAttribute("title"), mark.QuerySelector(".visually-hidden")!.TextContent));
+    }
+
+    [Fact]
+    public async Task TheStripAndTheFigureCountTheSameVotesWhenAMemberHasAThirdPartyATieOrAPresentCast()
+    {
+        await using var host = await StartAsync();
+        var database = host.OperationalDatabase;
+        await ViewsSeed.AddVotesAsync(database,
+            new SeededVote('e', "2026-02-07") { Casts = ["Nay"], PersonIds = ["p0"], RollCall = 5 },
+            new SeededVote('f', "2026-02-08") { Casts = ["Nay"], PersonIds = ["p0"], RollCall = 6 },
+            new SeededVote('9', "2026-02-09") { Casts = ["Present"], PersonIds = ["p0"], RollCall = 7 });
+        await ViewsSeed.ExecuteAsync(database, $"""
+            SET session_replication_role = replica;
+            UPDATE vote_member_list_entries SET party = 'Independent' WHERE person_id = 'p0' AND list_id = (SELECT member_list_id FROM vote_revisions WHERE record_id = '{new string('e', 64)}');
+            UPDATE vote_member_list_entries SET party = 'Democrat' WHERE person_id = 'p0' AND list_id IN (SELECT member_list_id FROM vote_revisions WHERE record_id IN ('{new string('f', 64)}', '{new string('9', 64)}'));
+            UPDATE vote_revisions SET columns_written = true, alignment = 'Split', democrat_majority = 'Yea', republican_majority = 'Nay'
+              WHERE record_id IN ('{new string('e', 64)}', '{new string('9', 64)}');
+            UPDATE vote_revisions SET columns_written = true, alignment = 'Split', democrat_majority = NULL, republican_majority = NULL
+              WHERE record_id = '{new string('f', 64)}';
+            """);
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        Assert.Equal(2, page.QuerySelectorAll(".official-strip a").Length);
+        Assert.Equal(1, page.QuerySelectorAll(".official-strip a.against").Length);
+        Assert.Contains("1of 2 split votes", string.Join('|', page.QuerySelectorAll(".official-figs li").Select(item => item.TextContent)));
+        Assert.Contains("1 vote against most House Democrats", page.QuerySelector(".official-legend")!.TextContent);
+    }
+
+    [Fact]
+    public async Task RecentVotesShowTheCastOfTheOfficialAndOnlyLinkedStatementsAppearWithTheirVote()
+    {
+        await using var host = await StartAsync();
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        Assert.Equal(4, page.QuerySelectorAll("#votes .shared-vote-row").Length);
+        Assert.Contains("No (Nay)", page.QuerySelector("#votes .shared-vote-row")!.TextContent);
+        var statements = Assert.Single(page.QuerySelectorAll("#statements .official-rows li"));
+        Assert.Contains("Said on 10 Feb 2026", statements.TextContent);
+        Assert.Contains("House roll call 3", statements.QuerySelector(".official-related a")!.TextContent);
+        Assert.Contains("Yes (Yea)", statements.QuerySelector(".shared-vote-cast-value")!.TextContent);
+        Assert.Contains(PublishedRecordLabels.StatementModelWording, statements.TextContent);
+        Assert.Equal(4, page.QuerySelectorAll("#votes .shared-vote-label").Length);
+        Assert.All(page.QuerySelectorAll("#votes .shared-vote-label"), label => Assert.Equal(PublishedRecordLabels.ModelWording, label.TextContent.Trim()));
+        Assert.DoesNotContain(page.QuerySelectorAll("#statements a"), link => link.GetAttribute("href")!.Contains(Unlinked));
+    }
+
+    [Fact]
+    public async Task BillRowsListOnlyBillsTheOfficialSponsoredNewestFirstWithIntroducedDatesAndTheBillLine()
+    {
+        await using var host = await StartAsync();
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        var rows = page.QuerySelectorAll("#bills .official-rows li");
+        Assert.Equal(2, rows.Length);
+        Assert.Equal("Pays landlords.", rows[0].QuerySelector(".bill-line")!.TextContent);
+        Assert.Null(rows[1].QuerySelector(".bill-line"));
+        Assert.Single(page.QuerySelectorAll("#bills > p.muted"));
+        Assert.Contains("Introduced 3 Mar 2026", rows[0].QuerySelector(".official-meta")!.TextContent);
+        Assert.Contains("Introduced 10 Jan 2026", rows[1].QuerySelector(".official-meta")!.TextContent);
+        Assert.Contains("See all 2 bills", page.QuerySelector("#bills .official-more")!.TextContent);
+    }
+
+    [Fact]
+    public async Task AnOfficialWithNoLinkedStatementsHidesThatSectionAndKeepsTheMessageInTheJumpRow()
+    {
+        await using var host = await StartAsync();
+
+        var page = await GetPageAsync(host, "/web/officials/p2");
+
+        Assert.Null(page.QuerySelector("#statements"));
+        Assert.Equal(OfficialPageText.NoLinks, page.QuerySelector(".official-jump p")!.TextContent);
+        Assert.Null(page.QuerySelector("#bills"));
+    }
+
+    [Fact]
+    public async Task AStatementLinkedOnlyToABillKeepsTheNoLinksMessageHidden()
+    {
+        await using var host = await StartAsync();
+        await StatementsSeed.AddAsync(host.OperationalDatabase, new SeededStatement('4', "2026-02-12", ["p2"], [], "Person", "Person"));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            {PublicRecordPageRows.Link(new string('8', 64), new string('4', 64), new string('1', 64), "action", "StatesPositionOn", "2026-02-12")}
+            {PublicRecordPageRows.RelationshipRevision(new string('8', 64), 1, new string('4', 64), new string('1', 64), "action", "StatesPositionOn", "The statement names this bill.")}
+            """);
+
+        var page = await GetPageAsync(host, "/web/officials/p2");
+
+        Assert.Null(page.QuerySelector("#statements"));
+        Assert.Null(page.QuerySelector(".official-jump p"));
+    }
+
+    [Fact]
+    public async Task ThePageCarriesTheReleaseETagTheMembersStripSlotAndTheSharedTrail()
+    {
+        await using var host = await StartAsync();
+
+        using var response = await host.Client.GetAsync("/web/officials/p0");
+        var page = await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
+
+        Assert.Matches("^W/\"r1-", response.Headers.ETag!.ToString());
+        Assert.Equal(["Home", "Officials"], page.QuerySelectorAll("nav[aria-label=Breadcrumb] a").Select(link => link.TextContent).ToArray());
+        Assert.Equal("officials/p0.html", new Uri(page.QuerySelector("link[rel=canonical]")!.GetAttribute("href")!).AbsolutePath.TrimStart('/'));
+    }
+
+    [Fact]
+    public async Task APresidentGetsPerTypeSectionsWithCountsAndNewestFirstRowsAndNoSpeeches()
+    {
+        await using var host = await StartAsync();
+        await HomeSeed.AddExecutiveActionsAsync(host.OperationalDatabase,
+            new SeededExecutiveAction('e', "ExecutiveOrder", "2026-05-20", "2026-05-21") { Title = "Newer order" },
+            new SeededExecutiveAction('f', "ExecutiveOrder", "2026-05-01", "2026-05-02") { Title = "Older order" },
+            new SeededExecutiveAction('9', "Proclamation", "2026-05-18", "2026-05-19") { Title = "A proclamation" });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, string.Join('\n', new[] { ('e', "ExecutiveOrder"), ('f', "ExecutiveOrder"), ('9', "Proclamation") }.Select(action => $"""
+            SET session_replication_role = replica;
+            INSERT INTO published_entries (kind, record_id, revision_number, executive_action_record_id, executive_action_revision_number, headline, document_type)
+              VALUES ('executiveAction', '{new string(action.Item1, 64)}', 1, '{new string(action.Item1, 64)}', 1, 'H', '{action.Item2}');
+            INSERT INTO published_entry_officials (kind, record_id, revision_number, "position", official_id)
+              VALUES ('executiveAction', '{new string(action.Item1, 64)}', 1, 0, 'president');
+            """)));
+
+        var page = await GetPageAsync(host, "/web/officials/president");
+
+        Assert.Equal("President Eve East", page.QuerySelector("h1")!.TextContent);
+        Assert.Contains("3 executive actions", page.QuerySelector(".official-lede")!.TextContent);
+        Assert.Contains("signed from 1 May 2026 to 20 May 2026", page.QuerySelector(".official-lede")!.TextContent);
+        Assert.Equal(["Executive orders (2)", "Proclamations (1)"], page.QuerySelectorAll(".official-exec h2").Select(heading => heading.TextContent).ToArray());
+        Assert.Equal(["Newer order", "Older order"], page.QuerySelectorAll("#type-executiveorder .official-row-title").Select(link => link.TextContent).ToArray());
+        Assert.Null(page.QuerySelector("#votes"));
+        Assert.DoesNotContain("What the President said", page.Body!.TextContent);
+    }
+
+    [Theory]
+    [InlineData("/web/officials/nobody")]
+    [InlineData("/web/officials/bad%20id")]
+    public async Task AnUnknownOfficialAnswersWithTheNotFoundPage(string path)
+    {
+        await using var host = await StartAsync();
+
+        using var response = await host.Client.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+}

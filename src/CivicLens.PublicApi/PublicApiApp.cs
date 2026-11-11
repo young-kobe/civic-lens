@@ -62,6 +62,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(provider => new BoardStore(views, provider.GetRequiredService<PartyAgreementStore>()));
         builder.Services.AddSingleton(new MemberVoteStore(views));
         builder.Services.AddSingleton(new BillStore(views));
+        builder.Services.AddSingleton(new RecordKindStore(views));
         builder.Services.AddSingleton(new RecordSnapshot(views));
         builder.Services.AddSingleton(new StatementStore(views));
         builder.Services.AddSingleton(provider => new StatementPageReader(provider.GetRequiredService<StatementStore>(), provider.GetRequiredService<RecordSnapshot>()));
@@ -89,6 +90,7 @@ public static class PublicApiApp
             builder.Services.AddSingleton<ServerPageResponder>();
         }
         builder.Services.AddSingleton(new OfficialStore(views));
+        builder.Services.AddSingleton(new OfficialPageReader(views));
         builder.Services.AddSingleton(new ReportStore(writer, options));
         if (options.Turnstile is { } turnstile)
             builder.Services.AddSingleton(new TurnstileVerifier(

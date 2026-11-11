@@ -15,8 +15,6 @@ public static class ExecutiveActionWords
 
     public const string ReadIt = "Read it in the Federal Register";
 
-    public const string WhoReviewedText = "Code checked each fact against the saved Federal Register record. No person reviewed it.";
-
     /// <summary>The text of a correction notice in three parts. The middle part is the link.</summary>
     public static (string Text, bool IsLink)[] CorrectionParts(DateOnly publishedOn) =>
     [
@@ -46,8 +44,7 @@ public static class ExecutiveActionWords
     public static IReadOnlyList<Fact> SourceFacts(ExecutiveActionPageData data) =>
     [
         Fact.LinkList("Official document", [new FactLink($"Federal Register document {data.DocumentNumber}", data.DocumentUrl)]),
-        new Fact("Document type", PublishedRecordLabels.ExecutiveActionKind(data.Kind)) { TermKey = PublishedRecordLabels.ExecutiveActionTermKey(data.Kind) },
-        new("Who reviewed it", WhoReviewedText)
+        new Fact("Document type", PublishedRecordLabels.ExecutiveActionKind(data.Kind)) { TermKey = PublishedRecordLabels.ExecutiveActionTermKey(data.Kind) }
     ];
 
     private static Fact Correction(ExecutiveActionNoticeData notice)

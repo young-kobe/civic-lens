@@ -4,7 +4,7 @@
 @using CivicLens.PublicWeb.Publication
 
 <PublishedRecordFrame Kind="PublishedRecordKind.Statement" Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" ShortName="@PublishedStatementView.ShortName(Record)" Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedStatementView.Facts(Record, Catalog)"
-                      Caveat="The observation time shows when the source was captured. It does not show when the statement was first made.">
+                      Caveat="@StatementPageView.CaptureCaveat">
     <PublishedRelatedPanel Related="Related" Kind="PublishedRecordKind.Statement" RecordId="@Record.RecordId" />
     <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
 
@@ -36,7 +36,7 @@
     <Panel Title="Source text" Id="source-title" Padded="true">
         @if (Record.ArticleUrl is { } article)
         {
-            <p class="muted small">Article: <a href="@article" rel="noopener noreferrer nofollow">@article</a>. The source below is the feed that lists the article. It holds a copy of the article text.</p>
+            <p class="muted small">Article: <a href="@article" rel="noopener noreferrer nofollow">@article</a>. @StatementPageView.FeedNote</p>
         }
         <VersionSource Version="Record.Source" />
         <DocumentText Label="Source text" Runs="CitedText.Split(Record.Source.Text, StatementPageView.Ranges(Record.Quotations, Record.StatementDateEvidence))" />

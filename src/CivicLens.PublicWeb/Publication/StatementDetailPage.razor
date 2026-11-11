@@ -37,7 +37,7 @@
                     }
                 </section>
             </div>
-            <aside class="detail-rail" aria-label="Speakers, issues, and source">
+            <aside class="detail-rail" aria-label="Speakers and issues">
                 <section class="detail-card" aria-labelledby="statement-speakers-title">
                     <h2 id="statement-speakers-title">@(Data.Speakers.Length == 1 ? "Speaker" : "Speakers")</h2>
                     <ul class="detail-list" role="list">
@@ -76,7 +76,6 @@
             {
                 <p class="muted small">@StatementPageView.FeedNote</p>
             }
-            <SourceLinesNote>saved source</SourceLinesNote>
             <DocumentText Label="Source text" Runs="CitedText.Split(Data.Source.Text, StatementPageView.Ranges(Data.Quotations, Data.DateEvidence))" />
         </SourceFold>
     </article>

@@ -41,7 +41,7 @@ public sealed class ExecutiveActionDetailPageTests
     }
 
     [Fact]
-    public async Task ThePresidentLinksToTheOfficialPageAndTheSourceFoldNamesTheOfficialDocumentAndWhoChecked()
+    public async Task ThePresidentLinksToTheOfficialPageAndTheSourceFoldNamesTheOfficialDocument()
     {
         var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(Action());
 
@@ -49,7 +49,6 @@ public sealed class ExecutiveActionDetailPageTests
         Assert.Equal("https://www.federalregister.gov/d/2026-21599", page.QuerySelector(".detail-facts a.btn")!.GetAttribute("href"));
         var fold = page.QuerySelector("#source")!.TextContent;
         Assert.Contains("Federal Register document 2026-21599", fold);
-        Assert.Contains(ExecutiveActionWords.WhoReviewedText, fold);
     }
 
     [Fact]
