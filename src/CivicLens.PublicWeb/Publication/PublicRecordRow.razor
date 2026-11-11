@@ -23,6 +23,10 @@
         {
             <p class="small muted"><PublishedBillLine Line="@BillLine" /><PublishedBillLineNote Inline="true" /></p>
         }
+        @if (Snippet is not null)
+        {
+            <p class="search-snippet">@Snippet</p>
+        }
     </div>
 </li>
 
@@ -37,4 +41,5 @@
     [Parameter] public int? Nay { get; set; }
     [Parameter] public string? ResultWords { get; set; }
     [Parameter] public string? BillLine { get; set; }
+    [Parameter] public RenderFragment? Snippet { get; set; }
 }

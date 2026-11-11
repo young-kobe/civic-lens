@@ -32,7 +32,7 @@ public sealed class SearchResultsPageTests
         Assert.True(ListPageRender.Precedes(empty.QuerySelector("p")!, empty.QuerySelector(".search-next")!));
         Assert.True(ListPageRender.Precedes(page.QuerySelector("form.search-box")!, empty));
         Assert.True(ListPageRender.Precedes(empty, page.QuerySelector(".list-fold")!));
-        Assert.Null(page.QuerySelector(".list-rows"));
+        Assert.Null(page.QuerySelector(".record-rows"));
         Assert.Null(page.QuerySelector(".list-status"));
     }
 
@@ -44,7 +44,7 @@ public sealed class SearchResultsPageTests
             bill: new(BillId, "H.R. 5334, the Sanctioning Act", 119, "119-111", 1),
             hits: [Hit('a', "H.R. 5334 would impose sanctions")]));
 
-        var ordered = new[] { ".search-official", ".search-pin", ".list-rows", ".list-fold" }.Select(selector => page.QuerySelector(selector)!).ToArray();
+        var ordered = new[] { ".search-official", ".search-pin", ".record-rows", ".list-fold" }.Select(selector => page.QuerySelector(selector)!).ToArray();
         for (var index = 1; index < ordered.Length; index++) Assert.True(ListPageRender.Precedes(ordered[index - 1], ordered[index]));
         Assert.Equal("Representative for CA, district 19. Democrat.", page.QuerySelector(".search-official p")!.TextContent);
         Assert.Contains("Bill in the 119th Congress. Became law as Public Law 119-111.", page.QuerySelector(".search-pin")!.TextContent);
@@ -80,7 +80,7 @@ public sealed class SearchResultsPageTests
         var page = await RenderAsync(Data(Query(null) with { Kind = "action" },
             hits: [Hit('a', "One", billLine: "This bill funds housing."), Hit('b', "Two")]));
 
-        var rows = page.QuerySelectorAll(".search-hit");
+        var rows = page.QuerySelectorAll(".record-row");
         Assert.Equal("This bill funds housing.", rows[0].QuerySelector(".search-snippet")!.TextContent);
         Assert.Null(rows[1].QuerySelector(".search-snippet"));
     }

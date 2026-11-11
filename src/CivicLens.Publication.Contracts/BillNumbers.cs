@@ -19,6 +19,9 @@ public static class BillNumbers
     public static string Of(string billType, int number) =>
         $"{(TypeLabels.TryGetValue(billType.ToLowerInvariant(), out var label) ? label : billType.ToUpperInvariant())} {number}";
 
+    /// <summary>Whether the lower case stored code is a bill type in the table.</summary>
+    public static bool IsType(string billType) => TypeLabels.ContainsKey(billType);
+
     /// <summary>The printed label of a bill type for stored, code approved text. A type outside the table throws, so no unreviewed label reaches a stored headline.</summary>
     public static string TypeLabel(string billType) => TypeLabels[billType.ToLowerInvariant()];
 }

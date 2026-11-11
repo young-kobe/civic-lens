@@ -118,7 +118,7 @@ public sealed class ListPageTests(PostgresCollection postgres)
         Assert.True(byNumber.Headers.CacheControl.Private);
         Assert.Null(byNumber.Headers.ETag);
         Assert.Equal("H.R. 5334, the Sanctions Act", number.QuerySelector(".search-pin h2")!.TextContent);
-        Assert.Contains("H.R. 5334 debate", number.QuerySelector(".list-rows")!.TextContent);
+        Assert.Contains("H.R. 5334 debate", number.QuerySelector(".record-rows")!.TextContent);
         Assert.Null(number.QuerySelector(".search-official"));
         Assert.Equal("Ayanna Pressley", name.QuerySelector(".search-official h2")!.TextContent);
         Assert.Null(name.QuerySelector(".search-pin"));
@@ -140,7 +140,7 @@ public sealed class ListPageTests(PostgresCollection postgres)
 
         Assert.Contains("No records match \"zzqxv\".", none.QuerySelector(".empty")!.TextContent);
         Assert.Null(blank.QuerySelector(".empty"));
-        Assert.Null(blank.QuerySelector(".list-rows"));
+        Assert.Null(blank.QuerySelector(".record-rows"));
     }
 }
 

@@ -7,7 +7,7 @@ public static class PublicSections
     /// <summary>One link of the header or footer. HiddenText is read by assistive technology after the link text.</summary>
     public sealed record NavLink(PublicSection? Section, string Text, string Path, string? HiddenText = null);
 
-    /// <summary>The path of the party boards page. Caddy maps it to the server page.</summary>
+    /// <summary>The path of the party boards page. The cutover PR maps it to the server page.</summary>
     public const string BoardsPath = "boards.html";
 
     public static readonly IReadOnlyList<NavLink> Header =

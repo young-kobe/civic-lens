@@ -51,33 +51,11 @@
     {
         <p class="list-status" role="status">@(Data.Hits.Count) @(Data.Hits.Count == 1 ? "result" : "results")@(Data.Query.Text is null ? string.Empty : $" for \"{Data.Query.Text}\""). Release @Data.Release.</p>
         <h2 class="search-results-title">Records</h2>
-        <ul class="list-rows" role="list">
+        <ul class="record-rows" role="list">
             @foreach (var hit in Data.Hits)
             {
-                <li class="list-row search-hit">
-                    <div>
-                        <a class="list-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(hit.RecordId))">@hit.Headline</a>
-                        <div class="list-row-meta">
-                            <span>@PublishedRecordLabels.Kind(hit.Kind)</span>
-                            @if (hit.Day is { } day)
-                            {
-                                <span>@Moment.Day(day)</span>
-                            }
-                            @foreach (var name in hit.Officials)
-                            {
-                                <span>@name</span>
-                            }
-                        </div>
-                        @if (hit.Snippet is { } snippet)
-                        {
-                            <p class="search-snippet">@Marked(snippet)</p>
-                        }
-                        else if (hit.BillLine is { } line)
-                        {
-                            <p class="search-snippet">@line</p>
-                        }
-                    </div>
-                </li>
+                <PublicRecordRow Icon="PublishedRecordLabels.Icon(hit.Kind)" IconClass="@IconClass(hit.Kind)" Href="@(RootPath + PublicationProtocol.RecordPagePath(hit.RecordId))"
+                                 Headline="@hit.Headline" Meta="@Meta(hit)" Snippet="@Snippet(hit)" />
             }
         </ul>
         @if (Data.NextCursor is { } cursor)
@@ -139,6 +117,14 @@
         var seat = OfficialSeat.Text(official.Kind, null, official.State, official.District);
         return official.Party is { } party ? $"{seat}. {party}." : $"{seat}.";
     }
+
+    private static string? IconClass(PublishedRecordKind kind) => kind == PublishedRecordKind.Action ? "record-row-icon-bill" : null;
+
+    private static string Meta(SearchHitData hit) =>
+        string.Join(", ", new[] { PublishedRecordLabels.Kind(hit.Kind), hit.Day is { } day ? Moment.Day(day) : null }.Concat(hit.Officials).OfType<string>());
+
+    private static RenderFragment? Snippet(SearchHitData hit) =>
+        hit.Snippet is { } snippet ? Marked(snippet) : hit.BillLine is { } line ? builder => builder.AddContent(0, line) : null;
 
     private string RecordsOfHref(SearchOfficialData official) => "?" + Query(("q", Data.Query.Text), ("official", official.OfficialId));
 

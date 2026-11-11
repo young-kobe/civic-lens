@@ -2850,7 +2850,7 @@ public sealed class ReleaseRendererTests
     }
 
     // Written by ReleaseIndexPages and ReleaseOfficialPages. PublishReleaseTests pins them.
-    // The boards page is the one header link that the release does not write. Caddy maps it to the server page.
+    // The boards page is the one header link that the release does not write. The cutover PR maps it to the server page.
     private static readonly string[] WrittenRootPages =
     [
         PublicationProtocol.HomePath, PublicationProtocol.OfficialsPagePath, PublicationProtocol.FacetsPath,
