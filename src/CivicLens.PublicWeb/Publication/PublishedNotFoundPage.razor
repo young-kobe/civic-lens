@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-<PublicPage CanonicalPath="@null" NoIndex="true" Title="Page not found" Description="This page does not exist on Civic Lens." RootPath="@RootPath">
+<PublicPage Section="null" CanonicalPath="@null" NoIndex="true" Title="Page not found" Description="This page does not exist on Civic Lens." RootPath="@RootPath">
     <Panel Label="Page not found" Padded="true">
         <EmptyState Title="Page not found" Text="This page does not exist on Civic Lens. The address may be wrong, or the page may have moved.">
             <Action><Button Href="@(RootPath + PublicationProtocol.HomePath)">Go to the home page</Button></Action>

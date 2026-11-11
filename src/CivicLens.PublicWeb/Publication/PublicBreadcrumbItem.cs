@@ -1,3 +1,4 @@
 namespace CivicLens.PublicWeb.Publication;
 
-public sealed record PublicBreadcrumbItem(string Text, string? PagePath);
+/// <summary>One link of a breadcrumb trail. Every link leads to a page.</summary>
+public sealed record PublicBreadcrumbItem(string Text, string PagePath);
