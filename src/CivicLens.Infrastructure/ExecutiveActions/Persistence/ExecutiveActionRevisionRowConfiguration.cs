@@ -59,6 +59,7 @@ internal sealed class ExecutiveActionRevisionRowConfiguration : IEntityTypeConfi
         builder.HasOne<ExecutiveActionDraftRow>().WithMany().HasForeignKey(row => row.RecordId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.Facts).WithOne().HasForeignKey(fact => new { fact.RecordId, fact.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.Notices).WithOne().HasForeignKey(notice => new { notice.RecordId, notice.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
+        builder.HasMany(row => row.DispositionTargets).WithOne().HasForeignKey(target => new { target.RecordId, target.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
     }
 
     private static string OneLine(string column) =>
