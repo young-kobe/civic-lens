@@ -935,6 +935,9 @@ internal sealed class FakePublicationStore : IPublicationStore
 
     public Dictionary<int, List<PublishedBillStatus>> BackfilledBillStatuses { get; } = [];
 
+    public Task<int> AddVoteBillsAsync(int releaseNumber, IReadOnlyCollection<ReleaseVoteBill> voteBills, CancellationToken cancellationToken) =>
+        Task.FromResult(voteBills.Count);
+
     public Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses, CancellationToken cancellationToken)
     {
         BackfilledBillStatuses[releaseNumber] = [.. statuses];

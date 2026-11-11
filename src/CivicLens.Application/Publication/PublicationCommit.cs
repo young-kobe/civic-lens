@@ -22,6 +22,9 @@ public sealed record PublicationCommit(int ReleaseNumber, int? BaseReleaseNumber
     /// <summary>The bill statuses that the release pins. They equal the rows of the status file of the release.</summary>
     public ImmutableArray<PublishedBillStatus> BillStatuses { get; init; } = [];
 
+    /// <summary>The action record that each vote of the release links. A vote with no action in the release has no link.</summary>
+    public ImmutableArray<ReleaseVoteBill> VoteBills { get; init; } = [];
+
     public ImmutableArray<BillHistoryBinding> BillHistories { get; init; } = [];
 
     public ImmutableArray<CorrectionHistoryBinding> CorrectionHistories { get; init; } = [];

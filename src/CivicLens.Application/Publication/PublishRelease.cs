@@ -117,6 +117,7 @@ public sealed class PublishRelease
             VoteColumns = [.. additions.OfType<PendingRecord<PublishedVote>>().Select(addition => VoteStoredColumns.From(addition.Record))],
             Names = names,
             BillStatuses = ReleaseBillStatuses.RowsOf(ReleaseBillStatuses.ActionIdsOf(entries), statuses),
+            VoteBills = [.. ReleaseBillLines.From(entries, released.VoteBillActions).VoteBills()],
             BillHistories = [.. histories.Select(input => new BillHistoryBinding(input.RecordId,
                 input.History!.DetailJobId, input.History.ProjectionVersion))],
             CorrectionHistories = correctionHistories

@@ -490,7 +490,7 @@ try
             new ListBlockedPublished(publications, releases, blocked),
             new ActivatePublicationRelease(publications, releases, blocked, loggers.CreateLogger<ActivatePublicationRelease>()),
             new BackfillFirstPublished(publications, releases), new BackfillPublishedEntries(publications, releases),
-            new BackfillStoredColumns(publications, releases), new VerifyPublishedEntries(publications, releases),
+            new BackfillStoredColumns(publications, releases, PostgresVoteReviewStore.FromConnectionString(connectionString)), new VerifyPublishedEntries(publications, releases),
             new VerifyCorrectionHistories(publications, releases), new BackfillCorrectionHistories(publications, releases),
             new BackfillReleaseBillCounts(publications, releases), new VerifyReleaseBillCounts(publications, releases), owner,
             Console.Out, Console.Error, cancellation.Token);

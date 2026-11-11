@@ -5730,40 +5730,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
-            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseBillCountRow", b =>
-                {
-                    b.Property<int>("ReleaseNumber").HasColumnType("integer").HasColumnName("release_number");
-                    b.Property<int>("Congress").HasColumnType("integer").HasColumnName("congress");
-                    b.Property<int>("Bills").HasColumnType("integer").HasColumnName("bills");
-                    b.Property<int>("ExpectedMemberRowCount").HasColumnType("integer").HasColumnName("expected_member_row_count");
-                    b.HasKey("ReleaseNumber", "Congress");
-                    b.ToTable("release_bill_counts", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_release_bill_counts_bills", "bills >= 0");
-                            t.HasCheckConstraint("ck_release_bill_counts_congress", "congress > 0");
-                            t.HasCheckConstraint("ck_release_bill_counts_expected_member_row_count", "expected_member_row_count >= 0");
-                        });
-                });
-
-            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialBillCountRow", b =>
-                {
-                    b.Property<int>("ReleaseNumber").HasColumnType("integer").HasColumnName("release_number");
-                    b.Property<int>("Congress").HasColumnType("integer").HasColumnName("congress");
-                    b.Property<string>("OfficialId").IsRequired().HasMaxLength(256).HasColumnType("character varying(256)").HasColumnName("official_id");
-                    b.Property<int>("Sponsored").HasColumnType("integer").HasColumnName("sponsored");
-                    b.Property<int>("Cosponsored").HasColumnType("integer").HasColumnName("cosponsored");
-                    b.HasKey("ReleaseNumber", "Congress", "OfficialId");
-                    b.HasIndex("ReleaseNumber", "OfficialId").HasDatabaseName("ix_release_official_bill_counts_release_official");
-                    b.ToTable("release_official_bill_counts", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_release_official_bill_counts_congress", "congress > 0");
-                            t.HasCheckConstraint("ck_release_official_bill_counts_cosponsored", "cosponsored >= 0");
-                            t.HasCheckConstraint("ck_release_official_bill_counts_nonzero", "sponsored + cosponsored > 0");
-                            t.HasCheckConstraint("ck_release_official_bill_counts_official_id", "length(btrim(official_id)) > 0");
-                            t.HasCheckConstraint("ck_release_official_bill_counts_sponsored", "sponsored >= 0");
-                        });
-                });
-
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssuePartyCountRow", b =>
                 {
                     b.Property<int>("ReleaseNumber")
@@ -6041,6 +6007,33 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_release_policy_areas_name", "length(btrim(name)) > 0");
 
                             t.HasCheckConstraint("ck_release_policy_areas_policy_area_id", "length(btrim(policy_area_id)) > 0");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseVoteBillRow", b =>
+                {
+                    b.Property<int>("ReleaseNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("release_number");
+
+                    b.Property<string>("VoteRecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("vote_record_id");
+
+                    b.Property<string>("BillRecordId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("bill_record_id");
+
+                    b.HasKey("ReleaseNumber", "VoteRecordId");
+
+                    b.ToTable("release_vote_bills", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_release_vote_bills_bill_record_id", "bill_record_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_release_vote_bills_vote_record_id", "vote_record_id ~ '^[0-9a-f]{64}$'");
                         });
                 });
 
@@ -10582,6 +10575,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleasePolicyAreaRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseVoteBillRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
                         .WithMany()

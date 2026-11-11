@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CivicLens.Application.Review;
+using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
 
@@ -10,10 +11,10 @@ namespace CivicLens.Application.Publication;
 /// A vote revision takes <see cref="VoteStoredColumns.From"/> of its own vote record file, which the newest kept folder in its release range holds. Its columns
 /// and its written marker go in together. A member list pins the parties of its published revision with the lowest revision number that has a kept file, so a later revision of the
 /// list never changes them. A revision with no kept file stays unwritten. An official takes the photo path of the officials file of its release. An entry takes
-/// <see cref="ReleaseRecordOrder.CongressOf(DateOnly?, DateTimeOffset)"/>. Every write fills only what is not filled yet, so a second run changes nothing.
+/// <see cref="ReleaseRecordOrder.CongressOf(DateOnly?, DateTimeOffset)"/>. A release takes the vote links of <see cref="ReleaseBillLines"/> over its manifest. Every write fills only what is not filled yet, so a second run changes nothing.
 /// Work runs in batches of <see cref="BatchSize"/> rows.
 /// </summary>
-public sealed class BackfillStoredColumns(IPublicationStore publications, IReleaseDirectory releases)
+public sealed class BackfillStoredColumns(IPublicationStore publications, IReleaseDirectory releases, IVoteReviewStore votes)
 {
     private const int BatchSize = 25;
 
@@ -21,10 +22,11 @@ public sealed class BackfillStoredColumns(IPublicationStore publications, IRelea
     {
         ReviewAuthorization.RequireOwner(actor);
         var releaseRows = (await publications.ListAllAsync(cancellationToken)).OrderByDescending(release => release.ReleaseNumber).ToArray();
-        var votes = await BackfillVotesAsync(releaseRows, cancellationToken);
+        var revisions = await BackfillVotesAsync(releaseRows, cancellationToken);
         var photos = await BackfillPhotoPathsAsync(releaseRows, cancellationToken);
         var congresses = await BackfillCongressesAsync(cancellationToken);
-        return new(votes.Examined, votes.Written, votes.OpenWithoutFile, votes.ClosedWithoutFile, photos, congresses);
+        var voteBills = await BackfillVoteBillsAsync(releaseRows, cancellationToken);
+        return new(revisions.Examined, revisions.Written, revisions.OpenWithoutFile, revisions.ClosedWithoutFile, photos, congresses, voteBills);
     }
 
     private async Task<(int Examined, int Written, int OpenWithoutFile, int ClosedWithoutFile)> BackfillVotesAsync(PublicationReleaseSummary[] releaseRows,
@@ -105,6 +107,28 @@ public sealed class BackfillStoredColumns(IPublicationStore publications, IRelea
         {
             filled += await publications.FillEntryCongressesAsync(batch, cancellationToken);
             last = batch[^1];
+        }
+        return filled;
+    }
+
+    private async Task<int> BackfillVoteBillsAsync(PublicationReleaseSummary[] releaseRows, CancellationToken cancellationToken)
+    {
+        var filled = 0;
+        foreach (var release in releaseRows)
+        {
+            PublicationRelease manifest;
+            try
+            {
+                manifest = await PreviousRelease.LoadManifestAsync(releases, release, cancellationToken);
+            }
+            catch (Exception exception) when (exception is FileNotFoundException or InvalidDataException)
+            {
+                continue;
+            }
+            var voteBillActions = await votes.FindBillActionRecordIdsOfVotesAsync(
+                [.. manifest.Records.Where(entry => entry.Kind == PublishedRecordKind.Vote).Select(PublishedRevisionBinding.Of)], cancellationToken);
+            foreach (var batch in ReleaseBillLines.From(manifest.Records, voteBillActions).VoteBills().Chunk(BatchSize))
+                filled += await publications.AddVoteBillsAsync(release.ReleaseNumber, batch, cancellationToken);
         }
         return filled;
     }

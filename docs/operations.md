@@ -1121,7 +1121,7 @@ The verifier writes nothing. It repeats the file checks of the backfill. Then it
 
 ### Stored columns backfill
 
-The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, and the Congress of each entry. This command fills them for rows that earlier releases wrote.
+The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, the Congress of each entry, and the bill link of each vote of a release. This command fills them for rows that earlier releases wrote.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases columns backfill
@@ -1129,7 +1129,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 
 Run this command after `db migrate` and before the worker starts. The worker publishes by itself. A redraft that shares an old member list with no pinned parties would pin the parties of today's roster. `deploy/scripts/update.sh` runs the command for you, in this order: it stops the worker and the review host, runs `db migrate`, runs `releases columns backfill`, and then starts the services. If the command exits with 1, `update.sh` stops and the worker stays stopped. Find the revisions that `openVoteRevisionsWithoutKeptFile` counts, restore their kept folders, and run `update.sh` again with the same SHA. To deploy by hand, follow the same order.
 
-The command reads the kept release folders. A vote revision takes its values from its own vote file, which the newest kept folder in its release range holds. The parties are the ones that the release gave on the vote day. A member list that holds no parties takes them from the published revision with the lowest revision number that has a kept file. A later revision of the list never changes them. An official takes the photo path of the officials file of its release. An entry takes the Congress of its event date, or of its first publication day when it has no event date. The command writes in batches of 25 rows. It fills only what is not filled yet, so you can run it again at any time. A written vote revision has `columns_written` set.
+The command reads the kept release folders. A vote revision takes its values from its own vote file, which the newest kept folder in its release range holds. The parties are the ones that the release gave on the vote day. A member list that holds no parties takes them from the published revision with the lowest revision number that has a kept file. A later revision of the list never changes them. An official takes the photo path of the officials file of its release. An entry takes the Congress of its event date, or of its first publication day when it has no event date. A release takes the bill links of its votes from its manifest: each vote links the first action record on its bill that the release holds, as `ReleaseBillLines` gives it at publication. A release with no manifest folder is skipped. Until this command runs after the migration `ReleaseVoteBills`, the API shows a null bill link for the votes of the releases that the migration found. The command writes in batches of 25 rows. It fills only what is not filled yet, so you can run it again at any time. A written vote revision has `columns_written` set.
 
 The command prints JSON with these keys:
 
@@ -1137,7 +1137,7 @@ The command prints JSON with these keys:
 - `voteRevisionsWritten`: the revisions that this run wrote. A revision that the release gives null columns counts as written.
 - `openVoteRevisionsWithoutKeptFile`: the revisions in the active release range that no kept folder holds. They stay unwritten.
 - `closedVoteRevisionsWithoutKeptFile`: the revisions that left the active release and that no kept folder holds. They stay unwritten. This is expected after a prune.
-- `officialPhotoPathsFilled` and `entryCongressesFilled`: the rows that this run filled.
+- `officialPhotoPathsFilled`, `entryCongressesFilled`, and `voteBillLinksFilled`: the rows that this run filled.
 
 The exit code is 0 only when `openVoteRevisionsWithoutKeptFile` is 0. Otherwise it is 1.
 

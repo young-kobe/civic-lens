@@ -6,5 +6,6 @@ namespace CivicLens.Application.Publication;
 /// <param name="ClosedVoteRevisionsWithoutKeptFile">The revisions that left the active release and that no kept folder holds. They stay unwritten. The command reports them and does not fail.</param>
 /// <param name="OfficialPhotoPathsFilled">The official rows that got a photo path from the officials file of their release.</param>
 /// <param name="EntryCongressesFilled">The entry rows that got a Congress.</param>
+/// <param name="VoteBillLinksFilled">The vote link rows that this run wrote for kept releases. A row that a commit wrote counts as present.</param>
 public sealed record StoredColumnsBackfillResult(int VoteRevisionsExamined, int VoteRevisionsWritten, int OpenVoteRevisionsWithoutKeptFile,
-    int ClosedVoteRevisionsWithoutKeptFile, int OfficialPhotoPathsFilled, int EntryCongressesFilled);
+    int ClosedVoteRevisionsWithoutKeptFile, int OfficialPhotoPathsFilled, int EntryCongressesFilled, int VoteBillLinksFilled);
