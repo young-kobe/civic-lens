@@ -138,12 +138,12 @@ internal static class ActionRevisionRows
         return revisions.Length == requested.Length ? revisions : throw CitedRevisions.NotStored(PublishedRecordKind.Action);
     }
 
-    /// <summary>Reads an exact bounded batch and validates the stored count projection against its rebuilt revision.</summary>
-    public static async Task ValidateBillCountBindingsAsync(CollectionAttemptDbContext db,
+    /// <summary>Reads an exact bounded batch and validates the stored count projection against its rebuilt revision. It returns the projection of each revision.</summary>
+    public static async Task<IReadOnlyList<BillCountActionProjection>> ValidateBillCountBindingsAsync(CollectionAttemptDbContext db,
         IReadOnlyCollection<PublishedRevisionBinding> named, CancellationToken cancellationToken)
     {
         var requested = named.Distinct().ToArray();
-        if (requested.Length == 0) return;
+        if (requested.Length == 0) return [];
         CitedRevisions.RequireKind(PublishedRecordKind.Action, requested, nameof(named));
         var rows = db.Set<ActionRevisionRow>().FromSqlRaw("""
             SELECT r.* FROM action_revisions r JOIN unnest({0}, {1}) AS k(id, number) ON r.record_id = k.id AND r.revision_number = k.number
@@ -151,6 +151,7 @@ internal static class ActionRevisionRows
         var page = await ReadPageAsync(db, rows, cancellationToken);
         if (page.Rows.Count != requested.Length)
             throw CitedRevisions.NotStored(PublishedRecordKind.Action);
+        var projections = new List<BillCountActionProjection>(page.Rows.Count);
         foreach (var row in page.Rows)
         {
             ActionDraftRevision rebuilt;
@@ -161,11 +162,14 @@ internal static class ActionRevisionRows
             }
             catch (Exception exception) when (exception is ArgumentException or InvalidDataException or InvalidOperationException)
             {
-                throw new InvalidOperationException($"Action revision {row.RecordId} {row.RevisionNumber} cannot produce a valid bill count projection.", exception);
+                throw new BillCountRefusedException($"Action revision {row.RecordId} {row.RevisionNumber} cannot produce a valid bill count projection.", exception);
             }
-            if (row.EventOn != rebuilt.EventOn() || row.CosponsorCount != rebuilt.CosponsorCount())
-                throw new InvalidOperationException($"Action revision {row.RecordId} {row.RevisionNumber} has a mismatched bill count projection.");
+            var cosponsorIds = rebuilt.CosponsorIds();
+            if (row.EventOn != rebuilt.EventOn() || row.CosponsorCount != cosponsorIds.Length)
+                throw new BillCountRefusedException($"Action revision {row.RecordId} {row.RevisionNumber} has a mismatched bill count projection.");
+            projections.Add(new(row.RecordId, row.RevisionNumber, rebuilt.Congress, row.EventOn, rebuilt.SponsorIds(), cosponsorIds));
         }
+        return projections;
     }
 
     private static IEnumerable<string> IssueIds(ActionDraftRevision revision) =>

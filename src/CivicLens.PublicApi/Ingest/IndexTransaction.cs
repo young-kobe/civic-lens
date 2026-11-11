@@ -76,8 +76,8 @@ public sealed class IndexTransaction : IAsyncDisposable
         var entry = record.Entry;
         await using var command = Command("""
             INSERT INTO records (record_id, revision_number, kind, headline, first_published_at_utc, officials, official_ids,
-                issue_ids, policy_area_ids, source_host, event_date, bill_line, body, search, first_release)
-            VALUES (@id, @revision, @kind, @headline, @first, @officials, @official_ids, @issue_ids, @policy_area_ids, @host, @date, @bill_line, @body,
+                issue_ids, policy_area_ids, source_host, event_date, bill_line, summary, body, search, first_release)
+            VALUES (@id, @revision, @kind, @headline, @first, @officials, @official_ids, @issue_ids, @policy_area_ids, @host, @date, @bill_line, @snippet_text, @body,
                 setweight(to_tsvector('english', @headline), 'A') ||
                 setweight(to_tsvector('english', @summary), 'B') ||
                 setweight(to_tsvector('english', @source), 'C'), @release)
@@ -94,6 +94,7 @@ public sealed class IndexTransaction : IAsyncDisposable
         command.Parameters.Add(new NpgsqlParameter("host", NpgsqlDbType.Text) { Value = (object?)entry.SourceHost ?? DBNull.Value });
         command.Parameters.Add(new NpgsqlParameter("date", NpgsqlDbType.Date) { Value = (object?)entry.EventDate ?? DBNull.Value });
         command.Parameters.Add(new NpgsqlParameter("bill_line", NpgsqlDbType.Text) { Value = (object?)entry.BillLine ?? DBNull.Value });
+        command.Parameters.Add(new NpgsqlParameter("snippet_text", NpgsqlDbType.Text) { Value = (object?)record.SnippetText ?? DBNull.Value });
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -116,9 +117,9 @@ public sealed class IndexTransaction : IAsyncDisposable
         if (revisions.Count == 0) return;
         await using var command = Command("""
             INSERT INTO records (record_id, revision_number, kind, headline, first_published_at_utc, officials, official_ids,
-                issue_ids, policy_area_ids, source_host, event_date, bill_line, body, search, first_release)
+                issue_ids, policy_area_ids, source_host, event_date, bill_line, summary, body, search, first_release)
             SELECT DISTINCT ON (record_id, revision_number) record_id, revision_number, kind, headline, first_published_at_utc, officials,
-                official_ids, issue_ids, policy_area_ids, source_host, event_date, bill_line, body, search, @release
+                official_ids, issue_ids, policy_area_ids, source_host, event_date, bill_line, summary, body, search, @release
             FROM records WHERE (record_id, revision_number) IN (SELECT * FROM unnest(@ids, @revisions))
             ORDER BY record_id, revision_number, first_release DESC
             """,

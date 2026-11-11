@@ -17,53 +17,73 @@ public sealed class VerifyCorrectionHistories(IPublicationStore publications, IR
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         var examined = 0;
         var verified = 0;
-        var failed = 0;
-        var cursor = after;
-        CorrectionHistoryVerificationCursor? next = null;
-        var selectionFingerprint = "";
         var failures = new List<CorrectionHistoryBackfillFailure>();
-        while (examined < limit)
+        var failed = 0;
+        var verifiedReleases = new List<CorrectionHistoryRelease>();
+        var skippedReleases = new List<CorrectionHistorySkippedRelease>();
+        var cursor = after;
+        var releaseFailures = after?.PriorFailures ?? 0;
+        do
         {
             var page = await publications.ReadCorrectionHistoryVerificationPageAsync(cursor, Math.Min(BatchSize, limit - examined),
                 releases.GetActiveAsync, cancellationToken);
-            if (page.StaleCursor)
-                return new(examined, verified, failed, failures, null, true) { SelectionFingerprint = page.SelectionFingerprint };
-            selectionFingerprint = page.SelectionFingerprint;
-            if (page.Candidates.Count == 0) break;
+            if (page.Skipped is not null)
+            {
+                skippedReleases.Add(page.Skipped);
+                releaseFailures = 0;
+            }
+            if (page.Release is null)
+            {
+                cursor = null;
+                break;
+            }
+            var pageFailed = 0;
             foreach (var candidate in page.Candidates)
             {
                 examined++;
-                try
-                {
-                    Verify(candidate, await ReleaseRecordFiles.ReadAsync(releases, candidate.Release.DirectoryName,
-                        candidate.Record.RecordId, cancellationToken));
-                    verified++;
-                }
-                catch (Exception exception) when (exception is IOException or InvalidDataException or JsonException or ArgumentException or UnauthorizedAccessException)
-                {
-                    failed++;
-                    if (failures.Count < MaximumReportedFailures)
-                        failures.Add(new(candidate.Release.ReleaseNumber, PublishedRecordReference.NameOf(candidate.Record.Kind),
-                            candidate.Record.RecordId, ReasonOf(exception)));
-                }
+                if (await VerifyCandidateAsync(candidate, failures, cancellationToken)) verified++;
+                else pageFailed++;
             }
-            if (page.NextCursor is null) break;
-            cursor = page.NextCursor;
-            if (examined >= limit)
+            failed += pageFailed;
+            releaseFailures += pageFailed;
+            if (!page.ReleaseCompleted)
             {
-                next = page.NextCursor;
-                break;
+                cursor = new(page.Release.ReleaseNumber, page.Release.DirectoryName, ReferenceOf(page.Candidates[^1].Record), releaseFailures);
             }
-        }
-        if (next is null)
-        {
-            // File reads run outside the short database snapshot, so refresh selection once before declaring the scan terminal.
-            var currentFingerprint = await publications.ReadCorrectionHistoryVerificationFingerprintAsync(releases.GetActiveAsync, cancellationToken);
-            if (currentFingerprint != selectionFingerprint)
-                return new(examined, verified, failed, failures, null, true) { SelectionFingerprint = currentFingerprint };
-        }
-        return new(examined, verified, failed, failures, next?.Encode(), false) { SelectionFingerprint = selectionFingerprint };
+            else
+            {
+                // A release counts as verified only when no record failed in this call or in an earlier call that the cursor carries.
+                if (releaseFailures == 0) verifiedReleases.Add(new(page.Release.ReleaseNumber, page.Release.DirectoryName));
+                releaseFailures = 0;
+                cursor = page.NextRelease is null ? null : new(page.NextRelease.ReleaseNumber, page.NextRelease.DirectoryName);
+            }
+        } while (cursor is not null && examined < limit);
+        // File reads run outside the short database snapshots, so the reported selection is read again after the last file.
+        var selection = await publications.ReadRetainedReleaseSelectionAsync(releases.GetActiveAsync, cancellationToken);
+        return new(examined, verified, failed, failures, cursor?.Encode(), verifiedReleases, skippedReleases,
+            [.. selection.Select(release => new CorrectionHistorySelectedRelease(release.ReleaseNumber, release.DirectoryName,
+                new CorrectionHistoryVerificationCursor(release.ReleaseNumber, release.DirectoryName).Encode()))]);
     }
+
+    private async Task<bool> VerifyCandidateAsync(CorrectionHistoryVerificationCandidate candidate,
+        List<CorrectionHistoryBackfillFailure> failures, CancellationToken cancellationToken)
+    {
+        try
+        {
+            Verify(candidate, await ReleaseRecordFiles.ReadAsync(releases, candidate.Release.DirectoryName,
+                candidate.Record.RecordId, cancellationToken));
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or JsonException or ArgumentException or UnauthorizedAccessException)
+        {
+            if (failures.Count < MaximumReportedFailures)
+                failures.Add(new(candidate.Release.ReleaseNumber, PublishedRecordReference.NameOf(candidate.Record.Kind),
+                    candidate.Record.RecordId, ReasonOf(exception)));
+            return false;
+        }
+    }
+
+    private static PublishedRecordReference ReferenceOf(StoredReleaseRecord record) => new(record.Kind, record.RecordId);
 
     private static void Verify(CorrectionHistoryVerificationCandidate candidate, byte[] json)
     {
