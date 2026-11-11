@@ -192,4 +192,58 @@ public sealed class IssueEndpointsTests(PostgresCollection postgres)
 
         Assert.Equal((0, 0, 0), (quiet.GetProperty("substantiveVotes").GetInt32(), quiet.GetProperty("bills").GetInt32(), quiet.GetProperty("topSponsors").GetArrayLength()));
     }
+
+    private static Task SeedLineUpAsync(ApiHost host, int bills, int unknown, params (string Party, int Bills)[] parties) => ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+        SET session_replication_role = replica;
+        UPDATE release_issues SET count_congress = 119, substantive_votes = 0, bills = {bills} WHERE release_number = 1 AND issue_id = 'tax';
+        INSERT INTO release_issue_party_lineups (release_number, issue_id, unknown_bills) VALUES (1, 'tax', {unknown});
+        {string.Concat(parties.Select(part => $"INSERT INTO release_issue_party_counts (release_number, issue_id, party, bills) VALUES (1, 'tax', '{part.Party}', {part.Bills});"))}
+        """);
+
+    [Fact]
+    public async Task TheLineUpNamesTheCongressTheBaseTheBillsOfEachPartyMostFirstAndTheUnknownCountThatAddUpToTheBase()
+    {
+        await using var host = await StartAsync([], [], "tax");
+        await SeedLineUpAsync(host, 7, 1, ("Democratic", 2), ("Republican", 3), ("Independent", 1));
+
+        var lineUp = (await GetAsync(host, "tax")).GetProperty("lineUp");
+
+        Assert.Equal((119, 7, 1), (lineUp.GetProperty("congress").GetInt32(), lineUp.GetProperty("bills").GetInt32(), lineUp.GetProperty("unknownBills").GetInt32()));
+        var parties = lineUp.GetProperty("parties").EnumerateArray().Select(item => (item.GetProperty("party").GetString(), item.GetProperty("bills").GetInt32())).ToArray();
+        Assert.Equal([("Republican", 3), ("Democratic", 2), ("Independent", 1)], parties);
+        Assert.Equal(7, parties.Sum(part => part.Item2) + lineUp.GetProperty("unknownBills").GetInt32());
+    }
+
+    [Fact]
+    public async Task AnIssueWithOnlyUnknownBillsHasNoPartiesAndAZeroBillIssueHasAnEmptyLineUp()
+    {
+        await using var host = await StartAsync([], [], "tax", "quiet");
+        await SeedLineUpAsync(host, 2, 2);
+
+        var lineUp = (await GetAsync(host, "tax")).GetProperty("lineUp");
+
+        Assert.Equal((2, 0), (lineUp.GetProperty("unknownBills").GetInt32(), lineUp.GetProperty("parties").GetArrayLength()));
+    }
+
+    [Fact]
+    public async Task AReleaseWithNoLineUpRowsGivesANullLineUpAndNeverZerosBecauseAnOlderReleaseHoldsNoSnapshot()
+    {
+        await using var host = await StartAsync([], [], "tax");
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "UPDATE release_issues SET count_congress = 119, substantive_votes = 0, bills = 4 WHERE issue_id = 'tax'");
+
+        var answer = await GetAsync(host, "tax");
+
+        Assert.Equal(JsonValueKind.Null, answer.GetProperty("lineUp").ValueKind);
+    }
+
+    [Fact]
+    public async Task ALineUpThatDoesNotAddUpToTheHomeTileCountFailsTheRequestBecauseAWrongSplitMustNeverShow()
+    {
+        await using var host = await StartAsync([], [], "tax");
+        await SeedLineUpAsync(host, 7, 1, ("Democratic", 2), ("Republican", 3));
+
+        using var response = await host.Client.GetAsync("/v1/issues/tax");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+    }
 }

@@ -43,6 +43,8 @@ public sealed class PostgresReleaseNamesTests(PostgresCollection postgres) : IAs
                 """));
         Assert.Equal(["1|housing|Housing costs|Rent and home prices."], await ReadAsync("SELECT release_number || '|' || issue_id || '|' || name || '|' || definition FROM release_issues"));
         Assert.Equal(["0|0"], await ReadAsync("SELECT substantive_votes || '|' || bills FROM release_issues WHERE release_number = 1"));
+        Assert.Equal(["1|housing|0"], await ReadAsync("SELECT release_number || '|' || issue_id || '|' || unknown_bills FROM release_issue_party_lineups"));
+        Assert.Empty(await ReadAsync("SELECT release_number::text FROM release_issue_party_counts"));
         Assert.Equal(["0 Rent caps", "1 Eviction rules"], await ReadAsync("""SELECT "position" || ' ' || text FROM release_issue_includes ORDER BY "position" """));
         Assert.Equal(["0 Zoning votes"], await ReadAsync("""SELECT "position" || ' ' || text FROM release_issue_excludes"""));
         Assert.Equal(["1|land-use|Land use"], await ReadAsync("SELECT release_number || '|' || policy_area_id || '|' || name FROM release_policy_areas"));
@@ -100,6 +102,26 @@ public sealed class PostgresReleaseNamesTests(PostgresCollection postgres) : IAs
         Assert.Empty(await ReadAsync("SELECT release_number::text FROM publication_releases"));
         Assert.Empty(await ReadAsync("SELECT release_number::text FROM release_issues"));
         Assert.Empty(await ReadAsync("SELECT release_number::text FROM release_officials"));
+    }
+
+    [Fact]
+    public async Task APartyLineUpFailureRollsBackTheReleaseAndItsNameRowsBecauseTheLineUpIsWrittenInTheCommitTransaction()
+    {
+        await ExecuteAsync("""
+            CREATE FUNCTION fail_party_lineup_write() RETURNS trigger LANGUAGE plpgsql AS $function$
+            BEGIN
+                RAISE EXCEPTION 'forced party line-up write failure';
+            END;
+            $function$;
+            CREATE TRIGGER fail_party_lineup_write BEFORE INSERT ON release_issue_party_lineups
+                FOR EACH ROW EXECUTE FUNCTION fail_party_lineup_write();
+            """);
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(() => CommitAsync(1, null, Names("Definition.", [], [])));
+
+        Assert.Equal("P0001", failure.SqlState);
+        Assert.Empty(await ReadAsync("SELECT release_number::text FROM publication_releases"));
+        Assert.Empty(await ReadAsync("SELECT release_number::text FROM release_issues"));
     }
 
     private async Task<string[]> ReadReleaseAsync(int release) => await ReadAsync($"""
