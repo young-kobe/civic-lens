@@ -278,6 +278,14 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task AboutTellsTheReaderToUseTheFooterReportLinkOfARecord()
+    {
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAboutAsync(CancellationToken.None)).QuerySelector("main")!.ShownText();
+
+        Assert.Contains($"Open the record. Use the link in the footer that starts with \"{PublishedRecordLabels.ReportLinkStart}\".", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheReportPageWithNoRecordSaysWhichLinkToUseAndGivesTheSiteContactAddressInEveryState()
     {
         var html = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);

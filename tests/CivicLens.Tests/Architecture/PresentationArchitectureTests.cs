@@ -78,9 +78,11 @@ public sealed class PresentationArchitectureTests
     public void AHeroAfterTheTrailStartsOneSharedGapBelowItSoEveryPageTitleSitsAtTheSameDistance()
     {
         var css = WebStyleSheets.Read("public.css");
-        const string selector = ".public-breadcrumbs + .public-hero:has(> .home-preview-hero)";
 
-        Assert.Equal(2, Regex.Matches(css, Regex.Escape(selector) + @"\s*\{[^}]*var\(--s6\)").Count);
+        Assert.Equal("padding-top: 0;", Declarations(css, ".public-breadcrumbs + .public-hero:has(> .home-preview-hero)").Trim());
+        Assert.Equal("padding-top: var(--s6);", Declarations(css, ".public-breadcrumbs + .public-hero > .home-preview-hero").Trim());
+        Assert.DoesNotContain("calc(var(--s6)", css);
+        Assert.Single(Regex.Matches(css, @"(?m)^\s*\.public-breadcrumbs \+ \.public-hero > \.home-preview-hero\b"));
     }
 
     private static string Declarations(string css, string selector)
