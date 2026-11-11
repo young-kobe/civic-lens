@@ -1,0 +1,60 @@
+@using CivicLens.PublicWeb.Components.Ui
+@using CivicLens.Publication.Contracts
+@{
+    var executive = Data.Executive!;
+    var title = "President " + Data.Name;
+    var allPath = RootPath + PublicationProtocol.SearchByKindPath(PublishedRecordKind.ExecutiveAction);
+}
+
+<PublicPage Section="PublicSection.Officials" CanonicalPath="@PublicationProtocol.OfficialPagePath(Data.OfficialId)" Title="@title" Description="@Description(executive)" RootPath="@RootPath">
+    <div class="official-page president-page">
+        <header class="official-head">
+            <div>
+                <h1>@title</h1>
+                <p class="official-lede">@Description(executive)</p>
+            </div>
+        </header>
+
+        <ul class="official-counts" role="list" aria-label="Executive actions by type, signed by @Data.Name">
+            @foreach (var type in executive.Types)
+            {
+                <li><a href="#@OfficialPageText.ExecutiveAnchor(type.Kind)"><b>@type.Count</b><span>@OfficialPageText.ExecutivePlural(type.Kind, type.Count) signed by @Data.Name</span></a></li>
+            }
+        </ul>
+        <p><a class="btn" href="@allPath">See all @executive.Total executive actions</a></p>
+
+        <aside class="official-fixed" aria-labelledby="president-box">
+            <h2 id="president-box">@OfficialPageText.ExecutiveBoxTitle</h2>
+            <p>@OfficialPageText.ExecutiveBox</p>
+        </aside>
+
+        @foreach (var type in executive.Types.Where(type => type.Newest.Length > 0))
+        {
+            <section id="@OfficialPageText.ExecutiveAnchor(type.Kind)" class="official-section official-exec" aria-labelledby="@(OfficialPageText.ExecutiveAnchor(type.Kind))-title">
+                <h2 id="@(OfficialPageText.ExecutiveAnchor(type.Kind))-title">@OfficialPageText.ExecutiveHeading(type.Kind, type.Count)</h2>
+                <p class="official-lede">@OfficialPageText.ExecutiveMeaning(type.Kind)</p>
+                <ul class="official-rows" role="list">
+                    @foreach (var action in type.Newest)
+                    {
+                        <li>
+                            <span class="official-icon" aria-hidden="true"><Icon Name="IconName.ExecutiveAction" /></span>
+                            <div>
+                                <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(action.RecordId))">@action.Title</a>
+                                <p class="official-meta"><span>@PublishedRecordLabels.ExecutiveActionKind(type.Kind)</span><span>Signed @Moment.Day(action.SignedOn)</span></p>
+                            </div>
+                        </li>
+                    }
+                </ul>
+                <p class="official-more"><a href="@allPath">See all @type.Count @OfficialPageText.ExecutivePlural(type.Kind, type.Count)</a></p>
+            </section>
+        }
+    </div>
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public OfficialPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    private static string Description(OfficialExecutiveData executive) =>
+        $"Civic Lens holds {executive.Total} executive actions that the Federal Register lists for this President, signed from {Moment.Day(executive.FirstSignedOn)} to {Moment.Day(executive.LastSignedOn)}. Newest first within each type.";
+}

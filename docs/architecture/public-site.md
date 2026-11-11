@@ -110,6 +110,11 @@ These decisions come from the component audit. The owner accepted every recommen
 - The footer report link of a record page names the record kind and title and binds the report to the record ID and revision. Other pages show the fixed text "Report a problem with this page". Enforcers: `PublicPage`, `ReportedRecord`, and `PublishedRecordFrame`. Tests: `PublicNavigationTests.TheFooterReportLinkNamesTheRecordAndBindsItsExactRevisionAndOtherPagesKeepTheFixedPageLink` and `ReleaseRendererTests.TheFooterReportLinkOfEachRecordKindNamesItsKindAndTitleAndSharesTheBodyLinkTarget`.
 - Every vote kind has a glossary term or none. Enforcer: `Glossary`. Test: `ReleaseRendererTests.EveryVoteKindHasItsTermKeyOrNoneForOtherAndEveryKeyIsInTheGlossary`.
 - Page text and AI text read at grade 12 or below. Enforcer: `ReadingGrade` checks AI action text at draft time. `PublicPageReadingGradeTests` protects the rendered Home and Compare introductions. It grades the headline and summary of a published featured model sample as one passage. Its isolation case prevents unrelated easy copy from lowering that passage's grade. Remaining fixed page copy and AI-text verification stay planned under R-68. Tests: `PublicPageReadingGradeTests.HomeAndCompareIntroPassagesReadAtOrBelowTheSharedGradeLimit`, `PublicPageReadingGradeTests.FeaturedModelHeadlineAndSummaryReadAsOnePassageAtOrBelowTheSharedGradeLimit`, and `PublicPageReadingGradeTests.EasyCopyOutsideTheFeaturedModelPassageCannotLowerItsGrade`.
+- The official page shows one party-vote figure. Its strip marks only split votes cast against the party majority, and roll calls with the cast Not Voting. The marks use the rules of `official_party_lines` and `official_attendance`. Enforcer: `OfficialPageQueries`. Test: `OfficialPageEndpointsTests.TheStripLinksOnlyThePartyBreakAndTheMissedVoteNewestFirstAndMatchesTheFigures`.
+- A section with no rows is hidden. With no linked statement, the jump row shows the no-links message. Enforcer: `OfficialProfilePage`. Tests: `OfficialProfilePageTests.EmptySectionsAreHiddenAndTheLinkedStatementMessageSitsInTheJumpRow`, `OfficialPageEndpointsTests.AnOfficialWithNoLinkedStatementsHidesThatSectionAndKeepsTheMessageInTheJumpRow`.
+- The President page has no speeches section until a source exists (P2). Enforcer: `PresidentPage`. Test: `OfficialProfilePageTests.ThePresidentPageCountsEachTypeLinksItsSectionAndShowsNoSpeechesSection`.
+- Introduced-bill rows show the sponsorship date. The title is the bill line, else the official title. The badge is the first clause of `BillStatusMeaning`, and an unmatched action gets none. Enforcer: `OfficialPageText`. Tests: `OfficialProfilePageTests.BillRowsShowTheIntroducedDateTheOfficialTitleWithoutABillLineAndAStatusBadge`, `OfficialProfilePageTests.ABillLineReplacesTheOfficialTitleAndAnUnknownActionGetsNoBadge`.
+- One repeatable-read snapshot serves every read of an official page. Enforcer: `OfficialPageReader`. Test: No test.
 - Every public number names its base and time frame. Enforcer: review of each UI pull request. Test: No test.
 - A fixed rule in code picks featured content. Enforcer: `HomeStore` selects the latest passage vote on a bill. Test: `HomeEndpointsTests.FeaturedVoteUsesLatestPassageOnBillTieOrderAndCarriesItsSummaryAndSourceLabelWithoutCountsFabricated`.
 - Every UI pull request has screenshots at 360 px and 1280 px, light and dark. Enforcer: pull request review. Test: No test.
@@ -142,12 +147,12 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 | # | Reader goal | Pages and components | Status |
 |---|---|---|---|
 | 1 | Find my members and what they did | Home ZIP form, member cards after a ZIP | Partial. Gated SSR home includes the existing ZIP flow when its browser API origin is configured. The answer scrolls into view and receives focus. Cards show portraits, seats, parties, term ends, scoped attendance, and party-line counts from private HTML fragments. Congress-scoped sponsored-bill and issue figures are shown, with shared vote rows and complete binary comparison badges |
-| 2 | See my member on an issue, from the member | Official page, issue chips, vote strip | Partial. Planned: strip marks link to the votes (DR2) |
+| 2 | See my member on an issue, from the member | Official page, issue chips, vote strip | Partial. `/web/officials/{id}` shows the strip: one link for each split vote against the party majority and each missed roll call (DR2). Static pages remain live |
 | 3 | See my member on an issue, from the issue | Issue page, "your members" section | Planned: each issue vote shows my members' casts |
 | 4 | Understand one vote | Vote page: AI summary, result card, "what a Yes meant", party bars, source fold | Partial. Planned: answer first, one fold (DR3) |
 | 5 | Understand one bill | Bill page: status stepper, AI summary, "who backed it", votes on the bill | Partial. Planned: stepper and party split of cosponsors |
 | 6 | Read one executive action | Executive action page, document links | Partial. Planned: body text and an AI "what it states" |
-| 7 | See what the President did | President page with per-type sections | Planned: count row becomes jump links |
+| 7 | See what the President did | President page with per-type sections | Partial. `/web/officials/{id}` for an official with executive actions shows count links that jump to per-type sections. Static pages remain live |
 | 8 | Follow an issue | Issue page: figures, votes, bills, party line-up | Partial. Planned: one count line and party line-up |
 | 9 | Compare parties | Party boards, per-kind list pages | Partial. Planned: boards link from the nav, list pages (DR6) |
 | 10 | Check a source | "Check the source" fold with an official link first | Partial. Planned: plain labels, raw text one click further (DR3) |
@@ -179,9 +184,9 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Member votes list | After a ZIP, official | How did my members vote? | `votes`, `member_votes` | Partial. The API and private ZIP fragment serve shared vote rows with recorded casts. Issue and Any chips refresh the combined private fragment and mark the selected issue. Captions name each chamber's selection and comparison bases |
 | Return-visit updates | Home, members strip | What is new for my members? | Published member votes and a locally saved release marker | Planned: identify votes published since the saved release |
 | Compare members | Compare page | How do my members differ? | `official_*` views, `member_votes` | Implemented in `/web/compare` preview; ZIP member content stays in the private fragment. |
-| Profile header, key figures | Official | Who is this? | `officials`, `official_attendance`, `official_party_lines` | API data implemented. Profile UI integration remains planned. |
-| Vote strip | Official | What is their voting pattern? | `member_votes.side` | Planned: marks only breaks and missed votes |
-| Statement and vote pairs | Official, vote | Did words match votes? | `record_links` | Planned: page content; related-record data is served by the API |
+| Profile header, key figures | Official | Who is this? | `officials`, `official_attendance`, `official_party_lines` | Implemented in the `/web/officials/{id}` preview: portrait, lede, and three scoped figures (roll calls voted on, one party-vote figure, sponsored bills) |
+| Vote strip | Official | What is their voting pattern? | `member_votes.side` | Implemented in the preview. Marks only breaks and missed votes, each a link, with a legend that names counts and Congress |
+| Statement and vote pairs | Official, vote | Did words match votes? | `record_links` | Implemented in the preview for statements that a reviewer linked to a vote. The section is hidden when none exist, and the jump row keeps the no-links message |
 | Vote header and AI summary | Vote | What was this vote? | `votes` headline, summary, label | Implemented. Planned: "what this vote decides" |
 | Fixed explainers | Vote, executive action | What did Yes mean? What next? | Code tables in `Publication.Contracts` | Planned: #407 |
 | Vote-kind explainer index | Vote kinds, glossary | What kinds of votes exist? | Shared kind names, record terms, and fixed Yes explainers | Planned: one index covering every vote kind, with approved wording |
@@ -193,7 +198,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Bill summary and CRS fold | Bill | What would the bill do? | `bills.summary`, CRS text and bill-text metadata; see [Publication](publication.md#public-api-views) | The API serves the summary, exact cited CRS body and version, and bill-text metadata. The fold, key terms and server-rendered bill page remain planned |
 | Who backed it | Bill | Is it bipartisan? | `bill_sponsorships`, `release_official_terms.party` | Partial. Planned: party split |
 | Votes on this bill | Bill | How did Congress vote? | `votes.bill_record_id` | Planned: route and UI; vote-to-bill data is available |
-| Executive action page | Executive action, President | What does this document do? | `executive_actions`, `executive_action_notices`, `executive_action_links` | Planned: route and UI; action and notice data are served, links remain pending |
+| Executive action page | Executive action, President | What does this document do? | `executive_actions`, `executive_action_notices`, `executive_action_links` | Partial. The President page lists the five newest actions of each type. The route for one action remains planned; action and notice data are served, links remain pending |
 | Statement page, quotations | Statement | What exactly was said? | `statements`, `statement_speakers`, `statement_quotations` | The API serves statement details with bounded source text, checked quotations, and citations. The reader page remains planned |
 | Document change page | Document change | What changed on this page? | `document_changes` and its source, region, edit, citation and official views | Partial. The detail API serves published sources and ordered changes. The API labels model text with the shared approved wording; person text has no AI label. Reader page remains planned |
 | Issue page | Issue | What is there on this issue? | `release_issues`, `issue_votes`, `issue_sponsors` | Partial. Issue counts and sponsor data are available through the API. Planned: page and party line-up |
@@ -240,7 +245,7 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 | Style files | `src/CivicLens.PublicWeb/wwwroot/css/theme.css`, `src/CivicLens.PublicWeb/wwwroot/css/app.css`, `src/CivicLens.PublicWeb/wwwroot/css/public.css` |
 | Presentation rules test | `tests/CivicLens.Tests/Architecture/PresentationArchitectureTests.cs` |
 
-`PublicApi` renders the gated `/web` home and `/web/compare` routes and the not-found shell under `/web`. Other successful reader routes still use static pages. Shared presentation components use `CivicLens.PublicWeb`, which references `Publication.Contracts` only.
+`PublicApi` renders the gated `/web` home, `/web/compare`, and `/web/officials/{id}` routes and the not-found shell under `/web`. Other successful reader routes still use static pages. Shared presentation components use `CivicLens.PublicWeb`, which references `Publication.Contracts` only.
 
 ## Limits and planned work
 

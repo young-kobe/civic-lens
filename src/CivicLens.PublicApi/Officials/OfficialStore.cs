@@ -67,6 +67,12 @@ public sealed class OfficialStore(NpgsqlDataSource views)
     {
         await using var connection = await views.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        return await ReadDetailAsync(connection, transaction, officialId, cancellationToken);
+    }
+
+    /// <summary>Reads one official inside the caller's snapshot, so a page that reads more views shares the release of its figures.</summary>
+    internal static async Task<OfficialDetail?> ReadDetailAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
+    {
         var found = await ReadOfficialAsync(connection, transaction, officialId, cancellationToken);
         if (found is not var (release, publishedAtUtcTicks, official)) return null;
         var terms = await ReadTermsAsync(connection, transaction, officialId, cancellationToken);
@@ -115,7 +121,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         parameters.AddWithValue("cursor_id", cursor.OfficialId);
     }
 
-    private async Task<(int Release, long? PublishedAtUtcTicks, OfficialRow Official)?> ReadOfficialAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
+    private static async Task<(int Release, long? PublishedAtUtcTicks, OfficialRow Official)?> ReadOfficialAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(DetailSql, connection);
         command.Transaction = transaction;

@@ -77,6 +77,18 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
     public async Task<MemberVoteAnswer?> FindAsync(MemberVoteRequest request, CancellationToken cancellationToken)
     {
         await using var command = views.CreateCommand(Sql(request));
+        return await ReadAsync(command, request, cancellationToken);
+    }
+
+    /// <summary>Reads the newest votes inside the caller's snapshot.</summary>
+    internal static async Task<MemberVoteAnswer?> ReadAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, MemberVoteRequest request, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(Sql(request), connection, transaction);
+        return await ReadAsync(command, request, cancellationToken);
+    }
+
+    private static async Task<MemberVoteAnswer?> ReadAsync(NpgsqlCommand command, MemberVoteRequest request, CancellationToken cancellationToken)
+    {
         command.Parameters.AddWithValue("officials", request.Officials);
         command.Parameters.AddWithValue("kinds", PublishedVoteKindExtensions.SubstantiveNames());
         command.Parameters.AddWithValue("take", MaximumVotes);

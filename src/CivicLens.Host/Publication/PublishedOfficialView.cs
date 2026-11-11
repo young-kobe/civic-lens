@@ -209,10 +209,6 @@ internal static class PublishedOfficialView
     public static string CountFilterNotice(string subject, string issueName, int congress) =>
         $"Filtered to {subject} on {issueName} in the {CongressCalendar.Ordinal(congress)} Congress";
 
-    public const string LinkMeaning = "A reviewer approved each link. A link does not mean the vote or bill matches the statement.";
-
-    public const string NoLinks = "No reviewed links between their statements and their bills or votes yet.";
-
     public const string NoVoteOnRecord = "No vote on record";
 
     public const string NotAVote = "Not a vote";
