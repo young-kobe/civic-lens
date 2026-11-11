@@ -23,7 +23,7 @@ public static class RecordReader
         if (indexed.Entry.RecordId != listed.RecordId || indexed.Entry.RevisionNumber != listed.RevisionNumber)
             throw new InvalidDataException("The record file does not match its manifest entry.");
         RequireNoNul(indexed);
-        return indexed with { Entry = indexed.Entry with { BillLine = listed.BillLine } };
+        return indexed with { Entry = indexed.Entry with { BillLine = listed.BillLine }, SnippetText = listed.BillLine ?? indexed.SnippetText };
     }
 
     // Postgres cannot store a NUL character in text or jsonb.
@@ -31,7 +31,7 @@ public static class RecordReader
     {
         var entry = record.Entry;
         IEnumerable<string?> texts =
-            [entry.Headline, entry.SourceHost, record.Summary, record.Source, .. entry.Officials.SelectMany(official => new[] { official.Id, official.Name }),
+            [entry.Headline, entry.SourceHost, record.Summary, record.Source, record.SnippetText, .. entry.Officials.SelectMany(official => new[] { official.Id, official.Name }),
                 .. entry.IssueIds, .. entry.PolicyAreaIds];
         if (texts.Any(text => text?.Contains('\0', StringComparison.Ordinal) == true))
             throw new InvalidDataException("A record text holds a NUL character.");
@@ -43,25 +43,25 @@ public static class RecordReader
     private static IndexedRecord Index(PublishedDocumentChange record)
     {
         record.Validate();
-        return Create(record.ToEntry(), [record.Summary], [record.After.Text, record.Before.Text]);
+        return Create(record.ToEntry(), [record.Summary], [record.After.Text, record.Before.Text], record.Summary);
     }
 
     private static IndexedRecord Index(PublishedStatement record)
     {
         record.Validate();
-        return Create(record.ToEntry(), [record.Summary, .. record.Quotations.Select(quotation => quotation.Quote)], [record.Source.Text]);
+        return Create(record.ToEntry(), [record.Summary, .. record.Quotations.Select(quotation => quotation.Quote)], [record.Source.Text], record.Summary);
     }
 
     private static IndexedRecord Index(PublishedAction record)
     {
         record.Validate();
-        return Create(record.ToEntry(), [record.Summary, record.BillTitle], [.. record.Sources.Select(source => source.Text)]);
+        return Create(record.ToEntry(), [record.Summary, record.BillTitle], [.. record.Sources.Select(source => source.Text)], record.Summary);
     }
 
     private static IndexedRecord Index(PublishedVote record)
     {
         record.Validate();
-        return Create(record.ToEntry(), [record.Summary], [.. record.Sources.Select(source => source.Text)]);
+        return Create(record.ToEntry(), [record.Summary], [.. record.Sources.Select(source => source.Text)], record.Summary);
     }
 
     private static IndexedRecord Index(PublishedExecutiveAction record)
@@ -82,8 +82,14 @@ public static class RecordReader
         return Create(record.ToEntry(), [record.Reason, record.Quote], []);
     }
 
-    private static IndexedRecord Create(PublishedRecordEntry entry, string[] summary, string[] source) =>
-        new(entry, Bound(IndexedRecord.SummaryLimit, summary), Bound(IndexedRecord.SourceLimit, source));
+    private static IndexedRecord Create(PublishedRecordEntry entry, string[] summary, string[] source, string? snippetText = null) =>
+        new(entry, Bound(IndexedRecord.SummaryLimit, summary), Bound(IndexedRecord.SourceLimit, source), BoundSnippetText(snippetText));
+
+    private static string? BoundSnippetText(string? text)
+    {
+        var bounded = Bound(IndexedRecord.SummaryLimit, text is null ? [] : [text]);
+        return bounded.Length == 0 ? null : bounded;
+    }
 
     private static string Bound(int limit, IEnumerable<string> parts)
     {
