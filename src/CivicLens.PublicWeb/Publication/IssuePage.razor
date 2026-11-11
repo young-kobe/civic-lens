@@ -9,7 +9,7 @@
                 <p class="issue-definition">@Data.Definition</p>
             }
             <p class="issue-counts" data-issue-counts>@CountLine</p>
-            <p class="small muted">A tag says a record is about the issue. It does not say whether the record backs or opposes it. An AI model picks each tag and no person checks it, so a tag can be wrong.</p>
+            <p class="small muted">@PublishedWording.IssueTagCaveat</p>
         </div>
     </Hero>
     <ChildContent>
@@ -62,7 +62,7 @@
                     </ul>
                     @if (Data.BillCount > Data.Bills.Length)
                     {
-                        <p class="small muted">Showing the newest @Data.Bills.Length of @Data.BillCount bills and resolutions.</p>
+                        <p class="small muted">Showing the newest @Data.Bills.Length of @Data.BillCount @BillsNoun.</p>
                     }
                 }
             </section>
@@ -70,15 +70,15 @@
             {
                 <section class="issue-section" id="parties" aria-labelledby="issue-parties-title">
                     <h2 id="issue-parties-title">How the parties line up</h2>
-                    <p>@lineUp.Bills @Noun(lineUp.Bills, "bill or resolution", "bills and resolutions") tagged @Data.Name in the @CongressCalendar.Ordinal(lineUp.Congress) Congress, by the party of the sponsor on the day of sponsorship. The count is of bills, not votes and not cosponsors.</p>
+                    <p>@lineUp.Bills @Noun(lineUp.Bills, BillNoun, BillsNoun) tagged @Data.Name in the @CongressCalendar.Ordinal(lineUp.Congress) Congress, by the party of the sponsor on the day of sponsorship. The count is of @BillsNoun, not votes and not cosponsors.</p>
                     <ul class="issue-lineup" role="list" data-issue-lineup>
                         @foreach (var party in lineUp.Parties)
                         {
-                            <li><span>@party.Party sponsor</span> <b>@party.Bills</b> <span>@Noun(party.Bills, "bill", "bills")</span></li>
+                            <li><span>@party.Party sponsor</span> <b>@party.Bills</b> <span>@Noun(party.Bills, BillNoun, BillsNoun)</span></li>
                         }
                         @if (lineUp.UnknownBills > 0)
                         {
-                            <li><span>Sponsor party not known</span> <b>@lineUp.UnknownBills</b> <span>@Noun(lineUp.UnknownBills, "bill", "bills")</span></li>
+                            <li><span>Sponsor party not known</span> <b>@lineUp.UnknownBills</b> <span>@Noun(lineUp.UnknownBills, BillNoun, BillsNoun)</span></li>
                         }
                     </ul>
                 </section>
@@ -95,9 +95,12 @@
     [Parameter] public string? BrowserApiUrl { get; set; }
 
     private string CountLine =>
-        $"This release holds {Data.SubstantiveVotes} substantive roll call {Noun(Data.SubstantiveVotes, "vote", "votes")} and {Data.BillCount} {Noun(Data.BillCount, "bill or resolution", "bills and resolutions")} tagged {Data.Name}.";
+        $"This release holds {Data.SubstantiveVotes} substantive roll call {Noun(Data.SubstantiveVotes, "vote", "votes")} and {Data.BillCount} {Noun(Data.BillCount, BillNoun, BillsNoun)} tagged {Data.Name}.";
 
     protected override void OnParametersSet() => description = CountLine;
+
+    private const string BillNoun = "bill or resolution";
+    private const string BillsNoun = "bills and resolutions";
 
     private static string Noun(int count, string one, string many) => count == 1 ? one : many;
 }

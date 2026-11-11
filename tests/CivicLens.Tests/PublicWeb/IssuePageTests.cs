@@ -25,7 +25,25 @@ public sealed class IssuePageTests
         var page = await RenderAsync(Data());
 
         Assert.Equal("This release holds 3 substantive roll call votes and 186 bills and resolutions tagged Firearms.", page.QuerySelector("[data-issue-counts]")!.TextContent);
-        Assert.Contains("An AI model picks each tag and no person checks it", page.QuerySelector(".issue-hero")!.TextContent);
+        Assert.Contains(PublishedWording.IssueTagCaveat, page.QuerySelector(".issue-hero")!.TextContent);
+    }
+
+    [Fact]
+    public void TheStaticIssuePageLedeAndTheServerPageShareOneTagCaveat()
+    {
+        Assert.Contains(PublishedWording.IssueTagCaveat, CivicLens.Host.Publication.PublishedFacetSummaryView.Lede(CivicLens.Application.Publication.FacetKind.Issue));
+    }
+
+    [Fact]
+    public async Task EveryBillCountNamesBillsAndResolutionsWithOneNounRule()
+    {
+        var lineUp = new IssueLineUpData(119, 3, [new("Democratic", 2), new("Republican", 1)], 0);
+        var page = await RenderAsync(Data(lineUp: lineUp, bills: [Bill]) with { BillCount = 5 });
+
+        Assert.Contains("Showing the newest 1 of 5 bills and resolutions.", page.QuerySelector("#bills")!.TextContent);
+        Assert.Contains("3 bills and resolutions tagged Firearms", page.QuerySelector("#parties")!.TextContent);
+        Assert.Equal(["Democratic sponsor 2 bills and resolutions", "Republican sponsor 1 bill or resolution"],
+            page.QuerySelectorAll("[data-issue-lineup] li").Select(row => string.Join(' ', row.TextContent.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))));
     }
 
     [Fact]

@@ -3,7 +3,11 @@
     {
         <SharedVoteRows Data="votes" RootPath="@RootPath" HeadingLevel="3" />
     }
-    @if (Data.SharedVotes.Length == 0)
+    @if (AChamberHasOnlyVacantSeats)
+    {
+        <p class="muted" data-member-votes-empty>No current member is in our records.</p>
+    }
+    @if (Data.SharedVotes.Length == 0 && Data.Seats.Any(seat => seat.Member is not null))
     {
         <p data-member-votes-empty>None of your members has a recorded vote on this issue in this release.</p>
     }
@@ -12,4 +16,6 @@
 @code {
     [Parameter, EditorRequired] public ZipMemberCardsData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    private bool AChamberHasOnlyVacantSeats => Data.Seats.GroupBy(seat => seat.Chamber).Any(chamber => chamber.All(seat => seat.Member is null));
 }

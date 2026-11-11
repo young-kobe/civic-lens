@@ -35,7 +35,7 @@ public sealed class IssueStore(NpgsqlDataSource views)
         """;
 
     private static readonly string VotesSql = $"""
-        SELECT v.record_id, v.voted_on, v.chamber, v.congress, v.headline, v.label, v.result, v.yea, v.nay
+        SELECT v.record_id, v.voted_on, v.chamber, v.headline, v.label, v.result, v.yea, v.nay
           FROM (SELECT DISTINCT record_id, revision_number FROM public_api.vote_issues WHERE issue_id = @issue) k
          CROSS JOIN LATERAL (
               SELECT v.* FROM public_api.votes v
@@ -94,8 +94,8 @@ public sealed class IssueStore(NpgsqlDataSource views)
         var votes = new List<IssueVote>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-            votes.Add(new(reader.GetString(0), reader.GetFieldValue<DateOnly>(1), ViewColumns.Enum<PublishedChamber>(reader, 2), reader.GetInt32(3), reader.GetString(4),
-                ViewColumns.Text(reader, 5), PlainVoteWords.Result(reader.GetString(6)), ViewColumns.Number(reader, 7), ViewColumns.Number(reader, 8)));
+            votes.Add(new(reader.GetString(0), reader.GetFieldValue<DateOnly>(1), ViewColumns.Enum<PublishedChamber>(reader, 2), reader.GetString(3),
+                ViewColumns.Text(reader, 4), PlainVoteWords.Result(reader.GetString(5)), ViewColumns.Number(reader, 6), ViewColumns.Number(reader, 7)));
         return [.. votes];
     }
 

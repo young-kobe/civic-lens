@@ -21,8 +21,7 @@
         }
         @if (BillLine is not null)
         {
-            <p class="small muted"><PublishedBillLine Line="@BillLine" /></p>
-            <PublishedBillLineNote />
+            <p class="small muted"><PublishedBillLine Line="@BillLine" /><PublishedBillLineNote Inline="true" /></p>
         }
     </div>
 </li>

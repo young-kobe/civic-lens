@@ -117,7 +117,7 @@ public sealed class IssuePageTests(PostgresCollection postgres)
         var section = page.QuerySelector("#parties")!;
         Assert.Contains("7 bills and resolutions tagged Taxes <b> in the 119th Congress", section.TextContent);
         var rows = section.QuerySelectorAll("[data-issue-lineup] li").Select(row => Compact(row.TextContent)).ToArray();
-        Assert.Equal(["Republican sponsor 3 bills", "Democratic sponsor 2 bills", "Independent sponsor 1 bill", "Sponsor party not known 1 bill"], rows);
+        Assert.Equal(["Republican sponsor 3 bills and resolutions", "Democratic sponsor 2 bills and resolutions", "Independent sponsor 1 bill or resolution", "Sponsor party not known 1 bill or resolution"], rows);
     }
 
     [Fact]

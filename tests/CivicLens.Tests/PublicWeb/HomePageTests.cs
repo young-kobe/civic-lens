@@ -200,6 +200,9 @@ public sealed class HomePageTests
         Assert.Equal("216Yes214NoPassed", row.QuerySelector(".record-counts")!.TextContent.Replace(" ", ""));
         Assert.Equal("Current bill line.", row.QuerySelector(".bill-line")!.TextContent);
         Assert.Contains(PublishedWording.BillLineSource, row.TextContent);
+        var billParagraph = row.QuerySelector(".bill-line")!.ParentElement!;
+        Assert.Equal("Current bill line. " + PublishedWording.BillLineSource, billParagraph.TextContent.Trim());
+        Assert.Single(row.QuerySelectorAll("p.small"));
         Assert.Null(rows[1].QuerySelector(".bill-line"));
         Assert.DoesNotContain(PublishedWording.BillLineSource, rows[1].TextContent);
     }
