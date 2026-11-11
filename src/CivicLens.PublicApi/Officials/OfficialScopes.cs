@@ -7,6 +7,8 @@ internal static class OfficialScopes
 {
     public const string RecordCount = "Records of the active release that name the official and have an entry row. Votes are not counted.";
 
+    public const string OfficialsInRelease = "Officials that the active release lists, with or without a term. A filter does not change this number.";
+
     public static string MissedVotes(PublishedChamber chamber, int congress) =>
         $"Roll calls of the {chamber} in Congress {congress} that list the official. Missed means the cast is Not Voting.";
 
