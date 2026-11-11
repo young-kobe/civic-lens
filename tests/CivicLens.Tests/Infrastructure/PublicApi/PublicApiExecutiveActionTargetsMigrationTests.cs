@@ -31,13 +31,13 @@ public sealed class PublicApiExecutiveActionTargetsMigrationTests(PostgresCollec
     public async Task ATargetLinksToTheOneMatchingExecutiveActionOfTheActiveReleaseAndToNoOtherRecord()
     {
         Assert.Equal([
-            $"0|Amends|ExecutiveOrder|14100|EO 14100, January 3, 2025|{ExecutiveActionTargetRows.LinkedOrder}",
-            "1|Amends|ExecutiveOrder|14101|EO 14101|",
-            "2|Amends|ExecutiveOrder|14102|EO 14102|",
-            $"3|Revokes|Proclamation|10001|Proc. 10001|{ExecutiveActionTargetRows.LinkedProclamation}",
-            "4|Revokes|ExecutiveOrder|14000|EO 14000|"
+            $"0|Amends|ExecutiveOrder|14100|8:25|{ExecutiveActionTargetRows.LinkedOrder}",
+            "1|Amends|ExecutiveOrder|14101|35:8|",
+            "2|Amends|ExecutiveOrder|14102|45:8|",
+            $"3|Revokes|Proclamation|10001|63:11|{ExecutiveActionTargetRows.LinkedProclamation}",
+            "4|Revokes|ExecutiveOrder|14000|76:8|"
         ], await QueryAsPublicAsync($"""
-            SELECT "position" || '|' || relation || '|' || kind || '|' || number || '|' || reference || '|' || coalesce(target_record_id, '')
+            SELECT "position" || '|' || relation || '|' || kind || '|' || number || '|' || reference_start || ':' || reference_length || '|' || coalesce(target_record_id, '')
               FROM public_api.executive_action_targets WHERE record_id = '{ExecutiveActionTargetRows.Source}' ORDER BY "position"
             """));
     }
@@ -64,26 +64,6 @@ public sealed class PublicApiExecutiveActionTargetsMigrationTests(PostgresCollec
     public async Task ARevisionNeverLinksToItself()
     {
         Assert.Equal([""], await QueryAsPublicAsync($"SELECT coalesce(target_record_id, '') FROM public_api.executive_action_targets WHERE record_id = '{ExecutiveActionTargetRows.Source}' AND number = '14000'"));
-    }
-
-    [Fact]
-    public async Task AReferenceThatAnAstralCharacterShiftsIsNullBecauseTheViewNeverShowsTextThatIsNotTheReference()
-    {
-        await ViewsSeed.ExecuteAsync(database, $"UPDATE executive_action_revisions SET disposition_notes = E'\\U0001F600' || disposition_notes WHERE record_id = '{ExecutiveActionTargetRows.Source}'");
-
-        Assert.Equal(["14000|"], await QueryAsPublicAsync($"""
-            SELECT number || '|' || coalesce(reference, '') FROM public_api.executive_action_targets WHERE record_id = '{ExecutiveActionTargetRows.Source}' AND number = '14000'
-            """));
-    }
-
-    [Fact]
-    public async Task AReferenceThatDoesNotStartWithTheStoredKindPrefixIsNullBecauseTheDocSaysTheTextMustMatchTheKind()
-    {
-        await ViewsSeed.ExecuteAsync(database, $"UPDATE executive_action_revision_disposition_targets SET kind = 'Proclamation' WHERE record_id = '{ExecutiveActionTargetRows.Source}' AND number = '14000'");
-
-        Assert.Equal(["14000||"], await QueryAsPublicAsync($"""
-            SELECT number || '|' || coalesce(reference, '') || '|' || coalesce(target_record_id, '') FROM public_api.executive_action_targets WHERE record_id = '{ExecutiveActionTargetRows.Source}' AND number = '14000'
-            """));
     }
 
     [Fact]

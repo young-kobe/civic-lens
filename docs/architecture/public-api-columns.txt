@@ -333,6 +333,7 @@ executive_actions federal_register_citation
 executive_actions document_url
 executive_actions official_id
 executive_actions president_name
+executive_actions disposition_notes
 executive_action_notices record_id
 executive_action_notices revision_number
 executive_action_notices position
@@ -345,7 +346,8 @@ executive_action_targets position
 executive_action_targets relation
 executive_action_targets kind
 executive_action_targets number
-executive_action_targets reference
+executive_action_targets reference_start
+executive_action_targets reference_length
 executive_action_targets target_record_id
 officials release_number
 officials official_id
