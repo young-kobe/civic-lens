@@ -5,7 +5,7 @@ using Npgsql;
 namespace CivicLens.PublicApi.Officials;
 
 /// <summary>Reads the bill and issue figures for selected officials and Congresses.</summary>
-public static class OfficialActivityReader
+internal static class OfficialActivityReader
 {
     private const int MaximumIssues = 10;
 
@@ -29,27 +29,6 @@ public static class OfficialActivityReader
           LEFT JOIN public_api.release_bill_counts totals ON totals.congress = selected.congress
           LEFT JOIN public_api.release_official_bill_counts members
             ON members.official_id = selected.official_id AND members.congress = selected.congress
-         ORDER BY selected.official_id
-        """;
-
-    private const string LiveBillsSql = """
-        WITH selected AS (
-            SELECT DISTINCT official_id, congress FROM unnest(@officialIds, @congresses) AS pairs(official_id, congress)
-        ), base_bills AS (
-            SELECT congress, count(*) AS bills_in_congress
-              FROM public_api.bills
-             WHERE congress = ANY(@congresses)
-             GROUP BY congress
-        )
-        SELECT selected.official_id, selected.congress, coalesce(base_bills.bills_in_congress, 0), coalesce(counts.sponsored, 0), coalesce(counts.cosponsored, 0)
-          FROM selected
-          LEFT JOIN base_bills ON base_bills.congress = selected.congress
-          LEFT JOIN LATERAL (
-               SELECT sponsored, cosponsored
-                 FROM public_api.official_bill_counts
-                WHERE official_id = selected.official_id AND congress = selected.congress
-                OFFSET 0
-               ) counts ON TRUE
          ORDER BY selected.official_id
         """;
 
@@ -88,36 +67,23 @@ public static class OfficialActivityReader
         return figures.ToDictionary(pair => pair.Key, pair => pair.Value.ToFigures(pair.Key.Congress));
     }
 
+    /// <summary>Reads the stored bill figures of the active release. A Congress with no stored total has no snapshot, so its figure stays absent and never shows zero.
+    /// A missing member row under a stored total means zero.</summary>
     private static async Task ReadBillsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string[] officialIds, int[] congresses,
         Dictionary<(string OfficialId, int Congress), MutableFigures> figures, CancellationToken cancellationToken)
     {
-        var unstored = await ReadBillRowsAsync(StoredBillsSql, connection, transaction, officialIds, congresses, figures, cancellationToken);
-        if (unstored.Count == 0) return;
-        // A release without a stored Congress total has no snapshot. A missing member row means zero only when the total exists.
-        await ReadBillRowsAsync(LiveBillsSql, connection, transaction, [.. unstored.Select(key => key.OfficialId)], [.. unstored.Select(key => key.Congress)], figures, cancellationToken);
-    }
-
-    private static async Task<List<(string OfficialId, int Congress)>> ReadBillRowsAsync(string sql, NpgsqlConnection connection, NpgsqlTransaction transaction,
-        string[] officialIds, int[] congresses, Dictionary<(string OfficialId, int Congress), MutableFigures> figures, CancellationToken cancellationToken)
-    {
-        var unstored = new List<(string OfficialId, int Congress)>();
-        await using var command = new NpgsqlCommand(sql, connection);
+        await using var command = new NpgsqlCommand(StoredBillsSql, connection);
         command.Transaction = transaction;
         command.Parameters.AddWithValue("officialIds", officialIds);
         command.Parameters.AddWithValue("congresses", congresses);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
+            if (reader.IsDBNull(2)) continue;
             var key = (reader.GetString(0), reader.GetInt32(1));
-            if (reader.IsDBNull(2))
-            {
-                unstored.Add(key);
-                continue;
-            }
             figures[key].Bills = new(key.Item2, ViewColumns.Number(reader, 3)!.Value, ViewColumns.Number(reader, 4)!.Value,
                 ViewColumns.Number(reader, 2)!.Value, OfficialScopes.Bills(key.Item2));
         }
-        return unstored;
     }
 
     private static async Task ReadIssuesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string[] officialIds, int[] congresses,
@@ -145,10 +111,8 @@ public static class OfficialActivityReader
         public BillCountsFigure? Bills { get; set; }
         public List<IssueCountsFigure> Issues { get; } = [];
 
-        public OfficialActivityFigures ToFigures(int congress) => new(
-            Bills ?? throw new InvalidDataException("The published bill figures are missing."),
-            new(congress, OfficialScopes.Issues(congress), [.. Issues]));
+        public OfficialActivityFigures ToFigures(int congress) => new(Bills, new(congress, OfficialScopes.Issues(congress), [.. Issues]));
     }
 }
 
-public sealed record OfficialActivityFigures(BillCountsFigure Bills, IssueCountsFigures Issues);
+internal sealed record OfficialActivityFigures(BillCountsFigure? Bills, IssueCountsFigures Issues);

@@ -25,6 +25,9 @@ public partial class PublicApiReleaseBillCounts : Migration
 
     protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.Sql(UpSql);
 
-    protected override void Down(MigrationBuilder migrationBuilder) =>
-        migrationBuilder.Sql("DROP VIEW public_api.release_official_bill_counts, public_api.release_bill_counts;");
+    protected override void Down(MigrationBuilder migrationBuilder) => migrationBuilder.Sql("""
+        DROP VIEW public_api.release_official_bill_counts, public_api.release_bill_counts;
+        REVOKE SELECT (release_number, congress, bills, expected_member_row_count) ON release_bill_counts FROM civic_lens_public_owner;
+        REVOKE SELECT (release_number, congress, official_id, sponsored, cosponsored) ON release_official_bill_counts FROM civic_lens_public_owner;
+        """);
 }
