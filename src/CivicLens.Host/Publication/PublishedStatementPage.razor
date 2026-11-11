@@ -2,7 +2,7 @@
 @using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
 
-<PublishedRecordFrame Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedStatementView.Facts(Record, Catalog)"
+<PublishedRecordFrame Kind="PublishedRecordKind.Statement" Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" ShortName="@PublishedStatementView.ShortName(Record)" Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedStatementView.Facts(Record, Catalog)"
                       Caveat="The observation time shows when the source was captured. It does not show when the statement was first made.">
     <PublishedRelatedPanel Related="Related" Kind="PublishedRecordKind.Statement" RecordId="@Record.RecordId" />
     <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
