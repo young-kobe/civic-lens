@@ -381,3 +381,8 @@ official_issue_counts records
 official_executive_actions official_id
 official_executive_actions document_type
 official_executive_actions actions
+release_issue_party_lineups release_number
+release_issue_party_lineups issue_id
+release_issue_party_lineups unknown_bills
+release_issue_party_lineups party
+release_issue_party_lineups bills

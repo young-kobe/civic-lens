@@ -6,22 +6,21 @@ namespace CivicLens.Infrastructure.Publication;
 /// <summary>Writes release-local Home issue counts from the exact revisions selected for a release.</summary>
 internal static class ReleaseIssueCounts
 {
-    private const string FillSql = """
-        WITH selected AS (
+    /// <summary>The revisions that a release selects. The line-up of parties reads the same ranges. Placeholders: {0} is the release number.</summary>
+    internal const string SelectedCte = """
+        selected AS (
             SELECT kind, record_id, revision_number
               FROM publication_record_states
              WHERE first_release <= {0} AND (last_release IS NULL OR last_release >= {0})
                AND kind IN ('vote', 'action')
-        ), vote_counts AS (
-            SELECT vi.issue_id, count(*) AS total
-              FROM selected s
-              JOIN vote_revisions v ON v.record_id = s.record_id AND v.revision_number = s.revision_number
-              JOIN vote_revision_issues vi ON vi.record_id = v.record_id AND vi.revision_number = v.revision_number
-             WHERE s.kind = 'vote' AND v.member_list_id IS NOT NULL AND v.congress = {1}
-               AND v.kind = ANY({2}::text[]) AND vi.is_tracked
-             GROUP BY vi.issue_id
-        ), bill_counts AS (
-            SELECT ai.issue_id, count(*) AS total
+        )
+        """;
+
+    /// <summary>One row for each selected bill revision and tracked issue that the Home tile counts. The line-up of parties classifies the same rows.
+    /// Placeholders: {0} is the release number and {1} is the Congress. It needs the <see cref="SelectedCte"/> before it.</summary>
+    internal const string EligibleBillIssuesCte = """
+        eligible_bill_issues AS (
+            SELECT ai.issue_id, a.record_id, a.revision_number
               FROM selected s
               JOIN action_revisions a ON a.record_id = s.record_id AND a.revision_number = s.revision_number
               JOIN action_revision_issues ai ON ai.record_id = a.record_id AND ai.revision_number = a.revision_number
@@ -29,7 +28,20 @@ internal static class ReleaseIssueCounts
                AND ai.is_tracked
                AND EXISTS (SELECT 1 FROM action_revision_sponsorships p
                             WHERE p.record_id = a.record_id AND p.revision_number = a.revision_number)
-             GROUP BY ai.issue_id
+        )
+        """;
+
+    private const string FillSql = $$"""
+        WITH {{SelectedCte}}, vote_counts AS (
+            SELECT vi.issue_id, count(*) AS total
+              FROM selected s
+              JOIN vote_revisions v ON v.record_id = s.record_id AND v.revision_number = s.revision_number
+              JOIN vote_revision_issues vi ON vi.record_id = v.record_id AND vi.revision_number = v.revision_number
+             WHERE s.kind = 'vote' AND v.member_list_id IS NOT NULL AND v.congress = {1}
+               AND v.kind = ANY({2}::text[]) AND vi.is_tracked
+             GROUP BY vi.issue_id
+        ), {{EligibleBillIssuesCte}}, bill_counts AS (
+            SELECT issue_id, count(*) AS total FROM eligible_bill_issues GROUP BY issue_id
         ), snapshots AS (
             SELECT names.issue_id, COALESCE(v.total, 0) AS votes, COALESCE(b.total, 0) AS bills
               FROM release_issues names

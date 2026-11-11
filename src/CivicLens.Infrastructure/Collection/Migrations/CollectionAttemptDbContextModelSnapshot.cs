@@ -5517,6 +5517,59 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssuePartyCountRow", b =>
+                {
+                    b.Property<int>("ReleaseNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("release_number");
+
+                    b.Property<string>("IssueId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("issue_id");
+
+                    b.Property<string>("Party")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("party");
+
+                    b.Property<int>("Bills")
+                        .HasColumnType("integer")
+                        .HasColumnName("bills");
+
+                    b.HasKey("ReleaseNumber", "IssueId", "Party");
+
+                    b.ToTable("release_issue_party_counts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_release_issue_party_counts_bills", "bills > 0");
+
+                            t.HasCheckConstraint("ck_release_issue_party_counts_party", "length(btrim(party)) > 0");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssuePartyLineupRow", b =>
+                {
+                    b.Property<int>("ReleaseNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("release_number");
+
+                    b.Property<string>("IssueId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("issue_id");
+
+                    b.Property<int>("UnknownBills")
+                        .HasColumnType("integer")
+                        .HasColumnName("unknown_bills");
+
+                    b.HasKey("ReleaseNumber", "IssueId");
+
+                    b.ToTable("release_issue_party_lineups", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_release_issue_party_lineups_unknown_bills", "unknown_bills >= 0");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssueRow", b =>
                 {
                     b.Property<long?>("Bills")
@@ -10129,6 +10182,26 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("ReleaseNumber", "IssueId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssuePartyCountRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssuePartyLineupRow", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseNumber", "IssueId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_release_issue_party_counts_lineup");
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssuePartyLineupRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssueRow", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseNumber", "IssueId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_release_issue_party_lineups_issue");
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssueRow", b =>
