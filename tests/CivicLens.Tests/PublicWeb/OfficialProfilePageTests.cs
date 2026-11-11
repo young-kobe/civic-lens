@@ -89,6 +89,25 @@ public sealed class OfficialProfilePageTests
     }
 
     [Fact]
+    public async Task AMemberWhoSwitchedPartiesGetsOneLegendLineForEachPartyTheMarksBrokeFrom()
+    {
+        var data = Member() with
+        {
+            PartyLines =
+            [
+                new(PublishedChamber.House, 119, "Democrat", 100, 2, 102, new(2025, 1, 3), new(2025, 6, 1)),
+                new(PublishedChamber.House, 119, "Republican", 50, 1, 51, new(2025, 6, 2), new(2026, 9, 16))
+            ]
+        };
+        var page = await RenderAsync<OfficialProfilePage>(data);
+
+        var legend = page.QuerySelectorAll(".official-legend li").Select(item => item.TextContent).ToArray();
+
+        Assert.Contains(legend, line => line.Contains("2 votes against most House Democrats"));
+        Assert.Contains(legend, line => line.Contains("1 vote against most House Republicans"));
+    }
+
+    [Fact]
     public async Task JumpLinksPointAtTheSectionsThatExistAndEveryTargetExists()
     {
         var page = await RenderAsync<OfficialProfilePage>(Member());

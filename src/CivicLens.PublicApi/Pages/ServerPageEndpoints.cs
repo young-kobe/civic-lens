@@ -36,13 +36,16 @@ public static class ServerPageEndpoints
                     [nameof(ComparePage.RootPath)] = baseUrl.Join(string.Empty),
                     [nameof(ComparePage.BrowserApiUrl)] = home.BrowserApiRoot
                 }, cancellationToken)));
+        routes.MapGet(Prefix + "/officials/{id}", (string id, HttpContext context, OfficialPageReader officials, ServerPageResponder responder, CancellationToken cancellationToken) =>
+            ApiResults.GuardAsync(async () => PublicationProtocol.IsPathSegment(id) && await officials.ReadAsync(id, cancellationToken) is { } page
+                ? await RespondOfficialAsync(context, responder, page, baseUrl, cancellationToken)
+                : await NotFoundAsync(context, responder, baseUrl, cancellationToken)));
         // The preview path of a static record page "records/{id}.html". A vote record gets the vote page and a bill record gets the bill page. Any other record gets the not found page.
         routes.MapGet(VoteRoute("{recordId}"), (string recordId, HttpContext context, VotePageReader votes, BillPageReader bills, ServerPageResponder responder,
             CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
         {
-            if (!PublicationProtocol.IsAnyRecordId(recordId)) return await RespondNotFoundAsync(context, responder, baseUrl, cancellationToken);
-            if (await votes.ReadAsync(recordId, cancellationToken) is { } vote)
-                return await RespondVoteAsync(context, responder, baseUrl, vote, recordId, cancellationToken);
+            if (!PublicationProtocol.IsAnyRecordId(recordId)) return await NotFoundAsync(context, responder, baseUrl, cancellationToken);
+            if (await votes.ReadAsync(recordId, cancellationToken) is { } vote) return await RespondVoteAsync(context, responder, baseUrl, vote, recordId, cancellationToken);
             return await bills.ReadAsync(recordId, cancellationToken) is { } bill
                 ? await responder.RespondAsync<BillDetailPage>(context, StatusCodes.Status200OK, bill.Release,
                     new Dictionary<string, object?>
@@ -50,14 +53,10 @@ public static class ServerPageEndpoints
                         [nameof(BillDetailPage.Data)] = bill,
                         [nameof(BillDetailPage.RootPath)] = baseUrl.Join(string.Empty)
                     }, cancellationToken)
-                : await RespondNotFoundAsync(context, responder, baseUrl, cancellationToken);
+                : await NotFoundAsync(context, responder, baseUrl, cancellationToken);
         }));
-        routes.MapGet(Prefix + "/officials/{id}", (string id, HttpContext context, OfficialPageReader officials, ServerPageResponder responder, CancellationToken cancellationToken) =>
-            ApiResults.GuardAsync(async () => PublicationProtocol.IsPathSegment(id) && await officials.ReadAsync(id, cancellationToken) is { } page
-                ? await RespondOfficialAsync(context, responder, page, baseUrl, cancellationToken)
-                : await RespondNotFoundAsync(context, responder, baseUrl, cancellationToken)));
         routes.MapGet(Prefix + "/{**path}", (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
-            RespondNotFoundAsync(context, responder, baseUrl, cancellationToken));
+            NotFoundAsync(context, responder, baseUrl, cancellationToken));
     }
 
     /// <summary>The route of the server-rendered vote page. The page uses it as an origin-relative form action, so a filter stays on the origin that served the page. The public base URL can name another origin.</summary>
@@ -77,7 +76,7 @@ public static class ServerPageEndpoints
         }, cancellationToken);
     }
 
-    private static Task<IResult> RespondNotFoundAsync(HttpContext context, ServerPageResponder responder, PublicBaseUrl baseUrl, CancellationToken cancellationToken) =>
+    private static Task<IResult> NotFoundAsync(HttpContext context, ServerPageResponder responder, PublicBaseUrl baseUrl, CancellationToken cancellationToken) =>
         responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,
             new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken);
 
