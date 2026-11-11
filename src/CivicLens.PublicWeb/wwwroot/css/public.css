@@ -338,6 +338,10 @@ table[data-paged]:focus { outline: none; }
 .glossary-term h3 { margin: 0 0 var(--s2); }
 .glossary-term dt { color: var(--muted); font-size: var(--t-xs); font-weight: 600; }
 .glossary-term dd { margin: 0 0 var(--s2); }
+.vote-kinds { display: grid; gap: var(--s5); margin: 0; padding: 0; list-style: none; }
+.vote-kind h2 { margin: 0 0 var(--s1); font-size: var(--t-lg); }
+.vote-kind p { margin: 0 0 var(--s2); }
+.vote-kind-term { color: var(--muted); font-size: var(--t-sm); }
 
 @media (max-width: 1139px) {
     .public-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand tools" "members members" "search search"; gap: 0 var(--s3); padding-block: 10px 14px; }

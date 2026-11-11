@@ -41,6 +41,18 @@ public sealed class PublicPageReadingGradeTests
     }
 
     [Fact]
+    public async Task EveryVoteKindYesMeaningOnTheIndexReadsAtOrBelowTheSharedGradeLimit()
+    {
+        var page = await RenderAsync<VoteKindsPage>(new Dictionary<string, object?> { [nameof(VoteKindsPage.RootPath)] = Root });
+
+        foreach (var yes in page.QuerySelectorAll(".vote-kind p:last-child"))
+        {
+            var grade = ReadingGrade.Rounded(NormalizeText(yes));
+            Assert.True(grade <= ReadingGrade.MaximumGrade, $"\"{yes.TextContent}\" reads at grade {ReadingGrade.Format(grade)}.");
+        }
+    }
+
+    [Fact]
     public async Task FeaturedModelHeadlineAndSummaryReadAsOnePassageAtOrBelowTheSharedGradeLimit()
     {
         // Civic Lens model text captured on 2026-11-10, release 1050.

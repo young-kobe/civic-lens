@@ -14,7 +14,7 @@ public static class ServerPageEndpoints
     /// <summary>The path prefix of the server pages. No live route uses it, so the static pages stay the production path until a route moves.</summary>
     public const string Prefix = "/web";
 
-    /// <summary>Maps the gated home, Compare, and vote previews and the not found page under the server-page prefix.</summary>
+    /// <summary>Maps the gated home, Compare, vote kind index, and vote previews and the not found page under the server-page prefix.</summary>
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         routes.MapGet(Prefix, (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
@@ -34,6 +34,9 @@ public static class ServerPageEndpoints
                     [nameof(ComparePage.RootPath)] = baseUrl.Join(string.Empty),
                     [nameof(ComparePage.BrowserApiUrl)] = home.BrowserApiRoot
                 }, cancellationToken)));
+        routes.MapGet(Prefix + "/" + PublicationProtocol.VoteKindsPagePath, (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
+            ApiResults.GuardAsync(() => responder.RespondAsync<VoteKindsPage>(context, StatusCodes.Status200OK,
+                new Dictionary<string, object?> { [nameof(VoteKindsPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken)));
         routes.MapGet(VoteRoute("{recordId}"), (string recordId, HttpContext context, VotePageReader votes, ServerPageResponder responder,
             CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
         {

@@ -1,0 +1,22 @@
+@using CivicLens.Publication.Contracts
+
+<PublicPage Section="PublicSection.Glossary" CanonicalPath="@PublicationProtocol.VoteKindsPagePath" Title="@Glossary.KindsOfVotes" Description="@Glossary.PageDescription" RootPath="@RootPath">
+    <PageHeader Title="@Glossary.KindsOfVotes" />
+    <Panel Label="@Glossary.KindsOfVotes" Padded="true">
+        <ul class="vote-kinds">
+            @foreach (var kind in VoteMeaning.Kinds)
+            {
+                var term = Glossary.Term(PublishedRecordLabels.VoteKindTermKey(kind)!);
+                <li class="vote-kind">
+                    <h2>@PlainVoteWords.Kind(kind)</h2>
+                    <p class="vote-kind-term"><a href="@($"{RootPath}{PublicationProtocol.GlossaryPagePath}#{term.AnchorId}")">@term.Name</a></p>
+                    <p>@VoteMeaning.YesOf(kind)</p>
+                </li>
+            }
+        </ul>
+    </Panel>
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+}
