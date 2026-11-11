@@ -44,9 +44,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
         return new(active, page, next);
     }
 
-    public async Task<VoteDetail?> FindAsync(string recordId, CancellationToken cancellationToken)
-    {
-        await using var command = views.CreateCommand($"""
+    private static readonly string DetailSql = $"""
             SELECT v.release_number, {Columns},
                    ARRAY(SELECT i.issue_id FROM public_api.vote_issues i
                           WHERE i.record_id = v.record_id AND i.revision_number = v.revision_number ORDER BY i.issue_id),
@@ -79,7 +77,18 @@ public sealed class VoteStore(NpgsqlDataSource views)
               FROM public_api.votes v
               LEFT JOIN public_api.vote_evidence e ON e.record_id = v.record_id AND e.revision_number = v.revision_number
              WHERE v.record_id = @id
-            """);
+            """;
+
+    public Task<VoteDetail?> FindAsync(string recordId, CancellationToken cancellationToken) =>
+        ReadDetailAsync(views.CreateCommand(DetailSql), recordId, cancellationToken);
+
+    /// <summary>Reads the detail inside the transaction of the caller, so that it shares a snapshot with the other reads of that transaction.</summary>
+    public Task<VoteDetail?> FindAsync(NpgsqlTransaction transaction, string recordId, CancellationToken cancellationToken) =>
+        ReadDetailAsync(new NpgsqlCommand(DetailSql, transaction.Connection, transaction), recordId, cancellationToken);
+
+    private static async Task<VoteDetail?> ReadDetailAsync(NpgsqlCommand command, string recordId, CancellationToken cancellationToken)
+    {
+        await using var _ = command;
         command.Parameters.AddWithValue("id", recordId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
@@ -247,36 +256,49 @@ public sealed class VoteStore(NpgsqlDataSource views)
         PublishedCitation? KindCitation, PublishedVoteFact[] Facts);
 
     /// <summary>Reads one page of members. Null means that the active release holds no such vote. The caller compares the release of the page with the release of the cursor.</summary>
-    public async Task<VoteMemberPage?> ListMembersAsync(string recordId, VoteMemberRequest request, CancellationToken cancellationToken)
+    public Task<VoteMemberPage?> ListMembersAsync(string recordId, VoteMemberRequest request, CancellationToken cancellationToken) =>
+        ReadMembersAsync(views.CreateCommand(MemberSql(request)), recordId, request, null, cancellationToken);
+
+    /// <summary>Reads one page of members inside the transaction of the caller. The sources are the ones that the detail of the same transaction already read, so no source text is read again.</summary>
+    public Task<VoteMemberPage?> ListMembersAsync(NpgsqlTransaction transaction, string recordId, VoteMemberRequest request,
+        PublishedDocumentVersion[] knownSources, CancellationToken cancellationToken) =>
+        ReadMembersAsync(new NpgsqlCommand(MemberSql(request), transaction.Connection, transaction), recordId, request, knownSources, cancellationToken);
+
+    private static string MemberSql(VoteMemberRequest request) => $"""
+        WITH active AS (
+            SELECT x.release_number, x.revision_number FROM public_api.active_records x
+             WHERE x.kind = 'vote' AND x.record_id = @id
+               AND EXISTS (SELECT 1 FROM public_api.vote_members h WHERE h.record_id = x.record_id AND h.revision_number = x.revision_number)
+        ), selected AS MATERIALIZED (
+            SELECT m.* FROM public_api.vote_members m
+              JOIN active a ON a.revision_number = m.revision_number
+             WHERE m.record_id = @id{MemberFilters(request)}
+             ORDER BY m."position" LIMIT @take
+        )
+        SELECT a.release_number,
+               (SELECT json_agg(json_build_object('position', m."position", 'officialId', m.official_id, 'cast', m.vote_cast,
+                        'party', m.party, 'caucus', m.caucus, 'id', m.extraction_id,
+                        'start', m.citation_start, 'length', m.citation_length) ORDER BY m."position")
+                  FROM selected m),
+               CASE WHEN @with_sources THEN
+                (SELECT json_agg(json_build_object('id', s.extraction_id, 'url', s.url,
+                        'observedAt', s.observed_at_utc_ticks,
+                        'text', CASE WHEN length(s.text) <= {PublishedDocumentVersion.MaximumTextLength} THEN s.text END)
+                        ORDER BY s.extraction_id)
+                  FROM (SELECT s.* FROM public_api.vote_sources s
+                         WHERE s.record_id = @id AND s.revision_number = a.revision_number
+                           AND s.extraction_id IN (SELECT extraction_id FROM selected)
+                         ORDER BY s.extraction_id LIMIT {PublishedVote.MaximumSources + 1}) s) END
+          FROM active a
+        """;
+
+    private static async Task<VoteMemberPage?> ReadMembersAsync(NpgsqlCommand command, string recordId, VoteMemberRequest request,
+        PublishedDocumentVersion[]? knownSources, CancellationToken cancellationToken)
     {
-        await using var command = views.CreateCommand($"""
-            WITH active AS (
-                SELECT x.release_number, x.revision_number FROM public_api.active_records x
-                 WHERE x.kind = 'vote' AND x.record_id = @id
-                   AND EXISTS (SELECT 1 FROM public_api.vote_members h WHERE h.record_id = x.record_id AND h.revision_number = x.revision_number)
-            ), selected AS MATERIALIZED (
-                SELECT m.* FROM public_api.vote_members m
-                  JOIN active a ON a.revision_number = m.revision_number
-                 WHERE m.record_id = @id{MemberFilters(request)}
-                 ORDER BY m."position" LIMIT @take
-            )
-            SELECT a.release_number,
-                   (SELECT json_agg(json_build_object('position', m."position", 'officialId', m.official_id, 'cast', m.vote_cast,
-                            'party', m.party, 'caucus', m.caucus, 'id', m.extraction_id,
-                            'start', m.citation_start, 'length', m.citation_length) ORDER BY m."position")
-                      FROM selected m),
-                   (SELECT json_agg(json_build_object('id', s.extraction_id, 'url', s.url,
-                            'observedAt', s.observed_at_utc_ticks,
-                            'text', CASE WHEN length(s.text) <= {PublishedDocumentVersion.MaximumTextLength} THEN s.text END)
-                            ORDER BY s.extraction_id)
-                      FROM (SELECT s.* FROM public_api.vote_sources s
-                             WHERE s.record_id = @id AND s.revision_number = a.revision_number
-                               AND s.extraction_id IN (SELECT extraction_id FROM selected)
-                             ORDER BY s.extraction_id LIMIT {PublishedVote.MaximumSources + 1}) s)
-              FROM active a
-            """);
+        await using var _ = command;
         command.Parameters.AddWithValue("id", recordId);
         command.Parameters.AddWithValue("take", request.Limit + 1);
+        command.Parameters.AddWithValue("with_sources", knownSources is null);
         if (request.Cast is not null) command.Parameters.AddWithValue("cast", request.Cast);
         if (request.Officials.Length > 0) command.Parameters.AddWithValue("officials", request.Officials);
         if (request.Cursor is { } cursor) command.Parameters.AddWithValue("after", cursor.Position);
@@ -291,9 +313,10 @@ public sealed class VoteStore(NpgsqlDataSource views)
                 if (!reader.IsDBNull(2)) sourceJson = reader.GetString(2);
             }
         if (release is not { } active) return null;
-        PublishedDocumentVersion[] sources = sourceJson is null ? [] : ReadSources(sourceJson, "member vote sources");
+        var sources = knownSources ?? (sourceJson is null ? [] : ReadSources(sourceJson, "member vote sources"));
         var evidenceRows = rows.Select(row => (Cast: (string?)row.Cast, Citation: (PublishedCitation?)ReadCitation(sources, row.Id, row.Start, row.Length))).ToArray();
-        if (evidenceRows.Length > 0) PublishedVote.ValidateMemberEvidence(sources, evidenceRows);
+        if (evidenceRows.Length > 0 && knownSources is null) PublishedVote.ValidateMemberEvidence(sources, evidenceRows);
+        else if (evidenceRows.Length > 0) PublishedVote.ValidateMemberCitations(sources, evidenceRows);
         var members = rows.Select((row, index) => new VoteMember(row.Position, row.OfficialId, row.Cast, row.Party, row.Caucus, evidenceRows[index].Citation!)).ToArray();
         var page = members.Take(request.Limit).ToArray();
         var next = rows.Length > request.Limit ? new VoteMemberCursor(active, page[^1].Position).Encode() : null;
