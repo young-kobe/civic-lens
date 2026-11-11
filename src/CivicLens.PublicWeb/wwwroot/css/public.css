@@ -472,7 +472,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .detail-stack > .detail-section h2 { margin: 0; }
 .detail :is(.detail-card, .ai-summary, .source-fold) h3 { margin: var(--s4) 0 var(--s2); font-size: var(--t-lg); font-weight: 800; }
 .detail-passage h3, .detail-versions h3 { margin-top: 0; }
-.detail :is(.detail-section, .detail-card, .ai-summary) p { max-width: var(--measure); }
+.detail :is(.detail-section, .detail-card, .ai-summary) p, .vote .ai-summary p { max-width: var(--measure); }
 /* Shared record page parts: AiSummary, SourceFold, LinkChip */
 .ai-summary { padding: var(--s4) 18px; border-radius: 20px; background: var(--surface); box-shadow: var(--e1); line-height: 1.55; }
 .ai-summary p { margin: 0 0 var(--s3); }
@@ -599,11 +599,6 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .vote-head { display: grid; gap: var(--s3); }
 .vote-meta { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3); margin: 0; color: var(--muted); font-size: .875rem; font-weight: 650; }
 .vote-headline { max-width: 26ch; margin: 0; font-family: var(--display); font-size: clamp(2.125rem, 4.5vw, 3.5rem); font-weight: 900; font-stretch: 70%; letter-spacing: -.01em; line-height: 1; text-wrap: balance; overflow-wrap: anywhere; }
-.vote-summary { max-width: var(--measure); line-height: 1.55; }
-.vote-summary p { margin: 0; }
-.vote-ai { padding: var(--s4) 18px; border: 1.5px solid var(--ai-line); border-radius: 20px; background: var(--ai-surface); color: var(--ai-ink); }
-.vote-summary-label { display: inline-block; margin-bottom: var(--s2); color: var(--muted); font-size: .75rem; font-weight: 700; }
-.vote-ai .vote-summary-label { padding: 5px 10px; border-radius: 999px; background: var(--ai-line); color: var(--ai-label-ink); text-transform: uppercase; }
 .vote-layout { display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
 .vote-main, .vote-rail { display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
 .vote-layout section, .vote-layout .vote-fold { min-width: 0; margin: 0; padding: 24px; border-radius: 28px; background: var(--surface); box-shadow: var(--e1); overflow-wrap: anywhere; }
@@ -628,8 +623,6 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .vote-members .vote-fold { margin-top: var(--s4); border: 1px solid var(--line); box-shadow: none; }
 .vote-members .vote-fold > :not(summary) { margin-inline: var(--s4); }
 .vote-members .vote-fold > :last-child { margin-bottom: var(--s4); }
-.vote-source-body { display: grid; gap: var(--s3); padding: var(--s4); }
-.vote-source-body > * { min-width: 0; margin: 0; }
 .vote-filter { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: var(--s3); align-items: end; margin-block: var(--s4); }
 .vote-filter-field { display: grid; gap: var(--s1); }
 .vote-filter-field label { font-size: .875rem; font-weight: 650; }
