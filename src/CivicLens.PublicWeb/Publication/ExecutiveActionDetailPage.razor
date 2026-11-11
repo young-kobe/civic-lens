@@ -1,0 +1,41 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Evidence
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSection.AllRecords" Title="@Data.Headline" Description="@Data.Headline" CanonicalPath="@PublicationProtocol.RecordPagePath(Data.RecordId)" IsArticle="true" RootPath="@RootPath" Record="record">
+    <article class="detail">
+        <header class="detail-head">
+            <p class="detail-eyebrow">@ExecutiveActionWords.Eyebrow(Data)</p>
+            <p class="detail-badges">
+                <StatusBadge Text="@PublishedRecordLabels.ExecutiveActionKind(Data.Kind)" />
+                <StatusBadge Text="@ExecutiveActionWords.DocumentBadge(Data)" />
+            </p>
+            <h1 class="detail-headline">@Data.Headline</h1>
+            <p class="detail-lede">@ExecutiveActionWords.Lede(Data)</p>
+            <p class="small muted">@ExecutiveActionWords.Approval(Data)</p>
+        </header>
+        <div class="detail-stack">
+            <AiSummary>
+                <Check>@ExecutiveActionWords.Caveat <a href="#source">@SourceFold.Title</a></Check>
+            </AiSummary>
+            <section class="detail-card detail-facts" aria-labelledby="executive-facts-title">
+                <h2 id="executive-facts-title">@ExecutiveActionWords.KeyFactsHeading</h2>
+                <Facts Items="ExecutiveActionWords.KeyFacts(Data, RootPath)" />
+                <p><Button Href="@Data.DocumentUrl" Variant="ButtonVariant.Primary" rel="noopener noreferrer nofollow">@ExecutiveActionWords.ReadIt</Button></p>
+            </section>
+        </div>
+        <SourceFold>
+            <Facts Items="ExecutiveActionWords.SourceFacts(Data)" />
+        </SourceFold>
+    </article>
+</PublicPage>
+
+@code {
+    private ReportedRecord record = default!;
+
+    [Parameter, EditorRequired] public ExecutiveActionPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    protected override void OnParametersSet() =>
+        record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.ExecutiveAction, Data.Headline);
+}

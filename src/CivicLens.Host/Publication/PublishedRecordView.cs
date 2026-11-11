@@ -8,13 +8,6 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedRecordView
 {
-    public const string ChangeDateAnchor = "cite-change-date";
-
-    public static string CitationAnchor(int index) => $"cite-{index + 1}";
-
-    public static string QuoteTarget(string subject, int index = 0, int count = 1) =>
-        count == 1 ? $"{subject}, quote" : $"{subject}, quote {index + 1}";
-
     public static string SourceLineTarget(string subject, int index = 0, int count = 1) =>
         count == 1 ? subject : $"{subject}, line {index + 1}";
 
@@ -55,15 +48,6 @@ internal static class PublishedRecordView
             change.AfterContextStart, Slice(record.After.Text, change.AfterContextStart, change.AfterContextLength),
             [.. change.WordEdits.Select(edit => new DocumentWordEdit(
                 edit.BeforeStart, edit.BeforeLength, edit.AfterStart, edit.AfterLength))]))];
-
-    public static IReadOnlyList<CitedRange> RangesIn(PublishedDocumentChange record, PublishedDocumentVersion version)
-    {
-        var cited = record.Citations.Select((citation, index) => (citation, anchor: CitationAnchor(index)));
-        if (record.ChangeDateEvidence is { } evidence)
-            cited = cited.Append((evidence, ChangeDateAnchor));
-        return [.. cited.Where(item => item.citation.ExtractionId == version.ExtractionId)
-            .Select(item => new CitedRange(item.anchor, item.citation.Start, item.citation.Length))];
-    }
 
     private static FactLink ConfiguredNameLink(bool isConfigured, string text, string href) =>
         new(text, isConfigured ? href : null);

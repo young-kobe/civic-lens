@@ -224,7 +224,7 @@ public sealed class DocumentChangeEndpointsTests(PostgresCollection postgres)
         return (int)(await command.ExecuteScalarAsync())!;
     }
 
-    private static async Task<CreatedDraft> CreateDraftAsync(ApiHost host, string key, string beforeText, string afterText)
+    internal static async Task<CreatedDraft> CreateDraftAsync(ApiHost host, string key, string beforeText, string afterText)
     {
         var captureRoot = Path.Combine(Path.GetTempPath(), "document-change-endpoint-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(captureRoot);
@@ -246,11 +246,11 @@ public sealed class DocumentChangeEndpointsTests(PostgresCollection postgres)
         }
     }
 
-    private static async Task<DocumentChangeDraftRevision> SaveAsync(ApiHost host, CreatedDraft created, string headline,
+    internal static async Task<DocumentChangeDraftRevision> SaveAsync(ApiHost host, CreatedDraft created, string headline,
         System.Collections.Immutable.ImmutableArray<SourceSpan> citations, DateOnly? changeDate = null, SourceSpan? dateEvidence = null) =>
         await SaveAsync(host, created.Draft, headline, citations, changeDate, dateEvidence);
 
-    private static async Task<DocumentChangeDraftRevision> SaveAsync(ApiHost host, DocumentChangeDraftRevision draft, string headline,
+    internal static async Task<DocumentChangeDraftRevision> SaveAsync(ApiHost host, DocumentChangeDraftRevision draft, string headline,
         System.Collections.Immutable.ImmutableArray<SourceSpan> citations, DateOnly? changeDate = null, SourceSpan? dateEvidence = null)
     {
         var store = new PostgresDocumentChangeReviewStore(Factory(host.OperationalDatabase));
@@ -259,7 +259,7 @@ public sealed class DocumentChangeEndpointsTests(PostgresCollection postgres)
                 changeDate, dateEvidence, [], [], citations, "save-" + Guid.NewGuid().ToString("N"), ChangeDateChecked: changeDate is not null));
     }
 
-    private static async Task ApproveAsync(ApiHost host, DocumentChangeDraftRevision draft)
+    internal static async Task ApproveAsync(ApiHost host, DocumentChangeDraftRevision draft)
     {
         var store = new PostgresDocumentChangeReviewStore(Factory(host.OperationalDatabase));
         var stateVersion = await ReadStateVersionAsync(host.OperationalDatabase, draft.DraftId);
@@ -268,7 +268,7 @@ public sealed class DocumentChangeEndpointsTests(PostgresCollection postgres)
                 "approve-" + Guid.NewGuid().ToString("N")));
     }
 
-    private static async Task CommitAsync(ApiHost host, int release, int? baseRelease, DocumentChangeDraftRevision draft)
+    internal static async Task CommitAsync(ApiHost host, int release, int? baseRelease, DocumentChangeDraftRevision draft)
     {
         var publications = new PostgresPublicationStore(Factory(host.OperationalDatabase), TestCodeVersion.Current);
         var stateVersion = await ReadStateVersionAsync(host.OperationalDatabase, draft.DraftId);
@@ -388,7 +388,7 @@ public sealed class DocumentChangeEndpointsTests(PostgresCollection postgres)
         return (reader.GetString(0), new DateTimeOffset(reader.GetInt64(1), TimeSpan.Zero));
     }
 
-    private sealed record CreatedDraft(DocumentChangeDraftRevision Draft, CivicLens.Core.Documents.DocumentComparison Comparison,
+    internal sealed record CreatedDraft(DocumentChangeDraftRevision Draft, CivicLens.Core.Documents.DocumentComparison Comparison,
         string BeforeText, string AfterText, string BeforeUrl, string AfterUrl, DateTimeOffset BeforeObservedAt,
         DateTimeOffset AfterObservedAt)
     {

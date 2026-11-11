@@ -4,6 +4,9 @@ public sealed record CitedRange(string AnchorId, int Start, int Length);
 
 public static class CitedText
 {
+    /// <summary>The anchor ID of the citation at this position. The cited text marks the same ID that the quote link points to.</summary>
+    public static string Anchor(int index) => $"cite-{index + 1}";
+
     public static IReadOnlyList<TextRun> Split(string text, IReadOnlyList<CitedRange> ranges)
     {
         var edges = ranges.SelectMany(range => new[] { range.Start, range.Start + range.Length })

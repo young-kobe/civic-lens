@@ -56,12 +56,12 @@ public sealed class HomePageTests
     {
         const string text = "<script>private()</script>";
         var page = await RenderAsync(new(7, Featured with { TextOrigin = origin, Summary = text }, [], null));
-        var summary = page.QuerySelector(".home-featured-summary")!;
+        var summary = page.QuerySelector(".home-featured-summary, .home-featured .ai-summary")!;
 
         Assert.Null(summary.QuerySelector("script"));
         Assert.Equal(text, summary.QuerySelector("p")!.TextContent);
         Assert.Equal(wording, summary.QuerySelector("span")?.TextContent);
-        Assert.Equal(origin == PublishedTextOrigin.Model, summary.ClassList.Contains("home-ai-summary"));
+        Assert.Equal(origin == PublishedTextOrigin.Model, summary.ClassList.Contains("ai-summary-ai"));
         var descriptionId = page.QuerySelector(".home-featured h2")!.GetAttribute("aria-describedby");
         if (wording is null)
             Assert.Null(descriptionId);
