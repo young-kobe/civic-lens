@@ -75,6 +75,52 @@ public sealed class PostgresReleaseIssuePartyCountsTests(PostgresCollection post
     }
 
     [Fact]
+    public async Task TwoOverlappingTermsOfDifferentPartiesOnTheSponsorshipDateCountAsUnknownBecauseNoSinglePartyHeldTheSeat()
+    {
+        await AddOfficialAsync(1, "p1",
+            Term("Republican", "Republican", "2025-01-03", null), Term("Democratic", "Democratic", "2025-01-03", "2025-12-31"));
+        await AddOfficialAsync(1, "same",
+            Term("Republican", "Republican", "2025-01-03", null), Term("Republican", "Republican", "2025-01-03", "2025-12-31"));
+        await BillsSeed.AddBillsAsync(connectionString,
+            Bill('1', "p1", "2025-02-01"), Bill('2', "p1", "2026-02-01"), Bill('3', "same", "2025-02-01"));
+
+        await FillAsync(1, 119);
+
+        Assert.Equal(["health|Republican|2"], await PartiesAsync(1));
+        Assert.Equal(["health|1", "tax|0"], await UnknownAsync(1));
+    }
+
+    [Fact]
+    public async Task ABlankTermPartyCountsAsUnknownAndDoesNotFailThePublishBecauseTheTableRefusesABlankLabel()
+    {
+        await AddOfficialAsync(1, "empty", Term("", "", "2025-01-03", null));
+        await AddOfficialAsync(1, "spaces", Term("  ", "  ", "2025-01-03", null));
+        await AddOfficialAsync(1, "p1", Term("Republican", "Republican", "2025-01-03", null));
+        await BillsSeed.AddBillsAsync(connectionString,
+            Bill('1', "empty", "2025-02-01"), Bill('2', "spaces", "2025-02-01"), Bill('3', "p1", "2025-02-01"));
+
+        await FillAsync(1, 119);
+
+        Assert.Equal(["health|Republican|1"], await PartiesAsync(1));
+        Assert.Equal(["health|2", "tax|0"], await UnknownAsync(1));
+    }
+
+    [Fact]
+    public async Task ASponsorRowIsCountedWhateverItsWithdrawnDateSaysBecauseTheEligibilityOfTheBillDoesNotLookAtTheDate()
+    {
+        await AddOfficialAsync(1, "p1", Term("Republican", "Republican", "2025-01-03", null));
+        await BillsSeed.AddBillsAsync(connectionString,
+            Bill('1', "p1", "2025-02-01") with { Sponsorships = [new("p1", "Sponsor", "2025-02-01", "2025-03-01")] });
+
+        await FillIssueCountsAsync(1, 119);
+        await FillAsync(1, 119);
+
+        Assert.Equal(["health|1", "tax|0"], await BaseAsync(1));
+        Assert.Equal(["health|Republican|1"], await PartiesAsync(1));
+        Assert.Equal(["health|0", "tax|0"], await UnknownAsync(1));
+    }
+
+    [Fact]
     public async Task ThePartsAndTheUnknownCountAddUpToTheHomeTileBillCountOfEachIssueBecauseOneRuleSelectsAndCountsTheBills()
     {
         await ViewsSeed.ActivateReleaseAsync(connectionString, 2, Published.AddDays(1));

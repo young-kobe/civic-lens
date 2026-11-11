@@ -14,19 +14,20 @@ internal static class ReleaseIssuePartyCounts
         DROP TABLE IF EXISTS pg_temp.expected_release_issue_party_lineups;
         DROP TABLE IF EXISTS pg_temp.expected_release_issue_party_bills;
         CREATE TEMP TABLE expected_release_issue_party_bills ON COMMIT DROP AS
-        WITH {{ReleaseIssueCounts.SelectedCte}}, {{ReleaseIssueCounts.EligibleBillIssuesCte}}, bill_parties AS (
+        WITH bill_parties AS (
             SELECT e.issue_id, bill.party
-              FROM eligible_bill_issues e
+              FROM {{ReleaseIssueCounts.EligibleBillsTable}} e
              CROSS JOIN LATERAL (
                 SELECT CASE WHEN count(sponsor.position) > 0 AND count(sponsor.party) = count(sponsor.position)
                                   AND count(DISTINCT sponsor.party) = 1 THEN min(sponsor.party) END AS party
                   FROM (SELECT p.position, term.party
                           FROM action_revision_sponsorships p
                           LEFT JOIN LATERAL (
-                              SELECT CASE WHEN count(DISTINCT t.party) = 1 AND count(t.party) = count(*) THEN min(t.party) END AS party
-                                FROM release_official_terms t
-                               WHERE t.release_number = {0} AND t.official_id = p.person_id
-                                 AND t.start_on <= p.sponsored_on AND (t.end_on IS NULL OR t.end_on >= p.sponsored_on)) term ON TRUE
+                              SELECT CASE WHEN count(DISTINCT held.party) = 1 AND count(held.party) = count(*) THEN min(held.party) END AS party
+                                FROM (SELECT CASE WHEN btrim(t.party) <> '' THEN t.party END AS party
+                                        FROM release_official_terms t
+                                       WHERE t.release_number = {0} AND t.official_id = p.person_id
+                                         AND t.start_on <= p.sponsored_on AND (t.end_on IS NULL OR t.end_on >= p.sponsored_on)) held) term ON TRUE
                          WHERE p.record_id = e.record_id AND p.revision_number = e.revision_number AND p.role = 'Sponsor') sponsor) bill
         )
         SELECT issue_id, party, count(*)::integer AS bills FROM bill_parties GROUP BY issue_id, party;
@@ -80,6 +81,7 @@ internal static class ReleaseIssuePartyCounts
         CancellationToken cancellationToken)
     {
         if (congress is not { } selectedCongress) return;
+        await ReleaseIssueCounts.EnsureEligibleBillsAsync(db, releaseNumber, selectedCongress, cancellationToken);
         await db.Database.ExecuteSqlRawAsync(ExpectedSql, [releaseNumber, selectedCongress], cancellationToken);
         var existing = await db.Database.SqlQueryRaw<bool>(ExistingSql, releaseNumber).SingleAsync(cancellationToken);
         if (existing)
