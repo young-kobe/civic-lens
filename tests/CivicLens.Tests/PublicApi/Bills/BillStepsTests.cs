@@ -8,8 +8,18 @@ public sealed class BillStepsTests
 
     private static BillRow Row(string type) => new()
     {
-        RecordId = new string('a', 64), RevisionNumber = 1, Congress = 119, BillType = type, BillNumber = 7, BillTitle = "Title", Headline = "Headline",
-        Summary = "Summary", TextOrigin = CivicLens.Publication.Contracts.PublishedTextOrigin.Code, EventDate = new(2025, 9, 11), SponsorCount = 1, CosponsorCount = 0
+        RecordId = new string('a', 64),
+        RevisionNumber = 1,
+        Congress = 119,
+        BillType = type,
+        BillNumber = 7,
+        BillTitle = "Title",
+        Headline = "Headline",
+        Summary = "Summary",
+        TextOrigin = CivicLens.Publication.Contracts.PublishedTextOrigin.Code,
+        EventDate = new(2025, 9, 11),
+        SponsorCount = 1,
+        CosponsorCount = 0
     };
 
     private static BillActionRow Action(int position, string date, string text, string? type = null) =>
