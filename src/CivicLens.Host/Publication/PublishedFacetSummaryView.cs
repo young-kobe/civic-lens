@@ -1,3 +1,4 @@
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Application.Publication;
 
 namespace CivicLens.Host.Publication;
@@ -30,10 +31,10 @@ public static class PublishedFacetSummaryView
     };
 
     public static string SplitVotes(FacetSummary summary) =>
-        $"{summary.SplitVotes} of them {(summary.SplitVotes == 1 ? "was a split vote" : "were split votes")}. {PublishedOfficialView.SplitVoteMeaning}";
+        $"{summary.SplitVotes} of them {(summary.SplitVotes == 1 ? "was a split vote" : "were split votes")}. {VoteWords.SplitMeaning}";
 
     public static string PartiesAgreedVotes(FacetSummary summary) =>
-        $"{summary.PartiesAgreedVotes} of them {(summary.PartiesAgreedVotes == 1 ? "was a vote" : "were votes")} where both parties agreed. {PublishedOfficialView.PartiesAgreedMeaning}";
+        $"{summary.PartiesAgreedVotes} of them {(summary.PartiesAgreedVotes == 1 ? "was a vote" : "were votes")} where both parties agreed. {VoteWords.PartiesAgreedMeaning}";
 
     public static string OtherVotes(FacetSummary summary) =>
         $"{summary.OtherVotes} of them {(summary.OtherVotes == 1 ? "is" : "are")} in neither group. Such a vote is procedural, is a vote for a candidate, has no Yes and No counts, has a party with no majority, or has no party row for the Democrats or the Republicans.";
