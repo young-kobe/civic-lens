@@ -44,10 +44,12 @@ internal sealed record ActionRevisionPage(IReadOnlyList<ActionRevisionRow> Rows,
                 .Select(citation => new ActionTextCitation(citation.Part, new SourceSpan(citation.CitationExtractionId, citation.CitationStart, citation.CitationLength), citation.Sentence))];
 
     /// <summary>A revision with no key terms keeps the default array, so its JSON leaves the field out.</summary>
-    private ImmutableArray<ActionKeyTerm> KeyTermsOf(ActionRevisionRow row) =>
-        KeyTerms[(row.RecordId, row.RevisionNumber)].OrderBy(term => term.Position).Select(term =>
-            new ActionKeyTerm(term.Term, new SourceSpan(term.CitationExtractionId, term.CitationStart, term.CitationLength), term.Definition)).ToImmutableArray() is { IsEmpty: false } terms
-            ? terms : default;
+    private ImmutableArray<ActionKeyTerm> KeyTermsOf(ActionRevisionRow row)
+    {
+        var terms = KeyTerms[(row.RecordId, row.RevisionNumber)].OrderBy(term => term.Position).Select(term =>
+            new ActionKeyTerm(term.Term, new SourceSpan(term.CitationExtractionId, term.CitationStart, term.CitationLength), term.Definition)).ToImmutableArray();
+        return terms.IsEmpty ? default : terms;
+    }
 
     private ImmutableArray<ActionSponsorship> SponsorshipsOf(ActionRevisionRow row) =>
         [.. Sponsorships[(row.RecordId, row.RevisionNumber)].OrderBy(item => item.Position).Select(item => new ActionSponsorship(item.PersonId, item.BioguideId,

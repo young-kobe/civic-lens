@@ -116,6 +116,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"active_release v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_actions v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"bill_key_terms v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_sponsorships v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_status v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bills v {Owner} {Role}:SELECT {{security_barrier=true}}",
