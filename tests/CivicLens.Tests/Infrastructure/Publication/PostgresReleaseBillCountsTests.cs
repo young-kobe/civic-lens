@@ -109,9 +109,9 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await ActionRevisionSeeder.AddAsync(connectionString, action);
         await ViewsSeed.ExecuteAsync(connectionString, $"SET session_replication_role = replica; INSERT INTO publication_record_states (kind, record_id, first_release, revision_number) VALUES ('action', '{action.RecordId}', 1, 1); DELETE FROM action_revisions WHERE record_id = '{action.RecordId}'");
 
-        var refusal = await Assert.ThrowsAsync<InvalidDataException>(() => FillAsync(1, 119));
+        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
 
-        Assert.Contains("not stored", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("selected action revision", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(await TotalsAsync(1));
     }
 
@@ -129,7 +129,7 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
     }
 
     [Fact]
-    public async Task ActiveCosponsorProjectionMismatchRefusesTheSnapshot()
+    public async Task TheOwnerSourceReadRefusesAnActiveCosponsorProjectionMismatch()
     {
         await AddReleaseAsync(1, Published);
         var action = ActionRevisionFixtures.Model() with
@@ -140,35 +140,35 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await ActionRevisionSeeder.AddAsync(connectionString, action);
         await ExecuteAsync($"INSERT INTO publication_record_states (kind, record_id, first_release, revision_number) VALUES ('action', '{action.RecordId}', 1, 1); DELETE FROM action_revision_sponsorship_citations WHERE record_id = '{action.RecordId}' AND sponsorship_position = 1; DELETE FROM action_revision_sponsorships WHERE record_id = '{action.RecordId}' AND position = 1");
 
-        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
+        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => publications.ReadBillCountSourceAsync(1, default));
 
         Assert.Contains("mismatched bill count projection", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(await TotalsAsync(1));
     }
 
     [Fact]
-    public async Task ActionWithMissingSponsorshipCitationRefusesTheSnapshot()
+    public async Task TheOwnerSourceReadRefusesAnActionWithAMissingSponsorshipCitation()
     {
         await AddReleaseAsync(1, Published);
         var action = Action('a', 119, [Sponsor("p1")]);
         await ActionRevisionSeeder.AddAsync(connectionString, action);
         await ExecuteAsync($"INSERT INTO publication_record_states (kind, record_id, first_release, revision_number) VALUES ('action', '{action.RecordId}', 1, 1); DELETE FROM action_revision_sponsorship_citations WHERE record_id = '{action.RecordId}'");
 
-        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
+        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => publications.ReadBillCountSourceAsync(1, default));
 
         Assert.Contains("cannot produce a valid bill count projection", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(await TotalsAsync(1));
     }
 
     [Fact]
-    public async Task IncompleteActionProjectionRefusesTheSnapshotBeforeWritingAnyRows()
+    public async Task TheOwnerSourceReadRefusesAnIncompleteActionProjection()
     {
         await AddReleaseAsync(1, Published);
         await AddReleaseOfficialsAsync(1, "p1");
         await AddActionRevisionAsync(Action('a', 119, [Sponsor("p1")]), 1);
         await ExecuteAsync($"UPDATE action_revisions SET event_on = NULL, cosponsor_count = NULL WHERE record_id = '{new string('a', 64)}'");
 
-        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
+        var refusal = await Assert.ThrowsAsync<BillCountRefusedException>(() => publications.ReadBillCountSourceAsync(1, default));
 
         Assert.Contains("mismatched bill count projection", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(await TotalsAsync(1));

@@ -11,8 +11,6 @@ namespace CivicLens.Infrastructure.Publication;
 /// <summary>Owns the expected bill counts of one immutable release. The writer saves them from temporary tables, and the read-only verifier reads the same text as common table expressions.</summary>
 internal static class ReleaseBillCounts
 {
-    public const int ValidationBatchSize = 256;
-
     private const string SelectedBody = """
         SELECT kind, record_id, revision_number
           FROM publication_record_states
@@ -142,6 +140,12 @@ internal static class ReleaseBillCounts
             OR EXISTS (SELECT 1 FROM release_official_bill_counts WHERE release_number = {0}) AS "Value"
         """;
 
+    private const string ActionBindingsSql = """
+        SELECT count(*)::integer AS "Value"
+          FROM unnest({0}, {1}) AS requested(id, number)
+          JOIN action_revisions a ON a.record_id = requested.id AND a.revision_number = requested.number
+        """;
+
     private const string VoteBindingsSql = """
         SELECT count(*)::integer AS "Value"
           FROM unnest({0}, {1}) AS requested(id, number)
@@ -155,12 +159,8 @@ internal static class ReleaseBillCounts
         var requested = bindings.Distinct().ToArray();
         var actions = requested.Where(binding => binding.Kind == PublishedRecordKind.Action).ToArray();
         var votes = requested.Where(binding => binding.Kind == PublishedRecordKind.Vote).ToArray();
-        foreach (var batch in actions.Chunk(ValidationBatchSize))
-            await ActionRevisionRows.ValidateBillCountBindingsAsync(db, batch, returnProjections: false, cancellationToken);
-        var voteCount = await db.Database.SqlQueryRaw<int>(VoteBindingsSql,
-            [votes.Select(binding => binding.RecordId).ToArray(), votes.Select(binding => binding.RevisionNumber).ToArray()]).SingleAsync(cancellationToken);
-        if (voteCount != votes.Length)
-            throw new BillCountRefusedException($"Release {releaseNumber} contains a selected vote revision that is not stored.");
+        await RequireStoredAsync(db, ActionBindingsSql, actions, releaseNumber, "action", cancellationToken);
+        await RequireStoredAsync(db, VoteBindingsSql, votes, releaseNumber, "vote", cancellationToken);
 
         await db.Database.ExecuteSqlRawAsync(ExpectedMembersSql, [releaseNumber], cancellationToken);
         await db.Database.ExecuteSqlRawAsync(ExpectedTotalsSql, [releaseNumber, CongressParameter(releaseCongress)], cancellationToken);
@@ -188,6 +188,15 @@ internal static class ReleaseBillCounts
             .SingleAsync(cancellationToken);
         if (!row.HasRows) return BillCountStatus.MissingRows;
         return row.Matches ? BillCountStatus.Verified : BillCountStatus.DifferentRows;
+    }
+
+    private static async Task RequireStoredAsync(CollectionAttemptDbContext db, string sql, PublishedRevisionBinding[] bindings,
+        int releaseNumber, string kind, CancellationToken cancellationToken)
+    {
+        var stored = await db.Database.SqlQueryRaw<int>(sql,
+            [bindings.Select(binding => binding.RecordId).ToArray(), bindings.Select(binding => binding.RevisionNumber).ToArray()]).SingleAsync(cancellationToken);
+        if (stored != bindings.Length)
+            throw new BillCountRefusedException($"Release {releaseNumber} contains a selected {kind} revision that is not stored.");
     }
 
     private static NpgsqlParameter CongressParameter(int? congress) =>

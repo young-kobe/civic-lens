@@ -15,6 +15,8 @@ namespace CivicLens.Infrastructure.Actions;
 
 internal static class ActionRevisionRows
 {
+    public const int BillCountBatchSize = 256;
+
     public static ActionRevisionRow Create(ActionDraftRevision revision, string? runId, CodeVersion codeVersion)
     {
         var authorKind = ReviewAuthor.KindOf(revision.AuthorSubject);
@@ -138,9 +140,9 @@ internal static class ActionRevisionRows
         return revisions.Length == requested.Length ? revisions : throw CitedRevisions.NotStored(PublishedRecordKind.Action);
     }
 
-    /// <summary>Reads an exact bounded batch and validates the stored count projection against its rebuilt revision. It returns the projection of each revision only when <paramref name="returnProjections"/> is set.</summary>
+    /// <summary>Reads an exact bounded batch and validates the stored count projection against its rebuilt revision. It returns the projection of each revision.</summary>
     public static async Task<IReadOnlyList<BillCountActionProjection>> ValidateBillCountBindingsAsync(CollectionAttemptDbContext db,
-        IReadOnlyCollection<PublishedRevisionBinding> named, bool returnProjections, CancellationToken cancellationToken)
+        IReadOnlyCollection<PublishedRevisionBinding> named, CancellationToken cancellationToken)
     {
         var requested = named.Distinct().ToArray();
         if (requested.Length == 0) return [];
@@ -151,7 +153,7 @@ internal static class ActionRevisionRows
         var page = await ReadPageAsync(db, rows, cancellationToken);
         if (page.Rows.Count != requested.Length)
             throw CitedRevisions.NotStored(PublishedRecordKind.Action);
-        var projections = new List<BillCountActionProjection>(returnProjections ? page.Rows.Count : 0);
+        var projections = new List<BillCountActionProjection>(page.Rows.Count);
         foreach (var row in page.Rows)
         {
             ActionDraftRevision rebuilt;
@@ -167,8 +169,7 @@ internal static class ActionRevisionRows
             var cosponsorIds = rebuilt.CosponsorIds();
             if (row.EventOn != rebuilt.EventOn() || row.CosponsorCount != cosponsorIds.Length)
                 throw new BillCountRefusedException($"Action revision {row.RecordId} {row.RevisionNumber} has a mismatched bill count projection.");
-            if (returnProjections)
-                projections.Add(new(row.RecordId, row.RevisionNumber, rebuilt.Congress, row.EventOn, rebuilt.SponsorIds(), cosponsorIds));
+            projections.Add(new(row.RecordId, row.RevisionNumber, rebuilt.Congress, row.EventOn, rebuilt.SponsorIds(), cosponsorIds));
         }
         return projections;
     }
