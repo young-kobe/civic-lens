@@ -30,8 +30,8 @@ public sealed class OfficialProfilePageTests
         BillsCongress = 119,
         SponsoredBills = 43,
         Issues = [new("tax", "Federal taxes", 8)],
-        Marks = [new(BreakId, new(2026, 9, 16), PublishedChamber.House, 309, "House passes H.R. 9576", false, "Democrat"),
-                 new(MissedId, new(2026, 9, 15), PublishedChamber.House, 305, "House passes H.R. 9500", true, null)],
+        Marks = [new(BreakId, new(2026, 9, 16), PublishedChamber.House, 309, false, "Democrat"),
+                 new(MissedId, new(2026, 9, 15), PublishedChamber.House, 305, true, null)],
         Votes = [new(VoteId, new(2026, 9, 16), 119, 2, 314, "House passes S 2403", "AI vote label", "Vote to pass the bill", "Passed", [new("p1", "Yes (Aye)", "Yea")])],
         Statements = [new(StatementId, new(2026, 9, 12), "A statement about H.R. 5334", "AI statement label", VoteId, "House agrees to Senate changes", "AI linked vote label",
             new(2026, 9, 16), PublishedChamber.House, 308, "Nay")],
@@ -55,7 +55,7 @@ public sealed class OfficialProfilePageTests
         var figures = page.QuerySelectorAll(".official-figs li").Select(item => item.TextContent).ToArray();
 
         Assert.Equal("Ann Able", page.QuerySelector("h1")!.TextContent);
-        Assert.Contains("Democratic representative for Massachusetts, district 7.", page.QuerySelector(".official-head .official-lede")!.TextContent);
+        Assert.Contains("Democratic representative for MA, district 7.", page.QuerySelector(".official-head .official-lede")!.TextContent);
         Assert.Equal(3, figures.Length);
         Assert.Contains("670roll calls voted on, of 675 House roll calls on this site in the 119th Congress.", figures[0]);
         Assert.StartsWith("248of 249 split votes", figures[1]);
@@ -133,6 +133,8 @@ public sealed class OfficialProfilePageTests
         var row = page.QuerySelector("#bills .official-rows li")!;
 
         Assert.Equal("H.R. 40 would study reparations.", row.QuerySelector("a.official-row-title")!.TextContent);
+        Assert.Null(row.QuerySelector(".bill-line"));
+        Assert.Null(page.QuerySelector("#bills > p.muted"));
         Assert.Contains("Introduced 3 Jan 2025", row.QuerySelector(".official-meta")!.TextContent);
         Assert.Equal(BillStatusMeaning.Label("Referred to the House Committee on the Judiciary.", "hr"), row.QuerySelector(".badge")!.TextContent.Trim());
         Assert.Equal("In committee", row.QuerySelector(".badge")!.TextContent.Trim());
@@ -140,13 +142,16 @@ public sealed class OfficialProfilePageTests
     }
 
     [Fact]
-    public async Task ABillLineReplacesTheOfficialTitleAndAnUnknownActionGetsTheSharedUnmatchedLabel()
+    public async Task ABillLineShowsBesideTheOfficialTitleWithTheSharedNoteOnceAndAnUnknownActionGetsTheSharedUnmatchedLabel()
     {
         var bill = Member().Bills[0] with { BillLine = "Studies reparations.", LatestAction = "Something odd happened" };
-        var page = await RenderAsync<OfficialProfilePage>(Member() with { Bills = [bill] });
+        var page = await RenderAsync<OfficialProfilePage>(Member() with { Bills = [bill, bill with { RecordId = new string('f', 64), BillLine = "Pays landlords." }] });
         var row = page.QuerySelector("#bills .official-rows li")!;
 
-        Assert.Equal("Studies reparations.", row.QuerySelector("a.official-row-title")!.TextContent);
+        Assert.Equal("H.R. 40 would study reparations.", row.QuerySelector("a.official-row-title")!.TextContent);
+        Assert.Equal("Studies reparations.", row.QuerySelector(".bill-line")!.TextContent);
+        Assert.Equal(2, page.QuerySelectorAll("#bills .bill-line").Length);
+        Assert.Equal(PublishedWording.BillLineSource, Assert.Single(page.QuerySelectorAll("#bills > p.muted")).TextContent);
         Assert.Equal(BillStatusMeaning.UnmatchedLabel, row.QuerySelector(".badge")!.TextContent.Trim());
     }
 
@@ -265,15 +270,36 @@ public sealed class OfficialProfilePageTests
 
         Assert.Contains("Current term ends 3 Jan 2027.", current.QuerySelector(".official-head .official-lede")!.TextContent);
         var lede = former.QuerySelector(".official-head .official-lede")!.TextContent;
-        Assert.StartsWith("Former Democratic representative for Massachusetts, district 7.", lede);
+        Assert.StartsWith("Former Democratic representative for MA, district 7.", lede);
         Assert.DoesNotContain("Current term ends", lede);
     }
 
     [Fact]
-    public void TheLedeOfTheStaticAndTheServerPageComeFromOneOwner()
+    public void NoTermEndShowsWhenTheReleaseDateIsUnknown()
     {
-        Assert.Equal("Former Independent senator for WA, caucuses with Democrats", OfficeLede.Of(true, "Independent", "senator", OfficeLede.Place("WA", null), "Democrat"));
+        var lede = OfficialPageText.Lede(Member() with { PublishedOn = null });
+
+        Assert.DoesNotContain("Current term ends", lede);
+        Assert.StartsWith("Democratic representative for MA, district 7.", lede);
+    }
+
+    [Fact]
+    public async Task TheStripSquaresNameOnlyTheFactsOfTheTitleAndNoVoteHeadline()
+    {
+        var page = await RenderAsync<OfficialProfilePage>(Member());
+
+        Assert.All(page.QuerySelectorAll(".official-strip a"), mark =>
+        {
+            Assert.Equal(mark.GetAttribute("title"), mark.QuerySelector(".visually-hidden")!.TextContent);
+            Assert.DoesNotContain("House passes", mark.TextContent);
+        });
+    }
+
+    [Fact]
+    public void TheLedeRulesHaveOneOwnerInOfficeLede()
+    {
         Assert.Equal("Democratic representative for WA, district 9", OfficeLede.Of(false, "Democrat", "representative", OfficeLede.Place("WA", 9), null));
+        Assert.Equal("Former Independent senator for WA, caucuses with Democrats", OfficeLede.Of(true, "Independent", "senator", OfficeLede.Place("WA", null), "Democrat"));
         Assert.True(OfficeLede.HasEnded(new(2026, 1, 3), new(2026, 1, 4)));
         Assert.False(OfficeLede.HasEnded(new(2026, 1, 3), new(2026, 1, 3)));
     }
@@ -281,7 +307,7 @@ public sealed class OfficialProfilePageTests
     [Fact]
     public async Task TheStripSaysHowManyMarksItShowsOfTheTotalAndLinksTheFullRecordOnlyWhenItIsCut()
     {
-        var marks = Enumerable.Range(0, 12).Select(day => new OfficialMarkData(new string((char)('a' + day), 64), new(2026, 9, 1 + day), PublishedChamber.House, 100 + day, "House passes H.R. 1", false, "Democrat")).ToArray();
+        var marks = Enumerable.Range(0, 12).Select(day => new OfficialMarkData(new string((char)('a' + day), 64), new(2026, 9, 1 + day), PublishedChamber.House, 100 + day, false, "Democrat")).ToArray();
         var cut = await RenderAsync<OfficialProfilePage>(Member() with { Marks = marks, MarksTotal = 40 });
         var whole = await RenderAsync<OfficialProfilePage>(Member() with { Marks = marks, MarksTotal = 12 });
 
@@ -326,7 +352,7 @@ public sealed class OfficialProfilePageTests
     [Fact]
     public void ABreakMarkWithoutAPartyIsAnInvalidMarkAndNoFallbackWordHidesIt()
     {
-        var invalid = new OfficialMarkData(BreakId, new(2026, 9, 16), PublishedChamber.House, 1, "House passes H.R. 1", false, null);
+        var invalid = new OfficialMarkData(BreakId, new(2026, 9, 16), PublishedChamber.House, 1, false, null);
 
         Assert.Throws<InvalidDataException>(() => OfficialPageText.MarkName(invalid));
     }

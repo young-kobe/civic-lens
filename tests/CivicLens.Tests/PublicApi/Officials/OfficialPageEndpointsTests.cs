@@ -91,6 +91,47 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task NoStripSquareTextNamesAVoteHeadlineBecauseTheHeadlineIsAiText()
+    {
+        await using var host = await StartAsync();
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        var headlines = page.QuerySelectorAll("#votes .shared-vote-row h3 a").Select(link => link.TextContent).ToArray();
+        Assert.NotEmpty(headlines);
+        var strip = page.QuerySelector(".official-strip")!;
+        Assert.All(headlines, headline => Assert.DoesNotContain(headline, strip.TextContent));
+        Assert.All(strip.QuerySelectorAll("a"), mark => Assert.Equal(mark.GetAttribute("title"), mark.QuerySelector(".visually-hidden")!.TextContent));
+    }
+
+    [Fact]
+    public async Task TheStripAndTheFigureCountTheSameVotesWhenAMemberHasAThirdPartyATieOrAPresentCast()
+    {
+        await using var host = await StartAsync();
+        var database = host.OperationalDatabase;
+        await ViewsSeed.AddVotesAsync(database,
+            new SeededVote('e', "2026-02-07") { Casts = ["Nay"], PersonIds = ["p0"], RollCall = 5 },
+            new SeededVote('f', "2026-02-08") { Casts = ["Nay"], PersonIds = ["p0"], RollCall = 6 },
+            new SeededVote('9', "2026-02-09") { Casts = ["Present"], PersonIds = ["p0"], RollCall = 7 });
+        await ViewsSeed.ExecuteAsync(database, $"""
+            SET session_replication_role = replica;
+            UPDATE vote_member_list_entries SET party = 'Independent' WHERE person_id = 'p0' AND list_id = (SELECT member_list_id FROM vote_revisions WHERE record_id = '{new string('e', 64)}');
+            UPDATE vote_member_list_entries SET party = 'Democrat' WHERE person_id = 'p0' AND list_id IN (SELECT member_list_id FROM vote_revisions WHERE record_id IN ('{new string('f', 64)}', '{new string('9', 64)}'));
+            UPDATE vote_revisions SET columns_written = true, alignment = 'Split', democrat_majority = 'Yea', republican_majority = 'Nay'
+              WHERE record_id IN ('{new string('e', 64)}', '{new string('9', 64)}');
+            UPDATE vote_revisions SET columns_written = true, alignment = 'Split', democrat_majority = NULL, republican_majority = NULL
+              WHERE record_id = '{new string('f', 64)}';
+            """);
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        Assert.Equal(2, page.QuerySelectorAll(".official-strip a").Length);
+        Assert.Equal(1, page.QuerySelectorAll(".official-strip a.against").Length);
+        Assert.Contains("1of 2 split votes", string.Join('|', page.QuerySelectorAll(".official-figs li").Select(item => item.TextContent)));
+        Assert.Contains("1 vote against most House Democrats", page.QuerySelector(".official-legend")!.TextContent);
+    }
+
+    [Fact]
     public async Task RecentVotesShowTheCastOfTheOfficialAndOnlyLinkedStatementsAppearWithTheirVote()
     {
         await using var host = await StartAsync();
@@ -118,7 +159,9 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
 
         var rows = page.QuerySelectorAll("#bills .official-rows li");
         Assert.Equal(2, rows.Length);
-        Assert.Equal("Pays landlords.", rows[0].QuerySelector("a.official-row-title")!.TextContent);
+        Assert.Equal("Pays landlords.", rows[0].QuerySelector(".bill-line")!.TextContent);
+        Assert.Null(rows[1].QuerySelector(".bill-line"));
+        Assert.Single(page.QuerySelectorAll("#bills > p.muted"));
         Assert.Contains("Introduced 3 Mar 2026", rows[0].QuerySelector(".official-meta")!.TextContent);
         Assert.Contains("Introduced 10 Jan 2026", rows[1].QuerySelector(".official-meta")!.TextContent);
         Assert.Contains("See all 2 bills", page.QuerySelector("#bills .official-more")!.TextContent);

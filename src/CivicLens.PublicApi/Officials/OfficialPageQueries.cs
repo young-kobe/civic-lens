@@ -8,21 +8,19 @@ namespace CivicLens.PublicApi.Officials;
 /// <summary>
 /// The reads that only the official page needs, each inside the caller's snapshot: the vote strip marks, the statements that a reviewer linked to a vote,
 /// the sponsored bills with their introduced dates, and the newest executive actions of each document type.
-/// The marks use the same rules as <c>official_party_lines</c> and <c>official_attendance</c>, so the strip and the figures count the same votes.
+/// The marks read <c>member_votes.breaks_party</c>, the one owner of the party-break rule that <c>official_party_lines</c> also reads, so the strip and the figures count the same votes.
 /// </summary>
 internal static class OfficialPageQueries
 {
     public const int MarkLimit = 12;
     public const int RowLimit = 5;
 
-    // A split vote cast against the party majority, or a roll call with the cast Not Voting. Newest first. The window count is the number of marks before the limit.
+    // A vote that broke from the party (the view column breaks_party), or a roll call with the cast Not Voting. Newest first. The window count is the number of marks before the limit.
     private const string MarksSql = """
-        SELECT v.record_id, v.voted_on, v.chamber, v.roll_call_number, v.headline, v.vote_cast = @not_voting, v.party, count(*) OVER ()
+        SELECT v.record_id, v.voted_on, v.chamber, v.roll_call_number, v.vote_cast = @not_voting, v.party, count(*) OVER ()
           FROM public_api.member_votes v
          WHERE v.official_id = @id AND v.congress = @congress
-           AND (v.vote_cast = @not_voting
-                OR (v.alignment = 'Split' AND v.party IN ('Democrat', 'Republican') AND v.side IS NOT NULL
-                    AND v.party_majority_cast IS NOT NULL AND v.side <> v.party_majority_cast))
+           AND (v.vote_cast = @not_voting OR v.breaks_party)
          ORDER BY v.voted_on DESC, v.chamber, v.roll_call_number DESC, v.record_id
          LIMIT @take
         """;
@@ -90,8 +88,8 @@ internal static class OfficialPageQueries
         while (await reader.ReadAsync(cancellationToken))
         {
             marks.Add(new(reader.GetString(0), reader.GetFieldValue<DateOnly>(1), ViewColumns.Enum<PublishedChamber>(reader, 2), reader.GetInt32(3),
-                reader.GetString(4), reader.GetBoolean(5), ViewColumns.Text(reader, 6)));
-            total = (int)reader.GetInt64(7);
+                reader.GetBoolean(4), ViewColumns.Text(reader, 5)));
+            total = (int)reader.GetInt64(6);
         }
         return ([.. marks], total);
     }

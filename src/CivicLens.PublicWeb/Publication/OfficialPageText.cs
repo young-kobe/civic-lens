@@ -18,11 +18,10 @@ public static class OfficialPageText
 
     public const string ExecutiveBox = "The President signs these documents. The Federal Register prints them, and Civic Lens copies each title and date from there. A title alone does not show what a document does, so each page links to the full text.";
 
-    public const string SplitVoteKey = "split-vote";
-
-    /// <summary>The lede of the header: party, role, place, and the end of the current term. The rules are <see cref="OfficeLede"/>, and a former member gets no current term end.</summary>
+    /// <summary>The lede of the header: party, role, place, and the end of the current term. The rules are <see cref="OfficeLede"/>, and no current term end shows for a former member or when the release date is unknown.</summary>
     public static string Lede(OfficialPageData data)
     {
+        var known = data.PublishedOn is not null;
         var ended = data.PublishedOn is { } publishedOn && OfficeLede.HasEnded(data.TermEndsOn, publishedOn);
         var role = data.Kind switch
         {
@@ -30,9 +29,9 @@ public static class OfficialPageText
             PublishedOfficeKind.Representative => "representative",
             _ => "official"
         };
-        var place = OfficeLede.Place(data.State is null ? null : UsStates.NameOf(data.State), data.District);
+        var place = OfficeLede.Place(data.State, data.District);
         var text = OfficeLede.Of(ended, data.Party, role, place, data.Caucus) + ".";
-        return !ended && data.TermEndsOn is { } day ? $"{text} Current term ends {Moment.Day(day)}." : text;
+        return known && !ended && data.TermEndsOn is { } day ? $"{text} Current term ends {Moment.Day(day)}." : text;
     }
 
     /// <summary>The party figure of the page. One figure covers the page, so a member with two party lines shows the newest.</summary>
@@ -54,8 +53,6 @@ public static class OfficialPageText
         { Party: { } party } => $"Voted against most {PublishedPartyNames.Members(party)}",
         _ => throw new InvalidDataException("A mark that is not a missed vote names the party that it broke from.")
     };
-
-    public static string BillTitle(OfficialBillData bill) => bill.BillLine ?? bill.BillTitle;
 
     public static string ExecutivePlural(PublishedExecutiveActionKind kind, int count) => (kind, count) switch
     {

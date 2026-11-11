@@ -33,7 +33,7 @@
                 }
                 @if (party is not null)
                 {
-                    <li><b>@party.WithParty</b><span>of @party.Cast <Term Key="@OfficialPageText.SplitVoteKey">split votes</Term> @OfficialPageText.PartyLineScope(party)</span></li>
+                    <li><b>@party.WithParty</b><span>of @party.Cast <Term Key="split-vote">split votes</Term> @OfficialPageText.PartyLineScope(party)</span></li>
                 }
                 @if (Data.BillsCongress is not null)
                 {
@@ -74,7 +74,7 @@
                     <ul class="official-strip" role="list" aria-label="Votes against the party and missed roll calls">
                         @foreach (var mark in Data.Marks)
                         {
-                            <li><a href="@(RootPath + PublicationProtocol.RecordPagePath(mark.RecordId))" class="@(mark.IsMissed ? "missed" : "against")" title="@Moment.Day(mark.VotedOn), @mark.Chamber roll call @mark.RollCall: @OfficialPageText.MarkName(mark)"><span class="visually-hidden">@mark.Headline: @OfficialPageText.MarkName(mark)</span></a></li>
+                            <li><a href="@(RootPath + PublicationProtocol.RecordPagePath(mark.RecordId))" class="@(mark.IsMissed ? "missed" : "against")" title="@Moment.Day(mark.VotedOn), @mark.Chamber roll call @mark.RollCall: @OfficialPageText.MarkName(mark)"><span class="visually-hidden">@Moment.Day(mark.VotedOn), @mark.Chamber roll call @mark.RollCall: @OfficialPageText.MarkName(mark)</span></a></li>
                         }
                     </ul>
                     @if (Data.MarksTotal > Data.Marks.Length)
@@ -123,7 +123,7 @@
                                     }
                                     @if (statement.Cast is { } cast)
                                     {
-                                        <span class="shared-vote-cast-value" data-side="@PublishedOfficialVote.SideOf(cast)?.ToLowerInvariant()"><CastWord Cast="@cast" /></span>
+                                        <SharedVoteCast Side="@PublishedOfficialVote.SideOf(cast)"><CastWord Cast="@cast" /></SharedVoteCast>
                                     }
                                 </p>
                             </div>
@@ -139,6 +139,10 @@
         {
             <section id="bills" class="official-section" aria-labelledby="bills-title">
                 <h2 id="bills-title">Bills @Data.Name introduced</h2>
+                @if (Data.Bills.Any(bill => bill.BillLine is not null))
+                {
+                    <PublishedBillLineNote />
+                }
                 <ul class="official-rows" role="list">
                     @foreach (var bill in Data.Bills)
                     {
@@ -146,7 +150,8 @@
                         <li>
                             <span class="official-icon" aria-hidden="true"><Icon Name="IconName.Bill" /></span>
                             <div>
-                                <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@OfficialPageText.BillTitle(bill)</a>
+                                <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@bill.BillTitle</a>
+                                <PublishedBillLine Line="@bill.BillLine" />
                                 <p class="official-meta"><span>Introduced @Moment.Day(bill.IntroducedOn)</span>
                                     @if (bill.LatestAction is not null && bill.LatestActionOn is { } actionOn)
                                     {

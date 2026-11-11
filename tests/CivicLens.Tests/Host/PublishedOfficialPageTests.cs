@@ -3,6 +3,7 @@ using CivicLens.Application.Issues;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Publication;
 using CivicLens.Host.Publication;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 
@@ -331,6 +332,20 @@ public sealed class PublishedOfficialPageTests
         var tenure = await TenureAsync(Seat(new(1997, 1, 7), new(1999, 1, 3)), Seat(new(1999, 1, 6), new(2001, 1, 3)) with { District = 8 }, Seat(new(2001, 1, 3), new(2027, 1, 3)));
 
         Assert.Equal("In the House since January 1997.", tenure);
+    }
+
+    [Fact]
+    public async Task TheLedeOfTheStaticAndTheServerPageComeFromOneOwner()
+    {
+        var published = new DateOnly(2026, 11, 1);
+        var data = new OfficialPageData(7, "rep", "Rita Rep", PublishedOfficeKind.Representative, "House", "WA", 9, "Democrat", null, null, null) { PublishedOn = published };
+
+        var current = Seat(new(2025, 1, 3), null);
+        var former = Seat(new(2001, 1, 3), new(2003, 1, 3));
+
+        Assert.Equal(await LedeAsync(current) + ".", OfficialPageText.Lede(data));
+        Assert.Equal(await LedeAsync(former) + ".", OfficialPageText.Lede(data with { TermEndsOn = new(2003, 1, 3) }));
+        Assert.Equal("Democratic representative for WA, district 9.", OfficialPageText.Lede(data));
     }
 
     [Fact]

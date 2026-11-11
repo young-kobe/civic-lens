@@ -48,7 +48,7 @@
                                     {
                                         <span class="shared-vote-member">@member.Name</span>
                                     }
-                                    <span class="shared-vote-cast-value" data-side="@(cast.Side?.ToLowerInvariant())">@cast.CastWords</span>
+                                    <SharedVoteCast Side="@cast.Side">@cast.CastWords</SharedVoteCast>
                                 </li>
                             }
                         }
