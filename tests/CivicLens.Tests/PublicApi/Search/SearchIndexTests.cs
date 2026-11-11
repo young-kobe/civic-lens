@@ -46,12 +46,52 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
     public async Task TheSnippetShowsTheMatchBetweenMarkersAndLeavesSourceMarkupAsPlainText()
     {
         await world.PublishAndIngestAsync(1,
-            PublishedSamples.Statement('a', "Zoning meeting", source: "Xq the <script>alert(1)</script> mayor discussed a rent cap today."));
+            PublishedSamples.Statement('a', "Zoning meeting", summary: "The <script>alert(1)</script> mayor discussed a rent cap today."));
 
         var hit = Assert.Single((await world.SearchAsync(request => request with { Text = "rent" })).Hits);
 
-        Assert.Contains("rent", hit.Snippet, StringComparison.Ordinal);
+        Assert.Contains("\uE000rent\uE001", hit.Snippet, StringComparison.Ordinal);
         Assert.DoesNotContain("<b>", hit.Snippet, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheSnippetComesFromTheSummaryAndNotFromTheSourceTextWhenTheRecordHasASummary()
+    {
+        await world.PublishAndIngestAsync(1,
+            PublishedSamples.Statement('a', "Zoning meeting", summary: "Tenants gain a rent cap in the city.", source: "Xq RAWFOOTER rent cap navigation line."));
+
+        var hit = Assert.Single((await world.SearchAsync(request => request with { Text = "rent" })).Hits);
+
+        Assert.Contains("Tenants gain a \uE000rent\uE001 cap", hit.Snippet, StringComparison.Ordinal);
+        Assert.DoesNotContain("RAWFOOTER", hit.Snippet, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnActionSnippetComesFromTheBillLineOfItsManifestEntry()
+    {
+        var action = PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001 RAWFOOTER housing");
+        await world.PublishAndIngestAsync(1, action with { Entry = action.Entry with { BillLine = "This bill funds housing for veterans." } });
+
+        var hit = Assert.Single((await world.SearchAsync(request => request with { Text = "housing" })).Hits);
+
+        Assert.Contains("funds \uE000housing\uE001 for veterans", hit.Snippet, StringComparison.Ordinal);
+        Assert.DoesNotContain("RAWFOOTER", hit.Snippet, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ARecordWithNoSummaryKeepsTheBodySnippetSoAnExecutiveActionAndARowFromBeforeTheColumnStillShowText()
+    {
+        await world.PublishAndIngestAsync(1,
+            PublishedSamples.ExecutiveAction("Ending the Weaponization", "Xq the order cites a rent cap here."),
+            PublishedSamples.Statement('a', "Zoning meeting", summary: "Tenants gain a rent cap.", source: "Xq RAWFOOTER rent cap navigation line."));
+        await using (var command = world.Database.CreateCommand("UPDATE records SET summary = NULL WHERE kind = 'statement'"))
+            await command.ExecuteNonQueryAsync();
+
+        var hits = (await world.SearchAsync(request => request with { Text = "rent" })).Hits;
+
+        Assert.Equal(2, hits.Length);
+        Assert.All(hits, hit => Assert.Contains("\uE000rent\uE001", hit.Snippet, StringComparison.Ordinal));
+        Assert.Contains(hits, hit => hit.Snippet!.Contains("RAWFOOTER", StringComparison.Ordinal));
     }
 
     [Fact]
