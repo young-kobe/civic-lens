@@ -17,6 +17,13 @@ concurrency:
   group: release-images-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  x64-probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          for host in ports.ubuntu.com archive.ubuntu.com; do
+            printf '%s: ' "$host"; getent hosts "$host" | head -1 || echo unresolved
+          done
   images:
     runs-on: ubuntu-24.04-arm
     permissions:
@@ -38,11 +45,14 @@ jobs:
           persist-credentials: false
       - name: Probe apt mirror DNS
         run: |
-          for host in ports.ubuntu.com azure.ports.ubuntu.com archive.ubuntu.com; do
+          for host in ports.ubuntu.com azure.ports.ubuntu.com archive.ubuntu.com security.ubuntu.com mirrors.edge.kernel.org mirror.arizona.edu deb.debian.org github.com; do
             printf '%s: ' "$host"; getent hosts "$host" | head -1 || echo unresolved
           done
           grep -h '^URIs' /etc/apt/sources.list.d/*.sources 2>/dev/null | sort -u || true
           docker run --rm --platform linux/arm64 ubuntu:24.04 sh -c 'getent hosts ports.ubuntu.com || echo container-unresolved' || true
+          cat /etc/resolv.conf || true
+          resolvectl status 2>/dev/null | head -20 || true
+          docker run --rm mcr.microsoft.com/dotnet/sdk@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b sh -c 'ls -l /usr/lib/aarch64-linux-gnu | grep -E "gssapi|krb5|k5crypto|com_err|keyutils"; dpkg -l | grep -E "gssapi|krb5" || true' || true
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - if: github.ref == 'refs/heads/main'
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
