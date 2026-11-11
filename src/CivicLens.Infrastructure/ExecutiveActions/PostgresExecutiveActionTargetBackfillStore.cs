@@ -8,7 +8,7 @@ namespace CivicLens.Infrastructure.ExecutiveActions;
 
 /// <summary>
 /// Writes the disposition targets of revisions that have notes and no target rows. A batch takes the executive action review lock, the lock of the revision writer.
-/// A revision whose notes hold no target stays selected, so each run examines it again. Examined counts the revisions that got targets.
+/// A revision whose notes hold no target stays selected, so each run examines it again. Examined counts the revisions that the batch read, as in the other stores.
 /// Verify compares the stored targets of each revision to the parse of its notes. A revision with notes, a target in the parse, and no stored target is Legacy.
 /// </summary>
 public sealed class PostgresExecutiveActionTargetBackfillStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IRevisionBackfillStore
@@ -23,16 +23,11 @@ public sealed class PostgresExecutiveActionTargetBackfillStore(IDbContextFactory
         var rows = await InKeyOrderAfter(db.Set<ExecutiveActionRevisionRow>().AsNoTracking()
             .Where(row => row.DispositionNotes != null && !row.DispositionTargets.Any()), after)
             .Select(row => new NotesRow(row.RecordId, row.RevisionNumber, row.DispositionNotes!)).Take(size).ToListAsync(cancellationToken);
-        var written = 0;
         foreach (var row in rows)
-        {
-            var targets = ExecutiveActionRevisionRows.TargetRows(row.RecordId, row.RevisionNumber, row.Notes).ToList();
-            db.Set<ExecutiveActionRevisionDispositionTargetRow>().AddRange(targets);
-            if (targets.Count > 0) written++;
-        }
+            db.Set<ExecutiveActionRevisionDispositionTargetRow>().AddRange(ExecutiveActionRevisionRows.TargetRows(row.RecordId, row.RevisionNumber, row.Notes));
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new(written, ImmutableArray<SkippedRevision>.Empty, rows.Count == 0 ? null : new(rows[^1].RecordId, rows[^1].RevisionNumber));
+        return new(rows.Count, ImmutableArray<SkippedRevision>.Empty, rows.Count == 0 ? null : new(rows[^1].RecordId, rows[^1].RevisionNumber));
     }
 
     public async Task<RevisionVerification> VerifyAsync(int mismatchLimit, CancellationToken cancellationToken)

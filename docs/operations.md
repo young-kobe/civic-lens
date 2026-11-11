@@ -779,7 +779,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ex
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions targets verify
 ```
 
-`backfill <limit>` walks the revisions that have notes and no target row, in key order, in batches of 25. Each batch is one short transaction that holds the executive action review lock. It parses the stored notes with `ExecutiveActionDispositionTargets` and writes the target rows. `moved` counts the revisions that got at least one target. A revision whose notes hold no target stays in the walk, so each run examines it again and writes nothing. A rerun changes nothing. The exit code is 0.
+`backfill <limit>` walks the revisions that have notes and no target row, in key order, in batches of 25. Each batch is one short transaction that holds the executive action review lock. It parses the stored notes with `ExecutiveActionDispositionTargets` and writes the target rows. `examined` and `moved` count the revisions that the run read, and `limit` bounds that count. They do not show how many revisions got a target. A revision whose notes hold no target stays in the walk, so each run examines it again and writes nothing. A run stops at `limit` or when the walk reaches the last revision, so it always ends. A rerun changes nothing. The exit code is 0.
 
 `verify` parses the notes of each revision again and compares the result to the stored rows. It writes nothing and takes no lock. A revision that has a target in its notes and no stored row counts as `legacy`. A revision whose stored rows differ from its notes, or that has rows and no notes, counts as a mismatch with the field name `dispositionTargets`. `verify` exits 1 while a legacy row or a mismatch remains.
 

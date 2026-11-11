@@ -89,10 +89,13 @@ public sealed class PostgresExecutiveActionDispositionTargetsTests(PostgresColle
         await executiveActions.AdmitAsync(WithNotes(FederalRegisterFixtures.BidenProclamation, Notes), "joe-biden");
         await ExecuteAsync("DELETE FROM executive_action_revision_disposition_targets");
 
-        var result = await BackfillAsync(1);
+        var limited = await BackfillAsync(1);
+        await BackfillAsync(10);
+        var rerun = await BackfillAsync(10);
 
-        Assert.Equal(1, result.Moved);
-        Assert.Equal(3L, await ScalarAsync("SELECT count(*) FROM executive_action_revision_disposition_targets"));
+        Assert.Equal(1, limited.Examined);
+        Assert.Equal(3L, await CountTargetsAsync());
+        Assert.Equal(1, rerun.Examined);
         Assert.Equal((2, 0), await VerifyAsync(legacy: false));
     }
 
@@ -147,6 +150,8 @@ public sealed class PostgresExecutiveActionDispositionTargetsTests(PostgresColle
 
     private static string WithNotes(string json, string notes) =>
         json.Replace("\"html_url\":", $"\"disposition_notes\":{JsonSerializer.Serialize(notes)},\"html_url\":", StringComparison.Ordinal);
+
+    private async Task<long> CountTargetsAsync() => (long)(await ScalarAsync("SELECT count(*) FROM executive_action_revision_disposition_targets"))!;
 
     private Task<RevisionBackfillResult> BackfillAsync(int limit) => new BackfillRevisions(Store()).ExecuteAsync(Owner, limit);
 
