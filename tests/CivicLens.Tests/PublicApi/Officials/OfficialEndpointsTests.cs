@@ -90,6 +90,8 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
         Assert.Equal(["p0", "p1", "p2", "p3", "p4", "p5"], Ids(page));
         Assert.Equal(1, page.RootElement.GetProperty("release").GetInt32());
         Assert.Contains("Votes are not counted", page.RootElement.GetProperty("recordCountScope").GetString(), StringComparison.Ordinal);
+        Assert.Equal(6, page.RootElement.GetProperty("officialsInRelease").GetInt32());
+        Assert.Contains("with or without a term", page.RootElement.GetProperty("officialsInReleaseScope").GetString(), StringComparison.Ordinal);
         var first = page.RootElement.GetProperty("officials")[0];
         Assert.Equal("Ann Able", first.GetProperty("name").GetString());
         Assert.Equal("senator", first.GetProperty("kind").GetString());
@@ -125,16 +127,35 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
     [InlineData("state=tx", "p1,p2")]
     [InlineData("party=REPUBLICAN", "p1,p2,p4")]
     [InlineData("name=ben", "p1")]
+    [InlineData("name=baker", "p1")]
+    [InlineData("name=DOLE", "p3")]
+    [InlineData("name=100", "p2")]
+    [InlineData("name=aker", "")]
+    [InlineData("name=ann%20a", "p0")]
+    [InlineData("name=able%20ann", "")]
     [InlineData("name=cy%20100%25", "p2")]
     [InlineData("name=%25", "")]
     [InlineData("chamber=senate&state=MA&party=democrat&name=a", "p0")]
-    public async Task EachFilterNarrowsTheListAndANamePrefixTakesPercentAsLiteralText(string query, string expected)
+    public async Task EachFilterNarrowsTheListAndANamePrefixMatchesAWordStartAndTakesPercentAsLiteralText(string query, string expected)
     {
         await using var host = await StartAsync();
 
         using var page = await GetAsync(host, "/v1/officials?" + query);
 
         Assert.Equal(expected.Length == 0 ? [] : expected.Split(','), Ids(page));
+    }
+
+    [Theory]
+    [InlineData("limit=2")]
+    [InlineData("chamber=senate")]
+    [InlineData("name=zzz")]
+    public async Task TheCountOfOfficialsInTheReleaseIgnoresFiltersAndPaging(string query)
+    {
+        await using var host = await StartAsync();
+
+        using var page = await GetAsync(host, "/v1/officials?" + query);
+
+        Assert.Equal(6, page.RootElement.GetProperty("officialsInRelease").GetInt32());
     }
 
     [Fact]
