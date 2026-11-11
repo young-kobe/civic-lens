@@ -14,7 +14,7 @@ public sealed partial class PostgresPublicationStore
         ArgumentNullException.ThrowIfNull(readServedDirectory);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await BeginVerificationReadAsync(db, cancellationToken);
-        var selection = await ReadRetainedReleaseSelectionAsync(db, readServedDirectory, cancellationToken);
+        var selection = await ReadFingerprintedSelectionAsync(db, readServedDirectory, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         if (selectionFingerprint is not null && selectionFingerprint != selection.Fingerprint)
             return new([], selection.Fingerprint, false, true);
