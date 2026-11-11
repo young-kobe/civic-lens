@@ -128,6 +128,7 @@ public sealed class ArchitectureTests
         const string source = """
             const string first = "WITH selected AS (SELECT 1 FROM public_api.bills) SELECT 1 FROM selected";
             const string second = "WITH actions AS (SELECT 1 FROM public_api.bills) SELECT 1 FROM actions";
+            const string materialized = "WITH active AS MATERIALIZED (SELECT 1 FROM public_api.votes), picked AS NOT MATERIALIZED (SELECT 1 FROM active) SELECT 1 FROM picked";
             const string privateRead = "SELECT 1 FROM publication_releases";
             const string borrowedAlias = "SELECT 1 FROM actions";
             """;
@@ -151,7 +152,7 @@ public sealed class ArchitectureTests
         }
     }
 
-    private static HashSet<string> CteNames(string sql) => Regex.Matches(sql, @"(?:WITH|,)\s*(\w+)\s+AS\s*\(", RegexOptions.IgnoreCase)
+    private static HashSet<string> CteNames(string sql) => Regex.Matches(sql, @"(?:WITH|,)\s*(\w+)\s+AS\s*(?:(?:NOT\s+)?MATERIALIZED\s*)?\(", RegexOptions.IgnoreCase)
         .Select(match => match.Groups[1].Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     private static IEnumerable<string> SqlTableNames(string sql) =>

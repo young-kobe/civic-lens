@@ -106,6 +106,8 @@ if (args is [] or ["--help"] or ["help"])
           votes draft requeue --refused
           executive-actions revisions backfill <limit>
           executive-actions revisions verify
+          executive-actions targets backfill <limit>
+          executive-actions targets verify
           document-changes revisions backfill <limit>
           document-changes revisions verify
           bills subjects backfill [limit]
@@ -384,7 +386,9 @@ try
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var backfillStore = new PostgresExecutiveActionRevisionBackfillStore(AnalysisDbContextFactory.Create(connectionString));
-        var executiveActions = new ExecutiveActionCommand(new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
+        var targetStore = new PostgresExecutiveActionTargetBackfillStore(AnalysisDbContextFactory.Create(connectionString));
+        var executiveActions = new ExecutiveActionCommand(new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore),
+            new BackfillRevisions(targetStore), new VerifyRevisions(targetStore), owner);
         executing = true;
         return await executiveActions.ExecuteAsync(args, cancellation.Token);
     }
@@ -487,7 +491,8 @@ try
             new ActivatePublicationRelease(publications, releases, blocked, loggers.CreateLogger<ActivatePublicationRelease>()),
             new BackfillFirstPublished(publications, releases), new BackfillPublishedEntries(publications, releases),
             new BackfillStoredColumns(publications, releases), new VerifyPublishedEntries(publications, releases),
-            new VerifyCorrectionHistories(publications, releases), new BackfillCorrectionHistories(publications, releases), owner,
+            new VerifyCorrectionHistories(publications, releases), new BackfillCorrectionHistories(publications, releases),
+            new BackfillReleaseBillCounts(publications, releases), new VerifyReleaseBillCounts(publications, releases), owner,
             Console.Out, Console.Error, cancellation.Token);
     }
 

@@ -72,12 +72,28 @@ public interface IPublicationStore
     Task<CorrectionHistoryVerificationPage> ReadCorrectionHistoryVerificationPageAsync(CorrectionHistoryVerificationCursor? after, int limit,
         Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
 
-    Task<string> ReadCorrectionHistoryVerificationFingerprintAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
+    Task<IReadOnlyList<PublicationReleaseSummary>> ReadRetainedReleaseSelectionAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken);
+
+    Task<string> ReadRetainedReleaseFingerprintAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
         CancellationToken cancellationToken);
 
     Task<(int Added, int AlreadyPresent)> CommitCorrectionHistoryBootstrapAsync(PublicationReleaseSummary release,
         IReadOnlyCollection<CorrectionHistoryBinding> bindings, Func<CancellationToken, Task<string?>> readServedDirectory,
         CancellationToken cancellationToken);
+
+    /// <summary>Reads the next retained, active, or served releases after <paramref name="afterReleaseNumber"/>. A fingerprint that differs from the current selection marks the page stale.</summary>
+    Task<BillCountReleasePage> ReadBillCountReleasePageAsync(int afterReleaseNumber, string? selectionFingerprint, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
+
+    Task<ReleaseBillCountSource> ReadBillCountSourceAsync(int releaseNumber, CancellationToken cancellationToken);
+
+    /// <summary>Writes the bill counts of one release in one transaction. It returns false for an exact existing snapshot.</summary>
+    Task<bool> CommitBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
+
+    Task<BillCountStatus> VerifyBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
 
     Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken);

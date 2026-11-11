@@ -770,6 +770,21 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ex
 
 Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every executive action read fails until it ends. For a manual run, start the new code only when `verify` exits 0. Every reader fails on a row with null columns. Production held 688 revisions when the survey was made. A rollback past the migration rebuilds `notice_json` from the notice columns.
 
+### Executive action disposition target backfill
+
+The table `executive_action_revision_disposition_targets` holds the typed Amends and Revokes targets of each revision. Current code writes them with each new revision. Revisions from before the migration `ExecutiveActionDispositionTargets` that hold notes need a backfill. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions targets backfill 500
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions targets verify
+```
+
+`backfill <limit>` walks the revisions that have notes and no target row, in key order, in batches of 25. Each batch is one short transaction that holds the executive action review lock. It parses the stored notes with `ExecutiveActionDispositionTargets` and writes the target rows. `examined` and `moved` count the revisions that the run read, and `limit` bounds that count. They do not show how many revisions got a target. A revision whose notes hold no target stays in the walk, so each run examines it again and writes nothing. A run stops at `limit` or when the walk reaches the last revision, so it always ends. A rerun changes nothing. The exit code is 0.
+
+`verify` parses the notes of each revision again and compares the result to the stored rows. It writes nothing and takes no lock. A revision that has a target in its notes and no stored row counts as `legacy`. A revision whose stored rows differ from its notes, or that has rows and no notes, counts as a mismatch with the field name `dispositionTargets`. `verify` exits 1 while a legacy row or a mismatch remains.
+
+Run order: `db migrate`, then `backfill`, then `verify`. The public pages and the API do not read the table yet.
+
 ### Statement revision backfill
 
 R-63 step 3 moves old statement revisions into columns and child rows. A revision written by current code already has them. The migration `StatementRevisionColumns` adds the columns and tables. It does not read any JSON. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
@@ -1065,11 +1080,44 @@ Run `releases entries verify` to prove stored membership against the kept manife
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases corrections verify <limit> [cursor]
 ```
 
-The limit caps record files examined. The command includes existing bindings and checks the retained, active, and served releases. It compares exact revision facts and correction content, including order, UTC ticks, and original offsets. It writes nothing. Each database page uses a short read-only repeatable-read transaction. File reads follow that transaction; the command checks the selection again after the terminal file batch.
+The limit caps record files examined. The command includes existing bindings and checks the retained, active, and served releases. It compares exact revision facts and correction content, including order, UTC ticks, and original offsets. It writes nothing. Each database page covers one release in a short read-only repeatable-read transaction. File reads follow that transaction.
 
-The JSON result contains `examined`, `verified`, `failed`, `failures`, `nextCursor`, `staleCursor`, and `selectionFingerprint`. The first 50 failures give the release, kind, record ID, and the same reasons as bootstrap. `recordInvalid` also covers missing or corrupt typed histories. All failures count in `failed`, even when the list is full.
+A release and its correction bindings never change. The command therefore verifies one release at a time. The walk goes through the selected releases in release order. The cursor binds to one release, by number and directory name, and holds the record position and the failures already found in that release.
 
-Copy `nextCursor` into the next invocation until it is null. A change to the selected release set sets `staleCursor` and gives no continuation. Restart without a cursor and discard coverage totals from the old fingerprint. Keep every batch result for the current fingerprint and resolve every failed record before claiming complete coverage. A zero exit code means this batch passed, not that earlier batches passed. Exit code 1 means a failed record or stale cursor; invalid input or owner identity gives 2. A terminal result with no failures across its complete scan proves agreement for that selected membership. It does not replace manifest membership verification.
+The JSON result contains these fields:
+
+- `examined`, `verified`, `failed`, `failures`, and `nextCursor`. The first 50 failures give the release, kind, record ID, and the same reasons as bootstrap. `recordInvalid` also covers missing or corrupt typed histories. All failures count in `failed`, even when the list is full.
+- `verifiedReleases`. Each entry gives `releaseNumber` and `directoryName` of a release that this call finished with no failed record. The cursor carries failures from earlier calls, so a release with an earlier failure never appears here.
+- `skippedReleases`. Each entry gives `releaseNumber`, `directoryName`, and `reason`. The cursor named this release, but the selection no longer holds it. The reason is `notSelected` when the number left the selection. The reason is `directoryChanged` when the number is selected under another directory. The walk then continues with the next selected release.
+- `selection`. Each entry gives `releaseNumber`, `directoryName`, and `cursor`. The list is the current selection, read after the last file read. The `cursor` starts a walk at the first record of that release.
+
+Copy `nextCursor` into the next invocation until it is null. A null cursor ends the walk. Exit code 1 means a failed record. A skipped release does not change the exit code. Invalid input or owner identity gives 2. A zero exit code means this call passed, not that earlier calls passed.
+
+The controller keeps a ledger outside the database. The ledger maps each release number to a directory name. Follow these rules:
+
+1. After each call, add every entry of `verifiedReleases` to the ledger.
+2. Never add a release that is not in `verifiedReleases`. Never remove a failed release that the selection still holds from the work list. Repair the cause, then verify the release again from its `selection` cursor. Failures of a release that the selection no longer holds need no repair.
+3. Declare completion only when `nextCursor` is null and every entry of `selection` is in the ledger with the same `directoryName`. A ledger entry that the selection no longer holds does not matter.
+4. When `nextCursor` is null but a selected release is not in the ledger, start the next call with the `cursor` of the first such release in `selection`. Do this when a release is published during a long walk, or when a release was reported in `skippedReleases`. When that release appears in `verifiedReleases` or in `failures`, discard `nextCursor`. Then continue with the next selected release that is not in the ledger. A cursor walks on through every later release, so this rule stops repeated work.
+5. Do not restart without a cursor after the first complete walk. A full restart repeats work that the ledger already holds.
+6. The cursor is trusted. Pass back only a `nextCursor` or `selection` cursor value, unchanged. The command does not check that an edited cursor still covers every record of its release.
+
+A complete ledger proves agreement for the selected membership. It does not replace manifest membership verification.
+
+### Bill count backfill and verification
+
+Run these owner commands for the active and retained rollback releases before any public reader uses the bill count tables. They need `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. A release published before the migration `20261110190000` has no rows in `release_bill_counts` and `release_official_bill_counts`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases counts backfill <limit> [release-number]
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases counts verify <limit> [cursor]
+```
+
+The limit caps releases examined. Each release is one write transaction. Before the write, the command reads the manifest, the officials file, and every action and vote record file of the release. It checks them against the tables. The write transaction then checks again that the release is still retained and that the same revisions are members. A release that already holds an exact snapshot counts as `alreadyPresent`. A partial or changed snapshot fails and the command never repairs it. A release with no Congress to count fails and writes nothing.
+
+The backfill JSON result holds `examined`, `added`, `alreadyPresent`, `failed`, `failures`, and `nextCursor`. A failure holds the release number, a reason, and a detail text. Reasons are `recordMissing`, `recordUnreadable`, `recordInvalid`, and `countsInvalid`. `nextCursor` is the last release number examined. Pass it as `[release-number]` to continue after it. The exit code is 1 when a release failed.
+
+The verifier writes nothing. It repeats the file checks of the backfill. Then it compares the expected counts with the saved rows in both directions in one read-only transaction. A release with no saved rows fails as `countsMissing`. A release with a missing, extra, or changed row fails as `countsDifferent`. The result holds `examined`, `verified`, `failed`, `failures`, `nextCursor`, `staleCursor`, and `selectionFingerprint`. Copy `nextCursor` into the next run until it is null. A stale cursor means the selected release set changed. Restart without a cursor. The exit code is 1 for a failure or a stale cursor. Readers may switch only after one complete scan under one fingerprint verifies every selected release.
 
 ### Stored columns backfill
 
@@ -1199,9 +1247,21 @@ To use the search page, set `CIVIC_LENS_PUBLIC_API_URL=http://127.0.0.1:8100` in
 
 To give each page a canonical address, set `CIVIC_LENS_PUBLIC_BASE_URL` in the same environment, for example `https://civic-lens.info`. The value must be a bare origin: https, or http only for `localhost` and `127.0.0.1`, with no user, path, query, or fragment. Use a host name, not an IPv6 address, and do not end the host with a dot. A trailing slash is removed. The stored value is in lower case, with a punycode host and no default port. A blank value counts as unset. An invalid value stops `releases publish` with exit code 2. It also stops the worker at start when publishing is on, because that composition reads the value then. It stops the review workspace at start when `CIVIC_LENS_RELEASE_DIRECTORY` is set. With the variable set, a release holds `sitemap.xml`, `robots.txt`, `404.html`, and a canonical link and `og:url` on every page except `404.html`. Without it, a release holds none of these. The process reads the variable once, so restart the review workspace and the worker after a change. Set the variable before the first production publish. A page that a publish carries by hard link keeps the address it was written with.
 
-To use the report page, also set `CIVIC_LENS_TURNSTILE_SITE_KEY` in the environment of the process that publishes. For a local trial use the Cloudflare test site key `1x00000000000000000000AA`, which always passes. Publish, serve the release root, and open a record page. Use its link "Report a problem with this record". Send the report, then run the pull command above to see it. Without the API address or the site key, `report.html` says that reporting is not available.
+To use the report page, also set `CIVIC_LENS_TURNSTILE_SITE_KEY` in the environment of the process that publishes. For a local trial use the Cloudflare test site key `1x00000000000000000000AA`, which always passes. Publish, serve the release root, and open a record page. Use the footer link that starts with "Report a problem with this". Send the report, then run the pull command above to see it. Without the API address or the site key, `report.html` says that reporting is not available.
 
 Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (empty in development) and `CIVIC_LENS_REQUESTS_PER_MINUTE` (default 60). In production, set the ranges to `127.0.0.0/8,::1/128`. Each range needs a prefix length, and the service stops at start when one has none. The tunnel and Caddy run on the same machine, so the peer is loopback. Caddy passes the `CF-Connecting-IP` header that Cloudflare sets. The container image of the search service is in [Container images](#container-images).
+
+### Reset the search index
+
+Do this after a deploy that adds a column that only the ingest fills, such as `summary` of `records` (`005_record_summary.sql`). The ingest never fetches a stored revision again, so old rows keep a null column until the index is empty. The reset removes the indexed releases and records. It keeps `reader_reports` and `report_pull_state`. It also drops the earlier releases, so a search pinned to an older release answers 404 until the ingest stores it again. The ingest stores the active release only. The owner runs these steps on the production host:
+
+1. Deploy the commit. The new search service applies the migration at startup.
+2. Stop the search service: `sudo deploy/scripts/compose.sh stop search`. This stops the whole public API and the server pages until step 4. All `/v1` routes and all `/web` pages, such as `/compare.html`, are down.
+3. Empty the index tables: `sudo deploy/scripts/compose.sh exec -T search-postgres sh -c 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --command="TRUNCATE active_release, records, releases"'`.
+4. Start the service: `sudo deploy/scripts/compose.sh up --detach search`. The start empties the cached manifest validators, so the first poll ingests the active release. Search answers 503 until that ingest ends.
+5. Check that the column is filled: `sudo deploy/scripts/compose.sh exec -T search-postgres sh -c 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --tuples-only --command="SELECT count(*) FROM records WHERE summary IS NULL AND kind IN ('"'"'statement'"'"', '"'"'documentChange'"'"', '"'"'action'"'"', '"'"'vote'"'"')"'` must print 0.
+
+On the dev machine, remove the search database as in [Run the search service](#run-the-search-service) and start it again.
 
 ## Container images
 
@@ -1220,7 +1280,9 @@ The `Dockerfile` in the repository root builds two images for linux-arm64. The w
 - After the first run on main, set the packages `civic-lens-host` and `civic-lens-search` to public in the ghcr package settings. Do this one time by hand. The Jetson then pulls without a token.
 - Each image has two tags: the full commit SHA and `main`. Deploy by the commit SHA. Pull one with `docker pull ghcr.io/young-kobe/civic-lens-host:<commit-sha>`. Check its attestation with `gh attestation verify oci://ghcr.io/young-kobe/civic-lens-host:<commit-sha> --repo young-kobe/civic-lens`.
 - Every base image is pinned by digest, and the tag is in a comment. The SDK image must equal the `global.json` version. The aspnet image must equal the runtime of that SDK (see the .NET release notes). To update a base image, change the digest and the comment together.
-- The `libgssapi-krb5-2` package is not pinned. Each build installs the current version from the distribution archive.
+- The `libgssapi-krb5-2` package is not pinned. Each build installs the current version from the Ubuntu archive or the fallback mirror.
+- If the apt update fails, the build retries once with the `mirrors.ocf.berkeley.edu` mirror and prints a warning in the build log. The GitHub runners use Azure DNS, which failed to resolve `*.ubuntu.com` on 2026-11-11. apt checks the Ubuntu archive signatures on each mirror. The image keeps the original source list.
+- A stale mirror can serve old packages with valid signatures. If the build log shows the fallback warning, rebuild after the Ubuntu archive works again.
 
 ## Web server
 

@@ -15,7 +15,7 @@ public sealed record OfficialRequest
     public string? State { get; init; }
     /// <summary>Lower case. The query compares it with the lower case party word.</summary>
     public string? Party { get; init; }
-    /// <summary>Lower case. The query matches the start of the lower case name.</summary>
+    /// <summary>Lower case. The query matches the start of the lower case name, or the start of any word after a space in it.</summary>
     public string? NamePrefix { get; init; }
     public OfficialCursor? Cursor { get; init; }
     public int Limit { get; init; } = SearchRequest.DefaultLimit;

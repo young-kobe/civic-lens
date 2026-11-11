@@ -7,7 +7,7 @@ namespace CivicLens.Tests.PublicApi.Votes;
 
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
-public sealed class VoteEndpointsTests(PostgresCollection postgres)
+public sealed partial class VoteEndpointsTests(PostgresCollection postgres)
 {
     // The order is date desc, chamber, session desc, roll call desc, record ID. G and H share every key but the record ID.
     private static readonly SeededVote E = new('e', "2026-03-03") { Issues = ["health"] };
@@ -319,7 +319,16 @@ public sealed class VoteEndpointsTests(PostgresCollection postgres)
         Assert.Equal(1, withIssues.RootElement.GetProperty("release").GetInt32());
         Assert.Equal(B.RecordId, withIssues.RootElement.GetProperty("vote").GetProperty("recordId").GetString());
         Assert.Equal("split", withIssues.RootElement.GetProperty("vote").GetProperty("alignment").GetString());
-        Assert.Equal(["Question: On " + B.Id, "Result: " + B.Result], withIssues.RootElement.GetProperty("facts").EnumerateArray().Select(fact => fact.GetString()));
+        Assert.Equal(["Question: On " + B.Id, "Result: " + B.Result], withIssues.RootElement.GetProperty("facts").EnumerateArray()
+            .Select(fact => fact.GetProperty("text").GetString()));
+        var details = withIssues.RootElement.GetProperty("sources").EnumerateArray().ToArray();
+        Assert.Equal(2, details.Length);
+        var memberOnlySource = Assert.Single(details, source => source.GetProperty("url").GetString()!.EndsWith("members", StringComparison.Ordinal));
+        Assert.Equal("congressGov", withIssues.RootElement.GetProperty("source").GetString());
+        Assert.Equal("Started: 2026-03-02T12:00:00Z", withIssues.RootElement.GetProperty("votedOnCitation").GetProperty("quote").GetString());
+        Assert.Equal("Result: " + B.Result, withIssues.RootElement.GetProperty("facts")[1].GetProperty("citation").GetProperty("quote").GetString());
+        Assert.DoesNotContain(withIssues.RootElement.GetProperty("facts").EnumerateArray(), fact =>
+            fact.GetProperty("citation").GetProperty("extractionId").GetString() == memberOnlySource.GetProperty("extractionId").GetString());
         Assert.Equal(9, withIssues.RootElement.GetProperty("vote").GetProperty("rollCall").GetInt32());
         Assert.Equal(["health", "tax"], withIssues.RootElement.GetProperty("issueIds").EnumerateArray().Select(issue => issue.GetString()));
         Assert.Empty(withoutIssues.RootElement.GetProperty("issueIds").EnumerateArray());
@@ -345,6 +354,8 @@ public sealed class VoteEndpointsTests(PostgresCollection postgres)
         using var none = await GetAsync(host, $"/v1/votes/{A.RecordId}");
         using var unresolved = await GetAsync(host, $"/v1/votes/{E.RecordId}");
         var tallies = detail.RootElement.GetProperty("partyTallies").EnumerateArray().ToArray();
+        Assert.Equal(new[] { ViewsSeed.ExtractionId(revised.RecordId, 2, "detail"), ViewsSeed.ExtractionId(revised.RecordId, 2, "members") }.Order(StringComparer.Ordinal),
+            detail.RootElement.GetProperty("sources").EnumerateArray().Select(source => source.GetProperty("extractionId").GetString()).Order(StringComparer.Ordinal));
         Assert.Equal(2, tallies.Length);
         Assert.Equal("Independent", tallies[0].GetProperty("party").GetString());
         Assert.Equal((1, 2, 3, 4, 5), Buckets(tallies[0]));
