@@ -6,7 +6,7 @@ using NpgsqlTypes;
 
 namespace CivicLens.PublicApi.Bills;
 
-/// <summary>Reads the views <c>public_api.bills</c>, <c>public_api.bill_sponsorships</c>, and <c>public_api.bill_issues</c>. Every answer takes its release from the query that reads its rows.</summary>
+/// <summary>Reads the views <c>public_api.bills</c>, <c>public_api.bill_sponsorships</c>, <c>public_api.bill_issues</c>, and <c>public_api.bill_key_terms</c>. Every answer takes its release from the query that reads its rows.</summary>
 public sealed class BillStore(NpgsqlDataSource views)
 {
     private const string Columns = """
@@ -43,7 +43,11 @@ public sealed class BillStore(NpgsqlDataSource views)
                    b.history_observed_at_utc_ticks, b.history_action_count,
                    ARRAY(SELECT i.issue_id FROM public_api.bill_issues i
                           WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number ORDER BY i."position"),
-                   s.latest_action_text, s.latest_action_date, s.read_at_utc_ticks
+                   s.latest_action_text, s.latest_action_date, s.read_at_utc_ticks,
+                   ARRAY(SELECT k.term FROM public_api.bill_key_terms k
+                          WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position"),
+                   ARRAY(SELECT k.definition FROM public_api.bill_key_terms k
+                          WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position")
               FROM public_api.bills b
               LEFT JOIN public_api.bill_status s ON s.record_id = b.record_id AND s.revision_number = b.revision_number
              WHERE b.record_id = @id
@@ -52,7 +56,15 @@ public sealed class BillStore(NpgsqlDataSource views)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
         return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(27), ReadLatestAction(reader), ReadHistory(reader, 25, 26),
-            ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24));
+            ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24), ReadKeyTerms(reader));
+    }
+
+    /// <summary>The two arrays come from one view, ordered by the same position, so they pair by index.</summary>
+    private static BillKeyTerm[] ReadKeyTerms(DbDataReader reader)
+    {
+        var terms = reader.GetFieldValue<string[]>(31);
+        var definitions = reader.GetFieldValue<string[]>(32);
+        return [.. terms.Zip(definitions, (term, definition) => new BillKeyTerm(term, definition))];
     }
 
     /// <summary>Reads one page of the sponsorships of a bill. Null means that no release is active or that the active release holds no such bill.</summary>

@@ -10,11 +10,15 @@ public sealed record ActionTextMeasureSentence(ActionTextPart Part, string Sente
 
 public sealed record ActionTextMeasurePass(AnalysisRunOutcome Outcome, string? OutputJson);
 
-/// <summary><see cref="MissingDates"/> lists the dates of the sent text that no accepted sentence writes the same way (string match, case ignored). It is filled for a flagged bill only. It is a measure only.</summary>
+/// <summary>One accepted key term. The definition is the exact stored quote of the definitions section.</summary>
+public sealed record ActionTextMeasureKeyTerm(string Term, string Definition);
+
+/// <summary><see cref="DefinitionsHeading"/> is the heading of the definitions section that code found, or null when the bill has none or key terms were off.
+/// <see cref="KeyTerms"/> holds the accepted terms, and is empty with no section. <see cref="MissingDates"/> lists the dates of the sent text that no accepted sentence writes the same way (string match, case ignored). It is filled for a flagged bill only. It is a measure only.</summary>
 public sealed record ActionTextMeasureBill(string BillId, string? Title, ActionTextMeasureOutcome Outcome, string? Reason, int CharsRead, int CharsTotal,
     int Calls, AnalysisTokenUsage Usage, long ChargedTokens, ImmutableArray<ActionTextMeasureSentence> Sentences, ImmutableArray<string> Rejections,
     ImmutableArray<ActionTextMeasurePass> Passes, BillFigureCounts TextFigures, BillFigureCounts SentenceFigures, double? PassageGrade,
-    ImmutableArray<string> MissingDates)
+    ImmutableArray<string> MissingDates, ImmutableArray<ActionTextMeasureKeyTerm> KeyTerms, string? DefinitionsHeading)
 {
     /// <summary>True when the sent text has a dollar amount or a date and the accepted sentences have none of that kind. It is a measure only.
     /// A bill with no accepted sentence is not flagged.</summary>
@@ -26,19 +30,20 @@ public sealed record ActionTextMeasureBill(string BillId, string? Title, ActionT
     public static ActionTextMeasureBill Skipped(string billId, string reason) => WithoutCall(billId, ActionTextMeasureOutcome.Skipped, reason);
 
     public static ActionTextMeasureBill WithoutCall(string billId, ActionTextMeasureOutcome outcome, string reason) =>
-        new(billId, null, outcome, reason, 0, 0, 0, AnalysisTokenUsage.None, 0, [], [], [], new(0, 0), new(0, 0), null, []);
+        new(billId, null, outcome, reason, 0, 0, 0, AnalysisTokenUsage.None, 0, [], [], [], new(0, 0), new(0, 0), null, [], [], null);
 }
 
 public sealed record ActionTextMeasureTotals(int Accepted, int Rejected, int Failed, int Skipped, int StoppedByCap, int StoppedByModel, int Calls,
-    AnalysisTokenUsage Usage, long ChargedTokens, double? MeanGrade, int BillsLosingFigures);
+    AnalysisTokenUsage Usage, long ChargedTokens, double? MeanGrade, int BillsLosingFigures, int BillsWithDefinitions, int BillsWithKeyTerms, int KeyTerms);
 
-public sealed record ActionTextMeasureReport(string PromptVersion, string SchemaVersion, string Model, long TokenCap,
+public sealed record ActionTextMeasureReport(string PromptVersion, string SchemaVersion, string Model, long TokenCap, bool KeyTermsOn,
     ImmutableArray<ActionTextMeasureBill> Bills)
 {
     public ActionTextMeasureTotals Totals => new(Count(ActionTextMeasureOutcome.Accepted), Count(ActionTextMeasureOutcome.Rejected),
         Count(ActionTextMeasureOutcome.Failed), Count(ActionTextMeasureOutcome.Skipped), Count(ActionTextMeasureOutcome.StoppedByCap),
         Count(ActionTextMeasureOutcome.StoppedByModel), Bills.Sum(bill => bill.Calls), TotalUsage(), Bills.Sum(bill => bill.ChargedTokens),
-        ActionTextMeasureGrades.Mean(Bills.Select(bill => bill.PassageGrade)), Bills.Count(bill => bill.LosesFigures));
+        ActionTextMeasureGrades.Mean(Bills.Select(bill => bill.PassageGrade)), Bills.Count(bill => bill.LosesFigures),
+        Bills.Count(bill => bill.DefinitionsHeading is not null), Bills.Count(bill => !bill.KeyTerms.IsEmpty), Bills.Sum(bill => bill.KeyTerms.Length));
 
     private int Count(ActionTextMeasureOutcome outcome) => Bills.Count(bill => bill.Outcome == outcome);
 

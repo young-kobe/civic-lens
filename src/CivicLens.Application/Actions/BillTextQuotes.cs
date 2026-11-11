@@ -1,4 +1,5 @@
 using System.Text;
+using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
 
 namespace CivicLens.Application.Actions;
@@ -36,21 +37,31 @@ public sealed class BillTextQuotes
     }
 
     /// <summary>The span of an exact quote of the normalized bill text, in the stored text. It is null when the characters read do not hold the quote.</summary>
-    public SourceSpan? Find(string quote)
+    public SourceSpan? Find(string quote) => FindIn(quote, 0, billText.Body.Length, normalizedBody);
+
+    /// <summary>The span of an exact quote that lies inside the definitions section. A quote that the section does not hold is null, even when
+    /// another section holds the same words.</summary>
+    public SourceSpan? FindInDefinitions(string quote, BillDefinitionsSection section) => FindIn(quote, section.Start, section.End, null);
+
+    /// <summary>The stored characters of a span that <see cref="Find"/> returned.</summary>
+    public string StoredQuote(SourceSpan span) => billText.Text.Substring(span.Start, span.Length);
+
+    /// <summary>Searches the normalized form of one range of the body. The whole-body caller passes the normalized body it already holds.</summary>
+    private SourceSpan? FindIn(string quote, int bodyStart, int bodyEnd, string? normalizedRange)
     {
         if (quote.Length == 0) return null;
-        var normalizedStart = normalizedBody.IndexOf(quote, StringComparison.Ordinal);
+        var stored = billText.Body[bodyStart..bodyEnd];
+        var normalizedStart = (normalizedRange ?? Normalize(stored)).IndexOf(quote, StringComparison.Ordinal);
         if (normalizedStart < 0) return null;
-        var start = billText.BodyStart + StoredOffset(normalizedStart);
-        var end = billText.BodyStart + StoredOffset(normalizedStart + quote.Length);
+        var start = billText.BodyStart + bodyStart + StoredOffset(stored, normalizedStart);
+        var end = billText.BodyStart + bodyStart + StoredOffset(stored, normalizedStart + quote.Length);
         var readEnd = billText.BodyStart + billText.CharsRead;
         return end > readEnd || SplitsSurrogatePair(billText.Text, start) || SplitsSurrogatePair(billText.Text, end)
             ? null : new(billText.ExtractionId, start, end - start);
     }
 
-    private int StoredOffset(int normalizedOffset)
+    private static int StoredOffset(string body, int normalizedOffset)
     {
-        var body = billText.Body;
         var stored = 0;
         for (var normalized = 0; normalized < normalizedOffset; normalized++) stored += MarkLength(body, stored);
         return stored;

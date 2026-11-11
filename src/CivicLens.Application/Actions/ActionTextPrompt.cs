@@ -25,16 +25,24 @@ public static class ActionTextPrompt
         Each field has a confidence. The confidence is your probability that a careful human reviewer would approve the field without changing its substance. It is a number from 0 to 1. Civic Lens records the values to calibrate them against human review. No rule acts on them. Use the full range honestly.
         """;
 
+    private static readonly string KeyTermInstructions = $"""
+        Key terms. The facts name the definitions section of the bill text in definitionsSection: its heading, and the heading where it ends. Add the field keyTerms with at most {ActionKeyTerm.MaximumPerRevision} terms that a reader needs to understand the bill. Each term must be defined in that section. Each key term is an object with two fields:
+        - term: the term as the definitions section writes it, at most {ActionKeyTerm.MaximumTermLength} characters.
+        - quote: one exact quote of the definitions section that defines the term. Copy the characters exactly. It must contain the term. It has at least {ActionDraftRevision.MinimumTextQuoteWords} words and at most {ActionDraftRevision.MaximumTextQuoteLength} characters. When a definition is longer, quote its first part.
+        Never write your own definition. Never choose a term that this section does not define. Write an empty list when the section has no term that a reader needs. Code rejects a quote that is not in the definitions section. Code ignores a key term that the Civic Lens glossary already explains. Code does not grade the key terms with the passage.
+        """;
+
     public static AnalysisModelRequest? Build(ActionBillSnapshot snapshot, ActionDraftBillText billText, BillIssueChoice issues, int maximumBytes,
-        ImmutableArray<string> previousErrors = default)
+        ImmutableArray<string> previousErrors = default, ActionKeyTermScope? keyTerms = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(billText);
         ArgumentNullException.ThrowIfNull(issues);
         var issueSchema = issues.AnswerSchema();
-        var system = issueSchema is null ? SystemInstructions : SystemInstructions + issues.Instructions("the title or the bill text");
-        var user = ActionDraftPrompt.UserPrompt(snapshot, issues, previousErrors, withSummary: false, billText);
-        var schema = AnalysisSchema.BillTextDraft(issueSchema);
+        var system = (issueSchema is null ? SystemInstructions : SystemInstructions + issues.Instructions("the title or the bill text")) +
+            (keyTerms is null ? string.Empty : KeyTermInstructions);
+        var user = ActionDraftPrompt.UserPrompt(snapshot, issues, previousErrors, withSummary: false, billText, keyTerms?.Section);
+        var schema = AnalysisSchema.BillTextDraft(issueSchema, withKeyTerms: keyTerms is not null);
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
         return AnalysisModelRequest.Create(ActionDraftTask.Model, ActionDraftTask.MaximumTextOutputTokens, system, user, schema, bytes,

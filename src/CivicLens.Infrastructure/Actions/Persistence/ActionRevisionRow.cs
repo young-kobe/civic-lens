@@ -56,4 +56,5 @@ internal sealed class ActionRevisionRow : IReviewRevisionRow, IReviewTextRow
     public List<ActionRevisionIssueRow> Issues { get; set; } = [];
     public List<ActionRevisionSponsorshipRow> Sponsorships { get; set; } = [];
     public List<ActionRevisionTextCitationRow> TextCitations { get; set; } = [];
+    public List<ActionRevisionKeyTermRow> KeyTerms { get; set; } = [];
 }
