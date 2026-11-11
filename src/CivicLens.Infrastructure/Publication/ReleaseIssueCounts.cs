@@ -19,10 +19,8 @@ internal static class ReleaseIssueCounts
         """;
 
     /// <summary>One row for each selected bill revision and tracked issue that the Home tile counts. The line-up of parties classifies the same rows.
-    /// Placeholders: {0} is the release number and {1} is the Congress.</summary>
-    private const string CreateEligibleBillsSql = $$"""
-        DROP TABLE IF EXISTS pg_temp.{{EligibleBillsTable}};
-        CREATE TEMP TABLE {{EligibleBillsTable}} ON COMMIT DROP AS
+    /// The commit writes it into a temp table, and the read-only verifier reads it as a CTE of the same name. Placeholders: {0} is the release number and {1} is the Congress.</summary>
+    internal const string EligibleBillsSelectSql = $$"""
         WITH {{SelectedCte}}
         SELECT ai.issue_id, a.record_id, a.revision_number
           FROM selected s
@@ -34,11 +32,17 @@ internal static class ReleaseIssueCounts
                         WHERE p.record_id = a.record_id AND p.revision_number = a.revision_number)
         """;
 
+    private const string CreateEligibleBillsSql = $"""
+        CREATE TEMP TABLE {EligibleBillsTable} ON COMMIT DROP AS
+        {EligibleBillsSelectSql}
+        """;
+
     private const string EligibleBillsExistSql = $"""
         SELECT to_regclass('pg_temp.{EligibleBillsTable}') IS NOT NULL AS "Value"
         """;
 
     private const string FillSql = $$"""
+        DROP TABLE IF EXISTS pg_temp.{{EligibleBillsTable}};
         {{CreateEligibleBillsSql}};
         WITH {{SelectedCte}}, vote_counts AS (
             SELECT vi.issue_id, count(*) AS total
@@ -64,7 +68,7 @@ internal static class ReleaseIssueCounts
         """;
 
     /// <summary>Gives the line-up of parties the eligible bills that <see cref="FillAsync"/> built in the same transaction. Outside a transaction,
-    /// the table is already gone, and this call builds it again.</summary>
+    /// the table is already gone, and this call builds it again. This call never drops a table, so the read-only verifier can use it.</summary>
     internal static async Task EnsureEligibleBillsAsync(CollectionAttemptDbContext db, int releaseNumber, int congress,
         CancellationToken cancellationToken)
     {

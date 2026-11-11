@@ -138,6 +138,14 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
         Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
         inner.VerifyBillCountsAsync(release, validatedMembers, readServedDirectory, cancellationToken);
 
+    public Task<bool> CommitPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.CommitPartyLineUpsAsync(release, validatedMembers, readServedDirectory, cancellationToken);
+
+    public Task<BillCountStatus> VerifyPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.VerifyPartyLineUpsAsync(release, validatedMembers, readServedDirectory, cancellationToken);
+
     public Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken) => inner.FindReplayAsync(actorSubject, idempotencyKey, payloadHash, cancellationToken);
 

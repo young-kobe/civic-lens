@@ -59,6 +59,32 @@ public sealed partial class PostgresPublicationStore
         return status;
     }
 
+    public async Task<bool> CommitPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(readServedDirectory);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysInOrder, cancellationToken);
+        var current = await RequireRetainedReleaseAsync(db, release, readServedDirectory, cancellationToken);
+        await ReleaseBillCountSources.RequireSameMembersAsync(db, release.ReleaseNumber, validatedMembers, cancellationToken);
+        var added = await ReleaseIssuePartyCounts.FillAsync(db, release.ReleaseNumber, CongressOfRelease(current), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return added;
+    }
+
+    public async Task<BillCountStatus> VerifyPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(readServedDirectory);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await BeginVerificationReadAsync(db, cancellationToken);
+        var current = await RequireRetainedReleaseAsync(db, release, readServedDirectory, cancellationToken);
+        await ReleaseBillCountSources.RequireSameMembersAsync(db, release.ReleaseNumber, validatedMembers, cancellationToken);
+        var status = await ReleaseIssuePartyCounts.VerifyAsync(db, release.ReleaseNumber, CongressOfRelease(current), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return status;
+    }
+
     private static int? CongressOfRelease(PublicationReleaseRow release) =>
         CongressCalendar.CongressOn(new DatabaseTime(release.PublishedAtUtcTicks).Day);
 }
