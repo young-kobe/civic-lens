@@ -713,6 +713,25 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task KeyTermsReachTheViewInOrderForModelTextThatCitesBillTextOnlyBecauseAPersonEditOrATextFreeRevisionNeedsNoAiTerms()
+    {
+        await SeedBillsAsync();
+        await ExecuteAsync("""
+            SET session_replication_role = replica;
+            INSERT INTO bill_text_versions (congress, bill_type, bill_number, package_id, version_type, version_date, source_url, extraction_id, chars_total, chars_read)
+              VALUES (119, 'hr', 7, 'BILLS-119hr7ih', 'Introduced in House', '2025-01-03',
+                      'https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm', 'x', 85000, 59987);
+            UPDATE action_revisions SET text_package_id = 'BILLS-119hr7ih', why_it_matters = 'It pays landlords.' WHERE record_id IN ('A', 'M');
+            INSERT INTO action_revision_key_terms (record_id, revision_number, position, term, citation_extraction_id, citation_start, citation_length, definition)
+              SELECT record_id, revision_number, 1, 'grant', 'x', 100, 30, 'The term grant means a payment.' FROM action_revisions WHERE record_id IN ('A', 'M', 'C')
+              UNION ALL SELECT record_id, revision_number, 0, 'Secretary', 'x', 10, 30, 'The term Secretary means the Secretary.' FROM action_revisions WHERE record_id IN ('A', 'M', 'C');
+            """);
+
+        Assert.Equal(["M|0|Secretary|The term Secretary means the Secretary.", "M|1|grant|The term grant means a payment."],
+            await PublicAsync("SELECT record_id || '|' || \"position\" || '|' || term || '|' || definition FROM public_api.bill_key_terms ORDER BY record_id, \"position\""));
+    }
+
+    [Fact]
     public async Task EventDateAndCosponsorCountEqualTheStoredColumnsBecauseCSharpWritesThemOnceAndTheViewMustNotComputeThem()
     {
         var revision = ActionRevisionFixtures.Model() with

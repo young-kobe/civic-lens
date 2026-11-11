@@ -71,6 +71,33 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task KeyTermsReadBackInOrderWithTheirExactSpansAndTheDatabaseRefusesATermPastFiveARepeatedTermAndABlankDefinition()
+    {
+        var candidate = await ReadableCandidateAsync("A000001", withSummary: false);
+        var stored = await StoreBillTextAsync(candidate, ActionBillTexts.BodyWithDefinitions);
+        var revision = KeyTermRevision(candidate, stored);
+        await SettleTextRevisionAsync(candidate, revision);
+
+        var found = await ActionReviews().GetRevisionAsync(RecordId, 1, default);
+        var current = (await ActionStore().ReadEvidenceAsync(candidate, false, default))!.Current;
+
+        Assert.Equal([.. revision.KeyTerms], [.. found!.KeyTerms]);
+        Assert.Equal([.. revision.KeyTerms], [.. current!.KeyTerms]);
+        Assert.Equal(revision.KeyTerms.Select((term, position) =>
+                $"{position}|{term.Term}|{term.Span.ExtractionId}|{term.Span.Start}|{term.Span.Length}|{term.Definition}"),
+            await LinesAsync("SELECT position || '|' || term || '|' || citation_extraction_id || '|' || citation_start || '|' || citation_length || '|' || definition " +
+                $"FROM action_revision_key_terms WHERE record_id = '{RecordId}' AND revision_number = 1 ORDER BY position"));
+        var first = revision.KeyTerms[0];
+        var insert = $"INSERT INTO action_revision_key_terms (record_id, revision_number, position, term, citation_extraction_id, citation_start, citation_length, definition) " +
+            $"VALUES ('{RecordId}', 1, {{0}}, '{{1}}', '{first.Span.ExtractionId}', {first.Span.Start}, {first.Span.Length}, '{{2}}')";
+        var sixth = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, string.Format(insert, 5, "Sixth", "The term Sixth means six.")));
+        var repeated = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, string.Format(insert, 4, first.Term, "The term means it.")));
+        var blank = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, string.Format(insert, 4, "Fifth", "   ")));
+        Assert.Equal(("ck_action_revision_key_terms_position", "ux_action_revision_key_terms_term", "ck_action_revision_key_terms_quote"),
+            (sixth.ConstraintName, repeated.ConstraintName, blank.ConstraintName));
+    }
+
+    [Fact]
     public async Task CodeApprovesATextDraftInTheSameTransactionAfterItsChecksPassSoItIsReadyToPublish()
     {
         var candidate = await ReadableCandidateAsync("A000001", withSummary: false);
@@ -164,6 +191,16 @@ public sealed partial class PostgresBillStreamTests
                 Cite(ActionTextPart.WhyItMatters, ActionBillTexts.WhyQuote, ActionBillTexts.WhyPlain)
             ],
             Sponsorships = [.. basis.Sponsorships.Select(item => item with { Citations = [new(stored.ExtractionId, 0, 5)] })]
+        };
+    }
+
+    private static ActionDraftRevision KeyTermRevision(string candidate, (string ExtractionId, CongressBillTextReading Reading) stored)
+    {
+        ActionKeyTerm Term(string term, string definition) =>
+            new(term, new(stored.ExtractionId, stored.Reading.Text.IndexOf(definition, StringComparison.Ordinal), definition.Length), definition);
+        return TextRevision(candidate, stored) with
+        {
+            KeyTerms = [Term("Secretary", ActionBillTexts.SecretaryDefinition), Term("eligible tenant", ActionBillTexts.TenantDefinition)]
         };
     }
 

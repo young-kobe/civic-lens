@@ -395,6 +395,44 @@ public sealed class PublishedActionTests
     }
 
     [Fact]
+    public void KeyTermsAreOptionalAndAnAbsentListLeavesTheFieldOutOfTheRecordFile()
+    {
+        var plain = JsonSerializer.Serialize(WithBillText(), PublicationProtocol.JsonOptions);
+        var withTerms = WithBillText(keyTerms: 2);
+
+        withTerms.Validate();
+        var json = JsonSerializer.Serialize(withTerms, PublicationProtocol.JsonOptions);
+        var read = JsonSerializer.Deserialize<PublishedAction>(json, PublicationProtocol.JsonOptions)!;
+
+        Assert.DoesNotContain("keyTerms", plain, StringComparison.Ordinal);
+        Assert.Contains("\"keyTerms\"", json, StringComparison.Ordinal);
+        Assert.Equal(["Term 0", "Term 1"], read.BillText!.KeyTerms!.Select(item => item.Term));
+        Assert.Equal(5, withTerms.Citations().Count(citation => citation.ExtractionId == TextId));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    public void BillTextHoldsOneToFiveKeyTermsWhenItHoldsAny(int count)
+    {
+        var record = WithBillText(keyTerms: count);
+
+        Assert.Throws<InvalidDataException>(record.Validate);
+    }
+
+    [Fact]
+    public void AKeyTermThatRepeatsAnotherTermOrQuotesTheTextWrongOrHasNoTermIsRefused()
+    {
+        var record = WithBillText(keyTerms: 2);
+        var terms = record.BillText!.KeyTerms!;
+
+        Assert.Throws<InvalidDataException>((record with { BillText = record.BillText with { KeyTerms = [terms[0], terms[1] with { Term = "TERM 0" }] } }).Validate);
+        Assert.Throws<InvalidDataException>((record with { BillText = record.BillText with { KeyTerms = [terms[0], terms[1] with { Citation = terms[1].Citation with { Quote = "The program ENDS" } }] } }).Validate);
+        Assert.Throws<InvalidDataException>((record with { BillText = record.BillText with { KeyTerms = [terms[0] with { Term = " " }] } }).Validate);
+        Assert.Throws<InvalidDataException>((record with { BillText = record.BillText with { KeyTerms = [terms[0] with { Term = new string('t', 81) }] } }).Validate);
+    }
+
+    [Fact]
     public void ABillTextRoundTripsThroughTheRecordFileWithItsSentencesAndCounts()
     {
         var json = JsonSerializer.Serialize(WithBillText(), PublicationProtocol.JsonOptions);
@@ -407,7 +445,7 @@ public sealed class PublishedActionTests
         Assert.Equal((70_000, 60_000), (read.BillText.CharsTotal, read.BillText.CharsRead));
     }
 
-    private static PublishedAction WithBillText(int summary = 2, int why = 1)
+    private static PublishedAction WithBillText(int summary = 2, int why = 1, int? keyTerms = null)
     {
         PublishedTextSentence Sentence(PublishedTextPart part, int index) => new()
         {
@@ -425,7 +463,8 @@ public sealed class PublishedActionTests
                 VersionDate = new DateOnly(2026, 1, 3),
                 CharsRead = 60_000,
                 CharsTotal = 70_000,
-                Sentences = [.. sentences]
+                Sentences = [.. sentences],
+                KeyTerms = keyTerms is null ? null : [.. Enumerable.Range(0, keyTerms.Value).Select(index => new PublishedKeyTerm { Term = $"Term {index}", Citation = Cite(TextId, BillTextBody, "The program ends") })]
             },
             Sources = [.. Action().Sources, Source(TextId, "https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm", BillTextBody)]
         };

@@ -15,6 +15,7 @@ public sealed class ActionTextMeasureTests
     private static readonly CongressBillListItem Bill = new(119, "hr", 1, default);
     private static readonly CongressBillListItem OtherBill = new(119, "s", 2, default);
     private static readonly ActionDraftSettings On = new(10_000_000, concurrency: 1, draftsFromBillText: true);
+    private static readonly ActionDraftSettings KeyTermsOn = new(10_000_000, concurrency: 1, draftsFromBillText: true, keyTermGlossary: ["Amendment"]);
 
     [Fact]
     public async Task TheReportHoldsEachSentenceWithItsQuoteTheCharacterCountsAndTheTokensOfTheCall()
@@ -43,6 +44,47 @@ public sealed class ActionTextMeasureTests
         Assert.Equal((ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, 1, 1000L),
             (report.PromptVersion, report.SchemaVersion, report.Totals.Accepted, report.Totals.Usage.Total));
         Assert.Equal(ActionDraftTask.TextPromptVersion, Assert.Single(model.Requests).PromptVersion);
+    }
+
+    [Fact]
+    public async Task WithKeyTermsOnTheReportHoldsTheHeadingOfTheDefinitionsSectionEachAcceptedTermWithItsDefinitionAndTheTotals()
+    {
+        var terms = new[] { ("Secretary", BillBodyQuote(SecretaryDefinition)), ("eligible tenant", BillBodyQuote(TenantDefinition)), ("amendment", BillBodyQuote(AmendmentDefinition)) };
+
+        var (report, _, model) = await MeasureAsync(Cap, new FakeHeadlineSummaryModel().Draft(Output(keyTerms: terms)), text: Of(BodyWithDefinitions), settings: KeyTermsOn);
+
+        var bill = Assert.Single(report.Bills);
+        Assert.True(report.KeyTermsOn);
+        Assert.Equal("SEC. 2. DEFINITIONS.", bill.DefinitionsHeading);
+        Assert.Equal([("Secretary", SecretaryDefinition), ("eligible tenant", TenantDefinition)], bill.KeyTerms.Select(term => (term.Term, term.Definition)));
+        Assert.Equal((1, 1, 2), (report.Totals.BillsWithDefinitions, report.Totals.BillsWithKeyTerms, report.Totals.KeyTerms));
+        Assert.Contains("keyTerms", Assert.Single(model.Requests).SchemaJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WithKeyTermsOnABillWithNoDefinitionsSectionReportsNoHeadingAndNoTermsAndSendsNoKeyTermRequest()
+    {
+        var (report, _, model) = await MeasureAsync(Cap, new FakeHeadlineSummaryModel().Draft(Output()), settings: KeyTermsOn);
+
+        var bill = Assert.Single(report.Bills);
+        Assert.Null(bill.DefinitionsHeading);
+        Assert.Empty(bill.KeyTerms);
+        Assert.Equal((0, 0, 0), (report.Totals.BillsWithDefinitions, report.Totals.BillsWithKeyTerms, report.Totals.KeyTerms));
+        Assert.DoesNotContain("keyTerms", Assert.Single(model.Requests).SchemaJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WithKeyTermsOffTheReportSaysSoAndHoldsNoTermsEvenForABillWithADefinitionsSection()
+    {
+        var terms = new[] { ("Secretary", BillBodyQuote(SecretaryDefinition)) };
+
+        var (report, _, _) = await MeasureAsync(Cap, new FakeHeadlineSummaryModel().Draft(Output(keyTerms: terms)), text: Of(BodyWithDefinitions));
+
+        var bill = Assert.Single(report.Bills);
+        Assert.False(report.KeyTermsOn);
+        Assert.Null(bill.DefinitionsHeading);
+        Assert.Empty(bill.KeyTerms);
+        Assert.Equal((0, 0, 0), (report.Totals.BillsWithDefinitions, report.Totals.BillsWithKeyTerms, report.Totals.KeyTerms));
     }
 
     [Fact]
@@ -320,11 +362,12 @@ public sealed class ActionTextMeasureTests
     }
 
     private static async Task<(ActionTextMeasureReport Report, FakeActionDraftStore Store, FakeHeadlineSummaryModel Model)> MeasureAsync(long cap,
-        FakeHeadlineSummaryModel model, bool withText = true, CongressBillListItem[]? bills = null, ActionDraftBillText? text = null)
+        FakeHeadlineSummaryModel model, bool withText = true, CongressBillListItem[]? bills = null, ActionDraftBillText? text = null,
+        ActionDraftSettings? settings = null)
     {
         var world = ActionBillWorld.Create(summaries: []);
         var evidence = world.Evidence() with { BillText = withText ? text ?? Of() : null };
-        var (store, step) = Parts(world, model, evidence);
+        var (store, step) = Parts(world, model, evidence, settings);
         return (await new ActionTextMeasure(store, step).RunAsync(bills ?? [Bill], cap, default), store, model);
     }
 
@@ -336,9 +379,11 @@ public sealed class ActionTextMeasureTests
     }
 
     private static (FakeActionDraftStore Store, ActionDraftStep Step) Parts(ActionBillWorld world, FakeHeadlineSummaryModel model,
-        ActionDraftEvidence? evidence = null)
+        ActionDraftEvidence? evidence = null, ActionDraftSettings? settings = null)
     {
         var store = new FakeActionDraftStore(evidence ?? world.Evidence() with { BillText = Of() });
-        return (store, new ActionDraftStep(store, world.Reader(), model, On, BillGateFixtures.Revision()));
+        return (store, new ActionDraftStep(store, world.Reader(), model, settings ?? On, BillGateFixtures.Revision()));
     }
+
+    private static string BillBodyQuote(string storedDefinition) => BillTextQuotes.Normalize(storedDefinition);
 }
