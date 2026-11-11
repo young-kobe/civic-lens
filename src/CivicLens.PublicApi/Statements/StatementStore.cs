@@ -25,9 +25,16 @@ public sealed class StatementStore(NpgsqlDataSource views)
           LEFT JOIN public_api.statement_sources src ON src.record_id = s.record_id AND src.revision_number = s.revision_number
         """;
 
-    public async Task<(int? Release, StatementDetail? Detail)> FindAsync(string recordId, CancellationToken cancellationToken)
+    public Task<(int? Release, StatementDetail? Detail)> FindAsync(string recordId, CancellationToken cancellationToken) =>
+        ReadDetailAsync(views.CreateCommand(DetailSql), recordId, cancellationToken);
+
+    /// <summary>Reads the detail inside the transaction of the caller, so that it shares a snapshot with the other reads of that transaction.</summary>
+    public Task<(int? Release, StatementDetail? Detail)> FindAsync(NpgsqlTransaction transaction, string recordId, CancellationToken cancellationToken) =>
+        ReadDetailAsync(new NpgsqlCommand(DetailSql, transaction.Connection, transaction), recordId, cancellationToken);
+
+    private static async Task<(int? Release, StatementDetail? Detail)> ReadDetailAsync(NpgsqlCommand command, string recordId, CancellationToken cancellationToken)
     {
-        await using var command = views.CreateCommand(DetailSql);
+        await using var _ = command;
         command.Parameters.AddWithValue("id", recordId);
         command.Parameters.AddWithValue("quotation_limit", PublishedStatement.MaximumQuotations + 1);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);

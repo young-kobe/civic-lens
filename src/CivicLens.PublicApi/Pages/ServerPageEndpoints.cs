@@ -13,7 +13,7 @@ public static class ServerPageEndpoints
     /// <summary>The path prefix of the server pages. No live route uses it, so the static pages stay the production path until a route moves.</summary>
     public const string Prefix = "/web";
 
-    /// <summary>Maps the gated home and Compare previews and the not found page under the server-page prefix.</summary>
+    /// <summary>Maps the gated home, Compare, and record previews and the not found page under the server-page prefix.</summary>
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         routes.MapGet(Prefix, (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
@@ -33,6 +33,7 @@ public static class ServerPageEndpoints
                     [nameof(ComparePage.RootPath)] = baseUrl.Join(string.Empty),
                     [nameof(ComparePage.BrowserApiUrl)] = home.BrowserApiRoot
                 }, cancellationToken)));
+        routes.MapRecordPages(baseUrl);
         routes.MapGet(Prefix + "/{**path}", (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
             responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,
                 new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken));

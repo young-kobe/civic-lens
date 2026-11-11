@@ -1,0 +1,105 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Evidence
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSection.AllRecords" Title="@Data.Headline" Description="@Data.Summary" CanonicalPath="@PublicationProtocol.RecordPagePath(Data.RecordId)" IsArticle="true" RootPath="@RootPath" Record="record">
+    <article class="detail">
+        <header class="detail-head">
+            <p class="detail-eyebrow">@DocumentChangeWords.Eyebrow(Data)</p>
+            <h1 class="detail-headline">@Data.Headline</h1>
+            <p class="detail-lede">@DocumentChangeWords.Lede(Data)</p>
+        </header>
+        <div class="detail-stack">
+            <section class="detail-card" aria-labelledby="change-when-title">
+                <h2 id="change-when-title">@DocumentChangeWords.WhenHeading</h2>
+                <p>@DocumentChangeWords.When(Data)</p>
+            </section>
+            <section class="detail-section" aria-labelledby="change-what-title">
+                <h2 id="change-what-title">@DocumentChangeWords.ChangedHeading</h2>
+                <p class="muted">@DocumentChangeWords.ChangedNote</p>
+                @for (var index = 0; index < Math.Min(Data.Changes.Length, DocumentChangeWords.ShownChanges); index++)
+                {
+                    <article class="detail-card detail-passage" aria-label="@DocumentChangeWords.PassageLabel(index, Data.Changes.Length)">
+                        <h3>@DocumentChangeWords.PassageLabel(index, Data.Changes.Length)</h3>
+                        <p class="redline"><RedlineText Segments="DocumentChangeRedline.Build(Data.Changes[index], Data.Before.Text, Data.After.Text)" /></p>
+                    </article>
+                }
+                @if (Data.Changes.Length > DocumentChangeWords.ShownChanges)
+                {
+                    <p class="small muted">@DocumentChangeWords.ShownNote(Data.Changes.Length)</p>
+                }
+            </section>
+            <section class="detail-section" aria-labelledby="change-versions-title">
+                <h2 id="change-versions-title">@DocumentChangeWords.VersionsHeading</h2>
+                <div class="detail-versions">
+                    <div class="detail-card">
+                        <h3>Earlier version</h3>
+                        <p class="small muted">@DocumentChangeWords.SavedLine(Data.Before)</p>
+                        <p class="small"><a href="#@DocumentChangeWords.EarlierAnchor">Open the saved earlier text</a></p>
+                    </div>
+                    <div class="detail-card">
+                        <h3>Later version</h3>
+                        <p class="small muted">@DocumentChangeWords.SavedLine(Data.After)</p>
+                        <p class="small"><a href="#@DocumentChangeWords.LaterAnchor">Open the saved later text</a></p>
+                    </div>
+                </div>
+            </section>
+            <DetailSummary Label="@DocumentChangeWords.Label(Data)">
+                <Paragraphs>
+                    <p>@Data.Summary</p>
+                    @if (Data.Significance is { Length: > 0 } significance)
+                    {
+                        <h3>@DocumentChangeWords.WhyItMatters</h3>
+                        <p>@significance</p>
+                    }
+                    @if (Data.Limits is { Length: > 0 } limits)
+                    {
+                        <h3>@DocumentChangeWords.EvidenceLimits</h3>
+                        <p>@limits</p>
+                    }
+                </Paragraphs>
+                <Check>@DocumentChangeWords.Check(Data.TextOrigin) <a href="#source">@DetailWords.CheckSource</a></Check>
+            </DetailSummary>
+        </div>
+        <DetailSourceFold>
+            <Facts Items="DocumentChangeWords.Facts(Data, RootPath)" />
+            <h3>Citations</h3>
+            <p class="muted small">Each quote is the exact text of the source version. Follow its link to see it marked in the full version.</p>
+            <ul class="choices">
+                @for (var index = 0; index < Data.Citations.Length; index++)
+                {
+                    var position = index; // The child content runs after the loop moves on, so it reads a copy.
+                    var citation = Data.Citations[position];
+                    var version = DocumentChangeWords.VersionName(Data, citation);
+                    <li>
+                        <CitationQuote Label="@version" Quote="@citation.Quote">
+                            <ContextLink Href="@("#" + DocumentChangeWords.CitationAnchor(position))" Text="@ContextLink.FullVersionText" Target="@($"{version.ToLowerInvariant()}, quote {position + 1}")" />
+                        </CitationQuote>
+                    </li>
+                }
+                @if (Data.ChangeDateEvidence is { } evidence)
+                {
+                    <DateEvidenceLine Label="@($"Evidence for the actual change date, {DocumentChangeWords.VersionName(Data, evidence).ToLowerInvariant()}")" Quote="@evidence.Quote">
+                        <ContextLink Href="@("#" + DocumentChangeWords.ChangeDateAnchor)" Text="@ContextLink.FullVersionText" Target="actual change date, quote" />
+                    </DateEvidenceLine>
+                }
+            </ul>
+            <h3 id="@DocumentChangeWords.EarlierAnchor">Earlier version</h3>
+            <p class="muted small">@DocumentChangeWords.SavedLine(Data.Before). Source: <a href="@Data.Before.Url" rel="noopener noreferrer nofollow">@Data.Before.Url</a></p>
+            <DocumentText Label="Earlier version text" Runs="CitedText.Split(Data.Before.Text, DocumentChangeWords.RangesIn(Data, Data.Before))" />
+            <h3 id="@DocumentChangeWords.LaterAnchor">Later version</h3>
+            <p class="muted small">@DocumentChangeWords.SavedLine(Data.After). Source: <a href="@Data.After.Url" rel="noopener noreferrer nofollow">@Data.After.Url</a></p>
+            <DocumentText Label="Later version text" Runs="CitedText.Split(Data.After.Text, DocumentChangeWords.RangesIn(Data, Data.After))" />
+        </DetailSourceFold>
+    </article>
+</PublicPage>
+
+@code {
+    private ReportedRecord record = default!;
+
+    [Parameter, EditorRequired] public DocumentChangePageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    protected override void OnParametersSet() =>
+        record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.DocumentChange, Data.Headline);
+}

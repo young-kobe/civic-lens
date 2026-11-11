@@ -61,8 +61,11 @@ public static class PublicApiApp
         builder.Services.AddSingleton(provider => new BoardStore(views, provider.GetRequiredService<PartyAgreementStore>()));
         builder.Services.AddSingleton(new MemberVoteStore(views));
         builder.Services.AddSingleton(new BillStore(views));
+        builder.Services.AddSingleton(new RecordNames(views));
         builder.Services.AddSingleton(new StatementStore(views));
+        builder.Services.AddSingleton(provider => new StatementPageReader(provider.GetRequiredService<StatementStore>(), provider.GetRequiredService<RecordNames>()));
         builder.Services.AddSingleton(new DocumentChangeStore(views));
+        builder.Services.AddSingleton(provider => new DocumentChangePageReader(provider.GetRequiredService<DocumentChangeStore>(), provider.GetRequiredService<RecordNames>()));
         builder.Services.AddSingleton(new BriefStore(views));
         builder.Services.AddSingleton(new ZipDistrictStore(views));
         builder.Services.AddSingleton(new IssueStore(views));
@@ -71,6 +74,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new RelatedStore(views));
         builder.Services.AddSingleton(new WithdrawalStore(views));
         builder.Services.AddSingleton(new ExecutiveActionStore(views));
+        builder.Services.AddSingleton(provider => new ExecutiveActionPageReader(provider.GetRequiredService<ExecutiveActionStore>()));
         builder.Services.AddSingleton<PageRenderer>();
         if (options.PublicBaseUrl is { } baseUrl)
         {

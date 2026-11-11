@@ -9,10 +9,6 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedExecutiveActionView
 {
-    public const string Caveat =
-        "The headline is the official title from the Federal Register. Civic Lens did not summarize this document. " +
-        "Code checked each fact against the saved Federal Register record. No person reviewed it. The title alone does not show what the document does. Read the document in the Federal Register.";
-
     public static IReadOnlyList<Fact> Facts(PublishedExecutiveAction action) =>
     [
         new Fact("Type", PublishedRecordLabels.ExecutiveActionKind(action.Kind)) { TermKey = PublishedRecordLabels.ExecutiveActionTermKey(action.Kind) }
@@ -29,21 +25,14 @@ internal static class PublishedExecutiveActionView
         new("Revision", action.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];
 
-    private static string CorrectionText(PublishedExecutiveActionNotice notice) => string.Concat(CorrectionParts(notice).Select(part => part.Text));
+    private static string CorrectionText(PublishedExecutiveActionNotice notice) => string.Concat(ExecutiveActionWords.CorrectionParts(notice.PublishedOn).Select(part => part.Text));
 
-    public static string CorrectionTimelineText(PublishedExecutiveActionNotice notice) => CorrectionParts(notice)[0].Text.TrimEnd();
+    public static string CorrectionTimelineText(PublishedExecutiveActionNotice notice) => ExecutiveActionWords.CorrectionParts(notice.PublishedOn)[0].Text.TrimEnd();
 
     private static Fact CorrectionFact(PublishedExecutiveAction action, PublishedExecutiveActionNotice notice, int index) =>
-        new Fact("Correction notice", CorrectionText(notice), [.. CorrectionParts(notice).Select(part => new FactLink(part.Text, part.IsLink ? notice.Url : null))])
+        new Fact("Correction notice", CorrectionText(notice), [.. ExecutiveActionWords.CorrectionParts(notice.PublishedOn).Select(part => new FactLink(part.Text, part.IsLink ? notice.Url : null))])
         { Separator = "" }.CitedAt(AnchorOf(action, ExecutiveActionFacts.CorrectionNotice, notice.Value),
             PublishedRecordView.SourceLineTarget("Correction notice", index, action.CorrectionNotices.Length));
-
-    private static (string Text, bool IsLink)[] CorrectionParts(PublishedExecutiveActionNotice notice) =>
-    [
-        ($"The Federal Register published a correction on {Moment.Day(notice.PublishedOn)}. This page shows the original document. ", false),
-        ("Open the correction", true),
-        (" to see what changed.", false)
-    ];
 
     public static IReadOnlyList<CitedRange> RangesIn(PublishedExecutiveAction action, PublishedDocumentVersion source) =>
     [.. action.Citations().Select((citation, index) => (citation, anchor: PublishedRecordView.CitationAnchor(index)))
