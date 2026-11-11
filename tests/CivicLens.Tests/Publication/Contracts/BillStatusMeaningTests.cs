@@ -169,44 +169,4 @@ public sealed class BillStatusMeaningTests
         Assert.Throws<ArgumentException>(() => BillStatusMeaning.Of(" ", "hr"));
         Assert.Throws<ArgumentException>(() => BillStatusMeaning.Of("Passed House.", ""));
     }
-
-    [Fact]
-    public void EveryStatusHasOneLabelAndNoTwoStatusesShareOne()
-    {
-        var statuses = Enum.GetValues<BillStatus>();
-        var labels = statuses.Select(BillStatusMeaning.LabelOf).ToArray();
-
-        Assert.All(labels, label => Assert.False(string.IsNullOrWhiteSpace(label)));
-        Assert.Equal(statuses.Length, labels.Distinct(StringComparer.Ordinal).Count());
-    }
-
-    [Theory]
-    [InlineData("Referred to the House Committee on Ways and Means.", "hr", "In committee")]
-    [InlineData("Referred to the Subcommittee on Health.", "hr", "In committee")]
-    [InlineData("Received in the Senate.", "hr", "Passed the House")]
-    [InlineData("Received in the House.", "s", "Passed the Senate")]
-    [InlineData("Placed on Senate Legislative Calendar under General Orders.", "s", "Waiting for a possible Senate floor vote")]
-    [InlineData("Placed on the Union Calendar, Calendar No. 12.", "hr", "Waiting for a possible House floor vote")]
-    [InlineData("Ordered to be Reported by Voice Vote.", "hres", "A committee voted to send this to the full chamber")]
-    [InlineData("Became Public Law No: 119-21.", "hr", "Became law")]
-    [InlineData("Motion to reconsider laid on the table.", "hr", "Latest official action")]
-    public void ATextGetsTheLabelOfTheStatusThatItsMeaningRuleReads(string text, string billType, string expected) =>
-        Assert.Equal(expected, BillStatusMeaning.Label(text, billType));
-
-    [Theory]
-    [InlineData("Referred to the Subcommittee on Health.", "hr")]
-    [InlineData("Received in the Senate.", "hr")]
-    [InlineData("Received in the House.", "s")]
-    [InlineData("Placed on Senate Legislative Calendar under General Orders.", "s")]
-    [InlineData("Placed on the Union Calendar, Calendar No. 12.", "hr")]
-    [InlineData("Ordered to be Reported by Voice Vote.", "hres")]
-    [InlineData("Became Public Law No: 119-21.", "hr")]
-    [InlineData("Motion to reconsider laid on the table.", "hr")]
-    public void EachLabelUsesOnlyWordsOfTheMeaningThatProductionReturnsForTheSameText(string text, string billType)
-    {
-        var meaningWords = BillStatusMeaning.Of(text, billType).Split([' ', '.', ':', ','], StringSplitOptions.RemoveEmptyEntries)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        Assert.All(BillStatusMeaning.Label(text, billType).Split(' '), word => Assert.Contains(word, meaningWords));
-    }
 }

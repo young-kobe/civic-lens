@@ -4,13 +4,11 @@
     {
         <p>@Text</p>
     }
-    @ChildContent
     @Action
 </div>
 
 @code {
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
     [Parameter] public string? Text { get; set; }
-    [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public RenderFragment? Action { get; set; }
 }
