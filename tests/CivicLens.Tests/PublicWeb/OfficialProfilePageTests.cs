@@ -182,7 +182,7 @@ public sealed class OfficialProfilePageTests
         var empty = new OfficialPageData(7, "p9", "Fay Fox", null, null, null, null, null, null, null, null);
         var page = await RenderAsync<OfficialProfilePage>(empty);
 
-        Assert.Contains(OfficialPageText.NoPageRecords, page.QuerySelector(".official-page")!.TextContent);
+        Assert.Contains(OfficialPageText.NothingToShow, page.QuerySelector(".official-page")!.TextContent);
         Assert.Empty(page.QuerySelectorAll(".official-section"));
         Assert.Null(page.QuerySelector(".official-figs"));
     }

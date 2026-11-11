@@ -12,7 +12,7 @@ public static class OfficialPageText
 
     public const string StatementsHeading = "What they said and how they voted";
 
-    public const string NoPageRecords = "No votes, bills or statements are published for this official yet.";
+    public const string NothingToShow = "This page has no votes, bills or linked statements to show yet.";
 
     public const string ExecutiveBoxTitle = "What these documents are";
 
