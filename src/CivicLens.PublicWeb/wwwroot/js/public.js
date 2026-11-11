@@ -914,6 +914,21 @@
         commit(null);
     };
 
+    // A link to a line inside a closed fold, such as a member row Source link, does nothing without this. Without script the anchor still reaches the page.
+    const hashTarget = () => {
+        try { return document.getElementById(decodeURIComponent(location.hash.slice(1))); }
+        catch { return null; }
+    };
+    const openFoldOfHash = () => {
+        const closed = [];
+        for (let fold = hashTarget()?.closest("details"); fold; fold = fold.parentElement?.closest("details")) if (!fold.open) closed.push(fold);
+        if (closed.length === 0) return;
+        closed.forEach(fold => { fold.open = true; });
+        hashTarget().scrollIntoView();
+    };
+    window.addEventListener("hashchange", openFoldOfHash);
+    openFoldOfHash();
+
     document.querySelectorAll("table[data-paged]").forEach(initPaged);
     document.querySelectorAll("[data-records]").forEach(initRecordFilters);
     document.querySelectorAll("[data-officials-filters]").forEach(initOfficialsFilter);
