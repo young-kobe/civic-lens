@@ -339,6 +339,14 @@ executive_action_notices position
 executive_action_notices document_number
 executive_action_notices published_on
 executive_action_notices notice_url
+executive_action_targets record_id
+executive_action_targets revision_number
+executive_action_targets position
+executive_action_targets relation
+executive_action_targets kind
+executive_action_targets number
+executive_action_targets reference
+executive_action_targets target_record_id
 officials release_number
 officials official_id
 officials name

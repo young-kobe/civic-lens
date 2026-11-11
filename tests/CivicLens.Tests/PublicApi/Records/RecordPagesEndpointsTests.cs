@@ -166,6 +166,28 @@ public sealed class RecordPagesEndpointsTests(PostgresCollection postgres)
         Assert.DoesNotContain("bioguide", detail.RootElement.GetRawText(), StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task AnExecutiveActionListsItsTypedTargetsWithARecordIdOnlyForAnExactMatchInTheActiveRelease()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 3, 0, 0, 0, TimeSpan.Zero));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + ExecutiveActionTargetRows.Seed());
+
+        using var detail = await GetAsync(host, $"/v1/executive-actions/{ExecutiveActionTargetRows.Source}");
+        using var plain = await GetAsync(host, $"/v1/executive-actions/{ExecutiveActionTargetRows.LinkedOrder}");
+
+        Assert.Equal([
+            $"0|amends|executiveOrder|14100|EO 14100, January 3, 2025|{ExecutiveActionTargetRows.LinkedOrder}",
+            "1|amends|executiveOrder|14101|EO 14101|none",
+            "2|amends|executiveOrder|14102|EO 14102|none",
+            $"3|revokes|proclamation|10001|Proc. 10001|{ExecutiveActionTargetRows.LinkedProclamation}",
+            "4|revokes|executiveOrder|14000|EO 14000|none"
+        ], detail.RootElement.GetProperty("targets").EnumerateArray().Select(target =>
+            $"{target.GetProperty("position").GetInt32()}|{target.GetProperty("relation").GetString()}|{target.GetProperty("kind").GetString()}|{target.GetProperty("number").GetString()}|" +
+            $"{target.GetProperty("reference").GetString()}|{(target.GetProperty("targetRecordId").ValueKind == JsonValueKind.Null ? "none" : target.GetProperty("targetRecordId").GetString())}"));
+        Assert.Empty(plain.RootElement.GetProperty("targets").EnumerateArray());
+    }
+
     private static string[] Describe(JsonDocument page) => [.. page.RootElement.GetProperty("related").EnumerateArray().Select(link =>
         $"{link.GetProperty("headline").GetString()}|{link.GetProperty("kind").GetString()}|{link.GetProperty("linkType").GetString()}|" +
         (link.GetProperty("statementDate").ValueKind == JsonValueKind.Null ? "none" : link.GetProperty("statementDate").GetString()) +
