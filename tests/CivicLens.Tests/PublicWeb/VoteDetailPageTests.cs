@@ -159,6 +159,26 @@ public sealed class VoteDetailPageTests
     }
 
     [Fact]
+    public async Task TheMemberTableShowsEachCastThroughTheSharedCastBadgeWithItsSide()
+    {
+        var vote = Vote();
+        vote = vote with { Members = [.. vote.Members, new("o7", "Gus Gray", "Present", null, Cite(Lines[4]))] };
+
+        var page = await RenderAsync(vote);
+
+        var rows = page.QuerySelectorAll(".vote-members tbody tr");
+        Assert.Equal(vote.Members.Length, rows.Length);
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var badge = rows[i].QuerySelector(".shared-vote-cast-value")!;
+            var side = PublishedOfficialVote.SideOf(vote.Members[i].Cast)?.ToLowerInvariant();
+            Assert.Equal(vote.Members[i].Name, rows[i].QuerySelector("td:first-child")!.TextContent);
+            Assert.Equal(side, badge.GetAttribute("data-side"));
+        }
+        Assert.Null(rows[^1].QuerySelector(".shared-vote-cast-value")!.GetAttribute("data-side"));
+    }
+
+    [Fact]
     public async Task EachMemberRowLinksToItsMarkedLineInTheSourceFoldThatPublicJsOpens()
     {
         var page = await RenderAsync(Vote());
