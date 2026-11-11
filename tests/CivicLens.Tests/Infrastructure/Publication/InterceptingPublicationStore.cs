@@ -111,6 +111,10 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
         Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
         inner.ReadCorrectionHistoryVerificationPageAsync(after, limit, readServedDirectory, cancellationToken);
 
+    public Task<IReadOnlyList<PublicationReleaseSummary>> ReadRetainedReleaseSelectionAsync(
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.ReadRetainedReleaseSelectionAsync(readServedDirectory, cancellationToken);
+
     public Task<string> ReadRetainedReleaseFingerprintAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
         CancellationToken cancellationToken) => inner.ReadRetainedReleaseFingerprintAsync(readServedDirectory, cancellationToken);
 

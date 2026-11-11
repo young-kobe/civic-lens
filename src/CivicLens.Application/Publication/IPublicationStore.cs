@@ -72,6 +72,9 @@ public interface IPublicationStore
     Task<CorrectionHistoryVerificationPage> ReadCorrectionHistoryVerificationPageAsync(CorrectionHistoryVerificationCursor? after, int limit,
         Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<PublicationReleaseSummary>> ReadRetainedReleaseSelectionAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken);
+
     Task<string> ReadRetainedReleaseFingerprintAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
         CancellationToken cancellationToken);
 
