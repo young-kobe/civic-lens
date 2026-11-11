@@ -5730,6 +5730,93 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseBillCountRow", b =>
+                {
+                    b.Property<int>("ReleaseNumber").HasColumnType("integer").HasColumnName("release_number");
+                    b.Property<int>("Congress").HasColumnType("integer").HasColumnName("congress");
+                    b.Property<int>("Bills").HasColumnType("integer").HasColumnName("bills");
+                    b.Property<int>("ExpectedMemberRowCount").HasColumnType("integer").HasColumnName("expected_member_row_count");
+                    b.HasKey("ReleaseNumber", "Congress");
+                    b.ToTable("release_bill_counts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_release_bill_counts_bills", "bills >= 0");
+                            t.HasCheckConstraint("ck_release_bill_counts_congress", "congress > 0");
+                            t.HasCheckConstraint("ck_release_bill_counts_expected_member_row_count", "expected_member_row_count >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialBillCountRow", b =>
+                {
+                    b.Property<int>("ReleaseNumber").HasColumnType("integer").HasColumnName("release_number");
+                    b.Property<int>("Congress").HasColumnType("integer").HasColumnName("congress");
+                    b.Property<string>("OfficialId").IsRequired().HasMaxLength(256).HasColumnType("character varying(256)").HasColumnName("official_id");
+                    b.Property<int>("Sponsored").HasColumnType("integer").HasColumnName("sponsored");
+                    b.Property<int>("Cosponsored").HasColumnType("integer").HasColumnName("cosponsored");
+                    b.HasKey("ReleaseNumber", "Congress", "OfficialId");
+                    b.HasIndex("ReleaseNumber", "OfficialId").HasDatabaseName("ix_release_official_bill_counts_release_official");
+                    b.ToTable("release_official_bill_counts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_release_official_bill_counts_congress", "congress > 0");
+                            t.HasCheckConstraint("ck_release_official_bill_counts_cosponsored", "cosponsored >= 0");
+                            t.HasCheckConstraint("ck_release_official_bill_counts_nonzero", "sponsored + cosponsored > 0");
+                            t.HasCheckConstraint("ck_release_official_bill_counts_official_id", "length(btrim(official_id)) > 0");
+                            t.HasCheckConstraint("ck_release_official_bill_counts_sponsored", "sponsored >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssuePartyCountRow", b =>
+                {
+                    b.Property<int>("ReleaseNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("release_number");
+
+                    b.Property<string>("IssueId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("issue_id");
+
+                    b.Property<string>("Party")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("party");
+
+                    b.Property<int>("Bills")
+                        .HasColumnType("integer")
+                        .HasColumnName("bills");
+
+                    b.HasKey("ReleaseNumber", "IssueId", "Party");
+
+                    b.ToTable("release_issue_party_counts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_release_issue_party_counts_bills", "bills > 0");
+
+                            t.HasCheckConstraint("ck_release_issue_party_counts_party", "length(btrim(party)) > 0");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssuePartyLineupRow", b =>
+                {
+                    b.Property<int>("ReleaseNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("release_number");
+
+                    b.Property<string>("IssueId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("issue_id");
+
+                    b.Property<int>("UnknownBills")
+                        .HasColumnType("integer")
+                        .HasColumnName("unknown_bills");
+
+                    b.HasKey("ReleaseNumber", "IssueId");
+
+                    b.ToTable("release_issue_party_lineups", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_release_issue_party_lineups_unknown_bills", "unknown_bills >= 0");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssueRow", b =>
                 {
                     b.Property<int>("ReleaseNumber")
@@ -10428,6 +10515,26 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("ReleaseNumber", "IssueId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssuePartyCountRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssuePartyLineupRow", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseNumber", "IssueId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_release_issue_party_counts_lineup");
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssuePartyLineupRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssueRow", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseNumber", "IssueId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_release_issue_party_lineups_issue");
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssueRow", b =>

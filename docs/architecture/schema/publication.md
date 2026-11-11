@@ -235,6 +235,21 @@ END
 - check ck_release_issue_includes_text: length(btrim(text)) > 0
 - unique AK_release_issue_includes_release_number_issue_id_text (release_number, issue_id, text)
 
+## release_issue_party_counts
+
+- pk (release_number, issue_id, party)
+- fk (release_number, issue_id) -> release_issue_party_lineups (release_number, issue_id) on delete restrict
+- cols release_number integer, issue_id varchar(256), party varchar(256), bills integer
+- check ck_release_issue_party_counts_bills: bills > 0
+- check ck_release_issue_party_counts_party: length(btrim(party)) > 0
+
+## release_issue_party_lineups
+
+- pk (release_number, issue_id)
+- fk (release_number, issue_id) -> release_issues (release_number, issue_id) on delete restrict
+- cols release_number integer, issue_id varchar(256), unknown_bills integer
+- check ck_release_issue_party_lineups_unknown_bills: unknown_bills >= 0
+
 ## release_issues
 
 - pk (release_number, issue_id)
