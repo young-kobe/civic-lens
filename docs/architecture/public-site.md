@@ -16,7 +16,7 @@ Every page and component must pass seven owner tests:
 
 This page holds the design rules and the plan for the reader flows. [Publication](publication.md) owns the release data, the page text rules, and the `public_api` views. [Host](host.md) owns the component library rules. The [roadmap](../roadmap.md#active-r-68-redesign) step R-68 owns the order of the work.
 
-Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 palette, type foundation, focus colors, and reduced-motion behavior are implemented. The `/web` home and `/web/compare` routes are gated PublicApi server-rendered previews. The home shows the published featured vote, recent votes, optional brief, configured issue counts, executive action groups, and chamber freshness. Its available-data bento is implemented; map, party bars, and break board remain planned. The existing static home remains live. The public `/compare.html` route now serves the server-rendered Compare page. Each row below says what is implemented and what is planned.
+Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 palette, type foundation, focus colors, and reduced-motion behavior are implemented. The `/web` home, `/web/compare`, and `/web/issues/{issueId}` routes are gated PublicApi server-rendered previews. The home shows the published featured vote, recent votes, optional brief, configured issue counts, executive action groups, and chamber freshness. Its available-data bento is implemented; map, party bars, and break board remain planned. The existing static home remains live. The public `/compare.html` route now serves the server-rendered Compare page. Each row below says what is implemented and what is planned.
 
 ## Decisions
 
@@ -144,12 +144,12 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 |---|---|---|---|
 | 1 | Find my members and what they did | Home ZIP form, member cards after a ZIP | Partial. Gated SSR home includes the existing ZIP flow when its browser API origin is configured. The answer scrolls into view and receives focus. Cards show portraits, seats, parties, term ends, scoped attendance, and party-line counts from private HTML fragments. Congress-scoped sponsored-bill and issue figures are shown, with shared vote rows and complete binary comparison badges |
 | 2 | See my member on an issue, from the member | Official page, issue chips, vote strip | Partial. Planned: strip marks link to the votes (DR2) |
-| 3 | See my member on an issue, from the issue | Issue page, "your members" section | Planned: each issue vote shows my members' casts |
+| 3 | See my member on an issue, from the issue | Issue page, "your members" section | Implemented on the gated `/web/issues/{issueId}` page. A private fragment shows the casts of the reader's members on the recent votes of the issue, up to 10 for each chamber. Planned: shared single-member vote rows and party bars |
 | 4 | Understand one vote | Vote page: AI summary, result card, "what a Yes meant", party bars, source fold | Partial. Planned: answer first, one fold (DR3) |
 | 5 | Understand one bill | Bill page: status stepper, AI summary, "who backed it", votes on the bill | Partial. Planned: stepper and party split of cosponsors |
 | 6 | Read one executive action | Executive action page, document links | Partial. Planned: body text and an AI "what it states" |
 | 7 | See what the President did | President page with per-type sections | Planned: count row becomes jump links |
-| 8 | Follow an issue | Issue page: figures, votes, bills, party line-up | Partial. The API sends the party line-up. Planned: one count line and the line-up on the page |
+| 8 | Follow an issue | Issue page: figures, votes, bills, party line-up | Implemented on the gated issue page: one count line, the newest 10 substantive votes, the newest 5 bills, and the party line-up as plain text. Planned: the shared party bar |
 | 9 | Compare parties | Party boards, per-kind list pages | Partial. Planned: boards link from the nav, list pages (DR6) |
 | 10 | Check a source | "Check the source" fold with an official link first | Partial. Planned: plain labels, raw text one click further (DR3) |
 | 11 | Search a name or a bill | Header search on every page, results page | Partial. Planned: official first, bill number pin, filters after results |
@@ -197,7 +197,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Executive action page | Executive action, President | What does this document do? | `executive_actions`, `executive_action_notices`, `executive_action_links` | Planned: route and UI; action and notice data are served, links remain pending |
 | Statement page, quotations | Statement | What exactly was said? | `statements`, `statement_speakers`, `statement_quotations` | The API serves statement details with bounded source text, checked quotations, and citations. The reader page remains planned |
 | Document change page | Document change | What changed on this page? | `document_changes` and its source, region, edit, citation and official views | Partial. The detail API serves published sources and ordered changes. The API labels model text with the shared approved wording; person text has no AI label. Reader page remains planned |
-| Issue page | Issue | What is there on this issue? | `release_issues`, `issue_votes`, `issue_sponsors`, `release_issue_party_lineups` | Partial. Issue counts, sponsor data, and the party line-up are available through the API. Planned: page |
+| Issue page | Issue | What is there on this issue? | `release_issues`, `issue_votes`, `issue_sponsors`, `release_issue_party_lineups` | Implemented on the gated `/web/issues/{issueId}` route. The static issue page stays live. Planned: the includes and excludes panel, the split-vote count, and the party bar |
 | Party boards | Boards | Who breaks from their party most? | `official_party_lines`, `party_agreement`, `/v1/boards` | One API response serves all four boards and one agreement per chamber. Board pages remain planned |
 | List pages for votes, bills, executive actions, statements | Lists | Show me all of one kind | Per-kind views | Planned: R-68 list step |
 | Record row, status badge | All lists | What is this record? | Per-kind views | Implemented. Planned: event-named date, one bill number format |
@@ -221,6 +221,9 @@ Remaining planned view columns and views, in the order that R-68 builds them:
 
 - Votes: stored validated totals beside immutable member counts, and a second AI text column for "what this vote decides".
 - Bills: `bill_key_terms`. The cited CRS body and version are implemented.
+- The issue page reads one snapshot of the active release: the counts, the line-up, the newest substantive votes, and the newest bills. Its count line says that the counts cover the release. The vote list says that a roll call concerns its own question, not the whole issue. Enforcers: `IssueStore.FindPageAsync` and `IssuePage`. Tests: `PublicApi.Issues.IssuePageTests.ThePageListsOnlySubstantiveVotesOfTheIssueNewestFirstAndEscapesTheIssueName`, `PublicWeb.IssuePageTests.TheVoteSectionKeepsTheCaveatThatARollCallConcernsItsQuestionNotTheWholeIssue`.
+- The issue page hides the party section when `lineUp` is null or holds no bills, and shows the unknown count only above 0. Enforcer: `IssuePage`. Test: `PublicWeb.IssuePageTests.NoLineUpAndAnEmptyLineUpRenderNoPartySectionSoNoZeroShows`.
+- The issue page HTML holds no ZIP. An empty hidden slot holds the issue ID and the browser API origin. `initIssueMembers` fills it from the private `view=issue` fragment, which needs an issue. Enforcers: `IssuePage` and `ZipDistrictEndpoints.MembersAsync`. Tests: `PublicApi.Issues.IssuePageTests.TheSharedPageHoldsNoZipAndTheMembersSlotCarriesOnlyTheIssueAndTheApiOrigin`, `ZipMemberCardsEndpointsTests.IssueViewWithoutAnIssueIsRejectedBeforeLookup`. No committed browser test covers `initIssueMembers`.
 - Issues: the party line-up is stored per release and served as `lineUp`. It counts bills by sponsor party, in the Congress of the release day, and its base is the Home tile count. The page must name who and what each number counts, and the Congress, as the number rule requires. The page shows an unknown count when it is above 0. A null `lineUp` means that the release holds no snapshot, so the page hides the section and shows no zero.
 - Executive actions: `executive_action_links` and summary columns. Exact numbered orders and proclamations get typed targets; unsupported or ambiguous references stay cited notes.
 - Other kinds: `record_corrections`, bound to distinct immutable correction-history snapshots. Document-change detail and withdrawal notices have typed public read APIs; their reader pages remain planned.
@@ -236,12 +239,12 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 | Public page components, today | `src/CivicLens.Host/Publication` |
 | Static render of pages | `src/CivicLens.Host/Publication/ReleaseRenderer.cs` |
 | Public API and its views | `src/CivicLens.PublicApi` |
-| Gated SSR reader pages and inputs | `src/CivicLens.PublicWeb/Publication/HomePage.razor`, `ComparePage.razor`, `ZipLookupForm.razor`, `ZipLookupResults.razor`, `HomePageData.cs`, `src/CivicLens.PublicApi/Home/HomePageReader.cs`, `src/CivicLens.PublicApi/Pages/ServerPageEndpoints.cs` |
+| Gated SSR reader pages and inputs | `src/CivicLens.PublicWeb/Publication/HomePage.razor`, `ComparePage.razor`, `IssuePage.razor`, `IssueMemberVotes.razor`, `ZipLookupForm.razor`, `ZipLookupResults.razor`, `HomePageData.cs`, `src/CivicLens.PublicApi/Home/HomePageReader.cs`, `src/CivicLens.PublicApi/Issues/IssuePageReader.cs`, `src/CivicLens.PublicApi/Pages/ServerPageEndpoints.cs` |
 | Shared member layout | `src/CivicLens.PublicWeb/Publication/ZipMemberCards.razor`, `ZipMemberCard.razor`, `ZipMemberIssueFilter.razor`, `SharedVoteRows.razor` |
 | Style files | `src/CivicLens.PublicWeb/wwwroot/css/theme.css`, `src/CivicLens.PublicWeb/wwwroot/css/app.css`, `src/CivicLens.PublicWeb/wwwroot/css/public.css` |
 | Presentation rules test | `tests/CivicLens.Tests/Architecture/PresentationArchitectureTests.cs` |
 
-`PublicApi` renders the gated `/web` home and `/web/compare` routes and the not-found shell under `/web`. Other successful reader routes still use static pages. Shared presentation components use `CivicLens.PublicWeb`, which references `Publication.Contracts` only.
+`PublicApi` renders the gated `/web` home, `/web/compare`, and `/web/issues/{issueId}` routes and the not-found shell under `/web`. Other successful reader routes still use static pages. Shared presentation components use `CivicLens.PublicWeb`, which references `Publication.Contracts` only.
 
 ## Limits and planned work
 

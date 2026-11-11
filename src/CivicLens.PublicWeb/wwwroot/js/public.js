@@ -291,11 +291,13 @@
             || fragment.dataset.sinceRelease !== (sinceRelease === null ? "" : String(sinceRelease))
             || (hasSince !== hasCount)
             || (hasCount && (typeof count !== "string" || count.length > 19 || !/^(0|[1-9][0-9]*)$/.test(count) || BigInt(count) > 9223372036854775807n))
-            || expectedView !== "strip" && (stripTemplates.length !== 1 || stripTemplateContent.childElementCount !== 1
+            || expectedView !== "strip" && expectedView !== "issue" && (stripTemplates.length !== 1 || stripTemplateContent.childElementCount !== 1
                 || !stripTemplateContent.firstElementChild.matches("div[data-member-strip-content]"))
             || (expectedView === "strip"
                 ? fragment.childElementCount !== 1 || !fragment.firstElementChild.matches("div[data-member-strip-content]")
-                : !fragment.querySelector(".zip-member-cards > li")))
+                : expectedView === "issue"
+                    ? !fragment.querySelector(".shared-vote-rows, [data-member-votes-empty]")
+                    : !fragment.querySelector(".zip-member-cards > li")))
             throw new TypeError("Invalid ZIP lookup answer.");
         return fragment;
     };
@@ -553,6 +555,54 @@
                 slot.replaceChildren(fragment.firstElementChild.cloneNode(true));
             } catch {
                 if (mine === request) showError(zip, 0);
+            } finally {
+                if (mine === request) { slot.removeAttribute("aria-busy"); active = null; }
+            }
+        };
+        remembered.onForget(clear);
+        remembered.onChange(zip => { if (zip === null) clear(); else { slot.replaceChildren(); run(zip); } });
+        const initial = remembered.zip();
+        if (initial !== null) run(initial);
+    };
+
+    const initIssueMembers = (remembered, slot) => {
+        const api = slot.dataset.membersApi;
+        const issue = slot.dataset.issueMembers;
+        const prompt = document.querySelector("[data-issue-members-prompt]");
+        if (!api || !issue) return;
+        let request = 0;
+        let active = null;
+        const message = text => {
+            const note = document.createElement("p");
+            note.textContent = text;
+            return note;
+        };
+        const clear = () => {
+            request++;
+            active?.abort();
+            active = null;
+            slot.hidden = true;
+            slot.removeAttribute("aria-busy");
+            slot.replaceChildren();
+            if (prompt) prompt.hidden = false;
+        };
+        const run = async zip => {
+            if (zip !== remembered.zip()) return;
+            if (!validZip(zip)) { clear(); return; }
+            const mine = ++request;
+            active?.abort();
+            const abort = new AbortController();
+            active = abort;
+            if (prompt) prompt.hidden = true;
+            slot.hidden = false;
+            slot.setAttribute("aria-busy", "true");
+            if (slot.childElementCount === 0) slot.replaceChildren(message("Looking up your officials."));
+            try {
+                const { status, fragment } = await readMemberFragment(api, zip, issue, "issue", null, abort.signal);
+                if (mine !== request || zip !== remembered.zip()) return;
+                slot.replaceChildren(fragment ?? memberFailure(zip, status, slot.dataset.officialsPage));
+            } catch {
+                if (mine === request) slot.replaceChildren(memberFailure(zip, 0, slot.dataset.officialsPage));
             } finally {
                 if (mine === request) { slot.removeAttribute("aria-busy"); active = null; }
             }
@@ -923,5 +973,7 @@
     document.querySelectorAll("[data-zip-api]").forEach(form => initZipLookup(form, rememberedMembers));
     const membersStrip = document.querySelector("#members-strip");
     if (membersStrip) initMemberStrip(rememberedMembers, membersStrip);
+    const issueMembers = document.querySelector("[data-issue-members]");
+    if (issueMembers) initIssueMembers(rememberedMembers, issueMembers);
     new Set(Array.from(document.querySelectorAll("th[data-sort]"), header => header.closest("table"))).forEach(initSortable);
 })();

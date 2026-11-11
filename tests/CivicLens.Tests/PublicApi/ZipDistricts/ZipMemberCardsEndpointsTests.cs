@@ -273,6 +273,42 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task IssueViewReturnsOnlyTheSharedVotesOfThatIssueWithTheMembersCastsAndNoCards()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('a', "2026-05-01") { RecordId = 1.ToString("x64"), Casts = ["Yea"], PersonIds = ["al2"], Issues = ["health"] },
+            new SeededVote('b', "2026-05-02") { RecordId = 2.ToString("x64"), Casts = ["Nay"], PersonIds = ["al2"], Issues = ["other"] });
+
+        var document = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?view=issue&issue=health");
+        var root = document.QuerySelector("[data-zip-member-fragment]")!;
+
+        Assert.Equal(("issue", "health", ""), (root.GetAttribute("data-view"), root.GetAttribute("data-issue"), root.GetAttribute("data-since-release")));
+        Assert.Single(document.QuerySelectorAll(".shared-vote-row"));
+        Assert.Equal("Yes (Yea)", document.QuerySelector(".shared-vote-cast-value")!.TextContent.Trim());
+        Assert.Empty(document.QuerySelectorAll(".zip-member-card, [data-member-issue-filter], template"));
+    }
+
+    [Fact]
+    public async Task IssueViewWithNoMatchingVoteStatesThatNoVoteIsRecorded()
+    {
+        await using var host = await StartAsync();
+
+        var document = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?view=issue&issue=health");
+
+        Assert.Empty(document.QuerySelectorAll(".shared-vote-row"));
+        Assert.Equal("None of your members has a recorded vote on this issue in this release.", document.QuerySelector("[data-member-votes-empty]")!.TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task IssueViewWithoutAnIssueIsRejectedBeforeLookup()
+    {
+        await using var host = await StartAsync();
+
+        await AssertProblemAsync(host, "/v1/zip-districts/36009/members?view=issue", HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task MembersRouteRejectsRepeatedAndUnsupportedViewsBeforeLookup()
     {
         await using var host = await StartAsync();
