@@ -14,7 +14,7 @@ public static class PublicSections
         new(PublicSection.AllRecords, "Votes and bills", PublicationProtocol.AllRecordsPagePath(1))
     ];
 
-    public static readonly NavLink Report = new(null, "Report a problem with this page", PublicationProtocol.ReportPagePath);
+    public static readonly NavLink Report = new(null, $"{PublishedRecordLabels.ReportLinkStart} page", PublicationProtocol.ReportPagePath);
 
     public static readonly IReadOnlyList<NavLink> Footer =
     [
