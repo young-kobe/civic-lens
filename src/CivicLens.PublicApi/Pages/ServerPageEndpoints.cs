@@ -1,3 +1,4 @@
+using CivicLens.PublicApi.Briefs;
 using CivicLens.PublicApi.DocumentChanges;
 using CivicLens.PublicApi.ExecutiveActions;
 using CivicLens.PublicApi.Home;
@@ -44,7 +45,8 @@ public static class ServerPageEndpoints
                 ? await RespondOfficialAsync(context, responder, page, baseUrl, cancellationToken)
                 : await NotFoundAsync(context, responder, baseUrl, cancellationToken)));
         routes.MapGet(RecordRoute("{recordId}"), (string recordId, HttpContext context, RecordKindStore kinds, VotePageReader votes, StatementPageReader statements,
-            ExecutiveActionPageReader actions, DocumentChangePageReader changes, ServerPageResponder responder, CancellationToken cancellationToken) =>
+            ExecutiveActionPageReader actions, DocumentChangePageReader changes, BriefPageReader briefs, WithdrawalStore withdrawals, ServerPageResponder responder,
+            CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () =>
         {
             var rootPath = baseUrl.Join(string.Empty);
@@ -78,6 +80,18 @@ public static class ServerPageEndpoints
                     {
                         [nameof(DocumentChangeDetailPage.Data)] = change,
                         [nameof(DocumentChangeDetailPage.RootPath)] = rootPath
+                    }, cancellationToken);
+                case PublishedRecordKind.Brief when await briefs.ReadAsync(recordId, cancellationToken) is { } brief:
+                    return await responder.RespondAsync<BriefDetailPage>(context, StatusCodes.Status200OK, brief.Release, new Dictionary<string, object?>
+                    {
+                        [nameof(BriefDetailPage.Data)] = brief,
+                        [nameof(BriefDetailPage.RootPath)] = rootPath
+                    }, cancellationToken);
+                case null when PublicationProtocol.IsAnyRecordId(recordId) && await withdrawals.FindAsync(recordId, cancellationToken) is { } notice:
+                    return await responder.RespondAsync<PublishedWithdrawalPage>(context, StatusCodes.Status200OK, notice.Release, new Dictionary<string, object?>
+                    {
+                        [nameof(PublishedWithdrawalPage.Withdrawal)] = notice.Withdrawal,
+                        [nameof(PublishedWithdrawalPage.RootPath)] = rootPath
                     }, cancellationToken);
                 default:
                     return await NotFoundAsync(context, responder, baseUrl, cancellationToken);
