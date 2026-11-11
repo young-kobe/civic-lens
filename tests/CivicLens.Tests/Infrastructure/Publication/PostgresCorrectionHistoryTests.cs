@@ -4,7 +4,9 @@ using CivicLens.Infrastructure.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
 
@@ -222,11 +224,11 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
         {
             var page = await publications.ReadCorrectionHistoryVerificationPageAsync(verificationCursor, 1,
                 _ => Task.FromResult<string?>(null), default);
-            Assert.False(page.StaleCursor);
             Assert.Single(page.Candidates);
+            Assert.All(page.Candidates, candidate => Assert.Equal(page.Release!.ReleaseNumber, candidate.Release.ReleaseNumber));
             verificationCandidates.AddRange(page.Candidates.Select(candidate =>
                 (candidate.Release.ReleaseNumber, candidate.Record.RecordId, candidate.Record.RevisionNumber)));
-            verificationCursor = page.NextCursor;
+            verificationCursor = NextCursor(page);
             if (pageNumber < expectedMemberships.Length - 1) Assert.NotNull(verificationCursor);
             else Assert.Null(verificationCursor);
         }
@@ -340,35 +342,67 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
     }
 
     [Fact]
-    public async Task VerificationSelectionIncludesRetainedActiveAndServedReleasesAndCursorDetectsSelectionChange()
+    public async Task VerificationSelectionIncludesRetainedActiveAndServedReleasesAndCursorReportsAReleaseThatLeftIt()
     {
         await SeedActionsAsync((A, 10));
         var record = Binding(A, 10);
         var history = Assert.Single(await publications.PrepareCorrectionHistoriesAsync([new(record, [])], default));
         await CommitAsync(1, null, [record], [new(PublishedRecordKind.Action, A, 10, 1)],
             [PublishedEntryFixtures.Action(A, PublishedAt, 10)], [history]);
-        await ExecuteAsync("""
-            UPDATE publication_releases SET published_at_utc_ticks = @old_time WHERE release_number = 1;
-            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
-            SELECT n, lpad(n::text, 6, '0') || '-' || md5(n::text), 'test', @old_time + n, 1, false
-              FROM generate_series(2, 40) n;
-            """, ("old_time", DateTimeOffset.UtcNow.AddDays(-40).UtcTicks));
+        await SeedRetentionReleasesAsync();
         var releases = await publications.ListAllAsync(default);
         var served = releases.Single(release => release.ReleaseNumber == 2);
         var anotherServed = releases.Single(release => release.ReleaseNumber == 3);
 
+        var selection = await publications.ReadRetainedReleaseSelectionAsync(_ => Task.FromResult<string?>(served.DirectoryName), default);
         var page = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 100,
             _ => Task.FromResult<string?>(served.DirectoryName), default);
-
-        Assert.Equal(new[] { 1, 2 }.Concat(Enumerable.Range(11, 30)), page.Candidates.Select(candidate => candidate.Release.ReleaseNumber));
-        Assert.Equal(page.SelectionFingerprint, await publications.ReadRetainedReleaseFingerprintAsync(
-            _ => Task.FromResult<string?>(served.DirectoryName), default));
-        var first = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 1,
-            _ => Task.FromResult<string?>(served.DirectoryName), default);
-        var stale = await publications.ReadCorrectionHistoryVerificationPageAsync(first.NextCursor, 1,
+        var skippedPage = await publications.ReadCorrectionHistoryVerificationPageAsync(new(2, served.DirectoryName), 1,
             _ => Task.FromResult<string?>(anotherServed.DirectoryName), default);
-        Assert.True(stale.StaleCursor);
-        Assert.Null(stale.NextCursor);
+
+        Assert.Equal(new[] { 1, 2 }.Concat(Enumerable.Range(11, 30)), selection.Select(release => release.ReleaseNumber));
+        Assert.Equal((1, true, 2), (page.Release!.ReleaseNumber, page.ReleaseCompleted, page.NextRelease!.ReleaseNumber));
+        Assert.Equal(A, Assert.Single(page.Candidates).Record.RecordId);
+        Assert.Equal(("notSelected", 2), (skippedPage.Skipped!.Reason, skippedPage.Skipped.ReleaseNumber));
+        Assert.Equal(3, skippedPage.Release!.ReleaseNumber);
+    }
+
+    [Fact]
+    public async Task VerificationCursorReportsADirectoryChangeForTheSameReleaseNumber()
+    {
+        await SeedRetentionReleasesAsync();
+        var original = (await publications.ListAllAsync(default)).Single(release => release.ReleaseNumber == 20);
+        await ExecuteAsync("UPDATE publication_releases SET directory_name = '000020-' || md5('replaced') WHERE release_number = 20");
+
+        var page = await publications.ReadCorrectionHistoryVerificationPageAsync(new(20, original.DirectoryName), 5,
+            _ => Task.FromResult<string?>(null), default);
+
+        Assert.Equal(("directoryChanged", 20), (page.Skipped!.Reason, page.Skipped.ReleaseNumber));
+        Assert.Equal(21, page.Release!.ReleaseNumber);
+    }
+
+    [Fact]
+    public async Task ReleaseCommittedAfterAWalkEndedAppearsInTheSelectionAndIsVerifiableFromItsOwnCursor()
+    {
+        await SeedActionsAsync((A, 10));
+        var first = Binding(A, 10);
+        await CommitAsync(1, null, [first], [new(PublishedRecordKind.Action, A, 10, 1)],
+            [PublishedEntryFixtures.Action(A, PublishedAt, 10)], await publications.PrepareCorrectionHistoriesAsync([new(first, [])], default));
+        var firstPage = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 10, _ => Task.FromResult<string?>(null), default);
+        await ActionRevisionSeeder.AddAsync(connectionString, ActionRevisionFixtures.Model(11) with { RecordId = A });
+        await ExecuteAsync("UPDATE action_drafts SET current_revision_number = 11, review_state_version = 2 WHERE record_id = @id", ("id", A));
+        var revised = Binding(A, 11);
+        var second = await CommitAsync(2, 1, [revised], [new(PublishedRecordKind.Action, A, 11, 2)],
+            [PublishedEntryFixtures.Action(A, PublishedAt, 11)], await publications.PrepareCorrectionHistoriesAsync([new(revised, [])], default));
+
+        var selection = await publications.ReadRetainedReleaseSelectionAsync(_ => Task.FromResult<string?>(null), default);
+        var secondPage = await publications.ReadCorrectionHistoryVerificationPageAsync(new(2, second.DirectoryName), 10,
+            _ => Task.FromResult<string?>(null), default);
+
+        Assert.Null(NextCursor(firstPage));
+        Assert.Equal([1, 2], selection.Select(release => release.ReleaseNumber));
+        Assert.Equal((2, 11), (secondPage.Release!.ReleaseNumber, Assert.Single(secondPage.Candidates).Record.RevisionNumber));
+        Assert.True(secondPage.ReleaseCompleted);
     }
 
     [Fact]
@@ -379,14 +413,7 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
         var history = Assert.Single(await publications.PrepareCorrectionHistoriesAsync([new(record, [])], default));
         await CommitAsync(1, null, [record], [new(PublishedRecordKind.Action, A, 10, 1)],
             [PublishedEntryFixtures.Action(A, PublishedAt, 10)], [history]);
-        await ExecuteAsync("""
-            UPDATE publication_releases SET published_at_utc_ticks = @old_time WHERE release_number = 1;
-            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
-            SELECT n, lpad(n::text, 6, '0') || '-' || md5(n::text), 'test', @old_time + n, 1, false
-              FROM generate_series(2, 40) n;
-            """, ("old_time", DateTimeOffset.UtcNow.AddDays(-40).UtcTicks));
-        var before = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 100,
-            _ => Task.FromResult<string?>(null), default);
+        await SeedRetentionReleasesAsync();
 
         var during = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 100, async _ =>
         {
@@ -394,16 +421,67 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
             await ExecuteAsync("UPDATE publication_releases SET is_active = false WHERE release_number = 1; UPDATE publication_releases SET is_active = true WHERE release_number = 3");
             return null;
         }, default);
+        var fresh = await publications.ReadRetainedReleaseSelectionAsync(_ => Task.FromResult<string?>(null), default);
 
-        Assert.Equal(before.SelectionFingerprint, during.SelectionFingerprint);
-        Assert.Equal(before.Candidates.Select(candidate => candidate.Release.ReleaseNumber),
-            during.Candidates.Select(candidate => candidate.Release.ReleaseNumber));
-        var first = during.Candidates[0];
-        var cursor = new CorrectionHistoryVerificationCursor(during.SelectionFingerprint,
-            first.Release.ReleaseNumber, first.Record.Kind, first.Record.RecordId);
-        var resumed = await publications.ReadCorrectionHistoryVerificationPageAsync(cursor, 1,
-            _ => Task.FromResult<string?>(null), default);
-        Assert.True(resumed.StaleCursor);
+        Assert.Equal((1, 11), (during.Release!.ReleaseNumber, during.NextRelease!.ReleaseNumber));
+        Assert.Equal(A, Assert.Single(during.Candidates).Record.RecordId);
+        Assert.Equal(3, fresh[0].ReleaseNumber);
+    }
+
+    [Fact]
+    public async Task VerificationPageReadsInsideARepeatableReadReadOnlyTransactionAndWritesNothing()
+    {
+        await SeedActionsAsync((A, 10));
+        var record = Binding(A, 10);
+        await CommitAsync(1, null, [record], [new(PublishedRecordKind.Action, A, 10, 1)],
+            [PublishedEntryFixtures.Action(A, PublishedAt, 10)], await publications.PrepareCorrectionHistoriesAsync([new(record, [])], default));
+        var commands = new CommandLog();
+        var logged = new PostgresPublicationStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(commands).Options),
+            TestCodeVersion.Current);
+
+        await logged.ReadCorrectionHistoryVerificationPageAsync(null, 10, _ => Task.FromResult<string?>(null), default);
+        var firstCommand = commands.Texts.First();
+        var rowsBefore = await ReadInt64Async("SELECT count(*) FROM release_correction_histories");
+        await logged.ReadRetainedReleaseSelectionAsync(_ => Task.FromResult<string?>(null), default);
+
+        Assert.Equal("SET TRANSACTION READ ONLY", firstCommand);
+        Assert.Equal(2, commands.Texts.Count(text => text == "SET TRANSACTION READ ONLY"));
+        Assert.DoesNotContain(commands.Texts, text => text.Contains("INSERT", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("UPDATE", StringComparison.OrdinalIgnoreCase) || text.Contains("DELETE", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(rowsBefore, await ReadInt64Async("SELECT count(*) FROM release_correction_histories"));
+    }
+
+    private static CorrectionHistoryVerificationCursor? NextCursor(CorrectionHistoryVerificationPage page) => page.Release is null ? null :
+        page.ReleaseCompleted
+            ? page.NextRelease is null ? null : new(page.NextRelease.ReleaseNumber, page.NextRelease.DirectoryName)
+            : new(page.Release.ReleaseNumber, page.Release.DirectoryName,
+                new(page.Candidates[^1].Record.Kind, page.Candidates[^1].Record.RecordId));
+
+    private Task SeedRetentionReleasesAsync() => ExecuteAsync("""
+        UPDATE publication_releases SET published_at_utc_ticks = @old_time WHERE release_number = 1;
+        INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+        SELECT n, lpad(n::text, 6, '0') || '-' || md5(n::text), 'test', @old_time + n, 1, false
+          FROM generate_series(2, 40) n;
+        """, ("old_time", DateTimeOffset.UtcNow.AddDays(-40).UtcTicks));
+
+    private sealed class CommandLog : DbCommandInterceptor
+    {
+        public List<string> Texts { get; } = [];
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            Texts.Add(command.CommandText);
+            return ValueTask.FromResult(result);
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            Texts.Add(command.CommandText);
+            return ValueTask.FromResult(result);
+        }
     }
 
     [Fact]

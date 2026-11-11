@@ -23,15 +23,9 @@ public sealed partial class PostgresPublicationStore
         ArgumentNullException.ThrowIfNull(readServedDirectory);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await BeginVerificationReadAsync(db, cancellationToken);
-        var selection = await ReadRetainedReleaseSelectionAsync(db, readServedDirectory, cancellationToken);
-        var fingerprint = selection.Fingerprint;
-        if (after is not null && after.SelectionFingerprint != fingerprint)
-        {
-            await transaction.CommitAsync(cancellationToken);
-            return new([], fingerprint, null, true);
-        }
-        var page = await PublishedEntries.ReadCorrectionVerificationPageAsync(db, after, fingerprint,
-            selection.ReleaseNumbers, limit, cancellationToken);
+        var selection = await ReadRetainedReleasesAsync(db, readServedDirectory, cancellationToken);
+        var page = await PublishedEntries.ReadCorrectionVerificationPageAsync(db, CorrectionHistoryWalk.Resolve(selection, after),
+            limit, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return page;
     }
