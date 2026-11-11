@@ -11,7 +11,7 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedOfficialView
 {
-    public static string Office(PublishedOfficeTerm term) => Role(term) + Place(term);
+    public static string Office(PublishedOfficeTerm term) => Role(term) + Place(term, OfficeLede.Place);
 
     private static string Role(PublishedOfficeTerm term) => term.Office switch
     {
@@ -22,10 +22,10 @@ internal static class PublishedOfficialView
         _ => term.Office
     };
 
-    private static string Place(PublishedOfficeTerm term) => term.Office switch
+    private static string Place(PublishedOfficeTerm term, Func<string?, int?, string> place) => term.Office switch
     {
-        MemberRosterParser.Senate => OfficeLede.Place(term.State, null),
-        MemberRosterParser.House => OfficeLede.Place(term.State, term.District),
+        MemberRosterParser.Senate => place(term.State, null),
+        MemberRosterParser.House => place(term.State, term.District),
         _ => ""
     };
 
@@ -37,7 +37,7 @@ internal static class PublishedOfficialView
     public static string? Lede(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc)
     {
         if (LatestTerm(terms, publishedAtUtc) is not { } term) return null;
-        return OfficeLede.Of(HasEnded(term.End, publishedAtUtc), term.Party, Role(term).ToLowerInvariant(), Place(term), term.Caucus);
+        return OfficeLede.Of(HasEnded(term.End, publishedAtUtc), term.Party, Role(term).ToLowerInvariant(), Place(term, OfficeLede.LedePlace), term.Caucus);
     }
 
     public static string? Tenure(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc)

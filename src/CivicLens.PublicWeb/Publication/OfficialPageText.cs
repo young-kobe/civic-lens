@@ -29,7 +29,7 @@ public static class OfficialPageText
             PublishedOfficeKind.Representative => "representative",
             _ => "official"
         };
-        var place = OfficeLede.Place(data.State, data.District);
+        var place = OfficeLede.LedePlace(data.State, data.District);
         var text = OfficeLede.Of(ended, data.Party, role, place, data.Caucus) + ".";
         return known && !ended && data.TermEndsOn is { } day ? $"{text} Current term ends {Moment.Day(day)}." : text;
     }

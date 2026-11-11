@@ -55,7 +55,7 @@ public sealed class OfficialProfilePageTests
         var figures = page.QuerySelectorAll(".official-figs li").Select(item => item.TextContent).ToArray();
 
         Assert.Equal("Ann Able", page.QuerySelector("h1")!.TextContent);
-        Assert.Contains("Democratic representative for MA, district 7.", page.QuerySelector(".official-head .official-lede")!.TextContent);
+        Assert.Contains("Democratic representative for Massachusetts, district 7.", page.QuerySelector(".official-head .official-lede")!.TextContent);
         Assert.Equal(3, figures.Length);
         Assert.Contains("670roll calls voted on, of 675 House roll calls on this site in the 119th Congress.", figures[0]);
         Assert.StartsWith("248of 249 split votes", figures[1]);
@@ -142,7 +142,7 @@ public sealed class OfficialProfilePageTests
     }
 
     [Fact]
-    public async Task ABillLineShowsBesideTheOfficialTitleWithTheSharedNoteOnceAndAnUnknownActionGetsTheSharedUnmatchedLabel()
+    public async Task ABillLineShowsBesideTheOfficialTitleWithTheSharedNoteOnceAndAnUnknownActionShowsNoBadge()
     {
         var bill = Member().Bills[0] with { BillLine = "Studies reparations.", LatestAction = "Something odd happened" };
         var page = await RenderAsync<OfficialProfilePage>(Member() with { Bills = [bill, bill with { RecordId = new string('f', 64), BillLine = "Pays landlords." }] });
@@ -152,7 +152,8 @@ public sealed class OfficialProfilePageTests
         Assert.Equal("Studies reparations.", row.QuerySelector(".bill-line")!.TextContent);
         Assert.Equal(2, page.QuerySelectorAll("#bills .bill-line").Length);
         Assert.Equal(PublishedWording.BillLineSource, Assert.Single(page.QuerySelectorAll("#bills > p.muted")).TextContent);
-        Assert.Equal(BillStatusMeaning.UnmatchedLabel, row.QuerySelector(".badge")!.TextContent.Trim());
+        Assert.Null(row.QuerySelector(".badge"));
+        Assert.Contains("Latest official action 3 Jan 2025: Something odd happened.", row.QuerySelector(".official-meta")!.TextContent);
     }
 
     [Fact]
@@ -270,7 +271,7 @@ public sealed class OfficialProfilePageTests
 
         Assert.Contains("Current term ends 3 Jan 2027.", current.QuerySelector(".official-head .official-lede")!.TextContent);
         var lede = former.QuerySelector(".official-head .official-lede")!.TextContent;
-        Assert.StartsWith("Former Democratic representative for MA, district 7.", lede);
+        Assert.StartsWith("Former Democratic representative for Massachusetts, district 7.", lede);
         Assert.DoesNotContain("Current term ends", lede);
     }
 
@@ -280,7 +281,7 @@ public sealed class OfficialProfilePageTests
         var lede = OfficialPageText.Lede(Member() with { PublishedOn = null });
 
         Assert.DoesNotContain("Current term ends", lede);
-        Assert.StartsWith("Democratic representative for MA, district 7.", lede);
+        Assert.StartsWith("Democratic representative for Massachusetts, district 7.", lede);
     }
 
     [Fact]
@@ -298,8 +299,9 @@ public sealed class OfficialProfilePageTests
     [Fact]
     public void TheLedeRulesHaveOneOwnerInOfficeLede()
     {
-        Assert.Equal("Democratic representative for WA, district 9", OfficeLede.Of(false, "Democrat", "representative", OfficeLede.Place("WA", 9), null));
-        Assert.Equal("Former Independent senator for WA, caucuses with Democrats", OfficeLede.Of(true, "Independent", "senator", OfficeLede.Place("WA", null), "Democrat"));
+        Assert.Equal("Democratic representative for Washington, district 9", OfficeLede.Of(false, "Democrat", "representative", OfficeLede.LedePlace("WA", 9), null));
+        Assert.Equal("Former Independent senator for Washington, caucuses with Democrats", OfficeLede.Of(true, "Independent", "senator", OfficeLede.LedePlace("WA", null), "Democrat"));
+        Assert.Equal(" for WA, district 9", OfficeLede.Place("WA", 9));
         Assert.True(OfficeLede.HasEnded(new(2026, 1, 3), new(2026, 1, 4)));
         Assert.False(OfficeLede.HasEnded(new(2026, 1, 3), new(2026, 1, 3)));
     }

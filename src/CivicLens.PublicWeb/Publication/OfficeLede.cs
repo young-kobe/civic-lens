@@ -24,6 +24,9 @@ public static class OfficeLede
         _ => $" for {state}"
     };
 
+    /// <summary>The place of a seat in a lede. It writes the full state name, such as " for Massachusetts, district 7", where <see cref="Place"/> writes the text it gets.</summary>
+    public static string LedePlace(string? stateCode, int? district) => Place(stateCode is null ? null : UsStates.NameOf(stateCode), district);
+
     /// <summary>The phrase "caucuses with Democrats" when the caucus differs from the party, otherwise null.</summary>
     public static string? CaucusWith(string party, string? caucus) =>
         caucus is null || caucus == party ? null : $"caucuses with {PublishedPartyNames.Members(caucus)}";

@@ -179,7 +179,6 @@ public sealed class BillStatusMeaningTests
     [InlineData("Placed on the Union Calendar, Calendar No. 12.", "hr", "Waiting for a possible House floor vote")]
     [InlineData("Ordered to be Reported by Voice Vote.", "hr", "A committee voted to send this to the full chamber")]
     [InlineData("Became Public Law No: 119-4.", "hr", "Became law")]
-    [InlineData("Something odd happened", "hr", "Latest official action")]
     public void EachStatusHasOneShortLabelAndEveryWordOfItIsInThePlainMeaningOfTheSameText(string text, string billType, string label)
     {
         var meaning = BillStatusMeaning.Of(text, billType);
@@ -187,5 +186,13 @@ public sealed class BillStatusMeaningTests
 
         Assert.Equal(label, BillStatusMeaning.Label(text, billType));
         Assert.All(label.Split(' '), word => Assert.Contains(word, meaningWords));
+    }
+
+    [Theory]
+    [InlineData("Something odd happened", "hr")]
+    [InlineData("Motion to reconsider laid on the table.", "s")]
+    public void AnUnmatchedTextHasNoLabelSoNoBadgeRepeatsTheOfficialWordsOfTheLine(string text, string billType)
+    {
+        Assert.Null(BillStatusMeaning.Label(text, billType));
     }
 }

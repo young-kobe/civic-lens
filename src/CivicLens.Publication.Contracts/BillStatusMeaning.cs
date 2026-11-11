@@ -9,9 +9,7 @@ namespace CivicLens.Publication.Contracts;
 /// </summary>
 public static partial class BillStatusMeaning
 {
-    public const string UnmatchedLabel = "Latest official action";
-
-    public const string UnmatchedPrefix = UnmatchedLabel + ": ";
+    public const string UnmatchedPrefix = "Latest official action: ";
 
     private const string Name = @"(?:(?!, and in addition to)[^.(])+?";
     private const string Citation = @"(?:\.|\. \((?:text|consideration|Sponsor introductory remarks on measure): [^\n]*\))?";
@@ -30,8 +28,8 @@ public static partial class BillStatusMeaning
     /// <summary>The meaning of a known text, or the official text as a sentence when no rule matches. It never adds the unmatched prefix.</summary>
     public static string Plain(string text, string billType) => Known(text, billType)?.Meaning ?? Sentence(text);
 
-    /// <summary>The short label of the status, such as "In committee". Each label uses only words of the plain meaning of the same text. A text that no rule matches gets <see cref="UnmatchedLabel"/>.</summary>
-    public static string Label(string text, string billType) => Known(text, billType)?.Label ?? UnmatchedLabel;
+    /// <summary>The short label of the status, such as "In committee". Each label uses only words of the plain meaning of the same text. A text that no rule matches has no label.</summary>
+    public static string? Label(string text, string billType) => Known(text, billType)?.Label;
 
     private static Status? Known(string text, string billType)
     {
