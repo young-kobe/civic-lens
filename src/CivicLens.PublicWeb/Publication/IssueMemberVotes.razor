@@ -1,7 +1,7 @@
 <div data-zip-member-fragment data-zcta="@Data.Zcta" data-release="@Data.Release" data-congress="@Data.Congress" data-issue="@Data.SelectedIssue" data-view="issue" data-since-release="" data-new-votes="">
     @foreach (var votes in Data.SharedVotes)
     {
-        <SharedVoteRows Data="votes" RootPath="@RootPath" />
+        <SharedVoteRows Data="votes" RootPath="@RootPath" HeadingLevel="3" />
     }
     @if (Data.SharedVotes.Length == 0)
     {

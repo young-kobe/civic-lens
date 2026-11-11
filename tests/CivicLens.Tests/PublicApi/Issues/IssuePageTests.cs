@@ -7,6 +7,7 @@ using CivicLens.PublicApi.Pages;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
+using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Issues;
 
@@ -61,7 +62,7 @@ public sealed class IssuePageTests(PostgresCollection postgres)
 
         Assert.Equal("Taxes <b>", page.QuerySelector("h1")!.TextContent);
         Assert.Null(page.QuerySelector("h1 b"));
-        Assert.Equal(1, page.QuerySelectorAll("#votes .issue-row").Length);
+        Assert.Equal(1, page.QuerySelectorAll("#votes .record-row").Length);
         Assert.DoesNotContain("Showing the newest", page.QuerySelector("#votes")!.TextContent);
         Assert.Contains("1 substantive roll call vote and 0 bills and resolutions tagged Taxes <b>.", page.QuerySelector("[data-issue-counts]")!.TextContent);
         Assert.Contains("not about the whole issue", page.QuerySelector("#votes .issue-note")!.TextContent);
@@ -75,7 +76,7 @@ public sealed class IssuePageTests(PostgresCollection postgres)
 
         var page = await GetPageAsync(host);
 
-        Assert.Equal(IssueStore.PageVotes, page.QuerySelectorAll("#votes .issue-row").Length);
+        Assert.Equal(IssueStore.PageVotes, page.QuerySelectorAll("#votes .record-row").Length);
         Assert.Contains("Showing the newest 10 of 12 substantive roll call votes.", page.QuerySelector("#votes")!.TextContent);
     }
 
@@ -87,7 +88,7 @@ public sealed class IssuePageTests(PostgresCollection postgres)
 
         var page = await GetPageAsync(host);
 
-        Assert.Equal(IssueStore.PageBills, page.QuerySelectorAll("#bills .issue-row").Length);
+        Assert.Equal(IssueStore.PageBills, page.QuerySelectorAll("#bills .record-row").Length);
         Assert.Contains("Showing the newest 5 of 7 bills and resolutions.", page.QuerySelector("#bills")!.TextContent);
     }
 
@@ -97,9 +98,10 @@ public sealed class IssuePageTests(PostgresCollection postgres)
         var bill = new SeededBill('a', "2026-03-01") { BillNumber = 1, Issues = ["tax"], BillLine = "Current bill line." };
         await using var host = await StartAsync([], [bill, new SeededBill('b', "2026-02-01") { BillNumber = 2, Issues = ["tax"] }]);
 
-        var rows = (await GetPageAsync(host)).QuerySelectorAll("#bills .issue-row");
+        var rows = (await GetPageAsync(host)).QuerySelectorAll("#bills .record-row");
 
-        Assert.Contains("Current bill line. " + PublishedWording.BillLineSource, rows[0].TextContent);
+        Assert.Contains("Current bill line.", rows[0].QuerySelector(".bill-line")!.TextContent);
+        Assert.Contains(PublishedWording.BillLineSource, rows[0].TextContent);
         Assert.DoesNotContain(PublishedWording.BillLineSource, rows[1].TextContent);
         Assert.Equal("https://civic-lens.test/" + PublicationProtocol.RecordPagePath(bill.RecordId), rows[0].QuerySelector("a")!.GetAttribute("href"));
     }
@@ -148,7 +150,7 @@ public sealed class IssuePageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task AnUnknownIssueAnswers404AndAnOversizedIdAnswers404WithoutReadingTheDatabaseForIt()
+    public async Task AnUnknownOrOversizedIssueAnswers404()
     {
         await using var host = await StartAsync([], []);
 
@@ -157,6 +159,41 @@ public sealed class IssuePageTests(PostgresCollection postgres)
 
         Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, oversized.StatusCode);
+    }
+
+    [Fact]
+    public async Task AnOversizedIssueIdIsRefusedBeforeAnyConnectionIsOpened()
+    {
+        await using var unreachable = NpgsqlDataSource.Create("Host=unreachable.invalid;Timeout=1;Command Timeout=1");
+        var reader = new IssuePageReader(new IssueStore(unreachable));
+
+        Assert.Null(await reader.ReadAsync(new string('x', PublishedRecordEntry.MaximumFilterValueLength + 1), default));
+        await Assert.ThrowsAnyAsync<Exception>(() => reader.ReadAsync("tax", default));
+    }
+
+    [Fact]
+    public async Task TheVoteListAndTheCountLineUseOneFilterSoAVoteWithNoMemberCountsIsListedAndCounted()
+    {
+        var counted = new SeededVote('1', "2026-03-01") { Kind = "Passage", RollCall = 1, Issues = ["tax"] };
+        var withOtherCasts = new SeededVote('2', "2026-04-01") { Kind = "Passage", RollCall = 2, Issues = ["tax"], Casts = ["Guilty", "Not Guilty"] };
+        await using var host = await StartAsync([counted, withOtherCasts], []);
+
+        var page = await GetPageAsync(host);
+
+        Assert.Contains("2 substantive roll call votes", page.QuerySelector("[data-issue-counts]")!.TextContent);
+        Assert.Equal(2, page.QuerySelectorAll("#votes .record-row").Length);
+        Assert.DoesNotContain("Showing the newest", page.QuerySelector("#votes")!.TextContent);
+        Assert.Equal(1, page.QuerySelectorAll("#votes .record-counts").Count(counts => counts.QuerySelector("b") is null));
+    }
+
+    [Fact]
+    public async Task TheDefinitionOfTheIssueComesFromTheReleaseAndFollowsTheName()
+    {
+        await using var host = await StartAsync([], []);
+
+        var page = await GetPageAsync(host);
+
+        Assert.Equal("d", page.QuerySelector(".issue-hero h1 + .issue-definition")!.TextContent);
     }
 
     [Fact]

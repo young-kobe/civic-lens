@@ -332,6 +332,89 @@
         return message;
     };
 
+    const memberFailureWithRetry = (zip, status, officialsPage, retry) => {
+        const again = document.createElement("button");
+        again.type = "button";
+        again.textContent = "Try again";
+        again.addEventListener("click", retry);
+        return [memberFailure(zip, status, officialsPage), again];
+    };
+
+    // The one owner of loading a member fragment. It keeps the stale-ZIP guard (snapshot, current, refresh) for every caller.
+    // A caller supplies the render hooks: onFragment(fragment, call) returns false when the page could not keep the answer,
+    // onFailure(call, status) shows the failure, onLoading(call) and onSettled(call) are optional.
+    // run() resolves to true when the answer was shown, false when it was not, and null when a newer run replaced it.
+    const memberLoader = (remembered, { api, view, requireSnapshot = false, onLoading, onFragment, onFailure, onSettled }) => {
+        let request = 0;
+        let active = null;
+        const cancel = () => {
+            request++;
+            active?.abort();
+            active = null;
+        };
+        const run = async (zip, options = {}) => {
+            const mine = ++request;
+            active?.abort();
+            active = null;
+            const startingState = remembered.snapshot();
+            if (requireSnapshot && startingState.zip !== zip) { remembered.refresh(); return false; }
+            const marker = "since" in options ? options.since : startingState.zip === zip ? startingState.release : null;
+            const abort = new AbortController();
+            active = abort;
+            const call = { ...options, zip, startingState, marker };
+            onLoading?.(call);
+            try {
+                const { status, fragment } = await readMemberFragment(api, zip, options.issue ?? null, view, marker, abort.signal);
+                if (mine !== request) return null;
+                if (fragment === null) { onFailure(call, status); return false; }
+                if (!remembered.current(startingState) || onFragment(fragment, call) === false) { remembered.refresh(); return false; }
+                return true;
+            } catch {
+                if (mine !== request) return null;
+                onFailure(call, 0);
+                return false;
+            } finally {
+                if (mine === request) { active = null; onSettled?.(call); }
+            }
+        };
+        return { run, cancel };
+    };
+
+    // Loads one member fragment into a slot and follows the remembered ZIP. A view supplies frame(nodes), nodeOf(fragment), and optional onShow and onClear hooks.
+    const followMemberSlot = (remembered, slot, { api, view, issue = null, sinceMarker = true, frame, nodeOf, onShow, onClear }) => {
+        const loader = memberLoader(remembered, {
+            api,
+            view,
+            requireSnapshot: true,
+            onLoading: () => {
+                onShow?.();
+                slot.setAttribute("aria-busy", "true");
+                if (slot.childElementCount !== 0) return;
+                const loading = document.createElement("p");
+                loading.textContent = "Looking up your officials.";
+                slot.replaceChildren(frame([loading]));
+            },
+            onFragment: fragment => { slot.replaceChildren(nodeOf(fragment)); },
+            onFailure: (call, status) => slot.replaceChildren(frame(memberFailureWithRetry(call.zip, status, slot.dataset.officialsPage, () => run(call.zip)))),
+            onSettled: () => slot.removeAttribute("aria-busy")
+        });
+        const clear = () => {
+            loader.cancel();
+            slot.removeAttribute("aria-busy");
+            slot.replaceChildren();
+            onClear?.();
+        };
+        const run = zip => {
+            if (zip !== remembered.zip()) return;
+            if (!validZip(zip)) { clear(); return; }
+            loader.run(zip, sinceMarker ? { issue } : { issue, since: null });
+        };
+        remembered.onForget(clear);
+        remembered.onChange(zip => { if (zip === null) clear(); else { slot.replaceChildren(); run(zip); } });
+        const initial = remembered.zip();
+        if (initial !== null) run(initial);
+    };
+
     const initZipLookup = (form, remembered) => {
         const api = form.dataset.zipApi;
         const view = form.dataset.zipView === "compare" ? "compare" : "";
@@ -351,7 +434,7 @@
             return node;
         };
         const show = (nodes, listed = false) => { panel.hidden = false; notes.hidden = !listed; body.replaceChildren(...nodes); };
-        const showProblem = node => { panel.hidden = true; problem.replaceChildren(node); };
+        const showProblem = (...nodes) => { panel.hidden = true; problem.replaceChildren(...nodes); };
         const reveal = () => {
             panel.scrollIntoView({ block: "start", behavior: reducedMotion.matches ? "auto" : "smooth" });
             heading.focus({ preventScroll: true });
@@ -374,7 +457,6 @@
             }
             strip.replaceChildren(source.content.firstElementChild.cloneNode(true));
         };
-        const failure = (zip, status) => memberFailure(zip, status, form.dataset.officialsPage);
         const submitLabel = submit.textContent;
         const loadingText = "Looking up your officials.";
         const setBusy = busy => {
@@ -384,46 +466,30 @@
             else body.removeAttribute("aria-busy");
             body.querySelectorAll("[data-member-issue]").forEach(button => { button.disabled = busy; });
         };
-        let lookup = 0;
-        let lookupAbort = null;
         let renderedSinceRelease = null;
-        const look = async (zip, request, revealAnswer, persist, issue, filtered) => {
-            const failed = status => {
-                if (request !== lookup) return;
-                if (filtered) problem.replaceChildren(failure(zip, status));
-                else showProblem(failure(zip, status));
-            };
-            try {
-                const startingState = remembered.snapshot();
-                const since = filtered ? renderedSinceRelease : startingState.zip === zip ? startingState.release : null;
-                const abort = new AbortController();
-                lookupAbort = abort;
-                const { status, fragment } = await readMemberFragment(api, zip, issue, view, since, abort.signal);
-                if (request !== lookup) return false;
-                if (fragment === null) { failed(status); return false; }
-                if (!remembered.current(startingState)) { remembered.refresh(); return false; }
+        const loader = memberLoader(remembered, {
+            api,
+            view,
+            onFragment: (fragment, call) => {
                 showAnswer(fragment);
-                if (request === lookup) {
-                    mountStrip(fragment);
-                    if (!filtered) {
-                        renderedSinceRelease = since;
-                        if (!remembered.complete(zip, Number(fragment.dataset.release), startingState, persist)) { remembered.refresh(); return false; }
-                    }
+                mountStrip(fragment);
+                if (!call.filtered) {
+                    renderedSinceRelease = call.marker;
+                    if (!remembered.complete(call.zip, Number(fragment.dataset.release), call.startingState, call.persist)) return false;
                 }
-                if (request !== lookup) return false;
-                if (filtered) fragment.querySelector('[data-member-issue][aria-pressed="true"]')?.focus();
-                if (revealAnswer) reveal();
-                return true;
-            }
-            catch {
-                failed(0);
-                return false;
-            }
-        };
+                if (call.filtered) fragment.querySelector('[data-member-issue][aria-pressed="true"]')?.focus();
+                if (call.revealAnswer) reveal();
+            },
+            onFailure: (call, status) => {
+                const nodes = memberFailureWithRetry(call.zip, status, form.dataset.officialsPage,
+                    () => runLookup(call.zip, call.revealAnswer, call.persist, call.issue, call.filtered));
+                if (call.filtered) problem.replaceChildren(...nodes);
+                else showProblem(...nodes);
+            },
+            onSettled: () => setBusy(false)
+        });
         const runLookup = async (zip, revealAnswer, persist = true, issue = null, filtered = false) => {
-            const request = ++lookup;
-            lookupAbort?.abort();
-            lookupAbort = null;
+            loader.cancel();
             problem.replaceChildren();
             if (!validZip(zip)) {
                 showProblem(element("p", "Enter a ZIP code with 5 digits."));
@@ -433,12 +499,10 @@
             }
             setBusy(true);
             if (!filtered) show([element("p", loadingText)]);
-            try {
-                const found = await look(zip, request, revealAnswer, persist, issue, filtered);
-                if (!found && request === lookup && revealAnswer) input.focus();
-            } finally {
-                if (request === lookup) { setBusy(false); lookupAbort = null; }
-            }
+            const options = { issue, filtered, persist, revealAnswer };
+            if (filtered) options.since = renderedSinceRelease;
+            const found = await loader.run(zip, options);
+            if (found === false && revealAnswer) input.focus();
         };
         body.addEventListener("click", event => {
             const button = event.target.closest("button[data-member-issue]");
@@ -461,9 +525,7 @@
         });
         input.addEventListener("input", () => {
             const wasBusy = body.hasAttribute("aria-busy");
-            lookup++;
-            lookupAbort?.abort();
-            lookupAbort = null;
+            loader.cancel();
             setBusy(false);
             if (wasBusy) {
                 panel.hidden = true;
@@ -472,9 +534,7 @@
             }
         });
         const clearLookup = () => {
-            lookup++;
-            lookupAbort?.abort();
-            lookupAbort = null;
+            loader.cancel();
             renderedSinceRelease = null;
             setBusy(false);
             input.value = "";
@@ -504,65 +564,20 @@
         if (document.querySelector("[data-zip-api]")) return;
         const api = slot.dataset.membersApi;
         if (!api) return;
-        let request = 0;
-        let active = null;
-        const showState = (...nodes) => {
-            const content = document.createElement("div");
-            content.className = "members-strip-content";
-            const controls = document.createElement("div");
-            controls.className = "members-strip-nav";
-            controls.append(...nodes);
-            content.append(controls);
-            slot.replaceChildren(content);
-        };
-        const showError = (zip, status) => {
-            const message = memberFailure(zip, status, slot.dataset.officialsPage);
-            const retry = document.createElement("button");
-            retry.type = "button";
-            retry.textContent = "Try again";
-            retry.addEventListener("click", () => run(zip));
-            showState(message, retry);
-        };
-        const clear = () => {
-            request++;
-            active?.abort();
-            active = null;
-            slot.removeAttribute("aria-busy");
-            slot.replaceChildren();
-        };
-        const run = async zip => {
-            if (zip !== remembered.zip()) return;
-            const mine = ++request;
-            active?.abort();
-            active = null;
-            if (!validZip(zip)) { slot.replaceChildren(); slot.removeAttribute("aria-busy"); return; }
-            const startingState = remembered.snapshot();
-            if (startingState.zip !== zip) { remembered.refresh(); return; }
-            const since = startingState.release;
-            const abort = new AbortController();
-            active = abort;
-            slot.setAttribute("aria-busy", "true");
-            if (slot.childElementCount === 0) {
-                const loading = document.createElement("p");
-                loading.textContent = "Looking up your officials.";
-                showState(loading);
-            }
-            try {
-                const { status, fragment } = await readMemberFragment(api, zip, null, "strip", since, abort.signal);
-                if (mine !== request) return;
-                if (fragment === null) { showError(zip, status); return; }
-                if (!remembered.current(startingState)) { remembered.refresh(); return; }
-                slot.replaceChildren(fragment.firstElementChild.cloneNode(true));
-            } catch {
-                if (mine === request) showError(zip, 0);
-            } finally {
-                if (mine === request) { slot.removeAttribute("aria-busy"); active = null; }
-            }
-        };
-        remembered.onForget(clear);
-        remembered.onChange(zip => { if (zip === null) clear(); else { slot.replaceChildren(); run(zip); } });
-        const initial = remembered.zip();
-        if (initial !== null) run(initial);
+        followMemberSlot(remembered, slot, {
+            api,
+            view: "strip",
+            frame: nodes => {
+                const content = document.createElement("div");
+                content.className = "members-strip-content";
+                const controls = document.createElement("div");
+                controls.className = "members-strip-nav";
+                controls.append(...nodes);
+                content.append(controls);
+                return content;
+            },
+            nodeOf: fragment => fragment.firstElementChild.cloneNode(true)
+        });
     };
 
     const initIssueMembers = (remembered, slot) => {
@@ -570,47 +585,26 @@
         const issue = slot.dataset.issueMembers;
         const prompt = document.querySelector("[data-issue-members-prompt]");
         if (!api || !issue) return;
-        let request = 0;
-        let active = null;
-        const message = text => {
-            const note = document.createElement("p");
-            note.textContent = text;
-            return note;
-        };
-        const clear = () => {
-            request++;
-            active?.abort();
-            active = null;
-            slot.hidden = true;
-            slot.removeAttribute("aria-busy");
-            slot.replaceChildren();
-            if (prompt) prompt.hidden = false;
-        };
-        const run = async zip => {
-            if (zip !== remembered.zip()) return;
-            if (!validZip(zip)) { clear(); return; }
-            const mine = ++request;
-            active?.abort();
-            const abort = new AbortController();
-            active = abort;
-            if (prompt) prompt.hidden = true;
-            slot.hidden = false;
-            slot.setAttribute("aria-busy", "true");
-            if (slot.childElementCount === 0) slot.replaceChildren(message("Looking up your officials."));
-            try {
-                const { status, fragment } = await readMemberFragment(api, zip, issue, "issue", null, abort.signal);
-                if (mine !== request || zip !== remembered.zip()) return;
-                slot.replaceChildren(fragment ?? memberFailure(zip, status, slot.dataset.officialsPage));
-            } catch {
-                if (mine === request) slot.replaceChildren(memberFailure(zip, 0, slot.dataset.officialsPage));
-            } finally {
-                if (mine === request) { slot.removeAttribute("aria-busy"); active = null; }
+        followMemberSlot(remembered, slot, {
+            api,
+            view: "issue",
+            issue,
+            sinceMarker: false,
+            frame: nodes => {
+                const content = document.createElement("div");
+                content.append(...nodes);
+                return content;
+            },
+            nodeOf: fragment => fragment,
+            onShow: () => {
+                if (prompt) prompt.hidden = true;
+                slot.hidden = false;
+            },
+            onClear: () => {
+                slot.hidden = true;
+                if (prompt) prompt.hidden = false;
             }
-        };
-        remembered.onForget(clear);
-        remembered.onChange(zip => { if (zip === null) clear(); else { slot.replaceChildren(); run(zip); } });
-        const initial = remembered.zip();
-        if (initial !== null) run(initial);
+        });
     };
 
     const initOfficialsFilter = controls => {

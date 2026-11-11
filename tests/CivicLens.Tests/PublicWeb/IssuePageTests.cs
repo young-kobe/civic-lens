@@ -14,10 +14,10 @@ public sealed class IssuePageTests
 {
     private const string Root = "https://civic-lens.test/";
     private static readonly IssueVoteData Vote = new(new string('a', 64), new(2026, 3, 3), PublishedChamber.Senate, "Senate passes a firearms bill", null, "Passed", 52, 48);
-    private static readonly IssueBillData Bill = new(new string('b', 64), "H.R. 1 would set storage rules.", PublishedRecordLabels.ModelWording, new(2026, 2, 1), "Current bill line.", PublishedWording.BillLineSource);
+    private static readonly IssueBillData Bill = new(new string('b', 64), "H.R. 1 would set storage rules.", PublishedRecordLabels.ModelWording, new(2026, 2, 1), "Current bill line.");
 
     private static IssuePageData Data(IssueLineUpData? lineUp = null, IssueVoteData[]? votes = null, IssueBillData[]? bills = null) =>
-        new(7, "firearms", "Firearms", 3, 186, votes ?? [Vote], bills ?? [Bill], lineUp);
+        new(7, "firearms", "Firearms", "Federal firearms law and regulation.", 3, 186, votes ?? [Vote], bills ?? [Bill], lineUp);
 
     [Fact]
     public async Task TheCountLineNamesTheWhatTheTagAndTheReleaseAndTheTagCaveatFollowsIt()
@@ -42,26 +42,59 @@ public sealed class IssuePageTests
         var page = await RenderAsync(Data());
 
         Assert.Equal("Each vote below is about its own question, not about the whole issue. A vote does not show a position on the issue.", page.QuerySelector("#votes .issue-note")!.TextContent);
-        Assert.Contains("52 Yes", page.QuerySelector("#votes .issue-tally")!.TextContent);
+        Assert.Contains("52 Yes", page.QuerySelector("#votes .record-counts")!.TextContent);
     }
 
     [Fact]
     public async Task ABillKeepsItsPublicAiLabelAndTheSourceOfItsBillLine()
     {
         var page = await RenderAsync(Data());
-        var row = page.QuerySelector("#bills .issue-row")!;
+        var row = page.QuerySelector("#bills .record-row")!;
 
-        Assert.Equal(PublishedRecordLabels.ModelWording, row.QuerySelector(".issue-label")!.TextContent);
-        Assert.Contains("Current bill line. " + PublishedWording.BillLineSource, row.TextContent);
-        Assert.Contains("not the day the bill began", row.TextContent);
+        Assert.Contains(PublishedRecordLabels.ModelWording, row.QuerySelector("a")!.TextContent);
+        Assert.Contains("Current bill line.", row.QuerySelector(".bill-line")!.TextContent);
+        Assert.Contains(PublishedWording.BillLineSource, row.TextContent);
+    }
+
+    [Fact]
+    public async Task TheDateNoteIsStatedOnceInTheSectionLeadAndNotOnEachBillRow()
+    {
+        var page = await RenderAsync(Data(bills: [Bill, Bill with { RecordId = new string('c', 64) }]));
+
+        Assert.Equal(1, page.QuerySelectorAll("#bills .issue-note").Length);
+        Assert.Contains("not the day the bill began", page.QuerySelector("#bills .issue-note")!.TextContent);
+        Assert.DoesNotContain("not the day the bill began", page.QuerySelector("#bills .record-rows")!.TextContent);
+        Assert.All(page.QuerySelectorAll("#bills .record-row"), row => Assert.Contains("Latest event on 1 Feb 2026", row.TextContent));
+    }
+
+    [Fact]
+    public async Task TheDefinitionOfTheIssueFollowsItsNameAndIsAbsentWhenTheIssueHasNone()
+    {
+        var with = await RenderAsync(Data());
+        var without = await RenderAsync(Data() with { Definition = null });
+
+        Assert.Equal("Federal firearms law and regulation.", with.QuerySelector(".issue-hero h1 + .issue-definition")!.TextContent);
+        Assert.Null(without.QuerySelector(".issue-definition"));
+    }
+
+    [Fact]
+    public async Task AVoteWithNoMemberListCountsShowsItsResultAndNoZeroTally()
+    {
+        var page = await RenderAsync(Data(votes: [Vote with { Yea = null, Nay = null }]));
+        var counts = page.QuerySelector("#votes .record-counts")!;
+
+        Assert.Equal("Passed", counts.TextContent);
+        Assert.Empty(counts.QuerySelectorAll("b"));
     }
 
     [Fact]
     public async Task ARowWithoutALabelShowsNoLabel()
     {
-        var page = await RenderAsync(Data(bills: [Bill with { Label = null, BillLine = null, BillLineSource = null }]));
+        var page = await RenderAsync(Data(bills: [Bill with { Label = null, BillLine = null }]));
 
-        Assert.Null(page.QuerySelector("#bills .issue-label"));
+        Assert.Equal(2, page.QuerySelectorAll("#bills .record-row a > span").Length);
+        Assert.DoesNotContain(PublishedRecordLabels.ModelWording, page.QuerySelector("#bills")!.TextContent);
+        Assert.Null(page.QuerySelector("#bills .bill-line"));
     }
 
     [Fact]
@@ -108,7 +141,7 @@ public sealed class IssuePageTests
     {
         var page = await RenderAsync(Data(new IssueLineUpData(119, 5, [new("Republican", 3), new("Democratic", 1)], 1)));
 
-        foreach (var selector in new[] { "[data-issue-counts]", ".issue-hero .small", "#votes .issue-note", "#parties > p" })
+        foreach (var selector in new[] { "[data-issue-counts]", ".issue-hero .small", "#votes .issue-note", "#bills .issue-note", "#parties > p" })
         {
             var passage = page.QuerySelector(selector)!;
             var grade = PassageGrade(passage);

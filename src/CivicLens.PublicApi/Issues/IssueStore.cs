@@ -10,7 +10,7 @@ namespace CivicLens.PublicApi.Issues;
 /// One snapshot serves both statements, so every count comes from one release, as in <c>ZipDistrictStore</c>.
 /// The kind rule is <see cref="PublishedVoteKindExtensions.SubstantiveNames"/>. A sponsor is a sponsorship with the role <c>Sponsor</c>, as in <c>bills.sponsor_count</c>.
 /// The current Congress is the Congress of the publication day of the release, from <see cref="CongressCalendar"/>.
-/// The page answer adds the issue name and the newest votes and bills of the issue to the same snapshot.
+/// The page answer adds the issue name and definition and the newest votes and bills of the issue to the same snapshot.
 /// The line-up reads <c>release_issue_party_lineups</c> in the same snapshot, and its base is the Home tile count <c>release_issues.bills</c>.</summary>
 public sealed class IssueStore(NpgsqlDataSource views)
 {
@@ -22,7 +22,7 @@ public sealed class IssueStore(NpgsqlDataSource views)
     public const int PageBills = 5;
 
     private const string CountsSql = """
-        SELECT i.release_number, a.published_at_utc_ticks, i.count_congress, i.bills, i.name,
+        SELECT i.release_number, a.published_at_utc_ticks, i.count_congress, i.bills, i.name, i.definition,
                (SELECT count(*) FROM public_api.issue_votes x WHERE x.issue_id = i.issue_id AND x.kind = ANY(@kinds)),
                (SELECT count(*) FROM public_api.bill_issues x WHERE x.issue_id = i.issue_id)
           FROM public_api.release_issues i
@@ -39,7 +39,7 @@ public sealed class IssueStore(NpgsqlDataSource views)
           FROM (SELECT DISTINCT record_id, revision_number FROM public_api.vote_issues WHERE issue_id = @issue) k
          CROSS JOIN LATERAL (
               SELECT v.* FROM public_api.votes v
-               WHERE v.record_id = k.record_id AND v.revision_number = k.revision_number AND v.kind = ANY(@kinds) AND v.yea IS NOT NULL AND v.nay IS NOT NULL
+               WHERE v.record_id = k.record_id AND v.revision_number = k.revision_number AND v.kind = ANY(@kinds)
                OFFSET 0) v
          ORDER BY {VoteStore.Order} LIMIT @take
         """;
@@ -82,7 +82,7 @@ public sealed class IssueStore(NpgsqlDataSource views)
         var lineUp = await ReadLineUpAsync(connection, issueId, counts, cancellationToken);
         var votes = await ReadVotesAsync(connection, issueId, cancellationToken);
         var bills = await ReadBillsAsync(connection, issueId, cancellationToken);
-        return new(counts.Release, issueId, counts.Name, counts.SubstantiveVotes, counts.Bills, lineUp, votes, bills);
+        return new(counts.Release, issueId, counts.Name, counts.Definition, counts.SubstantiveVotes, counts.Bills, lineUp, votes, bills);
     }
 
     private static async Task<IssueVote[]> ReadVotesAsync(NpgsqlConnection connection, string issueId, CancellationToken cancellationToken)
@@ -95,7 +95,7 @@ public sealed class IssueStore(NpgsqlDataSource views)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
             votes.Add(new(reader.GetString(0), reader.GetFieldValue<DateOnly>(1), ViewColumns.Enum<PublishedChamber>(reader, 2), reader.GetInt32(3), reader.GetString(4),
-                ViewColumns.Text(reader, 5), PlainVoteWords.Result(reader.GetString(6)), ViewColumns.Number(reader, 7)!.Value, ViewColumns.Number(reader, 8)!.Value));
+                ViewColumns.Text(reader, 5), PlainVoteWords.Result(reader.GetString(6)), ViewColumns.Number(reader, 7), ViewColumns.Number(reader, 8)));
         return [.. votes];
     }
 
@@ -111,7 +111,7 @@ public sealed class IssueStore(NpgsqlDataSource views)
         return [.. bills];
     }
 
-    private sealed record Counts(int Release, DateOnly? PublishedOn, int? HomeCongress, int? HomeBills, string Name, int SubstantiveVotes, int Bills);
+    private sealed record Counts(int Release, DateOnly? PublishedOn, int? HomeCongress, int? HomeBills, string Name, string? Definition, int SubstantiveVotes, int Bills);
 
     private static async Task<Counts?> ReadCountsAsync(NpgsqlConnection connection, string issueId,
         CancellationToken cancellationToken)
@@ -123,7 +123,7 @@ public sealed class IssueStore(NpgsqlDataSource views)
         if (!await reader.ReadAsync(cancellationToken)) return null;
         DateOnly? publishedOn = reader.IsDBNull(1) ? null : DateOnly.FromDateTime(new DateTime(reader.GetInt64(1), DateTimeKind.Utc));
         return new(reader.GetInt32(0), publishedOn, reader.IsDBNull(2) ? null : reader.GetInt32(2), reader.IsDBNull(3) ? null : reader.GetInt32(3),
-            reader.GetString(4), (int)reader.GetInt64(5), (int)reader.GetInt64(6));
+            reader.GetString(4), ViewColumns.Text(reader, 5), (int)reader.GetInt64(6), (int)reader.GetInt64(7));
     }
 
     /// <summary>Null means that the release has no line-up row for the issue. Rows that do not add up to the Home tile count fail the request, so a wrong split never shows.</summary>

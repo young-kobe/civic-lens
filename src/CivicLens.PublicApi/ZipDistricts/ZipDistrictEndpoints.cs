@@ -42,10 +42,15 @@ public static class ZipDistrictEndpoints
                 throw new ArgumentException("The issue view needs an issue.", "issue");
             if (view == "strip" && issue is not null)
                 throw new ArgumentException("The strip view has no issue filter.", "issue");
+            if (view == "issue" && http.Request.Query.ContainsKey("sinceRelease"))
+                throw new ArgumentException("The issue view has no release marker.", "sinceRelease");
             var sinceRelease = QueryValues.Number(http.Request.Query, "sinceRelease", 1, int.MaxValue);
-            var lookup = view == "strip"
-                ? await zips.FindStripAsync(request, sinceRelease, cancellationToken)
-                : await zips.FindMembersAsync(request, issue, sinceRelease, cancellationToken);
+            var lookup = view switch
+            {
+                "strip" => await zips.FindStripAsync(request, sinceRelease, cancellationToken),
+                "issue" => await zips.FindIssueVotesAsync(request, issue!, cancellationToken),
+                _ => await zips.FindMembersAsync(request, issue, sinceRelease, cancellationToken)
+            };
             if (lookup.Answer is not { } answer) return Miss(lookup.Miss!.Value);
             var data = ZipMemberCardsMapper.Map(answer, lookup.SharedVotes, lookup.IssueOptions, issue);
             var rootPath = options.PublicBaseUrl?.Join(string.Empty) ?? "/";

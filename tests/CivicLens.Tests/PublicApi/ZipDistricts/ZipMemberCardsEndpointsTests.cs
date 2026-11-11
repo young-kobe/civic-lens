@@ -309,6 +309,15 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task IssueViewRejectsAReleaseMarkerBeforeLookupAsTheStripRejectsAnIssue()
+    {
+        await using var host = await StartAsync(withNames: false);
+
+        foreach (var query in new[] { "sinceRelease=1", "sinceRelease=", "sinceRelease=x" })
+            await AssertProblemAsync(host, "/v1/zip-districts/36009/members?view=issue&issue=health&" + query, HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task MembersRouteRejectsRepeatedAndUnsupportedViewsBeforeLookup()
     {
         await using var host = await StartAsync();

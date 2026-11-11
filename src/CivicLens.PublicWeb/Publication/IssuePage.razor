@@ -4,6 +4,10 @@
     <Hero>
         <div class="issue-hero">
             <h1>@Data.Name</h1>
+            @if (Data.Definition is not null)
+            {
+                <p class="issue-definition">@Data.Definition</p>
+            }
             <p class="issue-counts" data-issue-counts>@CountLine</p>
             <p class="small muted">A tag says a record is about the issue. It does not say whether the record backs or opposes it. An AI model picks each tag and no person checks it, so a tag can be wrong.</p>
         </div>
@@ -27,21 +31,11 @@
                 else
                 {
                     <p class="issue-note">Each vote below is about its own question, not about the whole issue. A vote does not show a position on the issue.</p>
-                    <ul class="issue-rows" role="list">
+                    <ul class="record-rows" role="list">
                         @foreach (var vote in Data.Votes)
                         {
-                            <li class="issue-row">
-                                <span class="issue-icon" aria-hidden="true"><Icon Name="IconName.Vote" /></span>
-                                <div>
-                                    <a href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))">@vote.Headline</a>
-                                    @if (vote.Label is not null)
-                                    {
-                                        <span class="issue-label">@vote.Label</span>
-                                    }
-                                    <p class="muted small">@vote.Chamber, @Moment.Day(vote.VotedOn). @vote.ResultWords.</p>
-                                    <p class="issue-tally"><span><b>@vote.Yea</b> Yes</span><span><b>@vote.Nay</b> No</span></p>
-                                </div>
-                            </li>
+                            <PublicRecordRow Icon="IconName.Vote" Href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))" Headline="@vote.Headline" Label="@vote.Label"
+                                             Meta="@($"{vote.Chamber}, {Moment.Day(vote.VotedOn)}")" Yea="vote.Yea" Nay="vote.Nay" ResultWords="@vote.ResultWords" />
                         }
                     </ul>
                     @if (Data.SubstantiveVotes > Data.Votes.Length)
@@ -58,24 +52,12 @@
                 }
                 else
                 {
-                    <ul class="issue-rows" role="list">
+                    <p class="issue-note">The date is the day of the latest event, not the day the bill began.</p>
+                    <ul class="record-rows" role="list">
                         @foreach (var bill in Data.Bills)
                         {
-                            <li class="issue-row">
-                                <span class="issue-icon issue-icon-bill" aria-hidden="true"><Icon Name="IconName.Bill" /></span>
-                                <div>
-                                    <a href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@bill.Headline</a>
-                                    @if (bill.Label is not null)
-                                    {
-                                        <span class="issue-label">@bill.Label</span>
-                                    }
-                                    <p class="muted small">Latest event on @Moment.Day(bill.EventDate). The date is the day of the latest event, not the day the bill began.</p>
-                                    @if (bill.BillLine is not null)
-                                    {
-                                        <p class="small muted">@bill.BillLine @bill.BillLineSource</p>
-                                    }
-                                </div>
-                            </li>
+                            <PublicRecordRow Icon="IconName.Bill" IconClass="record-row-icon-bill" Href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" Headline="@bill.Headline" Label="@bill.Label"
+                                             Meta="@($"Latest event on {Moment.Day(bill.EventDate)}")" BillLine="@bill.BillLine" />
                         }
                     </ul>
                     @if (Data.BillCount > Data.Bills.Length)
