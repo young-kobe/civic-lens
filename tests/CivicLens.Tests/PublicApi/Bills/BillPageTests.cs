@@ -71,7 +71,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
         Assert.Equal(["1 Democrats", "1 Republicans"], page.QuerySelectorAll(".party-bar-legend li").Select(item => System.Text.RegularExpressions.Regex.Replace(item.TextContent, @"\s+", " ").Trim()));
         Assert.Equal("Bill on Congress.gov", page.QuerySelector("details#source a")!.TextContent);
         Assert.Equal("https://www.congress.gov/bill/119th-congress/house-bill/7", page.QuerySelector("details#source a")!.GetAttribute("href"));
-        Assert.Equal(["Health care"], page.QuerySelectorAll(".bill-chip").Select(chip => chip.TextContent));
+        Assert.Equal(["Health care"], page.QuerySelectorAll(".link-chip").Select(chip => chip.TextContent));
         var votes = page.QuerySelectorAll(".bill-votes h3 a").ToArray();
         Assert.Equal([$"https://civic-lens.test/records/{new string('e', 64)}.html"], votes.Select(link => link.GetAttribute("href")));
     }

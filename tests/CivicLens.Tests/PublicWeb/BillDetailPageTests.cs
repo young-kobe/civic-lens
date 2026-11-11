@@ -85,14 +85,14 @@ public sealed class BillDetailPageTests
     public async Task TheCrsFoldSitsDirectlyUnderTheLabeledSummaryAndHoldsOneParagraphPerLine()
     {
         var page = await RenderAsync(Bill);
-        var summary = page.QuerySelector(".bill-summary")!;
-        var fold = page.QuerySelector(".bill-main > details.bill-fold")!;
+        var summary = page.QuerySelector(".ai-summary")!;
+        var fold = page.QuerySelector(".bill-main > details.source-fold")!;
 
         Assert.Same(fold, summary.NextElementSibling);
-        Assert.True(summary.ClassList.Contains("bill-ai"));
-        Assert.Equal(Bill.Label, summary.QuerySelector(".bill-tag")!.TextContent);
+        Assert.True(summary.ClassList.Contains("ai-summary-ai"));
+        Assert.Equal(Bill.Label, summary.QuerySelector(".ai-summary-label")!.TextContent);
         Assert.Equal(["This bill imposes sanctions.", "It extends a law."], fold.QuerySelectorAll("p").Select(paragraph => paragraph.TextContent));
-        Assert.Null((await RenderAsync(Bill with { CrsText = null })).QuerySelector(".bill-main > details.bill-fold"));
+        Assert.Null((await RenderAsync(Bill with { CrsText = null })).QuerySelector(".bill-main > details.source-fold"));
     }
 
     [Fact]
@@ -100,8 +100,8 @@ public sealed class BillDetailPageTests
     {
         var page = await RenderAsync(Bill with { TextOrigin = PublishedTextOrigin.Code, Label = null });
 
-        Assert.False(page.QuerySelector(".bill-summary")!.ClassList.Contains("bill-ai"));
-        Assert.Equal(PublishedRecordLabels.CodeWording, page.QuerySelector(".bill-tag")!.TextContent);
+        Assert.False(page.QuerySelector(".ai-summary")!.ClassList.Contains("ai-summary-ai"));
+        Assert.Equal(PublishedRecordLabels.CodeWording, page.QuerySelector(".ai-summary p.muted")!.TextContent);
     }
 
     [Fact]
@@ -190,7 +190,7 @@ public sealed class BillDetailPageTests
 
         Assert.Null(page.QuerySelector("script[src=''], .bill-main script"));
         Assert.DoesNotContain("how much it costs", page.Body!.TextContent, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("<script>private()</script>", page.QuerySelector(".bill-summary p")!.TextContent);
+        Assert.Equal("<script>private()</script>", page.QuerySelector(".ai-summary p")!.TextContent);
     }
 
     [Fact]

@@ -33,29 +33,22 @@
             <div class="bill-main">
                 @if (!string.IsNullOrWhiteSpace(Data.Summary))
                 {
-                    <div class="bill-summary @(Data.TextOrigin == PublishedTextOrigin.Model ? "bill-ai" : null)">
-                        @if (SummaryLabel is not null)
+                    <AiSummary Label="@(Data.TextOrigin == PublishedTextOrigin.Model ? SummaryLabel : null)" Check="CrsCheck">
+                        @if (Data.TextOrigin != PublishedTextOrigin.Model && SummaryLabel is not null)
                         {
-                            <span class="bill-tag">@SummaryLabel</span>
+                            <p class="small muted">@SummaryLabel</p>
                         }
                         <p>@Data.Summary</p>
-                        @if (Data.CrsText is not null)
-                        {
-                            <p class="bill-check">The text above summarizes the Congressional Research Service summary. <a href="#source">Check the source</a></p>
-                        }
-                    </div>
+                    </AiSummary>
                 }
                 @if (Data.CrsText is not null)
                 {
-                    <details class="bill-fold">
-                        <summary>From the Congressional Research Service (CRS)</summary>
-                        <div class="bill-fold-body">
-                            @foreach (var paragraph in Data.CrsText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                            {
-                                <p>@paragraph</p>
-                            }
-                        </div>
-                    </details>
+                    <SourceFold Summary="From the Congressional Research Service (CRS)" FoldId="@null">
+                        @foreach (var paragraph in Data.CrsText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                        {
+                            <p>@paragraph</p>
+                        }
+                    </SourceFold>
                 }
                 @if (Data.Votes.Length > 0)
                 {
@@ -78,7 +71,7 @@
                         <h2 class="bill-card-title">Issues and area</h2>
                         @foreach (var issue in Data.Issues)
                         {
-                            <a class="bill-chip" href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">@issue.Name</a>
+                            <LinkChip Href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">@issue.Name</LinkChip>
                         }
                         @if (Data.PolicyArea is not null)
                         {
@@ -86,32 +79,29 @@
                         }
                     </div>
                 }
-                <details class="bill-fold" id="source">
-                    <summary>Check the source</summary>
-                    <div class="bill-fold-body">
-                        <dl class="bill-kv">
-                            @if (Data.Status is not null && Data.StatusDate is { } statusDate)
-                            {
-                                <dt>Latest action</dt>
-                                <dd>@Data.Status Action date @Moment.Day(statusDate).@if (Data.StatusReadAtUtc is { } read){<text> Status read @Moment.Full(read). The bill can change after this time.</text>}</dd>
-                            }
-                            @if (Data.CrsVersion is not null)
-                            {
-                                <dt>CRS summary</dt>
-                                <dd>Version @Data.CrsVersion</dd>
-                            }
-                            <dt>Official bill page</dt>
-                            <dd><a href="@Data.CongressGovUrl" rel="noopener noreferrer">Bill on Congress.gov</a></dd>
-                            <dt>Revision</dt>
-                            <dd>@Data.RevisionNumber.ToString(CultureInfo.InvariantCulture)</dd>
-                            @if (SummaryLabel is not null)
-                            {
-                                <dt>Wording</dt>
-                                <dd>@SummaryLabel</dd>
-                            }
-                        </dl>
-                    </div>
-                </details>
+                <SourceFold>
+                    <dl class="bill-kv">
+                        @if (Data.Status is not null && Data.StatusDate is { } statusDate)
+                        {
+                            <dt>Latest action</dt>
+                            <dd>@Data.Status Action date @Moment.Day(statusDate).@if (Data.StatusReadAtUtc is { } read){<text> Status read @Moment.Full(read). The bill can change after this time.</text>}</dd>
+                        }
+                        @if (Data.CrsVersion is not null)
+                        {
+                            <dt>CRS summary</dt>
+                            <dd>Version @Data.CrsVersion</dd>
+                        }
+                        <dt>Official bill page</dt>
+                        <dd><a href="@Data.CongressGovUrl" rel="noopener noreferrer">Bill on Congress.gov</a></dd>
+                        <dt>Revision</dt>
+                        <dd>@Data.RevisionNumber.ToString(CultureInfo.InvariantCulture)</dd>
+                        @if (SummaryLabel is not null)
+                        {
+                            <dt>Wording</dt>
+                            <dd>@SummaryLabel</dd>
+                        }
+                    </dl>
+                </SourceFold>
             </aside>
         </div>
     </div>
@@ -126,6 +116,9 @@
 
     private string? SummaryLabel => Data.Label ?? (Data.TextOrigin is PublishedTextOrigin.Model or PublishedTextOrigin.Code
         ? PublishedRecordLabels.Wording(Data.TextOrigin).First().Value : null);
+
+    private RenderFragment? CrsCheck => Data.CrsText is null ? null
+        : @<text>The text above summarizes the Congressional Research Service summary. <a href="#source">@SourceFold.Title</a></text>;
 
     protected override void OnParametersSet()
     {
