@@ -20,7 +20,7 @@ R-68 replaces static public serving with pages rendered by `PublicApi` from rest
 
 The restricted views, typed read APIs, shared Razor library, page cache, Home preview, and private ZIP cards and shared votes are merged. APIs also serve CRS bodies, bill histories, statement and document-change evidence, briefs, withdrawals, official figures, and party agreement. Their exact contracts are in [search](architecture/search.md#api) and [publication](architecture/publication.md#public-api-views). A merged API does not complete its reader page or live rollout.
 
-The public root still serves static releases. Home remains a gated preview under `/web`. The public `/compare.html` route now serves Compare through the existing server renderer. The member strip and both private ZIP layouts are deployed. Cold-read and larger-selection performance checks remain open, including the member bill-count timeout. The two-day all-pages-on-server period has not started.
+The public root still serves static releases. Home remains a gated preview under `/web`. The public `/compare.html` route now serves Compare through the existing server renderer. The member strip and both private ZIP layouts are deployed. Cold-read and larger-selection performance checks remain open, including the member bill-count timeout.
 
 Finish routes in this order. Each slice includes the data, source evidence, labels, downloads, and checks its reader flow needs.
 
@@ -58,7 +58,8 @@ Complete these gates before closing R-68.
 - [ ] Reconcile every accepted audit row, including missing components M1 through M10, against the component inventory. Complete all 18 reader flows and all seven owner tests in [public site](architecture/public-site.md#purpose). Verify grade, accessibility, keyboard and mobile use, privacy, and API downloads. Every table has a "Get this data" link.
 - [ ] Measure cold reads, traffic, query work, and worker effects on the shared database. Close the open Home cold-read timeout and verify larger ZIP selections. Warm generated-data probes do not establish cold production performance.
 - [ ] Deploy reviewed, green main builds with matching artifacts, a fresh backup, functional checks, worker health, and the final live check. Verify Cloudflare compression and caching with private fragments excluded from shared caches.
-- [ ] Move every public route to server rendering and record the actual start of that state. Keep the static rollback path for two days with no rollback. Only then delete static page rendering and rewrite options, so publication writes data only. End the temporary merge exception at that retirement gate.
+- [ ] Move every public route to server rendering. Then retire static page rendering and the rewrite options at once, so publication writes data only. There is no rollback period. End the temporary merge exception at that retirement gate.
+- [ ] After retirement, remove all unused legacy code, tests, and references in one prune pass. Then squash the EF migrations into one baseline.
 - [ ] Move search ingestion from `release.json` and record files to typed published data before static retirement. Remove public `release.json` at that gate. Keep private snapshots while verification or recovery use them, and remove code after its last caller leaves. Future public MCP uses the public API in a separate deployment.
 - [ ] Complete the held AI work after that retirement gate.
 - [ ] Run the final source, data, privacy, reader-flow, and design audit. Remove unused code and temporary migration rules. Reconcile the roadmap.
