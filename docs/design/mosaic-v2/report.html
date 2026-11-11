@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Report a problem | Civic Lens prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..900;1,8..60,400..700&family=Libre+Franklin:wght@400..900&family=Gabarito:wght@400..900&family=Figtree:wght@400..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="skins.css">
+<script>(function(){var r=document.documentElement,k=location.search.match(/skin=([a-z0-9]+)/),s=k&&k[1];try{if(s)localStorage.setItem('cl-skin',s);else s=localStorage.getItem('cl-skin')}catch(x){}if(s&&s!=='current')r.setAttribute('data-skin',s)})();</script>
+<script>(function(){var r=document.documentElement;try{var q=location.search.match(/zip=(\d{5})/);if(q)localStorage.setItem('cl-zip',q[1]);if(localStorage.getItem('cl-zip'))r.classList.add('has-zip');var t=localStorage.getItem('cl-theme');if(t)r.setAttribute('data-theme',t)}catch(x){}})();</script></head><body data-states="record:Record named|norec:No record chosen|sent:Report sent">
+<a class="skip" href="#main">Skip to content</a>
+<header class="site"><div class="wrap bar">
+<a class="brand" href="home.html"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21M10.5 7.5v6M7.5 10.5h6"/></svg> Civic Lens</a>
+<nav class="primary" aria-label="Main"><a href="home-zip.html">Your members</a><a href="official.html">Officials</a><a href="issue.html">Issues</a><a href="vote.html">Votes</a><a href="bill.html">Bills</a><a href="president.html">Executive actions</a><a href="boards.html">Compare parties</a></nav>
+<form class="search" role="search" action="search.html"><label class="sr" for="q" style="position:absolute;left:-999px">Search bills, votes and people</label><input id="q" name="q" type="search" placeholder="Search bills, votes, people"></form>
+<button class="icon-btn" id="theme" type="button" aria-label="Switch light or dark theme">Theme</button>
+<details class="menu"><summary>Menu</summary><div class="sheet"><a href="home-zip.html">Your members</a><a href="official.html">Officials</a><a href="issue.html">Issues</a><a href="vote.html">Votes</a><a href="bill.html">Bills</a><a href="president.html">Executive actions</a><a href="boards.html">Compare parties</a></div></details>
+</div></header>
+
+<main id="main"><div class="wrap">
+<p class="fresh">Records as of 6 Nov 2026, 14:00 UTC. <span class="example">example time</span></p>
+<p class="crumbs"><a href="home.html">Home</a> / Report a problem</p>
+<h1>Report a problem</h1>
+<p class="lede" style="margin-top:12px">Tell us what is wrong with a published record. A person reads each report.</p>
+<div data-show="record">
+<div class="card raised" style="margin-bottom:20px"><p class="eyebrow">You are reporting this record</p>
+<h2 style="font-size:1.25rem"><a href="statement.html">Kelly, with Schiff and Slotkin, announces bill to shut down the DOJ "Anti-Weaponization Fund" and calls it corruption</a></h2>
+<p class="muted small" style="margin:6px 0 0">Statement, revision 1, first published 30 Oct 2026, 00:44 UTC. <a href="report.html#norec">Wrong record? Choose another.</a></p></div>
+<form method="post" action="#" id="rform">
+<input type="hidden" name="recordId" value="ef40598104b8ef018bf6e3521e1b7aeee316cb4eecac665673617bdfac76636f"><input type="hidden" name="revision" value="1">
+<fieldset class="field"><legend>What is wrong</legend><div class="opts">
+<label class="opt"><input type="radio" name="category" value="quote" required> The quoted text is wrong</label>
+<label class="opt"><input type="radio" name="category" value="date"> A date is wrong</label>
+<label class="opt"><input type="radio" name="category" value="person"> The wrong person or source is named</label>
+<label class="opt"><input type="radio" name="category" value="context"> Context is missing</label>
+<label class="opt"><input type="radio" name="category" value="link"> A source link is broken</label>
+<label class="opt"><input type="radio" name="category" value="other"> Something else</label></div></fieldset>
+<div class="field"><label for="details">Details</label><textarea id="details" name="details" maxlength="2000" aria-describedby="d-hint"></textarea>
+<span class="hint" id="d-hint">Say where in the record the problem is. Details are required for "Something else". Use at most 2,000 characters. Do not add your name or contact details.</span></div>
+<div class="field" style="position:absolute;left:-9999px" aria-hidden="true"><label for="site">Leave this empty</label><input id="site" name="site" type="text" tabindex="-1" autocomplete="off"></div>
+<button class="btn" type="submit">Send report</button>
+<p class="small muted" style="margin-top:12px">This form works without JavaScript. The server checks that a person sent it with a hidden empty field and a minimum fill time. <span class="example">example</span> A report stores the record, the category and your text. It stores nothing about you.</p></form></div>
+<div data-show="norec" id="norec"><div class="empty" role="status"><p><b>Choose the record first.</b></p><p class="muted small" style="margin:0 0 6px">To report a record, open its page and use the link "Report a problem with this record". That link tells us which record you mean.</p>
+<ul><li><a href="search.html">Search the records</a> and open one</li><li><a href="search.html?kind=statement">Browse statements</a></li><li><a href="president.html">Browse executive actions</a></li></ul></div></div>
+<div data-show="sent"><div class="banner" role="status"><span class="bt">Report received</span><p><b>Thank you. We stored your report for the record "Kelly, with Schiff and Slotkin, announces bill..."</b></p><p>A person reads it and decides if the record needs a change. We do not reply to reports. If we change the record, the page shows a notice.</p></div><p><a href="statement.html">Back to the record</a> | <a href="home.html">Go to the home page</a></p></div>
+<section><h2 style="font-size:1.25rem">A problem with the site</h2><p class="muted">For a broken page or another site problem, write to the site contact on the <a href="#">About page</a>.</p></section>
+</div></main>
+<footer class="site"><div class="wrap"><a href="#">How we check records</a><a href="#">Glossary</a><a href="#">About</a><a href="report.html">Report a problem with this page</a><span class="muted" style="padding:10px 0">Prototype. Not the live site.</span></div></footer>
+<script>
+document.addEventListener('click',function(ev){var g=ev.target.closest('.gl'),x=ev.target.closest('.gl-x');document.querySelectorAll('.gloss').forEach(function(w){var p=w.querySelector('.pop'),b=w.querySelector('.gl'),own=g&&w.contains(g);if(x&&w.contains(x)){p.hidden=true;b.setAttribute('aria-expanded','false');b.focus();return}if(own){p.hidden=!p.hidden;b.setAttribute('aria-expanded',String(!p.hidden))}else if(!ev.target.closest('.pop')||!w.contains(ev.target)){p.hidden=true;b.setAttribute('aria-expanded','false')}})});
+document.querySelectorAll('[data-forget]').forEach(function(b){b.addEventListener('click',function(){try{localStorage.removeItem('cl-zip')}catch(x){}document.documentElement.classList.remove('has-zip')})});
+var tb=document.getElementById('theme');if(tb)tb.addEventListener('click',function(){var r=document.documentElement,c=r.getAttribute('data-theme'),dark=c?c==='dark':matchMedia('(prefers-color-scheme: dark)').matches,n=dark?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('cl-theme',n)}catch(x){}});
+var zf=document.getElementById('zip-form');if(zf)zf.addEventListener('submit',function(ev){ev.preventDefault();var i=document.getElementById('zip'),m=document.getElementById('zip-msg'),b=zf.querySelector('button'),v=i.value.trim();m.textContent='';if(!/^\d{5}$/.test(v)){m.textContent='Enter 5 digits, for example 02139.';i.setAttribute('aria-invalid','true');i.focus();return}i.removeAttribute('aria-invalid');if(v!=='02139'){m.textContent='Prototype only: this demo knows ZIP 02139. The built site looks up any ZIP.';i.focus();return}b.setAttribute('aria-busy','true');b.textContent='Looking up...';setTimeout(function(){location.href='home-zip.html?zip='+v},250)});
+var fi=document.getElementById('finder-q');if(fi)fi.addEventListener('input',function(){var q=fi.value.toLowerCase();document.querySelectorAll('#finder-list li').forEach(function(l){l.hidden=q&&l.textContent.toLowerCase().indexOf(q)<0})});
+</script><script src="states.js"></script></body></html>
