@@ -89,7 +89,7 @@
     </Panel>
 
     <Panel Title="Sources" Id="sources-title" Padded="true">
-        <SourceLinesNote>@PublishedVoteView.SavedData(Record)</SourceLinesNote>
+        <SourceLinesNote>@VoteFacts.SavedData(Record.Source)</SourceLinesNote>
         @for (var index = 0; index < Record.Sources.Length; index++)
         {
             var source = Record.Sources[index];

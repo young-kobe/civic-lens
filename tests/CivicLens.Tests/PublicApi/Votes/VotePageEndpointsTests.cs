@@ -2,6 +2,8 @@ using System.Net;
 using AngleSharp.Html.Parser;
 using CivicLens.PublicApi;
 using CivicLens.PublicApi.Pages;
+using CivicLens.PublicApi.Votes;
+using Npgsql;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Officials;
@@ -84,6 +86,36 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
         Assert.Equal(["Ben Baker", "Cy Cole"], nay.QuerySelectorAll(".vote-members tbody td:first-child").Select(cell => cell.TextContent));
         Assert.Equal(["Di Dole"], named.QuerySelectorAll(".vote-members tbody td:first-child").Select(cell => cell.TextContent));
         Assert.Equal(HttpStatusCode.BadRequest, tooLong.StatusCode);
+    }
+
+    [Fact]
+    public async Task TheFilterFormAndTheClearLinkPointAtTheRouteThatServedThePage()
+    {
+        await using var host = await StartAsync();
+
+        var page = await GetPageAsync(host, Path + "?cast=Nay");
+
+        var served = BaseUrl.Join(Path.TrimStart('/'));
+        Assert.Equal(served + "#members", page.QuerySelector("form.vote-filter")!.GetAttribute("action"));
+        Assert.Equal(served + "#members", page.QuerySelector(".vote-filter-actions a")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task TheReaderBuildsThePageOnOneConnectionAndOneSnapshot()
+    {
+        await using var host = await StartAsync();
+        var connections = 0;
+        await using var views = new NpgsqlDataSourceBuilder(host.Options.PublicViewsDatabase)
+            .UsePhysicalConnectionInitializer(_ => connections++, _ => { connections++; return Task.CompletedTask; }).Build();
+        var reader = new VotePageReader(new VoteStore(views), views);
+
+        var page = await reader.ReadAsync(House.RecordId, CancellationToken.None);
+
+        Assert.Equal(1, connections);
+        Assert.Equal(["Ann Able", "Ben Baker", "Cy Cole", "Di Dole"], page!.Members.Select(member => member.Name));
+        Assert.Equal("Health care", Assert.Single(page.Issues).Name);
+        Assert.NotEmpty(page.Sources);
+        Assert.Null(await reader.ReadAsync(new string('f', 64), CancellationToken.None));
     }
 
     [Fact]

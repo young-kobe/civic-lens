@@ -1,18 +1,13 @@
-using CivicLens.Publication.Contracts;
+using System.Globalization;
 
 namespace CivicLens.PublicWeb.Components.Ui;
 
-/// <summary>The casts of one group on one roll call. The group is one party or a whole chamber. Every count is known and covers every member of the group.</summary>
-public sealed record PartyBarData(string Name, PartyTone Tone, int Yes, int No, int Present, int NotVoting, int Other)
+/// <summary>The labeled segments of one party bar. A segment with no members is listed in the legend and not drawn.</summary>
+public sealed record PartyBarData(string Name, IReadOnlyList<PartyBarSegment> Segments, PartyBarMark? Mark = null)
 {
-    public int Total => Yes + No + Present + NotVoting + Other;
+    public int Total => Segments.Sum(segment => segment.Count);
 
-    /// <summary>The smallest count of Yes that is more than half of the Yes and No casts. Null when nobody cast Yes or No.</summary>
-    public int? Majority => Yes + No == 0 ? null : (Yes + No) / 2 + 1;
+    public string Description => $"{Name}: " + string.Join(", ", Segments.Select(segment => $"{segment.Label} {segment.Count}"));
 
-    public string Description =>
-        $"{Name}: {PlainVoteWords.Yes} {Yes}, {PlainVoteWords.No} {No}, {PlainVoteWords.Present} {Present}, {PlainVoteWords.NotVoting} {NotVoting}" + (Other > 0 ? $", {OtherWord} {Other}" : "");
-
-    public const string OtherWord = "Other";
-    public const string MajorityWord = "Majority of Yes and No votes";
+    public static string Number(double count) => count.ToString("0.#", CultureInfo.InvariantCulture);
 }

@@ -34,7 +34,7 @@ public static class ServerPageEndpoints
                     [nameof(ComparePage.RootPath)] = baseUrl.Join(string.Empty),
                     [nameof(ComparePage.BrowserApiUrl)] = home.BrowserApiRoot
                 }, cancellationToken)));
-        routes.MapGet(Prefix + "/records/{recordId}.html", (string recordId, HttpContext context, VotePageReader votes, ServerPageResponder responder,
+        routes.MapGet(VoteRoute("{recordId}"), (string recordId, HttpContext context, VotePageReader votes, ServerPageResponder responder,
             CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
         {
             var filter = new VoteMemberFilter(QueryValues.Filter(context.Request.Query, "q")?.Trim(), QueryValues.Filter(context.Request.Query, "cast"),
@@ -45,12 +45,16 @@ public static class ServerPageEndpoints
             {
                 [nameof(VoteDetailPage.Data)] = page,
                 [nameof(VoteDetailPage.RootPath)] = baseUrl.Join(string.Empty),
+                [nameof(VoteDetailPage.PagePath)] = baseUrl.Join(VoteRoute(recordId).TrimStart('/')),
                 [nameof(VoteDetailPage.Filter)] = filter
             }, cancellationToken);
         }));
         routes.MapGet(Prefix + "/{**path}", (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
             NotFoundAsync(context, responder, baseUrl, cancellationToken));
     }
+
+    /// <summary>The route of the server-rendered vote page. The page uses it for its own form action, so a filter stays on the page that served it.</summary>
+    private static string VoteRoute(string recordId) => $"{Prefix}/{PublicationProtocol.RecordPagePath(recordId)}";
 
     private static Task<IResult> NotFoundAsync(HttpContext context, ServerPageResponder responder, PublicBaseUrl baseUrl, CancellationToken cancellationToken) =>
         responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,

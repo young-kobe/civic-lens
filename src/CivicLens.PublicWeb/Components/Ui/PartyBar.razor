@@ -1,62 +1,86 @@
-@using CivicLens.Publication.Contracts
-
-<figure class="party-bar" data-party="@Data.Tone.ToString().ToLowerInvariant()">
+<figure class="party-bar">
     <figcaption>@Data.Name</figcaption>
     <svg class="party-bar-chart" role="img" aria-label="@Data.Description" focusable="false">
         <defs>
-            <pattern id="@HatchId" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="party-bar-hatch" width="4" height="7" /></pattern>
+            @foreach (var look in Looks)
+            {
+                <pattern id="@PatternId(look)" data-tone="@ToneName(look.Tone)" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                    <rect class="party-bar-paper" width="7" height="7" />
+                    @switch (look.Fill)
+                    {
+                        case PartyBarFill.Stripes:
+                            <rect class="party-bar-ink" width="3.5" height="7" />
+                            break;
+                        case PartyBarFill.Dots:
+                            <circle class="party-bar-ink" cx="3.5" cy="3.5" r="1.7" />
+                            break;
+                        default:
+                            <path class="party-bar-ink-line" d="M0 3.5H7M3.5 0V7" />
+                            break;
+                    }
+                </pattern>
+            }
         </defs>
         <rect class="party-bar-back" width="100%" height="100%" />
-        @foreach (var segment in Segments)
+        @foreach (var (segment, start) in Drawn)
         {
-            <rect class="party-bar-@segment.Kind" x="@Percent(segment.Start)" width="@Percent(segment.Share)" height="100%" fill="@(segment.Kind == "no" ? $"url(#{HatchId})" : null)" />
+            <rect class="party-bar-fill" data-tone="@ToneName(segment.Tone)" data-fill="@FillName(segment.Fill)" x="@Percent(start)" width="@Percent((double)segment.Count / Data.Total)" height="100%" fill="@Paint(segment)" />
         }
-        @if (Data.Majority is not null)
+        @if (Data.Mark is { } mark)
         {
-            <line class="party-bar-mark" x1="@Percent((Data.Yes + Data.No) / 2.0 / Data.Total)" x2="@Percent((Data.Yes + Data.No) / 2.0 / Data.Total)" y1="0" y2="100%" />
+            <line class="party-bar-mark-halo" x1="@Percent(mark.Count / Data.Total)" x2="@Percent(mark.Count / Data.Total)" y1="0" y2="100%" />
+            <line class="party-bar-mark" x1="@Percent(mark.Count / Data.Total)" x2="@Percent(mark.Count / Data.Total)" y1="0" y2="100%" />
         }
     </svg>
     <ul class="party-bar-legend">
-        <li><span class="party-bar-swatch party-bar-yes"></span><b>@Data.Yes</b> @PlainVoteWords.Yes</li>
-        <li><span class="party-bar-swatch party-bar-no"></span><b>@Data.No</b> @PlainVoteWords.No</li>
-        @if (Data.Present > 0)
+        @foreach (var segment in Data.Segments)
         {
-            <li><span class="party-bar-swatch party-bar-present"></span><b>@Data.Present</b> @PlainVoteWords.Present</li>
+            <li>
+                <svg class="party-bar-swatch" aria-hidden="true" focusable="false"><rect class="party-bar-fill" data-tone="@ToneName(segment.Tone)" data-fill="@FillName(segment.Fill)" width="100%" height="100%" fill="@Paint(segment)" /></svg>
+                <b>@segment.Count</b> @segment.Label
+            </li>
         }
-        @if (Data.Other > 0)
+        @if (Data.Mark is { } line)
         {
-            <li><span class="party-bar-swatch party-bar-present"></span><b>@Data.Other</b> @PartyBarData.OtherWord</li>
-        }
-        <li><span class="party-bar-swatch party-bar-not-voting"></span><b>@Data.NotVoting</b> @PlainVoteWords.NotVoting</li>
-        @if (Data.Majority is { } needed)
-        {
-            <li><span class="party-bar-swatch party-bar-line"></span>@PartyBarData.MajorityWord: <b>@needed</b></li>
+            <li>
+                <svg class="party-bar-swatch party-bar-swatch-line" aria-hidden="true" focusable="false"><line class="party-bar-mark-halo" x1="50%" x2="50%" y1="0" y2="100%" /><line class="party-bar-mark" x1="50%" x2="50%" y1="0" y2="100%" /></svg>
+                @line.Label: <b>@PartyBarData.Number(line.Count)</b>
+            </li>
         }
     </ul>
 </figure>
 
 @code {
-    private string HatchId => $"{Id}-hatch";
-
-    /// <summary>A page-unique ID prefix. It names the stripe pattern that the No segment uses.</summary>
+    /// <summary>A page-unique ID prefix. It names the patterns that the striped, dotted, and grid segments use.</summary>
     [Parameter, EditorRequired] public string Id { get; set; } = string.Empty;
 
     [Parameter, EditorRequired] public PartyBarData Data { get; set; } = default!;
 
-    private IEnumerable<(string Kind, double Start, double Share)> Segments
+    private IEnumerable<(PartyTone Tone, PartyBarFill Fill)> Looks =>
+        Data.Segments.Where(segment => segment.Fill is not (PartyBarFill.Solid or PartyBarFill.Open))
+            .Select(segment => (segment.Tone, segment.Fill)).Distinct();
+
+    private IEnumerable<(PartyBarSegment Segment, double Start)> Drawn
     {
         get
         {
             var start = 0.0;
-            foreach (var (kind, count) in new[] { ("yes", Data.Yes), ("no", Data.No), ("present", Data.Present + Data.Other), ("not-voting", Data.NotVoting) })
+            foreach (var segment in Data.Segments.Where(segment => segment.Count > 0))
             {
-                if (count == 0) continue;
-                var share = (double)count / Data.Total;
-                yield return (kind, start, share);
-                start += share;
+                yield return (segment, start);
+                start += (double)segment.Count / Data.Total;
             }
         }
     }
+
+    private string PatternId((PartyTone Tone, PartyBarFill Fill) look) => $"{Id}-{ToneName(look.Tone)}-{FillName(look.Fill)}";
+
+    private string? Paint(PartyBarSegment segment) =>
+        segment.Fill is PartyBarFill.Solid or PartyBarFill.Open ? null : $"url(#{PatternId((segment.Tone, segment.Fill))})";
+
+    private static string ToneName(PartyTone tone) => tone.ToString().ToLowerInvariant();
+
+    private static string FillName(PartyBarFill fill) => fill.ToString().ToLowerInvariant();
 
     private static string Percent(double fraction) => (fraction * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "%";
 }

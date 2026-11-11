@@ -455,27 +455,26 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
     .home-grid > .home-issues, .home-grid > .home-method { grid-column: span 4; }
 }
 
-/* Party bar: one bar for the casts of one party or one chamber. Blue marks Democrats and red marks Republicans. Yes is solid, No is striped, and the rest is gray. */
-.party-bar { --party: var(--ink); --party-quiet: var(--line-strong); margin: 0; }
-.party-bar[data-party="democrat"] { --party: var(--party-dem); }
-.party-bar[data-party="republican"] { --party: var(--party-rep); }
+/* Party bar: one bar of labeled segments for a party, a chamber, or any group. Blue marks Democrats and red marks Republicans. Gray marks a count that is not a side. Each fill has its own shape, so color is never the only cue. */
+.party-bar { margin: 0; }
+.party-bar [data-tone] { --tone: var(--ink); }
+.party-bar [data-tone="democrat"] { --tone: var(--party-dem); }
+.party-bar [data-tone="republican"] { --tone: var(--party-rep); }
+.party-bar [data-tone="quiet"] { --tone: var(--muted); }
 .party-bar figcaption { margin: 0 0 var(--s2); font-family: var(--heading); font-size: 1rem; font-weight: 800; }
 .party-bar-chart { display: block; width: 100%; height: 16px; border-radius: 8px; overflow: hidden; }
 .party-bar-back { fill: var(--line); }
-.party-bar-yes { fill: var(--party); }
-.party-bar-no { stroke: var(--party); stroke-width: 2px; }
-.party-bar-hatch { fill: var(--party); }
-.party-bar-present { fill: var(--party-quiet); fill-opacity: .7; }
-.party-bar-not-voting { fill: var(--party-quiet); fill-opacity: .35; }
-.party-bar-mark { stroke: var(--surface); stroke-width: 3px; }
+.party-bar-paper { fill: var(--surface); }
+.party-bar-ink { fill: var(--tone); }
+.party-bar-ink-line { stroke: var(--tone); stroke-width: 1.2px; }
+.party-bar-fill[data-fill="solid"] { fill: var(--tone); }
+.party-bar-fill[data-fill="open"] { fill: var(--surface); stroke: var(--tone); stroke-width: 3px; }
+.party-bar-mark-halo { stroke: var(--surface); stroke-width: 5px; }
+.party-bar-mark { stroke: var(--ink); stroke-width: 2px; }
 .party-bar-legend { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s4); margin: var(--s2) 0 0; padding: 0; list-style: none; font-size: .875rem; }
 .party-bar-legend b { font-variant-numeric: tabular-nums; }
-.party-bar-swatch { display: inline-block; width: 12px; height: 12px; margin-inline-end: 4px; border-radius: 3px; vertical-align: -1px; }
-.party-bar-swatch.party-bar-yes { background: var(--party); }
-.party-bar-swatch.party-bar-no { border: 1.5px solid var(--party); background: repeating-linear-gradient(135deg, var(--party) 0 3px, transparent 3px 5px); }
-.party-bar-swatch.party-bar-present { background: var(--party-quiet); opacity: .7; }
-.party-bar-swatch.party-bar-not-voting { background: var(--party-quiet); opacity: .35; }
-.party-bar-swatch.party-bar-line { width: 3px; height: 14px; border-radius: 0; background: var(--ink); }
+.party-bar-swatch { display: inline-block; width: 14px; height: 14px; margin-inline-end: 4px; border-radius: 3px; vertical-align: -2px; overflow: hidden; }
+.party-bar-swatch-line { width: 6px; border-radius: 0; }
 
 /* Vote page */
 .vote { display: grid; gap: var(--s5); min-width: 0; }
@@ -519,9 +518,6 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .vote-filter-field label { font-size: .875rem; font-weight: 650; }
 .vote-filter-field input, .vote-filter-field select { min-height: 44px; padding: 0 12px; border: 1px solid var(--control-line); border-radius: var(--r-control); background: var(--surface); color: var(--ink); font: inherit; }
 .vote-filter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); }
-.vote-cast { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border: 1.5px solid var(--line-strong); border-radius: 999px; font-weight: 650; white-space: nowrap; }
-.vote-cast[data-side="yea"] { border-color: var(--info); color: var(--info); }
-.vote-cast[data-side="nay"] { border-color: var(--against); color: var(--against); }
 
 @media (min-width: 1280px) {
     .public-main:has(> .content > .vote) { padding: var(--s6) var(--frame-pad) var(--s7); }

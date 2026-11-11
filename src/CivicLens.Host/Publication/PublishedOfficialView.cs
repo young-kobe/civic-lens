@@ -242,8 +242,6 @@ internal static class PublishedOfficialView
 
     public static string PartyOf(PublishedChamber chamber, string party) => PublishedPartyNames.PartyOf(chamber, party);
 
-    public static string PartyMemberOf(PublishedChamber chamber, string party) => $"{chamber} {party}";
-
     private static string ChamberName(PublishedChamber chamber) => chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";
 
     public static string WebsiteHost(string website) => new Uri(website).IdnHost;

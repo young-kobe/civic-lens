@@ -9,11 +9,11 @@
                 <span>@Data.Chamber vote, @Moment.Day(Data.VotedOn)</span>
                 @if (PublishedRecordLabels.VoteKindTermKey(Data.Kind) is { } kindKey)
                 {
-                    <Term Key="@kindKey">@VotePageView.KindName(Data)</Term>
+                    <Term Key="@kindKey">@VoteFacts.KindName(Data.Kind, Data.KindCitation)</Term>
                 }
                 else
                 {
-                    <span>@VotePageView.KindName(Data)</span>
+                    <span>@VoteFacts.KindName(Data.Kind, Data.KindCitation)</span>
                 }
             </p>
             <h1 class="vote-headline">@Data.Headline</h1>
@@ -71,10 +71,10 @@
                         @foreach (var group in breakers)
                         {
                             <div class="vote-breaker-group">
-                                <h3><a href="@(RootPath + PublicationProtocol.BoardPagePath(Data.Chamber, group.Party))">@group.Name</a>: @VotePageView.BreakersHeadline(group)</h3>
+                                <h3><a href="@(RootPath + PublicationProtocol.BoardPagePath(Data.Chamber, group.Party))">@group.Name</a>: @VoteBreakers.Headline(group.Members.Length)</h3>
                                 @if (group.Members.Length == 0)
                                 {
-                                    <p class="small">@VotePageView.NoBreakers(group)</p>
+                                    <p class="small">@VoteBreakers.None(group.Name)</p>
                                 }
                                 else
                                 {
@@ -94,7 +94,7 @@
                     <p class="muted small">@VoteWords.TrackedOnly @Data.Members.Length tracked @(Data.Members.Length == 1 ? "member has" : "members have") a recorded position, including those who did not vote.</p>
                     <details class="vote-fold" open="@(Filter.IsActive ? true : null)">
                         <summary>Find a member</summary>
-                        <form class="vote-filter" method="get" action="@(RootPath + PublicationProtocol.RecordPagePath(Data.RecordId) + "#members")">
+                        <form class="vote-filter" method="get" action="@(PagePath + "#members")">
                             <div class="vote-filter-field">
                                 <label for="vote-filter-name">Member name</label>
                                 <input id="vote-filter-name" type="search" name="q" maxlength="@PublishedRecordEntry.MaximumFilterValueLength" value="@Filter.Name" placeholder="Type a name" />
@@ -113,6 +113,10 @@
                                 <label for="vote-filter-party">Party</label>
                                 <select id="vote-filter-party" name="party">
                                     <option value="">All parties</option>
+                                    @if (VotePageView.HasUnknownParty(Data))
+                                    {
+                                        <option value="@VoteMemberFilter.NoKnownParty" selected="@(Filter.Party == VoteMemberFilter.NoKnownParty)">@VoteWords.NoKnownParty</option>
+                                    }
                                     @foreach (var party in VotePageView.PartyOptions(Data))
                                     {
                                         <option value="@party" selected="@(party == Filter.Party)">@party</option>
@@ -123,7 +127,7 @@
                                 <Button Type="submit" Variant="ButtonVariant.Primary">Apply filters</Button>
                                 @if (Filter.IsActive)
                                 {
-                                    <a href="@(RootPath + PublicationProtocol.RecordPagePath(Data.RecordId) + "#members")">Clear filters</a>
+                                    <a href="@(PagePath + "#members")">Clear filters</a>
                                 }
                             </div>
                         </form>
@@ -137,8 +141,8 @@
                             </Head>
                             <Row Context="member">
                                 <TableCell Main Label="Member"><a href="@(RootPath + PublicationProtocol.OfficialPagePath(member.OfficialId))">@member.Name</a></TableCell>
-                                <TableCell Label="Party">@(member.Party ?? "No known party")</TableCell>
-                                <TableCell Label="Vote"><span class="vote-cast" data-side="@PublishedOfficialVote.SideOf(member.Cast)?.ToLowerInvariant()"><CastWord Cast="@member.Cast" /></span></TableCell>
+                                <TableCell Label="Party">@(member.Party ?? VoteWords.NoKnownParty)</TableCell>
+                                <TableCell Label="Vote"><span class="shared-vote-cast-value" data-side="@PublishedOfficialVote.SideOf(member.Cast)?.ToLowerInvariant()"><CastWord Cast="@member.Cast" /></span></TableCell>
                                 <TableCell Label="Source"><SourceLineLink Anchor="@anchors.Anchor(member.Citation)" Target="@($"{member.Name}, member line")" /></TableCell>
                             </Row>
                             <Empty><p class="small">No tracked member matches these filters.</p></Empty>
@@ -175,7 +179,7 @@
                     <summary>@VotePageView.SourceHeading</summary>
                     <div class="vote-source-body">
                         <Facts Items="facts" />
-                        <SourceLinesNote>@VotePageView.SavedData(Data.Source)</SourceLinesNote>
+                        <SourceLinesNote>@VoteFacts.SavedData(Data.Source)</SourceLinesNote>
                         @for (var index = 0; index < Data.Sources.Length; index++)
                         {
                             var source = Data.Sources[index];
@@ -202,6 +206,8 @@
 
     [Parameter, EditorRequired] public VotePageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    /// <summary>The path of the page that serves this vote, as the browser sees it. The filter form and the clear link keep the reader on it.</summary>
+    [Parameter, EditorRequired] public string PagePath { get; set; } = default!;
     [Parameter] public VoteMemberFilter Filter { get; set; } = new();
 
     protected override void OnParametersSet()

@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicWeb.Publication;
 using static CivicLens.Tests.PublicWeb.VoteDetailPageFixture;
@@ -26,15 +27,43 @@ public sealed class VoteDetailPageTests
 
         var bars = page.QuerySelectorAll(".vote-parties .party-bar");
         Assert.Equal(["House Democrats", "House Republicans", "House Independents"], bars.Select(bar => bar.QuerySelector("figcaption")!.TextContent));
-        Assert.Equal(["democrat", "republican", "neutral"], bars.Select(bar => bar.GetAttribute("data-party")));
-        Assert.Equal("House Democrats: Yes 1, No 3, Present 0, Not voting 1", bars[0].QuerySelector("svg")!.GetAttribute("aria-label"));
-        Assert.Contains("Majority of Yes and No votes: 3", bars[0].TextContent);
-        Assert.Contains("Majority of Yes and No votes: 3", bars[1].TextContent);
+        Assert.Equal(["democrat", "republican", "neutral"], bars.Select(bar => bar.QuerySelector(".party-bar-fill[data-fill=solid]")!.GetAttribute("data-tone")));
+        Assert.Equal("House Democrats: Yes 1, No 3, Not voting 1", bars[0].QuerySelector("svg")!.GetAttribute("aria-label"));
+        Assert.Contains("Half of Yes and No votes: 2", bars[0].TextContent);
+        Assert.Contains("Half of Yes and No votes: 2.5", bars[1].TextContent);
         var chamber = page.QuerySelector(".vote-result .party-bar")!;
-        Assert.Equal("neutral", chamber.GetAttribute("data-party"));
+        Assert.Equal("neutral", chamber.QuerySelector(".party-bar-fill[data-fill=solid]")!.GetAttribute("data-tone"));
         Assert.Equal("House members: Yes 6, No 4, Present 1, Not voting 3", chamber.QuerySelector("svg")!.GetAttribute("aria-label"));
         Assert.Contains("14 members have a recorded position, including 3 who did not vote.", page.QuerySelector(".vote-result")!.TextContent);
         Assert.Contains("on 16 Sep 2026", page.QuerySelector(".vote-result")!.TextContent);
+        Assert.Contains("Yes, No, Present, or Not voting", page.QuerySelector(".vote-result")!.TextContent);
+    }
+
+    [Theory]
+    [InlineData(PublishedVoteKind.Passage, true)]
+    [InlineData(PublishedVoteKind.Rule, true)]
+    [InlineData(PublishedVoteKind.Suspension, false)]
+    [InlineData(PublishedVoteKind.VetoOverride, false)]
+    [InlineData(PublishedVoteKind.Cloture, false)]
+    public async Task OnlyAVoteThatNeedsASimpleMajorityDrawsTheHalfLineOnTheChamberBar(PublishedVoteKind kind, bool drawsLine)
+    {
+        var page = await RenderAsync(Vote() with { Kind = kind, KindCitation = null });
+
+        var chamber = page.QuerySelector(".vote-result .party-bar")!;
+        Assert.Equal(drawsLine, chamber.QuerySelector("line.party-bar-mark") is not null);
+        Assert.Equal(drawsLine, chamber.TextContent.Contains("Half of Yes and No votes", StringComparison.Ordinal));
+        Assert.NotNull(page.QuerySelector(".vote-parties line.party-bar-mark"));
+    }
+
+    [Fact]
+    public async Task TheLegendLineStatesTheCountWhereTheLineIsDrawn()
+    {
+        var page = await RenderAsync(Vote());
+
+        var chamber = page.QuerySelector(".vote-result .party-bar")!;
+        var line = chamber.QuerySelector("svg.party-bar-chart line.party-bar-mark")!;
+        Assert.Equal("35.71%", line.GetAttribute("x1"));
+        Assert.Contains("Half of Yes and No votes: 5", chamber.QuerySelector(".party-bar-legend")!.TextContent);
     }
 
     [Fact]
@@ -100,13 +129,46 @@ public sealed class VoteDetailPageTests
     }
 
     [Fact]
-    public async Task EachMemberRowLinksToItsMarkedLineInTheSourceText()
+    public async Task EachMemberRowLinksToItsMarkedLineInTheSourceFoldThatPublicJsOpens()
     {
         var page = await RenderAsync(Vote());
 
         var anchors = page.QuerySelectorAll(".vote-members .source-line").Select(link => link.GetAttribute("href")![1..]).ToArray();
         Assert.Equal(5, anchors.Length);
-        Assert.All(anchors, anchor => Assert.Contains("Member:", page.GetElementById(anchor)!.TextContent));
+        var fold = page.QuerySelector("details.vote-source")!;
+        Assert.All(anchors, anchor =>
+        {
+            var target = page.GetElementById(anchor)!;
+            Assert.Contains("Member:", target.TextContent);
+            Assert.Same(fold, target.Closest("details"));
+        });
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.PublicWeb", "wwwroot", "js", "public.js"));
+        Assert.Contains("closest(\"details\")", script, StringComparison.Ordinal);
+        Assert.Contains("addEventListener(\"hashchange\", openFoldOfHash)", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheFilterFormAndTheClearLinkStayOnThePageThatServedTheVote()
+    {
+        var page = await RenderAsync(Vote(), new(Cast: "Nay"));
+
+        Assert.Equal(PagePath + "#members", page.QuerySelector("form.vote-filter")!.GetAttribute("action"));
+        Assert.Equal(PagePath + "#members", page.QuerySelector(".vote-filter-actions a")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task ThePartyFilterOffersNoKnownPartyOnlyWhenAMemberHasNoPartyAndFindsThatMember()
+    {
+        var withoutParty = Vote() with { Members = [.. Members, new("o6", "Fay Fox", "Aye", null, Cite(Lines[4]))] };
+
+        var offered = await RenderAsync(withoutParty, new(Party: VoteMemberFilter.NoKnownParty));
+        var absent = await RenderAsync(Vote());
+
+        var option = offered.QuerySelector("#vote-filter-party option[value=none]")!;
+        Assert.Equal("No known party", option.TextContent);
+        Assert.NotNull(option.GetAttribute("selected"));
+        Assert.Equal(["Fay Fox"], Names(offered));
+        Assert.Null(absent.QuerySelector("#vote-filter-party option[value=none]"));
     }
 
     [Fact]

@@ -18,6 +18,8 @@ public static class VoteWords
 
     public const string BreakMeaning = "A member is listed when they cast Yes or No against the cast of most members of their own party on this vote. A current independent counts with the party they caucus with. A former independent counts with no party. A member with another party, or with no known party, is not listed. Present and Not voting never count as a break.";
 
+    public const string NoKnownParty = "No known party";
+
     public const string TrackedOnly = "This record lists only the officials that Civic Lens tracks.";
 
     /// <summary>The badge text and meaning of a stored alignment. A mixed alignment has no badge.</summary>

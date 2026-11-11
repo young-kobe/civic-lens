@@ -32,6 +32,8 @@ public sealed record VotePageData(
     string? BillType,
     int? BillNumber)
 {
+    public VoteFactsSource FactsSource => new(Chamber, Kind, VotedOn, VotedOnCitation, KindCitation, Result, Totals, Facts);
+
     public VoteWordingSource WordingSource => new(Kind, Chamber, Source, Result, KindCitation, Facts, BillType, BillNumber);
 
     public string ShortName => $"{Chamber} roll call {RollCall}";
