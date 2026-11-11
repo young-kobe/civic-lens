@@ -190,7 +190,7 @@ Use the fixtures of the legacy crawler and its lessons about normalization, robo
 
 A refused renewal cancels the work at once. A failed renewal is tried again while time is left before the lease deadline. The deadline counts from when the last successful renewal request was sent. Each attempt stops at that deadline.
 
-`RenewLeaseAsync` takes a `TimeProvider` for its waits, its deadline, and its attempt time limit. It defaults to the system clock. A test passes a manual clock, so no test waits on real time.
+`RenewLeaseAsync` takes a `TimeProvider` for its waits, its deadline, and its attempt time limit. It defaults to the system clock. The recovered-renewal test uses a manual clock to drive lease timers without real-time sleeps.
 
 The collection and evidence workers keep their own claim, checkpoint, and progress logic. `AnalysisWorker` owns that logic, and the budget and pause logic, for every analysis feature; see [analysis](architecture/analysis.md#behavior).
 
