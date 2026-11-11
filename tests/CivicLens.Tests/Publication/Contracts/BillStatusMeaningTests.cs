@@ -193,17 +193,20 @@ public sealed class BillStatusMeaningTests
     public void ATextGetsTheLabelOfTheStatusThatItsMeaningRuleReads(string text, string billType, string expected) =>
         Assert.Equal(expected, BillStatusMeaning.Label(text, billType));
 
-    [Fact]
-    public void EveryLabelUsesOnlyWordsOfAMeaningOrOfTheUnmatchedPrefix()
+    [Theory]
+    [InlineData("Referred to the Subcommittee on Health.", "hr")]
+    [InlineData("Received in the Senate.", "hr")]
+    [InlineData("Received in the House.", "s")]
+    [InlineData("Placed on Senate Legislative Calendar under General Orders.", "s")]
+    [InlineData("Placed on the Union Calendar, Calendar No. 12.", "hr")]
+    [InlineData("Ordered to be Reported by Voice Vote.", "hres")]
+    [InlineData("Became Public Law No: 119-21.", "hr")]
+    [InlineData("Motion to reconsider laid on the table.", "hr")]
+    public void EachLabelUsesOnlyWordsOfTheMeaningThatProductionReturnsForTheSameText(string text, string billType)
     {
-        var meanings = string.Join(' ', new[]
-        {
-            "In committee: sent to the Committee on Finance.", "Passed the House. Now in the Senate.", "Passed the Senate. Now in the House.",
-            "Waiting for a possible Senate floor vote.", "Waiting for a possible House floor vote.",
-            "A committee voted to send this bill to the full chamber.", "Became law: Public Law 119-21.", BillStatusMeaning.UnmatchedPrefix });
-        var known = meanings.Split([' ', '.', ':'], StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var meaningWords = BillStatusMeaning.Of(text, billType).Split([' ', '.', ':', ','], StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var label in Enum.GetValues<BillStatus>().Select(BillStatusMeaning.LabelOf))
-            Assert.All(label.Split(' '), word => Assert.Contains(word, known));
+        Assert.All(BillStatusMeaning.Label(text, billType).Split(' '), word => Assert.Contains(word, meaningWords));
     }
 }
