@@ -46,6 +46,7 @@ internal sealed class ExecutiveActionSeeder
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
+            DELETE FROM executive_action_revision_disposition_targets;
             DELETE FROM executive_action_revision_facts;
             DELETE FROM executive_action_revision_notices;
             UPDATE executive_action_revisions SET source_id = NULL, document_number = NULL, kind = NULL, presidential_number = NULL, title = NULL,

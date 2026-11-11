@@ -795,10 +795,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("EventOn")
                         .HasDatabaseName("ix_action_revisions_event_on");
 
-                    b.HasIndex("Congress", "BillNumber", "BillType", "RecordId", "RevisionNumber")
-                        .HasDatabaseName("ix_action_revisions_bill_identity")
-                        .HasFilter("headline IS NOT NULL AND event_on IS NOT NULL");
-
                     b.HasIndex("PolicyAreaCitationExtractionId");
 
                     b.HasIndex("RunId")
@@ -809,6 +805,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("SummaryCitationExtractionId");
 
                     b.HasIndex("Congress", "BillType", "BillNumber", "TextPackageId");
+
+                    b.HasIndex("Congress", "BillNumber", "BillType", "RecordId", "RevisionNumber")
+                        .HasDatabaseName("ix_action_revisions_bill_identity")
+                        .HasFilter("headline IS NOT NULL AND event_on IS NOT NULL");
 
                     b.HasIndex("RecordId", "SourceId", "Congress", "BillType", "BillNumber");
 
@@ -2660,10 +2660,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Collection.BillStream.BillPageRow", b =>
                 {
-                    b.Property<int?>("ImportedCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("imported_count");
-
                     b.Property<string>("JobId")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
@@ -2684,6 +2680,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("extraction_id");
+
+                    b.Property<int?>("ImportedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("imported_count");
 
                     b.Property<int>("PageOrder")
                         .HasColumnType("integer")
@@ -3849,6 +3849,65 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonHunkRow", b =>
+                {
+                    b.Property<string>("ComparisonId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("comparison_id");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<int>("AfterContextLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("after_context_length");
+
+                    b.Property<int>("AfterContextStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("after_context_start");
+
+                    b.Property<int>("AfterLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("after_length");
+
+                    b.Property<int>("AfterStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("after_start");
+
+                    b.Property<int>("BeforeContextLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("before_context_length");
+
+                    b.Property<int>("BeforeContextStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("before_context_start");
+
+                    b.Property<int>("BeforeLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("before_length");
+
+                    b.Property<int>("BeforeStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("before_start");
+
+                    b.Property<int>("WordEditCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("word_edit_count");
+
+                    b.HasKey("ComparisonId", "Position");
+
+                    b.ToTable("document_comparison_hunks", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_document_comparison_hunks_position", "position >= 0");
+
+                            t.HasCheckConstraint("ck_document_comparison_hunks_spans", "before_start >= 0 AND before_length >= 0 AND after_start >= 0 AND after_length >= 0 AND before_context_start >= 0 AND before_context_length >= 0 AND after_context_start >= 0 AND after_context_length >= 0");
+
+                            t.HasCheckConstraint("ck_document_comparison_hunks_word_edit_count", "word_edit_count >= 0");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonRow", b =>
                 {
                     b.Property<string>("ComparisonId")
@@ -3901,49 +3960,51 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("document_comparisons", null, t =>
                         {
-                            t.HasCheckConstraint("ck_document_comparisons_id", "comparison_id ~ '^[0-9a-f]{64}$'");
-
                             t.HasCheckConstraint("ck_document_comparisons_hunk_count", "hunk_count IS NULL OR (hunk_count >= 0 AND has_changes = (hunk_count > 0))");
-                        });
-                });
 
-            modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonHunkRow", b =>
-                {
-                    b.Property<string>("ComparisonId").HasMaxLength(64).HasColumnType("character varying(64)").HasColumnName("comparison_id");
-                    b.Property<int>("Position").HasColumnType("integer").HasColumnName("position");
-                    b.Property<int>("BeforeStart").HasColumnType("integer").HasColumnName("before_start");
-                    b.Property<int>("BeforeLength").HasColumnType("integer").HasColumnName("before_length");
-                    b.Property<int>("AfterStart").HasColumnType("integer").HasColumnName("after_start");
-                    b.Property<int>("AfterLength").HasColumnType("integer").HasColumnName("after_length");
-                    b.Property<int>("BeforeContextStart").HasColumnType("integer").HasColumnName("before_context_start");
-                    b.Property<int>("BeforeContextLength").HasColumnType("integer").HasColumnName("before_context_length");
-                    b.Property<int>("AfterContextStart").HasColumnType("integer").HasColumnName("after_context_start");
-                    b.Property<int>("AfterContextLength").HasColumnType("integer").HasColumnName("after_context_length");
-                    b.Property<int>("WordEditCount").HasColumnType("integer").HasColumnName("word_edit_count");
-                    b.HasKey("ComparisonId", "Position");
-                    b.ToTable("document_comparison_hunks", null, t =>
-                    {
-                        t.HasCheckConstraint("ck_document_comparison_hunks_position", "position >= 0");
-                        t.HasCheckConstraint("ck_document_comparison_hunks_word_edit_count", "word_edit_count >= 0");
-                        t.HasCheckConstraint("ck_document_comparison_hunks_spans", "before_start >= 0 AND before_length >= 0 AND after_start >= 0 AND after_length >= 0 AND before_context_start >= 0 AND before_context_length >= 0 AND after_context_start >= 0 AND after_context_length >= 0");
-                    });
+                            t.HasCheckConstraint("ck_document_comparisons_id", "comparison_id ~ '^[0-9a-f]{64}$'");
+                        });
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonWordEditRow", b =>
                 {
-                    b.Property<string>("ComparisonId").HasMaxLength(64).HasColumnType("character varying(64)").HasColumnName("comparison_id");
-                    b.Property<int>("HunkPosition").HasColumnType("integer").HasColumnName("hunk_position");
-                    b.Property<int>("Position").HasColumnType("integer").HasColumnName("position");
-                    b.Property<int>("BeforeStart").HasColumnType("integer").HasColumnName("before_start");
-                    b.Property<int>("BeforeLength").HasColumnType("integer").HasColumnName("before_length");
-                    b.Property<int>("AfterStart").HasColumnType("integer").HasColumnName("after_start");
-                    b.Property<int>("AfterLength").HasColumnType("integer").HasColumnName("after_length");
+                    b.Property<string>("ComparisonId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("comparison_id");
+
+                    b.Property<int>("HunkPosition")
+                        .HasColumnType("integer")
+                        .HasColumnName("hunk_position");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<int>("AfterLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("after_length");
+
+                    b.Property<int>("AfterStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("after_start");
+
+                    b.Property<int>("BeforeLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("before_length");
+
+                    b.Property<int>("BeforeStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("before_start");
+
                     b.HasKey("ComparisonId", "HunkPosition", "Position");
+
                     b.ToTable("document_comparison_word_edits", null, t =>
-                    {
-                        t.HasCheckConstraint("ck_document_comparison_word_edits_position", "hunk_position >= 0 AND position >= 0");
-                        t.HasCheckConstraint("ck_document_comparison_word_edits_spans", "before_start >= 0 AND before_length >= 0 AND after_start >= 0 AND after_length >= 0");
-                    });
+                        {
+                            t.HasCheckConstraint("ck_document_comparison_word_edits_position", "hunk_position >= 0 AND position >= 0");
+
+                            t.HasCheckConstraint("ck_document_comparison_word_edits_spans", "before_start >= 0 AND before_length >= 0 AND after_start >= 0 AND after_length >= 0");
+                        });
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", b =>
@@ -4228,6 +4289,66 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_executive_action_review_decisions_reason_code_kind", "(kind = 'Reject') = (reason_code IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_executive_action_review_decisions_versions", "revision_number >= 1 AND review_state_version >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionDispositionTargetRow", b =>
+                {
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)")
+                        .HasColumnName("number");
+
+                    b.Property<int>("ReferenceLength")
+                        .HasColumnType("integer")
+                        .HasColumnName("reference_length");
+
+                    b.Property<int>("ReferenceStart")
+                        .HasColumnType("integer")
+                        .HasColumnName("reference_start");
+
+                    b.Property<string>("Relation")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("relation");
+
+                    b.HasKey("RecordId", "RevisionNumber", "Position");
+
+                    b.HasIndex("RecordId", "RevisionNumber", "Relation", "Kind", "Number")
+                        .IsUnique();
+
+                    b.ToTable("executive_action_revision_disposition_targets", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_executive_action_revision_disposition_targets_kind", "kind IN ('ExecutiveOrder', 'Proclamation')");
+
+                            t.HasCheckConstraint("ck_executive_action_revision_disposition_targets_number", "number ~ '^[1-9][0-9]{0,5}$'");
+
+                            t.HasCheckConstraint("ck_executive_action_revision_disposition_targets_position", "position >= 0");
+
+                            t.HasCheckConstraint("ck_executive_action_revision_disposition_targets_relation", "relation IN ('Amends', 'Revokes')");
+
+                            t.HasCheckConstraint("ck_executive_action_revision_disposition_targets_span", "reference_start >= 0 AND reference_length > 0");
                         });
                 });
 
@@ -4853,6 +4974,125 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryActionRow", b =>
+                {
+                    b.Property<string>("DetailJobId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("detail_job_id");
+
+                    b.Property<int>("ProjectionVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("projection_version");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<string>("ActionCode")
+                        .HasColumnType("text")
+                        .HasColumnName("action_code");
+
+                    b.Property<DateOnly>("ActionDate")
+                        .HasColumnType("date")
+                        .HasColumnName("action_date");
+
+                    b.Property<TimeOnly?>("ActionTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("action_time");
+
+                    b.Property<int?>("SourceSystemCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("source_system_code");
+
+                    b.Property<string>("SourceSystemName")
+                        .HasColumnType("text")
+                        .HasColumnName("source_system_name");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("text");
+
+                    b.Property<string>("Type")
+                        .HasColumnType("text")
+                        .HasColumnName("type");
+
+                    b.HasKey("DetailJobId", "ProjectionVersion", "Position");
+
+                    b.ToTable("published_bill_history_actions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_published_bill_history_actions_position", "position >= 0");
+
+                            t.HasCheckConstraint("ck_published_bill_history_actions_projection_version", "projection_version >= 0");
+
+                            t.HasCheckConstraint("ck_published_bill_history_actions_text", "text ~ '\\S'");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryRow", b =>
+                {
+                    b.Property<string>("DetailJobId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("detail_job_id");
+
+                    b.Property<int>("ProjectionVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("projection_version");
+
+                    b.Property<int>("ActionCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("action_count");
+
+                    b.Property<int>("BillNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("bill_number");
+
+                    b.Property<string>("BillType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("bill_type");
+
+                    b.Property<int>("Congress")
+                        .HasColumnType("integer")
+                        .HasColumnName("congress");
+
+                    b.Property<long>("ObservedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("observed_at_utc_ticks");
+
+                    b.Property<string>("PublicLaw")
+                        .HasColumnType("text")
+                        .HasColumnName("public_law");
+
+                    b.Property<string>("SourceId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("source_id");
+
+                    b.HasKey("DetailJobId", "ProjectionVersion");
+
+                    b.ToTable("published_bill_histories", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_published_bill_histories_action_count", "action_count >= 0");
+
+                            t.HasCheckConstraint("ck_published_bill_histories_bill_number", "bill_number >= 1");
+
+                            t.HasCheckConstraint("ck_published_bill_histories_congress", "congress >= 1");
+
+                            t.HasCheckConstraint("ck_published_bill_histories_observed_at_utc_ticks", "observed_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
+                            t.HasCheckConstraint("ck_published_bill_histories_projection_version", "projection_version >= 0");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedCorrectionHistoryEntryRow", b =>
                 {
                     b.Property<string>("HistoryId")
@@ -5280,61 +5520,68 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
-            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryRow", b =>
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseBillCountRow", b =>
                 {
-                    b.Property<string>("DetailJobId").IsRequired().HasMaxLength(128).HasColumnType("character varying(128)").HasColumnName("detail_job_id");
-                    b.Property<int>("ProjectionVersion").ValueGeneratedOnAdd().HasColumnType("integer").HasDefaultValue(0).HasColumnName("projection_version");
-                    b.Property<string>("SourceId").IsRequired().HasMaxLength(128).HasColumnType("character varying(128)").HasColumnName("source_id");
-                    b.Property<int>("Congress").HasColumnType("integer").HasColumnName("congress");
-                    b.Property<string>("BillType").IsRequired().HasMaxLength(16).HasColumnType("character varying(16)").HasColumnName("bill_type");
-                    b.Property<int>("BillNumber").HasColumnType("integer").HasColumnName("bill_number");
-                    b.Property<long>("ObservedAtUtcTicks").HasColumnType("bigint").HasColumnName("observed_at_utc_ticks");
-                    b.Property<int>("ActionCount").HasColumnType("integer").HasColumnName("action_count");
-                    b.Property<string>("PublicLaw").HasColumnType("text").HasColumnName("public_law");
-                    b.HasKey("DetailJobId", "ProjectionVersion");
-                    b.ToTable("published_bill_histories", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_published_bill_histories_action_count", "action_count >= 0");
-                            t.HasCheckConstraint("ck_published_bill_histories_projection_version", "projection_version >= 0");
-                            t.HasCheckConstraint("ck_published_bill_histories_bill_number", "bill_number >= 1");
-                            t.HasCheckConstraint("ck_published_bill_histories_congress", "congress >= 1");
-                            t.HasCheckConstraint("ck_published_bill_histories_observed_at_utc_ticks", "observed_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
-                        });
-                });
+                    b.Property<int>("ReleaseNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("release_number");
 
-            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryActionRow", b =>
-                {
-                    b.Property<string>("DetailJobId").IsRequired().HasMaxLength(128).HasColumnType("character varying(128)").HasColumnName("detail_job_id");
-                    b.Property<int>("ProjectionVersion").ValueGeneratedOnAdd().HasColumnType("integer").HasDefaultValue(0).HasColumnName("projection_version");
-                    b.Property<int>("Position").HasColumnType("integer").HasColumnName("position");
-                    b.Property<DateOnly>("ActionDate").HasColumnType("date").HasColumnName("action_date");
-                    b.Property<TimeOnly?>("ActionTime").HasColumnType("time without time zone").HasColumnName("action_time");
-                    b.Property<string>("Text").IsRequired().HasColumnType("text").HasColumnName("text");
-                    b.Property<string>("Type").HasColumnType("text").HasColumnName("type");
-                    b.Property<string>("ActionCode").HasColumnType("text").HasColumnName("action_code");
-                    b.Property<int?>("SourceSystemCode").HasColumnType("integer").HasColumnName("source_system_code");
-                    b.Property<string>("SourceSystemName").HasColumnType("text").HasColumnName("source_system_name");
-                    b.HasKey("DetailJobId", "ProjectionVersion", "Position");
-                    b.ToTable("published_bill_history_actions", null, t =>
+                    b.Property<int>("Congress")
+                        .HasColumnType("integer")
+                        .HasColumnName("congress");
+
+                    b.Property<int>("Bills")
+                        .HasColumnType("integer")
+                        .HasColumnName("bills");
+
+                    b.Property<int>("ExpectedMemberRowCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("expected_member_row_count");
+
+                    b.HasKey("ReleaseNumber", "Congress");
+
+                    b.ToTable("release_bill_counts", null, t =>
                         {
-                            t.HasCheckConstraint("ck_published_bill_history_actions_position", "position >= 0");
-                            t.HasCheckConstraint("ck_published_bill_history_actions_projection_version", "projection_version >= 0");
-                            t.HasCheckConstraint("ck_published_bill_history_actions_text", "text ~ '\\S'");
+                            t.HasCheckConstraint("ck_release_bill_counts_bills", "bills >= 0");
+
+                            t.HasCheckConstraint("ck_release_bill_counts_congress", "congress > 0");
+
+                            t.HasCheckConstraint("ck_release_bill_counts_expected_member_row_count", "expected_member_row_count >= 0");
                         });
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseBillHistoryRow", b =>
                 {
-                    b.Property<int>("ReleaseNumber").HasColumnType("integer").HasColumnName("release_number");
-                    b.Property<string>("RecordId").IsRequired().HasMaxLength(64).HasColumnType("character varying(64)").HasColumnName("record_id");
-                    b.Property<string>("DetailJobId").IsRequired().HasMaxLength(128).HasColumnType("character varying(128)").HasColumnName("detail_job_id");
-                    b.Property<int>("ProjectionVersion").ValueGeneratedOnAdd().HasColumnType("integer").HasDefaultValue(0).HasColumnName("projection_version");
+                    b.Property<int>("ReleaseNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("release_number");
+
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
+
+                    b.Property<string>("DetailJobId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("detail_job_id");
+
+                    b.Property<int>("ProjectionVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("projection_version");
+
                     b.HasKey("ReleaseNumber", "RecordId");
+
                     b.HasIndex("DetailJobId", "ProjectionVersion");
+
                     b.ToTable("release_bill_histories", null, t =>
                         {
-                            t.HasCheckConstraint("ck_release_bill_histories_record_id", "record_id ~ '^[0-9a-f]{64}$'");
                             t.HasCheckConstraint("ck_release_bill_histories_projection_version", "projection_version >= 0");
+
+                            t.HasCheckConstraint("ck_release_bill_histories_record_id", "record_id ~ '^[0-9a-f]{64}$'");
                         });
                 });
 
@@ -5572,6 +5819,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssueRow", b =>
                 {
+                    b.Property<int>("ReleaseNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("release_number");
+
+                    b.Property<string>("IssueId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("issue_id");
+
                     b.Property<long?>("Bills")
                         .HasColumnType("bigint")
                         .HasColumnName("bills");
@@ -5579,19 +5835,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Property<int?>("CountCongress")
                         .HasColumnType("integer")
                         .HasColumnName("count_congress");
-
-                    b.Property<int>("ReleaseNumber")
-                        .HasColumnType("integer")
-                        .HasColumnName("release_number");
-
-                    b.Property<long?>("SubstantiveVotes")
-                        .HasColumnType("bigint")
-                        .HasColumnName("substantive_votes");
-
-                    b.Property<string>("IssueId")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("issue_id");
 
                     b.Property<string>("Definition")
                         .HasColumnType("text")
@@ -5603,15 +5846,61 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("name");
 
+                    b.Property<long?>("SubstantiveVotes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("substantive_votes");
+
                     b.HasKey("ReleaseNumber", "IssueId");
 
                     b.ToTable("release_issues", null, t =>
                         {
+                            t.HasCheckConstraint("ck_release_issues_home_counts", "(count_congress IS NULL AND substantive_votes IS NULL AND bills IS NULL) OR (count_congress IS NOT NULL AND substantive_votes IS NOT NULL AND bills IS NOT NULL AND count_congress > 0 AND substantive_votes >= 0 AND bills >= 0)");
+
                             t.HasCheckConstraint("ck_release_issues_issue_id", "length(btrim(issue_id)) > 0");
 
                             t.HasCheckConstraint("ck_release_issues_name", "length(btrim(name)) > 0");
+                        });
+                });
 
-                            t.HasCheckConstraint("ck_release_issues_home_counts", "(count_congress IS NULL AND substantive_votes IS NULL AND bills IS NULL) OR (count_congress IS NOT NULL AND substantive_votes IS NOT NULL AND bills IS NOT NULL AND count_congress > 0 AND substantive_votes >= 0 AND bills >= 0)");
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialBillCountRow", b =>
+                {
+                    b.Property<int>("ReleaseNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("release_number");
+
+                    b.Property<int>("Congress")
+                        .HasColumnType("integer")
+                        .HasColumnName("congress");
+
+                    b.Property<string>("OfficialId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("official_id");
+
+                    b.Property<int>("Cosponsored")
+                        .HasColumnType("integer")
+                        .HasColumnName("cosponsored");
+
+                    b.Property<int>("Sponsored")
+                        .HasColumnType("integer")
+                        .HasColumnName("sponsored");
+
+                    b.HasKey("ReleaseNumber", "Congress", "OfficialId");
+
+                    b.HasIndex("ReleaseNumber", "OfficialId")
+                        .HasDatabaseName("ix_release_official_bill_counts_release_official");
+
+                    b.ToTable("release_official_bill_counts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_release_official_bill_counts_congress", "congress > 0");
+
+                            t.HasCheckConstraint("ck_release_official_bill_counts_cosponsored", "cosponsored >= 0");
+
+                            t.HasCheckConstraint("ck_release_official_bill_counts_nonzero", "sponsored + cosponsored > 0");
+
+                            t.HasCheckConstraint("ck_release_official_bill_counts_official_id", "length(btrim(official_id)) > 0");
+
+                            t.HasCheckConstraint("ck_release_official_bill_counts_sponsored", "sponsored >= 0");
                         });
                 });
 
@@ -8679,12 +8968,13 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("CitationExtractionId");
 
+                    b.HasIndex("ListId")
+                        .HasDatabaseName("ix_vote_member_list_entries_tallies");
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("ListId"), new[] { "VoteCast" });
+
                     b.HasIndex("PersonId", "ListId")
                         .HasDatabaseName("ix_vote_member_list_entries_person");
-
-                    b.HasIndex("ListId")
-                        .HasDatabaseName("ix_vote_member_list_entries_tallies")
-                        .IncludeProperties("VoteCast");
 
                     b.ToTable("vote_member_list_entries", null, t =>
                         {
@@ -8743,7 +9033,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_vote_member_lists_id", "list_id ~ '^[0-9a-f]{64}$'");
 
-                        t.HasCheckConstraint("ck_vote_member_lists_totals", "yea_count >= 0 AND nay_count >= 0 AND present_count >= 0 AND not_voting_count >= 0 AND other_count >= 0 AND (yea_count::integer + nay_count + present_count + not_voting_count + other_count) = member_count");
+                            t.HasCheckConstraint("ck_vote_member_lists_totals", "yea_count >= 0 AND nay_count >= 0 AND present_count >= 0 AND not_voting_count >= 0 AND other_count >= 0 AND (yea_count::integer + nay_count + present_count + not_voting_count + other_count) = member_count");
                         });
                 });
 
@@ -8902,29 +9192,51 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
             modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionPartyTallyRow", b =>
                 {
-                    b.Property<string>("RecordId").HasMaxLength(64).HasColumnType("character varying(64)").HasColumnName("record_id");
-                    b.Property<int>("RevisionNumber").HasColumnType("integer").HasColumnName("revision_number");
-                    b.Property<string>("Party").HasMaxLength(256).HasColumnType("character varying(256)").HasColumnName("party");
-                    b.Property<short>("Yea").HasColumnType("smallint").HasColumnName("yea");
-                    b.Property<short>("Nay").HasColumnType("smallint").HasColumnName("nay");
-                    b.Property<short>("Present").HasColumnType("smallint").HasColumnName("present");
-                    b.Property<short>("NotVoting").HasColumnType("smallint").HasColumnName("not_voting");
-                    b.Property<short>("Other").HasColumnType("smallint").HasColumnName("other");
-                    b.HasKey("RecordId", "RevisionNumber", "Party").HasName("PK_vote_revision_party_tallies");
-                    b.ToTable("vote_revision_party_tallies", null, t =>
-                    {
-                        t.HasCheckConstraint("ck_vote_revision_party_tallies_party", "length(btrim(party)) > 0 AND length(party) <= 256");
-                        t.HasCheckConstraint("ck_vote_revision_party_tallies_buckets", "yea >= 0 AND nay >= 0 AND present >= 0 AND not_voting >= 0 AND other >= 0");
-                        t.HasCheckConstraint("ck_vote_revision_party_tallies_total", "yea + nay + present + not_voting + other BETWEEN 1 AND 600");
-                    });
-                });
+                    b.Property<string>("RecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("record_id");
 
-            modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionPartyTallyRow", b =>
-                {
-                    b.HasOne("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionRow", null)
-                        .WithMany("PartyTallies").HasForeignKey("RecordId", "RevisionNumber")
-                        .OnDelete(DeleteBehavior.Restrict).IsRequired()
-                        .HasConstraintName("FK_vote_revision_party_tallies_vote_revisions_record_id_revisi~");
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<string>("Party")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("party");
+
+                    b.Property<short>("Nay")
+                        .HasColumnType("smallint")
+                        .HasColumnName("nay");
+
+                    b.Property<short>("NotVoting")
+                        .HasColumnType("smallint")
+                        .HasColumnName("not_voting");
+
+                    b.Property<short>("Other")
+                        .HasColumnType("smallint")
+                        .HasColumnName("other");
+
+                    b.Property<short>("Present")
+                        .HasColumnType("smallint")
+                        .HasColumnName("present");
+
+                    b.Property<short>("Yea")
+                        .HasColumnType("smallint")
+                        .HasColumnName("yea");
+
+                    b.HasKey("RecordId", "RevisionNumber", "Party")
+                        .HasName("PK_vote_revision_party_tallies");
+
+                    b.ToTable("vote_revision_party_tallies", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_vote_revision_party_tallies_buckets", "yea >= 0 AND nay >= 0 AND present >= 0 AND not_voting >= 0 AND other >= 0");
+
+                            t.HasCheckConstraint("ck_vote_revision_party_tallies_party", "length(btrim(party)) > 0 AND length(party) <= 256");
+
+                            t.HasCheckConstraint("ck_vote_revision_party_tallies_total", "yea + nay + present + not_voting + other BETWEEN 1 AND 600");
+                        });
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionRow", b =>
@@ -8979,8 +9291,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("chamber");
-
-                    b.Property<short?>("PartyTallyCount").HasColumnType("smallint").HasColumnName("party_tally_count");
 
                     b.Property<bool>("ColumnsWritten")
                         .ValueGeneratedOnAdd()
@@ -9041,6 +9351,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("member_list_id");
+
+                    b.Property<short?>("PartyTallyCount")
+                        .HasColumnType("smallint")
+                        .HasColumnName("party_tally_count");
 
                     b.Property<string>("Question")
                         .HasMaxLength(2000)
@@ -9169,8 +9483,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_vote_revisions_columns_written", "columns_written OR (alignment IS NULL AND democrat_majority IS NULL AND republican_majority IS NULL)");
 
-                            t.HasCheckConstraint("ck_vote_revisions_party_tally_count", "party_tally_count IS NULL OR party_tally_count BETWEEN 0 AND 16");
-
                             t.HasCheckConstraint("ck_vote_revisions_created_at_utc_ticks", "created_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_vote_revisions_headline", "length(btrim(headline)) BETWEEN 1 AND 256");
@@ -9184,6 +9496,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_vote_revisions_majorities", "(democrat_majority IS NULL OR democrat_majority IN ('Yea', 'Nay')) AND (republican_majority IS NULL OR republican_majority IN ('Yea', 'Nay'))");
 
                             t.HasCheckConstraint("ck_vote_revisions_number", "revision_number >= 1");
+
+                            t.HasCheckConstraint("ck_vote_revisions_party_tally_count", "party_tally_count IS NULL OR party_tally_count BETWEEN 0 AND 16");
 
                             t.HasCheckConstraint("ck_vote_revisions_roll", "congress >= 1 AND session_number IN (1, 2) AND roll_call_number >= 1");
 
@@ -9831,15 +10145,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonWordEditRow", b =>
-                {
-                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonHunkRow", null)
-                        .WithMany("WordEdits")
-                        .HasForeignKey("ComparisonId", "HunkPosition")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
@@ -9852,6 +10157,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .WithMany()
                         .HasForeignKey("BeforeExtractionId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonWordEditRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonHunkRow", null)
+                        .WithMany("WordEdits")
+                        .HasForeignKey("ComparisonId", "HunkPosition")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -9887,6 +10201,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 {
                     b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", null)
                         .WithMany()
+                        .HasForeignKey("RecordId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionDispositionTargetRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", null)
+                        .WithMany("DispositionTargets")
                         .HasForeignKey("RecordId", "RevisionNumber")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
@@ -10014,6 +10337,24 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryActionRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryRow", null)
+                        .WithMany()
+                        .HasForeignKey("DetailJobId", "ProjectionVersion")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Collection.BillStream.BillGateRow", null)
+                        .WithMany()
+                        .HasForeignKey("DetailJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedCorrectionHistoryEntryRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedCorrectionHistoryRow", null)
@@ -10104,20 +10445,28 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
-            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryRow", b =>
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseBillCountRow", b =>
                 {
-                    b.HasOne("CivicLens.Infrastructure.Collection.BillStream.BillGateRow", null).WithMany().HasForeignKey("DetailJobId").OnDelete(DeleteBehavior.Restrict).IsRequired();
-                });
-
-            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryActionRow", b =>
-                {
-                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryRow", null).WithMany().HasForeignKey("DetailJobId", "ProjectionVersion").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseBillHistoryRow", b =>
                 {
-                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryRow", null).WithMany().HasForeignKey("DetailJobId", "ProjectionVersion").OnDelete(DeleteBehavior.Restrict).IsRequired();
-                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null).WithMany().HasForeignKey("ReleaseNumber").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublishedBillHistoryRow", null)
+                        .WithMany()
+                        .HasForeignKey("DetailJobId", "ProjectionVersion")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseBillStatusRow", b =>
@@ -10148,22 +10497,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("Kind", "RecordId", "RevisionNumber")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseBillCountRow", b =>
-                {
-                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
-                        .WithMany().HasForeignKey("ReleaseNumber").OnDelete(DeleteBehavior.Restrict).IsRequired();
-                });
-
-            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialBillCountRow", b =>
-                {
-                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.ReleaseBillCountRow", null)
-                        .WithMany().HasForeignKey("ReleaseNumber", "Congress").OnDelete(DeleteBehavior.Restrict).IsRequired()
-                        .HasConstraintName("fk_release_official_bill_counts_header");
-                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialRow", null)
-                        .WithMany().HasForeignKey("ReleaseNumber", "OfficialId").OnDelete(DeleteBehavior.Restrict).IsRequired()
-                        .HasConstraintName("fk_release_official_bill_counts_official");
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseIssueExcludeRow", b =>
@@ -10211,6 +10544,23 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasForeignKey("ReleaseNumber")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialBillCountRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.ReleaseBillCountRow", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseNumber", "Congress")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_release_official_bill_counts_header");
+
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialRow", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseNumber", "OfficialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_release_official_bill_counts_official");
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialRow", b =>
@@ -10853,6 +11203,16 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionPartyTallyRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionRow", null)
+                        .WithMany("PartyTallies")
+                        .HasForeignKey("RecordId", "RevisionNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_vote_revision_party_tallies_vote_revisions_record_id_revisi~");
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Collection.Votes.VoteCandidateRow", null)
@@ -10928,8 +11288,20 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.Navigation("Paragraphs");
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonHunkRow", b =>
+                {
+                    b.Navigation("WordEdits");
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Documents.Persistence.DocumentComparisonRow", b =>
+                {
+                    b.Navigation("Hunks");
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionRevisionRow", b =>
                 {
+                    b.Navigation("DispositionTargets");
+
                     b.Navigation("Facts");
 
                     b.Navigation("Notices");
