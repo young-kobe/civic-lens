@@ -10,6 +10,8 @@ internal static class PublishedStatementView
 {
     public const string StatementDateAnchor = "cite-statement-date";
 
+    public static string ShortName(PublishedStatement statement) => string.Join(", ", statement.Speakers.Select(speaker => speaker.Name));
+
     public static IReadOnlyList<Fact> Facts(PublishedStatement statement, PublicationCatalog catalog)
     {
         var facts = new List<Fact>();

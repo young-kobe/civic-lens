@@ -4,7 +4,8 @@ namespace CivicLens.PublicWeb.Publication;
 
 public static class PublicSections
 {
-    public sealed record NavLink(PublicSection? Section, string Text, string Path);
+    /// <summary>One link of the header or footer. HiddenText is read by assistive technology after the link text.</summary>
+    public sealed record NavLink(PublicSection? Section, string Text, string Path, string? HiddenText = null);
 
     public static readonly IReadOnlyList<NavLink> Header =
     [
@@ -13,7 +14,7 @@ public static class PublicSections
         new(PublicSection.AllRecords, "Votes and bills", PublicationProtocol.AllRecordsPagePath(1))
     ];
 
-    public static readonly NavLink Report = new(null, "Report a problem", PublicationProtocol.ReportPagePath);
+    public static readonly NavLink Report = new(null, "Report a problem with this page", PublicationProtocol.ReportPagePath);
 
     public static readonly IReadOnlyList<NavLink> Footer =
     [
@@ -23,13 +24,28 @@ public static class PublicSections
         Report
     ];
 
-    /// <summary>The breadcrumb trail of an inner page: Home, the section when it differs from the page, then the page.</summary>
-    public static IReadOnlyList<PublicBreadcrumbItem> Trail(PublicSection? section, string title)
+    /// <summary>The footer links of a page. A record page swaps the report link for the one that names its record.</summary>
+    public static IReadOnlyList<NavLink> FooterFor(ReportedRecord? record) =>
+        record is null ? Footer : [.. Footer.Select(link => link == Report ? record.ReportLink : link)];
+
+    /// <summary>
+    /// The breadcrumb trail of an inner page. A record page runs Home, the section of its kind, then its short name. Another page runs
+    /// Home, its section, then its title. The section link is absent when it leads to the page itself.
+    /// </summary>
+    public static PublicTrail Trail(PublicSection? section, string title, string? canonicalPath, ReportedRecord? record)
     {
-        var trail = new List<PublicBreadcrumbItem> { new("Home", PublicationProtocol.HomePath) };
+        var home = new PublicBreadcrumbItem("Home", PublicationProtocol.HomePath);
+        if (record is not null) return new([home, RecordSection(record.Kind)], record.ShortName ?? title);
+
         var link = Header.Concat(Footer).FirstOrDefault(candidate => section is not null && candidate.Section == section);
-        if (link is not null && link.Text != title) trail.Add(new(link.Text, link.Path));
-        trail.Add(new(title, null));
-        return trail;
+        if (link is null || link.Path == canonicalPath) return new([home], title);
+        return new([home, new(link.Text, link.Path)], title);
     }
+
+    private static PublicBreadcrumbItem RecordSection(PublishedRecordKind kind) => kind switch
+    {
+        PublishedRecordKind.Brief => new(PublishedRecordLabels.KindPlural(kind), PublicationProtocol.BriefsPagePath(1)),
+        PublishedRecordKind.Action => new("Bills", PublicationProtocol.SearchByKindPath(kind)),
+        _ => new(PublishedRecordLabels.KindPlural(kind), PublicationProtocol.SearchByKindPath(kind))
+    };
 }

@@ -231,6 +231,39 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task TheTrailOfAVoteAndABillPageNamesTheirSectionAndEndsWithTheShortRecordName()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var vote = Vote();
+        var action = Action();
+
+        var pages = new[]
+        {
+            (await renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None), "Votes", $"House roll call {vote.RollCallNumber}"),
+            (await renderer.RenderActionAsync(action, null, [], PublicationCatalogs.None, CancellationToken.None), "Bills", "H.R. 7")
+        };
+
+        foreach (var (html, section, shortName) in pages)
+        {
+            var trail = new HtmlParser().ParseDocument(html).QuerySelector("main nav[aria-label=Breadcrumb]")!;
+            Assert.Equal(["Home", section], trail.QuerySelectorAll("a").Select(link => link.TextContent));
+            Assert.Equal(shortName, trail.QuerySelector("[aria-current=page]")!.TextContent);
+        }
+    }
+
+    [Fact]
+    public async Task NoCrumbOfAnyPageTypeLinksToThePageItself()
+    {
+        foreach (var (name, pagePath, html, _) in await RenderEveryPageTypeAsync())
+        {
+            var trail = new HtmlParser().ParseDocument(html).QuerySelector("main nav[aria-label=Breadcrumb]");
+            if (trail is null) continue;
+
+            Assert.All(trail.QuerySelectorAll("a"), link => Assert.NotEqual(pagePath, ReleasePath(pagePath, link.GetAttribute("href")!)));
+        }
+    }
+
+    [Fact]
     public async Task ARecordPageOffersTheReportLinkOnceBelowTheRecordSoTheTopOfThePageHoldsTheRecord()
     {
         var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);

@@ -20,6 +20,7 @@
     [Parameter, EditorRequired] public int RevisionNumber { get; set; }
     [Parameter, EditorRequired] public string Headline { get; set; } = string.Empty;
     [Parameter, EditorRequired] public string Summary { get; set; } = string.Empty;
+    [Parameter] public string? ShortName { get; set; }
     [Parameter] public string? Significance { get; set; }
     [Parameter] public string? Limits { get; set; }
     [Parameter, EditorRequired] public IReadOnlyList<Fact> Facts { get; set; } = [];
@@ -27,5 +28,5 @@
     [Parameter] public PublishedCorrection[] Corrections { get; set; } = [];
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
-    protected override void OnParametersSet() => record = new ReportedRecord(RecordId, RevisionNumber, Kind, Headline);
+    protected override void OnParametersSet() => record = new ReportedRecord(RecordId, RevisionNumber, Kind, Headline, ShortName);
 }

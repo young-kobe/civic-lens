@@ -1,4 +1,5 @@
 using System.Globalization;
+using CivicLens.Application.Actions;
 using CivicLens.Application.Publication;
 using CivicLens.Host.Actions;
 using CivicLens.Host.Collection;
@@ -11,6 +12,8 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedActionView
 {
+    public static string ShortName(PublishedAction action) => ActionCodeText.BillNumber(action.BillType, action.BillNumber);
+
     public static IReadOnlyList<Fact> Facts(PublishedAction action, PublishedBillStatus? billStatus, PublicationCatalog catalog) =>
     [
         new("Bill", ActionLabels.Bill(action.Congress, action.BillType, action.BillNumber)),

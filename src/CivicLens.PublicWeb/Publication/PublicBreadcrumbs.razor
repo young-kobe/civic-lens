@@ -1,31 +1,17 @@
 <nav class="public-breadcrumbs" aria-label="Breadcrumb">
     <ol role="list">
-        @for (var index = 0; index < Items.Count; index++)
+        @foreach (var parent in Trail.Parents)
         {
-            var item = Items[index];
             <li>
-                @if (index > 0)
-                {
-                    <span class="public-breadcrumb-separator" aria-hidden="true">/</span>
-                }
-                @if (index == Items.Count - 1)
-                {
-                    <span aria-current="page">@item.Text</span>
-                }
-                else if (item.PagePath is not null)
-                {
-                    <a href="@(RootPath + item.PagePath)">@item.Text</a>
-                }
-                else
-                {
-                    <span>@item.Text</span>
-                }
+                <a href="@(RootPath + parent.PagePath)">@parent.Text</a>
+                <span class="public-breadcrumb-separator" aria-hidden="true">/</span>
             </li>
         }
+        <li><span aria-current="page">@Trail.Current</span></li>
     </ol>
 </nav>
 
 @code {
-    [Parameter, EditorRequired] public IReadOnlyList<PublicBreadcrumbItem> Items { get; set; } = [];
+    [Parameter, EditorRequired] public PublicTrail Trail { get; set; } = default!;
     [Parameter] public string RootPath { get; set; } = string.Empty;
 }
