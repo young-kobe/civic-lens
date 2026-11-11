@@ -1238,10 +1238,10 @@ Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (empty in development) and
 Do this after a deploy that adds a column that only the ingest fills, such as `summary` of `records` (`005_record_summary.sql`). The ingest never fetches a stored revision again, so old rows keep a null column until the index is empty. The reset removes the indexed releases and records. It keeps `reader_reports` and `report_pull_state`. It also drops the earlier releases, so a search pinned to an older release answers 404 until the ingest stores it again. The ingest stores the active release only. The owner runs these steps on the production host:
 
 1. Deploy the commit. The new search service applies the migration at startup.
-2. Stop the search service: `sudo deploy/scripts/compose.sh stop search`.
+2. Stop the search service: `sudo deploy/scripts/compose.sh stop search`. This stops the whole public API and the server pages until step 4. All `/v1` routes and all `/web` pages, such as `/compare.html`, are down.
 3. Empty the index tables: `sudo deploy/scripts/compose.sh exec -T search-postgres sh -c 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --command="TRUNCATE active_release, records, releases"'`.
 4. Start the service: `sudo deploy/scripts/compose.sh up --detach search`. The start empties the cached manifest validators, so the first poll ingests the active release. Search answers 503 until that ingest ends.
-5. Check that the column is filled: `SELECT count(*) FROM records WHERE summary IS NULL AND kind IN ('statement', 'documentChange', 'action', 'vote')` returns 0 in the search database.
+5. Check that the column is filled: `sudo deploy/scripts/compose.sh exec -T search-postgres sh -c 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --tuples-only --command="SELECT count(*) FROM records WHERE summary IS NULL AND kind IN ('"'"'statement'"'"', '"'"'documentChange'"'"', '"'"'action'"'"', '"'"'vote'"'"')"'` must print 0.
 
 On the dev machine, remove the search database as in [Run the search service](#run-the-search-service) and start it again.
 

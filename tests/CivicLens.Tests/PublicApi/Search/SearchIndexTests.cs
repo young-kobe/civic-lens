@@ -67,6 +67,18 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
     }
 
     [Fact]
+    public async Task TheSnippetComesFromTheSourceTextWithTheMatchMarkedWhenOnlyTheSourceTextMatches()
+    {
+        await world.PublishAndIngestAsync(1,
+            PublishedSamples.Statement('a', "Zoning meeting", summary: "Tenants gain a new cap in the city.", source: "Xq the mayor said rent rises."));
+
+        var hit = Assert.Single((await world.SearchAsync(request => request with { Text = "rent" })).Hits);
+
+        Assert.Contains("the mayor said \uE000rent\uE001 rises", hit.Snippet, StringComparison.Ordinal);
+        Assert.DoesNotContain("Tenants gain", hit.Snippet, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AnActionSnippetComesFromTheBillLineOfItsManifestEntry()
     {
         var action = PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001 RAWFOOTER housing");

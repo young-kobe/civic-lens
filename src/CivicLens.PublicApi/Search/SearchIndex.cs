@@ -72,7 +72,9 @@ public sealed class SearchIndex(NpgsqlDataSource database)
             ORDER BY r.rank DESC, r.record_id LIMIT @take
         )
         SELECT {Columns},
-            ts_headline('english', left(COALESCE(r.summary, r.body), {SnippetScanCharacters}), q.query, '{SnippetOptions}'), r.rank
+            ts_headline('english', left(
+                CASE WHEN to_tsvector('english', r.summary) @@ q.query THEN r.summary ELSE r.body END,
+                {SnippetScanCharacters}), q.query, '{SnippetOptions}'), r.rank
         FROM page r CROSS JOIN q ORDER BY r.rank DESC, r.record_id
         """;
 
