@@ -1,0 +1,41 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSection.AllRecords" Title="@Data.Headline" Description="@Data.Headline" CanonicalPath="@PublicationProtocol.RecordPagePath(Data.RecordId)" IsArticle="true" RootPath="@RootPath" Record="record">
+    <article class="detail">
+        <header class="detail-head">
+            <p class="detail-eyebrow">@PublishedRecordLabels.Kind(PublishedRecordKind.Brief) | @Data.ShortName</p>
+            <h1 class="detail-headline">@Data.Headline</h1>
+            <p class="detail-lede">@PublishedBriefView.WeekStartText(Data.WeekStart)</p>
+        </header>
+        <div class="detail-stack">
+            <AiSummary Label="@Data.Label">
+                <ChildContent><PublishedBriefText Paragraphs="Data.Paragraphs" /></ChildContent>
+                <Check>@PublishedBriefView.SampleNote <a href="#cited">@PublishedBriefView.CitedRecordsTitle</a></Check>
+            </AiSummary>
+            <section class="detail-section" id="cited" aria-labelledby="brief-cited-title">
+                <h2 id="brief-cited-title">@PublishedBriefView.CitedRecordsTitle</h2>
+                <ul class="choices detail-cited" role="list">
+                    @foreach (var citation in Data.Citations)
+                    {
+                        <li id="@PublishedBriefView.CitationAnchor(citation.Id)">
+                            <span class="choice-label">@citation.Id</span>
+                            <a href="@(RootPath + PublicationProtocol.RecordPagePath(citation.RecordId))">@citation.Headline</a>
+                            <span class="muted small">@PublishedBriefView.CitedRecordNote(citation)</span>
+                        </li>
+                    }
+                </ul>
+            </section>
+        </div>
+    </article>
+</PublicPage>
+
+@code {
+    private ReportedRecord record = default!;
+
+    [Parameter, EditorRequired] public BriefPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    protected override void OnParametersSet() =>
+        record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.Brief, Data.Headline, Data.ShortName);
+}

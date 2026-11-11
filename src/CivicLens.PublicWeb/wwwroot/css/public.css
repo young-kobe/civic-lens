@@ -494,6 +494,12 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .detail-quotes .choice .row { margin-top: var(--s2); }
 .detail-quotes + p { margin-top: var(--s3); }
 .detail-versions { display: grid; gap: var(--s4); }
+.ai-summary .record-body { color: inherit; font: inherit; }
+.ai-summary .record-body a { margin-inline-start: .4em; }
+.detail-cited li { display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: 0 var(--s3); padding: var(--s3) var(--s4); border-radius: 20px; background: var(--surface); box-shadow: var(--e1); overflow-wrap: anywhere; }
+.detail-cited .choice-label { grid-row: 1 / span 2; margin: 2px 0 0; font-weight: 700; }
+.detail-cited a { font-weight: 650; }
+.detail-cited li:target { box-shadow: 0 0 0 2px var(--ink); }
 
 @media (min-width: 720px) {
     .detail-versions { grid-template-columns: 1fr 1fr; }

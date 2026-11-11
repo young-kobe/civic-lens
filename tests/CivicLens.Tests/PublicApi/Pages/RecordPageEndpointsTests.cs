@@ -1,4 +1,6 @@
 using System.Net;
+using System.Text.RegularExpressions;
+using CivicLens.PublicWeb.Publication;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.PublicApi;
@@ -6,6 +8,7 @@ using CivicLens.PublicApi.Pages;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using CivicLens.Tests.PublicApi.Briefs;
 using CivicLens.Tests.PublicApi.DocumentChanges;
 using CivicLens.Tests.PublicApi.Officials;
 using CivicLens.Tests.PublicApi.Statements;
@@ -93,6 +96,65 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task TheBriefRouteRendersItsParagraphsAndPinnedCitationsInOrder()
+    {
+        await using var host = await StartAsync();
+        await PublishedBriefContentSeed.SeedAsync(host.OperationalDatabase);
+
+        var page = await GetPageAsync(host, Path(RecordPageEndpoints.BriefPath, BriefFixtures.RecordId));
+
+        Assert.Equal("Published brief headline", page.QuerySelector("h1")!.TextContent);
+        Assert.Equal(["Textparagraphone[R1]", "Textparagraphtwo[R2][R3]"], page.QuerySelectorAll(".ai-summary p.record-body").Select(text => Regex.Replace(text.TextContent, @"\s+", "")));
+        Assert.Equal(["Pinned statement headline", "Pinned document headline", "Bill 7"], page.QuerySelectorAll(".detail-cited li a").Select(link => link.TextContent));
+        Assert.Equal("Starts Monday 5 Oct 2026, New York time", page.QuerySelector(".detail-lede")!.TextContent);
+        Assert.NotNull(page.QuerySelector(".ai-summary-label"));
+    }
+
+    public static TheoryData<string, PublishedRecordKind> WithdrawableRoutes => new()
+    {
+        { RecordPageEndpoints.StatementPath, PublishedRecordKind.Statement },
+        { RecordPageEndpoints.ExecutiveActionPath, PublishedRecordKind.ExecutiveAction },
+        { RecordPageEndpoints.DocumentChangePath, PublishedRecordKind.DocumentChange },
+        { RecordPageEndpoints.BriefPath, PublishedRecordKind.Brief }
+    };
+
+    [Theory]
+    [MemberData(nameof(WithdrawableRoutes))]
+    public async Task AWithdrawnRecordOnItsKindRouteAnswersTheNoticeWithTheExactRevisionDatesNoteAndCorrectionHistoryAndAnotherKindRouteAnswersNotFound(string route, PublishedRecordKind kind)
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 6, new DateTimeOffset(2026, 6, 6, 0, 0, 0, TimeSpan.Zero));
+        var id = new string('c', kind == PublishedRecordKind.DocumentChange ? 32 : 64);
+        var first = new DateTimeOffset(2026, 1, 2, 3, 4, 0, TimeSpan.Zero).UtcTicks;
+        var withdrawn = new DateTimeOffset(2026, 6, 2, 12, 30, 0, TimeSpan.Zero).UtcTicks;
+        var edit = new DateTimeOffset(2026, 3, 3, 0, 0, 0, TimeSpan.Zero).UtcTicks;
+        var text = PublicationProtocol.KindText(kind);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('{text}', '{id}', {first});
+            INSERT INTO publication_withdrawals (kind, record_id, withdrawn_revision_number, withdrawn_at_utc_ticks, note, first_release, last_release) VALUES
+                ('{text}', '{id}', 5, {withdrawn}, 'Withdrawn after a report', 6, NULL);
+            INSERT INTO publication_withdrawal_corrections (kind, record_id, first_release, "position", replaced_revision_number, published_at_utc_ticks, note, facts_unchanged) VALUES
+                ('{text}', '{id}', 6, 0, 4, {edit}, 'A person fixed the date', false),
+                ('{text}', '{id}', 6, 1, 2, {edit}, NULL, false);
+            """);
+
+        var page = await GetPageAsync(host, Path(route, id));
+
+        Assert.Equal("This record was withdrawn", page.QuerySelector("h1")!.TextContent);
+        Assert.Equal([PublishedRecordLabels.Kind(kind), id, "5", "2 Jan 2026, 03:04 UTC", "2 Jun 2026, 12:30 UTC", "Withdrawn after a report"],
+            page.QuerySelectorAll("dd").Select(value => value.TextContent.Trim()));
+        var history = page.QuerySelectorAll(".corrections li").Select(item => item.TextContent).ToArray();
+        Assert.Equal(2, history.Length);
+        Assert.Contains("Replaces revision 4.", history[0]);
+        Assert.Contains("A person fixed the date", history[0]);
+        Assert.Contains("Replaces revision 2.", history[1]);
+        Assert.StartsWith(BaseUrl.Join(string.Empty), page.QuerySelector(".public-breadcrumbs a")!.GetAttribute("href"));
+        foreach (var other in WithdrawableRoutes.Select(row => (string)row[0]).Where(path => path != route))
+            await GetPageAsync(host, Path(other, id), HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task ARecordOfAnotherKindAMalformedIdAndAnUnknownIdAnswerTheNotFoundPageOnEveryKindRoute()
     {
         await using var host = await StartAsync();
@@ -101,7 +163,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
 
         foreach (var kind in new[] { RecordPageEndpoints.ExecutiveActionPath, RecordPageEndpoints.DocumentChangePath })
             await GetPageAsync(host, Path(kind, Statement.RecordId), HttpStatusCode.NotFound);
-        foreach (var kind in new[] { RecordPageEndpoints.StatementPath, RecordPageEndpoints.ExecutiveActionPath, RecordPageEndpoints.DocumentChangePath })
+        foreach (var kind in new[] { RecordPageEndpoints.StatementPath, RecordPageEndpoints.ExecutiveActionPath, RecordPageEndpoints.DocumentChangePath, RecordPageEndpoints.BriefPath })
         {
             await GetPageAsync(host, Path(kind, "bad-id"), HttpStatusCode.NotFound);
             await GetPageAsync(host, Path(kind, new string('f', 64)), HttpStatusCode.NotFound);
