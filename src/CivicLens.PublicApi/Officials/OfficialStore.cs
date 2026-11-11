@@ -49,16 +49,18 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         AddParameters(command, request);
         var rows = new List<OfficialRow>();
         int? release = null;
+        var listed = 0;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
             while (await reader.ReadAsync(cancellationToken))
             {
                 release = reader.GetInt32(0);
-                if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader, 1));
+                listed = reader.GetInt32(1);
+                if (!reader.IsDBNull(2)) rows.Add(ReadRow(reader, 2));
             }
         if (release is not { } active) return null;
         var page = rows.Take(request.Limit).ToArray();
         var next = rows.Count > request.Limit ? OfficialCursor.Of(active, page[^1]).Encode() : null;
-        return new(active, OfficialScopes.RecordCount, page, next);
+        return new(active, OfficialScopes.RecordCount, listed, OfficialScopes.OfficialsInRelease, page, next);
     }
 
     /// <summary>Reads one official. Null means that no release is active or that the active release names no such official.
@@ -90,11 +92,13 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         return (new(release, official, OfficialScopes.RecordCount, terms, congress, missed, partyLines, bills, issues, executive), publishedAtUtcTicks);
     }
 
+    // The view is read once. The CTE feeds both the count of the whole release and the filtered page.
     private static string ListSql(OfficialRequest request) => $"""
-        SELECT a.release_number, {Columns}
+        WITH listed AS MATERIALIZED (SELECT * FROM public_api.officials)
+        SELECT a.release_number, (SELECT count(*) FROM listed) AS officials_in_release, {Columns}
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
-               SELECT o.* FROM public_api.officials o
+               SELECT o.* FROM listed o
                 WHERE TRUE{Filters(request)}
                 ORDER BY {Order} LIMIT @take) o
             ON TRUE
@@ -105,7 +109,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         (request.Kind is null ? "" : " AND o.kind = @kind") +
         (request.State is null ? "" : " AND o.state = @state") +
         (request.Party is null ? "" : " AND lower(o.party) = @party") +
-        (request.NamePrefix is null ? "" : " AND starts_with(lower(o.name), @name_prefix)") +
+        (request.NamePrefix is null ? "" : " AND strpos(' ' || lower(o.name), ' ' || @name_prefix) > 0") +
         (request.Cursor is null ? "" : " AND (o.name, o.official_id) > (@cursor_name, @cursor_id)");
 
     private static void AddParameters(NpgsqlCommand command, OfficialRequest request)
