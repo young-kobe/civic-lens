@@ -1,5 +1,10 @@
+using CivicLens.PublicApi.DocumentChanges;
+using CivicLens.PublicApi.ExecutiveActions;
 using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.Http;
+using CivicLens.PublicApi.Records;
+using CivicLens.PublicApi.Statements;
+using CivicLens.PublicApi.Votes;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Builder;
@@ -33,12 +38,54 @@ public static class ServerPageEndpoints
                     [nameof(ComparePage.RootPath)] = baseUrl.Join(string.Empty),
                     [nameof(ComparePage.BrowserApiUrl)] = home.BrowserApiRoot
                 }, cancellationToken)));
-        routes.MapRecordPages(baseUrl);
+        routes.MapGet(RecordRoute("{recordId}"), (string recordId, HttpContext context, RecordKindStore kinds, VotePageReader votes, StatementPageReader statements,
+            ExecutiveActionPageReader actions, DocumentChangePageReader changes, ServerPageResponder responder, CancellationToken cancellationToken) =>
+            ApiResults.GuardAsync(async () =>
+        {
+            var rootPath = baseUrl.Join(string.Empty);
+            var kind = PublicationProtocol.IsAnyRecordId(recordId) ? await kinds.FindAsync(recordId, cancellationToken) : null;
+            switch (kind)
+            {
+                case PublishedRecordKind.Vote when await votes.ReadAsync(recordId, cancellationToken) is { } vote:
+                    var filter = new VoteMemberFilter(QueryValues.FilterValue(QueryValues.Value(context.Request.Query, "q")?.Trim(), "q"), QueryValues.Filter(context.Request.Query, "cast"),
+                        QueryValues.Filter(context.Request.Query, "party"));
+                    return await responder.RespondAsync<VoteDetailPage>(context, StatusCodes.Status200OK, vote.Release, new Dictionary<string, object?>
+                    {
+                        [nameof(VoteDetailPage.Data)] = vote,
+                        [nameof(VoteDetailPage.RootPath)] = rootPath,
+                        [nameof(VoteDetailPage.PagePath)] = RecordRoute(recordId),
+                        [nameof(VoteDetailPage.Filter)] = filter
+                    }, cancellationToken);
+                case PublishedRecordKind.Statement when await statements.ReadAsync(recordId, cancellationToken) is { } statement:
+                    return await responder.RespondAsync<StatementDetailPage>(context, StatusCodes.Status200OK, statement.Release, new Dictionary<string, object?>
+                    {
+                        [nameof(StatementDetailPage.Data)] = statement,
+                        [nameof(StatementDetailPage.RootPath)] = rootPath
+                    }, cancellationToken);
+                case PublishedRecordKind.ExecutiveAction when await actions.ReadAsync(recordId, cancellationToken) is { } action:
+                    return await responder.RespondAsync<ExecutiveActionDetailPage>(context, StatusCodes.Status200OK, action.Release, new Dictionary<string, object?>
+                    {
+                        [nameof(ExecutiveActionDetailPage.Data)] = action,
+                        [nameof(ExecutiveActionDetailPage.RootPath)] = rootPath
+                    }, cancellationToken);
+                case PublishedRecordKind.DocumentChange when await changes.ReadAsync(recordId, cancellationToken) is { } change:
+                    return await responder.RespondAsync<DocumentChangeDetailPage>(context, StatusCodes.Status200OK, change.Release, new Dictionary<string, object?>
+                    {
+                        [nameof(DocumentChangeDetailPage.Data)] = change,
+                        [nameof(DocumentChangeDetailPage.RootPath)] = rootPath
+                    }, cancellationToken);
+                default:
+                    return await NotFoundAsync(context, responder, baseUrl, cancellationToken);
+            }
+        }));
         routes.MapGet(Prefix + "/{**path}", (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
             NotFoundAsync(context, responder, baseUrl, cancellationToken));
     }
 
-    internal static Task<IResult> NotFoundAsync(HttpContext context, ServerPageResponder responder, PublicBaseUrl baseUrl, CancellationToken cancellationToken) =>
+    /// <summary>The route of the server-rendered record page. One route serves every kind, because a record ID does not name its kind. The vote page uses it as an origin-relative form action, so a filter stays on the origin that served the page. The public base URL can name another origin.</summary>
+    private static string RecordRoute(string recordId) => $"{Prefix}/{PublicationProtocol.RecordPagePath(recordId)}";
+
+    private static Task<IResult> NotFoundAsync(HttpContext context, ServerPageResponder responder, PublicBaseUrl baseUrl, CancellationToken cancellationToken) =>
         responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,
             new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken);
 }

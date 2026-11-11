@@ -233,6 +233,9 @@ record_links link_type
 record_links statement_date
 record_links link_record_id
 record_links reason
+statement_approvers approved_by
+statement_approvers record_id
+statement_approvers revision_number
 statement_quotations record_id
 statement_quotations revision_number
 statement_quotations position

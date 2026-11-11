@@ -70,7 +70,7 @@
                 {
                     var position = index; // The child content runs after the loop moves on, so it reads a copy.
                     var citation = Data.Citations[position];
-                    var version = DocumentChangeWords.VersionName(Data, citation);
+                    var version = DocumentChangeWords.VersionName(Data.Before, citation);
                     <li>
                         <CitationQuote Label="@version" Quote="@citation.Quote">
                             <ContextLink Href="@("#" + CitedText.Anchor(position))" Text="@ContextLink.FullVersionText" Target="@ContextLink.QuoteTarget(version.ToLowerInvariant(), position, Data.Citations.Length)" />
@@ -79,8 +79,8 @@
                 }
                 @if (Data.ChangeDateEvidence is { } evidence)
                 {
-                    <DateEvidenceLine Label="@($"Evidence for the actual change date, {DocumentChangeWords.VersionName(Data, evidence).ToLowerInvariant()}")" Quote="@evidence.Quote">
-                        <ContextLink Href="@("#" + DocumentChangeWords.ChangeDateAnchor)" Text="@ContextLink.FullVersionText" Target="actual change date, quote" />
+                    <DateEvidenceLine Label="@($"Evidence for the actual change date, {DocumentChangeWords.VersionName(Data.Before, evidence).ToLowerInvariant()}")" Quote="@evidence.Quote">
+                        <ContextLink Href="@("#" + DocumentChangeWords.ChangeDateAnchor)" Text="@ContextLink.FullVersionText" Target="@ContextLink.QuoteTarget("actual change date")" />
                     </DateEvidenceLine>
                 }
             </ul>

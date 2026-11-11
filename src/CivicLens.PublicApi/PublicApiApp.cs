@@ -57,10 +57,12 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new SearchIndex(reader));
         builder.Services.AddSingleton(new ActiveReleaseReader(views));
         builder.Services.AddSingleton(new VoteStore(views));
+        builder.Services.AddSingleton(provider => new VotePageReader(provider.GetRequiredService<VoteStore>(), views));
         builder.Services.AddSingleton(new PartyAgreementStore(views));
         builder.Services.AddSingleton(provider => new BoardStore(views, provider.GetRequiredService<PartyAgreementStore>()));
         builder.Services.AddSingleton(new MemberVoteStore(views));
         builder.Services.AddSingleton(new BillStore(views));
+        builder.Services.AddSingleton(new RecordKindStore(views));
         builder.Services.AddSingleton(new RecordSnapshot(views));
         builder.Services.AddSingleton(new StatementStore(views));
         builder.Services.AddSingleton(provider => new StatementPageReader(provider.GetRequiredService<StatementStore>(), provider.GetRequiredService<RecordSnapshot>()));

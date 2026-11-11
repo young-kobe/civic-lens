@@ -23,10 +23,10 @@ public static class VoteMeaning
             [PublishedVoteKind.MotionToProceed] = ("A Yes vote supported beginning consideration of the matter named in the question.", "A No vote opposed beginning consideration of the matter named in the question.")
         };
 
-    internal static (string Yes, string No) For(PublishedVote vote, VoteWordingInput input)
+    internal static (string Yes, string No) For(PublishedVoteKind kind, VoteWordingInput input)
     {
-        if (input.Result is null || !input.KnownQuestion || vote.Kind == PublishedVoteKind.Other ||
-            !ByKind.TryGetValue(vote.Kind, out var meaning))
+        if (input.Result is null || !input.KnownQuestion || kind == PublishedVoteKind.Other ||
+            !ByKind.TryGetValue(kind, out var meaning))
             return (YesFallback, NoFallback);
         return meaning;
     }
