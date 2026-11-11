@@ -8,7 +8,7 @@ public static class VoteMeaning
     public const string NoFallback = "A No vote opposed the question before the chamber.";
 
     /// <summary>The index row for the kind Other. It has no Yes meaning, so it sends the reader to the vote page.</summary>
-    public const string OtherOnIndex = "Other question: the record states the question in its own words. Read it on the vote page.";
+    public const string OtherOnIndex = "The record states the question in its own words. Read it on the vote page.";
 
     private sealed record Row(PublishedVoteKind Kind, string Yes, string No, string? YesOnIndex = null);
 

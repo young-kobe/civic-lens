@@ -15,7 +15,7 @@
                 <TableCell Label="@PublicColumn.WordInTheRecord">
                     @if (row.Term is { } term)
                     {
-                        <a href="@($"{RootPath}{PublicationProtocol.GlossaryPagePath}#{term.AnchorId}")">@term.Name</a>
+                        <a href="@($"{RootPath}{PublicationProtocol.GlossaryPagePath}#{term.AnchorId}")">@row.RecordText</a>
                     }
                 </TableCell>
                 <TableCell Label="@PublicColumn.WhatAYesVoteMeans">@row.Meaning</TableCell>
@@ -31,10 +31,11 @@
     [
         .. VoteMeaning.Kinds.Select(kind => new KindRow(
             PlainVoteWords.Kind(kind),
+            PlainVoteWords.RecordTerm(kind)!,
             Glossary.Term(PublishedRecordLabels.VoteKindTermKey(kind)!),
             VoteMeaning.YesOnIndexOf(kind))),
-        new(PlainVoteWords.OtherKind, null, VoteMeaning.OtherOnIndex)
+        new(PlainVoteWords.OtherKind, null, null, VoteMeaning.OtherOnIndex)
     ];
 
-    private sealed record KindRow(string Name, GlossaryTerm? Term, string Meaning);
+    private sealed record KindRow(string Name, string? RecordText, GlossaryTerm? Term, string Meaning);
 }

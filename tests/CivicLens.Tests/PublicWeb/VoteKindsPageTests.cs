@@ -58,11 +58,24 @@ public sealed class VoteKindsPageTests
             var link = cells[1].QuerySelector("a")!;
 
             Assert.Equal(PlainVoteWords.Kind(kind), cells[0].TextContent);
-            Assert.Equal(term.Name, link.TextContent);
+            Assert.Equal(PlainVoteWords.RecordTerm(kind), link.TextContent);
             Assert.Equal($"{IndexRoot}{PublicationProtocol.GlossaryPagePath}#{term.AnchorId}", link.GetAttribute("href"));
             Assert.Equal(VoteMeaning.YesOnIndexOf(kind), cells[2].TextContent);
             Assert.Equal(3, cells.Length);
         }
+    }
+
+    [Fact]
+    public async Task TheRecordTermCanDifferFromItsGlossaryTitleWithoutChangingTheGlossaryTarget()
+    {
+        var page = await RenderIndexAsync();
+        var passageRow = page.QuerySelectorAll("tbody tr").Single(row => row.Children[0].TextContent == PlainVoteWords.Kind(PublishedVoteKind.Passage));
+        var link = passageRow.Children[1].QuerySelector("a")!;
+        var term = Glossary.Term(PublishedRecordLabels.VoteKindTermKey(PublishedVoteKind.Passage)!);
+
+        Assert.Equal("Passage or agreement", link.TextContent);
+        Assert.NotEqual(term.Name, link.TextContent);
+        Assert.Equal($"{IndexRoot}{PublicationProtocol.GlossaryPagePath}#{term.AnchorId}", link.GetAttribute("href"));
     }
 
     [Fact]
@@ -72,8 +85,9 @@ public sealed class VoteKindsPageTests
 
         var cells = page.QuerySelectorAll("tbody tr").Last().Children;
 
-        Assert.Equal("Other question: the record states the question in its own words. Read it on the vote page.", cells[2].TextContent);
+        Assert.Equal("The record states the question in its own words. Read it on the vote page.", cells[2].TextContent);
         Assert.Equal(PlainVoteWords.OtherKind, cells[0].TextContent);
+        Assert.Empty(cells[1].TextContent);
         Assert.Empty(cells[1].QuerySelectorAll("a"));
     }
 
@@ -86,7 +100,7 @@ public sealed class VoteKindsPageTests
             .Concat(VoteMeaning.Kinds.SelectMany(kind => new[]
             {
                 PlainVoteWords.Kind(kind),
-                Glossary.Term(PublishedRecordLabels.VoteKindTermKey(kind)!).Name,
+                PlainVoteWords.RecordTerm(kind)!,
                 VoteMeaning.YesOnIndexOf(kind)
             }))
             .Concat([PlainVoteWords.OtherKind, VoteMeaning.OtherOnIndex]);
@@ -114,13 +128,13 @@ public sealed class VoteKindsPageTests
     }
 
     [Fact]
-    public async Task TheVotePageLinksToTheIndexFromItsKindExplainer()
+    public async Task TheVotePageHoldsNoLinkToTheIndexUntilCutover()
     {
         var page = await RenderAsync(Vote());
 
         var link = page.QuerySelector($".vote-explain a[href='{Root}{PublicationProtocol.VoteKindsPagePath}']");
 
-        Assert.Equal("See what a Yes vote means for each kind of vote", link!.TextContent);
+        Assert.Null(link);
     }
 
     private static async Task<IDocument> RenderIndexAsync()

@@ -11,8 +11,6 @@ public static class Glossary
 
     public const string VoteKindsIntro = "Congress votes on many kinds of questions. This page lists each kind and says what a Yes vote on it means.";
 
-    public const string VoteKindsLink = "See what a Yes vote means for each kind of vote";
-
     public const string PageDescription = "What each term means and why it matters.";
 
     public const string IndexLabel = "Terms in the glossary";
