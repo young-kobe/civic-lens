@@ -30,6 +30,23 @@ public sealed class VoteWordingTests
     }
 
     [Fact]
+    public void TheCitedPartsOfAVoteGiveTheSameWordsAsThePublishedVote()
+    {
+        var vote = Vote(PublishedVoteKind.Passage, "On Passage");
+
+        Assert.Equal(VoteWording.Of(vote), VoteWording.Of(VoteWordingSource.Of(vote)));
+        Assert.NotNull(VoteWording.Of(VoteWordingSource.Of(vote)));
+    }
+
+    [Fact]
+    public void CitedPartsWithoutAQuestionCitationGiveNoWording()
+    {
+        var source = VoteWordingSource.Of(Vote(PublishedVoteKind.Passage, "On Passage")) with { KindCitation = null };
+
+        Assert.Null(VoteWording.Of(source));
+    }
+
+    [Fact]
     public void ARecognizedQuestionMatchesWithoutCaseSensitivity()
     {
         var vote = Vote(PublishedVoteKind.Passage, "on passage");

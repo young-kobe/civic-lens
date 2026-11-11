@@ -49,79 +49,70 @@ internal static class PublishedEntries
         """;
 
     private const string ReadCorrectionVerificationCandidates = """
-        SELECT r.release_number AS "ReleaseNumber", r.directory_name AS "DirectoryName", r.published_at_utc_ticks AS "PublishedAtUtcTicks",
-               r.record_count AS "RecordCount", candidate."Kind", candidate."RecordId", candidate."RevisionNumber"
-          FROM unnest({0}::integer[]) AS selected(release_number)
-          JOIN publication_releases r ON r.release_number = selected.release_number
-          CROSS JOIN LATERAL (
-              SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber"
-                FROM publication_record_states s
-               WHERE s.first_release <= r.release_number AND (s.last_release IS NULL OR s.last_release >= r.release_number)
-                 AND ({1} = 0 OR (r.release_number, s.kind, s.record_id) > ({1}, {2}, {3}))
-               ORDER BY s.kind, s.record_id
-               LIMIT {4}
-          ) candidate
-         WHERE r.release_number >= {1}
-         ORDER BY r.release_number, candidate."Kind", candidate."RecordId"
-         LIMIT {4}
+        SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber"
+          FROM publication_record_states s
+         WHERE s.first_release <= {0} AND (s.last_release IS NULL OR s.last_release >= {0})
+           AND ({1}::text = '' OR (s.kind, s.record_id) > ({1}::text, {2}::text))
+         ORDER BY s.kind, s.record_id
+         LIMIT {3}
         """;
 
     public static async Task<CorrectionHistoryVerificationPage> ReadCorrectionVerificationPageAsync(CollectionAttemptDbContext db,
-        CorrectionHistoryVerificationCursor? after, string fingerprint, IReadOnlyCollection<int> releaseNumbers, int limit,
-        CancellationToken cancellationToken)
+        CorrectionHistoryWalkStep step, int limit, CancellationToken cancellationToken)
     {
         if (limit == int.MaxValue) throw new ArgumentOutOfRangeException(nameof(limit));
-        if (releaseNumbers.Count == 0) return new([], fingerprint, null);
-        var rows = await db.Database.SqlQueryRaw<CorrectionBootstrapRow>(ReadCorrectionVerificationCandidates,
-            releaseNumbers.ToArray(), after?.ReleaseNumber ?? 0, after is null ? "" : PublishedRecordReference.NameOf(after.Kind),
-            after?.RecordId ?? "", limit + 1).ToArrayAsync(cancellationToken);
+        if (step.Target is not { } release) return new(null, [], true, null, step.Skipped);
+        var rows = await db.Database.SqlQueryRaw<ReleaseStateRow>(ReadCorrectionVerificationCandidates, release.ReleaseNumber,
+            step.After is null ? "" : PublishedRecordReference.NameOf(step.After.Kind), step.After?.RecordId ?? "", limit + 1)
+            .ToArrayAsync(cancellationToken);
         var hasMore = rows.Length > limit;
         if (hasMore) rows = rows[..limit];
-        var distinctKeys = rows.Select(row => (row.Kind, row.RecordId, row.RevisionNumber)).Distinct().ToArray();
+        var keys = rows.Select(row => (row.Kind, row.RecordId, row.RevisionNumber)).ToArray();
         var facts = rows.Length == 0 ? new Dictionary<(string Kind, string RecordId, int RevisionNumber), PublishedEntryFacts>()
-            : await ReadFactsAsync(db, KeyArrays(distinctKeys), cancellationToken);
+            : await ReadFactsAsync(db, KeyArrays(keys), cancellationToken);
         var firstPublished = rows.Length == 0 ? new Dictionary<PublishedRecordReference, DateTimeOffset>()
-            : await PublishedRecords.ReadAsync(db, distinctKeys.Select(key => new PublishedRecordReference(KindOf(key.Kind), key.RecordId)).Distinct().ToArray(), cancellationToken);
-        var historiesByRecord = new Dictionary<(int ReleaseNumber, PublishedRecordReference Record), StoredCorrectionHistory>();
-        var historyErrors = new HashSet<(int ReleaseNumber, PublishedRecordReference Record)>();
-        foreach (var releaseGroup in rows.GroupBy(row => row.ReleaseNumber))
-        {
-            var bindings = releaseGroup.Select(row => new PublishedRevisionBinding(KindOf(row.Kind), row.RecordId, row.RevisionNumber)).ToArray();
-            try
-            {
-                var histories = await CorrectionHistoryCopies.ReadAsync(db, releaseGroup.Key, bindings, cancellationToken);
-                foreach (var (record, history) in histories) historiesByRecord.Add((releaseGroup.Key, record), history);
-            }
-            catch (InvalidDataException)
-            {
-                // Batch validation is the normal path. Retry records separately only to identify malformed rows without hiding valid peers.
-                foreach (var binding in bindings)
-                {
-                    var record = new PublishedRecordReference(binding.Kind, binding.RecordId);
-                    try
-                    {
-                        var history = await CorrectionHistoryCopies.ReadAsync(db, releaseGroup.Key, [binding], cancellationToken);
-                        if (history.TryGetValue(record, out var stored)) historiesByRecord.Add((releaseGroup.Key, record), stored);
-                    }
-                    catch (InvalidDataException) { historyErrors.Add((releaseGroup.Key, record)); }
-                }
-            }
-        }
-        var output = new List<CorrectionHistoryVerificationCandidate>(rows.Length);
-        foreach (var row in rows)
+            : await PublishedRecords.ReadAsync(db, [.. rows.Select(row => new PublishedRecordReference(KindOf(row.Kind), row.RecordId))], cancellationToken);
+        var bindings = rows.Select(row => new PublishedRevisionBinding(KindOf(row.Kind), row.RecordId, row.RevisionNumber)).ToArray();
+        var (histories, historyErrors) = await ReadVerificationHistoriesAsync(db, release.ReleaseNumber, bindings, cancellationToken);
+        var candidates = rows.Select(row =>
         {
             var reference = new PublishedRecordReference(KindOf(row.Kind), row.RecordId);
-            historiesByRecord.TryGetValue((row.ReleaseNumber, reference), out var storedHistory);
-            var historyError = historyErrors.Contains((row.ReleaseNumber, reference)) ? "recordInvalid" : null;
+            histories.TryGetValue(reference, out var storedHistory);
             DateTimeOffset? firstPublishedAtUtc = firstPublished.TryGetValue(reference, out var firstTime) ? firstTime : null;
-            output.Add(new(new PublicationReleaseSummary(row.ReleaseNumber, row.DirectoryName,
-                    new DateTimeOffset(row.PublishedAtUtcTicks, TimeSpan.Zero), row.RecordCount),
-                new StoredReleaseRecord(KindOf(row.Kind), row.RecordId, row.RevisionNumber,
+            return new CorrectionHistoryVerificationCandidate(release,
+                new StoredReleaseRecord(reference.Kind, row.RecordId, row.RevisionNumber,
                     firstPublishedAtUtc, facts.GetValueOrDefault((row.Kind, row.RecordId, row.RevisionNumber))),
-                storedHistory, historyError));
+                storedHistory, historyErrors.Contains(reference) ? "recordInvalid" : null);
+        }).ToArray();
+        return new(release, candidates, !hasMore, step.Next, step.Skipped);
+    }
+
+    private static async Task<(IReadOnlyDictionary<PublishedRecordReference, StoredCorrectionHistory> Histories,
+        HashSet<PublishedRecordReference> Errors)> ReadVerificationHistoriesAsync(CollectionAttemptDbContext db, int releaseNumber,
+        PublishedRevisionBinding[] bindings, CancellationToken cancellationToken)
+    {
+        var errors = new HashSet<PublishedRecordReference>();
+        if (bindings.Length == 0) return (new Dictionary<PublishedRecordReference, StoredCorrectionHistory>(), errors);
+        try
+        {
+            return (await CorrectionHistoryCopies.ReadAsync(db, releaseNumber, bindings, cancellationToken), errors);
         }
-        var last = hasMore && rows.Length > 0 ? rows[^1] : null;
-        return new(output, fingerprint, last is null ? null : new(fingerprint, last.ReleaseNumber, KindOf(last.Kind), last.RecordId));
+        catch (InvalidDataException)
+        {
+            // Batch validation is the normal path. Retry records separately only to identify malformed rows without hiding valid peers.
+            var histories = new Dictionary<PublishedRecordReference, StoredCorrectionHistory>();
+            foreach (var binding in bindings)
+            {
+                var record = new PublishedRecordReference(binding.Kind, binding.RecordId);
+                try
+                {
+                    var history = await CorrectionHistoryCopies.ReadAsync(db, releaseNumber, [binding], cancellationToken);
+                    if (history.TryGetValue(record, out var stored)) histories.Add(record, stored);
+                }
+                catch (InvalidDataException) { errors.Add(record); }
+            }
+            return (histories, errors);
+        }
     }
 
     public static async Task<CorrectionHistoryBootstrapPage> ReadCorrectionBootstrapPageAsync(CollectionAttemptDbContext db,

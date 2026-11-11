@@ -1,3 +1,4 @@
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Application.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicWeb.Components.Ui;
@@ -60,7 +61,7 @@ internal static class PublishedBoardView
 
     public static string AgreementLead(ChamberAgreement agreement) => agreement.Total == 0
         ? $"This site has no substantive {agreement.Chamber} roll call vote with both parties in the {CongressCalendar.Ordinal(agreement.Congress)} Congress."
-        : $"On {agreement.Agreed} of the {agreement.Total} substantive {agreement.Chamber} roll call {PublishedOfficialView.Noun(agreement.Total, "vote")} on this site, {PublishedOfficialView.BothMajorities} voted the same way.";
+        : $"On {agreement.Agreed} of the {agreement.Total} substantive {agreement.Chamber} roll call {PublishedOfficialView.Noun(agreement.Total, "vote")} on this site, {VoteWords.BothMajorities} voted the same way.";
 
     public static IReadOnlyList<AgreementRow> AgreementRows(ChamberAgreement agreement) =>
     [

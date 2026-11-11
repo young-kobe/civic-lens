@@ -203,6 +203,56 @@ public sealed class ReleaseCommandTests
         Assert.Equal(1, secondExit);
     }
 
+    [Fact]
+    public async Task CorrectionVerificationPrintsTheReleaseLedgerFieldsAndAcceptsItsOwnCursor()
+    {
+        var scenario = new PublicationScenario();
+        scenario.Publications.CorrectionBootstrapCandidates.Add(CorrectionCandidate(1, 'a'));
+        scenario.Publications.CorrectionBootstrapCandidates.Add(CorrectionCandidate(2, 'b'));
+        var verify = new VerifyCorrectionHistories(scenario.Publications, scenario.Releases);
+        var firstOutput = new StringWriter();
+        var firstExit = await RunVerifyAsync(["releases", "corrections", "verify", "1"], verify, firstOutput);
+        using var firstJson = JsonDocument.Parse(firstOutput.ToString());
+        var cursor = firstJson.RootElement.GetProperty("nextCursor").GetString();
+
+        var secondOutput = new StringWriter();
+        var secondExit = await RunVerifyAsync(["releases", "corrections", "verify", "1", cursor!], verify, secondOutput);
+        using var secondJson = JsonDocument.Parse(secondOutput.ToString());
+
+        Assert.Equal((1, 1), (firstExit, secondExit));
+        Assert.Equal(0, firstJson.RootElement.GetProperty("verifiedReleases").GetArrayLength());
+        Assert.Equal(0, firstJson.RootElement.GetProperty("skippedReleases").GetArrayLength());
+        var selection = firstJson.RootElement.GetProperty("selection");
+        Assert.Equal([1, 2], selection.EnumerateArray().Select(item => item.GetProperty("releaseNumber").GetInt32()));
+        Assert.Equal($"{2:D6}-{new string('a', 32)}", selection[1].GetProperty("directoryName").GetString());
+        Assert.Equal(2, CorrectionHistoryVerificationCursor.Parse(cursor)!.ReleaseNumber);
+        Assert.Equal(2, CorrectionHistoryVerificationCursor.Parse(selection[1].GetProperty("cursor").GetString())!.ReleaseNumber);
+        Assert.Equal(2, secondJson.RootElement.GetProperty("failures")[0].GetProperty("releaseNumber").GetInt32());
+        Assert.Equal(JsonValueKind.Null, secondJson.RootElement.GetProperty("nextCursor").ValueKind);
+    }
+
+    [Fact]
+    public async Task CorrectionVerificationReportsASkippedReleaseWithoutFailingTheExitCode()
+    {
+        var scenario = new PublicationScenario();
+        var retired = new CorrectionHistoryVerificationCursor(9, $"{9:D6}-{new string('a', 32)}");
+        var output = new StringWriter();
+
+        var exit = await RunVerifyAsync(["releases", "corrections", "verify", "5", retired.Encode()],
+            new VerifyCorrectionHistories(scenario.Publications, scenario.Releases), output);
+        using var json = JsonDocument.Parse(output.ToString());
+
+        Assert.Equal(0, exit);
+        var skipped = json.RootElement.GetProperty("skippedReleases")[0];
+        Assert.Equal((9, "notSelected"), (skipped.GetProperty("releaseNumber").GetInt32(), skipped.GetProperty("reason").GetString()));
+        Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("nextCursor").ValueKind);
+        Assert.Equal(0, json.RootElement.GetProperty("selection").GetArrayLength());
+    }
+
+    private static Task<int> RunVerifyAsync(string[] args, VerifyCorrectionHistories verify, TextWriter output) =>
+        ReleaseCommand.ExecuteAsync(args, null!, null!, null!, null!, null!, null!, null!, null!, verify, null!, null!, null!,
+            PublicationScenario.Owner, output, TextWriter.Null, CancellationToken.None);
+
     [Theory]
     [InlineData("backfill")]
     [InlineData("verify")]

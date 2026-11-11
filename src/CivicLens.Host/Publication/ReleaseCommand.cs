@@ -62,12 +62,12 @@ public static class ReleaseCommand
                     case ["releases", "corrections", "verify", var verifyLimit] when TryParsePositive(verifyLimit, out var verifyCount):
                         var verification = await verifyCorrections.ExecuteAsync(owner, verifyCount, null, cancellationToken);
                         CommandOutput.Write(output, verification);
-                        return verification.Failed == 0 && !verification.StaleCursor ? 0 : 1;
+                        return verification.Failed == 0 ? 0 : 1;
                     case ["releases", "corrections", "verify", var verifyLimitWithCursor, var verifyCursorText] when TryParsePositive(verifyLimitWithCursor, out var verifyCountWithCursor):
                         var verifyCursor = CorrectionHistoryVerificationCursor.Parse(verifyCursorText);
                         var continuedVerification = await verifyCorrections.ExecuteAsync(owner, verifyCountWithCursor, verifyCursor, cancellationToken);
                         CommandOutput.Write(output, continuedVerification);
-                        return continuedVerification.Failed == 0 && !continuedVerification.StaleCursor ? 0 : 1;
+                        return continuedVerification.Failed == 0 ? 0 : 1;
                     case ["releases", "counts", "backfill", var countLimit, .. var countCursor]
                         when TryParsePositive(countLimit, out var countTotal) && TryParseOptionalPositive(countCursor, out var countAfter):
                         var counted = await billCounts.ExecuteAsync(owner, countTotal, countAfter, cancellationToken);

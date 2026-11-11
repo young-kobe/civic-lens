@@ -33,22 +33,22 @@ public static class NextStep
     private const string NominationPassed = "Confirmation gives the President Senate consent to make the appointment. It does not show whether or when the nominee takes office.";
     private const string NominationFailed = "This vote does not give Senate consent for the appointment. This record does not show another nomination or vote.";
 
-    internal static string For(PublishedVote vote, VoteWordingInput input)
+    internal static string For(PublishedVoteKind kind, PublishedChamber chamber, VoteWordingInput input)
     {
         if (input.Result is null || !input.KnownQuestion) return NotShown;
 
-        return vote.Kind switch
+        return kind switch
         {
             PublishedVoteKind.Rule => Result(input, RulePassed, RuleFailed),
             PublishedVoteKind.PreviousQuestion => Result(input, PreviousQuestionPassed, PreviousQuestionFailed),
             PublishedVoteKind.MotionToRecommit => Result(input, RecommitPassed, RecommitFailed),
             PublishedVoteKind.Amendment => Result(input, AmendmentPassed, AmendmentFailed),
             PublishedVoteKind.Suspension when input.Result == "Failed" => SuspensionFailed,
-            PublishedVoteKind.Suspension when input.Result == "Passed" => SuspensionPassedFor(vote.Chamber, input),
-            PublishedVoteKind.Passage when input.Result == "Passed" => PassagePassedFor(vote.Chamber, input.Question, input.BillType),
+            PublishedVoteKind.Suspension when input.Result == "Passed" => SuspensionPassedFor(chamber, input),
+            PublishedVoteKind.Passage when input.Result == "Passed" => PassagePassedFor(chamber, input.Question, input.BillType),
             PublishedVoteKind.ConferenceReport when input.Result == "Passed" => input.BillType is "hr" or "s" ? BillConferencePassed : ConferencePassed,
             PublishedVoteKind.VetoOverride when input.Result == "Failed" => VetoOverrideFailed,
-            PublishedVoteKind.VetoOverride when input.Result == "Passed" => OverridePassedFor(vote.Chamber, input),
+            PublishedVoteKind.VetoOverride when input.Result == "Passed" => OverridePassedFor(chamber, input),
             PublishedVoteKind.Nomination when input.Result == "Confirmed" => NominationPassed,
             PublishedVoteKind.Nomination when input.Result == "Not confirmed" => NominationFailed,
             PublishedVoteKind.Cloture => Result(input, CloturePassed, ClotureFailed),

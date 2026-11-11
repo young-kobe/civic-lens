@@ -179,10 +179,15 @@ public sealed record PublishedVote
         if (memberEvidence is null || memberEvidence.Length is 0 or > MaximumMembers)
             throw new InvalidDataException($"Published vote requires 1 to {MaximumMembers} member vote citations.");
 
+        ValidateMemberCitations(sources, memberEvidence);
+        PublishedEvidenceRules.RequireEverySourceCited(sources, memberEvidence.Select(member => member.Citation!), "vote");
+    }
+
+    /// <summary>Checks each member cast against its cited line and each citation against the sources. A caller that holds the sources of the whole vote uses this check, because other citations of the vote may cite some sources.</summary>
+    public static void ValidateMemberCitations(PublishedDocumentVersion[] sources, (string? Cast, PublishedCitation? Citation)[] memberEvidence)
+    {
         ValidateMemberEvidenceCore(memberEvidence);
-        var citations = memberEvidence.Select(member => member.Citation!).ToArray();
-        foreach (var citation in citations) PublishedEvidenceRules.RequireCitation(sources, citation, "vote");
-        PublishedEvidenceRules.RequireEverySourceCited(sources, citations, "vote");
+        foreach (var member in memberEvidence) PublishedEvidenceRules.RequireCitation(sources, member.Citation!, "vote");
     }
 
     private static void ValidateMemberEvidenceCore((string? Cast, PublishedCitation? Citation)[] memberEvidence)

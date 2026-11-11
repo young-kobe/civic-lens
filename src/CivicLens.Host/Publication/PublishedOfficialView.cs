@@ -220,12 +220,6 @@ internal static class PublishedOfficialView
         return $"Missed {missed.Missed} of the {missed.Held} roll call {Noun(missed.Held, "vote")} of {ChamberName(missed.Chamber)} on this site{share}, {days} ({CongressCalendar.Ordinal(congress)} Congress).";
     }
 
-    public static readonly string BothMajorities = $"most {PublishedPartyMajority.Democrat}s and most {PublishedPartyMajority.Republican}s who cast Yes or No";
-
-    public static readonly string SplitVoteMeaning = $"A split vote is a substantive roll call vote where {BothMajorities} voted on opposite sides.";
-
-    public static readonly string PartiesAgreedMeaning = $"A vote where both parties agreed is a substantive roll call vote where {BothMajorities} voted the same way.";
-
     public static string SplitVoteCount(int count, int cast)
     {
         var share = TalkAndActionProfile.ShareOf(count, cast) is not null ? $" ({Percent(count, cast)})" : "";
@@ -235,8 +229,6 @@ internal static class PublishedOfficialView
     public static string PartyOf(VotesWithParty votes) => PartyOf(votes.Chamber, votes.Party);
 
     public static string PartyOf(PublishedChamber chamber, string party) => PublishedPartyNames.PartyOf(chamber, party);
-
-    public static string PartyMemberOf(PublishedChamber chamber, string party) => $"{chamber} {party}";
 
     private static string ChamberName(PublishedChamber chamber) => chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";
 

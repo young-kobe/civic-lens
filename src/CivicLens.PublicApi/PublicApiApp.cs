@@ -57,6 +57,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new SearchIndex(reader));
         builder.Services.AddSingleton(new ActiveReleaseReader(views));
         builder.Services.AddSingleton(new VoteStore(views));
+        builder.Services.AddSingleton(provider => new VotePageReader(provider.GetRequiredService<VoteStore>(), views));
         builder.Services.AddSingleton(new PartyAgreementStore(views));
         builder.Services.AddSingleton(provider => new BoardStore(views, provider.GetRequiredService<PartyAgreementStore>()));
         builder.Services.AddSingleton(new MemberVoteStore(views));
