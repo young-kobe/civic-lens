@@ -7,6 +7,8 @@ namespace CivicLens.PublicWeb.Publication;
 
 public static class PublishedBriefView
 {
+    public static string ShortName(PublishedBrief brief) => $"{PublicColumn.WeekOf} {Moment.Day(brief.WeekStart)}";
+
     public static IReadOnlyList<Fact> Facts(PublishedBrief brief) =>
     [
         new("Week", $"Starts Monday {Moment.Day(brief.WeekStart)}, New York time"),

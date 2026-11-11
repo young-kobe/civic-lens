@@ -207,16 +207,82 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task ARecordPageOffersTheReportLinkOnceBelowTheRecordSoTheTopOfThePageHoldsTheRecord()
+    public async Task TheFooterReportLinkOfEachRecordKindNamesItsKindAndTitleAndUsesTheProtocolLinkOfItsRecord()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var record = Record();
+        var vote = Vote();
+
+        var pages = new[]
+        {
+            ("Report a problem with this document change", PublishedRecordKind.DocumentChange, record.RecordId, record.RevisionNumber, record.Headline, await renderer.RenderRecordAsync(record, PublicationCatalogs.None, CancellationToken.None)),
+            ("Report a problem with this vote", PublishedRecordKind.Vote, vote.RecordId, vote.RevisionNumber, vote.Headline, await renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None))
+        };
+
+        foreach (var (text, kind, recordId, revision, headline, html) in pages)
+        {
+            var document = new HtmlParser().ParseDocument(html);
+            var footer = Assert.Single(document.QuerySelectorAll("footer a[href^='../report.html']"));
+            var expected = new ReportedRecord(recordId, revision, kind, headline);
+            Assert.Equal("../" + PublicationProtocol.ReportPageLink(recordId, revision, headline), footer.GetAttribute("href"));
+            Assert.Equal("../" + expected.ReportPath, footer.GetAttribute("href"));
+            Assert.Equal(text, footer.FirstChild!.TextContent);
+            Assert.Equal(": " + headline, footer.QuerySelector(".visually-hidden")!.TextContent);
+        }
+    }
+
+    [Fact]
+    public async Task TheTrailOfAVoteAndABillPageNamesTheirSectionAndEndsWithTheShortRecordName()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var vote = Vote();
+        var action = Action();
+
+        var pages = new[]
+        {
+            (await renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None), "Votes", $"House roll call {vote.RollCallNumber}"),
+            (await renderer.RenderActionAsync(action, null, [], PublicationCatalogs.None, CancellationToken.None), "Bills", "H.R. 7")
+        };
+
+        foreach (var (html, section, shortName) in pages)
+        {
+            var trail = new HtmlParser().ParseDocument(html).QuerySelector("main nav[aria-label=Breadcrumb]")!;
+            Assert.Equal(["Home", section], trail.QuerySelectorAll("a").Select(link => link.TextContent));
+            Assert.Equal(shortName, trail.QuerySelector("[aria-current=page]")!.TextContent);
+        }
+    }
+
+    [Fact]
+    public async Task NoCrumbOfAnyPageTypeLinksToThePageItself()
+    {
+        foreach (var (name, pagePath, html, _) in await RenderEveryPageTypeAsync())
+        {
+            var trail = new HtmlParser().ParseDocument(html).QuerySelector("main nav[aria-label=Breadcrumb]");
+            if (trail is null) continue;
+
+            Assert.All(trail.QuerySelectorAll("a"), link => Assert.NotEqual(pagePath, ReleasePath(pagePath, link.GetAttribute("href")!)));
+        }
+    }
+
+    [Fact]
+    public async Task ARecordPageOffersOneReportLinkInTheFooterAndNoneInTheBody()
     {
         var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
-        var links = document.QuerySelectorAll("main a[href^='../report.html']");
 
-        var link = Assert.Single(links);
-        Assert.Equal(PublishedRecordLabels.ReportRecordLink, link.TextContent);
-        Assert.True(document.QuerySelector("main .facts, main dl")!.CompareDocumentPosition(link).HasFlag(DocumentPositions.Following));
+        Assert.Empty(document.QuerySelectorAll("main a[href*='report.html']"));
+        var link = Assert.Single(document.QuerySelectorAll("a[href*='report.html']"));
+        Assert.NotNull(link.Closest("footer"));
+        Assert.StartsWith(PublishedRecordLabels.ReportLinkStart, link.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AboutTellsTheReaderToUseTheFooterReportLinkOfARecord()
+    {
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAboutAsync(CancellationToken.None)).QuerySelector("main")!.ShownText();
+
+        Assert.Contains($"Open the record. Use the link in the footer that starts with \"{PublishedRecordLabels.ReportLinkStart}\".", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -229,7 +295,7 @@ public sealed class ReleaseRendererTests
 
         Assert.Equal("Find the record first", panel.QuerySelector("h3")!.TextContent);
         Assert.Equal([PublicationProtocol.SearchPagePath, PublicationProtocol.OfficialsPagePath], panel.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
-        Assert.Contains($"has the link \"{PublishedRecordLabels.ReportRecordLink}\"", panel.TextContent, StringComparison.Ordinal);
+        Assert.Contains($"has a link in the footer that starts with \"{PublishedRecordLabels.ReportLinkStart}\"", panel.TextContent, StringComparison.Ordinal);
         Assert.Equal($"mailto:{PublishedRecordLabels.ContactEmail}", document.QuerySelector("main a[href^='mailto:']")!.GetAttribute("href"));
         AssertMailtoPanelIsAlwaysShown(document);
         AssertMailtoPanelIsAlwaysShown(new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderReportAsync(CancellationToken.None)));
@@ -268,7 +334,7 @@ public sealed class ReleaseRendererTests
         var headline = "Rep. <b>Smith</b> & \"others\" vote on H.R. 1";
         var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record() with { Headline = headline }, PublicationCatalogs.None, CancellationToken.None);
 
-        var href = new HtmlParser().ParseDocument(html).QuerySelector("main a[href^='../report.html']")!.GetAttribute("href")!;
+        var href = new HtmlParser().ParseDocument(html).QuerySelector("footer a[href^='../report.html']")!.GetAttribute("href")!;
 
         var title = System.Web.HttpUtility.ParseQueryString(href[(href.IndexOf('?') + 1)..])[ReaderReportProtocol.TitleParameter];
         Assert.Equal(headline, title);

@@ -36,7 +36,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
          "document_comparisons", "document_comparison_hunks", "document_comparison_word_edits", "document_change_revision_citations",
          "document_change_revision_issues", "document_change_revision_officials",
          "document_extractions", "statement_revision_quotations",
-         "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas", "published_entry_officials",
+         "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_issue_party_lineups", "release_issue_party_counts", "release_policy_areas", "published_entry_officials",
          "published_bill_histories", "published_bill_history_actions", "release_bill_histories",
          "release_bill_statuses", "statement_review_decisions", "statement_revisions", "statement_revision_speakers", "statement_revision_issues",
          "statement_drafts", "statement_candidates", "executive_action_revisions", "executive_action_revision_notices", "executive_action_documents",
@@ -78,7 +78,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
-        foreach (var view in new[] { "active_records", "active_release", "votes", "vote_members", "vote_first_publications", "vote_party_tallies", "vote_evidence", "vote_sources", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas",
+        foreach (var view in new[] { "active_records", "active_release", "votes", "vote_members", "vote_first_publications", "vote_party_tallies", "vote_evidence", "vote_sources", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_issue_party_lineups", "release_policy_areas",
             "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "statement_speakers", "statements", "statement_sources", "statement_quotations", "document_changes", "document_change_officials", "document_change_sources", "document_change_hunks", "document_change_word_edits", "document_change_citations",
             "executive_actions", "executive_action_notices", "withdrawals", "withdrawal_corrections" })
         {
@@ -144,6 +144,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"record_links v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issue_excludes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issue_includes v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"release_issue_party_lineups v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_official_terms v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_officials v {Owner} {Role}:SELECT {{security_barrier=true}}",
@@ -809,6 +810,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             INSERT INTO release_issue_includes (release_number, issue_id, "position", text) VALUES (1, 'housing', 0, 'Old include'), (2, 'housing', 0, 'New include');
             INSERT INTO release_issue_excludes (release_number, issue_id, "position", text) VALUES (1, 'housing', 0, 'Old exclude'), (2, 'housing', 0, 'New exclude');
             INSERT INTO release_policy_areas (release_number, policy_area_id, name) VALUES (1, 'land-use', 'Land'), (2, 'land-use', 'Land use');
+            INSERT INTO release_issue_party_lineups (release_number, issue_id, unknown_bills) VALUES (1, 'housing', 1), (2, 'housing', 0);
+            INSERT INTO release_issue_party_counts (release_number, issue_id, party, bills) VALUES (1, 'housing', 'Old party', 2), (2, 'housing', 'New party', 3);
             """);
 
         Assert.Equal(["2 New Name"], await PublicAsync("SELECT release_number || ' ' || name FROM public_api.release_officials"));
@@ -817,9 +820,11 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Equal(["New include"], await PublicAsync("SELECT text FROM public_api.release_issue_includes"));
         Assert.Equal(["New exclude"], await PublicAsync("SELECT text FROM public_api.release_issue_excludes"));
         Assert.Equal(["2 Land use"], await PublicAsync("SELECT release_number || ' ' || name FROM public_api.release_policy_areas"));
+        Assert.Equal(["2 housing 0 New party 3"], await PublicAsync("SELECT release_number || ' ' || issue_id || ' ' || unknown_bills || ' ' || party || ' ' || bills FROM public_api.release_issue_party_lineups"));
 
         await ExecuteAsync("UPDATE publication_releases SET is_active = false; UPDATE publication_releases SET is_active = true WHERE release_number = 1");
         Assert.Equal(["1 Old Name"], await PublicAsync("SELECT release_number || ' ' || name FROM public_api.release_officials"));
+        Assert.Equal(["1 housing 1 Old party 2"], await PublicAsync("SELECT release_number || ' ' || issue_id || ' ' || unknown_bills || ' ' || party || ' ' || bills FROM public_api.release_issue_party_lineups"));
         await ExecuteAsync("UPDATE publication_releases SET is_active = false");
         Assert.Empty(await PublicAsync("SELECT official_id FROM public_api.release_officials"));
     }

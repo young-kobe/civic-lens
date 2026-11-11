@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-<PublicPage Title="Weekly briefs" CanonicalPath="@PublicationProtocol.BriefsPagePath(Page)" Page="Page" PageCount="PageCount" Description="@Description">
+<PublicPage Section="null" Title="Weekly briefs" CanonicalPath="@PublicationProtocol.BriefsPagePath(Page)" Page="Page" PageCount="PageCount" Description="@Description">
     <PageHeader Title="Weekly briefs" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
     @if (Briefs.Length == 0)
     {

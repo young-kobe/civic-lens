@@ -58,6 +58,41 @@ public sealed class PresentationArchitectureTests
     }
 
     [Fact]
+    public void TheCurrentSectionMarkIsAnInsetBarInTheNavAndTheMenuSheetNotATextUnderline()
+    {
+        var mark = Declarations(WebStyleSheets.Read("public.css"), @".public-nav a[aria-current=""page""], .public-menu-nav a[aria-current=""page""]");
+
+        Assert.Contains("box-shadow: inset 0 -3px 0 var(--marigold)", mark, StringComparison.Ordinal);
+        Assert.DoesNotContain("text-decoration", mark, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheFooterSitsOnTheSurfaceColorLikeTheApprovedDesign()
+    {
+        var footer = Declarations(WebStyleSheets.Read("public.css"), ".public-footer");
+
+        Assert.Contains("background: var(--surface);", footer, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AHeroAfterTheTrailStartsOneSharedGapBelowItSoEveryPageTitleSitsAtTheSameDistance()
+    {
+        var css = WebStyleSheets.Read("public.css");
+
+        Assert.Equal("padding-top: 0;", Declarations(css, ".public-breadcrumbs + .public-hero:has(> .home-preview-hero)").Trim());
+        Assert.Equal("padding-top: var(--s6);", Declarations(css, ".public-breadcrumbs + .public-hero > .home-preview-hero").Trim());
+        Assert.DoesNotContain("calc(var(--s6)", css);
+        Assert.Single(Regex.Matches(css, @"(?m)^\s*\.public-breadcrumbs \+ \.public-hero > \.home-preview-hero\b"));
+    }
+
+    private static string Declarations(string css, string selector)
+    {
+        var match = Regex.Match(css, @"(?m)^\s*" + Regex.Escape(selector) + @"\s*\{([^}]*)\}");
+        Assert.True(match.Success, $"No rule for {selector}.");
+        return match.Groups[1].Value;
+    }
+
+    [Fact]
     public void EveryDarkThemeTokenAlsoHasALightDefault()
     {
         var theme = WebStyleSheets.Read("theme.css");
