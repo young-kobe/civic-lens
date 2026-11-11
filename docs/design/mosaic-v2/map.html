@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How the House voted: roll call 308 map | Civic Lens prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..900;1,8..60,400..700&family=Libre+Franklin:wght@400..900&family=Gabarito:wght@400..900&family=Figtree:wght@400..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="skins.css">
+<script>(function(){var r=document.documentElement,k=location.search.match(/skin=([a-z0-9]+)/),s=k&&k[1];try{if(s)localStorage.setItem('cl-skin',s);else s=localStorage.getItem('cl-skin')}catch(x){}if(s&&s!=='current')r.setAttribute('data-skin',s)})();</script>
+<script>(function(){var r=document.documentElement;try{var q=location.search.match(/zip=(\d{5})/);if(q)localStorage.setItem('cl-zip',q[1]);if(localStorage.getItem('cl-zip'))r.classList.add('has-zip');var t=localStorage.getItem('cl-theme');if(t)r.setAttribute('data-theme',t)}catch(x){}})();</script></head><body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site"><div class="wrap bar">
+<a class="brand" href="home.html"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21M10.5 7.5v6M7.5 10.5h6"/></svg> Civic Lens</a>
+<nav class="primary" aria-label="Main"><a href="home-zip.html">Your members</a><a href="official.html">Officials</a><a href="issue.html">Issues</a><a href="vote.html" aria-current="page">Votes</a><a href="bill.html">Bills</a><a href="president.html">Executive actions</a><a href="boards.html">Compare parties</a></nav>
+<form class="search" role="search" action="search.html"><label class="sr" for="q" style="position:absolute;left:-999px">Search bills, votes and people</label><input id="q" name="q" type="search" placeholder="Search bills, votes, people"></form>
+<button class="icon-btn" id="theme" type="button" aria-label="Switch light or dark theme">Theme</button>
+<details class="menu"><summary>Menu</summary><div class="sheet"><a href="home-zip.html">Your members</a><a href="official.html">Officials</a><a href="issue.html">Issues</a><a href="vote.html" aria-current="page">Votes</a><a href="bill.html">Bills</a><a href="president.html">Executive actions</a><a href="boards.html">Compare parties</a></div></details>
+</div></header>
+<div class="ym-strip ym" aria-label="Your members"><div class="wrap"><span class="names"><b>Your members (ZIP 02139):</b> <a href="official.html">Ayanna Pressley</a> <a href="home-zip.html#house">Katherine Clark</a> <a href="home-zip.html#senate">Edward J. Markey</a> <a href="home-zip.html#senate">Elizabeth Warren</a></span><a href="home-zip.html">Change</a><button class="linkbtn" data-forget type="button">Forget this ZIP</button></div></div>
+<main id="main"><div class="wrap">
+
+<p class="fresh">Records as of 6 Nov 2026, 14:00 UTC. <span class="example">example time</span></p>
+<p class="crumbs"><a href="home.html">Home</a> / <a href="#">Votes</a> / <a href="vote.html">House roll call 308</a> / Map</p>
+<p class="eyebrow">House vote, 16 Sep 2026 | Map</p>
+<h1 class="prose" style="max-width:900px">How the House voted: roll call 308, H.R. 5334</h1>
+<p class="lede" style="margin-top:12px">Each shape is one House seat. Its fill shows how that seat's member voted on the motion to agree to the Senate changes to H.R. 5334. <a href="vote.html">Back to the vote page</a></p>
+
+<section class="card" style="margin-top:20px" aria-labelledby="maph">
+<h2 id="maph" style="font-size:1.25rem;margin-bottom:12px">Map of the vote</h2>
+<div class="ctrls">
+<div class="seggrp" role="group" aria-labelledby="g-view"><span class="lbl" id="g-view">View</span>
+<button type="button" data-view="geo" aria-pressed="true">Map of districts</button><button type="button" data-view="tile" aria-pressed="false">One tile per seat</button></div>
+<div class="seggrp" role="group" aria-labelledby="g-color"><span class="lbl" id="g-color">Prototype: compare color modes</span>
+<button type="button" data-color="vote" aria-pressed="true">By vote</button><button type="button" data-color="party" aria-pressed="false">By party</button></div>
+</div>
+<p class="small muted" style="max-width:720px">Each seat casts one vote, but large rural districts take up more room on a map. The tile view gives every seat the same size.</p>
+<noscript><p class="notice">The map needs JavaScript. The table below holds the same data.</p></noscript>
+<div class="mapwrap" id="mapwrap">
+<svg id="themap" role="group" aria-label="Map of the 435 House seats, colored by how each member voted. Use the arrow keys to move between seats, and Enter to open one. A table with the same data follows."></svg>
+<div class="tip" id="tip" hidden></div>
+</div>
+<div class="readout" id="readout" role="status" aria-live="polite">Hover, focus or tap a seat to see the member and the cast. Click a seat to open the member page.</div>
+<p class="small muted" id="maperr" hidden></p>
+</section>
+
+<section class="card" style="margin-top:16px" aria-labelledby="legh">
+<h2 id="legh" style="font-size:1.25rem">What the colors count</h2>
+<p class="muted" id="legsum"></p>
+<ul class="keys" id="keys"></ul>
+</section>
+
+<p class="notice" style="margin-top:16px"><b>This map shows recorded votes only.</b> It makes no predictions and gives no ratings.</p>
+
+<details class="fold" id="tablefold"><summary>See the table</summary><div class="in">
+<p class="small muted">The same data as the map, one row for each seat. Screen readers can use this table in place of the map.</p>
+<div class="tblbox" tabindex="0" role="region" aria-label="Table of how each seat voted"><table class="tbl" id="tbl"><caption>How each House seat voted on roll call 308</caption>
+<thead><tr><th scope="col">State</th><th scope="col">District</th><th scope="col">Member</th><th scope="col">Party</th><th scope="col">Cast</th></tr></thead><tbody></tbody></table></div>
+</div></details>
+
+<details class="fold" id="source"><summary>Where the data comes from</summary><div class="in"><dl class="kv">
+<dt>Votes</dt><dd><a href="https://clerk.house.gov/evs/2026/roll308.xml">House Clerk roll call 308 file</a>. It lists every member with party, state and cast.</dd>
+<dt>Seats</dt><dd>The Clerk file gives no district number. Civic Lens matched each member to a district with the congress-legislators roster. All 433 members matched. Two seats had no member in the Clerk file, so the map shows them as vacant: Florida 20 and Texas 23.</dd>
+<dt>Shapes</dt><dd>Census Bureau 2024 cartographic boundary file for the 119th Congress, at 1:20,000,000 scale, simplified more for the web. Alaska and Hawaii sit in boxes. Use the shapes to see the pattern, not to find an address.</dd>
+<dt>Delegates</dt><dd>Six non-voting delegates (DC, Puerto Rico, Guam, U.S. Virgin Islands, American Samoa, Northern Mariana Islands) are circles. They can vote in committee. They cannot vote on passage.</dd>
+<dt>Color modes</dt><dd>The party colors are a prototype choice. <span class="example">example</span> The owner has not chosen them.</dd>
+</dl></div></details>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script src="map.js"></script>
+<script>
+(function(){
+var q=new URLSearchParams(location.search);
+var view=q.get('view')||(innerWidth<720?'tile':'geo'), color=q.get('color')||'vote', ctl=null;
+var zip=null;try{if(localStorage.getItem('cl-zip')==='02139')zip=['MA05','MA07']}catch(x){}
+function sync(){document.querySelectorAll('[data-view]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.view===view))});document.querySelectorAll('[data-color]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.color===color))})}
+function li(parent,html,sw){var l=document.createElement('li');if(sw){var w=document.createElement('span');w.className='sws';sw.forEach(function(s){w.appendChild(s)});l.appendChild(w)}var t=document.createElement('span');t.innerHTML=html;l.appendChild(t);parent.appendChild(l)}
+function legend(d){
+ var C=CLMap.counts(d),k=document.getElementById('keys');k.innerHTML='';
+ var sum=C.Y+C.N+C.NV+C.V;
+ document.getElementById('legsum').textContent=color==='vote'
+  ?'Each color or mark counts House seats by how the member voted. The counts add up to '+sum+' seats.'
+  :'Color shows the member\'s party. A solid fill means Yes, stripes mean No, and dots mean the member did not vote. The counts add up to '+sum+' seats.';
+ var S=function(c,p){return {c:c,p:p||'R'}};
+ if(color==='vote'){
+  li(k,'<b>'+C.Y+'</b> members voted Yes',[CLMap.swatch(S('Y'),'vote')]);
+  li(k,'<b>'+C.N+'</b> members voted No',[CLMap.swatch(S('N'),'vote')]);
+  li(k,'<b>'+C.NV+'</b> members did not vote',[CLMap.swatch(S('NV'),'vote')]);
+ }else{
+  [['R','Republicans'],['D','Democrats'],['I','Independent']].forEach(function(p){
+   var n=C.party[p[0]];
+   li(k,'<b>'+p[1]+'</b>: '+n.Y+' Yes, '+n.N+' No, '+n.NV+' did not vote',['Y','N','NV'].map(function(c){return CLMap.swatch(S(c,p[0]),'party')}));
+  });
+ }
+ li(k,'<b>'+C.V+'</b> vacant seats: '+C.vacant.map(function(s){return CLMap.seatName(s)}).join(' and '),[CLMap.swatch({c:'V'},color)]);
+ var dl=document.createElement('span');dl.innerHTML='<svg viewBox="0 0 18 18" aria-hidden="true" focusable="false"><circle cx="9" cy="9" r="7" style="fill:var(--raised);stroke:var(--line-strong);stroke-width:1.5;stroke-dasharray:3 2"/></svg>';
+ li(k,'<b>'+d.delegates.length+'</b> non-voting delegates. They cannot vote on passage, so they are not in the counts.',[dl.firstChild]);
+ if(color==='party')li(k,'The independent voted Yes. The vote page counts that member with Republicans, so it shows 204 Republican Yes votes.',[]);
+ if(zip)li(k,'Outlined in black: your districts, MA-5 and MA-7 (ZIP 02139).',[]);
+}
+function table(d){
+ var rows=d.seats.slice().sort(function(a,b){return a.s===b.s?a.d-b.d:(CLMap.ST[a.s]<CLMap.ST[b.s]?-1:1)}),h='';
+ rows.forEach(function(s){h+='<tr><td>'+CLMap.ST[s.s]+'</td><td>'+(s.d||'At large')+'</td><td>'+(s.n?CLMap.esc(s.n):'Vacant')+'</td><td>'+(s.p||'')+'</td><td>'+CLMap.castPill(s.c)+'</td></tr>'});
+ d.delegates.slice().sort(function(a,b){return CLMap.ST[a.s]<CLMap.ST[b.s]?-1:1}).forEach(function(s){h+='<tr><td>'+CLMap.ST[s.s]+'</td><td>Delegate</td><td>'+CLMap.esc(s.n)+'</td><td>'+s.p+'</td><td>'+CLMap.castPill('X')+'</td></tr>'});
+ document.querySelector('#tbl tbody').innerHTML=h;
+}
+sync();
+if(!window.d3||!window.topojson){var e=document.getElementById('maperr');e.hidden=false;e.textContent='The map could not load. Use the table below instead.'}
+else CLMap.mount({svg:document.getElementById('themap'),tip:document.getElementById('tip'),readout:document.getElementById('readout'),view:view,color:color,zip:zip}).then(function(c){
+ ctl=c;legend(c.data);table(c.data);
+ document.addEventListener('click',function(ev){var b=ev.target.closest('[data-view],[data-color]');if(!b)return;if(b.dataset.view)view=b.dataset.view;if(b.dataset.color)color=b.dataset.color;sync();ctl.set(view,color);legend(c.data)});
+}).catch(function(){var e=document.getElementById('maperr');e.hidden=false;e.textContent='The map data could not load. Use the table below instead.'});
+})();
+</script>
+
+</div></main>
+<footer class="site"><div class="wrap"><a href="#">How we check records</a><a href="#">Glossary</a><a href="#">About</a><a href="report.html">Report a problem with this page</a><span class="muted" style="padding:10px 0">Prototype. Not the live site.</span></div></footer>
+<script>
+document.addEventListener('click',function(ev){var g=ev.target.closest('.gl'),x=ev.target.closest('.gl-x');document.querySelectorAll('.gloss').forEach(function(w){var p=w.querySelector('.pop'),b=w.querySelector('.gl'),own=g&&w.contains(g);if(x&&w.contains(x)){p.hidden=true;b.setAttribute('aria-expanded','false');b.focus();return}if(own){p.hidden=!p.hidden;b.setAttribute('aria-expanded',String(!p.hidden))}else if(!ev.target.closest('.pop')||!w.contains(ev.target)){p.hidden=true;b.setAttribute('aria-expanded','false')}})});
+document.querySelectorAll('[data-forget]').forEach(function(b){b.addEventListener('click',function(){try{localStorage.removeItem('cl-zip')}catch(x){}document.documentElement.classList.remove('has-zip')})});
+var tb=document.getElementById('theme');if(tb)tb.addEventListener('click',function(){var r=document.documentElement,c=r.getAttribute('data-theme'),dark=c?c==='dark':matchMedia('(prefers-color-scheme: dark)').matches,n=dark?'light':'dark';r.setAttribute('data-theme',n);try{localStorage.setItem('cl-theme',n)}catch(x){}});
+var zf=document.getElementById('zip-form');if(zf)zf.addEventListener('submit',function(ev){ev.preventDefault();var i=document.getElementById('zip'),m=document.getElementById('zip-msg'),b=zf.querySelector('button'),v=i.value.trim();m.textContent='';if(!/^\d{5}$/.test(v)){m.textContent='Enter 5 digits, for example 02139.';i.setAttribute('aria-invalid','true');i.focus();return}i.removeAttribute('aria-invalid');if(v!=='02139'){m.textContent='Prototype only: this demo knows ZIP 02139. The built site looks up any ZIP.';i.focus();return}b.setAttribute('aria-busy','true');b.textContent='Looking up...';setTimeout(function(){location.href='home-zip.html?zip='+v},250)});
+var fi=document.getElementById('finder-q');if(fi)fi.addEventListener('input',function(){var q=fi.value.toLowerCase();document.querySelectorAll('#finder-list li').forEach(function(l){l.hidden=q&&l.textContent.toLowerCase().indexOf(q)<0})});
+</script><script src="states.js"></script></body></html>
