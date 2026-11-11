@@ -1,5 +1,6 @@
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Bills;
+using CivicLens.PublicApi.Officials;
 using CivicLens.PublicWeb.Publication;
 using Microsoft.AspNetCore.Http;
 
@@ -7,9 +8,15 @@ namespace CivicLens.PublicApi.Search;
 
 /// <summary>Builds the search page from one request. The index answers the results. Officials and a bill number match come only with the first page of a text search.
 /// The page shows nothing before the first search, so an empty request reads no results.</summary>
-public sealed class SearchPageReader(SearchIndex index, SearchPageStore pages, BillStore bills)
+public sealed class SearchPageReader(SearchIndex index, SearchPageStore pages, OfficialStore officialStore, BillStore bills)
 {
     private const int BillMatchLimit = 5;
+
+    /// <summary>The most officials that the page shows above the results.</summary>
+    public const int MaximumOfficials = 3;
+
+    /// <summary>A shorter query would match too many names.</summary>
+    public const int MinimumOfficialText = 3;
 
     public async Task<SearchPageData?> ReadAsync(IQueryCollection query, CancellationToken cancellationToken)
     {
@@ -22,7 +29,7 @@ public sealed class SearchPageReader(SearchIndex index, SearchPageStore pages, B
         var page = await index.SearchAsync(release.ReleaseNumber, request, cancellationToken);
         var hits = page.Hits.Select(Hit).ToArray();
         var first = request.Cursor is null && request.Text is not null;
-        var officials = first ? await pages.FindOfficialsAsync(request.Text!.ToLowerInvariant(), cancellationToken) : [];
+        var officials = first ? await FindOfficialsAsync(request.Text!, cancellationToken) : [];
         var bill = first ? await FindBillAsync(request.Text!, cancellationToken) : null;
         return new(typed, release.ReleaseNumber, officials, bill, hits, page.NextCursor, issues);
     }
@@ -33,6 +40,15 @@ public sealed class SearchPageReader(SearchIndex index, SearchPageStore pages, B
 
     private static SearchHitData Hit(RecordHit hit) => new(hit.Kind, hit.RecordId, hit.Headline, hit.EventDate, hit.BillLine, hit.Snippet,
         [.. hit.Officials.Select(official => official.Name)]);
+
+    /// <summary>Finds officials whose name, or any word of it, starts with the text. <see cref="OfficialStore"/> owns the name match.</summary>
+    private async Task<SearchOfficialData[]> FindOfficialsAsync(string text, CancellationToken cancellationToken)
+    {
+        var name = text.Trim().ToLowerInvariant();
+        if (name.Length < MinimumOfficialText) return [];
+        var found = await officialStore.ListAsync(new OfficialRequest { NamePrefix = name, Limit = MaximumOfficials }, cancellationToken);
+        return found is null ? [] : [.. found.Officials.Select(row => new SearchOfficialData(row.OfficialId, row.Name, row.Kind, row.State, row.District, row.Party))];
+    }
 
     private async Task<SearchBillData?> FindBillAsync(string text, CancellationToken cancellationToken)
     {

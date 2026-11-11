@@ -1,3 +1,4 @@
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Infrastructure.ExecutiveActions;
 using Microsoft.Extensions.Logging.Abstractions;
 using CivicLens.Application.Issues;
@@ -127,6 +128,7 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
         foreach (var reference in references)
         {
             var relative = reference.Split('#', '?')[0];
+            if (relative.EndsWith(PublicSections.BoardsPath, StringComparison.Ordinal)) continue; // Caddy maps it to the boards server page, so the release does not write it.
             var target = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(pagePath)!, relative));
             Assert.StartsWith(current + Path.DirectorySeparatorChar, target, StringComparison.Ordinal);
             Assert.True(File.Exists(target), $"{reference} in {Path.GetFileName(pagePath)} does not resolve inside the release.");

@@ -5,13 +5,14 @@ namespace CivicLens.Tests.PublicWeb;
 
 public sealed class OfficialsPageTests
 {
+    private const string TotalScope = "Officials that the active release lists, with or without a term. A filter does not change this number.";
     private const string Scope = "Records of the active release that name the official. Votes are not counted.";
 
     private static OfficialListRowData Row(string id, string name, PublishedOfficeKind kind, string? state, int? district, string? party,
         DateOnly? end, int count) => new(id, name, kind, kind.ToString(), state, district, party, null, end, count);
 
     private static OfficialsPageData Page(OfficialListRowData[] rows, OfficialsFilterData? filter = null, string? next = null) =>
-        new(7, Scope, rows, filter ?? OfficialsFilterData.None, next);
+        new(7, Scope, 542, TotalScope, rows, filter ?? OfficialsFilterData.None, next);
 
     private static Task<AngleSharp.Dom.IDocument> RenderAsync(OfficialsPageData data) =>
         ListPageRender.RenderAsync<OfficialsPage>(data, nameof(OfficialsPage.Data));
@@ -32,8 +33,20 @@ public sealed class OfficialsPageTests
             rows[1].QuerySelectorAll(".list-row-meta span").Select(span => span.TextContent));
         Assert.Equal("1 record other than votes", rows[1].QuerySelector(".list-row-side")!.TextContent);
         Assert.Equal(Root + "officials/aaron-bean.html", rows[0].QuerySelector("a")!.GetAttribute("href"));
-        Assert.Single(page.QuerySelectorAll(".list-scope"));
-        Assert.Contains(Scope, page.QuerySelector(".list-scope")!.TextContent);
+        var scope = Assert.Single(page.QuerySelectorAll(".list-scope"));
+        Assert.Contains(TotalScope, scope.TextContent);
+        Assert.Contains(Scope, scope.TextContent);
+        Assert.Single(page.Body!.TextContent.Split(Scope).Skip(1));
+    }
+
+    [Theory]
+    [InlineData(542, "542 officials have a page. Each page lists")]
+    [InlineData(1, "1 official has a page. Each page lists")]
+    public async Task TheLedeStartsWithTheTotalOfTheReleaseWhateverTheFilter(int total, string start)
+    {
+        var page = await RenderAsync(Page([], new("house", null, null, "zzz")) with { OfficialsInRelease = total });
+
+        Assert.StartsWith(start, page.QuerySelector(".page-header-lede")!.TextContent);
     }
 
     private const string Root = ListPageRender.Root;

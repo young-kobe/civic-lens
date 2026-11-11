@@ -29,19 +29,33 @@
 	}
 }
 
+(server_page) {
+	encode zstd gzip
+	header {
+		+Cache-Control no-transform
+		+Vary Accept-Encoding
+		defer
+	}
+	reverse_proxy 127.0.0.1:{$CIVIC_LENS_API_PORT:8100}
+}
+
 http://civic-lens.info, http://127.0.0.1 {
 	import security_headers
 	root * {$CIVIC_LENS_RELEASE_DIRECTORY}/current
 
 	handle /compare.html {
-		encode zstd gzip
-		header {
-			+Cache-Control no-transform
-			+Vary Accept-Encoding
-			defer
-		}
 		rewrite * /web/compare
-		reverse_proxy 127.0.0.1:{$CIVIC_LENS_API_PORT:8100}
+		import server_page
+	}
+
+	handle /officials.html {
+		rewrite * /web/officials
+		import server_page
+	}
+
+	handle /boards.html {
+		rewrite * /web/boards
+		import server_page
 	}
 
 	handle {

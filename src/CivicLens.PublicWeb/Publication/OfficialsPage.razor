@@ -2,7 +2,7 @@
 @using CivicLens.PublicWeb.Components.Ui
 
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@PublicationProtocol.OfficialsPagePath" Title="Officials" Description="Every official with a published record or vote. Each page lists the records and votes that name one official." RootPath="@RootPath">
-    <PageHeader Title="Officials" Lede="Each page lists the published records that name the official. A member of Congress also has their votes in the current Congress. Looking for the parties?">
+    <PageHeader Title="Officials" Lede="@Lede">
         <Actions><a href="@(RootPath + PublicationProtocol.BoardPagePath(PublishedChamber.House, PublishedPartyMajority.Democrat))">Compare the parties</a></Actions>
     </PageHeader>
     @if (Data.Officials.Count == 0)
@@ -52,7 +52,7 @@
     @if (Data.Officials.Count > 0)
     {
         <p class="list-status" role="status">Showing @Data.Officials.Count @(Data.Officials.Count == 1 ? "official" : "officials")@(Data.Filter.IsActive ? " that match your filters" : string.Empty). Release @Data.Release.</p>
-        <p class="list-scope muted small">Each figure counts: @Data.RecordCountScope</p>
+        <p class="list-scope muted small">@Data.OfficialsInReleaseScope Each figure counts: @Data.RecordCountScope</p>
         <ul class="list-rows" role="list">
             @foreach (var official in Data.Officials)
             {
@@ -92,6 +92,8 @@
             ("chamber", Data.Filter.Chamber), ("state", Data.Filter.State), ("party", Data.Filter.Party),
             ("name", Data.Filter.Name), ("cursor", Data.NextCursor)
         }.Where(pair => pair.Value is not null).Select(pair => $"{pair.Name}={Uri.EscapeDataString(pair.Value!)}"));
+
+    private string Lede => $"{Data.OfficialsInRelease} {(Data.OfficialsInRelease == 1 ? "official has" : "officials have")} a page. Each page lists the published records that name the official. A member of Congress also has their votes in the current Congress. Looking for the parties?";
 
     private static string TermEnd(OfficialListRowData official) => official.TermEndsOn is { } end
         ? $"Term ends {Moment.Day(end)}"

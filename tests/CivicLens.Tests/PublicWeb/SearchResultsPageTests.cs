@@ -28,6 +28,8 @@ public sealed class SearchResultsPageTests
         var empty = page.QuerySelector(".empty")!;
         Assert.Contains("No records match \"zzqxv\".", empty.TextContent);
         Assert.Equal(4, empty.QuerySelectorAll(".search-next li").Length);
+        Assert.Equal("Next steps:", empty.QuerySelector("p")!.TextContent);
+        Assert.True(ListPageRender.Precedes(empty.QuerySelector("p")!, empty.QuerySelector(".search-next")!));
         Assert.True(ListPageRender.Precedes(page.QuerySelector("form.search-box")!, empty));
         Assert.True(ListPageRender.Precedes(empty, page.QuerySelector(".list-fold")!));
         Assert.Null(page.QuerySelector(".list-rows"));

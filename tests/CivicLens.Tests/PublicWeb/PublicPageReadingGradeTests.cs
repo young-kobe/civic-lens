@@ -45,7 +45,7 @@ public sealed class PublicPageReadingGradeTests
     {
         var officials = await RenderAsync<OfficialsPage>(new Dictionary<string, object?>
         {
-            [nameof(OfficialsPage.Data)] = new OfficialsPageData(7, "x", [], OfficialsFilterData.None, null),
+            [nameof(OfficialsPage.Data)] = new OfficialsPageData(7, "x", 542, "y", [], OfficialsFilterData.None, null),
             [nameof(OfficialsPage.RootPath)] = Root
         });
         var boards = await RenderAsync<BoardsPage>(new Dictionary<string, object?>

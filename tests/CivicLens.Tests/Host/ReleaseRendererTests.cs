@@ -87,7 +87,7 @@ public sealed class ReleaseRendererTests
         Assert.DoesNotContain("not published", html, StringComparison.Ordinal);
         Assert.Contains("href=\"../assets/css/theme.css\"", html, StringComparison.Ordinal);
         Assert.Contains("src=\"../assets/js/app.js\"", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"../all.html\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"../boards.html\"", html, StringComparison.Ordinal);
         Assert.DoesNotMatch(new Regex("(?:href|src)=\"(?:/|//)"), html);
         Assert.Contains("rel=\"noopener noreferrer nofollow\"", html, StringComparison.Ordinal);
     }
@@ -2850,11 +2850,13 @@ public sealed class ReleaseRendererTests
     }
 
     // Written by ReleaseIndexPages and ReleaseOfficialPages. PublishReleaseTests pins them.
+    // The boards page is the one header link that the release does not write. Caddy maps it to the server page.
     private static readonly string[] WrittenRootPages =
     [
         PublicationProtocol.HomePath, PublicationProtocol.OfficialsPagePath, PublicationProtocol.FacetsPath,
         PublicationProtocol.AllRecordsPagePath(1), PublicationProtocol.BriefsPagePath(1), PublicationProtocol.SearchPagePath,
         PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.GlossaryPagePath, PublicationProtocol.ReportPagePath,
+        PublicSections.BoardsPath,
         .. OfficialBoard.All.Select(board => board.PagePath)
     ];
 
@@ -2867,14 +2869,13 @@ public sealed class ReleaseRendererTests
             var currentByNavigation = document.QuerySelectorAll("nav[aria-label='Site'], nav[aria-label='Footer']")
                 .Select(navigation => navigation.QuerySelectorAll("[aria-current]")).ToArray();
             var current = currentByNavigation.SelectMany(links => links).ToArray();
-            var linkText = section == "All records" ? "Votes and bills" : section;
-            var expectedCount = section is null ? 0 : PublicSections.Header.Any(link => link.Text == linkText) ? 2 : 1;
+            var expectedCount = section is null or "All records" ? 0 : PublicSections.Header.Any(link => link.Text == section) ? 2 : 1;
 
             Assert.True(current.Length == expectedCount, name);
             Assert.All(currentByNavigation, links => Assert.InRange(links.Length, 0, 1));
             Assert.All(current, link =>
             {
-                Assert.Equal(linkText, link.TextContent);
+                Assert.Equal(section, link.TextContent);
                 Assert.Equal("page", link.GetAttribute("aria-current"));
             });
         }

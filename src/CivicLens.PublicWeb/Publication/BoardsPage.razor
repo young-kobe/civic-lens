@@ -1,7 +1,7 @@
 @using CivicLens.Publication.Contracts
 @using CivicLens.PublicWeb.Components.Ui
 
-<PublicPage Section="PublicSection.Officials" CanonicalPath="@CanonicalPath" Title="Compare the parties" Description="Which members voted against most of their own party, and how often both parties voted the same way." RootPath="@RootPath">
+<PublicPage Section="PublicSection.Boards" CanonicalPath="@PublicSections.BoardsPath" Title="Compare the parties" Description="Which members voted against most of their own party, and how often both parties voted the same way." RootPath="@RootPath">
     <PageHeader Title="Compare the parties" Lede="Which members voted against most of their own party, and how often both parties voted the same way. Code builds every number from roll call votes on this site. No model is used." />
     <FilterTabs Label="Party lists" Tabs="Tabs" />
     @foreach (var board in Data.Boards)
@@ -88,8 +88,6 @@
 </PublicPage>
 
 @code {
-    public const string CanonicalPath = "boards.html";
-
     [Parameter, EditorRequired] public BoardsPageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
 

@@ -14,7 +14,7 @@ public sealed class OfficialsPageReader(OfficialStore officials)
         var rows = page.Officials.Select(row => new OfficialListRowData(row.OfficialId, row.Name, row.Kind, row.Office, row.State,
             row.District, row.Party, row.Caucus, row.TermEndsOn, row.RecordCount)).ToArray();
         var filter = new OfficialsFilterData(Chamber(request.Kind), request.State, request.Party, request.NamePrefix);
-        return new(page.Release, page.RecordCountScope, rows, filter, page.NextCursor);
+        return new(page.Release, page.RecordCountScope, page.OfficialsInRelease, page.OfficialsInReleaseScope, rows, filter, page.NextCursor);
     }
 
     private static string? Chamber(PublishedOfficeKind? kind) => kind switch

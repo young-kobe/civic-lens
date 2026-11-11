@@ -50,6 +50,8 @@ public sealed class ListPageTests(PostgresCollection postgres)
         Assert.Null(second.QuerySelector(".pager"));
         Assert.DoesNotContain("Rep One", firstPage.Body!.TextContent + second.Body!.TextContent);
         Assert.Contains("Term ends 3 Jan 2027", firstPage.QuerySelector(".list-row")!.TextContent);
+        Assert.StartsWith("31 officials have a page.", firstPage.QuerySelector(".page-header-lede")!.TextContent);
+        Assert.StartsWith("31 officials have a page.", second.QuerySelector(".page-header-lede")!.TextContent);
     }
 
     [Fact]
@@ -120,6 +122,8 @@ public sealed class ListPageTests(PostgresCollection postgres)
         Assert.Null(number.QuerySelector(".search-official"));
         Assert.Equal("Ayanna Pressley", name.QuerySelector(".search-official h2")!.TextContent);
         Assert.Null(name.QuerySelector(".search-pin"));
+        Assert.Null((await ParseAsync(await host.Client.GetAsync("/web/search?q=Pr"))).QuerySelector(".search-official"));
+        Assert.Equal("Ayanna Pressley", (await ParseAsync(await host.Client.GetAsync("/web/search?q=ayanna%20pre"))).QuerySelector(".search-official h2")!.TextContent);
     }
 
     [Fact]

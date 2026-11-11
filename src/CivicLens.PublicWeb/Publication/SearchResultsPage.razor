@@ -15,14 +15,12 @@
     else if (Data.Hits.Count == 0 && Data.Bill is null && Data.Officials.Count == 0)
     {
         <EmptyState Title="@NoRecords" Text="Next steps:">
-            <Action>
-                <ul class="search-next">
-                    <li>Check the spelling, or type fewer words.</li>
-                    <li>Search a bill number, such as <a href="?q=5334">5334</a>, or an official's last name.</li>
-                    <li>Browse by <a href="@(RootPath + PublicationProtocol.FacetsPath)">issue</a>, by <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">official</a>, or <a href="@(RootPath + PublicationProtocol.AllRecordsPagePath(1))">all records</a>.</li>
-                    <li>A record you expected is missing? <a href="@(RootPath + PublicationProtocol.ReportPagePath)">Tell us</a>.</li>
-                </ul>
-            </Action>
+            <ul class="search-next">
+                <li>Check the spelling, or type fewer words.</li>
+                <li>Search a bill number, such as <a href="?q=5334">5334</a>, or an official's last name.</li>
+                <li>Browse by <a href="@(RootPath + PublicationProtocol.FacetsPath)">issue</a>, by <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">official</a>, or <a href="@(RootPath + PublicationProtocol.AllRecordsPagePath(1))">all records</a>.</li>
+                <li>A record you expected is missing? <a href="@(RootPath + PublicationProtocol.ReportPagePath)">Tell us</a>.</li>
+            </ul>
         </EmptyState>
     }
     @foreach (var official in Data.Officials)
