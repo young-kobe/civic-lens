@@ -27,9 +27,12 @@ public sealed class WorkerLoopTests
     public async Task ARefusedRenewalCancelsOwnershipAtOnce()
     {
         using var ownership = new CancellationTokenSource();
+        var clock = new ManualClock();
         var calls = 0;
+        var renewal = WorkerLoop.RenewLeaseAsync(_ => { calls++; return Task.FromResult(false); }, Lease, ownership, clock);
 
-        await WorkerLoop.RenewLeaseAsync(_ => { calls++; return Task.FromResult(false); }, Lease, ownership);
+        await clock.AdvanceAsync(Lease / 3, timersCreated: 1).WaitAsync(HangGuard);
+        await renewal.WaitAsync(HangGuard);
 
         Assert.True(ownership.IsCancellationRequested);
         Assert.Equal(1, calls);
