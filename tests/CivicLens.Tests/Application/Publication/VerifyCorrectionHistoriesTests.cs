@@ -217,42 +217,149 @@ public sealed class VerifyCorrectionHistoriesTests
     }
 
     [Fact]
-    public async Task ChangedSelectionRejectsContinuation()
+    public async Task ReleaseAddedAfterTheWalkEndedIsListedAndVerifiedOnItsOwnFromItsSelectionCursor()
     {
         var scenario = new PublicationScenario();
-        var sample = PublishedSamples.Statement('d', "Headline", official: "mayor");
-        Add(scenario, Release(4), sample);
-        var second = PublishedSamples.Statement('e', "Second", official: "mayor");
-        Add(scenario, Release(4), second);
-        var first = await new VerifyCorrectionHistories(scenario.Publications, scenario.Releases)
-            .ExecuteAsync(PublicationScenario.Owner, 1, null);
-        scenario.Publications.CorrectionBootstrapCandidates.Add(scenario.Publications.CorrectionBootstrapCandidates[0] with
-        {
-            Release = Release(5)
-        });
+        AddVerified(scenario, Release(1), PublishedSamples.Statement('a', "First", official: "mayor"));
+        scenario.Publications.BeforeReadingVerificationSelection = () =>
+            AddVerified(scenario, Release(2), PublishedSamples.Statement('b', "Second", official: "mayor"));
+        var verifier = new VerifyCorrectionHistories(scenario.Publications, scenario.Releases);
 
-        var resumed = await new VerifyCorrectionHistories(scenario.Publications, scenario.Releases)
-            .ExecuteAsync(PublicationScenario.Owner, 1, CorrectionHistoryVerificationCursor.Parse(first.NextCursor));
+        var first = await verifier.ExecuteAsync(PublicationScenario.Owner, 5, null);
+        scenario.Publications.BeforeReadingVerificationSelection = null;
+        var second = await verifier.ExecuteAsync(PublicationScenario.Owner, 5,
+            CorrectionHistoryVerificationCursor.Parse(first.Selection.Single(release => release.ReleaseNumber == 2).Cursor));
 
-        Assert.True(resumed.StaleCursor);
-        Assert.Null(resumed.NextCursor);
+        Assert.Equal([1], first.VerifiedReleases.Select(release => release.ReleaseNumber));
+        Assert.Null(first.NextCursor);
+        Assert.Equal([1, 2], first.Selection.Select(release => release.ReleaseNumber));
+        Assert.Equal([2], second.VerifiedReleases.Select(release => release.ReleaseNumber));
+        Assert.Equal((1, 1, 0), (second.Examined, second.Verified, second.Failed));
     }
 
     [Fact]
-    public async Task ChangedSelectionAfterLastFileBatchMakesTerminalResultStale()
+    public async Task ReleaseAddedBetweenCallsIsReachedByTheSameWalk()
     {
         var scenario = new PublicationScenario();
-        var sample = PublishedSamples.Statement('b', "Headline", official: "mayor");
-        Add(scenario, Release(8), sample);
-        scenario.Publications.BeforeReadingVerificationFingerprint = () =>
-            scenario.Publications.CorrectionBootstrapCandidates.Add(scenario.Publications.CorrectionBootstrapCandidates[0] with { Release = Release(9) });
+        AddVerified(scenario, Release(1), PublishedSamples.Statement('a', "First", official: "mayor"));
+        AddVerified(scenario, Release(1), PublishedSamples.Statement('b', "Second", official: "mayor"));
+        var verifier = new VerifyCorrectionHistories(scenario.Publications, scenario.Releases);
+        var first = await verifier.ExecuteAsync(PublicationScenario.Owner, 1, null);
+        AddVerified(scenario, Release(2), PublishedSamples.Statement('c', "Third", official: "mayor"));
+
+        var second = await verifier.ExecuteAsync(PublicationScenario.Owner, 5, CorrectionHistoryVerificationCursor.Parse(first.NextCursor));
+
+        Assert.Empty(first.VerifiedReleases);
+        Assert.Equal([1, 2], second.VerifiedReleases.Select(release => release.ReleaseNumber));
+        Assert.Equal((2, 2, 0), (second.Examined, second.Verified, second.Failed));
+        Assert.Null(second.NextCursor);
+    }
+
+    [Fact]
+    public async Task ReleaseRetiredMidWalkIsSkippedAndReportedWhileLaterReleasesContinue()
+    {
+        var scenario = new PublicationScenario();
+        AddVerified(scenario, Release(1), PublishedSamples.Statement('a', "First", official: "mayor"));
+        AddVerified(scenario, Release(2), PublishedSamples.Statement('b', "Second", official: "mayor"));
+        AddVerified(scenario, Release(3), PublishedSamples.Statement('c', "Third", official: "mayor"));
+        scenario.Publications.BeforeReadingVerificationPage = read =>
+        {
+            if (read == 2) scenario.Publications.CorrectionBootstrapCandidates.RemoveAll(candidate => candidate.Release.ReleaseNumber == 2);
+        };
 
         var result = await new VerifyCorrectionHistories(scenario.Publications, scenario.Releases)
             .ExecuteAsync(PublicationScenario.Owner, 5, null);
 
-        Assert.True(result.StaleCursor);
-        Assert.Null(result.NextCursor);
-        Assert.NotEmpty(result.SelectionFingerprint);
+        Assert.Equal([1, 3], result.VerifiedReleases.Select(release => release.ReleaseNumber));
+        var skipped = Assert.Single(result.SkippedReleases);
+        Assert.Equal((2, Release(2).DirectoryName, "notSelected"), (skipped.ReleaseNumber, skipped.DirectoryName, skipped.Reason));
+        Assert.Equal((2, 0), (result.Examined, result.Failed));
+        Assert.Equal([1, 3], result.Selection.Select(release => release.ReleaseNumber));
+    }
+
+    [Fact]
+    public async Task ChangedDirectoryForTheSameNumberIsReportedAndTheWalkContinuesWithTheNextRelease()
+    {
+        var scenario = new PublicationScenario();
+        var replaced = new PublicationReleaseSummary(2, $"000002-{new string('b', 32)}", DateTimeOffset.UnixEpoch.AddDays(2), 1);
+        AddVerified(scenario, replaced, PublishedSamples.Statement('b', "Second", official: "mayor"));
+        AddVerified(scenario, Release(3), PublishedSamples.Statement('c', "Third", official: "mayor"));
+        var cursor = new CorrectionHistoryVerificationCursor(2, Release(2).DirectoryName);
+
+        var result = await new VerifyCorrectionHistories(scenario.Publications, scenario.Releases)
+            .ExecuteAsync(PublicationScenario.Owner, 5, cursor);
+
+        var skipped = Assert.Single(result.SkippedReleases);
+        Assert.Equal((2, Release(2).DirectoryName, "directoryChanged"), (skipped.ReleaseNumber, skipped.DirectoryName, skipped.Reason));
+        Assert.Equal([3], result.VerifiedReleases.Select(release => release.ReleaseNumber));
+        Assert.Equal(replaced.DirectoryName, result.Selection.Single(release => release.ReleaseNumber == 2).DirectoryName);
+    }
+
+    [Fact]
+    public async Task CorruptBindingInOneReleaseFailsItsRecordsWithoutHidingOtherReleases()
+    {
+        var scenario = new PublicationScenario();
+        var broken = PublishedSamples.Statement('a', "Broken", official: "mayor");
+        Add(scenario, Release(1), broken);
+        scenario.Publications.CorrectionHistories[1] = [];
+        AddVerified(scenario, Release(2), PublishedSamples.Statement('b', "Healthy", official: "mayor"));
+
+        var result = await new VerifyCorrectionHistories(scenario.Publications, scenario.Releases)
+            .ExecuteAsync(PublicationScenario.Owner, 5, null);
+
+        Assert.Equal((2, 1, 1), (result.Examined, result.Verified, result.Failed));
+        Assert.Equal((1, "recordInvalid"), (Assert.Single(result.Failures).ReleaseNumber, result.Failures[0].Reason));
+        Assert.Equal([2], result.VerifiedReleases.Select(release => release.ReleaseNumber));
+    }
+
+    [Fact]
+    public async Task ReleaseIsNeverVerifiedWhenAnyRecordFailedInThisCallOrInAnEarlierCall()
+    {
+        var scenario = new PublicationScenario();
+        var broken = PublishedSamples.Statement('a', "Broken", official: "mayor");
+        Add(scenario, Release(1), broken);
+        scenario.Publications.CorrectionHistories[1] = [];
+        AddVerified(scenario, Release(1), PublishedSamples.Statement('b', "Healthy", official: "mayor"));
+        var verifier = new VerifyCorrectionHistories(scenario.Publications, scenario.Releases);
+
+        var first = await verifier.ExecuteAsync(PublicationScenario.Owner, 1, null);
+        var second = await verifier.ExecuteAsync(PublicationScenario.Owner, 1, CorrectionHistoryVerificationCursor.Parse(first.NextCursor));
+        var whole = await verifier.ExecuteAsync(PublicationScenario.Owner, 5, null);
+
+        Assert.Equal((1, 0, 1), (first.Examined, first.Verified, first.Failed));
+        Assert.Equal((1, 1, 0), (second.Examined, second.Verified, second.Failed));
+        Assert.Empty(first.VerifiedReleases);
+        Assert.Empty(second.VerifiedReleases);
+        Assert.Empty(whole.VerifiedReleases);
+    }
+
+    [Fact]
+    public async Task ReleaseFinishedAfterAnEarlierCleanCallIsVerified()
+    {
+        var scenario = new PublicationScenario();
+        AddVerified(scenario, Release(1), PublishedSamples.Statement('a', "First", official: "mayor"));
+        AddVerified(scenario, Release(1), PublishedSamples.Statement('b', "Second", official: "mayor"));
+        var verifier = new VerifyCorrectionHistories(scenario.Publications, scenario.Releases);
+
+        var first = await verifier.ExecuteAsync(PublicationScenario.Owner, 1, null);
+        var second = await verifier.ExecuteAsync(PublicationScenario.Owner, 1, CorrectionHistoryVerificationCursor.Parse(first.NextCursor));
+
+        Assert.Empty(first.VerifiedReleases);
+        Assert.Equal([1], second.VerifiedReleases.Select(release => release.ReleaseNumber));
+    }
+
+    [Fact]
+    public void CursorRoundTripsAndRejectsOtherShapes()
+    {
+        var start = new CorrectionHistoryVerificationCursor(7, Release(7).DirectoryName);
+        var middle = new CorrectionHistoryVerificationCursor(7, Release(7).DirectoryName,
+            new(PublishedRecordKind.Statement, new string('a', 64)), 3);
+
+        Assert.Equal(start, CorrectionHistoryVerificationCursor.Parse(start.Encode()));
+        Assert.Equal(middle, CorrectionHistoryVerificationCursor.Parse(middle.Encode()));
+        Assert.Throws<ArgumentException>(() => CorrectionHistoryVerificationCursor.Parse("bad-cursor"));
+        Assert.Throws<ArgumentException>(() => CorrectionHistoryVerificationCursor.Parse(Convert.ToBase64String(
+            System.Text.Encoding.UTF8.GetBytes($"1|{new string('a', 64)}|7|statement|{new string('a', 64)}")).TrimEnd('=')));
     }
 
     [Fact]
@@ -303,6 +410,14 @@ public sealed class VerifyCorrectionHistoriesTests
             default: throw new InvalidOperationException("The fixture needs a supported published record type.");
         }
         files[PublicationProtocol.RecordDataPath(sample.Entry.RecordId)] = json;
+    }
+
+    private static void AddVerified(PublicationScenario scenario, PublicationReleaseSummary release, SampleRecord sample)
+    {
+        Add(scenario, release, sample);
+        if (!scenario.Publications.CorrectionHistories.TryGetValue(release.ReleaseNumber, out var histories))
+            scenario.Publications.CorrectionHistories[release.ReleaseNumber] = histories = [];
+        histories[new(sample.Entry.Kind, sample.Entry.RecordId)] = History(sample.Entry, []);
     }
 
     private static PublishedEntryFacts Facts(PublishedRecordEntry entry) => new(entry.Headline, entry.SourceHost, entry.EventDate,
