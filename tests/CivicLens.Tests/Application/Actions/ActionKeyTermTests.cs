@@ -161,7 +161,7 @@ public sealed class ActionKeyTermTests
 
         Assert.Throws<ArgumentException>(() => (accepted with
         {
-            KeyTerms = [.. Enumerable.Range(0, 6).Select(index => term with { Term = $"Secretary {index}" })]
+            KeyTerms = [.. new[] { "The", "term", "Secretary", "means", "Housing", "Urban" }.Select(word => term with { Term = word })]
         }).ValidateShape());
         Assert.Throws<ArgumentException>(() => (accepted with { KeyTerms = [term, term with { Term = "SECRETARY" }] }).ValidateShape());
         Assert.Throws<ArgumentException>(() => (accepted with { TextPackageId = null, WhyItMatters = null, TextCitations = default }).ValidateShape());
