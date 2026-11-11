@@ -1268,7 +1268,9 @@ The `Dockerfile` in the repository root builds two images for linux-arm64. The w
 - After the first run on main, set the packages `civic-lens-host` and `civic-lens-search` to public in the ghcr package settings. Do this one time by hand. The Jetson then pulls without a token.
 - Each image has two tags: the full commit SHA and `main`. Deploy by the commit SHA. Pull one with `docker pull ghcr.io/young-kobe/civic-lens-host:<commit-sha>`. Check its attestation with `gh attestation verify oci://ghcr.io/young-kobe/civic-lens-host:<commit-sha> --repo young-kobe/civic-lens`.
 - Every base image is pinned by digest, and the tag is in a comment. The SDK image must equal the `global.json` version. The aspnet image must equal the runtime of that SDK (see the .NET release notes). To update a base image, change the digest and the comment together.
-- The `libgssapi-krb5-2` package is not pinned. Each build installs the current version from the distribution archive.
+- The `libgssapi-krb5-2` package is not pinned. Each build installs the current version from the Ubuntu archive or the fallback mirror.
+- If the apt update fails, the build retries once with the `mirrors.ocf.berkeley.edu` mirror and prints a warning in the build log. The GitHub runners use Azure DNS, which failed to resolve `*.ubuntu.com` on 2026-11-11. apt checks the Ubuntu archive signatures on each mirror. The image keeps the original source list.
+- A stale mirror can serve old packages with valid signatures. If the build log shows the fallback warning, rebuild after the Ubuntu archive works again.
 
 ## Web server
 
