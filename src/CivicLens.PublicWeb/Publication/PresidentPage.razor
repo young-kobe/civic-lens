@@ -33,16 +33,11 @@
             <section id="@OfficialPageText.ExecutiveAnchor(type.Kind)" class="official-section official-exec" aria-labelledby="@(OfficialPageText.ExecutiveAnchor(type.Kind))-title">
                 <h2 id="@(OfficialPageText.ExecutiveAnchor(type.Kind))-title">@OfficialPageText.ExecutiveHeading(type.Kind, type.Count)</h2>
                 <p class="official-lede">@OfficialPageText.ExecutiveMeaning(type.Kind)</p>
-                <ul class="official-rows" role="list">
+                <ul class="record-rows" role="list">
                     @foreach (var action in type.Newest)
                     {
-                        <li>
-                            <span class="official-icon" aria-hidden="true"><Icon Name="IconName.ExecutiveAction" /></span>
-                            <div>
-                                <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(action.RecordId))">@action.Title</a>
-                                <p class="official-meta"><span>@PublishedRecordLabels.ExecutiveActionKind(type.Kind)</span><span>Signed @Moment.Day(action.SignedOn)</span></p>
-                            </div>
-                        </li>
+                        <PublicRecordRow Icon="IconName.ExecutiveAction" IconClass="home-executive-icon" Href="@(RootPath + PublicationProtocol.RecordPagePath(action.RecordId))" Headline="@action.Title"
+                                         Label="@PublishedRecordLabels.ExecutiveActionKind(type.Kind)" Meta="@("Signed " + Moment.Day(action.SignedOn))" />
                     }
                 </ul>
                 <p class="official-more"><a href="@allPath">See all @type.Count @OfficialPageText.ExecutivePlural(type.Kind, type.Count)</a></p>

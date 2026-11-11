@@ -104,30 +104,22 @@
         {
             <section id="statements" class="official-section" aria-labelledby="statements-title">
                 <h2 id="statements-title">@OfficialPageText.StatementsHeading</h2>
-                <ul class="official-rows" role="list">
+                <ul class="record-rows" role="list">
                     @foreach (var statement in Data.Statements)
                     {
-                        <li>
-                            <span class="official-icon" aria-hidden="true"><Icon Name="IconName.Statements" /></span>
-                            <div>
-                                <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))">@statement.Headline</a>
-                                @if (statement.Label is not null)
+                        <PublicRecordRow Icon="IconName.Statements" Href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))" Headline="@statement.Headline" Label="@statement.Label"
+                                         Meta="@(statement.StatementDate is { } said ? "Said on " + Moment.Day(said) : "Date not stated")">
+                            <p class="official-related"><span>Related vote</span> <a href="@(RootPath + PublicationProtocol.RecordPagePath(statement.VoteRecordId))">@statement.VoteChamber roll call @statement.VoteRollCall, @Moment.Day(statement.VotedOn): @statement.VoteHeadline</a>
+                                @if (statement.VoteLabel is not null)
                                 {
-                                    <span class="muted small">@statement.Label</span>
+                                    <span class="muted small">@statement.VoteLabel</span>
                                 }
-                                <p class="official-meta"><span>@(statement.StatementDate is { } said ? "Said on " + Moment.Day(said) : "Date not stated")</span></p>
-                                <p class="official-related"><span>Related vote</span> <a href="@(RootPath + PublicationProtocol.RecordPagePath(statement.VoteRecordId))">@statement.VoteChamber roll call @statement.VoteRollCall, @Moment.Day(statement.VotedOn): @statement.VoteHeadline</a>
-                                    @if (statement.VoteLabel is not null)
-                                    {
-                                        <span class="muted small">@statement.VoteLabel</span>
-                                    }
-                                    @if (statement.Cast is { } cast)
-                                    {
-                                        <SharedVoteCast Side="@PublishedOfficialVote.SideOf(cast)"><CastWord Cast="@cast" /></SharedVoteCast>
-                                    }
-                                </p>
-                            </div>
-                        </li>
+                                @if (statement.Cast is { } cast)
+                                {
+                                    <SharedVoteCast Side="@PublishedOfficialVote.SideOf(cast)"><CastWord Cast="@cast" /></SharedVoteCast>
+                                }
+                            </p>
+                        </PublicRecordRow>
                     }
                 </ul>
                 <p class="muted small">@OfficialPageText.LinkMeaning <a href="@(RootPath + PublicationProtocol.MethodPagePath)">What a link is</a></p>
@@ -143,27 +135,21 @@
                 {
                     <PublishedBillLineNote />
                 }
-                <ul class="official-rows" role="list">
+                <ul class="record-rows" role="list">
                     @foreach (var bill in Data.Bills)
                     {
                         var status = bill.LatestAction is { } action ? BillStatusMeaning.Label(action, bill.BillType) : null;
-                        <li>
-                            <span class="official-icon" aria-hidden="true"><Icon Name="IconName.Bill" /></span>
-                            <div>
-                                <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@bill.BillTitle</a>
-                                <PublishedBillLine Line="@bill.BillLine" />
-                                <p class="official-meta"><span>Introduced @Moment.Day(bill.IntroducedOn)</span>
-                                    @if (bill.LatestAction is not null && bill.LatestActionOn is { } actionOn)
-                                    {
-                                        <span>Latest official action @Moment.Day(actionOn): @BillStatusMeaning.Plain(bill.LatestAction, bill.BillType)</span>
-                                    }
-                                </p>
-                            </div>
+                        <PublicRecordRow Icon="IconName.Bill" IconClass="record-row-icon-bill" Href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" Headline="@bill.BillTitle"
+                                         Meta="@("Introduced " + Moment.Day(bill.IntroducedOn))" BillLine="@bill.BillLine" ShowBillLineSource="false">
+                            @if (bill.LatestAction is not null && bill.LatestActionOn is { } actionOn)
+                            {
+                                <p class="small muted">Latest official action @Moment.Day(actionOn): @BillStatusMeaning.Plain(bill.LatestAction, bill.BillType)</p>
+                            }
                             @if (status is not null)
                             {
                                 <StatusBadge Text="@status" />
                             }
-                        </li>
+                        </PublicRecordRow>
                     }
                 </ul>
                 <p class="official-more"><a href="@recordPath">See all @Data.SponsoredBills bills</a></p>
