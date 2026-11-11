@@ -2,6 +2,7 @@ using CivicLens.PublicApi.DocumentChanges;
 using CivicLens.PublicApi.ExecutiveActions;
 using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.Http;
+using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Records;
 using CivicLens.PublicApi.Statements;
 using CivicLens.PublicApi.Votes;
@@ -18,7 +19,7 @@ public static class ServerPageEndpoints
     /// <summary>The path prefix of the server pages. No live route uses it, so the static pages stay the production path until a route moves.</summary>
     public const string Prefix = "/web";
 
-    /// <summary>Maps the gated home, Compare, and record previews and the not found page under the server-page prefix.</summary>
+    /// <summary>Maps the gated home, Compare, official, and record previews and the not found page under the server-page prefix.</summary>
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         routes.MapGet(Prefix, (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
@@ -38,6 +39,10 @@ public static class ServerPageEndpoints
                     [nameof(ComparePage.RootPath)] = baseUrl.Join(string.Empty),
                     [nameof(ComparePage.BrowserApiUrl)] = home.BrowserApiRoot
                 }, cancellationToken)));
+        routes.MapGet(Prefix + "/officials/{id}", (string id, HttpContext context, OfficialPageReader officials, ServerPageResponder responder, CancellationToken cancellationToken) =>
+            ApiResults.GuardAsync(async () => PublicationProtocol.IsPathSegment(id) && await officials.ReadAsync(id, cancellationToken) is { } page
+                ? await RespondOfficialAsync(context, responder, page, baseUrl, cancellationToken)
+                : await NotFoundAsync(context, responder, baseUrl, cancellationToken)));
         routes.MapGet(RecordRoute("{recordId}"), (string recordId, HttpContext context, RecordKindStore kinds, VotePageReader votes, StatementPageReader statements,
             ExecutiveActionPageReader actions, DocumentChangePageReader changes, ServerPageResponder responder, CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () =>
@@ -88,4 +93,16 @@ public static class ServerPageEndpoints
     private static Task<IResult> NotFoundAsync(HttpContext context, ServerPageResponder responder, PublicBaseUrl baseUrl, CancellationToken cancellationToken) =>
         responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,
             new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken);
+
+    /// <summary>An official with executive actions gets the President layout. Every other official gets the member layout.</summary>
+    private static Task<IResult> RespondOfficialAsync(HttpContext context, ServerPageResponder responder, OfficialPageData page, PublicBaseUrl baseUrl,
+        CancellationToken cancellationToken) => page.Executive is null
+        ? responder.RespondAsync<OfficialProfilePage>(context, StatusCodes.Status200OK, page.Release, OfficialParameters(page, baseUrl), cancellationToken)
+        : responder.RespondAsync<PresidentPage>(context, StatusCodes.Status200OK, page.Release, OfficialParameters(page, baseUrl), cancellationToken);
+
+    private static Dictionary<string, object?> OfficialParameters(OfficialPageData page, PublicBaseUrl baseUrl) => new()
+    {
+        [nameof(OfficialProfilePage.Data)] = page,
+        [nameof(OfficialProfilePage.RootPath)] = baseUrl.Join(string.Empty)
+    };
 }

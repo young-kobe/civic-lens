@@ -3,6 +3,7 @@ using CivicLens.Application.Issues;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Publication;
 using CivicLens.Host.Publication;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 
@@ -205,7 +206,7 @@ public sealed class PublishedOfficialPageTests
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
         var header = new HtmlParser().ParseDocument(html).QuerySelector("header.page-header")!;
-        Assert.Equal("Democratic representative for WA, district 9", header.QuerySelector(".page-header-lede")!.TextContent);
+        Assert.Equal("Democratic representative for Washington, district 9", header.QuerySelector(".page-header-lede")!.TextContent);
         Assert.Equal("In the House since January 1997.", header.QuerySelector(".page-header-meta span")!.TextContent);
     }
 
@@ -334,11 +335,25 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public async Task TheLedeOfTheStaticAndTheServerPageComeFromOneOwner()
+    {
+        var published = new DateOnly(2026, 11, 1);
+        var data = new OfficialPageData(7, "rep", "Rita Rep", PublishedOfficeKind.Representative, "House", "WA", 9, "Democrat", null, null, null) { PublishedOn = published };
+
+        var current = Seat(new(2025, 1, 3), null);
+        var former = Seat(new(2001, 1, 3), new(2003, 1, 3));
+
+        Assert.Equal(await LedeAsync(current) + ".", OfficialPageText.Lede(data));
+        Assert.Equal(await LedeAsync(former) + ".", OfficialPageText.Lede(data with { TermEndsOn = new(2003, 1, 3) }));
+        Assert.Equal("Democratic representative for Washington, district 9.", OfficialPageText.Lede(data));
+    }
+
+    [Fact]
     public async Task ASenatorWhoLeftTheHouseDatesTheTenureFromTheSenateBecauseTheTenureNamesOneChamber()
     {
         var terms = new[] { Seat(new(2001, 1, 3), new(2007, 1, 3)), Senate(new(2007, 1, 4), new(2013, 1, 3)), Senate(new(2013, 1, 3), new(2027, 1, 3)) };
 
-        Assert.Equal("Democratic senator for WA", await LedeAsync(terms));
+        Assert.Equal("Democratic senator for Washington", await LedeAsync(terms));
         Assert.Equal("In the Senate since January 2007.", await TenureAsync(terms));
     }
 
@@ -347,7 +362,7 @@ public sealed class PublishedOfficialPageTests
     {
         var terms = new[] { Seat(new(2001, 1, 3), new(2003, 1, 3)), Seat(new(2003, 1, 3), new(2005, 1, 3)) };
 
-        Assert.Equal("Former Democratic representative for WA, district 9", await LedeAsync(terms));
+        Assert.Equal("Former Democratic representative for Washington, district 9", await LedeAsync(terms));
         Assert.Equal("In the House from January 2001 to January 2005.", await TenureAsync(terms));
     }
 
@@ -356,7 +371,7 @@ public sealed class PublishedOfficialPageTests
     {
         var terms = new[] { Seat(new(2025, 1, 3), new(2027, 1, 3)), Seat(new(2027, 1, 3), null) with { District = 3 } };
 
-        Assert.Equal("Democratic representative for WA, district 9", await LedeAsync(terms));
+        Assert.Equal("Democratic representative for Washington, district 9", await LedeAsync(terms));
         Assert.Equal("In the House since January 2025.", await TenureAsync(terms));
     }
 
@@ -445,7 +460,7 @@ public sealed class PublishedOfficialPageTests
         var header = new HtmlParser().ParseDocument(html).QuerySelector("header.page-header")!;
         Assert.Equal("Rita Rep", header.QuerySelector("h1")!.TextContent);
         Assert.NotNull(header.QuerySelector(".page-header-portrait figure.portrait img"));
-        Assert.Equal("Democratic representative for WA, district 9", header.QuerySelector(".page-header-lede")!.TextContent);
+        Assert.Equal("Democratic representative for Washington, district 9", header.QuerySelector(".page-header-lede")!.TextContent);
         Assert.Equal("Official website", header.QuerySelector(".page-header-meta a[href='https://rep.example.gov/home']")!.TextContent);
     }
 
@@ -836,7 +851,7 @@ public sealed class PublishedOfficialPageTests
     {
         var lede = await LedeAsync(Senate(new(2013, 1, 3), new(2027, 1, 3)) with { Party = "Independent", Caucus = "Democrat" });
 
-        Assert.Equal("Independent senator for WA, caucuses with Democrats", lede);
+        Assert.Equal("Independent senator for Washington, caucuses with Democrats", lede);
     }
 
     private static ReleaseOfficialPage PageForSections()
@@ -1165,7 +1180,7 @@ public sealed class PublishedOfficialPageTests
         var html = await new ReleaseRenderer(null, null).RenderOfficialAsync(page, PublicationCatalogs.None, CancellationToken.None);
 
         var description = new HtmlParser().ParseDocument(html).QuerySelector("meta[name='description']")!.GetAttribute("content")!;
-        Assert.Equal("Mayor Example. Democratic representative for WA, district 1. In the House since January 2021.", description);
+        Assert.Equal("Mayor Example. Democratic representative for Washington, district 1. In the House since January 2021.", description);
     }
 
     [Theory]
