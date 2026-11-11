@@ -275,7 +275,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("https://civic-lens.test/" + PublicationProtocol.VoteKindsPagePath, page.QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
-        Assert.Equal(VoteMeaning.Kinds.Count, page.QuerySelectorAll(".vote-kind").Length);
+        Assert.Equal(VoteMeaning.Kinds.Count + 1, page.QuerySelectorAll("tbody tr").Length);
         Assert.Contains("r4-", response.Headers.ETag!.ToString());
         Assert.Equal(PageCache.CacheControl, response.Headers.CacheControl?.ToString());
 
@@ -299,7 +299,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("Page not found", page.QuerySelector(".empty h3")!.TextContent.Trim());
-        Assert.Empty(page.QuerySelectorAll(".vote-kind"));
+        Assert.Empty(page.QuerySelectorAll("tbody tr"));
     }
 
     [Fact]

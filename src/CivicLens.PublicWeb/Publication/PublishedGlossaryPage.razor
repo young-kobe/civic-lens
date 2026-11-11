@@ -29,10 +29,6 @@
     @foreach (var group in Glossary.Groups)
     {
         <Panel Title="@group.Title" Id="@group.AnchorId" Padded="true">
-            @if (group.Title == Glossary.KindsOfVotes)
-            {
-                <p><a href="@PublicationProtocol.VoteKindsPagePath">@Glossary.KindsOfVotes</a></p>
-            }
             @foreach (var term in group.Terms)
             {
                 <section class="glossary-term" aria-labelledby="@term.AnchorId">
