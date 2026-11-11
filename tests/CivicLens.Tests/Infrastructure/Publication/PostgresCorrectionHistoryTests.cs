@@ -470,14 +470,17 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
     [Fact]
     public async Task CommitRejectsAHistoryBoundToAnIncompatibleRevisionAndRollsBackItsWrites()
     {
-        await SeedActionsAsync((A, 2));
+        await SeedActionsAsync((A, 2), (B, 20));
         var prepared = Assert.Single(await publications.PrepareCorrectionHistoriesAsync(
             [new(Binding(A, 10), [Correction(9, PublishedAt, "For revision ten")])], default));
         var target = Binding(A, 2);
         var forged = new CorrectionHistoryBinding(target, prepared.HistoryId);
+        var valid = Binding(B, 20);
+        var validHistory = Assert.Single(await publications.PrepareCorrectionHistoriesAsync([new(valid, [])], default));
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => CommitAsync(1, null, [target],
-            [new(PublishedRecordKind.Action, A, 2, 1)], [PublishedEntryFixtures.Action(A, PublishedAt, 2)], [forged]));
+        await Assert.ThrowsAsync<InvalidDataException>(() => CommitAsync(1, null, [target, valid],
+            [new(PublishedRecordKind.Action, A, 2, 1), new(PublishedRecordKind.Action, B, 20, 1)],
+            [PublishedEntryFixtures.Action(A, PublishedAt, 2), PublishedEntryFixtures.Action(B, PublishedAt, 20)], [forged, validHistory]));
 
         Assert.Equal(new PublicationState(0, null), await publications.GetStateAsync(default));
         Assert.Equal(0L, await ReadInt64Async("SELECT count(*) FROM publication_releases"));
@@ -486,6 +489,8 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
             ("record_id", A)));
         Assert.Equal(0L, await ReadInt64Async("SELECT count(*) FROM published_entries WHERE kind = 'action' AND record_id = @record_id AND revision_number = 2",
             ("record_id", A)));
+        Assert.Equal(0L, await ReadInt64Async("SELECT count(*) FROM published_entries WHERE kind = 'action' AND record_id = @record_id",
+            ("record_id", B)));
         Assert.Equal(0L, await ReadInt64Async(
             "SELECT count(*) FROM document_change_review_idempotency WHERE operation = 'publish-release'"));
     }

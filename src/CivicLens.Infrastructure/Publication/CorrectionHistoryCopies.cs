@@ -87,6 +87,7 @@ internal static class CorrectionHistoryCopies
             throw new InvalidDataException("Correction history bindings must exactly cover the release records once.");
         if (bindings.Any(binding => !IsHistoryId(binding.HistoryId)))
             throw new InvalidDataException("A correction history binding has an invalid content identity.");
+        if (bindings.Count == 0) return;
 
         var kinds = bindings.Select(binding => PublishedRecordReference.NameOf(binding.Record.Kind)).ToArray();
         var recordIds = bindings.Select(binding => binding.Record.RecordId).ToArray();
