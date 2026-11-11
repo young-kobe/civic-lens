@@ -11,7 +11,7 @@ public partial class PublicApiExecutiveActionTargets : Migration
     private const string UpSql = """
         CREATE VIEW public_api.executive_action_targets WITH (security_barrier = true) AS
         SELECT a.record_id, a.revision_number, t."position", t.relation, t.kind, t.number,
-               CASE WHEN cited.text ~ ('^(EO|Proc\.) ' || t.number || '(, |$)') THEN cited.text END AS reference,
+               CASE WHEN cited.text ~ ('^' || CASE t.kind WHEN 'ExecutiveOrder' THEN 'EO' ELSE 'Proc\.' END || ' ' || t.number || '(, |$)') THEN cited.text END AS reference,
                (SELECT CASE WHEN count(*) = 1 THEN min(m.record_id) END
                   FROM public_api.active_records m
                   JOIN public.executive_action_revisions mr ON mr.record_id = m.record_id AND mr.revision_number = m.revision_number
@@ -26,12 +26,25 @@ public partial class PublicApiExecutiveActionTargets : Migration
         ALTER VIEW public_api.executive_action_targets OWNER TO civic_lens_public_owner;
         """;
 
-    protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.Sql(UpSql);
+    protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.CreateIndex(
+            name: "IX_executive_action_revisions_kind_presidential_number",
+            table: "executive_action_revisions",
+            columns: new[] { "kind", "presidential_number" });
+        migrationBuilder.Sql(UpSql);
+    }
 
-    protected override void Down(MigrationBuilder migrationBuilder) => migrationBuilder.Sql("""
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.Sql("""
         DROP VIEW public_api.executive_action_targets;
         REVOKE SELECT (presidential_number, disposition_notes) ON executive_action_revisions FROM civic_lens_public_owner;
         REVOKE SELECT (record_id, revision_number, "position", relation, kind, number, reference_start, reference_length)
             ON executive_action_revision_disposition_targets FROM civic_lens_public_owner;
         """);
+        migrationBuilder.DropIndex(
+            name: "IX_executive_action_revisions_kind_presidential_number",
+            table: "executive_action_revisions");
+    }
 }

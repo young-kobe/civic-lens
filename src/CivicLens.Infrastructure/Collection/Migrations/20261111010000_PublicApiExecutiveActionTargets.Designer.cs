@@ -4548,6 +4548,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("DispositionNotesExtractionId");
 
+                    b.HasIndex("Kind", "PresidentialNumber");
+
                     b.ToTable("executive_action_revisions", null, t =>
                         {
                             t.HasCheckConstraint("ck_executive_action_revisions_author", "author_kind = 'Code' AND author_subject = 'civic-lens:code'");
@@ -5730,40 +5732,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_release_issue_includes_position", "position >= 0");
 
                             t.HasCheckConstraint("ck_release_issue_includes_text", "length(btrim(text)) > 0");
-                        });
-                });
-
-            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseBillCountRow", b =>
-                {
-                    b.Property<int>("ReleaseNumber").HasColumnType("integer").HasColumnName("release_number");
-                    b.Property<int>("Congress").HasColumnType("integer").HasColumnName("congress");
-                    b.Property<int>("Bills").HasColumnType("integer").HasColumnName("bills");
-                    b.Property<int>("ExpectedMemberRowCount").HasColumnType("integer").HasColumnName("expected_member_row_count");
-                    b.HasKey("ReleaseNumber", "Congress");
-                    b.ToTable("release_bill_counts", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_release_bill_counts_bills", "bills >= 0");
-                            t.HasCheckConstraint("ck_release_bill_counts_congress", "congress > 0");
-                            t.HasCheckConstraint("ck_release_bill_counts_expected_member_row_count", "expected_member_row_count >= 0");
-                        });
-                });
-
-            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialBillCountRow", b =>
-                {
-                    b.Property<int>("ReleaseNumber").HasColumnType("integer").HasColumnName("release_number");
-                    b.Property<int>("Congress").HasColumnType("integer").HasColumnName("congress");
-                    b.Property<string>("OfficialId").IsRequired().HasMaxLength(256).HasColumnType("character varying(256)").HasColumnName("official_id");
-                    b.Property<int>("Sponsored").HasColumnType("integer").HasColumnName("sponsored");
-                    b.Property<int>("Cosponsored").HasColumnType("integer").HasColumnName("cosponsored");
-                    b.HasKey("ReleaseNumber", "Congress", "OfficialId");
-                    b.HasIndex("ReleaseNumber", "OfficialId").HasDatabaseName("ix_release_official_bill_counts_release_official");
-                    b.ToTable("release_official_bill_counts", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_release_official_bill_counts_congress", "congress > 0");
-                            t.HasCheckConstraint("ck_release_official_bill_counts_cosponsored", "cosponsored >= 0");
-                            t.HasCheckConstraint("ck_release_official_bill_counts_nonzero", "sponsored + cosponsored > 0");
-                            t.HasCheckConstraint("ck_release_official_bill_counts_official_id", "length(btrim(official_id)) > 0");
-                            t.HasCheckConstraint("ck_release_official_bill_counts_sponsored", "sponsored >= 0");
                         });
                 });
 
