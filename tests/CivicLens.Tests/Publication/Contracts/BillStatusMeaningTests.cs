@@ -169,4 +169,41 @@ public sealed class BillStatusMeaningTests
         Assert.Throws<ArgumentException>(() => BillStatusMeaning.Of(" ", "hr"));
         Assert.Throws<ArgumentException>(() => BillStatusMeaning.Of("Passed House.", ""));
     }
+
+    [Fact]
+    public void EveryStatusHasOneLabelAndNoTwoStatusesShareOne()
+    {
+        var statuses = Enum.GetValues<BillStatus>();
+        var labels = statuses.Select(BillStatusMeaning.LabelOf).ToArray();
+
+        Assert.All(labels, label => Assert.False(string.IsNullOrWhiteSpace(label)));
+        Assert.Equal(statuses.Length, labels.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Theory]
+    [InlineData("Referred to the House Committee on Ways and Means.", "hr", "In committee")]
+    [InlineData("Referred to the Subcommittee on Health.", "hr", "In committee")]
+    [InlineData("Received in the Senate.", "hr", "Passed the House")]
+    [InlineData("Received in the House.", "s", "Passed the Senate")]
+    [InlineData("Placed on Senate Legislative Calendar under General Orders.", "s", "Waiting for a possible Senate floor vote")]
+    [InlineData("Placed on the Union Calendar, Calendar No. 12.", "hr", "Waiting for a possible House floor vote")]
+    [InlineData("Ordered to be Reported by Voice Vote.", "hres", "A committee voted to send this to the full chamber")]
+    [InlineData("Became Public Law No: 119-21.", "hr", "Became law")]
+    [InlineData("Motion to reconsider laid on the table.", "hr", "Latest official action")]
+    public void ATextGetsTheLabelOfTheStatusThatItsMeaningRuleReads(string text, string billType, string expected) =>
+        Assert.Equal(expected, BillStatusMeaning.Label(text, billType));
+
+    [Fact]
+    public void EveryLabelUsesOnlyWordsOfAMeaningOrOfTheUnmatchedPrefix()
+    {
+        var meanings = string.Join(' ', new[]
+        {
+            "In committee: sent to the Committee on Finance.", "Passed the House. Now in the Senate.", "Passed the Senate. Now in the House.",
+            "Waiting for a possible Senate floor vote.", "Waiting for a possible House floor vote.",
+            "A committee voted to send this bill to the full chamber.", "Became law: Public Law 119-21.", BillStatusMeaning.UnmatchedPrefix });
+        var known = meanings.Split([' ', '.', ':'], StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var label in Enum.GetValues<BillStatus>().Select(BillStatusMeaning.LabelOf))
+            Assert.All(label.Split(' '), word => Assert.Contains(word, known));
+    }
 }

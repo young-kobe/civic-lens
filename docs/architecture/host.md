@@ -84,7 +84,7 @@ PublicWeb holds these components:
 
 | Folder | Components |
 |---|---|
-| `Ui` | General controls: `Button`, `Panel`, `PageHeader`, `DataTable`, `TableCell`, `Pager`, `FilterTabs` (all links from `FilterTab.Link`, or all buttons from `FilterTab.Button` that a script reads; a mixed list throws `ArgumentException`, tested by `FilterTabsTests`), `Notice`, `EmptyState`, `Field`, `TabSet`, `ThemeToggle`, `IconFrame` (owns the SVG tag), `Icon` (the closed `IconName` list), `InfoPopover` (a button with an accessible name that opens a short note; `Term` uses the same popover), `ContextLink` (a link whose hidden suffix names its target), `CellTitle` (a table title that is a link when it has an address, else plain text) |
+| `Ui` | General controls: `Button`, `Panel`, `PageHeader`, `DataTable`, `TableCell`, `Pager`, `EmptyState` (a title, optional text, then `ChildContent` such as a next-step list, then `Action`; tested by `EmptyStateTests`), `FilterTabs` (all links from `FilterTab.Link`, or all buttons from `FilterTab.Button` that a script reads; a mixed list throws `ArgumentException`, tested by `FilterTabsTests`), `Notice`, `EmptyState`, `Field`, `TabSet`, `ThemeToggle`, `IconFrame` (owns the SVG tag), `Icon` (the closed `IconName` list), `InfoPopover` (a button with an accessible name that opens a short note; `Term` uses the same popover), `ContextLink` (a link whose hidden suffix names its target), `CellTitle` (a table title that is a link when it has an address, else plain text) |
 | `Evidence` | `RecordView`, `StatementRecord`, `CitationQuote`, `DateEvidenceLine`, `SourceLineLink`, `SourceLinesNote`, `DocumentText` |
 
 `Tone` and `ToneClass.Suffix` remain in PublicWeb. Public and Host controls use the same CSS suffix rule.

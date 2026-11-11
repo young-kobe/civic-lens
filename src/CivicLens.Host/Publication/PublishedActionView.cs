@@ -31,7 +31,7 @@ internal static class PublishedActionView
         [
             new("Latest action on Congress.gov", $"{BillStatusMeaning.Of(billStatus.Text, action.BillType)} Action date: {Moment.Day(billStatus.Date)}."),
             new("Status read on", $"{Moment.Full(billStatus.ObservedAtUtc)}. The bill can change after this time."),
-            Fact.LinkList("Official bill page", [new FactLink("Bill on Congress.gov", SourcePages.Bill(action.Congress, action.BillType, action.BillNumber))])
+            Fact.LinkList("Official bill page", [new FactLink("Bill on Congress.gov", CongressGovBillPage.Url(action.Congress, action.BillType, action.BillNumber))])
         ];
     }
 
