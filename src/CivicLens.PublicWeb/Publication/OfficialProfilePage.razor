@@ -82,9 +82,9 @@
                         <p class="muted small">The @Data.Marks.Length newest of @Data.MarksTotal. <a href="@recordPath">See all votes and records of @Data.Name</a></p>
                     }
                     <ul class="official-legend" role="list">
-                        @if (party is not null)
+                        @foreach (var line in Data.PartyLines.Where(line => line.AgainstParty > 0).OrderBy(line => line.FirstVotedOn))
                         {
-                            <li><span class="swatch against" aria-hidden="true"></span>@party.AgainstParty @(party.AgainstParty == 1 ? "vote" : "votes") against most @PublishedPartyNames.PartyOf(party.Chamber, party.Party)</li>
+                            <li><span class="swatch against" aria-hidden="true"></span>@line.AgainstParty @(line.AgainstParty == 1 ? "vote" : "votes") against most @PublishedPartyNames.PartyOf(line.Chamber, line.Party)</li>
                         }
                         @foreach (var figure in Data.Attendance)
                         {
