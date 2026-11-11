@@ -68,6 +68,7 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
         var page = await GetPageAsync(host, Path);
 
         Assert.Null(page.QuerySelector(".vote-parties"));
+        Assert.NotNull(page.QuerySelector(".vote-parties-unknown"));
         Assert.Single(page.QuerySelectorAll(".party-bar"));
     }
 

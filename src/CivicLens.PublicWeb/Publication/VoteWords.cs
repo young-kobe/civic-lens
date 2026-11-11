@@ -12,6 +12,8 @@ public static class VoteWords
     public static readonly string SplitMeaning = $"A split vote is a substantive roll call vote where {BothMajorities} voted on opposite sides.";
     public static readonly string PartiesAgreedMeaning = $"A vote where both parties agreed is a substantive roll call vote where {BothMajorities} voted the same way.";
 
+    public const string PartyCountsUnknown = "This record does not show party counts.";
+
     public const string PartyCountsNote = "These counts include every member of the party, tracked or not. An independent counts with the party they caucus with, so these counts can differ from the source totals. Yes here means Yea or Aye in the record. No means Nay.";
 
     public const string BreakMeaning = "A member is listed when they cast Yes or No against the cast of most members of their own party on this vote. A current independent counts with the party they caucus with. A former independent counts with no party. A member with another party, or with no known party, is not listed. Present and Not voting never count as a break.";

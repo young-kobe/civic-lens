@@ -46,7 +46,11 @@
                     <h3>@NextStep.Heading</h3>
                     <p>@(wording?.NextStep ?? NextStep.NotShown)</p>
                 </section>
-                @if (partyBars.Count > 0)
+                @if (partyBars.Count == 0)
+                {
+                    <p class="vote-parties-unknown muted small">@VoteWords.PartyCountsUnknown</p>
+                }
+                else
                 {
                     <section class="vote-parties" aria-labelledby="vote-parties-title">
                         <h2 id="vote-parties-title">@VotePageView.PartiesHeading</h2>

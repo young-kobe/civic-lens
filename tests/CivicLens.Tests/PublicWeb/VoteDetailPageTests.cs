@@ -44,6 +44,7 @@ public sealed class VoteDetailPageTests
 
         Assert.Null(page.QuerySelector(".vote-parties"));
         Assert.Null(page.QuerySelector(".vote-breakers"));
+        Assert.Equal("This record does not show party counts.", page.QuerySelector(".vote-parties-unknown")!.TextContent.Trim());
         Assert.Single(page.QuerySelectorAll(".party-bar"));
         Assert.DoesNotContain("Democrats", page.QuerySelector("main")!.TextContent);
     }
