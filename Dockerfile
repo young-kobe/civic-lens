@@ -14,8 +14,15 @@ RUN dotnet publish src/CivicLens.Host --no-restore -c Release -p:UseAppHost=fals
 
 # mcr.microsoft.com/dotnet/aspnet:10.0.14
 FROM mcr.microsoft.com/dotnet/aspnet@sha256:de0ee358cdd672f7017a003bed21e9ac9ed48a27c922a59b18175b6e82fa7fee AS runtime
-RUN apt-get update \
+# Fallback mirror: see docs/operations.md (image build).
+RUN sources=/etc/apt/sources.list.d/ubuntu.sources \
+ && cp "$sources" /tmp/ubuntu.sources \
+ && if ! apt-get update --error-on=any; then \
+      sed -i -E 's#http://(ports|archive|security)\.ubuntu\.com/#https://mirrors.ocf.berkeley.edu/#' "$sources" \
+      && apt-get update --error-on=any; \
+    fi \
  && apt-get install --yes --no-install-recommends libgssapi-krb5-2 \
+ && mv /tmp/ubuntu.sources "$sources" \
  && rm -rf /var/lib/apt/lists/*
 RUN groupadd --gid 10001 civic-lens \
  && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin civic-lens

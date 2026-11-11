@@ -1251,6 +1251,7 @@ The `Dockerfile` in the repository root builds two images for linux-arm64. The w
 - Each image has two tags: the full commit SHA and `main`. Deploy by the commit SHA. Pull one with `docker pull ghcr.io/young-kobe/civic-lens-host:<commit-sha>`. Check its attestation with `gh attestation verify oci://ghcr.io/young-kobe/civic-lens-host:<commit-sha> --repo young-kobe/civic-lens`.
 - Every base image is pinned by digest, and the tag is in a comment. The SDK image must equal the `global.json` version. The aspnet image must equal the runtime of that SDK (see the .NET release notes). To update a base image, change the digest and the comment together.
 - The `libgssapi-krb5-2` package is not pinned. Each build installs the current version from the distribution archive.
+- If apt cannot reach the Ubuntu archive, the build retries once with the `mirrors.ocf.berkeley.edu` mirror. The GitHub runners use Azure DNS, which sometimes fails to resolve `*.ubuntu.com`. apt checks the Ubuntu archive signatures on every mirror, and the image keeps the original source list.
 
 ## Web server
 
