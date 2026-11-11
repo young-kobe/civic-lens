@@ -6,13 +6,10 @@
     <PublishedCorrectionList Corrections="Corrections" />
     <div class="record-panels">@ChildContent</div>
     <Caveat>@Caveat</Caveat>
-    @ReportLink
 </PublicPage>
 
 @code {
     private ReportedRecord record = default!;
-
-    private RenderFragment ReportLink => @<p class="muted small"><a href="@("../" + record.ReportPath)">@PublishedRecordLabels.ReportRecordLink</a></p>;
 
     [Parameter] public PublicSection? Section { get; set; } = PublicSection.AllRecords;
     [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
