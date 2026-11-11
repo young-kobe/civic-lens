@@ -36,6 +36,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Probe apt mirror DNS
+        run: |
+          for host in ports.ubuntu.com azure.ports.ubuntu.com archive.ubuntu.com; do
+            printf '%s: ' "$host"; getent hosts "$host" | head -1 || echo unresolved
+          done
+          grep -h '^URIs' /etc/apt/sources.list.d/*.sources 2>/dev/null | sort -u || true
+          docker run --rm --platform linux/arm64 ubuntu:24.04 sh -c 'getent hosts ports.ubuntu.com || echo container-unresolved' || true
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - if: github.ref == 'refs/heads/main'
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
