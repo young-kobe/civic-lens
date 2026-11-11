@@ -10,6 +10,7 @@ public static class PlainVoteWords
     public const string No = "No";
     public const string Present = "Present";
     public const string NotVoting = "Not voting";
+    public const string OtherCast = "Other";
     public const string OtherKind = "Other question";
 
     private static readonly (string Ending, string Words)[] ResultByEnding =

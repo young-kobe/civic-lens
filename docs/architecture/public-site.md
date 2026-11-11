@@ -95,7 +95,7 @@ These decisions come from the component audit. The owner accepted every recommen
 - Every public number names who and what it counts, and its time frame.
 - AI text always carries its label.
 - A fixed rule in code picks featured content. A person never picks it.
-- Party colors use red and blue, with patterns and an explicit legend. Vote Yes and No colors remain an owner choice at the map step.
+- Party colors use red and blue, with patterns and an explicit legend. On the vote map, Yes is navy ink (`--ink`) and No is orange stripes (`--against`). Patterns, the legend, and a table carry meaning, never color alone.
 - Every UI pull request attaches screenshots at 360 px and 1280 px, light and dark.
 - Components have no inline styles. One component owns each markup rule.
 
@@ -141,12 +141,21 @@ These decisions come from the component audit. The owner accepted every recommen
 - The facts, the member noun, the source name, and the words about breakers have one owner each, `VoteFacts` and `VoteBreakers`. The vote page and the live record page both call them. Enforcers: `VoteFacts`, `VoteBreakers`. Tests: `VoteDetailPageTests`, `ReleaseRendererTests`.
 - Vote wording comes from the approved tables. Enforcer: `VoteWording.Of(VoteWordingSource)`. Tests: `VoteDetailPageTests.ThePlainWordsOfTheApprovedWordingTableAnswerWhatYesMeantAndWhatHappensNext` and `VoteWordingTests.TheCitedPartsOfAVoteGiveTheSameWordsAsThePublishedVote`.
 - The vote member filters narrow the table by name, cast, and party. Enforcer: `VoteMemberFilter`. Tests: `VoteDetailPageTests.TheMemberTableIsFoldedAndFiltersByNameVoteAndParty` and `VotePageEndpointsTests.TheQueryFiltersTheMemberTableAndALongNameFilterAnswers400`.
+- A map seat with no member row is never a cast. It has a plain fill, a dashed line, and the words "No member in the record" in its hover text, the legend, and the table. The map never says "vacant". Enforcer: `VoteMapMarks.Of`. Test: `VoteMapTests.ASeatWithNoMemberRowIsNeverLabeledAsACast`.
+- A Senate state splits in two in the position order of the vote members, in the map and in the tiles. The first senator takes the left half and the first tile. Enforcer: `VoteMapData.Of`. Test: `VoteMapTests.ASenateStateSplitsInTwoInThePositionOrderOfTheVoteMembersInBothViews`.
+- Delegates are circles below the map. They are never in the shapes or the tiles. Enforcer: `VoteMapData.Of` and `VoteMap`. Test: `VoteMapTests.DelegatesAreCirclesBelowTheMapAndNeverInTheSeatGrid`.
+- The map legend lists every mark in use, with counts that add up to every seat and circle. Each mark has its own pattern, so color is never the only cue. Enforcers: `VoteMapData.Legend` and `VoteMap`. Test: `VoteMapTests.TheLegendListsEveryPatternInUseWithCountsThatAddUpToEverySeatAndCircle`.
+- The map shows only a true join. It stays off for a House vote of another Congress than the shapes, or a member whose seat has no shape. It also stays off for two members on one House seat, more than two senators in one state, or no placed member. Enforcer: `VoteMapData.Of`. Test: `VoteMapTests.TheMapStaysOffWhenItCannotShowTheVoteTruly`.
+- The tiles put the states in name order, each in a square grid, as the mockup `drawTiles` does. Enforcer: `VoteMapTiles.Place`. Test: `VoteMapTests.TheTilesPutStatesInNameOrderEachInASquareGrid`.
+- The map shapes come only from the committed asset `districts-119.json`, which the PublicWeb assembly embeds. Enforcer: `VoteMapGeometry`. Test: No test checks that no other source exists.
 
 - The glossary index lists each approved term and the party-count note once, in alphabetical order. Letter links reach focusable index headings. Enforcer: `PublishedGlossaryPage`. Test: `GlossaryTests.TheGlossaryIndexGroupsEveryTermAlphabeticallyAndLinksPopulatedLettersAndDefinitions`.
 
 ## Behavior
 
 Implemented today: the static pages that [publication](publication.md#public-reader-experience) describes. PublicApi serves `/web` and `/web/compare` as gated server-rendered previews when `CIVIC_LENS_PUBLIC_BASE_URL` is configured. Caddy maps `/compare.html` on the public site to the Compare renderer and preserves its response headers. The vote preview uses the same ETag rule. The static vote page keeps its own fact list until the route moves. The Compare page has canonical path `compare.html`; its initial HTML contains no ZIP or member results. Its ZIP form and the home form appear only when `CIVIC_LENS_PUBLIC_API_URL` is configured. Home and current member results link to `/compare.html` on the configured public site root. Both layouts use the same private member endpoint and repeatable-read snapshot. The `view=compare` layout groups every current seat by chamber. It shows differing votes only when every listed member cast Yes or No. The existing static home remains the live route. After a successful current ZIP lookup, the browser stores the five-digit ZIP on this device. The header then shows "Your members" and a Forget control. Returning to either lookup page re-queries the configured ZIP endpoint against current published data. Personal lookup results are added only in the browser. Other pages move to PublicApi one route at a time in R-68. Rows marked "planned" describe accepted design that is not implemented.
+
+The vote preview shows a server-rendered SVG map of the vote after the party bars. `VoteMapData.Of` joins the vote members to the seats of `districts-119.json`. A House member takes the seat of the state and the district of the term in `public_api.vote_members`. A Senate state splits in two in member position order. A member with no state in the release stays in the member table and the map says how many it leaves out. Party follows the term party rule of the member table. The map has two views: the shapes and one tile per seat. Without script the screen width picks the view: shapes at 720 px and wider, tiles below. `public.js` shows the view buttons and lets the reader switch. The seats are not links. Each seat has hover text, and the folded table lists every seat for readers who cannot use the map.
 
 ### Reader flow matrix
 
@@ -155,7 +164,7 @@ Implemented today: the static pages that [publication](publication.md#public-rea
 | 1 | Find my members and what they did | Home ZIP form, member cards after a ZIP | Partial. Gated SSR home includes the existing ZIP flow when its browser API origin is configured. The answer scrolls into view and receives focus. Cards show portraits, seats, parties, term ends, scoped attendance, and party-line counts from private HTML fragments. Congress-scoped sponsored-bill and issue figures are shown, with shared vote rows and complete binary comparison badges |
 | 2 | See my member on an issue, from the member | Official page, issue chips, vote strip | Partial. Planned: strip marks link to the votes (DR2) |
 | 3 | See my member on an issue, from the issue | Issue page, "your members" section | Planned: each issue vote shows my members' casts |
-| 4 | Understand one vote | Vote page: AI summary, result card, "what a Yes meant", party bars, breakers, member table, source fold | Implemented in the gated `/web/records/{id}.html` preview: answer first, then the result, the fixed explainers, party bars, breakers, a folded member table with filters, and one "Check the source" fold (DR3). The static page stays live. Planned: map, statements, correction banner, bill status badge |
+| 4 | Understand one vote | Vote page: AI summary, result card, "what a Yes meant", party bars, breakers, member table, source fold | Implemented in the gated `/web/records/{id}.html` preview: answer first, then the result, the fixed explainers, party bars, the vote map, breakers, a folded member table with filters, and one "Check the source" fold (DR3). The static page stays live. Planned: statements, correction banner, bill status badge |
 | 5 | Understand one bill | Bill page: status stepper, AI summary, "who backed it", votes on the bill | Partial. Planned: stepper and party split of cosponsors |
 | 6 | Read one executive action | Executive action page, document links | Partial. Planned: body text and an AI "what it states" |
 | 7 | See what the President did | President page with per-type sections | Planned: count row becomes jump links |
@@ -199,7 +208,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Result card, party bars | Vote | Did it pass, and by how much? | `votes` chamber totals; published whole-party tallies | Implemented in the preview. The result word, the alignment badge, and a neutral chamber bar sit in the result card. One red or blue bar per party group sits below the explainers. Each bar names its group, shows every count in a legend, and marks half of its Yes and No casts. A release without party counts shows no party card |
 | Breakers list | Vote | Who broke ranks? | `votes.alignment`, `vote_members.party`, party tallies | Implemented in the preview for a split vote with party counts. Each party heading links to its board |
 | Member list with finder | Vote | How did my member vote? | `vote_members`, `officials` | Implemented in the preview: a folded table with name, vote, and party filters. A GET form applies them without a script |
-| Vote map | Vote, home | Where did Yes and No come from? | `vote_members`, `release_official_terms` | Planned: R-68 map step |
+| Vote map | Vote, map, home | Where did Yes and No come from? | `vote_members` state and district, `districts-119.json` | Implemented on the vote preview: district or state shapes, one tile per seat, delegate circles, a legend, and a folded seat table. The map page and the Home map are planned |
 | Bill status stepper | Bill | Where is the bill now? | `bill_actions`, `bills.public_law` | Planned: route and UI; bill actions and public law data are available |
 | Bill summary and CRS fold | Bill | What would the bill do? | `bills.summary`, CRS text and bill-text metadata; see [Publication](publication.md#public-api-views) | The API serves the summary, exact cited CRS body and version, and bill-text metadata. The fold, key terms and server-rendered bill page remain planned |
 | Who backed it | Bill | Is it bipartisan? | `bill_sponsorships`, `release_official_terms.party` | Partial. Planned: party split |
@@ -248,6 +257,7 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 | Static render of pages | `src/CivicLens.Host/Publication/ReleaseRenderer.cs` |
 | Public API and its views | `src/CivicLens.PublicApi` |
 | Gated SSR reader pages and inputs | `src/CivicLens.PublicWeb/Publication/HomePage.razor`, `ComparePage.razor`, `ZipLookupForm.razor`, `ZipLookupResults.razor`, `HomePageData.cs`, `src/CivicLens.PublicApi/Home/HomePageReader.cs`, `src/CivicLens.PublicApi/Pages/ServerPageEndpoints.cs` |
+| Vote map | `src/CivicLens.PublicWeb/Publication/VoteMap.razor`, `VoteMapData.cs`, `VoteMapSeat.cs`, `VoteMapMarks.cs`, `VoteMapWords.cs`, `VoteMapTiles.cs`, `VoteMapTileLayout.cs`, `VoteMapTile.cs`, `VoteMapTileLabel.cs`, `VoteMapRow.cs`, `VoteMapGeometry.cs`, `VoteMapStateShape.cs`, `src/CivicLens.PublicWeb/wwwroot/data/districts-119.json`, `tests/CivicLens.Tests/PublicWeb/VoteMapTests.cs` |
 | Shared member layout | `src/CivicLens.PublicWeb/Publication/ZipMemberCards.razor`, `ZipMemberCard.razor`, `ZipMemberIssueFilter.razor`, `SharedVoteRows.razor` |
 | Style files | `src/CivicLens.PublicWeb/wwwroot/css/theme.css`, `src/CivicLens.PublicWeb/wwwroot/css/app.css`, `src/CivicLens.PublicWeb/wwwroot/css/public.css` |
 | Presentation rules test | `tests/CivicLens.Tests/Architecture/PresentationArchitectureTests.cs` |
@@ -264,5 +274,5 @@ Limits:
 
 Open choices:
 
-- The vote Yes and No colors and their map legend. Party red and blue are approved.
+- The approved text of the new vote map headings, notes, and view names in `VoteMapWords`. "No member in the record" is approved.
 - The approved text for each glossary term that still shows example wording.

@@ -63,6 +63,10 @@
                         </div>
                     </section>
                 }
+                @if (map is not null)
+                {
+                    <VoteMap Data="map" RootPath="@RootPath" />
+                }
                 @if (breakers.Count > 0)
                 {
                     <section class="vote-breakers" aria-labelledby="vote-breakers-title">
@@ -201,6 +205,7 @@
     private string? summaryLabel;
     private PartyBarData? chamberBar;
     private IReadOnlyList<PartyBarData> partyBars = [];
+    private VoteMapData? map;
     private IReadOnlyList<VoteBreakerGroup> breakers = [];
     private IReadOnlyList<VoteMemberData> rows = [];
     private IReadOnlyList<Fact> facts = [];
@@ -220,6 +225,7 @@
             ? PublishedRecordLabels.Wording(Data.TextOrigin).First().Value : null);
         chamberBar = VotePageView.ChamberBar(Data);
         partyBars = VotePageView.PartyBars(Data);
+        map = VoteMapData.Of(Data);
         breakers = VotePageView.Breakers(Data);
         rows = VotePageView.Filtered(Data, Filter);
         facts = VotePageView.Facts(Data, anchors);

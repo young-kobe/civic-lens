@@ -929,7 +929,21 @@
     window.addEventListener("hashchange", openFoldOfHash);
     openFoldOfHash();
 
+    // The vote map shows the shapes on a wide screen and the tiles on a narrow one. The view buttons override that choice. Without script the width chooses.
+    const initVoteMapView = map => {
+        const views = map.querySelector("[data-vote-map-views]");
+        const buttons = Array.from(views.querySelectorAll("[data-view]"));
+        const show = view => {
+            map.dataset.view = view;
+            buttons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.view === view)));
+        };
+        buttons.forEach(button => button.addEventListener("click", () => show(button.dataset.view)));
+        buttons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.view === (matchMedia("(max-width: 719px)").matches ? "tile" : "shape"))));
+        views.hidden = false;
+    };
+
     document.querySelectorAll("table[data-paged]").forEach(initPaged);
+    document.querySelectorAll("[data-vote-map]").forEach(initVoteMapView);
     document.querySelectorAll("[data-records]").forEach(initRecordFilters);
     document.querySelectorAll("[data-officials-filters]").forEach(initOfficialsFilter);
     document.querySelectorAll("[data-search-api]").forEach(initSearchService);
