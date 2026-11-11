@@ -124,7 +124,6 @@ if (args is [] or ["--help"] or ["help"])
           brief revisions backfill <limit>
           brief revisions verify
           roster propose <config.json>
-          people import <config.json>
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
           releases activate <release-number>
