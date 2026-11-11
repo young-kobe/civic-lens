@@ -20,6 +20,10 @@ internal static class ReleaseVoteBillRows
             BillRecordId = voteBill.BillActionRecordId
         }));
 
+    public static async Task<IReadOnlyList<ReleaseVoteBill>> ReadAsync(CollectionAttemptDbContext db, int releaseNumber, CancellationToken cancellationToken) =>
+        await db.Set<ReleaseVoteBillRow>().AsNoTracking().Where(row => row.ReleaseNumber == releaseNumber)
+            .OrderBy(row => row.VoteRecordId).Select(row => new ReleaseVoteBill(row.VoteRecordId, row.BillRecordId)).ToListAsync(cancellationToken);
+
     /// <summary>Writes the rows that a kept release lacks. A row that exists stays as it is. Returns the number of rows that this call wrote.</summary>
     public static async Task<int> InsertMissingAsync(CollectionAttemptDbContext db, int releaseNumber, IReadOnlyCollection<ReleaseVoteBill> voteBills,
         CancellationToken cancellationToken)

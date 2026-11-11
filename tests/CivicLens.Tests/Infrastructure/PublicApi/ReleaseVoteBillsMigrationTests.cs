@@ -96,7 +96,7 @@ public sealed partial class ReleaseVoteBillsMigrationTests(PostgresCollection po
             Assert.Equal(grouped, await RowsAsync(database, VoteLinks));
             Assert.Contains("Aggregate", oldPlan, StringComparison.Ordinal);
             Assert.DoesNotContain("Aggregate", newPlan, StringComparison.Ordinal);
-            Assert.DoesNotContain("action_revisions", newPlan, StringComparison.Ordinal);
+            Assert.DoesNotContain("Seq Scan on action_revisions", newPlan, StringComparison.Ordinal);
             Assert.Contains("release_vote_bills", newPlan, StringComparison.Ordinal);
             Assert.True(newBuffers * 10 < oldBuffers, $"The new plan read {newBuffers} buffers and the old plan read {oldBuffers}.");
         }

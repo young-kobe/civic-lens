@@ -17,6 +17,7 @@ using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Publication;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.PublicApi;
@@ -299,6 +300,36 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await ViewsSeed.ActivateReleaseAsync(connectionString, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         Assert.Equal(["7 b", "8 none", "9 none", "c none"], await PublicAsync(VoteBillLinks));
         Assert.Equal(await PublicAsync(VoteBillLinks), await QueryAsync(OldBillLinkSql, connectionString));
+    }
+
+    // The rows come from PublishRelease and from the commit of PostgresPublicationStore. Only the review rows of the records are seeded, because the commit of this test holds no records.
+    [Fact]
+    public async Task APublishedReleaseGivesTheLinksOfTheOldRuleAndAHiddenBillGivesNullBecauseNoRouteServesThatBill()
+    {
+        var scenario = new PublicationScenario();
+        var (visibleLow, visibleHigh, hidden, visibleOther) = (scenario.AddAction('b'), scenario.AddAction('d'), scenario.AddAction('3'), scenario.AddAction('e'));
+        var linked = scenario.AddVote('1', billActionRecordIds: [visibleLow, visibleHigh]);
+        var hiddenFirst = scenario.AddVote('2', billType: "s", billActionRecordIds: [hidden, visibleOther]);
+        var noBill = scenario.AddVote('4', billType: null);
+        PublishedRecordReference[] references = [.. new[] { visibleLow, visibleHigh, hidden, visibleOther }.Select(id => new PublishedRecordReference(PublishedRecordKind.Action, id)),
+            .. new[] { linked, hiddenFirst, noBill }.Select(id => new PublishedRecordReference(PublishedRecordKind.Vote, id))];
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", references));
+        await ViewsSeed.AddVotesAsync(connectionString, new SeededVote('1', "2026-03-03") { BillNumber = 7 }, new SeededVote('2', "2026-03-02") { BillType = "s", BillNumber = 7 },
+            new SeededVote('4', "2026-03-01") { BillType = null, BillNumber = null });
+        await BillsSeed.AddBillsAsync(connectionString, new SeededBill('b', "2026-01-01") { BillNumber = 7 }, new SeededBill('d', "2026-01-01") { BillNumber = 7 },
+            new SeededBill('3', "2026-01-01") { BillType = "s", Sponsorships = [] }, new SeededBill('e', "2026-01-01") { BillType = "s" });
+
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
+        var published = scenario.Publications.LastCommit!;
+        var commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications,
+            new PublicationCommit(1, null, $"000001-{Guid.NewGuid():N}", published.Records, []) { Withdrawals = [], Names = ReleaseNameFixtures.None, AddedEntries = published.AddedEntries, VoteBills = published.VoteBills });
+        await publications.CommitAsync("auth0|owner", commit, "key", new string('1', 64), default);
+
+        Assert.Equal(["1 b", "2 none", "4 none"], await PublicAsync(VoteBillLinks));
+        Assert.Equal(["1 b", "2 e", "4 none"], await QueryAsync(OldBillLinkSql, connectionString));
+        Assert.Equal((await QueryAsync(OldBillLinkSql, connectionString)).Where(row => !row.StartsWith("2 ", StringComparison.Ordinal)),
+            (await PublicAsync(VoteBillLinks)).Where(row => !row.StartsWith("2 ", StringComparison.Ordinal)));
+        Assert.Equal(["3"], await QueryAsync($"SELECT left(bill_record_id, 1) FROM release_vote_bills WHERE vote_record_id = '{hiddenFirst}'", connectionString));
     }
 
     [Fact]

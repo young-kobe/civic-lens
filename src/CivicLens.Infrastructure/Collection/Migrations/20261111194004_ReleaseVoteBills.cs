@@ -8,7 +8,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
     public partial class ReleaseVoteBills : Migration
     {
         // The view reads the one row that the release pinned for the vote, so it no longer groups public_api.bills for each list read.
-        // The commit writes the row with ReleaseBillLines, which links the first action record of the bill that the release holds. That is the record that min(record_id) gave.
+        // The commit writes the row with ReleaseBillLines, which links the lowest-ID action entry of the bill in the release. The old view took min(record_id) only over
+        // public_api.bills, which hides a revision with no headline, no event date, or no sponsorship row. The new view joins public_api.bills by the stored key,
+        // so a vote shows a null link when that bill is hidden and never a link to a bill that no route serves.
+        // The LIMIT 1 keeps the lookup per row. A plain join would read every bill, because the planner cannot push a join key into a security barrier view.
         private const string UpVotesSql = """
             CREATE OR REPLACE VIEW public_api.votes WITH (security_barrier = true) AS
             SELECT a.record_id, a.revision_number, a.release_number,
@@ -24,10 +27,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                    CASE WHEN t.other_count = 0 THEN t.not_voting_count::bigint END AS not_voting,
                    v.question, v.result,
                    v.alignment,
-                   rb.bill_record_id
+                   bill.record_id::varchar(64) AS bill_record_id
               FROM public_api.active_records a
               JOIN public.vote_revisions v ON v.record_id = a.record_id AND v.revision_number = a.revision_number
               LEFT JOIN public.release_vote_bills rb ON rb.release_number = a.release_number AND rb.vote_record_id = a.record_id
+              LEFT JOIN LATERAL (SELECT b.record_id FROM public_api.bills b WHERE b.record_id = rb.bill_record_id LIMIT 1) bill ON TRUE
               JOIN public.vote_member_lists t ON t.list_id = v.member_list_id
              WHERE a.kind = 'vote' AND v.member_list_id IS NOT NULL;
             ALTER VIEW public_api.votes OWNER TO civic_lens_public_owner;

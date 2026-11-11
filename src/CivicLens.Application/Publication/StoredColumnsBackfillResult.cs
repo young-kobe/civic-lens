@@ -7,5 +7,6 @@ namespace CivicLens.Application.Publication;
 /// <param name="OfficialPhotoPathsFilled">The official rows that got a photo path from the officials file of their release.</param>
 /// <param name="EntryCongressesFilled">The entry rows that got a Congress.</param>
 /// <param name="VoteBillLinksFilled">The vote link rows that this run wrote for kept releases. A row that a commit wrote counts as present.</param>
+/// <param name="ReleasesWithUnreadableManifest">The kept releases whose manifest is invalid. The run wrote no vote link for them. They fail the command.</param>
 public sealed record StoredColumnsBackfillResult(int VoteRevisionsExamined, int VoteRevisionsWritten, int OpenVoteRevisionsWithoutKeptFile,
-    int ClosedVoteRevisionsWithoutKeptFile, int OfficialPhotoPathsFilled, int EntryCongressesFilled, int VoteBillLinksFilled);
+    int ClosedVoteRevisionsWithoutKeptFile, int OfficialPhotoPathsFilled, int EntryCongressesFilled, int VoteBillLinksFilled, int ReleasesWithUnreadableManifest);

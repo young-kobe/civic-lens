@@ -58,6 +58,9 @@ public interface IPublicationStore
 
     Task<int> AddVoteBillsAsync(int releaseNumber, IReadOnlyCollection<ReleaseVoteBill> voteBills, CancellationToken cancellationToken);
 
+    /// <summary>The vote links that the store holds for one release.</summary>
+    Task<IReadOnlyList<ReleaseVoteBill>> ReadVoteBillsAsync(int releaseNumber, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<BillPublicationInput>> ReadBillInputsAsync(int? previousReleaseNumber, ImmutableArray<string> recordIds, CancellationToken cancellationToken);
 
     Task PrepareBillHistoriesAsync(IReadOnlyCollection<BillHistoryCapture> histories, CancellationToken cancellationToken);

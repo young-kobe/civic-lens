@@ -1,4 +1,5 @@
 using CivicLens.Application.Publication;
+using CivicLens.Host.Publication;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Publication.Contracts;
@@ -93,6 +94,87 @@ public sealed class PostgresReleaseVoteBillsTests(PostgresCollection postgres) :
         Assert.Equal(1, result.VoteBillLinksFilled);
         Assert.Equal(["1|d|c"], await ReadAsync(Rows));
     }
+
+    [Fact]
+    public async Task TheBackfillCountsAReleaseWhoseManifestCannotBeReadAndTheCommandFailsBecauseThatReleaseKeepsNoLink()
+    {
+        var (scenario, _) = await PublishedReleaseAsync();
+        var broken = Directory(2);
+        scenario.Releases.Directories[broken] = new() { [PublicationProtocol.ManifestPath] = "{"u8.ToArray() };
+        await CommitAsync(2, 1, broken, []);
+        var backfill = new BackfillStoredColumns(publications, scenario.Releases, scenario.Votes);
+
+        var result = await backfill.ExecuteAsync(PublicationScenario.Owner);
+        var exit = await ReleaseCommand.ExecuteAsync(["releases", "columns", "backfill"], null!, null!, null!, null!, null!, null!, backfill, null!, null!, null!, null!, null!, null!,
+            PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+
+        Assert.Equal((0, 1), (result.VoteBillLinksFilled, result.ReleasesWithUnreadableManifest));
+        Assert.Equal(1, exit);
+        Assert.Equal(["1|d|c"], await ReadAsync(Rows));
+    }
+
+    [Fact]
+    public async Task TheVerifierPassesStoredLinksThatEqualTheRuleSkipsAReleaseWithNoFolderAndWritesNothing()
+    {
+        var (scenario, _) = await PublishedReleaseAsync();
+        await CommitAsync(2, 1, Directory(2), []);
+        var before = await ReadAsync(Rows);
+
+        var result = await VerifyAsync(scenario);
+
+        Assert.Equal((1, 0, 1), (result.Passed, result.Failed, result.Retired));
+        Assert.Equal(before, await ReadAsync(Rows));
+        Assert.Equal(0, await ExitOfVerifyAsync(scenario));
+    }
+
+    [Theory]
+    [InlineData("DELETE FROM release_vote_bills", "linkMissing")]
+    [InlineData("INSERT INTO release_vote_bills VALUES (1, '{e}', '{c}')", "linkExtra")]
+    [InlineData("UPDATE release_vote_bills SET bill_record_id = '{e}'", "linkChanged")]
+    public async Task TheVerifierFailsAReleaseWhoseStoredLinksDifferFromTheRuleAndNamesTheVoteBecauseTheViewReadsOnlyTheStoredRows(string change, string reason)
+    {
+        var (scenario, vote) = await PublishedReleaseAsync();
+        await ExecuteAsync(change.Replace("{e}", new string('e', 64), StringComparison.Ordinal).Replace("{c}", new string('c', 64), StringComparison.Ordinal));
+        var after = await ReadAsync(Rows);
+
+        var result = await VerifyAsync(scenario);
+
+        var failure = Assert.Single(result.FailedReleases);
+        Assert.Equal((1, 1, reason), (result.Failed, failure.ReleaseNumber, failure.Reason));
+        Assert.Equal(reason == "linkExtra" ? $"vote:{new string('e', 64)}" : $"vote:{vote}", failure.Record);
+        Assert.Equal(after, await ReadAsync(Rows));
+        Assert.Equal(1, await ExitOfVerifyAsync(scenario));
+    }
+
+    [Fact]
+    public async Task TheVerifierFailsAReleaseWhoseManifestCannotBeRead()
+    {
+        var (scenario, _) = await PublishedReleaseAsync();
+        var broken = Directory(2);
+        scenario.Releases.Directories[broken] = new() { [PublicationProtocol.ManifestPath] = "{"u8.ToArray() };
+        await CommitAsync(2, 1, broken, []);
+
+        var result = await VerifyAsync(scenario);
+
+        Assert.Equal((1, 1, "manifestInvalid"), (result.Passed, result.Failed, Assert.Single(result.FailedByReason).Key));
+    }
+
+    private async Task<(PublicationScenario Scenario, string Vote)> PublishedReleaseAsync()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c');
+        var vote = scenario.AddVote('d', billActionRecordIds: [action]);
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
+            new PublishedRecordReference(PublishedRecordKind.Action, action), new PublishedRecordReference(PublishedRecordKind.Vote, vote)));
+        await CommitAsync(1, null, KeepFolder(scenario, summary), [.. scenario.Publications.LastCommit!.VoteBills]);
+        return (scenario, vote);
+    }
+
+    private Task<ReleaseVoteBillsVerification> VerifyAsync(PublicationScenario scenario) =>
+        new VerifyReleaseVoteBills(publications, scenario.Releases, scenario.Votes).ExecuteAsync(PublicationScenario.Owner);
+
+    private Task<int> ExitOfVerifyAsync(PublicationScenario scenario) => ReleaseCommand.ExecuteAsync(["releases", "vote-bills", "verify"], null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
+        new VerifyReleaseVoteBills(publications, scenario.Releases, scenario.Votes), PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
     private Task CommitAsync(int number, int? baseNumber, string directory, ReleaseVoteBill[] voteBills) =>
         publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, directory, [], [])
