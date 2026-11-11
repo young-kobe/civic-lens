@@ -454,7 +454,7 @@ A reader asks `VoteRevisionRows` for the rows of a query with their facts, issue
 
 ## Limits and planned work
 
-- The approved "what this vote decides" work (#410) remains held until static rendering is removed under R-68. Use the stored bill line and supporting CRS quote from the current approved action revision, retaining its evidence span. Reuse the existing queue and run-context pattern. Summary completion requeues affected votes, and settlement checks the input version so a stale in-flight draft retries. Procedure votes name the bill only. The freshness workflow adds no schema or model call. Never acquire `ActionReview` while holding `VoteAnalysis`.
+- The approved "what this vote decides" work remains held until static rendering is removed under R-68. Use the stored bill line and supporting CRS quote from the current approved action revision, retaining its evidence span. Reuse the existing queue and run-context pattern. Summary completion requeues affected votes, and settlement checks the input version so a stale in-flight draft retries. Procedure votes name the bill only. The freshness workflow adds no schema or model call. Never acquire `ActionReview` while holding `VoteAnalysis`.
 
 - A stored party of an old vote cannot change. A correction needs an explicit owner command. That command is not built.
 - Only the members of the member list are pinned. They are the tracked members. The other member lines of the roll call still take their party from the roster rule at each build. So the party majorities and the alignment of a new revision count those members by the roster of that day.

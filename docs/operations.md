@@ -1086,6 +1086,21 @@ The JSON result contains `examined`, `verified`, `failed`, `failures`, `nextCurs
 
 Copy `nextCursor` into the next invocation until it is null. A change to the selected release set sets `staleCursor` and gives no continuation. Restart without a cursor and discard coverage totals from the old fingerprint. Keep every batch result for the current fingerprint and resolve every failed record before claiming complete coverage. A zero exit code means this batch passed, not that earlier batches passed. Exit code 1 means a failed record or stale cursor; invalid input or owner identity gives 2. A terminal result with no failures across its complete scan proves agreement for that selected membership. It does not replace manifest membership verification.
 
+### Bill count backfill and verification
+
+Run these owner commands for the active and retained rollback releases before any public reader uses the bill count tables. They need `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. A release published before the migration `20261110190000` has no rows in `release_bill_counts` and `release_official_bill_counts`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases counts backfill <limit> [release-number]
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases counts verify <limit> [cursor]
+```
+
+The limit caps releases examined. Each release is one write transaction. Before the write, the command reads the manifest, the officials file, and every action and vote record file of the release. It checks them against the tables. The write transaction then checks again that the release is still retained and that the same revisions are members. A release that already holds an exact snapshot counts as `alreadyPresent`. A partial or changed snapshot fails and the command never repairs it. A release with no Congress to count fails and writes nothing.
+
+The backfill JSON result holds `examined`, `added`, `alreadyPresent`, `failed`, `failures`, and `nextCursor`. A failure holds the release number, a reason, and a detail text. Reasons are `recordMissing`, `recordUnreadable`, `recordInvalid`, and `countsInvalid`. `nextCursor` is the last release number examined. Pass it as `[release-number]` to continue after it. The exit code is 1 when a release failed.
+
+The verifier writes nothing. It repeats the file checks of the backfill. Then it compares the expected counts with the saved rows in both directions in one read-only transaction. A release with no saved rows fails as `countsMissing`. A release with a missing, extra, or changed row fails as `countsDifferent`. The result holds `examined`, `verified`, `failed`, `failures`, `nextCursor`, `staleCursor`, and `selectionFingerprint`. Copy `nextCursor` into the next run until it is null. A stale cursor means the selected release set changed. Restart without a cursor. The exit code is 1 for a failure or a stale cursor. Readers may switch only after one complete scan under one fingerprint verifies every selected release.
+
 ### Stored columns backfill
 
 The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, and the Congress of each entry. This command fills them for rows that earlier releases wrote.

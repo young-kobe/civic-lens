@@ -74,7 +74,7 @@ public sealed class RecordPagesEndpointsTests(PostgresCollection postgres)
 
         using var detail = await GetAsync(host, $"/v1/votes/{new string('a', 64)}");
 
-        Assert.Equal(["Question: On a", "Result: Passed a"], detail.RootElement.GetProperty("facts").EnumerateArray().Select(fact => fact.GetString()));
+        Assert.Equal(["Question: On a", "Result: Passed a"], detail.RootElement.GetProperty("facts").EnumerateArray().Select(fact => fact.GetProperty("text").GetString()));
     }
 
     [Fact]

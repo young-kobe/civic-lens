@@ -764,6 +764,13 @@ internal sealed class FakePublicationStore : IPublicationStore
     public List<PublicationCorrectionHistory> PreparedCorrectionHistories { get; } = [];
     public List<CorrectionHistoryBootstrapCandidate> CorrectionBootstrapCandidates { get; } = [];
     public int CorrectionBootstrapPageReads { get; private set; }
+    public List<PublicationReleaseSummary> BillCountReleases { get; } = [];
+    public Dictionary<int, ReleaseBillCountSource> BillCountSources { get; } = [];
+    public Dictionary<int, Exception> BillCountCommitFailures { get; } = [];
+    public Dictionary<int, BillCountStatus> BillCountStatuses { get; } = [];
+    public HashSet<int> ExistingBillCounts { get; } = [];
+    public List<(int ReleaseNumber, IReadOnlyCollection<PublishedRevisionBinding> Members)> CommittedBillCounts { get; } = [];
+    public List<int> VerifiedBillCounts { get; } = [];
     public Action? BeforeReadingVerificationFingerprint { get; set; }
     public Action? BeforePreparingHistories { get; set; }
     private readonly Dictionary<int, BillHistoryBinding[]> historyBindings = [];
@@ -833,7 +840,7 @@ internal sealed class FakePublicationStore : IPublicationStore
             new(fingerprint, last.Release.ReleaseNumber, last.Record.Kind, last.Record.RecordId)));
     }
 
-    public Task<string> ReadCorrectionHistoryVerificationFingerprintAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
+    public Task<string> ReadRetainedReleaseFingerprintAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -841,10 +848,40 @@ internal sealed class FakePublicationStore : IPublicationStore
         return Task.FromResult(VerificationFingerprint());
     }
 
+    public Task<BillCountReleasePage> ReadBillCountReleasePageAsync(int afterReleaseNumber, string? selectionFingerprint, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var fingerprint = VerificationFingerprint();
+        if (selectionFingerprint is not null && selectionFingerprint != fingerprint)
+            return Task.FromResult(new BillCountReleasePage([], fingerprint, false, true));
+        var following = BillCountReleases.OrderBy(release => release.ReleaseNumber)
+            .Where(release => release.ReleaseNumber > afterReleaseNumber).Take(limit + 1).ToArray();
+        return Task.FromResult(new BillCountReleasePage([.. following.Take(limit)], fingerprint, following.Length > limit));
+    }
+
+    public Task<ReleaseBillCountSource> ReadBillCountSourceAsync(int releaseNumber, CancellationToken cancellationToken) =>
+        Task.FromResult(BillCountSources.GetValueOrDefault(releaseNumber) ?? new ReleaseBillCountSource([], [], [], []));
+
+    public Task<bool> CommitBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        if (BillCountCommitFailures.TryGetValue(release.ReleaseNumber, out var failure)) throw failure;
+        CommittedBillCounts.Add((release.ReleaseNumber, validatedMembers));
+        return Task.FromResult(!ExistingBillCounts.Contains(release.ReleaseNumber));
+    }
+
+    public Task<BillCountStatus> VerifyBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        VerifiedBillCounts.Add(release.ReleaseNumber);
+        return Task.FromResult(BillCountStatuses.GetValueOrDefault(release.ReleaseNumber, BillCountStatus.Verified));
+    }
+
     private string VerificationFingerprint()
     {
-        var selection = CorrectionBootstrapCandidates.Select(candidate => candidate.Release).DistinctBy(release => release.ReleaseNumber)
-            .OrderBy(release => release.ReleaseNumber);
+        var selection = CorrectionBootstrapCandidates.Select(candidate => candidate.Release).Concat(BillCountReleases)
+            .DistinctBy(release => release.ReleaseNumber).OrderBy(release => release.ReleaseNumber);
         var fields = selection.Select(release => string.Concat(release.ReleaseNumber.ToString(System.Globalization.CultureInfo.InvariantCulture), ":",
             release.DirectoryName.Length.ToString(System.Globalization.CultureInfo.InvariantCulture), ":", release.DirectoryName));
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(string.Join("\n", fields))))
