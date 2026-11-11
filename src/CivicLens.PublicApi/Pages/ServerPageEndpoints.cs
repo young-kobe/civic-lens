@@ -45,7 +45,7 @@ public static class ServerPageEndpoints
             {
                 [nameof(VoteDetailPage.Data)] = page,
                 [nameof(VoteDetailPage.RootPath)] = baseUrl.Join(string.Empty),
-                [nameof(VoteDetailPage.PagePath)] = baseUrl.Join(VoteRoute(recordId).TrimStart('/')),
+                [nameof(VoteDetailPage.PagePath)] = VoteRoute(recordId),
                 [nameof(VoteDetailPage.Filter)] = filter
             }, cancellationToken);
         }));
@@ -53,7 +53,7 @@ public static class ServerPageEndpoints
             NotFoundAsync(context, responder, baseUrl, cancellationToken));
     }
 
-    /// <summary>The route of the server-rendered vote page. The page uses it for its own form action, so a filter stays on the page that served it.</summary>
+    /// <summary>The route of the server-rendered vote page. The page uses it as an origin-relative form action, so a filter stays on the origin that served the page. The public base URL can name another origin.</summary>
     private static string VoteRoute(string recordId) => $"{Prefix}/{PublicationProtocol.RecordPagePath(recordId)}";
 
     private static Task<IResult> NotFoundAsync(HttpContext context, ServerPageResponder responder, PublicBaseUrl baseUrl, CancellationToken cancellationToken) =>

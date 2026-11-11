@@ -15,7 +15,7 @@ internal static class VoteDetailPageFixture
     public const string Root = "https://civic-lens.test/";
     public const string RecordId = "abababababababababababababababababababababababababababababababab";
     /// <summary>The page that serves the vote, as the browser sees it. The gated preview serves it under the web prefix.</summary>
-    public const string PagePath = Root + "web/records/" + RecordId + ".html";
+    public const string PagePath = "/web/records/" + RecordId + ".html";
     private const string Question = "On Passage";
 
     public static readonly string[] Lines =

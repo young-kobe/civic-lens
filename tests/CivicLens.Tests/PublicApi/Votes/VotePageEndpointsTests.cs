@@ -64,6 +64,17 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task TheFilterFormAndClearLinkStayOnTheOriginThatServedThePageEvenWhenThePublicBaseUrlNamesAnotherOrigin()
+    {
+        await using var host = await StartAsync();
+
+        var page = await GetPageAsync(host, Path + "?cast=Nay");
+
+        Assert.Equal(Path + "#members", page.QuerySelector("form.vote-filter")!.GetAttribute("action"));
+        Assert.Equal(Path + "#members", page.QuerySelector(".vote-filter-actions a")!.GetAttribute("href"));
+    }
+
+    [Fact]
     public async Task ARetainedReleaseWithoutPartyCountsShowsNoPartyCardAndNoZeros()
     {
         await using var host = await StartAsync(withTallies: false);
@@ -99,18 +110,6 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
         Assert.Equal(["Ben Baker", "Cy Cole"], nay.QuerySelectorAll(".vote-members tbody td:first-child").Select(cell => cell.TextContent));
         Assert.Equal(["Di Dole"], named.QuerySelectorAll(".vote-members tbody td:first-child").Select(cell => cell.TextContent));
         Assert.Equal(HttpStatusCode.BadRequest, tooLong.StatusCode);
-    }
-
-    [Fact]
-    public async Task TheFilterFormAndTheClearLinkPointAtTheRouteThatServedThePage()
-    {
-        await using var host = await StartAsync();
-
-        var page = await GetPageAsync(host, Path + "?cast=Nay");
-
-        var served = BaseUrl.Join(Path.TrimStart('/'));
-        Assert.Equal(served + "#members", page.QuerySelector("form.vote-filter")!.GetAttribute("action"));
-        Assert.Equal(served + "#members", page.QuerySelector(".vote-filter-actions a")!.GetAttribute("href"));
     }
 
     [Fact]
