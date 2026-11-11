@@ -298,7 +298,12 @@ public sealed class OfficialProfilePageTests
     {
         var page = await RenderAsync<OfficialProfilePage>(Member() with
         {
-            Votes = [], Marks = [], Statements = [], Bills = [], Issues = [], HasLinkedStatements = false
+            Votes = [],
+            Marks = [],
+            Statements = [],
+            Bills = [],
+            Issues = [],
+            HasLinkedStatements = false
         });
 
         Assert.Null(page.QuerySelector(".official-jump"));
