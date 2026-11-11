@@ -140,6 +140,58 @@ public sealed record PublishedVote
     public IEnumerable<PublishedCitation> Citations() => new[] { VotedOnCitation }.Concat(KindCitation is { } kind ? [kind] : [])
         .Concat(Facts.Select(fact => fact.Citation)).Concat(Members.Select(member => member.Citation));
 
+    public static void ValidateEvidence(
+        PublishedDocumentVersion[]? sources,
+        DateOnly votedOn,
+        PublishedVoteKind kind,
+        PublishedCitation? kindCitation,
+        PublishedCitation? votedOnCitation,
+        string? result,
+        PublishedVoteFact[]? facts,
+        (string? Cast, PublishedCitation? Citation)[]? memberEvidence)
+    {
+        PublishedEvidenceRules.RequireSources(sources, MaximumSources, "vote");
+        if (!Enum.IsDefined(kind) || kind != PublishedVoteKind.Other && kindCitation is null)
+            throw new InvalidDataException("A published vote kind other than Other requires a citation.");
+        if (facts is null || facts.Length > MaximumFacts || facts.Any(fact => fact?.Citation is null || fact.Text != fact.Citation.Quote))
+            throw new InvalidDataException($"Published vote requires at most {MaximumFacts} facts that equal their citations.");
+        if (!PublishedEvidenceRules.IsBoundedText(result) || facts.All(fact => fact.Text != ResultPrefix + result))
+            throw new InvalidDataException("A published vote result must be the text of a cited result line.");
+        if (memberEvidence is null || memberEvidence.Length is 0 or > MaximumMembers)
+            throw new InvalidDataException($"Published vote requires 1 to {MaximumMembers} member vote citations.");
+
+        var citations = new[] { votedOnCitation! }
+            .Concat(kindCitation is { } kindEvidence ? [kindEvidence] : [])
+            .Concat(facts.Select(fact => fact.Citation))
+            .Concat(memberEvidence.Select(member => member.Citation!));
+        ValidateMemberEvidenceCore(memberEvidence);
+        foreach (var citation in citations) PublishedEvidenceRules.RequireCitation(sources, citation, "vote");
+        PublishedEvidenceRules.RequireEverySourceCited(sources, citations, "vote");
+        if (!votedOnCitation!.Quote.StartsWith(StartedPrefix + votedOn.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), StringComparison.Ordinal))
+            throw new InvalidDataException("The vote day must be the date of the cited start line.");
+    }
+
+    public static void ValidateMemberEvidence(
+        PublishedDocumentVersion[]? sources,
+        (string? Cast, PublishedCitation? Citation)[]? memberEvidence)
+    {
+        PublishedEvidenceRules.RequireSources(sources, MaximumSources, "vote");
+        if (memberEvidence is null || memberEvidence.Length is 0 or > MaximumMembers)
+            throw new InvalidDataException($"Published vote requires 1 to {MaximumMembers} member vote citations.");
+
+        ValidateMemberEvidenceCore(memberEvidence);
+        var citations = memberEvidence.Select(member => member.Citation!).ToArray();
+        foreach (var citation in citations) PublishedEvidenceRules.RequireCitation(sources, citation, "vote");
+        PublishedEvidenceRules.RequireEverySourceCited(sources, citations, "vote");
+    }
+
+    private static void ValidateMemberEvidenceCore((string? Cast, PublishedCitation? Citation)[] memberEvidence)
+    {
+        if (memberEvidence.Any(member => string.IsNullOrWhiteSpace(member.Cast) || member.Cast.Length > MaximumCastLength ||
+                member.Citation?.Quote?.EndsWith(", " + member.Cast, StringComparison.Ordinal) != true))
+            throw new InvalidDataException($"A published member vote requires a named official and a cast of at most {MaximumCastLength} characters that its citation shows.");
+    }
+
     public void Validate()
     {
         PublishedCorrection.ValidateAll(Corrections, RevisionNumber);
@@ -150,31 +202,17 @@ public sealed record PublishedVote
             throw new InvalidDataException("Published vote requires a roll call identity.");
         if ((BillType is null) != (BillNumber is null) || BillType is not null && (string.IsNullOrWhiteSpace(BillType) || BillType.Length > MaximumBillTypeLength || BillNumber < 1))
             throw new InvalidDataException($"A published vote bill type has at most {MaximumBillTypeLength} characters and a number, and a number has a type.");
-        PublishedEvidenceRules.RequireSources(Sources, MaximumSources, "vote");
-        if (!Enum.IsDefined(Kind) || Kind != PublishedVoteKind.Other && KindCitation is null)
-            throw new InvalidDataException("A published vote kind other than Other requires a citation.");
-        ValidateFacts();
+        ValidateEvidence(Sources, VotedOn, Kind, KindCitation, VotedOnCitation, Result, Facts,
+            Members?.Take(MaximumMembers + 1).Select(member => (member?.Cast, member?.Citation)).ToArray());
         ValidateResult();
         ValidateMembers();
         ValidateTrackedPartyTallies();
         if (TrackedIssueIds is null || !PublishedEvidenceRules.AreDistinctAndNotBlank(TrackedIssueIds))
             throw new InvalidDataException("Published vote tracked issue ids must be distinct and not blank.");
-        foreach (var citation in Citations()) PublishedEvidenceRules.RequireCitation(Sources, citation, "vote");
-        PublishedEvidenceRules.RequireEverySourceCited(Sources, Citations(), "vote");
-        if (!VotedOnCitation.Quote.StartsWith(StartedPrefix + VotedOn.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), StringComparison.Ordinal))
-            throw new InvalidDataException("The vote day must be the date of the cited start line.");
-    }
-
-    private void ValidateFacts()
-    {
-        if (Facts is null || Facts.Length > MaximumFacts || Facts.Any(fact => fact?.Citation is null || fact.Text != fact.Citation.Quote))
-            throw new InvalidDataException($"Published vote requires at most {MaximumFacts} facts that equal their citations.");
     }
 
     private void ValidateResult()
     {
-        if (!PublishedEvidenceRules.IsBoundedText(Result) || Facts.All(fact => fact.Text != ResultPrefix + Result))
-            throw new InvalidDataException("A published vote result must be the text of a cited result line.");
         if (HasCandidateTotals)
         {
             if (Totals is not null || PartyMajorities is not { Length: 0 })
@@ -252,9 +290,7 @@ public sealed record PublishedVote
         if (Members is null || Members.Length is 0 or > MaximumMembers)
             throw new InvalidDataException($"Published vote requires 1 to {MaximumMembers} member votes.");
         if (Members.Any(member => member?.Official is null || member.Citation is null || string.IsNullOrWhiteSpace(member.Official.Id) ||
-                string.IsNullOrWhiteSpace(member.Official.Name) || string.IsNullOrWhiteSpace(member.Cast) ||
-                !IsKnownParty(member.Party) || member.Cast.Length > MaximumCastLength ||
-                member.Citation.Quote?.EndsWith(", " + member.Cast, StringComparison.Ordinal) != true))
+                string.IsNullOrWhiteSpace(member.Official.Name) || !IsKnownParty(member.Party)))
             throw new InvalidDataException($"A published member vote requires a named official and a cast of at most {MaximumCastLength} characters that its citation shows.");
         if (!PublishedEvidenceRules.AreDistinctAndNotBlank(Members.Select(member => member.Official.Id)))
             throw new InvalidDataException("Published vote members must be distinct officials.");

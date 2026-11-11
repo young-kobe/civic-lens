@@ -78,7 +78,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
-        foreach (var view in new[] { "active_records", "active_release", "votes", "vote_members", "vote_first_publications", "vote_party_tallies", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas",
+        foreach (var view in new[] { "active_records", "active_release", "votes", "vote_members", "vote_first_publications", "vote_party_tallies", "vote_evidence", "vote_sources", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas",
             "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "statement_speakers", "statements", "statement_sources", "statement_quotations", "document_changes", "document_change_officials", "document_change_sources", "document_change_hunks", "document_change_word_edits", "document_change_citations",
             "executive_actions", "executive_action_notices", "withdrawals", "withdrawal_corrections" })
         {
@@ -152,11 +152,13 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"statement_sources v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"statement_speakers v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"statements v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"vote_evidence v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_facts v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_first_publications v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_members v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_party_tallies v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"vote_sources v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"votes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"withdrawal_corrections v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"withdrawals v {Owner} {Role}:SELECT {{security_barrier=true}}",
