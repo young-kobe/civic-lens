@@ -159,6 +159,16 @@ public sealed class VoteDetailPageTests
     }
 
     [Fact]
+    public async Task TheMemberTableShowsEachCastThroughTheSharedCastBadgeWithItsSide()
+    {
+        var page = await RenderAsync(Vote(), new(Cast: "Nay"));
+
+        var badges = page.QuerySelectorAll(".vote-members .shared-vote-cast-value");
+        Assert.Equal(2, badges.Length);
+        Assert.All(badges, badge => Assert.Equal("nay", badge.GetAttribute("data-side")));
+    }
+
+    [Fact]
     public async Task EachMemberRowLinksToItsMarkedLineInTheSourceFoldThatPublicJsOpens()
     {
         var page = await RenderAsync(Vote());
