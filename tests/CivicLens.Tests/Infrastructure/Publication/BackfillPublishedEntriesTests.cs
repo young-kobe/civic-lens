@@ -670,7 +670,7 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
     {
         var output = new StringWriter();
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "entries", "backfill", limit.ToString()], null!, null!, null!, null!, null!,
-            new BackfillPublishedEntries(publications, releases), null!, null!, null!, null!, Owner, output, TextWriter.Null, CancellationToken.None);
+            new BackfillPublishedEntries(publications, releases), null!, null!, null!, null!, null!, null!, Owner, output, TextWriter.Null, CancellationToken.None);
         return (exit, JsonDocument.Parse(output.ToString()).RootElement);
     }
 
