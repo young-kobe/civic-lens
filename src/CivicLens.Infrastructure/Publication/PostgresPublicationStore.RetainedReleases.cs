@@ -24,6 +24,17 @@ public sealed partial class PostgresPublicationStore
         return selection.Fingerprint;
     }
 
+    public async Task<IReadOnlyList<PublicationReleaseSummary>> ReadRetainedReleaseSelectionAsync(
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(readServedDirectory);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await BeginVerificationReadAsync(db, cancellationToken);
+        var selected = await ReadRetainedReleasesAsync(db, readServedDirectory, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return selected;
+    }
+
     private static async Task<IDbContextTransaction> BeginVerificationReadAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken)
     {
         var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);

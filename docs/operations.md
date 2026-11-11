@@ -1080,11 +1080,28 @@ Run `releases entries verify` to prove stored membership against the kept manife
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases corrections verify <limit> [cursor]
 ```
 
-The limit caps record files examined. The command includes existing bindings and checks the retained, active, and served releases. It compares exact revision facts and correction content, including order, UTC ticks, and original offsets. It writes nothing. Each database page uses a short read-only repeatable-read transaction. File reads follow that transaction; the command checks the selection again after the terminal file batch.
+The limit caps record files examined. The command includes existing bindings and checks the retained, active, and served releases. It compares exact revision facts and correction content, including order, UTC ticks, and original offsets. It writes nothing. Each database page covers one release in a short read-only repeatable-read transaction. File reads follow that transaction.
 
-The JSON result contains `examined`, `verified`, `failed`, `failures`, `nextCursor`, `staleCursor`, and `selectionFingerprint`. The first 50 failures give the release, kind, record ID, and the same reasons as bootstrap. `recordInvalid` also covers missing or corrupt typed histories. All failures count in `failed`, even when the list is full.
+A release and its correction bindings never change. The command therefore verifies one release at a time. The walk goes through the selected releases in release order. The cursor binds to one release, by number and directory name, and holds the record position and the failures already found in that release.
 
-Copy `nextCursor` into the next invocation until it is null. A change to the selected release set sets `staleCursor` and gives no continuation. Restart without a cursor and discard coverage totals from the old fingerprint. Keep every batch result for the current fingerprint and resolve every failed record before claiming complete coverage. A zero exit code means this batch passed, not that earlier batches passed. Exit code 1 means a failed record or stale cursor; invalid input or owner identity gives 2. A terminal result with no failures across its complete scan proves agreement for that selected membership. It does not replace manifest membership verification.
+The JSON result contains these fields:
+
+- `examined`, `verified`, `failed`, `failures`, and `nextCursor`. The first 50 failures give the release, kind, record ID, and the same reasons as bootstrap. `recordInvalid` also covers missing or corrupt typed histories. All failures count in `failed`, even when the list is full.
+- `verifiedReleases`. Each entry gives `releaseNumber` and `directoryName` of a release that this call finished with no failed record. The cursor carries failures from earlier calls, so a release with an earlier failure never appears here.
+- `skippedReleases`. Each entry gives `releaseNumber`, `directoryName`, and `reason`. The cursor named this release, but the selection no longer holds it. The reason is `notSelected` when the number left the selection. The reason is `directoryChanged` when the number is selected under another directory. The walk then continues with the next selected release.
+- `selection`. Each entry gives `releaseNumber`, `directoryName`, and `cursor`. The list is the current selection, read after the last file read. The `cursor` starts a walk at the first record of that release.
+
+Copy `nextCursor` into the next invocation until it is null. A null cursor ends the walk. Exit code 1 means a failed record. A skipped release does not change the exit code. Invalid input or owner identity gives 2. A zero exit code means this call passed, not that earlier calls passed.
+
+The controller keeps a ledger outside the database. The ledger maps each release number to a directory name. Follow these rules:
+
+1. After each call, add every entry of `verifiedReleases` to the ledger.
+2. Never add a release that is not in `verifiedReleases`. Never remove a failed release from the work list. Repair the cause, then verify the release again from its `selection` cursor.
+3. Declare completion only when `nextCursor` is null and every entry of `selection` is in the ledger with the same `directoryName`. A ledger entry that the selection no longer holds does not matter.
+4. When `nextCursor` is null but a selected release is not in the ledger, start the next call with the `cursor` of the first such release in `selection`. Do this when a release is published during a long walk, or when a release was reported in `skippedReleases`.
+5. Do not restart without a cursor after the first complete walk. A full restart repeats work that the ledger already holds.
+
+A complete ledger proves agreement for the selected membership. It does not replace manifest membership verification.
 
 ### Bill count backfill and verification
 
