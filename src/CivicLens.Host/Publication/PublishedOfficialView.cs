@@ -24,26 +24,21 @@ internal static class PublishedOfficialView
 
     private static string Place(PublishedOfficeTerm term) => term.Office switch
     {
-        MemberRosterParser.Senate => $" for {term.State}",
-        MemberRosterParser.House when term.District is { } district => $" for {term.State}, district {district}",
-        MemberRosterParser.House => $" for {term.State}",
+        MemberRosterParser.Senate => OfficeLede.Place(term.State, null),
+        MemberRosterParser.House => OfficeLede.Place(term.State, term.District),
         _ => ""
     };
 
     public static string CardOffice(PublishedOfficeTerm term, DateTimeOffset publishedAtUtc) =>
         HasEnded(term.End, publishedAtUtc) ? $"Former {Office(term)}" : Office(term);
 
-    private static bool HasEnded(DateOnly? end, DateTimeOffset publishedAtUtc) => end is { } day && day < DateOnly.FromDateTime(publishedAtUtc.UtcDateTime);
+    private static bool HasEnded(DateOnly? end, DateTimeOffset publishedAtUtc) => OfficeLede.HasEnded(end, DateOnly.FromDateTime(publishedAtUtc.UtcDateTime));
 
     public static string? Lede(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc)
     {
         if (LatestTerm(terms, publishedAtUtc) is not { } term) return null;
-        var role = string.Join(' ', new[] { HasEnded(term.End, publishedAtUtc) ? "former" : null, term.Party is { } party ? PartyAdjective(party) : null, Role(term).ToLowerInvariant() }.OfType<string>());
-        var caucus = term.Party is { } caucusParty && CaucusWith(caucusParty, term.Caucus) is { } with ? $", {with}" : "";
-        return $"{char.ToUpperInvariant(role[0])}{role[1..]}{Place(term)}{caucus}";
+        return OfficeLede.Of(HasEnded(term.End, publishedAtUtc), term.Party, Role(term).ToLowerInvariant(), Place(term), term.Caucus);
     }
-
-    private static string PartyAdjective(string party) => party == PublishedPartyMajority.Democrat ? "Democratic" : party;
 
     public static string? Tenure(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc)
     {
@@ -133,10 +128,7 @@ internal static class PublishedOfficialView
     };
 
     public static string PartyLine(string party, string? caucus) =>
-        CaucusWith(party, caucus) is { } with ? $"Party: {party}, {with}" : $"Party: {party}";
-
-    private static string? CaucusWith(string party, string? caucus) =>
-        caucus is null || caucus == party ? null : $"caucuses with {PublishedPartyNames.Members(caucus)}";
+        OfficeLede.CaucusWith(party, caucus) is { } with ? $"Party: {party}, {with}" : $"Party: {party}";
 
     public static PublishedOfficeTerm? LatestTerm(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc) =>
         Started(terms, publishedAtUtc).OrderBy(term => term.Start).LastOrDefault();

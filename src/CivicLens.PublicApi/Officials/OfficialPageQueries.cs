@@ -15,9 +15,9 @@ internal static class OfficialPageQueries
     public const int MarkLimit = 12;
     public const int RowLimit = 5;
 
-    // A split vote cast against the party majority, or a roll call with the cast Not Voting. Newest first.
+    // A split vote cast against the party majority, or a roll call with the cast Not Voting. Newest first. The window count is the number of marks before the limit.
     private const string MarksSql = """
-        SELECT v.record_id, v.voted_on, v.chamber, v.roll_call_number, v.headline, v.vote_cast = @not_voting, v.party
+        SELECT v.record_id, v.voted_on, v.chamber, v.roll_call_number, v.headline, v.vote_cast = @not_voting, v.party, count(*) OVER ()
           FROM public_api.member_votes v
          WHERE v.official_id = @id AND v.congress = @congress
            AND (v.vote_cast = @not_voting
@@ -29,10 +29,10 @@ internal static class OfficialPageQueries
 
     // OFFSET 0 keeps the speaker lookup and the vote link correlated through the security barrier views.
     private const string StatementsSql = """
-        SELECT s.record_id, s.statement_date, s.headline, v.record_id, v.headline, v.voted_on, v.chamber, v.roll_call_number, m.vote_cast
+        SELECT s.record_id, s.statement_date, s.headline, s.label, v.record_id, v.headline, v.label, v.voted_on, v.chamber, v.roll_call_number, m.vote_cast
           FROM public_api.statements s
          CROSS JOIN LATERAL (
-              SELECT v.record_id, v.headline, v.voted_on, v.chamber, v.roll_call_number
+              SELECT v.record_id, v.headline, v.label, v.voted_on, v.chamber, v.roll_call_number
                 FROM public_api.record_links l
                 JOIN public_api.votes v ON v.record_id = l.related_record_id
                WHERE l.kind = 'statement' AND l.record_id = s.record_id AND l.related_kind = 'vote'
@@ -42,6 +42,16 @@ internal static class OfficialPageQueries
                         WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number AND p.official_id = @id OFFSET 0)
          ORDER BY s.statement_date DESC NULLS LAST, s.record_id
          LIMIT @take
+        """;
+
+    // The message "no reviewed links" must stay true, so a statement linked to a bill counts as a link too. A bill is the record kind action.
+    private const string BillLinkedStatementSql = """
+        SELECT EXISTS (
+            SELECT 1 FROM public_api.statements s
+             WHERE EXISTS (SELECT 1 FROM public_api.statement_speakers p
+                            WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number AND p.official_id = @id OFFSET 0)
+               AND EXISTS (SELECT 1 FROM public_api.record_links l
+                            WHERE l.kind = 'statement' AND l.record_id = s.record_id AND l.related_kind = 'action' OFFSET 0))
         """;
 
     private const string BillsSql = """
@@ -66,7 +76,8 @@ internal static class OfficialPageQueries
 
     private const string ExecutiveSpanSql = "SELECT min(signed_on), max(signed_on) FROM public_api.executive_actions WHERE official_id = @id";
 
-    public static async Task<OfficialMarkData[]> ReadMarksAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, int congress, CancellationToken cancellationToken)
+    /// <summary>Reads the newest marks and how many marks the official has in all.</summary>
+    public static async Task<(OfficialMarkData[] Marks, int Total)> ReadMarksAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, int congress, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(MarksSql, connection, transaction);
         command.Parameters.AddWithValue("id", officialId);
@@ -74,11 +85,15 @@ internal static class OfficialPageQueries
         command.Parameters.AddWithValue("not_voting", PublishedOfficialVote.NotVoting);
         command.Parameters.AddWithValue("take", MarkLimit);
         var marks = new List<OfficialMarkData>();
+        var total = 0;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
+        {
             marks.Add(new(reader.GetString(0), reader.GetFieldValue<DateOnly>(1), ViewColumns.Enum<PublishedChamber>(reader, 2), reader.GetInt32(3),
                 reader.GetString(4), reader.GetBoolean(5), ViewColumns.Text(reader, 6)));
-        return [.. marks];
+            total = (int)reader.GetInt64(7);
+        }
+        return ([.. marks], total);
     }
 
     public static async Task<OfficialStatementData[]> ReadStatementsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
@@ -89,9 +104,18 @@ internal static class OfficialPageQueries
         var statements = new List<OfficialStatementData>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-            statements.Add(new(reader.GetString(0), ViewColumns.Date(reader, 1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
-                reader.GetFieldValue<DateOnly>(5), ViewColumns.Enum<PublishedChamber>(reader, 6), reader.GetInt32(7), ViewColumns.Text(reader, 8)));
+            statements.Add(new(reader.GetString(0), ViewColumns.Date(reader, 1), reader.GetString(2), ViewColumns.Text(reader, 3), reader.GetString(4),
+                reader.GetString(5), ViewColumns.Text(reader, 6), reader.GetFieldValue<DateOnly>(7), ViewColumns.Enum<PublishedChamber>(reader, 8),
+                reader.GetInt32(9), ViewColumns.Text(reader, 10)));
         return [.. statements];
+    }
+
+    public static async Task<bool> ReadHasBillLinkedStatementAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(BillLinkedStatementSql, connection, transaction);
+        command.Parameters.AddWithValue("id", officialId);
+        return await command.ExecuteScalarAsync(cancellationToken) is true;
     }
 
     public static async Task<OfficialBillData[]> ReadBillsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, int congress, CancellationToken cancellationToken)

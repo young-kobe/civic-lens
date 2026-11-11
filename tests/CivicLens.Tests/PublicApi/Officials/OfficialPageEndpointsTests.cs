@@ -1,6 +1,7 @@
 using System.Net;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -51,7 +52,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
             UPDATE vote_revisions SET columns_written = true, alignment = 'PartiesAgree', democrat_majority = 'Yea', republican_majority = 'Yea'
               WHERE record_id = '{new string('d', 64)}';
             """);
-        await StatementsSeed.AddAsync(database, new SeededStatement('5', "2026-02-10", ["p0"], [], "Person", "Person"),
+        await StatementsSeed.AddAsync(database, new SeededStatement('5', "2026-02-10", ["p0"], [], "Analysis", "Code"),
             new SeededStatement('6', "2026-02-11", ["p0"], [], "Person", "Person"));
         await ViewsSeed.ExecuteAsync(database, $"""
             SET session_replication_role = replica;
@@ -96,12 +97,15 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
 
         var page = await GetPageAsync(host, "/web/officials/p0");
 
-        Assert.Equal(4, page.QuerySelectorAll("#votes .official-rows li").Length);
-        Assert.Contains("No (Nay)", page.QuerySelector("#votes .official-rows li")!.TextContent);
+        Assert.Equal(4, page.QuerySelectorAll("#votes .shared-vote-row").Length);
+        Assert.Contains("No (Nay)", page.QuerySelector("#votes .shared-vote-row")!.TextContent);
         var statements = Assert.Single(page.QuerySelectorAll("#statements .official-rows li"));
         Assert.Contains("Said on 10 Feb 2026", statements.TextContent);
         Assert.Contains("House roll call 3", statements.QuerySelector(".official-related a")!.TextContent);
-        Assert.Contains("Yes (Yea)", statements.QuerySelector(".official-cast")!.TextContent);
+        Assert.Contains("Yes (Yea)", statements.QuerySelector(".shared-vote-cast-value")!.TextContent);
+        Assert.Contains(PublishedRecordLabels.StatementModelWording, statements.TextContent);
+        Assert.Equal(4, page.QuerySelectorAll("#votes .shared-vote-label").Length);
+        Assert.All(page.QuerySelectorAll("#votes .shared-vote-label"), label => Assert.Equal(PublishedRecordLabels.ModelWording, label.TextContent.Trim()));
         Assert.DoesNotContain(page.QuerySelectorAll("#statements a"), link => link.GetAttribute("href")!.Contains(Unlinked));
     }
 
@@ -128,8 +132,25 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         var page = await GetPageAsync(host, "/web/officials/p2");
 
         Assert.Null(page.QuerySelector("#statements"));
-        Assert.Equal(CivicLens.PublicWeb.Publication.OfficialPageText.NoLinks, page.QuerySelector(".official-jump p")!.TextContent);
+        Assert.Equal(OfficialPageText.NoLinks, page.QuerySelector(".official-jump p")!.TextContent);
         Assert.Null(page.QuerySelector("#bills"));
+    }
+
+    [Fact]
+    public async Task AStatementLinkedOnlyToABillKeepsTheNoLinksMessageHidden()
+    {
+        await using var host = await StartAsync();
+        await StatementsSeed.AddAsync(host.OperationalDatabase, new SeededStatement('4', "2026-02-12", ["p2"], [], "Person", "Person"));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            {PublicRecordPageRows.Link(new string('8', 64), new string('4', 64), new string('1', 64), "action", "StatesPositionOn", "2026-02-12")}
+            {PublicRecordPageRows.RelationshipRevision(new string('8', 64), 1, new string('4', 64), new string('1', 64), "action", "StatesPositionOn", "The statement names this bill.")}
+            """);
+
+        var page = await GetPageAsync(host, "/web/officials/p2");
+
+        Assert.Null(page.QuerySelector("#statements"));
+        Assert.Null(page.QuerySelector(".official-jump p"));
     }
 
     [Fact]

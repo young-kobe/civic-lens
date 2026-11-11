@@ -17,8 +17,8 @@ public sealed class OfficialPageReader(NpgsqlDataSource views)
     {
         await using var connection = await views.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        if (await OfficialStore.ReadDetailAsync(connection, transaction, officialId, cancellationToken) is not { } detail) return null;
-        var page = Profile(detail);
+        if (await OfficialStore.ReadDetailAsync(connection, transaction, officialId, cancellationToken) is not var (detail, publishedAtUtcTicks)) return null;
+        var page = Profile(detail, publishedAtUtcTicks);
         return detail.ExecutiveActions is { } executive
             ? page with { Executive = await OfficialPageQueries.ReadExecutiveAsync(connection, transaction, officialId, executive, cancellationToken) }
             : await ReadLegislativeAsync(connection, transaction, page, detail, cancellationToken);
@@ -28,28 +28,32 @@ public sealed class OfficialPageReader(NpgsqlDataSource views)
         OfficialDetail detail, CancellationToken cancellationToken)
     {
         var id = page.OfficialId;
-        var recent = await MemberVoteStore.ReadAsync(connection, transaction, new() { Officials = [id] }, cancellationToken);
-        var marks = detail.Congress is { } congress
+        var recent = await MemberVoteStore.ReadAsync(connection, transaction, new() { Officials = [id] }, OfficialPageQueries.RowLimit, cancellationToken);
+        var (marks, marksTotal) = detail.Congress is { } congress
             ? await OfficialPageQueries.ReadMarksAsync(connection, transaction, id, congress, cancellationToken)
-            : [];
+            : ([], 0);
         var bills = detail.Bills is { } figure
             ? await OfficialPageQueries.ReadBillsAsync(connection, transaction, id, figure.Congress, cancellationToken)
             : [];
+        var statements = await OfficialPageQueries.ReadStatementsAsync(connection, transaction, id, cancellationToken);
         return page with
         {
-            Votes = [.. (recent?.Officials[0].Votes ?? []).Take(OfficialPageQueries.RowLimit).Select(Vote)],
+            Votes = [.. (recent?.Officials[0].Votes ?? []).Select(vote => Vote(id, vote))],
             Marks = marks,
-            Statements = await OfficialPageQueries.ReadStatementsAsync(connection, transaction, id, cancellationToken),
+            MarksTotal = marksTotal,
+            Statements = statements,
+            HasLinkedStatements = statements.Length > 0 || await OfficialPageQueries.ReadHasBillLinkedStatementAsync(connection, transaction, id, cancellationToken),
             Bills = bills
         };
     }
 
-    private static OfficialPageData Profile(OfficialDetail detail)
+    private static OfficialPageData Profile(OfficialDetail detail, long? publishedAtUtcTicks)
     {
         var official = detail.Official;
         return new(detail.Release, official.OfficialId, official.Name, official.Kind, official.Office, official.State, official.District, official.Party,
             official.Caucus, official.TermEndsOn, official.PhotoPath)
         {
+            PublishedOn = publishedAtUtcTicks is { } ticks ? DateOnly.FromDateTime(new DateTime(ticks, DateTimeKind.Utc)) : null,
             Attendance = [.. detail.MissedVotes.Select(figure => new OfficialAttendanceData(figure.Chamber, figure.Congress, figure.Missed, figure.Held,
                 figure.FirstVotedOn, figure.LastVotedOn))],
             PartyLines = [.. detail.PartyLines.Select(figure => new OfficialPartyLineData(figure.Chamber, figure.Congress, figure.Party, figure.WithParty,
@@ -61,6 +65,7 @@ public sealed class OfficialPageReader(NpgsqlDataSource views)
         };
     }
 
-    private static OfficialVoteData Vote(MemberVote vote) =>
-        new(vote.RecordId, vote.VotedOn, vote.Chamber, vote.RollCall, vote.Headline, vote.ResultWords, vote.Cast, vote.CastWords);
+    private static SharedVoteRowData Vote(string officialId, MemberVote vote) =>
+        new(vote.RecordId, vote.VotedOn, vote.Congress, vote.Session, vote.RollCall, vote.Headline, vote.Label, vote.KindWords, vote.ResultWords,
+            [new(officialId, vote.CastWords, vote.Side)]);
 }

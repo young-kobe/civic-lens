@@ -3,7 +3,7 @@
 @{
     var executive = Data.Executive!;
     var title = "President " + Data.Name;
-    var allPath = RootPath + PublicationProtocol.SearchByKindPath(PublishedRecordKind.ExecutiveAction);
+    var allPath = RootPath + PublicationProtocol.OfficialRecordPagePath(Data.OfficialId);
 }
 
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@PublicationProtocol.OfficialPagePath(Data.OfficialId)" Title="@title" Description="@Description(executive)" RootPath="@RootPath">

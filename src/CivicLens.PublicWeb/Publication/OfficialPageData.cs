@@ -10,14 +10,20 @@ public sealed record OfficialPageData(
     int Release, string OfficialId, string Name, PublishedOfficeKind? Kind, string? Office, string? State, int? District, string? Party,
     string? Caucus, DateOnly? TermEndsOn, string? PhotoPath)
 {
+    /// <summary>The day of the release. A term that ended before it is a former term.</summary>
+    public DateOnly? PublishedOn { get; init; }
     public OfficialAttendanceData[] Attendance { get; init; } = [];
     public OfficialPartyLineData[] PartyLines { get; init; } = [];
     public int? BillsCongress { get; init; }
     public int SponsoredBills { get; init; }
     public OfficialIssueData[] Issues { get; init; } = [];
     public OfficialMarkData[] Marks { get; init; } = [];
-    public OfficialVoteData[] Votes { get; init; } = [];
+    /// <summary>How many marks the official has in all. <c>Marks</c> holds only the newest ones.</summary>
+    public int MarksTotal { get; init; }
+    public SharedVoteRowData[] Votes { get; init; } = [];
     public OfficialStatementData[] Statements { get; init; } = [];
+    /// <summary>True when a reviewer linked any statement of the official to a vote or a bill. <c>Statements</c> lists only the vote links.</summary>
+    public bool HasLinkedStatements { get; init; }
     public OfficialBillData[] Bills { get; init; } = [];
     public OfficialExecutiveData? Executive { get; init; }
 }

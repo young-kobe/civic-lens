@@ -425,7 +425,7 @@ Planned: `/v1/records/{kind}/{recordId}/corrections` will serve ordinary correct
 - The `issue` and `sponsor` filters of the bill list match an ID as given. An ID that no bill carries gives an empty page, because `PublicApi` holds no issue or official catalog.
 - The release manifest stays the data path of the static pages until the pages read `PublicApi`.
 - The record page routes give no source quote, no source link, and no source text. Those parts exist only in the release record files. The view `public_api.record_links` needs no file. The owner decided where the quote will live. The revision writer will store the quote text on each citation row, written once by C#, and a view will read that plain column. The full source text stays in the static files until a page needs it. This is planned. No column and no writer change exist yet.
-- The bill detail gives the raw latest action and no plain meaning. `BillStatusMeaning` is in `Publication.Contracts`, so `PublicApi` can use it. No route calls it yet. The bill page PR will add the call.
+- The bill detail gives the raw latest action and no plain meaning. `BillStatusMeaning` is in `Publication.Contracts`, so `PublicApi` can use it. The server-rendered official page calls `Plain` and `Label`. The bill page PR will add the route call.
 - The executive action route serves one action by ID. A list of executive actions is not served yet.
 - The vote list filters the bill by type and number without an index on those columns. A plan reads every vote revision of the active release. This is fast at 1,600 votes. Add an index when the vote count grows.
 - One worker pulls. Two workers would pull the same pages. The unique report ID keeps the queue correct.

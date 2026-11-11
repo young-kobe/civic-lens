@@ -20,30 +20,20 @@ public static class OfficialPageText
 
     public const string SplitVoteKey = "split-vote";
 
-    /// <summary>The lede of the header: party, role, place, and the end of the current term.</summary>
+    /// <summary>The lede of the header: party, role, place, and the end of the current term. The rules are <see cref="OfficeLede"/>, and a former member gets no current term end.</summary>
     public static string Lede(OfficialPageData data)
     {
-        var party = data.Party == PublishedPartyMajority.Democrat ? "Democratic" : data.Party;
+        var ended = data.PublishedOn is { } publishedOn && OfficeLede.HasEnded(data.TermEndsOn, publishedOn);
         var role = data.Kind switch
         {
             PublishedOfficeKind.Senator => "senator",
             PublishedOfficeKind.Representative => "representative",
             _ => "official"
         };
-        var text = string.Join(' ', new[] { party, role }.OfType<string>()) + Place(data) + Caucus(data) + ".";
-        var end = data.TermEndsOn is { } day ? $" Current term ends {Moment.Day(day)}." : "";
-        return char.ToUpperInvariant(text[0]) + text[1..] + end;
+        var place = OfficeLede.Place(data.State is null ? null : UsStates.NameOf(data.State), data.District);
+        var text = OfficeLede.Of(ended, data.Party, role, place, data.Caucus) + ".";
+        return !ended && data.TermEndsOn is { } day ? $"{text} Current term ends {Moment.Day(day)}." : text;
     }
-
-    private static string Place(OfficialPageData data) => data switch
-    {
-        { State: null } => "",
-        { District: { } district } => $" for {UsStates.NameOf(data.State!)}, district {district}",
-        _ => $" for {UsStates.NameOf(data.State!)}"
-    };
-
-    private static string Caucus(OfficialPageData data) =>
-        data.Caucus is { } caucus && data.Party is { } party && caucus != party ? $", caucuses with {PublishedPartyNames.Members(caucus)}" : "";
 
     /// <summary>The party figure of the page. One figure covers the page, so a member with two party lines shows the newest.</summary>
     public static OfficialPartyLineData? MainPartyLine(OfficialPageData data) =>
@@ -58,20 +48,12 @@ public static class OfficialPageText
     public static string BillsSponsored(OfficialPageData data) =>
         $"bills and resolutions sponsored in the {CongressCalendar.Ordinal(data.BillsCongress!.Value)} Congress, counted in this release";
 
-    public static string MarkName(OfficialMarkData mark) => mark.IsMissed
-        ? PlainVoteWords.Cast(PublishedOfficialVote.NotVoting)
-        : $"Voted against most {PublishedPartyNames.Members(mark.Party ?? "of the party")}";
-
-    /// <summary>The short badge of a bill status. It is the first clause of the shared plain meaning, and a latest action that no known shape matches gets no badge.</summary>
-    public static string? StatusBadge(OfficialBillData bill)
+    public static string MarkName(OfficialMarkData mark) => mark switch
     {
-        if (bill.LatestAction is not { } action) return null;
-        var plain = BillStatusMeaning.Plain(action, bill.BillType);
-        var unmatched = action.EndsWith('.') ? action : action + ".";
-        if (plain == unmatched) return null;
-        var end = plain.IndexOfAny([':', '.']);
-        return end < 0 ? plain : plain[..end];
-    }
+        { IsMissed: true } => PlainVoteWords.Cast(PublishedOfficialVote.NotVoting),
+        { Party: { } party } => $"Voted against most {PublishedPartyNames.Members(party)}",
+        _ => throw new InvalidDataException("A mark that is not a missed vote names the party that it broke from.")
+    };
 
     public static string BillTitle(OfficialBillData bill) => bill.BillLine ?? bill.BillTitle;
 

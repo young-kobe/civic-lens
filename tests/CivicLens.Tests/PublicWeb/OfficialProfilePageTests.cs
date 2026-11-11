@@ -2,6 +2,7 @@ using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.Application.Actions;
 using CivicLens.PublicWeb.Publication;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
@@ -21,6 +22,9 @@ public sealed class OfficialProfilePageTests
 
     private static OfficialPageData Member() => new(7, "p1", "Ann Able", PublishedOfficeKind.Representative, "House", "MA", 7, "Democrat", null, new(2027, 1, 3), null)
     {
+        PublishedOn = new(2026, 11, 1),
+        HasLinkedStatements = true,
+        MarksTotal = 2,
         Attendance = [new(PublishedChamber.House, 119, 5, 675, new(2025, 1, 3), new(2026, 9, 16))],
         PartyLines = [new(PublishedChamber.House, 119, "Democrat", 248, 1, 249, new(2025, 1, 3), new(2026, 9, 16))],
         BillsCongress = 119,
@@ -28,8 +32,9 @@ public sealed class OfficialProfilePageTests
         Issues = [new("tax", "Federal taxes", 8)],
         Marks = [new(BreakId, new(2026, 9, 16), PublishedChamber.House, 309, "House passes H.R. 9576", false, "Democrat"),
                  new(MissedId, new(2026, 9, 15), PublishedChamber.House, 305, "House passes H.R. 9500", true, null)],
-        Votes = [new(VoteId, new(2026, 9, 16), PublishedChamber.House, 314, "House passes S 2403", "Passed", "Aye", "Yes (Aye)")],
-        Statements = [new(StatementId, new(2026, 9, 12), "A statement about H.R. 5334", VoteId, "House agrees to Senate changes", new(2026, 9, 16), PublishedChamber.House, 308, "Nay")],
+        Votes = [new(VoteId, new(2026, 9, 16), 119, 2, 314, "House passes S 2403", "AI vote label", "Vote to pass the bill", "Passed", [new("p1", "Yes (Aye)", "Yea")])],
+        Statements = [new(StatementId, new(2026, 9, 12), "A statement about H.R. 5334", "AI statement label", VoteId, "House agrees to Senate changes", "AI linked vote label",
+            new(2026, 9, 16), PublishedChamber.House, 308, "Nay")],
         Bills = [new(BillId, "hr", null, "H.R. 40 would study reparations.", new(2025, 1, 3),
             "Referred to the House Committee on the Judiciary.", new(2025, 1, 3))]
     };
@@ -97,7 +102,7 @@ public sealed class OfficialProfilePageTests
     [Fact]
     public async Task EmptySectionsAreHiddenAndTheLinkedStatementMessageSitsInTheJumpRow()
     {
-        var page = await RenderAsync<OfficialProfilePage>(Member() with { Statements = [], Bills = [], Issues = [] });
+        var page = await RenderAsync<OfficialProfilePage>(Member() with { Statements = [], HasLinkedStatements = false, Bills = [], Issues = [] });
 
         Assert.Null(page.QuerySelector("#statements"));
         Assert.Null(page.QuerySelector("#bills"));
@@ -115,7 +120,8 @@ public sealed class OfficialProfilePageTests
         Assert.Equal("What they said and how they voted", statements.QuerySelector("h2")!.TextContent);
         Assert.Contains("Said on 12 Sep 2026", statements.TextContent);
         Assert.Contains("House roll call 308, 16 Sep 2026: House agrees to Senate changes", statements.QuerySelector(".official-related a")!.TextContent);
-        Assert.Contains("No (Nay)", statements.QuerySelector(".official-cast")!.TextContent);
+        Assert.Contains("No (Nay)", statements.QuerySelector(".shared-vote-cast-value")!.TextContent);
+        Assert.Equal("nay", statements.QuerySelector(".shared-vote-cast-value")!.GetAttribute("data-side"));
         Assert.Contains(OfficialPageText.LinkMeaning, statements.TextContent);
         Assert.Equal(Root + "method.html", statements.QuerySelector("p.muted a")!.GetAttribute("href"));
     }
@@ -128,19 +134,20 @@ public sealed class OfficialProfilePageTests
 
         Assert.Equal("H.R. 40 would study reparations.", row.QuerySelector("a.official-row-title")!.TextContent);
         Assert.Contains("Introduced 3 Jan 2025", row.QuerySelector(".official-meta")!.TextContent);
+        Assert.Equal(BillStatusMeaning.Label("Referred to the House Committee on the Judiciary.", "hr"), row.QuerySelector(".badge")!.TextContent.Trim());
         Assert.Equal("In committee", row.QuerySelector(".badge")!.TextContent.Trim());
         Assert.Contains("See all 43 bills", page.QuerySelector("#bills .official-more")!.TextContent);
     }
 
     [Fact]
-    public async Task ABillLineReplacesTheOfficialTitleAndAnUnknownActionGetsNoBadge()
+    public async Task ABillLineReplacesTheOfficialTitleAndAnUnknownActionGetsTheSharedUnmatchedLabel()
     {
         var bill = Member().Bills[0] with { BillLine = "Studies reparations.", LatestAction = "Something odd happened" };
         var page = await RenderAsync<OfficialProfilePage>(Member() with { Bills = [bill] });
         var row = page.QuerySelector("#bills .official-rows li")!;
 
         Assert.Equal("Studies reparations.", row.QuerySelector("a.official-row-title")!.TextContent);
-        Assert.Null(row.QuerySelector(".badge"));
+        Assert.Equal(BillStatusMeaning.UnmatchedLabel, row.QuerySelector(".badge")!.TextContent.Trim());
     }
 
     [Fact]
@@ -199,7 +206,16 @@ public sealed class OfficialProfilePageTests
         Assert.Equal(Root + "records/" + new string('1', 64) + ".html", row.QuerySelector("a")!.GetAttribute("href"));
         Assert.Contains("Executive order", row.QuerySelector(".official-meta")!.TextContent);
         Assert.Contains("Signed 22 Oct 2026", row.QuerySelector(".official-meta")!.TextContent);
-        Assert.Equal(Root + "search.html?kind=executiveAction", page.QuerySelector("a.btn")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task EveryPresidentSeeAllLinkLeadsToTheRecordPageOfThePresidentAndNeverToAnAllPresidentSearch()
+    {
+        var page = await RenderAsync<PresidentPage>(President());
+        var links = page.QuerySelectorAll("a.btn, .official-more a");
+
+        Assert.Equal(3, links.Length);
+        Assert.All(links, link => Assert.Equal(Root + "officials/p4/record.html", link.GetAttribute("href")));
     }
 
     [Fact]
@@ -214,6 +230,123 @@ public sealed class OfficialProfilePageTests
 
         foreach (var passage in passages)
             Assert.True(ReadingGrade.RoundedPassage([passage]) <= ReadingGrade.MaximumGrade, $"\"{passage}\" reads above the limit.");
+    }
+
+    [Fact]
+    public async Task EveryAiLabelOfAVoteAStatementAndItsLinkedVoteIsShown()
+    {
+        var page = await RenderAsync<OfficialProfilePage>(Member());
+
+        Assert.Contains("AI vote label", page.QuerySelector("#votes .shared-vote-label")!.TextContent);
+        var statement = page.QuerySelector("#statements")!.TextContent;
+        Assert.Contains("AI statement label", statement);
+        Assert.Contains("AI linked vote label", statement);
+    }
+
+    [Fact]
+    public async Task AVoteRowKeepsItsCongressSessionKindWordsAndOnlyTheCastOfTheOfficialWithoutAName()
+    {
+        var page = await RenderAsync<OfficialProfilePage>(Member());
+        var row = page.QuerySelector("#votes .shared-vote-row")!;
+
+        Assert.Contains("119th Congress, session 2", row.QuerySelector(".shared-vote-meta")!.TextContent);
+        Assert.Contains("Vote to pass the bill", row.QuerySelector(".shared-vote-meta")!.TextContent);
+        Assert.Equal("Yes (Aye)", row.QuerySelector(".shared-vote-cast-value")!.TextContent.Trim());
+        Assert.Null(row.QuerySelector(".shared-vote-member"));
+        Assert.Null(page.QuerySelector("#votes .shared-vote-caption"));
+        Assert.Null(page.QuerySelector(".official-cast"));
+    }
+
+    [Fact]
+    public async Task AFormerMemberNeverReadsCurrentTermEndsAndACurrentMemberDoes()
+    {
+        var current = await RenderAsync<OfficialProfilePage>(Member());
+        var former = await RenderAsync<OfficialProfilePage>(Member() with { TermEndsOn = new(2026, 1, 3) });
+
+        Assert.Contains("Current term ends 3 Jan 2027.", current.QuerySelector(".official-head .official-lede")!.TextContent);
+        var lede = former.QuerySelector(".official-head .official-lede")!.TextContent;
+        Assert.StartsWith("Former Democratic representative for Massachusetts, district 7.", lede);
+        Assert.DoesNotContain("Current term ends", lede);
+    }
+
+    [Fact]
+    public void TheLedeOfTheStaticAndTheServerPageComeFromOneOwner()
+    {
+        Assert.Equal("Former Independent senator for WA, caucuses with Democrats", OfficeLede.Of(true, "Independent", "senator", OfficeLede.Place("WA", null), "Democrat"));
+        Assert.Equal("Democratic representative for WA, district 9", OfficeLede.Of(false, "Democrat", "representative", OfficeLede.Place("WA", 9), null));
+        Assert.True(OfficeLede.HasEnded(new(2026, 1, 3), new(2026, 1, 4)));
+        Assert.False(OfficeLede.HasEnded(new(2026, 1, 3), new(2026, 1, 3)));
+    }
+
+    [Fact]
+    public async Task TheStripSaysHowManyMarksItShowsOfTheTotalAndLinksTheFullRecordOnlyWhenItIsCut()
+    {
+        var marks = Enumerable.Range(0, 12).Select(day => new OfficialMarkData(new string((char)('a' + day), 64), new(2026, 9, 1 + day), PublishedChamber.House, 100 + day, "House passes H.R. 1", false, "Democrat")).ToArray();
+        var cut = await RenderAsync<OfficialProfilePage>(Member() with { Marks = marks, MarksTotal = 40 });
+        var whole = await RenderAsync<OfficialProfilePage>(Member() with { Marks = marks, MarksTotal = 12 });
+
+        var note = cut.QuerySelector("#votes p.muted")!;
+        Assert.StartsWith("The 12 newest of 40.", note.TextContent);
+        Assert.Equal(Root + "officials/p1/record.html", note.QuerySelector("a")!.GetAttribute("href"));
+        Assert.DoesNotContain("newest of", whole.QuerySelector("#votes")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheNoLinksMessageShowsOnlyWhenNoStatementLinksToAVoteOrABill()
+    {
+        var onlyBillLinks = await RenderAsync<OfficialProfilePage>(Member() with { Statements = [], HasLinkedStatements = true });
+        var none = await RenderAsync<OfficialProfilePage>(Member() with { Statements = [], HasLinkedStatements = false });
+
+        Assert.Null(onlyBillLinks.QuerySelector(".official-jump p"));
+        Assert.Equal(OfficialPageText.NoLinks, none.QuerySelector(".official-jump p")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheStripNeverNamesACongressZeroWhenNoFigureGivesTheCongress()
+    {
+        var page = await RenderAsync<OfficialProfilePage>(Member() with { Attendance = [], PartyLines = [], BillsCongress = null, Issues = [] });
+
+        Assert.NotEmpty(page.QuerySelectorAll(".official-strip a"));
+        Assert.DoesNotContain("0th", page.DocumentElement.TextContent);
+        Assert.Null(page.QuerySelector("#votes .official-lede"));
+    }
+
+    [Fact]
+    public async Task AnIssueSectionWithoutItsCongressIsHiddenAndAPageWithNoSectionHasNoJumpList()
+    {
+        var noCongress = await RenderAsync<OfficialProfilePage>(Member() with { BillsCongress = null });
+        var nothing = await RenderAsync<OfficialProfilePage>(Member() with { Marks = [], Votes = [], Statements = [], Bills = [], Issues = [], HasLinkedStatements = true });
+
+        Assert.Null(noCongress.QuerySelector("#issues"));
+        Assert.DoesNotContain("0th", noCongress.DocumentElement.TextContent);
+        Assert.Empty(nothing.QuerySelectorAll(".official-jump ul"));
+        Assert.Null(nothing.QuerySelector(".official-jump"));
+    }
+
+    [Fact]
+    public void ABreakMarkWithoutAPartyIsAnInvalidMarkAndNoFallbackWordHidesIt()
+    {
+        var invalid = new OfficialMarkData(BreakId, new(2026, 9, 16), PublishedChamber.House, 1, "House passes H.R. 1", false, null);
+
+        Assert.Throws<InvalidDataException>(() => OfficialPageText.MarkName(invalid));
+    }
+
+    [Fact]
+    public void TheStripHitAreasOfNeighborsDoNotOverlap()
+    {
+        var css = WebStyleSheets.Read("public.css");
+        var gap = Px(css, @"\.official-strip \{[^}]*?gap: var\(--s(\d)\)");
+        var reach = Px(css, @"\.official-strip a::after \{[^}]*?inset: -(\d+)px");
+
+        Assert.True(reach * 2 <= gap, $"Each hit area reaches {reach}px, and the gap between squares is {gap}px.");
+    }
+
+    private static int Px(string css, string pattern)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(css, pattern);
+        Assert.True(match.Success, pattern);
+        var value = int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+        return pattern.Contains("--s", StringComparison.Ordinal) ? new[] { 0, 4, 8, 12, 16, 24, 32, 48 }[value] : value;
     }
 
     private static async Task<IDocument> RenderAsync<TComponent>(OfficialPageData data) where TComponent : IComponent
