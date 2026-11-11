@@ -361,7 +361,7 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
             _ => Task.FromResult<string?>(served.DirectoryName), default);
 
         Assert.Equal(new[] { 1, 2 }.Concat(Enumerable.Range(11, 30)), page.Candidates.Select(candidate => candidate.Release.ReleaseNumber));
-        Assert.Equal(page.SelectionFingerprint, await publications.ReadCorrectionHistoryVerificationFingerprintAsync(
+        Assert.Equal(page.SelectionFingerprint, await publications.ReadRetainedReleaseFingerprintAsync(
             _ => Task.FromResult<string?>(served.DirectoryName), default));
         var first = await publications.ReadCorrectionHistoryVerificationPageAsync(null, 1,
             _ => Task.FromResult<string?>(served.DirectoryName), default);
