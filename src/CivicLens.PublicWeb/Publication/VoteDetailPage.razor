@@ -1,0 +1,216 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Evidence
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSection.AllRecords" Title="@Data.Headline" Description="@Data.Summary" CanonicalPath="@PublicationProtocol.RecordPagePath(Data.RecordId)" IsArticle="true" RootPath="@RootPath" Record="record">
+    <article class="vote">
+        <header class="vote-head">
+            <p class="vote-meta">
+                <span>@Data.Chamber vote, @Moment.Day(Data.VotedOn)</span>
+                @if (PublishedRecordLabels.VoteKindTermKey(Data.Kind) is { } kindKey)
+                {
+                    <Term Key="@kindKey">@VotePageView.KindName(Data)</Term>
+                }
+                else
+                {
+                    <span>@VotePageView.KindName(Data)</span>
+                }
+            </p>
+            <h1 class="vote-headline">@Data.Headline</h1>
+            <div class="vote-summary @(Data.TextOrigin == PublishedTextOrigin.Model ? "vote-ai" : null)">
+                @if (summaryLabel is not null)
+                {
+                    <span class="vote-summary-label">@summaryLabel</span>
+                }
+                <p>@Data.Summary</p>
+            </div>
+        </header>
+        <div class="vote-layout">
+            <section class="vote-result" aria-labelledby="vote-result-title">
+                <h2 id="vote-result-title">@VotePageView.ResultHeading</h2>
+                <p class="vote-result-word">@VotePageView.ResultWords(Data)@if (VoteWords.Badge(Data.Alignment) is { } badge){<StatusBadge Text="@badge.Text" />}</p>
+                @if (chamberBar is not null)
+                {
+                    <p class="muted small">@VotePageView.ChamberCaption(Data, chamberBar)</p>
+                    <PartyBar Id="chamber" Data="chamberBar" />
+                }
+            </section>
+            <div class="vote-main">
+                <section class="vote-explain" aria-labelledby="vote-meaning-title">
+                    <h2 id="vote-meaning-title">@VoteMeaning.Heading</h2>
+                    @if (wording is { } meaning)
+                    {
+                        <p>@meaning.Yes</p>
+                        <p>@meaning.No</p>
+                    }
+                    <h3>@NextStep.Heading</h3>
+                    <p>@(wording?.NextStep ?? NextStep.NotShown)</p>
+                </section>
+                @if (partyBars.Count > 0)
+                {
+                    <section class="vote-parties" aria-labelledby="vote-parties-title">
+                        <h2 id="vote-parties-title">@VotePageView.PartiesHeading</h2>
+                        <p class="muted small">@VoteWords.PartyCountsNote</p>
+                        <div class="vote-party-bars">
+                            @for (var index = 0; index < partyBars.Count; index++)
+                            {
+                                <PartyBar Id="@($"party-{index}")" Data="partyBars[index]" />
+                            }
+                        </div>
+                    </section>
+                }
+                @if (breakers.Count > 0)
+                {
+                    <section class="vote-breakers" aria-labelledby="vote-breakers-title">
+                        <h2 id="vote-breakers-title">@VotePageView.BreakersHeading</h2>
+                        <p class="muted small">@VoteWords.BreakMeaning</p>
+                        @foreach (var group in breakers)
+                        {
+                            <div class="vote-breaker-group">
+                                <h3><a href="@(RootPath + PublicationProtocol.BoardPagePath(Data.Chamber, group.Party))">@group.Name</a>: @VotePageView.BreakersHeadline(group)</h3>
+                                @if (group.Members.Length == 0)
+                                {
+                                    <p class="small">@VotePageView.NoBreakers(group)</p>
+                                }
+                                else
+                                {
+                                    <ul class="vote-breaker-list">
+                                        @foreach (var member in group.Members)
+                                        {
+                                            <li><a href="@(RootPath + PublicationProtocol.OfficialPagePath(member.OfficialId))">@member.Name</a> <span class="small">voted <CastWord Cast="@member.Cast" /></span></li>
+                                        }
+                                    </ul>
+                                }
+                            </div>
+                        }
+                    </section>
+                }
+                <section class="vote-members" id="members" aria-labelledby="vote-members-title">
+                    <h2 id="vote-members-title">@VotePageView.MembersHeading</h2>
+                    <p class="muted small">@VoteWords.TrackedOnly @Data.Members.Length tracked @(Data.Members.Length == 1 ? "member has" : "members have") a recorded position, including those who did not vote.</p>
+                    <details class="vote-fold" open="@(Filter.IsActive ? true : null)">
+                        <summary>Find a member</summary>
+                        <form class="vote-filter" method="get" action="@(RootPath + PublicationProtocol.RecordPagePath(Data.RecordId) + "#members")">
+                            <div class="vote-filter-field">
+                                <label for="vote-filter-name">Member name</label>
+                                <input id="vote-filter-name" type="search" name="q" maxlength="@PublishedRecordEntry.MaximumFilterValueLength" value="@Filter.Name" placeholder="Type a name" />
+                            </div>
+                            <div class="vote-filter-field">
+                                <label for="vote-filter-cast">Vote</label>
+                                <select id="vote-filter-cast" name="cast">
+                                    <option value="">All votes</option>
+                                    @foreach (var cast in VotePageView.CastOptions(Data))
+                                    {
+                                        <option value="@cast" selected="@(cast == Filter.Cast)">@PlainVoteWords.Cast(cast)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="vote-filter-field">
+                                <label for="vote-filter-party">Party</label>
+                                <select id="vote-filter-party" name="party">
+                                    <option value="">All parties</option>
+                                    @foreach (var party in VotePageView.PartyOptions(Data))
+                                    {
+                                        <option value="@party" selected="@(party == Filter.Party)">@party</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="vote-filter-actions">
+                                <Button Type="submit" Variant="ButtonVariant.Primary">Apply filters</Button>
+                                @if (Filter.IsActive)
+                                {
+                                    <a href="@(RootPath + PublicationProtocol.RecordPagePath(Data.RecordId) + "#members")">Clear filters</a>
+                                }
+                            </div>
+                        </form>
+                        <p class="small muted" role="status">@rows.Count of @Data.Members.Length tracked members shown.</p>
+                        <DataTable TItem="VoteMemberData" Items="rows" Caption="Tracked members and their votes" Scroll="true" PagedRows="members">
+                            <Head>
+                                <TableCell Header>Member</TableCell>
+                                <TableCell Header>Party</TableCell>
+                                <TableCell Header>Vote</TableCell>
+                                <TableCell Header>Source</TableCell>
+                            </Head>
+                            <Row Context="member">
+                                <TableCell Main Label="Member"><a href="@(RootPath + PublicationProtocol.OfficialPagePath(member.OfficialId))">@member.Name</a></TableCell>
+                                <TableCell Label="Party">@(member.Party ?? "No known party")</TableCell>
+                                <TableCell Label="Vote"><span class="vote-cast" data-side="@PublishedOfficialVote.SideOf(member.Cast)?.ToLowerInvariant()"><CastWord Cast="@member.Cast" /></span></TableCell>
+                                <TableCell Label="Source"><SourceLineLink Anchor="@anchors.Anchor(member.Citation)" Target="@($"{member.Name}, member line")" /></TableCell>
+                            </Row>
+                            <Empty><p class="small">No tracked member matches these filters.</p></Empty>
+                        </DataTable>
+                    </details>
+                </section>
+            </div>
+            <aside class="vote-rail" aria-label="Bill, issues, and sources">
+                @if (Data.Bill is { } bill)
+                {
+                    <section class="vote-bill" aria-labelledby="vote-bill-title">
+                        <h2 id="vote-bill-title">@VotePageView.BillHeading</h2>
+                        <p><a href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@bill.Title</a></p>
+                        @if (bill.Line is not null)
+                        {
+                            <p class="small"><PublishedBillLine Line="@bill.Line" /></p>
+                            <PublishedBillLineNote />
+                        }
+                    </section>
+                }
+                @if (Data.Issues.Length > 0)
+                {
+                    <section class="vote-issues" aria-labelledby="vote-issues-title">
+                        <h2 id="vote-issues-title">@VotePageView.IssuesHeading</h2>
+                        <ul class="vote-chips" role="list">
+                            @foreach (var issue in Data.Issues)
+                            {
+                                <li><a class="vote-chip" href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">@issue.Name</a></li>
+                            }
+                        </ul>
+                    </section>
+                }
+                <details class="vote-fold vote-source" id="source">
+                    <summary>@VotePageView.SourceHeading</summary>
+                    <div class="vote-source-body">
+                        <Facts Items="facts" />
+                        <SourceLinesNote>@VotePageView.SavedData(Data.Source)</SourceLinesNote>
+                        @for (var index = 0; index < Data.Sources.Length; index++)
+                        {
+                            var source = Data.Sources[index];
+                            <VersionSource Version="source" Linked="false" />
+                            <DocumentText Label="@($"Source text {index + 1} of {Data.Sources.Length}")" Runs="CitedText.Split(source.Text, anchors.RangesIn(source))" />
+                        }
+                    </div>
+                </details>
+            </aside>
+        </div>
+    </article>
+</PublicPage>
+
+@code {
+    private ReportedRecord record = default!;
+    private VoteCitationAnchors anchors = default!;
+    private (string Yes, string No, string NextStep)? wording;
+    private string? summaryLabel;
+    private PartyBarData? chamberBar;
+    private IReadOnlyList<PartyBarData> partyBars = [];
+    private IReadOnlyList<VoteBreakerGroup> breakers = [];
+    private IReadOnlyList<VoteMemberData> rows = [];
+    private IReadOnlyList<Fact> facts = [];
+
+    [Parameter, EditorRequired] public VotePageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    [Parameter] public VoteMemberFilter Filter { get; set; } = new();
+
+    protected override void OnParametersSet()
+    {
+        record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.Vote, Data.Headline, Data.ShortName);
+        anchors = new VoteCitationAnchors(Data);
+        wording = VoteWording.Of(Data.WordingSource);
+        summaryLabel = Data.Label ?? (Data.TextOrigin is PublishedTextOrigin.Model or PublishedTextOrigin.Code
+            ? PublishedRecordLabels.Wording(Data.TextOrigin).First().Value : null);
+        chamberBar = VotePageView.ChamberBar(Data);
+        partyBars = VotePageView.PartyBars(Data);
+        breakers = VotePageView.Breakers(Data);
+        rows = VotePageView.Filtered(Data, Filter);
+        facts = VotePageView.Facts(Data, anchors);
+    }
+}

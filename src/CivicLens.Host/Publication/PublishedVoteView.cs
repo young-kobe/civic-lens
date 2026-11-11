@@ -53,7 +53,7 @@ internal static class PublishedVoteView
     private static string MemberNoun(PublishedVote vote) => vote.Chamber == PublishedChamber.Senate ? "senator" : "House member";
 
     public static string Caveat(PublishedVote vote) =>
-        "This record lists only the officials that Civic Lens tracks. " + vote.Source switch
+        VoteWords.TrackedOnly + " " + vote.Source switch
         {
             PublishedVoteSource.Voteview => "Voteview stores each vote as a number code. Civic Lens shows that code as a word such as Yes (Yea) or No (Nay). The Senate roll call may use other words. Voteview does not list a Vice President tie-break vote.",
             _ => $"Each cast is the wording of the {(vote.Chamber == PublishedChamber.Senate ? "Senate" : "House Clerk")} roll call at the observation time of its source."
@@ -93,16 +93,7 @@ internal static class PublishedVoteView
     private static PublishedMemberVote[] ByName(IEnumerable<PublishedMemberVote> members) =>
         [.. members.OrderBy(member => member.Official.Name, StringComparer.OrdinalIgnoreCase).ThenBy(member => member.Official.Id, StringComparer.Ordinal)];
 
-    public const string SplitVoteText = "Split vote";
-
-    public const string PartiesAgreedText = "Both parties agreed";
-
-    public static (string Text, string Meaning)? ListBadge(PublishedRecordEntry entry) => entry.Alignment switch
-    {
-        PublishedVoteAlignment.Split => (SplitVoteText, PublishedOfficialView.SplitVoteMeaning),
-        PublishedVoteAlignment.PartiesAgree => (PartiesAgreedText, PublishedOfficialView.PartiesAgreedMeaning),
-        _ => null
-    };
+    public static (string Text, string Meaning)? ListBadge(PublishedRecordEntry entry) => VoteWords.Badge(entry.Alignment);
 
     public static string? ListYeaNay(PublishedRecordEntry entry) =>
         entry.YeaCount is { } yea && entry.NayCount is { } nay ? PlainVoteWords.YesNo(yea, nay) : null;
@@ -115,8 +106,8 @@ internal static class PublishedVoteView
     public static IEnumerable<string> ListNotes(IEnumerable<PublishedRecordEntry> entries, bool defineBadges, ReleaseBillLines billLines)
     {
         var votes = entries.Where(entry => entry.Kind == PublishedRecordKind.Vote).ToArray();
-        if (defineBadges && votes.Any(entry => entry.Alignment == PublishedVoteAlignment.Split)) yield return PublishedOfficialView.SplitVoteMeaning;
-        if (defineBadges && votes.Any(entry => entry.Alignment == PublishedVoteAlignment.PartiesAgree)) yield return PublishedOfficialView.PartiesAgreedMeaning;
+        if (defineBadges && votes.Any(entry => entry.Alignment == PublishedVoteAlignment.Split)) yield return VoteWords.SplitMeaning;
+        if (defineBadges && votes.Any(entry => entry.Alignment == PublishedVoteAlignment.PartiesAgree)) yield return VoteWords.PartiesAgreedMeaning;
         if (votes.Any(entry => ListYeaNay(entry) is not null)) yield return $"Yes and No counts are casts {CountsWho}.";
         if (billLines.AnyOf(entries)) yield return PublishedWording.BillLineSource;
     }
@@ -127,8 +118,8 @@ internal static class PublishedVoteView
         var republicans = $"most {PartyOf(vote, PublishedPartyMajority.Republican)}";
         const string cast = "who cast Yes or No";
         if (vote.IsSplit())
-            return new(SplitVoteText, $"{SplitVoteText}: {democrats} {cast} voted {SideWord(vote, PublishedPartyMajority.Democrat)}, and {republicans} {cast} voted {SideWord(vote, PublishedPartyMajority.Republican)}.", PartyCounts(vote));
-        return vote.PartiesAgree() ? new(PartiesAgreedText, $"{PartiesAgreedText}: {democrats} and {republicans} {cast} voted {SideWord(vote, PublishedPartyMajority.Democrat)}.", PartyCounts(vote)) : null;
+            return new(VoteWords.SplitBadge, $"{VoteWords.SplitBadge}: {democrats} {cast} voted {SideWord(vote, PublishedPartyMajority.Democrat)}, and {republicans} {cast} voted {SideWord(vote, PublishedPartyMajority.Republican)}.", PartyCounts(vote));
+        return vote.PartiesAgree() ? new(VoteWords.PartiesAgreedBadge, $"{VoteWords.PartiesAgreedBadge}: {democrats} and {republicans} {cast} voted {SideWord(vote, PublishedPartyMajority.Democrat)}.", PartyCounts(vote)) : null;
     }
 
     private static string SideWord(PublishedVote vote, string party) =>
@@ -136,7 +127,7 @@ internal static class PublishedVoteView
 
     private static string PartyCounts(PublishedVote vote) =>
         string.Join(' ', new[] { PublishedPartyMajority.Democrat, PublishedPartyMajority.Republican }.Select(party => PartyCount(vote, party))) +
-        " These counts include every member of the party, tracked or not. An independent counts with the party they caucus with, so these counts can differ from the source totals. Yes here means Yea or Aye in the record. No means Nay.";
+        " " + VoteWords.PartyCountsNote;
 
     private static string PartyCount(PublishedVote vote, string party)
     {
@@ -144,15 +135,13 @@ internal static class PublishedVoteView
         return $"{PartyOf(vote, party)}: {count.YeaCount} Yes, {count.NayCount} No.";
     }
 
-    public const string BreakMeaning = "A member is listed when they cast Yes or No against the cast of most members of their own party on this vote. A current independent counts with the party they caucus with. A former independent counts with no party. A member with another party, or with no known party, is not listed. Present and Not voting never count as a break.";
-
     public static IEnumerable<PartyBreakers> Breakers(PublishedVote vote) =>
         vote.IsSplit() ? new[] { PublishedPartyMajority.Democrat, PublishedPartyMajority.Republican }.Select(party => BreakersOf(vote, party)) : [];
 
     private static PartyBreakers BreakersOf(PublishedVote vote, string party)
     {
         var members = ByName(vote.Members.Where(member => member.Party == party &&
-            vote.MajorityOf(party) is { } majority && VotesWithParty.IsAgainstPartyMajority(member.Party, member.Cast, majority)));
+            vote.MajorityOf(party) is { } majority && PublishedPartyMajority.IsAgainstPartyMajority(member.Party, member.Cast, majority)));
         var name = PartyOf(vote, party);
         return new($"{name}: {members.Length} tracked {PublishedOfficialView.Noun(members.Length, "member")} voted against most of the party",
             $"No tracked {PublishedOfficialView.PartyMemberOf(vote.Chamber, party)} voted against most {name}.", members);

@@ -1,0 +1,62 @@
+@using CivicLens.Publication.Contracts
+
+<figure class="party-bar" data-party="@Data.Tone.ToString().ToLowerInvariant()">
+    <figcaption>@Data.Name</figcaption>
+    <svg class="party-bar-chart" role="img" aria-label="@Data.Description" focusable="false">
+        <defs>
+            <pattern id="@HatchId" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="party-bar-hatch" width="4" height="7" /></pattern>
+        </defs>
+        <rect class="party-bar-back" width="100%" height="100%" />
+        @foreach (var segment in Segments)
+        {
+            <rect class="party-bar-@segment.Kind" x="@Percent(segment.Start)" width="@Percent(segment.Share)" height="100%" fill="@(segment.Kind == "no" ? $"url(#{HatchId})" : null)" />
+        }
+        @if (Data.Majority is not null)
+        {
+            <line class="party-bar-mark" x1="@Percent((Data.Yes + Data.No) / 2.0 / Data.Total)" x2="@Percent((Data.Yes + Data.No) / 2.0 / Data.Total)" y1="0" y2="100%" />
+        }
+    </svg>
+    <ul class="party-bar-legend">
+        <li><span class="party-bar-swatch party-bar-yes"></span><b>@Data.Yes</b> @PlainVoteWords.Yes</li>
+        <li><span class="party-bar-swatch party-bar-no"></span><b>@Data.No</b> @PlainVoteWords.No</li>
+        @if (Data.Present > 0)
+        {
+            <li><span class="party-bar-swatch party-bar-present"></span><b>@Data.Present</b> @PlainVoteWords.Present</li>
+        }
+        @if (Data.Other > 0)
+        {
+            <li><span class="party-bar-swatch party-bar-present"></span><b>@Data.Other</b> @PartyBarData.OtherWord</li>
+        }
+        <li><span class="party-bar-swatch party-bar-not-voting"></span><b>@Data.NotVoting</b> @PlainVoteWords.NotVoting</li>
+        @if (Data.Majority is { } needed)
+        {
+            <li><span class="party-bar-swatch party-bar-line"></span>@PartyBarData.MajorityWord: <b>@needed</b></li>
+        }
+    </ul>
+</figure>
+
+@code {
+    private string HatchId => $"{Id}-hatch";
+
+    /// <summary>A page-unique ID prefix. It names the stripe pattern that the No segment uses.</summary>
+    [Parameter, EditorRequired] public string Id { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public PartyBarData Data { get; set; } = default!;
+
+    private IEnumerable<(string Kind, double Start, double Share)> Segments
+    {
+        get
+        {
+            var start = 0.0;
+            foreach (var (kind, count) in new[] { ("yes", Data.Yes), ("no", Data.No), ("present", Data.Present + Data.Other), ("not-voting", Data.NotVoting) })
+            {
+                if (count == 0) continue;
+                var share = (double)count / Data.Total;
+                yield return (kind, start, share);
+                start += share;
+            }
+        }
+    }
+
+    private static string Percent(double fraction) => (fraction * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "%";
+}

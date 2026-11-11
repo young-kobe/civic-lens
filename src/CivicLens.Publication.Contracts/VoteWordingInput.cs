@@ -6,18 +6,18 @@ internal sealed record VoteWordingInput(string Question, string? Result, string?
 {
     internal const string ConcurrenceWithAmendment = "On Motion to Concur in the Senate Amendment with an Amendment";
 
-    public static bool TryRead(PublishedVote vote, out VoteWordingInput input)
+    public static bool TryRead(VoteWordingSource source, out VoteWordingInput input)
     {
         input = default!;
-        if (vote.Facts is null || vote.KindCitation is not { } kindCitation ||
-            !Enum.IsDefined(vote.Kind) || !Enum.IsDefined(vote.Chamber) || !Enum.IsDefined(vote.Source) || vote.Result is null)
+        if (source.Facts is null || source.KindCitation is not { } kindCitation ||
+            !Enum.IsDefined(source.Kind) || !Enum.IsDefined(source.Chamber) || !Enum.IsDefined(source.Source) || source.Result is null)
             return false;
 
         var questions = new List<PublishedVoteFact>(1);
         var results = new List<PublishedVoteFact>(1);
         var legislation = new List<PublishedVoteFact>(1);
         var possibleConstitutionalPurpose = false;
-        foreach (var fact in vote.Facts)
+        foreach (var fact in source.Facts)
         {
             if (fact.Text.StartsWith(PublishedVote.QuestionPrefix, StringComparison.OrdinalIgnoreCase)) questions.Add(fact);
             if (fact.Text.StartsWith(PublishedVote.ResultPrefix, StringComparison.OrdinalIgnoreCase)) results.Add(fact);
@@ -33,14 +33,14 @@ internal sealed record VoteWordingInput(string Question, string? Result, string?
         var question = questions[0].Text[PublishedVote.QuestionPrefix.Length..];
         if (string.IsNullOrWhiteSpace(question) || question != question.Trim()) return false;
 
-        if (results.Count != 1 || results[0].Text != PublishedVote.ResultPrefix + vote.Result ||
+        if (results.Count != 1 || results[0].Text != PublishedVote.ResultPrefix + source.Result ||
             results[0].Citation is not { } resultCitation || resultCitation.Quote != results[0].Text)
             return false;
 
-        if (!TryBillType(vote, legislation, out var billType)) return false;
-        var result = PlainVoteWords.ResultWord(vote.Result);
-        if (!HasCompatibleResult(vote.Kind, result)) result = null;
-        input = new(question, result, billType, QuestionMatches(vote.Kind, vote.Chamber, question), possibleConstitutionalPurpose);
+        if (!TryBillType(source, legislation, out var billType)) return false;
+        var result = PlainVoteWords.ResultWord(source.Result);
+        if (!HasCompatibleResult(source.Kind, result)) result = null;
+        input = new(question, result, billType, QuestionMatches(source.Kind, source.Chamber, question), possibleConstitutionalPurpose);
         return true;
     }
 
@@ -51,20 +51,20 @@ internal sealed record VoteWordingInput(string Question, string? Result, string?
         _ => result is "Passed" or "Failed"
     };
 
-    private static bool TryBillType(PublishedVote vote, IReadOnlyList<PublishedVoteFact> legislation, out string? billType)
+    private static bool TryBillType(VoteWordingSource source, IReadOnlyList<PublishedVoteFact> legislation, out string? billType)
     {
         billType = null;
-        if ((vote.BillType is null) != (vote.BillNumber is null)) return false;
+        if ((source.BillType is null) != (source.BillNumber is null)) return false;
 
         if (legislation.Count > 1) return false;
-        if (legislation.Count == 1 && (vote.BillType is null || vote.BillNumber is not > 0 ||
+        if (legislation.Count == 1 && (source.BillType is null || source.BillNumber is not > 0 ||
             legislation[0].Citation?.Quote != legislation[0].Text ||
-            !legislation[0].Text.Equals($"{PublishedVote.LegislationPrefix}{vote.BillType.ToUpperInvariant()} {vote.BillNumber.Value}", StringComparison.OrdinalIgnoreCase)))
+            !legislation[0].Text.Equals($"{PublishedVote.LegislationPrefix}{source.BillType.ToUpperInvariant()} {source.BillNumber.Value}", StringComparison.OrdinalIgnoreCase)))
             return false;
         if (legislation.Count == 0) return true;
 
-        if (vote.BillType is not { } sourceType) return true;
-        if (vote.BillNumber is not > 0) return false;
+        if (source.BillType is not { } sourceType) return true;
+        if (source.BillNumber is not > 0) return false;
         var normalized = sourceType.ToLowerInvariant();
         if (normalized is "hr" or "s" or "hjres" or "sjres" or "hconres" or "sconres" or "hres" or "sres")
             billType = normalized;

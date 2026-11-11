@@ -50,7 +50,7 @@
     @if (PublishedVoteView.Breakers(Record).ToArray() is { Length: > 0 } breakers)
     {
         <Panel Title="Members who voted against most of their party" Id="breakers-title" Padded="true">
-            <p class="muted small">@PublishedVoteView.BreakMeaning</p>
+            <p class="muted small">@VoteWords.BreakMeaning</p>
             @foreach (var party in breakers)
             {
                 <section class="member-group">

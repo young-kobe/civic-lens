@@ -1,3 +1,4 @@
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Application.Publication;
 using CivicLens.Publication.Contracts;
 
@@ -32,8 +33,8 @@ public sealed record PublishedKeyFigure(string Value, string Label, string Note)
         var party = PublishedOfficialView.PartyOf(votes);
         var splitVotes = $"split {PublishedOfficialView.Noun(votes.Cast, "vote")}";
         var note = votes.NotCast == 0
-            ? PublishedOfficialView.SplitVoteMeaning
-            : $"{PublishedOfficialView.SplitVoteMeaning} They did not cast Yes or No on {votes.NotCast} other split {PublishedOfficialView.Noun(votes.NotCast, "vote")}.";
+            ? VoteWords.SplitMeaning
+            : $"{VoteWords.SplitMeaning} They did not cast Yes or No on {votes.NotCast} other split {PublishedOfficialView.Noun(votes.NotCast, "vote")}.";
         return TalkAndActionProfile.ShareOf(votes.Matched, votes.Cast) is null
             ? new($"{votes.Matched} of {votes.Cast}", $"{splitVotes} with most {party}", note)
             : new(PublishedOfficialView.Percent(votes.Matched, votes.Cast), $"with most {party}: {votes.Matched} of {votes.Cast} {splitVotes}", note);
