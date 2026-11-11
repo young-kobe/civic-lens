@@ -3,9 +3,10 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Host.ExecutiveActions;
 
-internal sealed class ExecutiveActionCommand(BackfillRevisions backfill, VerifyRevisions verify, ReviewActor owner)
+internal sealed class ExecutiveActionCommand(BackfillRevisions backfill, VerifyRevisions verify, BackfillRevisions backfillTargets, VerifyRevisions verifyTargets,
+    ReviewActor owner)
 {
-    private const string Usage = "Use executive-actions revisions backfill <limit>, or executive-actions revisions verify.";
+    private const string Usage = "Use executive-actions revisions backfill <limit>, executive-actions revisions verify, executive-actions targets backfill <limit>, or executive-actions targets verify.";
 
     public static bool Matches(string[] args) => args is ["executive-actions", ..];
 
@@ -18,6 +19,10 @@ internal sealed class ExecutiveActionCommand(BackfillRevisions backfill, VerifyR
                     return await OwnerCommand.BackfillRevisionsAsync(backfill, owner, limit, Usage, cancellationToken);
                 case ["executive-actions", "revisions", "verify"]:
                     return await OwnerCommand.VerifyRevisionsAsync(verify, owner, cancellationToken);
+                case ["executive-actions", "targets", "backfill", var limit]:
+                    return await OwnerCommand.BackfillRevisionsAsync(backfillTargets, owner, limit, Usage, cancellationToken);
+                case ["executive-actions", "targets", "verify"]:
+                    return await OwnerCommand.VerifyRevisionsAsync(verifyTargets, owner, cancellationToken);
                 default:
                     Console.Error.WriteLine(Usage);
                     return 2;

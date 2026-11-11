@@ -45,6 +45,7 @@ internal static class ExecutiveActionRevisionRows
         row.DispositionNotesLength = revision.DispositionNotes?.Citation.Length;
         row.Facts = [.. revision.Facts.Select((fact, position) => FactRow(revision, fact, position))];
         row.Notices = [.. revision.Notices.Select((notice, position) => NoticeRow(revision, notice, position))];
+        row.DispositionTargets = [.. TargetRows(revision)];
     }
 
     public static async Task<ExecutiveActionRevisionPage> ReadPageAsync(CollectionAttemptDbContext db, IQueryable<ExecutiveActionRevisionRow> query,
@@ -93,6 +94,23 @@ internal static class ExecutiveActionRevisionRows
         CitationStart = fact.Citation.Start,
         CitationLength = fact.Citation.Length
     };
+
+    /// <summary>The store parses the verbatim notes once, in the transaction that writes the revision. A correction revision keeps the original notes, so it keeps their targets.</summary>
+    public static IEnumerable<ExecutiveActionRevisionDispositionTargetRow> TargetRows(ExecutiveActionRevision revision) =>
+        TargetRows(revision.RecordId, revision.RevisionNumber, revision.DispositionNotes?.Value);
+
+    public static IEnumerable<ExecutiveActionRevisionDispositionTargetRow> TargetRows(string recordId, int revisionNumber, string? notes) =>
+        notes is null ? [] : ExecutiveActionDispositionTargets.Parse(notes).Select((target, position) => new ExecutiveActionRevisionDispositionTargetRow
+        {
+            RecordId = recordId,
+            RevisionNumber = revisionNumber,
+            Position = position,
+            Relation = target.Relation,
+            Kind = target.Kind,
+            Number = target.Number,
+            ReferenceStart = target.Start,
+            ReferenceLength = target.Length
+        });
 
     private static ExecutiveActionRevisionNoticeRow NoticeRow(ExecutiveActionRevision revision, ExecutiveActionNotice notice, int position) => new()
     {
