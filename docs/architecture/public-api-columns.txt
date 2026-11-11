@@ -123,6 +123,8 @@ vote_members caucus
 vote_members extraction_id
 vote_members citation_start
 vote_members citation_length
+vote_members state
+vote_members district
 vote_party_tallies record_id
 vote_party_tallies revision_number
 vote_party_tallies party_tally_count
