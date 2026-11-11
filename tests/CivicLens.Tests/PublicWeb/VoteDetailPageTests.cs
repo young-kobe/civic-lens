@@ -125,7 +125,7 @@ public sealed class VoteDetailPageTests
         Assert.NotNull(groups[0].QuerySelector("h3"));
         Assert.Null(groups[1].QuerySelector("h3"));
         Assert.Null(groups[1].QuerySelector("ul"));
-        Assert.Equal("House Republicans: No tracked member of this party voted against most House Republicans.", groups[1].TextContent.Trim());
+        Assert.Equal("House Republicans: no tracked member voted against most of the party.", groups[1].TextContent.Trim());
         Assert.Equal(Root + "board-house-republican.html", groups[1].QuerySelector("a")!.GetAttribute("href"));
         Assert.DoesNotContain("0 tracked", page.QuerySelector(".vote-breakers")!.TextContent);
     }

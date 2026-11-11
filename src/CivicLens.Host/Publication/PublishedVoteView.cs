@@ -101,7 +101,7 @@ internal static class PublishedVoteView
         var members = ByName(vote.Members.Where(member => member.Party == party &&
             vote.MajorityOf(party) is { } majority && PublishedPartyMajority.IsAgainstPartyMajority(member.Party, member.Cast, majority)));
         var name = PartyOf(vote, party);
-        return new($"{name}: {VoteBreakers.Headline(members.Length)}", VoteBreakers.None(name), members);
+        return new($"{name}: {VoteBreakers.Headline(members.Length)}", $"{name}: {VoteBreakers.None}", members);
     }
 
     private static string PartyOf(PublishedVote vote, string party) => PublishedOfficialView.PartyOf(vote.Chamber, party);

@@ -5,5 +5,5 @@ public static class VoteBreakers
 {
     public static string Headline(int count) => $"{count} tracked {(count == 1 ? "member" : "members")} voted against most of the party";
 
-    public static string None(string partyName) => $"No tracked member of this party voted against most {partyName}.";
+    public const string None = "no tracked member voted against most of the party.";
 }

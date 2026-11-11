@@ -1337,8 +1337,8 @@ public sealed class ReleaseRendererTests
         var breakers = (await RenderedAsync(vote)).QuerySelector("[aria-labelledby='breakers-title']")!;
 
         Assert.Empty(breakers.QuerySelectorAll("li"));
-        Assert.Contains("No tracked member of this party voted against most House Democrats.", breakers.TextContent);
-        Assert.Contains("No tracked member of this party voted against most House Republicans.", breakers.TextContent);
+        Assert.Contains("House Democrats: no tracked member voted against most of the party.", breakers.TextContent);
+        Assert.Contains("House Republicans: no tracked member voted against most of the party.", breakers.TextContent);
         Assert.Empty(breakers.QuerySelectorAll("h3"));
         Assert.DoesNotContain("0 tracked", breakers.TextContent);
     }
@@ -1355,7 +1355,7 @@ public sealed class ReleaseRendererTests
         Assert.Contains("Senate Democrats: 2 Yes, 1 No. Senate Republicans: 1 Yes, 3 No.", parties);
         var breakers = page.QuerySelector("[aria-labelledby='breakers-title']")!.TextContent;
         Assert.Contains("Senate Democrats: 1 tracked member voted against most of the party", breakers);
-        Assert.Contains("No tracked member of this party voted against most Senate Republicans.", breakers);
+        Assert.Contains("Senate Republicans: no tracked member voted against most of the party.", breakers);
     }
 
     [Fact]
