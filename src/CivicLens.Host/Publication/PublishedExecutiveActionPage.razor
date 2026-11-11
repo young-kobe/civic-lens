@@ -1,7 +1,7 @@
 @using CivicLens.Host.Components.Evidence
 @using CivicLens.Publication.Contracts
 
-<PublishedRecordFrame Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="" Facts="PublishedExecutiveActionView.Facts(Record)"
+<PublishedRecordFrame Kind="PublishedRecordKind.ExecutiveAction" Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="" Facts="PublishedExecutiveActionView.Facts(Record)"
                       Caveat="@PublishedExecutiveActionView.Caveat">
     <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
 

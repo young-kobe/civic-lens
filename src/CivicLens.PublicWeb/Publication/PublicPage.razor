@@ -64,9 +64,9 @@
     }
     <main id="main" tabindex="-1">
         <CascadingValue Value="glossaryUse" IsFixed="true">
-            @if (Breadcrumbs is not null)
+            @if (trail is not null)
             {
-                @Breadcrumbs
+                <PublicBreadcrumbs Trail="trail" RootPath="@RootPath" />
             }
             @if (Hero is not null)
             {
@@ -76,8 +76,7 @@
         </CascadingValue>
     </main>
     <footer class="public-footer">
-        <span class="public-footer-name">Civic Lens</span>
-        <nav class="public-footer-nav" aria-label="Footer">@NavLinks(PublicSections.Footer)</nav>
+        <nav class="public-footer-nav" aria-label="Footer">@NavLinks(PublicSections.FooterFor(Record))</nav>
     </footer>
 </body>
 </html>
@@ -86,6 +85,7 @@
     private string documentTitle = string.Empty;
     private string description = string.Empty;
     private string? canonicalUrl;
+    private PublicTrail? trail;
     private MembersStripSlot? membersStrip;
     private readonly GlossaryPageUse glossaryUse = new();
 
@@ -93,20 +93,20 @@
     [Parameter, EditorRequired] public string Description { get; set; } = string.Empty;
     [Parameter] public int Page { get; set; } = 1;
     [Parameter] public int PageCount { get; set; } = 1;
-    [Parameter] public PublicSection? Section { get; set; }
+    [Parameter, EditorRequired] public PublicSection? Section { get; set; }
+    [Parameter] public ReportedRecord? Record { get; set; }
     [Parameter] public bool IsArticle { get; set; }
     [Parameter] public bool NoIndex { get; set; }
     [Parameter, EditorRequired] public string? CanonicalPath { get; set; }
     [Parameter] public string? ExternalScript { get; set; }
     [Parameter] public string RootPath { get; set; } = string.Empty;
-    [Parameter] public RenderFragment? Breadcrumbs { get; set; }
     [Parameter] public RenderFragment? Hero { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
     private RenderFragment NavLinks(IReadOnlyList<PublicSections.NavLink> links) => @<text>
         @foreach (var link in links)
         {
-            <a href="@(RootPath + link.Path)" aria-current="@(link.Section is { } section && section == Section ? "page" : null)">@link.Text</a>
+            <a href="@(RootPath + link.Path)" aria-current="@(link.Section is { } section && section == Section ? "page" : null)">@link.Text@if (link.HiddenText is not null){<span class="visually-hidden">: @link.HiddenText</span>}</a>
         }
     </text>;
 
@@ -116,6 +116,7 @@
     {
         documentTitle = PublicHead.DocumentTitle(Title, Page, PageCount);
         description = PublicHead.Description(Description);
+        trail = CanonicalPath == string.Empty ? null : PublicSections.Trail(Section, Title, CanonicalPath, Record);
         membersStrip = Services.GetService<MembersStripSlot>();
         canonicalUrl = CanonicalPath is null ? null : Services.GetService<PublicBaseUrl>()?.Join(CanonicalPath);
     }
