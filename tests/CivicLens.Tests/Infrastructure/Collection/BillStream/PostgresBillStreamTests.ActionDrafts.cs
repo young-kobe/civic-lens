@@ -624,7 +624,7 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task AV6TextDraftStaysCurrentWithKeyTermsOffAndIsStaleWithThemOnSoOnlyTheSettingRedraftsIt()
+    public async Task AV6TextDraftStaysCurrentWithKeyTermsOnAsWellAsOffBecauseABillWithNoDefinitionsIsSentV6AndRedraftWouldPayAgain()
     {
         var candidate = await CandidateWithoutSummariesAsync();
         await SettleAsync(candidate, Revision(candidate, 1));
@@ -633,7 +633,8 @@ public sealed partial class PostgresBillStreamTests
 
         Assert.Equal("action-text-prompt-v6", ActionDraftTask.TextPromptVersion);
         Assert.False((await ActionStore(draftsKeyTerms: false).ReadEvidenceAsync(candidate, false, default))!.HasStaleDraft);
-        Assert.True((await ActionStore(draftsKeyTerms: true).ReadEvidenceAsync(candidate, false, default))!.HasStaleDraft);
+        Assert.False((await ActionStore(draftsKeyTerms: true).ReadEvidenceAsync(candidate, false, default))!.HasStaleDraft);
+        Assert.Equal(0, await ActionStore(draftsKeyTerms: true).RequeueStaleAsync(default));
 
         _ = await InsertRunAsync(candidate, ActionDraftTask.KeyTermTextPromptVersion, DateTimeOffset.UnixEpoch.UtcTicks + 2,
             schemaVersion: ActionDraftTask.KeyTermTextSchemaVersion);

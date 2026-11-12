@@ -14,7 +14,7 @@ public static class ActionDraftTask
     public const string TextPromptVersion = "action-text-prompt-v6";
     public const string TextSchemaVersion = "action-text-schema-v1";
 
-    /// <summary>The versions of a text prompt that holds the key term part. Only that prompt is sent with them, so a v6 draft stays current while key terms are off.</summary>
+    /// <summary>The versions of a text prompt that holds the key term part. Only that prompt is sent with them. A bill with no definitions section is still sent v6.</summary>
     public const string KeyTermTextPromptVersion = "action-text-prompt-v7";
     public const string KeyTermTextSchemaVersion = "action-text-schema-v2";
     public const string Model = "claude-haiku-5-5";
@@ -25,15 +25,17 @@ public static class ActionDraftTask
     public const int MaximumValidationPasses = 2;
     public const int MaximumSummaryPages = 20;
 
-    /// <summary>The current versions for the key term setting. With the setting off, the text prompt without key terms is current. With it on,
-    /// only the key term prompt is current, so a text draft from before the setting is stale and its redraft can get key terms.</summary>
+    /// <summary>The current versions for the key term setting. With the setting off, only the text prompt without key terms is current. With it on, both
+    /// text prompts are current, because a bill with no definitions section is sent v6 and a redraft would send it again and pay again.
+    /// A draft from before the setting gets key terms only when its bill next changes.</summary>
     public static AnalysisCurrentVersions CurrentVersions(bool draftsKeyTerms) => draftsKeyTerms ? KeyTermVersions : PlainVersions;
 
     private static readonly AnalysisCurrentVersions PlainVersions = new(TaskVersion,
         [PromptVersion, IssuePromptVersion, TextPromptVersion], [SchemaVersion, IssueSchemaVersion, TextSchemaVersion]);
 
     private static readonly AnalysisCurrentVersions KeyTermVersions = new(TaskVersion,
-        [PromptVersion, IssuePromptVersion, KeyTermTextPromptVersion], [SchemaVersion, IssueSchemaVersion, KeyTermTextSchemaVersion]);
+        [PromptVersion, IssuePromptVersion, TextPromptVersion, KeyTermTextPromptVersion],
+        [SchemaVersion, IssueSchemaVersion, TextSchemaVersion, KeyTermTextSchemaVersion]);
 
     public static readonly AnalysisTaskIdentity Identity = new(Task, TaskVersion, Model, PromptVersion, SchemaVersion);
 }
