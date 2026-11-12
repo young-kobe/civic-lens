@@ -10,7 +10,7 @@ namespace CivicLens.PublicApi.Issues;
 /// One snapshot serves both statements, so every count comes from one release, as in <c>ZipDistrictStore</c>.
 /// The kind rule is <see cref="PublishedVoteKindExtensions.SubstantiveNames"/>. A sponsor is a sponsorship with the role <c>Sponsor</c>, as in <c>bills.sponsor_count</c>.
 /// The current Congress is the Congress of the publication day of the release, from <see cref="CongressCalendar"/>.
-/// The page answer adds the issue name and definition and the newest votes and bills of the issue to the same snapshot.
+/// The page answer adds the issue name and definition and the newest votes and bills of the issue to the same snapshot. Its counts and lists cover the Congress of the release (<c>release_issues.count_congress</c>), and the votes and bills of each count and its list come from one shared set.
 /// The line-up reads <c>release_issue_party_lineups</c> in the same snapshot, and its base is the Home tile count <c>release_issues.bills</c>.</summary>
 public sealed class IssueStore(NpgsqlDataSource views)
 {
@@ -21,13 +21,39 @@ public sealed class IssueStore(NpgsqlDataSource views)
     public const int PageVotes = 10;
     public const int PageBills = 5;
 
-    private const string CountsSql = """
-        SELECT i.release_number, a.published_at_utc_ticks, i.count_congress, i.bills, i.name, i.definition,
-               (SELECT count(*) FROM public_api.issue_votes x WHERE x.issue_id = i.issue_id AND x.kind = ANY(@kinds)),
-               (SELECT count(*) FROM public_api.bill_issues x WHERE x.issue_id = i.issue_id)
+    private const string HeaderSql = """
+        SELECT i.release_number, a.published_at_utc_ticks, i.count_congress, i.bills, i.name, i.definition
           FROM public_api.release_issues i
           LEFT JOIN (SELECT published_at_utc_ticks FROM public_api.active_release LIMIT 1) a ON TRUE
          WHERE i.issue_id = @issue
+        """;
+
+    private const string TotalsSql = """
+        SELECT (SELECT count(*) FROM public_api.issue_votes x WHERE x.issue_id = @issue AND x.kind = ANY(@kinds)),
+               (SELECT count(*) FROM public_api.bill_issues x WHERE x.issue_id = @issue)
+        """;
+
+    // The vote set of the page: the substantive votes of the issue in the Congress of the release. A null Congress means that the release stores none, so the set is not narrowed.
+    private const string PageVoteSet = """
+          FROM (SELECT DISTINCT record_id, revision_number FROM public_api.vote_issues WHERE issue_id = @issue) k
+         CROSS JOIN LATERAL (
+              SELECT v.* FROM public_api.votes v
+               WHERE v.record_id = k.record_id AND v.revision_number = k.revision_number AND v.kind = ANY(@kinds)
+                 AND (@congress::integer IS NULL OR v.congress = @congress)
+               OFFSET 0) v
+        """;
+
+    private const string PageBillSet = """
+          FROM public_api.bills b
+         WHERE EXISTS (SELECT 1 FROM public_api.bill_issues i
+                        WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number AND i.issue_id = @issue)
+           AND (@congress::integer IS NULL OR b.congress = @congress)
+        """;
+
+    private const string PageTotalsSql = $"""
+        SELECT (SELECT count(*) {PageVoteSet}),
+               (SELECT count(*) {PageVoteSet} WHERE v.alignment = 'Split'),
+               (SELECT count(*) {PageBillSet})
         """;
 
     private const string LineUpSql = """
@@ -36,19 +62,13 @@ public sealed class IssueStore(NpgsqlDataSource views)
 
     private static readonly string VotesSql = $"""
         SELECT v.record_id, v.voted_on, v.chamber, v.headline, v.label, v.result, v.yea, v.nay
-          FROM (SELECT DISTINCT record_id, revision_number FROM public_api.vote_issues WHERE issue_id = @issue) k
-         CROSS JOIN LATERAL (
-              SELECT v.* FROM public_api.votes v
-               WHERE v.record_id = k.record_id AND v.revision_number = k.revision_number AND v.kind = ANY(@kinds)
-               OFFSET 0) v
+          {PageVoteSet}
          ORDER BY {VoteStore.Order} LIMIT @take
         """;
 
-    private const string BillsSql = """
+    private const string BillsSql = $"""
         SELECT b.record_id, b.headline, b.label, b.event_date, b.bill_line
-          FROM public_api.bills b
-         WHERE EXISTS (SELECT 1 FROM public_api.bill_issues i
-                        WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number AND i.issue_id = @issue)
+          {PageBillSet}
          ORDER BY b.event_date DESC, b.record_id LIMIT @take
         """;
 
@@ -66,10 +86,11 @@ public sealed class IssueStore(NpgsqlDataSource views)
     {
         await using var connection = await views.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        if (await ReadCountsAsync(connection, issueId, cancellationToken) is not { } counts) return null;
-        var sponsors = counts.PublishedOn is { } day ? await ReadSponsorsAsync(connection, issueId, day, cancellationToken) : [];
-        var lineUp = await ReadLineUpAsync(connection, issueId, counts, cancellationToken);
-        return new(counts.Release, issueId, counts.SubstantiveVotes, counts.Bills, [.. sponsors.Select(sponsor => new IssueSponsor(sponsor.OfficialId, sponsor.Bills, counts.Bills))], lineUp);
+        if (await ReadHeaderAsync(connection, issueId, cancellationToken) is not { } header) return null;
+        var (substantiveVotes, bills) = await ReadTotalsAsync(connection, issueId, cancellationToken);
+        var sponsors = header.PublishedOn is { } day ? await ReadSponsorsAsync(connection, issueId, day, cancellationToken) : [];
+        var lineUp = await ReadLineUpAsync(connection, issueId, header, cancellationToken);
+        return new(header.Release, issueId, substantiveVotes, bills, [.. sponsors.Select(sponsor => new IssueSponsor(sponsor.OfficialId, sponsor.Bills, bills))], lineUp);
     }
 
     /// <summary>Reads the page answer of one issue in one release snapshot: the counts, the line-up, the newest substantive votes, and the newest bills.
@@ -78,18 +99,20 @@ public sealed class IssueStore(NpgsqlDataSource views)
     {
         await using var connection = await views.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-        if (await ReadCountsAsync(connection, issueId, cancellationToken) is not { } counts) return null;
-        var lineUp = await ReadLineUpAsync(connection, issueId, counts, cancellationToken);
-        var votes = await ReadVotesAsync(connection, issueId, cancellationToken);
-        var bills = await ReadBillsAsync(connection, issueId, cancellationToken);
-        return new(counts.Release, issueId, counts.Name, counts.Definition, counts.SubstantiveVotes, counts.Bills, lineUp, votes, bills);
+        if (await ReadHeaderAsync(connection, issueId, cancellationToken) is not { } header) return null;
+        var lineUp = await ReadLineUpAsync(connection, issueId, header, cancellationToken);
+        var totals = await ReadPageTotalsAsync(connection, issueId, header.HomeCongress, cancellationToken);
+        var votes = await ReadVotesAsync(connection, issueId, header.HomeCongress, cancellationToken);
+        var bills = await ReadBillsAsync(connection, issueId, header.HomeCongress, cancellationToken);
+        return new(header.Release, issueId, header.Name, header.Definition, header.HomeCongress, totals.Votes, totals.SplitVotes, totals.Bills, lineUp, votes, bills);
     }
 
-    private static async Task<IssueVote[]> ReadVotesAsync(NpgsqlConnection connection, string issueId, CancellationToken cancellationToken)
+    private static async Task<IssueVote[]> ReadVotesAsync(NpgsqlConnection connection, string issueId, int? congress, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(VotesSql, connection);
         command.Parameters.AddWithValue("issue", issueId);
         command.Parameters.AddWithValue("kinds", PublishedVoteKindExtensions.SubstantiveNames());
+        AddCongress(command, congress);
         command.Parameters.AddWithValue("take", PageVotes);
         var votes = new List<IssueVote>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -99,10 +122,11 @@ public sealed class IssueStore(NpgsqlDataSource views)
         return [.. votes];
     }
 
-    private static async Task<IssueBill[]> ReadBillsAsync(NpgsqlConnection connection, string issueId, CancellationToken cancellationToken)
+    private static async Task<IssueBill[]> ReadBillsAsync(NpgsqlConnection connection, string issueId, int? congress, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(BillsSql, connection);
         command.Parameters.AddWithValue("issue", issueId);
+        AddCongress(command, congress);
         command.Parameters.AddWithValue("take", PageBills);
         var bills = new List<IssueBill>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -111,23 +135,47 @@ public sealed class IssueStore(NpgsqlDataSource views)
         return [.. bills];
     }
 
-    private sealed record Counts(int Release, DateOnly? PublishedOn, int? HomeCongress, int? HomeBills, string Name, string? Definition, int SubstantiveVotes, int Bills);
+    private sealed record Header(int Release, DateOnly? PublishedOn, int? HomeCongress, int? HomeBills, string Name, string? Definition);
 
-    private static async Task<Counts?> ReadCountsAsync(NpgsqlConnection connection, string issueId,
-        CancellationToken cancellationToken)
+    private sealed record PageTotals(int Votes, int SplitVotes, int Bills);
+
+    private static void AddCongress(NpgsqlCommand command, int? congress) =>
+        command.Parameters.Add(new NpgsqlParameter("congress", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)congress ?? DBNull.Value });
+
+    private static async Task<Header?> ReadHeaderAsync(NpgsqlConnection connection, string issueId, CancellationToken cancellationToken)
     {
-        await using var command = new NpgsqlCommand(CountsSql, connection);
+        await using var command = new NpgsqlCommand(HeaderSql, connection);
         command.Parameters.AddWithValue("issue", issueId);
-        command.Parameters.AddWithValue("kinds", PublishedVoteKindExtensions.SubstantiveNames());
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
         DateOnly? publishedOn = reader.IsDBNull(1) ? null : DateOnly.FromDateTime(new DateTime(reader.GetInt64(1), DateTimeKind.Utc));
         return new(reader.GetInt32(0), publishedOn, reader.IsDBNull(2) ? null : reader.GetInt32(2), reader.IsDBNull(3) ? null : reader.GetInt32(3),
-            reader.GetString(4), ViewColumns.Text(reader, 5), (int)reader.GetInt64(6), (int)reader.GetInt64(7));
+            reader.GetString(4), ViewColumns.Text(reader, 5));
+    }
+
+    private static async Task<(int SubstantiveVotes, int Bills)> ReadTotalsAsync(NpgsqlConnection connection, string issueId, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(TotalsSql, connection);
+        command.Parameters.AddWithValue("issue", issueId);
+        command.Parameters.AddWithValue("kinds", PublishedVoteKindExtensions.SubstantiveNames());
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        await reader.ReadAsync(cancellationToken);
+        return ((int)reader.GetInt64(0), (int)reader.GetInt64(1));
+    }
+
+    private static async Task<PageTotals> ReadPageTotalsAsync(NpgsqlConnection connection, string issueId, int? congress, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(PageTotalsSql, connection);
+        command.Parameters.AddWithValue("issue", issueId);
+        command.Parameters.AddWithValue("kinds", PublishedVoteKindExtensions.SubstantiveNames());
+        AddCongress(command, congress);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        await reader.ReadAsync(cancellationToken);
+        return new((int)reader.GetInt64(0), (int)reader.GetInt64(1), (int)reader.GetInt64(2));
     }
 
     /// <summary>Null means that the release has no line-up row for the issue. Rows that do not add up to the Home tile count fail the request, so a wrong split never shows.</summary>
-    private static async Task<IssuePartyLineUp?> ReadLineUpAsync(NpgsqlConnection connection, string issueId, Counts counts, CancellationToken cancellationToken)
+    private static async Task<IssuePartyLineUp?> ReadLineUpAsync(NpgsqlConnection connection, string issueId, Header counts, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(LineUpSql, connection);
         command.Parameters.AddWithValue("issue", issueId);

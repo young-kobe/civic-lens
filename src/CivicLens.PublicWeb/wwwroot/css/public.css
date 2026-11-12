@@ -461,6 +461,10 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .issue-definition { max-width: 34em; margin: var(--s4) 0 0; color: var(--bar-ink); font-size: 1.125rem; line-height: 1.5; }
 .issue-counts { max-width: 34em; margin: var(--s4) 0 var(--s3); color: var(--bar-ink); font-size: 1.125rem; line-height: 1.5; }
 .issue-hero .small { max-width: 40em; margin: 0; color: var(--bar-muted); }
+.issue-tabs { display: flex; gap: 2px; max-width: 60rem; margin: 0 0 var(--s4); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.issue-tabs a { min-height: 44px; padding: 12px; border-bottom: 3px solid transparent; color: var(--muted); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.issue-tabs a:hover { border-bottom-color: var(--info); color: var(--ink); }
+.issue-tabs a:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
 .issue-grid { display: grid; gap: var(--s4); max-width: 60rem; }
 .issue-section { min-width: 0; padding: 24px; border-radius: 28px; background: var(--raised); }
 .issue-section > h2 { margin: 0 0 var(--s3); font-size: clamp(1.5rem, 5vw, var(--t-section)); font-weight: 800; text-wrap: balance; }
