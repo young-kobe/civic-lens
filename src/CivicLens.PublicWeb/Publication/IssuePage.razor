@@ -30,7 +30,7 @@
             </div>
         }
         <nav class="issue-tabs" aria-label="On this page">
-            <a href="#your-members">Your members</a>
+            <a href="#your-members" aria-current="true">Your members</a>
             <a href="#votes">Votes</a>
             <a href="#bills">Bills</a>
             @if (Data.LineUp is { Bills: > 0 })
@@ -81,7 +81,7 @@
                     <ul class="record-rows" role="list">
                         @foreach (var bill in Data.Bills)
                         {
-                            <PublicRecordRow Icon="IconName.Bill" IconClass="record-row-icon-bill" Href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" Headline="@bill.Headline" Label="@bill.Label"
+                            <PublicRecordRow Icon="IconName.Bill" IconClass="record-row-icon-bill" Href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" Headline="@bill.Headline" Label="@bill.Label" Sponsor="@bill.Sponsor"
                                              Meta="@($"Latest sponsorship on {Moment.Day(bill.EventDate)}")" BillLine="@bill.BillLine" />
                         }
                     </ul>
