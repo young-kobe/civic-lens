@@ -85,6 +85,11 @@ brief_citations kind
 brief_citations target_record_id
 brief_citations target_revision_number
 brief_citations headline
+briefs approved_at_utc_ticks
+briefs coverage_considered
+briefs coverage_sent_to_model
+briefs cutoff_release_number
+briefs first_published_at_utc_ticks
 briefs record_id
 briefs revision_number
 briefs release_number

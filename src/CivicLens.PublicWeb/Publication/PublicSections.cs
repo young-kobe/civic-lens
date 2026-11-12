@@ -29,13 +29,13 @@ public static class PublicSections
         record is null ? Footer : [.. Footer.Select(link => link == Report ? record.ReportLink : link)];
 
     /// <summary>
-    /// The breadcrumb trail of an inner page. A record page runs Home, the section of its kind, then its short name. Another page runs
+    /// The breadcrumb trail of an inner page. A page of one kind runs Home, the section of its kind, then its short name. Another page runs
     /// Home, its section, then its title. The section link is absent when it leads to the page itself.
     /// </summary>
-    public static PublicTrail Trail(PublicSection? section, string title, string? canonicalPath, ReportedRecord? record)
+    public static PublicTrail Trail(PublicSection? section, string title, string? canonicalPath, PublishedRecordKind? kind, string? shortName)
     {
         var home = new PublicBreadcrumbItem("Home", PublicationProtocol.HomePath);
-        if (record is not null) return new([home, RecordSection(record.Kind)], record.ShortName ?? title);
+        if (kind is { } recordKind) return new([home, RecordSection(recordKind)], shortName ?? title);
 
         var link = Header.Concat(Footer).FirstOrDefault(candidate => section is not null && candidate.Section == section);
         if (link is null || link.Path == canonicalPath) return new([home], title);

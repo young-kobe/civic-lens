@@ -61,12 +61,12 @@ internal static class PublicApiGrants
         GRANT SELECT (record_id, revision_number, issue_id, "position", is_tracked) ON action_revision_issues TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", term, definition, cut) ON action_revision_key_terms TO civic_lens_public_owner;
         GRANT SELECT (crs_summary_text, summary_version) ON action_revisions TO civic_lens_public_owner;
+        GRANT SELECT (record_id, revision_number, week_start, headline, text_origin, cutoff_release_number, coverage_considered, coverage_sent_to_model) ON brief_revisions TO civic_lens_public_owner;
         GRANT SELECT (summary_citation_extraction_id, policy_area_citation_extraction_id, bill_citation_extraction_id)
             ON action_revisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, sponsorship_position, "position", citation_extraction_id)
             ON action_revision_sponsorship_citations TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", citation_extraction_id) ON action_revision_text_citations TO civic_lens_public_owner;
-        GRANT SELECT (record_id, revision_number, week_start, headline, text_origin) ON brief_revisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, part, position, paragraph_text) ON brief_revision_paragraphs TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, part, citation_id, position, kind, statement_candidate_id, statement_revision_number,
             action_record_id, action_revision_number, document_change_draft_id, document_change_revision_number) ON brief_revision_citations TO civic_lens_public_owner;

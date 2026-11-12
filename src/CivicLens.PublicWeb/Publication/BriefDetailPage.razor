@@ -1,0 +1,36 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Evidence
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSection.AllRecords" Title="@Data.Headline" Description="@Data.Headline" CanonicalPath="@PublicationProtocol.RecordPagePath(Data.RecordId)" IsArticle="true" RootPath="@RootPath" Record="record">
+    <article class="detail">
+        <header class="detail-head">
+            <p class="detail-eyebrow">@PublishedRecordLabels.Kind(PublishedRecordKind.Brief) | @PublishedBriefView.WeekRange(Data.WeekStart)</p>
+            <h1 class="detail-headline">@Data.Headline</h1>
+        </header>
+        <div class="detail-stack">
+            <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label">
+                <ChildContent><PublishedBriefText Paragraphs="Data.Paragraphs" /></ChildContent>
+                <Check>@PublishedBriefView.SampleBeforeRelease(Data.Coverage)<Term Key="@PublishedBriefView.ReleaseTermKey">releases</Term>@PublishedBriefView.SampleAfterRelease(Data.CutoffReleaseNumber) <a href="#cited">@PublishedBriefView.CitedRecordsTitle</a></Check>
+            </AiSummary>
+            <section class="detail-section" id="cited" aria-labelledby="brief-cited-title">
+                <h2 id="brief-cited-title">@PublishedBriefView.CitedRecordsTitle</h2>
+                <PublishedBriefCitations Citations="Data.Citations" ListClass="choices detail-cited" RecordHref="citedId => RootPath + PublicationProtocol.RecordPagePath(citedId)" />
+            </section>
+            <section class="detail-section" id="coverage" aria-labelledby="brief-coverage-title">
+                <h2 id="brief-coverage-title">How this brief was made</h2>
+                <Facts Items="PublishedBriefView.Facts(Data.WeekStart, Data.RevisionNumber, Data.CutoffReleaseNumber, Data.Coverage, Data.ApprovedAtUtc, Data.FirstPublishedAtUtc)" />
+            </section>
+        </div>
+    </article>
+</PublicPage>
+
+@code {
+    private ReportedRecord record = default!;
+
+    [Parameter, EditorRequired] public BriefPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    protected override void OnParametersSet() =>
+        record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.Brief, Data.Headline, Data.ShortName);
+}

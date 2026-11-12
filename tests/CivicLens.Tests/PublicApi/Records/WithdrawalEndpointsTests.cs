@@ -1,5 +1,7 @@
 using System.Net;
 using System.Text.Json;
+using CivicLens.PublicApi.Pages;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
@@ -94,5 +96,24 @@ public sealed class WithdrawalEndpointsTests(PostgresCollection postgres)
             using var noActiveRelease = await host.Client.GetAsync($"/v1/records/statement/{Id}/withdrawal");
             Assert.Equal(HttpStatusCode.NotFound, noActiveRelease.StatusCode);
         }
+    }
+
+    [Fact]
+    public async Task AStoredWithdrawalOfAnUnknownKindFailsTheRecordPageInsteadOfAnsweringNotFound()
+    {
+        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test") });
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 6, new DateTimeOffset(2026, 6, 6, 0, 0, 0, TimeSpan.Zero));
+        var withdrawn = new DateTimeOffset(2026, 6, 2, 3, 4, 5, TimeSpan.Zero).UtcTicks;
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            ALTER TABLE published_records DROP CONSTRAINT ck_published_records_kind;
+            INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('unknown-kind', '{Id}', {withdrawn});
+            INSERT INTO publication_withdrawals (kind, record_id, withdrawn_revision_number, withdrawn_at_utc_ticks, note, first_release, last_release)
+            VALUES ('unknown-kind', '{Id}', 3, {withdrawn}, 'Notice', 6, NULL);
+            """);
+
+        using var response = await host.Client.GetAsync($"/web/records/{Id}.html");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
     }
 }

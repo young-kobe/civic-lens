@@ -71,6 +71,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new DocumentChangeStore(views));
         builder.Services.AddSingleton(provider => new DocumentChangePageReader(provider.GetRequiredService<DocumentChangeStore>(), provider.GetRequiredService<RecordSnapshot>()));
         builder.Services.AddSingleton(new BriefStore(views));
+        builder.Services.AddSingleton(provider => new BriefPageReader(provider.GetRequiredService<BriefStore>()));
         builder.Services.AddSingleton(new ZipDistrictStore(views));
         builder.Services.AddSingleton(new IssueStore(views));
         builder.Services.AddSingleton<IssuePageReader>();
