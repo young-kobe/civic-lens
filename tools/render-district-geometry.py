@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """Make the district geometry asset of the vote map from the Census cartographic boundary KML.
 
-Run it with a local copy of the pinned zip:
+Run it with a local copy of the zip at SOURCE_URL:
     python3 tools/render-district-geometry.py --source PATH
 Check that the committed asset is current:
     python3 tools/render-district-geometry.py --source PATH --check
 
 The script needs only the Python standard library. It never downloads. It verifies the size and the
-SHA-256 of the zip, so a changed Census file fails loudly and never changes the asset silently.
+SHA-256 of the KML member of the zip, so a changed Census file fails loudly and never changes the asset silently.
 """
 import argparse
 import hashlib
 import heapq
-import io
 import json
 import math
 import sys
@@ -24,9 +23,10 @@ ROOT = Path(__file__).resolve().parents[1]
 ASSET = ROOT / 'src/CivicLens.PublicWeb/wwwroot/data/districts-119.json'
 
 SOURCE_URL = 'https://www2.census.gov/geo/tiger/GENZ2024/kml/cb_2024_us_cd119_20m.zip'
-SOURCE_SHA256 = 'da0e648b037ca9156a539cad2fe4c7ddd72d33908ad2fce06e8a64d40913cbf5'
-SOURCE_SIZE = 290655
 SOURCE_MEMBER = 'cb_2024_us_cd119_20m.kml'
+# The pin is on the KML member, not on the zip, so a repacked zip with the same content still passes.
+SOURCE_SIZE = 1551207
+SOURCE_SHA256 = 'c24be3bdb6afd3b82e853fde440046b20b6c8b9988fde5f371f4657148a9c471'
 CONGRESS = 119
 
 # Census KML field names, read from ExtendedData/SchemaData/SimpleData. The script fails when one is missing.
@@ -65,17 +65,17 @@ class GeometryError(Exception):
 # ---- Input ----
 
 def read_kml(source):
-    """Return the KML bytes of the pinned zip. Fail when the size, the hash, or the content differ."""
-    data = Path(source).read_bytes()
-    if len(data) != SOURCE_SIZE:
-        raise GeometryError(f'{source} has {len(data)} bytes. The pinned file has {SOURCE_SIZE} bytes.')
-    digest = hashlib.sha256(data).hexdigest()
-    if digest != SOURCE_SHA256:
-        raise GeometryError(f'{source} has sha256 {digest}. The pinned file has sha256 {SOURCE_SHA256}.')
-    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+    """Return the KML bytes of the zip. Fail when the member is missing or its size or hash differ."""
+    with zipfile.ZipFile(source) as archive:
         if SOURCE_MEMBER not in archive.namelist():
             raise GeometryError(f'The zip has no member {SOURCE_MEMBER}.')
-        return archive.read(SOURCE_MEMBER)
+        kml = archive.read(SOURCE_MEMBER)
+    if len(kml) != SOURCE_SIZE:
+        raise GeometryError(f'{SOURCE_MEMBER} has {len(kml)} bytes. The pinned member has {SOURCE_SIZE} bytes.')
+    digest = hashlib.sha256(kml).hexdigest()
+    if digest != SOURCE_SHA256:
+        raise GeometryError(f'{SOURCE_MEMBER} has sha256 {digest}. The pinned member has sha256 {SOURCE_SHA256}.')
+    return kml
 
 
 def local_name(element):

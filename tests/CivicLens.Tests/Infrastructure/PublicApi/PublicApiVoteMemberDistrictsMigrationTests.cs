@@ -66,6 +66,10 @@ public sealed class PublicApiVoteMemberDistrictsMigrationTests(PostgresCollectio
             Assert.Equal(["record_id", "revision_number", "position", "official_id", "vote_cast", "party", "caucus", "extraction_id", "citation_start", "citation_length"],
                 await QueryAsync(database, "SELECT attname FROM pg_attribute WHERE attrelid = 'public_api.vote_members'::regclass AND attnum > 0 ORDER BY attnum"));
             Assert.Equal(["true"], await QueryAsync(database, "SELECT (to_regclass('public_api.vote_sources') IS NOT NULL)::text"));
+            Assert.Equal(["true|true"], await QueryAsync(database, """
+                SELECT has_table_privilege('civic_lens_public', 'public_api.vote_members', 'SELECT')::text || '|'
+                    || has_table_privilege('civic_lens_public', 'public_api.vote_sources', 'SELECT')::text
+                """));
 
             await ApplyAsync(database, migration.UpOperations);
             Assert.Equal(["p0|CA|12", "p1||", "p2||"], await MembersAsync(database, House));

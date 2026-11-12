@@ -21,8 +21,8 @@ spec.loader.exec_module(tool)
 
 
 def pinned_to(path):
-    """Patch the pinned size and hash of the tool to the values of a local file."""
-    data = Path(path).read_bytes()
+    """Patch the pinned size and hash of the tool to the values of the KML member of a local zip."""
+    data = zipfile.ZipFile(path).read(tool.SOURCE_MEMBER)
     stack = contextlib.ExitStack()
     stack.enter_context(mock.patch.object(tool, 'SOURCE_SIZE', len(data)))
     stack.enter_context(mock.patch.object(tool, 'SOURCE_SHA256', hashlib.sha256(data).hexdigest()))
@@ -114,14 +114,15 @@ class RenderDistrictGeometryTests(unittest.TestCase):
         self.assertTrue(first.endswith('}\n'))
         self.assertEqual(3, sum('"district":' in line for line in first.splitlines()))
 
-    def test_a_file_with_another_size_is_rejected(self):
+    def test_a_member_with_another_size_is_rejected(self):
         result = subprocess.run([sys.executable, str(SCRIPT), '--source', str(FIXTURE), '--output', '/dev/null'],
                                 capture_output=True, text=True)
         self.assertEqual(1, result.returncode)
         self.assertIn('bytes', result.stderr)
+        self.assertIn(tool.SOURCE_MEMBER, result.stderr)
 
-    def test_a_file_with_another_sha256_is_rejected_and_writes_nothing(self):
-        with tempfile.TemporaryDirectory() as directory, mock.patch.object(tool, 'SOURCE_SIZE', FIXTURE.stat().st_size):
+    def test_a_member_with_another_sha256_is_rejected_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(tool, 'SOURCE_SIZE', len(zipfile.ZipFile(FIXTURE).read(tool.SOURCE_MEMBER))):
             output = Path(directory) / 'out.json'
             with contextlib.redirect_stderr(io.StringIO()) as errors:
                 code = tool.main(['--source', str(FIXTURE), '--output', str(output)])
