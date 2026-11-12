@@ -1,4 +1,5 @@
 @using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
 @{
     var compared = Data.Votes.Count(vote => vote.MembersVotedTheSame is not null);
     var different = Data.Votes.Count(vote => vote.MembersVotedTheSame == false);
@@ -16,8 +17,9 @@
         }
     }
     <ul class="shared-vote-list" role="list">
-        @foreach (var vote in displayedVotes)
+        @for (var index = 0; index < displayedVotes.Length; index++)
         {
+            var vote = displayedVotes[index];
             <li class="shared-vote-row">
                 <span class="shared-vote-icon" aria-hidden="true"><Icon Name="IconName.Vote" /></span>
                 <div class="shared-vote-content">
@@ -33,7 +35,15 @@
                             {
                                 <span class="shared-vote-comparison">@(membersVotedTheSame ? "Same vote" : "Voted differently")</span>
                             }
+                            @if (VoteWords.Badge(vote.Alignment) is { } badge)
+                            {
+                                <StatusBadge Text="@badge.Text" />
+                            }
                         </p>
+                        @if (vote.Totals is { } totals)
+                        {
+                            <PartyBar Id="@($"shared-vote-{index}")" Data="totals" />
+                        }
                     </div>
                 @if (vote.Casts.Length > 0)
                 {

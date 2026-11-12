@@ -1,3 +1,4 @@
+using CivicLens.PublicApi.Bills;
 using CivicLens.PublicApi.DocumentChanges;
 using CivicLens.PublicApi.ExecutiveActions;
 using CivicLens.PublicApi.Home;
@@ -58,7 +59,7 @@ public static class ServerPageEndpoints
             ApiResults.GuardAsync(async () => PublicationProtocol.IsPathSegment(id) && await officials.ReadAsync(id, cancellationToken) is { } page
                 ? await RespondOfficialAsync(context, responder, page, baseUrl, cancellationToken)
                 : await NotFoundAsync(context, responder, baseUrl, cancellationToken)));
-        routes.MapGet(RecordRoute("{recordId}"), (string recordId, HttpContext context, RecordKindStore kinds, VotePageReader votes, StatementPageReader statements,
+        routes.MapGet(RecordRoute("{recordId}"), (string recordId, HttpContext context, RecordKindStore kinds, VotePageReader votes, BillPageReader bills, StatementPageReader statements,
             ExecutiveActionPageReader actions, DocumentChangePageReader changes, ServerPageResponder responder, CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () =>
         {
@@ -75,6 +76,12 @@ public static class ServerPageEndpoints
                         [nameof(VoteDetailPage.RootPath)] = rootPath,
                         [nameof(VoteDetailPage.PagePath)] = RecordRoute(recordId),
                         [nameof(VoteDetailPage.Filter)] = filter
+                    }, cancellationToken);
+                case PublishedRecordKind.Action when await bills.ReadAsync(recordId, cancellationToken) is { } bill:
+                    return await responder.RespondAsync<BillDetailPage>(context, StatusCodes.Status200OK, bill.Release, new Dictionary<string, object?>
+                    {
+                        [nameof(BillDetailPage.Data)] = bill,
+                        [nameof(BillDetailPage.RootPath)] = rootPath
                     }, cancellationToken);
                 case PublishedRecordKind.Statement when await statements.ReadAsync(recordId, cancellationToken) is { } statement:
                     return await responder.RespondAsync<StatementDetailPage>(context, StatusCodes.Status200OK, statement.Release, new Dictionary<string, object?>

@@ -1,0 +1,144 @@
+@using System.Globalization
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSection.AllRecords" CanonicalPath="@PublicationProtocol.RecordPagePath(Data.RecordId)" Title="@Data.Headline" Description="@(Data.BillLine ?? Data.Title)" IsArticle="true"
+            Record="record" RootPath="@RootPath">
+    <div class="bill-page">
+        <header class="bill-head">
+            <p class="bill-eyebrow">Bill in the @CongressCalendar.Ordinal(Data.Congress) Congress</p>
+            <h1>@Data.Number, @Data.Title</h1>
+            @if (Data.StatusLabel is not null)
+            {
+                <p class="bill-status"><StatusBadge Text="@Data.StatusLabel" /></p>
+            }
+            @if (Data.BillLine is not null)
+            {
+                <p class="bill-line-row"><PublishedBillLine Line="@Data.BillLine" /></p>
+                <PublishedBillLineNote />
+            }
+            <p class="bill-lede">@Lede()</p>
+        </header>
+        @if (Data.Steps.Length > 0)
+        {
+            <BillStepper Steps="Data.Steps" />
+        }
+        <p class="bill-legend"><b>How a bill becomes law.</b> @Glossary.Term("bill").WhyItMatters <a href="@(RootPath + PublicationProtocol.GlossaryPagePath + "#" + Glossary.Term("bill").AnchorId)">Open the glossary</a></p>
+
+        <div class="bill-layout">
+            <div class="bill-main">
+                @if (!string.IsNullOrWhiteSpace(Data.Summary))
+                {
+                    <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label" Check="CrsCheck">
+                        <p>@Data.Summary</p>
+                    </AiSummary>
+                }
+                @if (Data.CrsText is not null)
+                {
+                    <SourceFold Summary="From the Congressional Research Service (CRS)" FoldId="@CrsFoldId">
+                        @foreach (var paragraph in Data.CrsText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                        {
+                            <p>@paragraph</p>
+                        }
+                    </SourceFold>
+                }
+                @if (Data.Votes.Length > 0 || Data.SenateVoteGap)
+                {
+                    <section class="bill-section bill-votes" aria-labelledby="bill-votes-title">
+                        <h2 id="bill-votes-title">Votes on this bill</h2>
+                        <p class="bill-lede">Votes on this site that name @Data.Number.</p>
+                        @if (Data.Votes.Length > 0)
+                        {
+                            <SharedVoteRows Data="voteRows" RootPath="@RootPath" SingleMember="true" />
+                        }
+                        @if (Data.SenateVoteGap)
+                        {
+                            <p class="small muted">This site has no Senate roll call vote on this bill.</p>
+                        }
+                    </section>
+                }
+                @if (Data.Cosponsors is { } cosponsors)
+                {
+                    <BillCosponsors Cosponsors="cosponsors" Sponsor="Data.Sponsors.FirstOrDefault()" Introduced="Data.Introduced" RootPath="@RootPath" />
+                }
+            </div>
+
+            <aside class="bill-rail" aria-label="Key facts">
+                <div class="bill-card bill-card-raised bill-members" data-bill-members data-record-id="@Data.RecordId" data-release="@Data.Release">
+                    <h2 class="bill-card-heading">Your members and this bill</h2>
+                    <div data-bill-members-body></div>
+                    <p class="small muted" data-bill-members-prompt>Enter your ZIP to see how your members relate to this bill. <a href="@(RootPath + PublicationProtocol.HomePath)#zip-results">Find my members</a></p>
+                </div>
+                @if (Data.Issues.Length > 0 || Data.PolicyArea is not null)
+                {
+                    <div class="bill-card">
+                        <h2 class="bill-card-title">Issues and area</h2>
+                        @foreach (var issue in Data.Issues)
+                        {
+                            <LinkChip Href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">@issue.Name</LinkChip>
+                        }
+                        @if (Data.PolicyArea is not null)
+                        {
+                            <p class="small muted">Policy area from Congress.gov: @Data.PolicyArea.</p>
+                        }
+                    </div>
+                }
+                <SourceFold>
+                    <dl class="bill-kv">
+                        @if (Data.Status is not null && Data.StatusDate is { } statusDate)
+                        {
+                            <dt>Latest action</dt>
+                            <dd>@Data.Status Action date @Moment.Day(statusDate).@if (Data.StatusReadAtUtc is { } read){<text> Status read @Moment.Full(read). The bill can change after this time.</text>}</dd>
+                        }
+                        @if (Data.CrsVersion is not null)
+                        {
+                            <dt>CRS summary</dt>
+                            <dd>Version @Data.CrsVersion</dd>
+                        }
+                        @if (Data.CheckedAtUtc is { } checkedAt && Data.FirstPublishedAtUtc is { } firstPublished)
+                        {
+                            <dt>Checked</dt>
+                            <dd>@Moment.Full(checkedAt). First published @Moment.Full(firstPublished).</dd>
+                        }
+                        <dt>Official bill page</dt>
+                        <dd><a href="@Data.CongressGovUrl" rel="noopener noreferrer">Bill on Congress.gov</a></dd>
+                        <dt>Revision</dt>
+                        <dd>@Data.RevisionNumber.ToString(CultureInfo.InvariantCulture)</dd>
+                    </dl>
+                </SourceFold>
+            </aside>
+        </div>
+    </div>
+</PublicPage>
+
+@code {
+    private ReportedRecord record = default!;
+    private SharedVoteRowsData voteRows = default!;
+
+    [Parameter, EditorRequired] public BillPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+
+    private const string CrsFoldId = "crs-source";
+
+    private RenderFragment? CrsCheck => !Data.SummaryFromCrs ? null
+        : @<text>The text above summarizes the Congressional Research Service summary. <a href="#@CrsFoldId">@SourceFold.Title</a></text>;
+
+    protected override void OnParametersSet()
+    {
+        record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.Action, Data.Headline, Data.Number);
+        voteRows = new SharedVoteRowsData(Data.Chamber, [], Data.Votes);
+    }
+
+    private string Lede()
+    {
+        var parts = new List<string>();
+        if (Data.Sponsors.FirstOrDefault() is { } sponsor)
+            parts.Add(sponsor.Party is { } party ? $"Sponsored by {sponsor.Name}, {Article(party)} {party}." : $"Sponsored by {sponsor.Name}.");
+        parts.Add($"Introduced {Moment.Day(Data.Introduced)}.");
+        if (Data.PublicLaw is { } law)
+            parts.Add(Data.BecameLawOn is { } on ? $"Became law on {Moment.Day(on)} as Public Law {law}." : $"Became law as Public Law {law}.");
+        return string.Join(' ', parts);
+    }
+
+    private static string Article(string word) => "AEIOUaeiou".Contains(word[0]) ? "an" : "a";
+}

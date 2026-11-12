@@ -1,5 +1,5 @@
-<details class="source-fold" id="source">
-    <summary>@Title</summary>
+<details class="source-fold" id="@FoldId">
+    <summary>@Summary</summary>
     <div class="source-fold-body">@ChildContent</div>
 </details>
 
@@ -7,5 +7,9 @@
     /// <summary>The summary text of the fold. The check lines of a page link to it.</summary>
     public const string Title = "Check the source";
 
+    /// <summary>The summary text. A page with a second fold gives it its own text.</summary>
+    [Parameter] public string Summary { get; set; } = Title;
+    /// <summary>The anchor of the fold. The check lines link to the fold that keeps the default. Null gives the fold no anchor.</summary>
+    [Parameter] public string? FoldId { get; set; } = "source";
     [Parameter] public RenderFragment? ChildContent { get; set; }
 }

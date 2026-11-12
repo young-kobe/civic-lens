@@ -455,6 +455,67 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
     .home-grid > .home-issues, .home-grid > .home-method { grid-column: span 4; }
 }
 
+/* Bill page. */
+.bill-page {
+    display: grid;
+    gap: var(--s5);
+    min-width: 0;
+}
+.bill-page > * { min-width: 0; }
+.bill-head { display: grid; gap: var(--s3); }
+.bill-eyebrow { margin: 0; color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.bill-head h1 { font-size: clamp(2.125rem, 4.5vw, 3.5rem); line-height: 1; text-wrap: balance; overflow-wrap: anywhere; }
+.bill-status, .bill-line-row { margin: 0; }
+.bill-section .party-bar { margin: var(--s4) 0; }
+.bill-lede { max-width: var(--measure, 46rem); margin: 0; color: var(--muted); font-size: 1.125rem; line-height: 1.5; }
+.bill-stepper { display: grid; margin: 0; padding: 0; list-style: none; }
+.bill-stepper li { position: relative; padding: 0 0 18px 40px; }
+.bill-stepper li::before { content: ""; position: absolute; left: 11px; top: 24px; bottom: 0; width: 2px; background: var(--line-strong); }
+.bill-stepper li:last-child { padding-bottom: 0; }
+.bill-stepper li:last-child::before { display: none; }
+.bill-stepper li::after { content: ""; position: absolute; left: 0; top: 2px; width: 24px; height: 24px; border: 2px solid var(--info); border-radius: 50%; background: var(--info); }
+.bill-stepper li[aria-current="step"]::after { box-shadow: 0 0 0 3px var(--ground), 0 0 0 5px var(--info); }
+.bill-stepper b { display: block; font-family: var(--heading); }
+.bill-step-detail { color: var(--muted); font-size: .875rem; }
+.bill-legend { max-width: 46rem; margin: 0; color: var(--muted); font-size: var(--t-sm); }
+.bill-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s5); }
+/* One shrinkable track and anywhere wrapping keep a long word or URL in stored text from widening the page. */
+.bill-main, .bill-rail { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); align-content: start; min-width: 0; overflow-wrap: anywhere; }
+.bill-section { padding: 20px 14px; border-radius: 28px; background: var(--surface); }
+.bill-section > h2 { margin: 0 0 var(--s2); font-size: clamp(var(--t-h2), 3vw, 2rem); font-weight: 800; letter-spacing: -.015em; }
+.bill-kv { display: grid; gap: 2px var(--s4); margin: 0; }
+.bill-kv dt { margin-top: var(--s3); color: var(--muted); font-size: .85rem; }
+.bill-kv dd { margin: 0; overflow-wrap: anywhere; }
+.bill-card { display: grid; gap: var(--s3); justify-items: start; padding: var(--s5); border-radius: 20px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+.bill-card p { margin: 0; }
+.bill-members-list { display: grid; gap: var(--s3); margin: 0; padding: 0; list-style: none; }
+.bill-members-list p { margin: 0 0 var(--s2); }
+.bill-card-title { margin: 0; color: var(--muted); font-family: var(--ui); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.bill-card-raised { box-shadow: inset 0 0 0 2px var(--marigold); }
+.bill-members [data-bill-members-body]:empty { display: none; }
+.bill-card-heading { margin: 0; font-family: var(--heading); font-size: 1.25rem; font-weight: 800; letter-spacing: -.015em; }
+@media (min-width: 761px) {
+    .bill-section { padding: 32px; }
+    .bill-kv { grid-template-columns: 200px minmax(0, 1fr); }
+    .bill-kv dt { margin-top: 0; padding: 6px 0; }
+    .bill-kv dd { padding: 6px 0; }
+}
+@media (min-width: 900px) {
+    .bill-stepper { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+    .bill-stepper li { padding: 36px 12px 0 0; }
+    .bill-stepper li::before { left: 28px; right: 0; top: 11px; bottom: auto; width: auto; height: 2px; }
+    .bill-stepper li:last-child { padding-bottom: 0; }
+    .bill-stepper li::after { left: 0; top: 0; }
+}
+@media (min-width: 1280px) {
+    .bill-layout { grid-template-columns: minmax(0, 1fr) 320px; gap: var(--s6); }
+    .bill-rail { position: sticky; top: 88px; max-height: calc(100vh - 104px); overflow-y: auto; overscroll-behavior: contain; padding: 4px; margin: -4px; }
+    .bill-card { flex: none; }
+    .bill-rail .bill-kv { grid-template-columns: minmax(0, 1fr); }
+    .bill-rail .bill-kv dt { padding: 0; margin-top: var(--s3); }
+    .bill-rail .bill-kv dd { padding: 0; }
+}
+
 .issue-hero { max-width: 48rem; padding-block: var(--s6) var(--s7); }
 .issue-eyebrow { margin: 0 0 var(--s2); color: var(--bar-muted); font-size: .875rem; font-weight: 650; }
 .issue-hero h1 { margin: 0; font-size: var(--t-display); line-height: .95; text-wrap: balance; }
