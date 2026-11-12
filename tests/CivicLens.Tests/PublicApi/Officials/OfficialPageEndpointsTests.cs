@@ -145,6 +145,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         Assert.Contains("House roll call 3", statements.QuerySelector(".official-related a")!.TextContent);
         Assert.Contains("Yes (Yea)", statements.QuerySelector(".shared-vote-cast-value")!.TextContent);
         Assert.Contains(PublishedRecordLabels.StatementModelWording, statements.TextContent);
+        Assert.Equal(2, statements.QuerySelectorAll(".official-source-label[data-origin=model]").Length);
         Assert.Equal(4, page.QuerySelectorAll("#votes .shared-vote-label").Length);
         Assert.All(page.QuerySelectorAll("#votes .shared-vote-label"), label => Assert.Equal(PublishedRecordLabels.ModelWording, label.TextContent.Trim()));
         Assert.DoesNotContain(page.QuerySelectorAll("#statements a"), link => link.GetAttribute("href")!.Contains(Unlinked));
@@ -164,7 +165,35 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         Assert.Single(page.QuerySelectorAll("#bills > p.muted"));
         Assert.Contains("Introduced 3 Mar 2026", rows[0].QuerySelector(".official-meta")!.TextContent);
         Assert.Contains("Introduced 10 Jan 2026", rows[1].QuerySelector(".official-meta")!.TextContent);
-        Assert.Contains("See all 2 bills", page.QuerySelector("#bills .official-more")!.TextContent);
+        Assert.Null(page.QuerySelector("#bills .official-more"));
+    }
+
+    [Fact]
+    public async Task PersonApprovalDoesNotHideAModelWrittenStatementLabel()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase,
+            $"UPDATE published_entries SET approved_by = 'Person' WHERE kind = 'statement' AND record_id = '{Linked}'");
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        var labels = page.QuerySelectorAll("#statements .official-source-label[data-origin=model]");
+        Assert.Equal(2, labels.Length);
+        Assert.Contains(labels, label => label.TextContent == PublishedRecordLabels.StatementModelWording);
+    }
+
+    [Fact]
+    public async Task LinkedCodeVoteKeepsItsCodeLabelWithoutAnAiBadge()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase,
+            $"UPDATE vote_revisions SET text_origin = 'Code' WHERE record_id = '{new string('c', 64)}'");
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        Assert.Single(page.QuerySelectorAll("#statements .official-source-label[data-origin=model]"));
+        Assert.Equal(PublishedRecordLabels.CodeWording,
+            Assert.Single(page.QuerySelectorAll("#statements .official-source-label[data-origin=code]")).TextContent);
     }
 
     [Fact]
