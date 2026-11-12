@@ -95,7 +95,7 @@
     }
     <details class="vote-fold">
         <summary>@VoteMapWords.TableFold</summary>
-        <DataTable TItem="VoteMapRow" Items="rows" Caption="@VoteMapWords.TableCaption(Data.Chamber)" Scroll="true" PagedRows="seats">
+        <DataTable TItem="VoteMapRow" Items="rows" Caption="@VoteMapWords.TableCaption(Data.Chamber, RollCall)" Scroll="true" PagedRows="seats">
             <Head>
                 <TableCell Header>Seat</TableCell>
                 <TableCell Header>Member</TableCell>
@@ -125,6 +125,7 @@
     private IReadOnlyList<VoteMapRow> rows = [];
 
     [Parameter, EditorRequired] public VoteMapData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public int RollCall { get; set; }
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
 
     protected override void OnParametersSet() =>

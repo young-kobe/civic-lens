@@ -102,6 +102,15 @@ public sealed class VoteMapTests
     }
 
     [Fact]
+    public async Task TheSeatTableCaptionNamesTheChamberAndTheRollCallOfTheVote()
+    {
+        var vote = House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7));
+        var page = await RenderAsync(vote);
+
+        Assert.Equal($"How each House seat voted on roll call {vote.RollCall}", page.QuerySelector(".vote-map caption")!.TextContent.Trim());
+    }
+
+    [Fact]
     public async Task AMemberWithNoSeatInTheReleaseStaysInTheTableNotOnTheMap()
     {
         var page = await RenderAsync(House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7), Vote().Members[1]));

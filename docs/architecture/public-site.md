@@ -167,7 +167,7 @@ These decisions come from the component audit. The owner accepted every recommen
 - The vote member filters narrow the table by name, cast, and party. Enforcer: `VoteMemberFilter`. Tests: `VoteDetailPageTests.TheMemberTableIsFoldedAndFiltersByNameVoteAndParty` and `VotePageEndpointsTests.TheQueryFiltersTheMemberTableAndALongNameFilterAnswers400`.
 - A map seat with no member row is never a cast. It has a plain fill, a dashed line, and the words "No member in the record" in its hover text, the legend, and the table. The map never says "vacant". Enforcer: `VoteMapMarks.Of`. Test: `VoteMapTests.ASeatWithNoMemberRowIsNeverLabeledAsACast`.
 - A Senate state splits in two in the position order of the vote members, in the map and in the tiles. The first senator takes the left half and the first tile. Enforcer: `VoteMapData.Of`. Test: `VoteMapTests.ASenateStateSplitsInTwoInThePositionOrderOfTheVoteMembersInBothViews`.
-- Delegates are circles below the map. They are never in the shapes or the tiles. Enforcer: `VoteMapData.Of` and `VoteMap`. Test: `VoteMapTests.DelegatesAreCirclesBelowTheMapAndNeverInTheSeatGrid`.
+- Delegates are circles below the map. They are never in the shapes or the tiles. The map shows only delegates who have a vote row. Enforcer: `VoteMapData.Of` and `VoteMap`. Test: `VoteMapTests.DelegatesAreCirclesBelowTheMapAndNeverInTheSeatGrid`.
 - The map legend lists every mark in use, with counts that add up to every seat and circle. Each mark has its own pattern, so color is never the only cue. Enforcers: `VoteMapData.Legend` and `VoteMap`. Test: `VoteMapTests.TheLegendListsEveryPatternInUseWithCountsThatAddUpToEverySeatAndCircle`.
 - The map shows only a true join. It stays off for a House vote of another Congress than the shapes, or a member whose seat has no shape. It also stays off for two members on one House seat, more than two senators in one state, or no placed member. Enforcer: `VoteMapData.Of`. Test: `VoteMapTests.TheMapStaysOffWhenItCannotShowTheVoteTruly`.
 - The tiles put the states in name order, each in a square grid, as the mockup `drawTiles` does. Enforcer: `VoteMapTiles.Place`. Test: `VoteMapTests.TheTilesPutStatesInNameOrderEachInASquareGrid`.
@@ -300,5 +300,8 @@ Limits:
 
 Open choices:
 
-- The approved text of the new vote map headings, notes, and view names in `VoteMapWords`. "No member in the record" is approved.
+- The approved text of these `VoteMapWords` strings: the map heading, the legend heading, and the view group name.
+- The approved text of the House view name, the tile view name, the table fold, and the delegates heading.
+- The approved text of the House intro and the tile note.
+- Approved by the owner: "Map of states", the Senate intro, the delegates note, and the unplaced line. Also the description, the table caption, and "No member in the record".
 - The approved text for each glossary term that still shows example wording.

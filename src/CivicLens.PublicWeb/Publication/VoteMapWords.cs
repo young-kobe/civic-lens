@@ -27,7 +27,7 @@ public static class VoteMapWords
         ? "1 tracked member has no seat in the record, so the map leaves them out."
         : $"{count} tracked members have no seat in the record, so the map leaves them out.";
 
-    public static string TableCaption(PublishedChamber chamber) => $"How each {chamber} seat voted";
+    public static string TableCaption(PublishedChamber chamber, int rollCall) => $"How each {chamber} seat voted on roll call {rollCall}";
 
     /// <summary>"Massachusetts district 7", "Alaska at large", or the state name alone for a Senate seat.</summary>
     public static string SeatName(VoteMapSeat seat) => seat.District switch
