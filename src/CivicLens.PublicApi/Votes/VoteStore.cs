@@ -250,7 +250,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
     private sealed record FactRow(int Position, string Text, string Id, int Start, int Length);
     private sealed record SourceRow(string? Id, string? Url, long? ObservedAt, string? Text);
     private sealed record MemberEvidenceRow(int Position, string Cast, string Id, int Start, int Length);
-    private sealed record RawVoteMember(int Position, string OfficialId, string Cast, string? Party, string? Caucus, string? Id, int? Start, int? Length);
+    private sealed record RawVoteMember(int Position, string OfficialId, string Cast, string? Party, string? Caucus, string? State, int? District, string? Id, int? Start, int? Length);
     private sealed record TallyRow(string Party, int? Yea, int? Nay, int? Present, int? NotVoting, int? Other);
     private sealed record DetailEvidence(PublishedVoteSource Source, PublishedDocumentVersion[] Sources, PublishedCitation VotedOnCitation,
         PublishedCitation? KindCitation, PublishedVoteFact[] Facts);
@@ -277,7 +277,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
         )
         SELECT a.release_number,
                (SELECT json_agg(json_build_object('position', m."position", 'officialId', m.official_id, 'cast', m.vote_cast,
-                        'party', m.party, 'caucus', m.caucus, 'id', m.extraction_id,
+                        'party', m.party, 'caucus', m.caucus, 'state', m.state, 'district', m.district, 'id', m.extraction_id,
                         'start', m.citation_start, 'length', m.citation_length) ORDER BY m."position")
                   FROM selected m),
                CASE WHEN @with_sources THEN
@@ -317,7 +317,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
         var evidenceRows = rows.Select(row => (Cast: (string?)row.Cast, Citation: (PublishedCitation?)ReadCitation(sources, row.Id, row.Start, row.Length))).ToArray();
         if (evidenceRows.Length > 0 && knownSources is null) PublishedVote.ValidateMemberEvidence(sources, evidenceRows);
         else if (evidenceRows.Length > 0) PublishedVote.ValidateMemberCitations(sources, evidenceRows);
-        var members = rows.Select((row, index) => new VoteMember(row.Position, row.OfficialId, row.Cast, row.Party, row.Caucus, evidenceRows[index].Citation!)).ToArray();
+        var members = rows.Select((row, index) => new VoteMember(row.Position, row.OfficialId, row.Cast, row.Party, row.Caucus, row.State, row.District, evidenceRows[index].Citation!)).ToArray();
         var page = members.Take(request.Limit).ToArray();
         var next = rows.Length > request.Limit ? new VoteMemberCursor(active, page[^1].Position).Encode() : null;
         return new(active, page, next);

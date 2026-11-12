@@ -82,6 +82,7 @@ internal static class PublicApiGrants
         GRANT SELECT (record_id, revision_number, "position", fact_text, citation_extraction_id, citation_start, citation_length)
             ON vote_revision_facts TO civic_lens_public_owner;
         GRANT SELECT (release_number, record_id, latest_action_text, latest_action_date, read_at_utc_ticks) ON release_bill_statuses TO civic_lens_public_owner;
+        GRANT SELECT (release_number, vote_record_id, bill_record_id) ON release_vote_bills TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, kind, document_number, signed_on, published_on, federal_register_citation, document_url,
             person_id, president_name, title, presidential_number, disposition_notes, disposition_notes_extraction_id) ON executive_action_revisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", citation_extraction_id) ON executive_action_revision_facts TO civic_lens_public_owner;
