@@ -491,6 +491,8 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .source-fold-body { display: grid; gap: var(--s3); padding: var(--s4) 24px 24px; overflow-wrap: anywhere; }
 .source-fold-body > * { min-width: 0; margin: 0; }
 .detail-list { display: grid; gap: var(--s1); margin: 0; padding: 0; list-style: none; font-weight: 650; }
+.detail-targets { gap: var(--s4); }
+.detail-target-reference { margin: var(--s1) 0 0; color: var(--muted); font-size: var(--t-sm); font-weight: 400; }
 .detail-chips { display: flex; flex-wrap: wrap; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
 .detail-quotes .choice { background: var(--surface); }
 .detail-quotes .choice .row { margin-top: var(--s2); }
