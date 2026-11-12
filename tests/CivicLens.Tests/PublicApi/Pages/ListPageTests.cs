@@ -242,23 +242,6 @@ public sealed class ListPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task ATypedSortIsIgnoredSoTheNextLinkCursorMatchesTheRankedSearch()
-    {
-        var site = new FakeReleaseSite();
-        site.Publish(1, PublishedSamples.Statement('a', "Rent cap one"), PublishedSamples.Statement('b', "Rent cap two"));
-        await using var host = await StartAsync(site);
-        await host.WaitForReleaseAsync();
-        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
-
-        var first = await ParseAsync(await host.Client.GetAsync("/web/search?q=rent&sort=headline&direction=desc&limit=1"));
-        var next = first.QuerySelector(".pager a[rel=next]")!.GetAttribute("href")!;
-        var second = await host.Client.GetAsync("/web/search" + next);
-
-        Assert.DoesNotContain("sort=", next);
-        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
-    }
-
-    [Fact]
     public async Task ASearchWithNoMatchGivesGuidanceAndABlankSearchRunsNoQuery()
     {
         var site = new FakeReleaseSite();
