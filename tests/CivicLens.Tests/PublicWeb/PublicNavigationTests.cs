@@ -23,10 +23,10 @@ public sealed class PublicNavigationTests
         foreach (var nav in navs)
         {
             var links = nav.QuerySelectorAll("a");
-            Assert.Equal(PublicSections.Header.Count, links.Length);
+            Assert.Equal(PublicSections.PreviewHeader.Count, links.Length);
             for (var index = 0; index < links.Length; index++)
             {
-                var expected = PublicSections.Header[index];
+                var expected = PublicSections.PreviewHeader[index];
                 Assert.Equal(expected.Text, links[index].TextContent);
                 Assert.Equal(Root + expected.Path, links[index].GetAttribute("href"));
                 Assert.Equal(expected.Section == PublicSection.Officials ? "page" : null, links[index].GetAttribute("aria-current"));
@@ -43,12 +43,37 @@ public sealed class PublicNavigationTests
         Assert.Equal(["Officials", "Issues", "Votes", "Bills", "Executive actions", "Compare parties"], nav.QuerySelectorAll("a").Select(link => link.TextContent));
         Assert.Equal(
             [PublicationProtocol.OfficialsPagePath, PublicationProtocol.FacetsPath,
-             PublicationProtocol.SearchByKindPath(PublishedRecordKind.Vote), PublicationProtocol.SearchByKindPath(PublishedRecordKind.Action),
-             PublicationProtocol.SearchByKindPath(PublishedRecordKind.ExecutiveAction), PublicSections.StaticBoardsPath],
+             "web/votes", "web/bills", "web/executive-actions", PublicSections.StaticBoardsPath],
             nav.QuerySelectorAll("a").Select(link => link.GetAttribute("href")![Root.Length..]));
         Assert.DoesNotContain(nav.QuerySelectorAll("a"), link => link.GetAttribute("href")!.Contains("all.html"));
         Assert.Equal("Compare parties", Assert.Single(nav.QuerySelectorAll("[aria-current=page]")).TextContent);
         Assert.Equal(["Home"], page.QuerySelectorAll("main nav[aria-label=Breadcrumb] a").Select(link => link.TextContent));
+    }
+
+    [Fact]
+    public async Task AStaticPageKeepsTheSearchLinksOfTheHeaderUntilTheCutover()
+    {
+        var page = await RenderAsync<PublicPage>(new Dictionary<string, object?>
+        {
+            [nameof(PublicPage.Title)] = "Test",
+            [nameof(PublicPage.Description)] = "Test page",
+            [nameof(PublicPage.CanonicalPath)] = null,
+            [nameof(PublicPage.Section)] = PublicSection.Officials
+        });
+
+        var hrefs = page.QuerySelectorAll(".public-nav a").Select(link => link.GetAttribute("href")).ToArray();
+
+        Assert.Equal(PublicSections.Header.Select(link => link.Path), hrefs);
+        Assert.Contains(PublicationProtocol.SearchByKindPath(PublishedRecordKind.Vote), hrefs);
+    }
+
+    [Fact]
+    public async Task APreviewListPageIsTheOwnPageOfItsSectionLinkSoItsTrailHasNoSectionCrumb()
+    {
+        var page = await RenderAsync(section: PublicSection.Votes, title: "Votes", canonicalPath: PublicSections.ListOf(PublishedRecordKind.Vote).Path);
+
+        Assert.Equal(["Home"], page.QuerySelectorAll("main nav[aria-label=Breadcrumb] a").Select(link => link.TextContent));
+        Assert.Equal("Votes", Assert.Single(page.QuerySelectorAll(".public-nav [aria-current=page]")).TextContent);
     }
 
     [Fact]
