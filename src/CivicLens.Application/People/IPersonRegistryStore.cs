@@ -12,4 +12,8 @@ public interface IPersonRegistryStore
     /// <summary>Reads the newest setting of each named person in one query. A person with no revision is absent.</summary>
     Task<IReadOnlyDictionary<string, PersonSetting>> ReadNewestSettingsAsync(IReadOnlyCollection<string> personIds,
         CancellationToken cancellationToken);
+
+    /// <summary>Reads the person ID of each named bioguide ID in one query. A bioguide ID with no person row is absent.</summary>
+    Task<IReadOnlyDictionary<string, string>> ReadIdsByBioguideAsync(IReadOnlyCollection<string> bioguideIds,
+        CancellationToken cancellationToken);
 }

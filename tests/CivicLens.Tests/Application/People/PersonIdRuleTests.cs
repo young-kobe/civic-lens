@@ -37,4 +37,14 @@ public sealed class PersonIdRuleTests
 
         Assert.Equal("l000001", PersonIdRule.Mint(name, "L000001", new HashSet<string>(StringComparer.Ordinal)));
     }
+
+    [Fact]
+    public void ATakenBioguideFallbackThrowsSoNoCallerGetsAnIdThatBreaksThePrimaryKey()
+    {
+        var taken = new HashSet<string>(StringComparer.Ordinal) { "q000001" };
+
+        var failure = Assert.Throws<InvalidOperationException>(() => PersonIdRule.Mint("...", "Q000001", taken));
+
+        Assert.Contains("q000001", failure.Message, StringComparison.Ordinal);
+    }
 }

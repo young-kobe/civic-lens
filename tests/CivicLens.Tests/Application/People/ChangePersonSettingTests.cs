@@ -111,5 +111,8 @@ public sealed class ChangePersonSettingTests
 
         public Task<IReadOnlyDictionary<string, PersonSetting>> ReadNewestSettingsAsync(IReadOnlyCollection<string> personIds,
             CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<string, string>> ReadIdsByBioguideAsync(IReadOnlyCollection<string> bioguideIds,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

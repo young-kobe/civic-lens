@@ -9,10 +9,14 @@ namespace CivicLens.Application.People;
 /// The one owner of the person ID rule. The ID is the address of the public pages, so a later name change never changes it.
 /// The ID is the official name in lowercase words joined by hyphens. A taken ID gets the bioguide ID as a suffix.
 /// A name with no letters, or an ID longer than the facet limit, falls back to the lowercase bioguide ID.
+/// When the fallback is taken too, no ID is left and the rule throws.
 /// </summary>
 public static partial class PersonIdRule
 {
-    /// <summary>Returns an ID that is not in <paramref name="takenIds"/> and adds it to the set.</summary>
+    /// <summary>
+    /// Returns an ID that is not in <paramref name="takenIds"/> and adds it to the set.
+    /// Throws <see cref="InvalidOperationException"/> when the lowercase bioguide ID fallback is taken.
+    /// </summary>
     public static string Mint(string fullName, string bioguideId, ISet<string> takenIds)
     {
         ArgumentNullException.ThrowIfNull(takenIds);
@@ -20,6 +24,8 @@ public static partial class PersonIdRule
         var slug = NotLowerAlphanumeric().Replace(WithoutAccents(fullName).ToLowerInvariant(), "-").Trim('-');
         var id = Candidates(slug, bioguide)
             .FirstOrDefault(candidate => candidate.Length <= PublicationProtocol.MaximumFacetIdLength && !takenIds.Contains(candidate)) ?? bioguide;
+        if (takenIds.Contains(id))
+            throw new InvalidOperationException($"No person ID is left for bioguide ID '{bioguideId}'. The fallback '{id}' is taken.");
         takenIds.Add(id);
         return id;
     }

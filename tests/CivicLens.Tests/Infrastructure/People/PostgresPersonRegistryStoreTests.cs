@@ -104,6 +104,21 @@ public sealed class PostgresPersonRegistryStoreTests(PostgresCollection postgres
         Assert.Equal([false, true, true], [newest["president"].WithholdPhoto, newest["jd-vance"].WithholdPhoto, newest["maria-cantwell"].WithholdPhoto]);
     }
 
+    [Fact]
+    public async Task TheMintedIdsOfManyBioguideIdsCostOneQueryAndAMemberWithNoRowIsAbsent()
+    {
+        await PersonSeed.InsertAsync(connectionString, "john-smith", "S000001");
+        await PersonSeed.InsertAsync(connectionString, "john-smith-s000002", "S000002");
+        var counter = new ReadCounter();
+        var counted = new PostgresPersonRegistryStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(counter).Options));
+
+        var ids = await counted.ReadIdsByBioguideAsync(["S000002", "S000003"], default);
+
+        Assert.Equal(1, counter.Reads);
+        Assert.Equal(new Dictionary<string, string> { ["S000002"] = "john-smith-s000002" }, ids);
+    }
+
     [Theory]
     [InlineData("bioguide_id", "'C000127'", "IX_people_bioguide_id")]
     [InlineData("wikidata_id", "'Q22686'", "IX_people_wikidata_id")]
