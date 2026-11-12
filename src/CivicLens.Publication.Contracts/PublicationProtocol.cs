@@ -21,6 +21,7 @@ public static class PublicationProtocol
     public const string SearchPagePath = "search.html";
     public const string ReportPagePath = "report.html";
     public const string MethodPagePath = "method.html";
+    public const string IssueTagsAnchor = "#issue-tags";
     public const string OfficialsPath = "officials.json";
     public const string OfficialSummariesPath = "officials-summary.json";
     public const string BillStatusPath = "bill-status.json";
@@ -28,6 +29,7 @@ public static class PublicationProtocol
     public const string OfficialsPagePath = "officials.html";
     public const string AboutPagePath = "about.html";
     public const string GlossaryPagePath = "glossary.html";
+    public const string VoteKindsPagePath = "vote-kinds.html";
     public const string SitemapPath = "sitemap.xml";
     public const string RobotsPath = "robots.txt";
     public const string NotFoundPagePath = "404.html";

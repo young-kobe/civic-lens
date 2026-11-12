@@ -12,12 +12,22 @@ public sealed class VoteDetailPageTests
     {
         var page = await RenderAsync(Vote());
 
-        var order = new[] { "h1.vote-headline", ".vote-summary", ".vote-result", ".vote-explain", ".vote-parties", ".vote-breakers", ".vote-members" }
+        var order = new[] { "h1.vote-headline", ".ai-summary", ".vote-result", ".vote-explain", ".vote-parties", ".vote-breakers", ".vote-members" }
             .Select(selector => Position(page, selector)).ToArray();
 
         Assert.All(order, position => Assert.True(position >= 0));
         Assert.Equal(order.Order(), order);
         Assert.Equal("The House passed H.R. 5334.", page.QuerySelector("h1")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ACodeWrittenVoteKeepsItsCodeLabelWithoutModelStyling()
+    {
+        var page = await RenderAsync(Vote() with { TextOrigin = PublishedTextOrigin.Code, Label = PublishedRecordLabels.CodeWording });
+
+        var summary = page.QuerySelector(".ai-summary")!;
+        Assert.Equal(PublishedRecordLabels.CodeWording, summary.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.False(summary.ClassList.Contains("ai-summary-ai"));
     }
 
     [Fact]
@@ -185,7 +195,7 @@ public sealed class VoteDetailPageTests
 
         var anchors = page.QuerySelectorAll(".vote-members .source-line").Select(link => link.GetAttribute("href")![1..]).ToArray();
         Assert.Equal(5, anchors.Length);
-        var fold = page.QuerySelector("details.vote-source")!;
+        var fold = page.QuerySelector("details.source-fold")!;
         Assert.All(anchors, anchor =>
         {
             var target = page.GetElementById(anchor)!;
@@ -226,7 +236,7 @@ public sealed class VoteDetailPageTests
     {
         var page = await RenderAsync(Vote());
 
-        var fold = Assert.Single(page.QuerySelectorAll("details.vote-source"));
+        var fold = Assert.Single(page.QuerySelectorAll("details.source-fold"));
         Assert.Equal("Check the source", fold.QuerySelector("summary")!.TextContent);
         Assert.Contains("Casts of all House members: Yes 6, No 4, Present 1, Not voting 3", fold.QuerySelector("dl.facts")!.TextContent);
         Assert.Equal(1, fold.QuerySelectorAll(".doc-text").Length);
@@ -270,8 +280,8 @@ public sealed class VoteDetailPageTests
     {
         var page = await RenderAsync(Vote() with { Summary = "<script>x()</script>" });
 
-        Assert.Equal(PublishedRecordLabels.ModelWording, page.QuerySelector(".vote-summary-label")!.TextContent);
-        Assert.Equal("<script>x()</script>", page.QuerySelector(".vote-summary p")!.TextContent);
+        Assert.Equal(PublishedRecordLabels.ModelWording, page.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal("<script>x()</script>", page.QuerySelector(".ai-summary p")!.TextContent);
         Assert.Null(page.QuerySelector("main script"));
     }
 

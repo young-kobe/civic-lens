@@ -4548,6 +4548,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.HasIndex("DispositionNotesExtractionId");
 
+                    b.HasIndex("Kind", "PresidentialNumber");
+
                     b.ToTable("executive_action_revisions", null, t =>
                         {
                             t.HasCheckConstraint("ck_executive_action_revisions_author", "author_kind = 'Code' AND author_subject = 'civic-lens:code'");

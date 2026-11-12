@@ -26,7 +26,8 @@ public sealed class IssuePageTests(PostgresCollection postgres)
         });
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;" +
-            "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'tax', 'Taxes <b>', 'd');");
+            "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'tax', 'Taxes <b>', 'd');" +
+            "UPDATE release_issues SET count_congress = 119, substantive_votes = 0, bills = 0 WHERE issue_id = 'tax';");
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, votes);
         await BillsSeed.AddBillsAsync(host.OperationalDatabase, bills);
         return host;
@@ -64,8 +65,35 @@ public sealed class IssuePageTests(PostgresCollection postgres)
         Assert.Null(page.QuerySelector("h1 b"));
         Assert.Equal(1, page.QuerySelectorAll("#votes .record-row").Length);
         Assert.DoesNotContain("Showing the newest", page.QuerySelector("#votes")!.TextContent);
-        Assert.Contains("1 substantive roll call vote and 0 bills and resolutions tagged Taxes <b>.", page.QuerySelector("[data-issue-counts]")!.TextContent);
+        Assert.Contains("1 substantive roll call vote and 0 bills and resolutions tagged Taxes <b> in the 119th Congress.", page.QuerySelector("[data-issue-counts]")!.TextContent);
         Assert.Contains("not about the whole issue", page.QuerySelector("#votes .issue-note")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheCountsAndTheListsCoverOnlyTheCongressOfTheReleaseAndTheSplitCountReadsTheStoredAlignment()
+    {
+        var votes = new[]
+        {
+            new SeededVote('1', "2026-03-01") { Kind = "Passage", RollCall = 1, Issues = ["tax"] },
+            new SeededVote('2', "2026-04-01") { Kind = "Passage", RollCall = 2, Issues = ["tax"] },
+            new SeededVote('3', "2024-04-01") { Kind = "Passage", RollCall = 3, Issues = ["tax"], Congress = 118 }
+        };
+        var bills = new[]
+        {
+            new SeededBill('a', "2026-03-01") { BillNumber = 1, Issues = ["tax"] },
+            new SeededBill('b', "2024-03-01") { BillNumber = 2, Issues = ["tax"], Congress = 118 }
+        };
+        await using var host = await StartAsync(votes, bills);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;" +
+            "UPDATE vote_revisions SET alignment = 'Split', democrat_majority = 'Yea', republican_majority = 'Nay', columns_written = true WHERE congress = 119 AND roll_call_number = 1;" +
+            "UPDATE vote_revisions SET alignment = 'Split', democrat_majority = 'Yea', republican_majority = 'Nay', columns_written = true WHERE congress = 118;");
+
+        var page = await GetPageAsync(host);
+
+        Assert.Equal("This release holds 2 substantive roll call votes and 1 bill or resolution tagged Taxes <b> in the 119th Congress.", page.QuerySelector("[data-issue-counts]")!.TextContent);
+        Assert.StartsWith("1 of those 2 votes were split votes", page.QuerySelector("[data-issue-split]")!.TextContent);
+        Assert.Equal(2, page.QuerySelectorAll("#votes .record-row").Length);
+        Assert.Equal(1, page.QuerySelectorAll("#bills .record-row").Length);
     }
 
     [Fact]
@@ -77,7 +105,7 @@ public sealed class IssuePageTests(PostgresCollection postgres)
         var page = await GetPageAsync(host);
 
         Assert.Equal(IssueStore.PageVotes, page.QuerySelectorAll("#votes .record-row").Length);
-        Assert.Contains("Showing the newest 10 of 12 substantive roll call votes.", page.QuerySelector("#votes")!.TextContent);
+        Assert.Contains("The 10 newest of 12.", page.QuerySelector("#votes")!.TextContent);
     }
 
     [Fact]
@@ -89,7 +117,7 @@ public sealed class IssuePageTests(PostgresCollection postgres)
         var page = await GetPageAsync(host);
 
         Assert.Equal(IssueStore.PageBills, page.QuerySelectorAll("#bills .record-row").Length);
-        Assert.Contains("Showing the newest 5 of 7 bills and resolutions.", page.QuerySelector("#bills")!.TextContent);
+        Assert.Contains("The 5 newest of 7.", page.QuerySelector("#bills")!.TextContent);
     }
 
     [Fact]
@@ -110,14 +138,14 @@ public sealed class IssuePageTests(PostgresCollection postgres)
     public async Task ThePartyLineUpNamesItsBaseCongressAndUnknownCountAndTheSplitAddsUpToTheBase()
     {
         await using var host = await StartAsync([], []);
-        await SeedLineUpAsync(host, 7, 1, ("Democratic", 2), ("Republican", 3), ("Independent", 1));
+        await SeedLineUpAsync(host, 7, 1, ("Democrat", 2), ("Republican", 3), ("Independent", 1));
 
         var page = await GetPageAsync(host);
 
         var section = page.QuerySelector("#parties")!;
         Assert.Contains("7 bills and resolutions tagged Taxes <b> in the 119th Congress", section.TextContent);
-        var rows = section.QuerySelectorAll("[data-issue-lineup] li").Select(row => Compact(row.TextContent)).ToArray();
-        Assert.Equal(["Republican sponsor 3 bills and resolutions", "Democratic sponsor 2 bills and resolutions", "Independent sponsor 1 bill or resolution", "Sponsor party not known 1 bill or resolution"], rows);
+        var rows = section.QuerySelectorAll(".party-bar-legend li").Select(row => Compact(row.TextContent)).ToArray();
+        Assert.Equal(["2 Democrat sponsor", "3 Republican sponsor", "1 Independent sponsor", "1 Sponsor party not known"], rows);
     }
 
     [Fact]

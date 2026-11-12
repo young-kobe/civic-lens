@@ -22,7 +22,6 @@ public static class PublishedFacetSummaryView
 
     public const string IssueTagsLinkText = "Where the issue tags come from";
 
-    public const string IssueTagsAnchor = "#issue-tags";
 
     public static string Votes(FacetSummary summary) => summary.Votes switch
     {

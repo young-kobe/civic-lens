@@ -5,9 +5,9 @@
     var showVotes = Data.Votes.Length > 0 || Data.Marks.Length > 0;
     var showStatements = Data.Statements.Length > 0;
     var showBills = Data.Bills.Length > 0;
-    var showIssues = Data.Issues.Length > 0 && Data.BillsCongress is not null;
+    var showIssues = Data.Issues.Length > 0 && Data.IssuesCongress is not null;
     var showJump = showVotes || showStatements || showBills || showIssues;
-    var showNoLinks = !Data.HasLinkedStatements;
+    var showNoLinks = showJump && !Data.HasLinkedStatements;
     var marksCongress = Data.Attendance.FirstOrDefault()?.Congress ?? party?.Congress;
     var voteRows = new SharedVoteRowsData(Data.Kind == PublishedOfficeKind.Senator ? PublishedChamber.Senate : PublishedChamber.House,
         [new(Data.OfficialId, Data.Name)], Data.Votes);
@@ -16,178 +16,191 @@
 
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@PublicationProtocol.OfficialPagePath(Data.OfficialId)" Title="@Data.Name" Description="@OfficialPageText.Lede(Data)" RootPath="@RootPath">
     <div class="official-page">
-        <header class="official-head">
-            <div class="official-portrait"><OfficialPortrait Name="@Data.Name" PhotoPath="@Data.PhotoPath" RootPath="@RootPath" ShowCredit="false" /></div>
-            <div>
-                <h1>@Data.Name</h1>
-                <p class="official-lede">@OfficialPageText.Lede(Data)</p>
-            </div>
-        </header>
-
-        @if (Data.Attendance.Length > 0 || party is not null || Data.BillsCongress is not null)
-        {
-            <ul class="official-figs" role="list" aria-label="Figures for @Data.Name">
-                @foreach (var figure in Data.Attendance)
-                {
-                    <li><b>@(figure.Held - figure.Missed)</b><span>@OfficialPageText.VotedOn(figure)</span></li>
-                }
-                @if (party is not null)
-                {
-                    <li><b>@party.WithParty</b><span>of @party.Cast <Term Key="split-vote">split votes</Term> @OfficialPageText.PartyLineScope(party)</span></li>
-                }
-                @if (Data.BillsCongress is not null)
-                {
-                    <li><b>@Data.SponsoredBills</b><span>@OfficialPageText.BillsSponsored(Data)</span></li>
-                }
-            </ul>
-        }
-
-        @if (showJump || showNoLinks)
-        {
-            <nav class="official-jump" aria-label="On this page">
-                @if (showJump)
-                {
-                    <ul role="list">
-                        @if (showVotes) {<li><a href="#votes">Votes</a></li>}
-                        @if (showStatements) {<li><a href="#statements">Statements</a></li>}
-                        @if (showBills) {<li><a href="#bills">Bills</a></li>}
-                        @if (showIssues) {<li><a href="#issues">Issues</a></li>}
-                    </ul>
-                }
-                @if (showNoLinks)
-                {
-                    <p class="muted small">@OfficialPageText.NoLinks</p>
-                }
-            </nav>
-        }
-
-        @if (showVotes)
-        {
-            <section id="votes" class="official-section official-votes" aria-labelledby="votes-title">
-                <h2 id="votes-title">How @Data.Name voted</h2>
-                @if (Data.Marks.Length > 0)
-                {
-                    @if (marksCongress is { } congress)
-                    {
-                        <p class="official-lede">Each square is one vote of @Data.Name in the @CongressCalendar.Ordinal(congress) Congress. Select a square to open that vote.</p>
-                    }
-                    <ul class="official-strip" role="list" aria-label="Votes against the party and missed roll calls">
-                        @foreach (var mark in Data.Marks)
-                        {
-                            <li><a href="@(RootPath + PublicationProtocol.RecordPagePath(mark.RecordId))" class="@(mark.IsMissed ? "missed" : "against")" title="@Moment.Day(mark.VotedOn), @mark.Chamber roll call @mark.RollCall: @OfficialPageText.MarkName(mark)"><span class="visually-hidden">@Moment.Day(mark.VotedOn), @mark.Chamber roll call @mark.RollCall: @OfficialPageText.MarkName(mark)</span></a></li>
-                        }
-                    </ul>
-                    @if (Data.MarksTotal > Data.Marks.Length)
-                    {
-                        <p class="muted small">The @Data.Marks.Length newest of @Data.MarksTotal. <a href="@recordPath">See all votes and records of @Data.Name</a></p>
-                    }
-                    <ul class="official-legend" role="list">
-                        @foreach (var line in Data.PartyLines.Where(line => line.AgainstParty > 0).OrderBy(line => line.FirstVotedOn))
-                        {
-                            <li><span class="swatch against" aria-hidden="true"></span>@OfficialPageText.AgainstPartyLegend(line)</li>
-                        }
+        <div class="official-layout">
+            <header class="official-head">
+                <div class="official-portrait"><OfficialPortrait Name="@Data.Name" PhotoPath="@Data.PhotoPath" RootPath="@RootPath" ShowCredit="false" /></div>
+                <div>
+                    <h1>@Data.Name</h1>
+                    <p class="official-lede">@OfficialPageText.Lede(Data)</p>
+                </div>
+            </header>
+            @if (Data.Attendance.Length > 0 || party is not null || Data.BillsCongress is not null || Data.BillCountsAbsent)
+            {
+                <aside class="official-rail" aria-label="Figures for @Data.Name">
+                    <ul class="official-figs" role="list">
                         @foreach (var figure in Data.Attendance)
                         {
-                            <li><span class="swatch missed" aria-hidden="true"></span>@figure.Missed missed @figure.Chamber roll @(figure.Missed == 1 ? "call" : "calls")</li>
+                            <li><b>@(figure.Held - figure.Missed)</b><span>@OfficialPageText.VotedOn(figure)</span></li>
+                        }
+                        @if (party is not null)
+                        {
+                            <li><b>@party.WithParty</b><span>of @party.Cast <Term Key="split-vote">split votes</Term> @OfficialPageText.PartyLineScope(party)</span></li>
+                        }
+                        @if (Data.BillsCongress is not null)
+                        {
+                            <li><b>@Data.SponsoredBills</b><span>@OfficialPageText.BillsSponsored(Data)</span></li>
+                        }
+                        else if (Data.BillCountsAbsent)
+                        {
+                            <li><span>@OfficialPageText.BillCountsUnavailable</span></li>
                         }
                     </ul>
-                }
-                @if (Data.Votes.Length > 0)
+                </aside>
+            }
+            <div class="official-main">
+                @if (showJump || showNoLinks)
                 {
-                    <SharedVoteRows Data="voteRows" RootPath="@RootPath" SingleMember="true" />
-                    <p class="official-more"><a href="@recordPath">See all votes and records of @Data.Name</a></p>
+                    <nav class="official-jump" aria-label="On this page">
+                        @if (showJump)
+                        {
+                            <ul role="list">
+                                @if (showVotes) {<li><a href="#votes">Votes</a></li>}
+                                @if (showStatements) {<li><a href="#statements">Statements</a></li>}
+                                @if (showBills) {<li><a href="#bills">Bills</a></li>}
+                                @if (showIssues) {<li><a href="#issues">Issues</a></li>}
+                            </ul>
+                        }
+                        @if (showNoLinks)
+                        {
+                            <p class="muted small">@OfficialPageText.NoLinks</p>
+                        }
+                    </nav>
                 }
-            </section>
-        }
 
-        @if (showStatements)
-        {
-            <section id="statements" class="official-section" aria-labelledby="statements-title">
-                <h2 id="statements-title">@OfficialPageText.StatementsHeading</h2>
-                <ul class="official-rows" role="list">
-                    @foreach (var statement in Data.Statements)
-                    {
-                        <li>
-                            <span class="official-icon" aria-hidden="true"><Icon Name="IconName.Statements" /></span>
-                            <div>
-                                <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))">@statement.Headline</a>
-                                @if (statement.Label is not null)
-                                {
-                                    <span class="muted small">@statement.Label</span>
-                                }
-                                <p class="official-meta"><span>@(statement.StatementDate is { } said ? "Said on " + Moment.Day(said) : "Date not stated")</span></p>
-                                <p class="official-related"><span>Related vote</span> <a href="@(RootPath + PublicationProtocol.RecordPagePath(statement.VoteRecordId))">@statement.VoteChamber roll call @statement.VoteRollCall, @Moment.Day(statement.VotedOn): @statement.VoteHeadline</a>
-                                    @if (statement.VoteLabel is not null)
-                                    {
-                                        <span class="muted small">@statement.VoteLabel</span>
-                                    }
-                                    @if (statement.Cast is { } cast)
-                                    {
-                                        <SharedVoteCast Side="@PublishedOfficialVote.SideOf(cast)"><CastWord Cast="@cast" /></SharedVoteCast>
-                                    }
-                                </p>
-                            </div>
-                        </li>
-                    }
-                </ul>
-                <p class="muted small">@OfficialPageText.LinkMeaning <a href="@(RootPath + PublicationProtocol.MethodPagePath)">What a link is</a></p>
-                <p class="official-more"><a href="@recordPath">See all statements by @Data.Name</a></p>
-            </section>
-        }
-
-        @if (showBills)
-        {
-            <section id="bills" class="official-section" aria-labelledby="bills-title">
-                <h2 id="bills-title">Bills @Data.Name introduced</h2>
-                @if (Data.Bills.Any(bill => bill.BillLine is not null))
+                @if (showVotes)
                 {
-                    <PublishedBillLineNote />
-                }
-                <ul class="official-rows" role="list">
-                    @foreach (var bill in Data.Bills)
-                    {
-                        var status = bill.LatestAction is { } action ? BillStatusMeaning.Label(action, bill.BillType) : null;
-                        <li>
-                            <span class="official-icon" aria-hidden="true"><Icon Name="IconName.Bill" /></span>
-                            <div>
-                                <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@bill.BillTitle</a>
-                                <PublishedBillLine Line="@bill.BillLine" />
-                                <p class="official-meta"><span>Introduced @Moment.Day(bill.IntroducedOn)</span>
-                                    @if (bill.LatestAction is not null && bill.LatestActionOn is { } actionOn)
-                                    {
-                                        <span>Latest official action @Moment.Day(actionOn): @BillStatusMeaning.Plain(bill.LatestAction, bill.BillType)</span>
-                                    }
-                                </p>
-                            </div>
-                            @if (status is not null)
+                    <section id="votes" class="official-section official-votes" aria-labelledby="votes-title">
+                        <h2 id="votes-title">How @Data.Name voted</h2>
+                        @if (Data.Marks.Length > 0)
+                        {
+                            @if (marksCongress is { } congress)
                             {
-                                <StatusBadge Text="@status" />
+                                <p class="official-lede">Each square is one vote of @Data.Name in the @CongressCalendar.Ordinal(congress) Congress. Select a square to open that vote.</p>
                             }
-                        </li>
-                    }
-                </ul>
-                <p class="official-more"><a href="@recordPath">See all @Data.SponsoredBills bills</a></p>
-            </section>
-        }
+                            <ul class="official-strip" role="list" aria-label="Votes against the party and missed roll calls">
+                                @foreach (var mark in Data.Marks)
+                                {
+                                    <li><a href="@(RootPath + PublicationProtocol.RecordPagePath(mark.RecordId))" class="@(mark.IsMissed ? "missed" : "against")" data-tone="@(mark.IsMissed ? null : PartyTones.Of(mark.Party ?? string.Empty).ToString().ToLowerInvariant())" title="@Moment.Day(mark.VotedOn), @mark.Chamber roll call @mark.RollCall: @OfficialPageText.MarkName(mark)"><span class="visually-hidden">@Moment.Day(mark.VotedOn), @mark.Chamber roll call @mark.RollCall: @OfficialPageText.MarkName(mark)</span></a></li>
+                                }
+                            </ul>
+                            @if (Data.MarksTotal > Data.Marks.Length)
+                            {
+                                <p class="muted small">The @Data.Marks.Length newest of @Data.MarksTotal. <a href="@recordPath">See all votes and records of @Data.Name</a></p>
+                            }
+                            <ul class="official-legend" role="list">
+                                @foreach (var line in Data.PartyLines.Where(line => line.AgainstParty > 0).OrderBy(line => line.FirstVotedOn))
+                                {
+                                    <li><span class="swatch against" data-tone="@PartyTones.Of(line.Party).ToString().ToLowerInvariant()" aria-hidden="true"></span>@OfficialPageText.AgainstPartyLegend(line)</li>
+                                }
+                                @foreach (var figure in Data.Attendance)
+                                {
+                                    <li><span class="swatch missed" aria-hidden="true"></span>@figure.Missed missed @figure.Chamber roll @(figure.Missed == 1 ? "call" : "calls")</li>
+                                }
+                            </ul>
+                        }
+                        @if (Data.Votes.Length > 0)
+                        {
+                            <SharedVoteRows Data="voteRows" RootPath="@RootPath" SingleMember="true" />
+                            <p class="official-more"><a href="@recordPath">See all votes and records of @Data.Name</a></p>
+                        }
+                    </section>
+                }
 
-        @if (showIssues)
-        {
-            <section id="issues" class="official-section" aria-labelledby="issues-title">
-                <h2 id="issues-title">Issues in @(Data.Name)'s record</h2>
-                <p class="official-lede">Each number counts the votes and bills in the @CongressCalendar.Ordinal(Data.BillsCongress!.Value) Congress that carry the issue tag. An AI model picks the tag, so a tag can be wrong. <a href="@(RootPath + PublicationProtocol.MethodPagePath)">How tags are chosen</a></p>
-                <ul class="official-chips" role="list">
-                    @foreach (var issue in Data.Issues)
-                    {
-                        <li><a href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">@issue.Name <b>@issue.Records</b></a></li>
-                    }
-                </ul>
-            </section>
-        }
+                @if (showStatements)
+                {
+                    <section id="statements" class="official-section official-statements" aria-labelledby="statements-title">
+                        <h2 id="statements-title">@OfficialPageText.StatementsHeading</h2>
+                        <ul class="official-rows" role="list">
+                            @foreach (var statement in Data.Statements)
+                            {
+                                var statementLabel = statement.Label ?? (statement.TextOrigin == PublishedTextOrigin.Model ? PublishedRecordLabels.StatementModelWording : null);
+                                var voteLabel = statement.VoteLabel ?? (statement.VoteTextOrigin == PublishedTextOrigin.Model ? PublishedRecordLabels.ModelWording : null);
+                                <li>
+                                    <span class="official-icon" aria-hidden="true"><Icon Name="IconName.Statements" /></span>
+                                    <div>
+                                        <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))">@statement.Headline</a>
+                                        @if (statementLabel is not null)
+                                        {
+                                            <span class="official-source-label" data-origin="@statement.TextOrigin?.ToString().ToLowerInvariant()">@statementLabel</span>
+                                        }
+                                        <p class="official-meta"><span>@(statement.StatementDate is { } said ? "Said on " + Moment.Day(said) : "Date not stated")</span></p>
+                                        <p class="official-related"><span>Related vote</span> <a href="@(RootPath + PublicationProtocol.RecordPagePath(statement.VoteRecordId))">@statement.VoteChamber roll call @statement.VoteRollCall, @Moment.Day(statement.VotedOn): @statement.VoteHeadline</a>
+                                            @if (voteLabel is not null)
+                                            {
+                                                <span class="official-source-label" data-origin="@statement.VoteTextOrigin?.ToString().ToLowerInvariant()">@voteLabel</span>
+                                            }
+                                            @if (statement.Cast is { } cast)
+                                            {
+                                                <SharedVoteCast Side="@PublishedOfficialVote.SideOf(cast)"><CastWord Cast="@cast" /></SharedVoteCast>
+                                            }
+                                        </p>
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                        <p class="muted small">@OfficialPageText.LinkMeaning <a href="@(RootPath + PublicationProtocol.MethodPagePath)">What a link is</a></p>
+                        <p class="official-more"><a href="@recordPath">See all statements by @Data.Name</a></p>
+                    </section>
+                }
 
-        @if (!showVotes && !showStatements && !showBills && !showIssues)
-        {
-            <EmptyState Title="@OfficialPageText.NothingToShow" />
-        }
+                @if (showBills)
+                {
+                    <section id="bills" class="official-section official-bills" aria-labelledby="bills-title">
+                        <h2 id="bills-title">Bills @Data.Name introduced</h2>
+                        @if (Data.Bills.Any(bill => bill.BillLine is not null))
+                        {
+                            <PublishedBillLineNote />
+                        }
+                        <ul class="official-rows" role="list">
+                            @foreach (var bill in Data.Bills)
+                            {
+                                var status = bill.LatestAction is { } action ? BillStatusMeaning.Label(action, bill.BillType) : null;
+                                <li>
+                                    <span class="official-icon" aria-hidden="true"><Icon Name="IconName.Bill" /></span>
+                                    <div>
+                                        <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@bill.BillTitle</a>
+                                        <PublishedBillLine Line="@bill.BillLine" />
+                                        <p class="official-meta"><span>Introduced @Moment.Day(bill.IntroducedOn)</span>
+                                            @if (bill.LatestAction is not null && bill.LatestActionOn is { } actionOn)
+                                            {
+                                                <span>Latest official action @Moment.Day(actionOn): @BillStatusMeaning.Plain(bill.LatestAction, bill.BillType)</span>
+                                            }
+                                        </p>
+                                    </div>
+                                    @if (status is not null)
+                                    {
+                                        <StatusBadge Text="@status" />
+                                    }
+                                </li>
+                            }
+                        </ul>
+                        @if (Data.SponsoredBills > Data.Bills.Length)
+                        {
+                            <p class="official-more"><a href="@recordPath">See all @Data.SponsoredBills bills</a></p>
+                        }
+                    </section>
+                }
+
+                @if (showIssues)
+                {
+                    <section id="issues" class="official-section" aria-labelledby="issues-title">
+                        <h2 id="issues-title">Issues in @(Data.Name)'s record</h2>
+                        <p class="official-lede">Each number counts the votes and bills in the @CongressCalendar.Ordinal(Data.IssuesCongress!.Value) Congress that carry the issue tag. An AI model picks the tag, so a tag can be wrong. <a href="@(RootPath + PublicationProtocol.MethodPagePath)">How tags are chosen</a></p>
+                        <ul class="official-chips" role="list">
+                            @foreach (var issue in Data.Issues)
+                            {
+                                <li><a href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">@issue.Name <b>@issue.Records</b></a></li>
+                            }
+                        </ul>
+                    </section>
+                }
+
+                @if (!showVotes && !showStatements && !showBills && !showIssues)
+                {
+                    <EmptyState Title="@OfficialPageText.NothingToShow" />
+                }
+            </div>
+        </div>
     </div>
 </PublicPage>
 

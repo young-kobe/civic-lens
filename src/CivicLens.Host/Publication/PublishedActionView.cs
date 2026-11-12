@@ -45,21 +45,21 @@ internal static class PublishedActionView
             .Select(fact => fact.CitedAt(action.PolicyAreaCitation is null ? null : PolicyAreaAnchor(action)));
 
     public static IReadOnlyList<CitedRange> RangesIn(PublishedAction action, PublishedDocumentVersion source) =>
-    [.. action.Citations().Select((citation, index) => (citation, anchor: PublishedRecordView.CitationAnchor(index)))
+    [.. action.Citations().Select((citation, index) => (citation, anchor: CitedText.Anchor(index)))
         .Where(item => item.citation.ExtractionId == source.ExtractionId)
         .Select(item => new CitedRange(item.anchor, item.citation.Start, item.citation.Length))];
 
     public static string SponsorshipAnchor(PublishedAction action, PublishedSponsorship sponsorship, int citationIndex) =>
-        PublishedRecordView.CitationAnchor(action.Sponsorships.TakeWhile(item => !ReferenceEquals(item, sponsorship))
+        CitedText.Anchor(action.Sponsorships.TakeWhile(item => !ReferenceEquals(item, sponsorship))
             .Sum(item => item.Citations.Length) + citationIndex);
 
     public static string CitationAnchorOf(PublishedAction action, PublishedCitation citation) =>
-        PublishedRecordView.CitationAnchor(action.Citations().TakeWhile(item => !ReferenceEquals(item, citation)).Count());
+        CitedText.Anchor(action.Citations().TakeWhile(item => !ReferenceEquals(item, citation)).Count());
 
-    private static string PolicyAreaAnchor(PublishedAction action) => PublishedRecordView.CitationAnchor(SponsorshipCitationCount(action));
+    private static string PolicyAreaAnchor(PublishedAction action) => CitedText.Anchor(SponsorshipCitationCount(action));
 
     public static string SummaryAnchor(PublishedAction action) =>
-        PublishedRecordView.CitationAnchor(SponsorshipCitationCount(action) + (action.PolicyAreaCitation is null ? 0 : 1));
+        CitedText.Anchor(SponsorshipCitationCount(action) + (action.PolicyAreaCitation is null ? 0 : 1));
 
     private static int SponsorshipCitationCount(PublishedAction action) => action.Sponsorships.Sum(item => item.Citations.Length);
 }

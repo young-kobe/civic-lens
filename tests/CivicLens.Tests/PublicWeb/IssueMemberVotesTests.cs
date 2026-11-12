@@ -17,16 +17,35 @@ public sealed class IssueMemberVotesTests
     private static readonly ZipMemberIdentityData Pat = new("pat", "Pat Member", "Democratic", null, null, [], []);
 
     private static readonly SharedVoteRowsData HouseVotes = new(PublishedChamber.House, [new("pat", "Pat Member")],
-        [new(new string('d', 64), new(2026, 9, 16), 119, 1, 5, "A vote", null, "Vote to pass", "Passed", [])]);
+        [new(new string('d', 64), new(2026, 9, 16), 119, 1, 5, "A vote", null, "Vote to pass", "Passed", [new("pat", "Yes", "Yea")])]);
 
     [Fact]
-    public async Task TheSharedVotesSitBelowTheMembersHeadingSoTheSectionIsAnH3AndItsRowsAreH4()
+    public async Task EachMemberGetsAnH3NameAndSingleMemberVoteRowsWithAnH4HeadingAndNoRepeatedName()
     {
         var page = await RenderAsync(Data([new("House seat", Pat)], HouseVotes));
 
-        Assert.Equal("How your House members voted", page.QuerySelector("h3")!.TextContent);
+        Assert.Equal("Pat Member", page.QuerySelector("h3")!.TextContent);
         Assert.Equal("A vote", page.QuerySelector("h4 a")!.TextContent);
         Assert.Null(page.QuerySelector("h2"));
+        Assert.Single(page.QuerySelectorAll(".shared-vote-rows.single"));
+        Assert.Null(page.QuerySelector(".shared-vote-member"));
+        Assert.Null(page.QuerySelector(".shared-vote-caption"));
+    }
+
+    [Fact]
+    public async Task TwoMembersOfOneChamberGetTheirOwnSectionWithOnlyTheirOwnCast()
+    {
+        var other = new SharedVoteMemberData("sam", "Sam Member");
+        var votes = new SharedVoteRowsData(PublishedChamber.Senate, [new("pat", "Pat Member"), other],
+            [HouseVotes.Votes[0] with { Casts = [new("pat", "Yes", "Yea"), new("sam", "No", "Nay")] },
+             HouseVotes.Votes[0] with { RecordId = new string('e', 64), Casts = [new("pat", "No", "Nay")] }]);
+
+        var page = await RenderAsync(Data([new("Senate seat", Pat) { Chamber = PublishedChamber.Senate }], votes));
+
+        var sections = page.QuerySelectorAll(".issue-member");
+        Assert.Equal(["Pat Member", "Sam Member"], sections.Select(section => section.QuerySelector("h3")!.TextContent));
+        Assert.Equal([2, 1], sections.Select(section => section.QuerySelectorAll(".shared-vote-row").Length));
+        Assert.Equal(["No"], sections[1].QuerySelectorAll(".shared-vote-cast").Select(cast => cast.TextContent.Trim()));
     }
 
     [Fact]

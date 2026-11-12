@@ -1,0 +1,6 @@
+<a class="link-chip" href="@Href">@ChildContent</a>
+
+@code {
+    [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}
