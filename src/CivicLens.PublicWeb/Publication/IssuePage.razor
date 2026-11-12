@@ -1,8 +1,10 @@
 @using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
 
 <PublicPage Section="PublicSection.Issues" CanonicalPath="@PublicationProtocol.IssuePagePath(Data.IssueId, 1)" Title="@Data.Name" Description="@description" RootPath="@RootPath">
     <Hero>
         <div class="issue-hero">
+            <p class="issue-eyebrow">Issue</p>
             <h1>@Data.Name</h1>
             @if (Data.Definition is not null)
             {
@@ -71,16 +73,7 @@
                 <section class="issue-section" id="parties" aria-labelledby="issue-parties-title">
                     <h2 id="issue-parties-title">How the parties line up</h2>
                     <p>@lineUp.Bills @Noun(lineUp.Bills, BillNoun, BillsNoun) tagged @Data.Name in the @CongressCalendar.Ordinal(lineUp.Congress) Congress, by the party of the sponsor on the day of sponsorship. The count is of @BillsNoun, not votes and not cosponsors.</p>
-                    <ul class="issue-lineup" role="list" data-issue-lineup>
-                        @foreach (var party in lineUp.Parties)
-                        {
-                            <li><span>@party.Party sponsor</span> <b>@party.Bills</b> <span>@Noun(party.Bills, BillNoun, BillsNoun)</span></li>
-                        }
-                        @if (lineUp.UnknownBills > 0)
-                        {
-                            <li><span>Sponsor party not known</span> <b>@lineUp.UnknownBills</b> <span>@Noun(lineUp.UnknownBills, BillNoun, BillsNoun)</span></li>
-                        }
-                    </ul>
+                    <PartyBar Id="issue-lineup" Data="IssueLineUpBar.Of(Data.Name, lineUp)" />
                 </section>
             }
         </div>

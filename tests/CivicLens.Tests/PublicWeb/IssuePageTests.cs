@@ -37,14 +37,15 @@ public sealed class IssuePageTests
     [Fact]
     public async Task EveryBillCountNamesBillsAndResolutionsWithOneNounRule()
     {
-        var lineUp = new IssueLineUpData(119, 3, [new("Democratic", 2), new("Republican", 1)], 0);
+        var lineUp = new IssueLineUpData(119, 3, [new("Democrat", 2), new("Republican", 1)], 0);
         var page = await RenderAsync(Data(lineUp: lineUp, bills: [Bill]) with { BillCount = 5 });
 
         Assert.Contains("Showing the newest 1 of 5 bills and resolutions.", page.QuerySelector("#bills")!.TextContent);
         Assert.Contains("3 bills and resolutions tagged Firearms", page.QuerySelector("#parties")!.TextContent);
-        Assert.Equal(["Democratic sponsor 2 bills and resolutions", "Republican sponsor 1 bill or resolution"],
-            page.QuerySelectorAll("[data-issue-lineup] li").Select(row => string.Join(' ', row.TextContent.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))));
+        Assert.Equal(["2 Democrat sponsor", "1 Republican sponsor"], page.QuerySelectorAll("#parties .party-bar-legend li").Select(row => Compact(row.TextContent)));
     }
+
+    private static string Compact(string text) => string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     [Fact]
     public async Task OneVoteAndOneBillUseTheSingularNouns()
@@ -125,13 +126,14 @@ public sealed class IssuePageTests
     [Fact]
     public async Task TheLineUpListsEachPartyAndTheUnknownCountOnlyWhenItIsAboveZero()
     {
-        var parties = new IssueLineUpPartyData[] { new("Republican", 3), new("Democratic", 1) };
+        var parties = new IssueLineUpPartyData[] { new("Republican", 3), new("Democrat", 1) };
         var with = await RenderAsync(Data(new IssueLineUpData(119, 5, parties, 1)));
         var without = await RenderAsync(Data(new IssueLineUpData(119, 4, parties, 0)));
 
         Assert.Contains("5 bills and resolutions tagged Firearms in the 119th Congress", with.QuerySelector("#parties")!.TextContent);
-        Assert.Equal(3, with.QuerySelectorAll("[data-issue-lineup] li").Length);
-        Assert.Equal(2, without.QuerySelectorAll("[data-issue-lineup] li").Length);
+        Assert.Equal(3, with.QuerySelectorAll("#parties .party-bar-legend li").Length);
+        Assert.Equal(2, without.QuerySelectorAll("#parties .party-bar-legend li").Length);
+        Assert.Equal("1 Sponsor party not known", Compact(with.QuerySelectorAll("#parties .party-bar-legend li")[2].TextContent));
     }
 
     [Fact]
@@ -146,6 +148,26 @@ public sealed class IssuePageTests
     }
 
     [Fact]
+    public async Task TheHeroNamesTheKindAboveTheTitleAsTheMockupDoes()
+    {
+        var page = await RenderAsync(Data());
+
+        Assert.Equal("Issue", page.QuerySelector(".issue-hero > .issue-eyebrow")!.TextContent);
+        Assert.Equal("Firearms", page.QuerySelector(".issue-eyebrow + h1")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheLineUpIsOnePartyBarWhoseSegmentsAddUpToTheBillCount()
+    {
+        var lineUp = new IssueLineUpData(119, 6, [new("Republican", 3), new("Democrat", 2)], 1);
+        var page = await RenderAsync(Data(lineUp: lineUp));
+
+        var bar = Assert.Single(page.QuerySelectorAll("#parties .party-bar"));
+        Assert.Equal(["democrat", "republican", "quiet"], bar.QuerySelectorAll("svg.party-bar-chart rect.party-bar-fill").Select(rect => rect.GetAttribute("data-tone")));
+        Assert.Equal(["solid", "stripes", "open"], bar.QuerySelectorAll("svg.party-bar-chart rect.party-bar-fill").Select(rect => rect.GetAttribute("data-fill")));
+    }
+
+    [Fact]
     public async Task TheBreadcrumbTrailRunsHomeIssuesThenTheIssueName()
     {
         var page = await RenderAsync(Data());
@@ -157,7 +179,7 @@ public sealed class IssuePageTests
     [Fact]
     public async Task TheIssuePagePassagesReadAtOrBelowTheSharedGradeLimit()
     {
-        var page = await RenderAsync(Data(new IssueLineUpData(119, 5, [new("Republican", 3), new("Democratic", 1)], 1)));
+        var page = await RenderAsync(Data(new IssueLineUpData(119, 5, [new("Republican", 3), new("Democrat", 1)], 1)));
 
         foreach (var selector in new[] { "[data-issue-counts]", ".issue-hero .small", "#votes .issue-note", "#bills .issue-note", "#parties > p" })
         {

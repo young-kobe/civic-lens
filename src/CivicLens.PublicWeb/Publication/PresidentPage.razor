@@ -10,6 +10,13 @@
     <div class="official-page president-page">
         <header class="official-head">
             <div>
+                <p class="official-office">
+                    President of the United States
+                    @if (Data.Party is { } party)
+                    {
+                        <span aria-hidden="true"> | </span><span>@party</span>
+                    }
+                </p>
                 <h1>@title</h1>
                 <p class="official-lede">@Description(executive)</p>
             </div>
@@ -21,7 +28,7 @@
                 <li><a href="#@OfficialPageText.ExecutiveAnchor(type.Kind)"><b>@type.Count</b><span>@OfficialPageText.ExecutivePlural(type.Kind, type.Count) signed by @Data.Name</span></a></li>
             }
         </ul>
-        <p><a class="btn" href="@allPath">See all @executive.Total executive actions</a></p>
+        <p><Button Variant="ButtonVariant.Primary" Href="@allPath">See all @executive.Total executive actions</Button></p>
 
         <aside class="official-fixed" aria-labelledby="president-box">
             <h2 id="president-box">@OfficialPageText.ExecutiveBoxTitle</h2>
@@ -33,14 +40,21 @@
             <section id="@OfficialPageText.ExecutiveAnchor(type.Kind)" class="official-section official-exec" aria-labelledby="@(OfficialPageText.ExecutiveAnchor(type.Kind))-title">
                 <h2 id="@(OfficialPageText.ExecutiveAnchor(type.Kind))-title">@OfficialPageText.ExecutiveHeading(type.Kind, type.Count)</h2>
                 <p class="official-lede">@OfficialPageText.ExecutiveMeaning(type.Kind)</p>
-                <ul class="record-rows" role="list">
+                <ul class="official-rows" role="list">
                     @foreach (var action in type.Newest)
                     {
-                        <PublicRecordRow Icon="IconName.ExecutiveAction" IconClass="home-executive-icon" Href="@(RootPath + PublicationProtocol.RecordPagePath(action.RecordId))" Headline="@action.Title"
-                                         Label="@PublishedRecordLabels.ExecutiveActionKind(type.Kind)" Meta="@("Signed " + Moment.Day(action.SignedOn))" />
+                        <li>
+                            <div>
+                                <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(action.RecordId))">@action.Title</a>
+                                <p class="official-meta"><span>@PublishedRecordLabels.ExecutiveActionKind(type.Kind)</span><span>Signed @Moment.Day(action.SignedOn)</span></p>
+                            </div>
+                        </li>
                     }
                 </ul>
-                <p class="official-more"><a href="@allPath">See all @type.Count @OfficialPageText.ExecutivePlural(type.Kind, type.Count)</a></p>
+                @if (type.Count > type.Newest.Length)
+                {
+                    <p class="official-more"><a href="@allPath">See all @type.Count @OfficialPageText.ExecutivePlural(type.Kind, type.Count)</a></p>
+                }
             </section>
         }
     </div>

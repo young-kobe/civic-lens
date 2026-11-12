@@ -140,11 +140,12 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
 
         Assert.Equal(4, page.QuerySelectorAll("#votes .shared-vote-row").Length);
         Assert.Contains("No (Nay)", page.QuerySelector("#votes .shared-vote-row")!.TextContent);
-        var statements = Assert.Single(page.QuerySelectorAll("#statements .record-rows li"));
+        var statements = Assert.Single(page.QuerySelectorAll("#statements .official-rows li"));
         Assert.Contains("Said on 10 Feb 2026", statements.TextContent);
         Assert.Contains("House roll call 3", statements.QuerySelector(".official-related a")!.TextContent);
         Assert.Contains("Yes (Yea)", statements.QuerySelector(".shared-vote-cast-value")!.TextContent);
         Assert.Contains(PublishedRecordLabels.StatementModelWording, statements.TextContent);
+        Assert.Equal(2, statements.QuerySelectorAll(".official-source-label[data-origin=model]").Length);
         Assert.Equal(4, page.QuerySelectorAll("#votes .shared-vote-label").Length);
         Assert.All(page.QuerySelectorAll("#votes .shared-vote-label"), label => Assert.Equal(PublishedRecordLabels.ModelWording, label.TextContent.Trim()));
         Assert.DoesNotContain(page.QuerySelectorAll("#statements a"), link => link.GetAttribute("href")!.Contains(Unlinked));
@@ -157,14 +158,42 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
 
         var page = await GetPageAsync(host, "/web/officials/p0");
 
-        var rows = page.QuerySelectorAll("#bills .record-rows li");
+        var rows = page.QuerySelectorAll("#bills .official-rows li");
         Assert.Equal(2, rows.Length);
         Assert.Equal("Pays landlords.", rows[0].QuerySelector(".bill-line")!.TextContent);
         Assert.Null(rows[1].QuerySelector(".bill-line"));
         Assert.Single(page.QuerySelectorAll("#bills > p.muted"));
-        Assert.Contains("Introduced 3 Mar 2026", rows[0].QuerySelector("a")!.TextContent);
-        Assert.Contains("Introduced 10 Jan 2026", rows[1].QuerySelector("a")!.TextContent);
-        Assert.Contains("See all 2 bills", page.QuerySelector("#bills .official-more")!.TextContent);
+        Assert.Contains("Introduced 3 Mar 2026", rows[0].QuerySelector(".official-meta")!.TextContent);
+        Assert.Contains("Introduced 10 Jan 2026", rows[1].QuerySelector(".official-meta")!.TextContent);
+        Assert.Null(page.QuerySelector("#bills .official-more"));
+    }
+
+    [Fact]
+    public async Task PersonApprovalDoesNotHideAModelWrittenStatementLabel()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase,
+            $"UPDATE published_entries SET approved_by = 'Person' WHERE kind = 'statement' AND record_id = '{Linked}'");
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        var labels = page.QuerySelectorAll("#statements .official-source-label[data-origin=model]");
+        Assert.Equal(2, labels.Length);
+        Assert.Contains(labels, label => label.TextContent == PublishedRecordLabels.StatementModelWording);
+    }
+
+    [Fact]
+    public async Task LinkedCodeVoteKeepsItsCodeLabelWithoutAnAiBadge()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase,
+            $"UPDATE vote_revisions SET text_origin = 'Code' WHERE record_id = '{new string('c', 64)}'");
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        Assert.Single(page.QuerySelectorAll("#statements .official-source-label[data-origin=model]"));
+        Assert.Equal(PublishedRecordLabels.CodeWording,
+            Assert.Single(page.QuerySelectorAll("#statements .official-source-label[data-origin=code]")).TextContent);
     }
 
     [Fact]
@@ -231,7 +260,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         Assert.Contains("3 executive actions", page.QuerySelector(".official-lede")!.TextContent);
         Assert.Contains("signed from 1 May 2026 to 20 May 2026", page.QuerySelector(".official-lede")!.TextContent);
         Assert.Equal(["Executive orders (2)", "Proclamations (1)"], page.QuerySelectorAll(".official-exec h2").Select(heading => heading.TextContent).ToArray());
-        Assert.Equal(["Newer order", "Older order"], page.QuerySelectorAll("#type-executiveorder .record-row a > span:first-child").Select(link => link.TextContent).ToArray());
+        Assert.Equal(["Newer order", "Older order"], page.QuerySelectorAll("#type-executiveorder .official-row-title").Select(link => link.TextContent).ToArray());
         Assert.Null(page.QuerySelector("#votes"));
         Assert.DoesNotContain("What the President said", page.Body!.TextContent);
     }

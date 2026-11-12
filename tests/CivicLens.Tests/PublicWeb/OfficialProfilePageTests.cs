@@ -149,12 +149,12 @@ public sealed class OfficialProfilePageTests
     public async Task BillRowsShowTheIntroducedDateTheOfficialTitleWithoutABillLineAndAStatusBadge()
     {
         var page = await RenderAsync<OfficialProfilePage>(Member());
-        var row = page.QuerySelector("#bills .record-rows li")!;
+        var row = page.QuerySelector("#bills .official-rows li")!;
 
-        Assert.Equal("H.R. 40 would study reparations.", row.QuerySelector("a > span:first-child")!.TextContent);
+        Assert.Equal("H.R. 40 would study reparations.", row.QuerySelector("a.official-row-title")!.TextContent);
         Assert.Null(row.QuerySelector(".bill-line"));
         Assert.Null(page.QuerySelector("#bills > p.muted"));
-        Assert.Contains("Introduced 3 Jan 2025", row.QuerySelector("a")!.TextContent);
+        Assert.Contains("Introduced 3 Jan 2025", row.QuerySelector(".official-meta")!.TextContent);
         Assert.Equal(BillStatusMeaning.Label("Referred to the House Committee on the Judiciary.", "hr"), row.QuerySelector(".badge")!.TextContent.Trim());
         Assert.Equal("In committee", row.QuerySelector(".badge")!.TextContent.Trim());
         Assert.Contains("See all 43 bills", page.QuerySelector("#bills .official-more")!.TextContent);
@@ -165,14 +165,14 @@ public sealed class OfficialProfilePageTests
     {
         var bill = Member().Bills[0] with { BillLine = "Studies reparations.", LatestAction = "Something odd happened" };
         var page = await RenderAsync<OfficialProfilePage>(Member() with { Bills = [bill, bill with { RecordId = new string('f', 64), BillLine = "Pays landlords." }] });
-        var row = page.QuerySelector("#bills .record-rows li")!;
+        var row = page.QuerySelector("#bills .official-rows li")!;
 
-        Assert.Equal("H.R. 40 would study reparations.", row.QuerySelector("a > span:first-child")!.TextContent);
+        Assert.Equal("H.R. 40 would study reparations.", row.QuerySelector("a.official-row-title")!.TextContent);
         Assert.Equal("Studies reparations.", row.QuerySelector(".bill-line")!.TextContent);
         Assert.Equal(2, page.QuerySelectorAll("#bills .bill-line").Length);
         Assert.Equal(PublishedWording.BillLineSource, Assert.Single(page.QuerySelectorAll("#bills > p.muted")).TextContent);
         Assert.Null(row.QuerySelector(".badge"));
-        Assert.Contains("Latest official action 3 Jan 2025: Something odd happened.", row.TextContent);
+        Assert.Contains("Latest official action 3 Jan 2025: Something odd happened.", row.QuerySelector(".official-meta")!.TextContent);
     }
 
     [Fact]
@@ -226,11 +226,11 @@ public sealed class OfficialProfilePageTests
     public async Task PresidentRowsShowTheTypeTheSignedDateAndLinkToTheRecord()
     {
         var page = await RenderAsync<PresidentPage>(President());
-        var row = page.QuerySelector(".official-exec .record-rows li")!;
+        var row = page.QuerySelector(".official-exec .official-rows li")!;
 
         Assert.Equal(Root + "records/" + new string('1', 64) + ".html", row.QuerySelector("a")!.GetAttribute("href"));
-        Assert.Contains("Executive order", row.QuerySelector("a")!.TextContent);
-        Assert.Contains("Signed 22 Oct 2026", row.QuerySelector("a")!.TextContent);
+        Assert.Contains("Executive order", row.QuerySelector(".official-meta")!.TextContent);
+        Assert.Contains("Signed 22 Oct 2026", row.QuerySelector(".official-meta")!.TextContent);
     }
 
     [Fact]
@@ -239,8 +239,76 @@ public sealed class OfficialProfilePageTests
         var page = await RenderAsync<PresidentPage>(President());
         var links = page.QuerySelectorAll("a.btn, .official-more a");
 
-        Assert.Equal(3, links.Length);
+        Assert.Single(links);
         Assert.All(links, link => Assert.Equal(Root + "officials/p4/record.html", link.GetAttribute("href")));
+    }
+
+    [Fact]
+    public async Task PresidentTypeLinkAppearsOnlyWhenMoreRecordsExistThanShown()
+    {
+        var data = President();
+        var executive = data.Executive!;
+        var page = await RenderAsync<PresidentPage>(data with
+        {
+            Executive = executive with { Total = 6, Types = [executive.Types[0] with { Count = 5 }, executive.Types[1]] }
+        });
+
+        var link = Assert.Single(page.QuerySelectorAll(".official-exec .official-more a"));
+        Assert.Equal("See all 5 executive orders", link.TextContent);
+        Assert.Equal(Root + "officials/p4/record.html", link.GetAttribute("href"));
+        Assert.NotNull(page.QuerySelector("a.btn-primary"));
+    }
+
+    [Fact]
+    public async Task TypedModelOriginsKeepCanonicalLabelsWhenAStoredLabelIsMissing()
+    {
+        var data = Member();
+        var page = await RenderAsync<OfficialProfilePage>(data with
+        {
+            Statements = [data.Statements[0] with
+            {
+                Label = null, VoteLabel = null,
+                TextOrigin = PublishedTextOrigin.Model, VoteTextOrigin = PublishedTextOrigin.Model
+            }]
+        });
+
+        var labels = page.QuerySelectorAll("#statements .official-source-label[data-origin=model]");
+        Assert.Equal([PublishedRecordLabels.StatementModelWording, PublishedRecordLabels.ModelWording], labels.Select(label => label.TextContent).ToArray());
+    }
+
+    [Fact]
+    public async Task CodeWordingIsVisibleWithoutBeingMarkedAsModelText()
+    {
+        var data = Member();
+        var page = await RenderAsync<OfficialProfilePage>(data with
+        {
+            Statements = [data.Statements[0] with
+            {
+                Label = null, TextOrigin = PublishedTextOrigin.Person,
+                VoteLabel = PublishedRecordLabels.CodeWording, VoteTextOrigin = PublishedTextOrigin.Code
+            }]
+        });
+
+        Assert.Empty(page.QuerySelectorAll("#statements .official-source-label[data-origin=model]"));
+        Assert.Equal(PublishedRecordLabels.CodeWording, Assert.Single(page.QuerySelectorAll("#statements .official-source-label")).TextContent);
+    }
+
+    [Fact]
+    public async Task EmptyOfficialPageShowsOneEmptyMessageWithoutAnotherNoLinksMessage()
+    {
+        var page = await RenderAsync<OfficialProfilePage>(Member() with
+        {
+            Votes = [],
+            Marks = [],
+            Statements = [],
+            Bills = [],
+            Issues = [],
+            HasLinkedStatements = false
+        });
+
+        Assert.Null(page.QuerySelector(".official-jump"));
+        Assert.Contains(OfficialPageText.NothingToShow, page.DocumentElement.TextContent);
+        Assert.DoesNotContain(OfficialPageText.NoLinks, page.DocumentElement.TextContent);
     }
 
     [Fact]

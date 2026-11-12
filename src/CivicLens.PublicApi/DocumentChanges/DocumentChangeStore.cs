@@ -63,9 +63,16 @@ public sealed class DocumentChangeStore(NpgsqlDataSource views)
           CROSS JOIN LATERAL (SELECT d.hunk_count BETWEEN 1 AND @maximum_changes AS ready) bounds
         """;
 
-    public async Task<(int? Release, DocumentChangeDetail? Detail)> FindAsync(string recordId, CancellationToken cancellationToken)
+    public Task<(int? Release, DocumentChangeDetail? Detail)> FindAsync(string recordId, CancellationToken cancellationToken) =>
+        ReadDetailAsync(views.CreateCommand(Sql), recordId, cancellationToken);
+
+    /// <summary>Reads the detail inside the transaction of the caller, so that it shares a snapshot with the other reads of that transaction.</summary>
+    public Task<(int? Release, DocumentChangeDetail? Detail)> FindAsync(NpgsqlTransaction transaction, string recordId, CancellationToken cancellationToken) =>
+        ReadDetailAsync(new NpgsqlCommand(Sql, transaction.Connection, transaction), recordId, cancellationToken);
+
+    private static async Task<(int? Release, DocumentChangeDetail? Detail)> ReadDetailAsync(NpgsqlCommand command, string recordId, CancellationToken cancellationToken)
     {
-        await using var command = views.CreateCommand(Sql);
+        await using var _ = command;
         command.Parameters.AddWithValue("id", recordId);
         command.Parameters.AddWithValue("citation_limit", CitationLimit);
         command.Parameters.AddWithValue("change_limit", ChangeLimit);

@@ -41,6 +41,21 @@ public sealed class PublicPageReadingGradeTests
     }
 
     [Fact]
+    public async Task TheVoteKindIndexTextReadsAtOrBelowTheSharedGradeLimit()
+    {
+        var page = await RenderAsync<VoteKindsPage>(new Dictionary<string, object?> { [nameof(VoteKindsPage.RootPath)] = Root });
+
+        var meanings = page.QuerySelectorAll("tbody tr td:last-child");
+        Assert.Equal(VoteMeaning.Kinds.Count + 1, meanings.Length);
+        var texts = meanings.Append(Assert.Single(page.QuerySelectorAll(".page-header-lede")));
+        foreach (var text in texts)
+        {
+            var grade = ReadingGrade.Rounded(NormalizeText(text));
+            Assert.True(grade <= ReadingGrade.MaximumGrade, $"\"{text.TextContent}\" reads at grade {ReadingGrade.Format(grade)}.");
+        }
+    }
+
+    [Fact]
     public async Task FeaturedModelHeadlineAndSummaryReadAsOnePassageAtOrBelowTheSharedGradeLimit()
     {
         // Civic Lens model text captured on 2026-11-10, release 1050.
@@ -90,7 +105,7 @@ public sealed class PublicPageReadingGradeTests
     {
         var modelSection = Assert.Single(page.QuerySelectorAll(".home-featured"));
         var headline = Assert.Single(modelSection.QuerySelectorAll("h2"));
-        var summaryContainer = Assert.Single(modelSection.QuerySelectorAll(".home-featured-summary.home-ai-summary"));
+        var summaryContainer = Assert.Single(modelSection.QuerySelectorAll(".ai-summary.ai-summary-ai"));
         var summary = Assert.Single(summaryContainer.QuerySelectorAll("p"));
         return PassageGrade(headline, summary);
     }

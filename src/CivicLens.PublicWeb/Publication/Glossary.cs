@@ -7,6 +7,12 @@ public static class Glossary
 {
     public const string BillsAndCongress = "Bills and Congress";
 
+    public const string KindsOfVotes = "Kinds of votes";
+
+    public const string VoteKindsIntro = "Congress votes on many kinds of questions. This page lists each kind and says what a Yes vote on it means.";
+
+    public const string PageDescription = "What each term means and why it matters.";
+
     public const string IndexLabel = "Terms in the glossary";
 
     public const string PartyCountAnchorId = "glossary-party-count";
@@ -48,7 +54,7 @@ public static class Glossary
                 "We use this group for some vote counts and party comparisons. It does not rank how important a vote is.",
                 "How the counts work", SourceHref: PublicationProtocol.MethodPagePath)
         ]),
-        new("Kinds of votes",
+        new(KindsOfVotes,
         [
             new("passage", "Passage",
                 "The record calls it Passage. This site calls it \"Vote to pass or agree to\". It is the vote to pass a bill, to agree to a resolution, or to agree to a change that the other chamber made.",

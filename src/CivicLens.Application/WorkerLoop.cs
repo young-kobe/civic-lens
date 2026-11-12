@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace CivicLens.Application;
 
 public static class WorkerLoop
@@ -54,22 +52,23 @@ public static class WorkerLoop
         exception.GetType().Name is { Length: <= 128 } name ? name : "processingFailure";
 
     public static async Task RenewLeaseAsync(Func<CancellationToken, Task<bool>> renew, TimeSpan leaseDuration,
-        CancellationTokenSource ownership)
+        CancellationTokenSource ownership, TimeProvider? clock = null)
     {
-        var clock = Stopwatch.StartNew();
-        var deadline = clock.Elapsed + leaseDuration;
+        clock ??= TimeProvider.System;
+        var start = clock.GetTimestamp();
+        var deadline = leaseDuration;
         var interval = TimeSpan.FromTicks(leaseDuration.Ticks / 3);
         while (!ownership.IsCancellationRequested)
         {
-            var wait = Min(interval, deadline - clock.Elapsed);
+            var wait = Min(interval, deadline - clock.GetElapsedTime(start));
             if (wait <= TimeSpan.Zero) break;
-            try { await Task.Delay(wait, ownership.Token); }
+            try { await Task.Delay(wait, clock, ownership.Token); }
             catch (OperationCanceledException) when (ownership.IsCancellationRequested) { return; }
-            var remaining = deadline - clock.Elapsed;
+            var remaining = deadline - clock.GetElapsedTime(start);
             if (remaining <= TimeSpan.Zero) break;
-            var sent = clock.Elapsed;
-            using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ownership.Token);
-            attempt.CancelAfter(remaining);
+            var sent = clock.GetElapsedTime(start);
+            using var expiry = new CancellationTokenSource(remaining, clock);
+            using var attempt = CancellationTokenSource.CreateLinkedTokenSource(ownership.Token, expiry.Token);
             try
             {
                 if (!await renew(attempt.Token)) break;

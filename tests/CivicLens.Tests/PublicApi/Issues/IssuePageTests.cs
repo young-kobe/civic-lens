@@ -110,14 +110,14 @@ public sealed class IssuePageTests(PostgresCollection postgres)
     public async Task ThePartyLineUpNamesItsBaseCongressAndUnknownCountAndTheSplitAddsUpToTheBase()
     {
         await using var host = await StartAsync([], []);
-        await SeedLineUpAsync(host, 7, 1, ("Democratic", 2), ("Republican", 3), ("Independent", 1));
+        await SeedLineUpAsync(host, 7, 1, ("Democrat", 2), ("Republican", 3), ("Independent", 1));
 
         var page = await GetPageAsync(host);
 
         var section = page.QuerySelector("#parties")!;
         Assert.Contains("7 bills and resolutions tagged Taxes <b> in the 119th Congress", section.TextContent);
-        var rows = section.QuerySelectorAll("[data-issue-lineup] li").Select(row => Compact(row.TextContent)).ToArray();
-        Assert.Equal(["Republican sponsor 3 bills and resolutions", "Democratic sponsor 2 bills and resolutions", "Independent sponsor 1 bill or resolution", "Sponsor party not known 1 bill or resolution"], rows);
+        var rows = section.QuerySelectorAll(".party-bar-legend li").Select(row => Compact(row.TextContent)).ToArray();
+        Assert.Equal(["2 Democrat sponsor", "3 Republican sponsor", "1 Independent sponsor", "1 Sponsor party not known"], rows);
     }
 
     [Fact]
