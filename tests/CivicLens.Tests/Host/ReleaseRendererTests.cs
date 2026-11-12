@@ -358,7 +358,7 @@ public sealed class ReleaseRendererTests
         Assert.Contains("Code also approves a statement when the statement comes from the own website of the office of that official and names no other speaker. An AI model drafts these statements, finds their issues, and proposes their date. Code then checks the quote and the date against the saved page.", text, StringComparison.Ordinal);
         Assert.Contains("a summary that a model wrote has this label when code approved it: \"An AI summary of this release.\" When a person approved it, the label is this: \"Drafted by an AI model from this source. A person checked it before publication.\"", text, StringComparison.Ordinal);
         Assert.DoesNotContain(".\".", text, StringComparison.Ordinal);
-        Assert.Contains($"within {StatementCodeApproval.DateWindowDays} days before Civic Lens saved the page", text, StringComparison.Ordinal);
+        Assert.Contains($"within {PublishedCountRules.StatementDateWindowDays} days before Civic Lens saved the page", text, StringComparison.Ordinal);
         Assert.Contains("and each statement that code does not approve", text, StringComparison.Ordinal);
     }
 
@@ -416,7 +416,7 @@ public sealed class ReleaseRendererTests
         Assert.DoesNotContain("all roll calls of the current Congress", text, StringComparison.Ordinal);
         Assert.Contains("A roll call that is not on this site is in neither number.", text, StringComparison.Ordinal);
         Assert.Contains("A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yes or No voted on opposite sides.", text, StringComparison.Ordinal);
-        Assert.Contains($"on at least {TalkAndActionProfile.MinimumRecordsForShare} split votes", text, StringComparison.Ordinal);
+        Assert.Contains($"on at least {PublishedCountRules.MinimumRecordsForShare} split votes", text, StringComparison.Ordinal);
         Assert.Contains("An independent who caucuses with the Democrats or the Republicans, which means they work with that party in Congress, counts with that party.", text, StringComparison.Ordinal);
         Assert.Contains("The page leaves out votes that the official cast while in another party and not caucusing with either.", text, StringComparison.Ordinal);
         Assert.Contains("For a member who has left Congress, the page uses the party letter in the vote record, so the page does not count the votes of an independent who left.", text, StringComparison.Ordinal);

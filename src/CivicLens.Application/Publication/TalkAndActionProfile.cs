@@ -10,7 +10,6 @@ namespace CivicLens.Application.Publication;
 public sealed record TalkAndActionProfile(TalkAndActionColumn Statements, ImmutableArray<PublishedRecordEntry> SponsoredBills,
     TalkAndActionColumn Votes, ImmutableArray<MissedVotes> MissedByChamber, ImmutableArray<VotesWithParty> WithPartyByChamber, int StatementsInCongress)
 {
-    public const int MinimumRecordsForShare = 5;
     public const string StatementCount = "statement";
     public const string BillCount = "bill";
     public const string VoteCount = "vote";
@@ -40,5 +39,5 @@ public sealed record TalkAndActionProfile(TalkAndActionColumn Statements, Immuta
             MissedVotes.Of(allVotes), VotesWithParty.Of(allVotes), inCongress[PublishedRecordKind.Statement].Count());
     }
 
-    public static double? ShareOf(int count, int of) => of >= MinimumRecordsForShare ? (double)count / of : null;
+    public static double? ShareOf(int count, int of) => of >= PublishedCountRules.MinimumRecordsForShare ? (double)count / of : null;
 }
