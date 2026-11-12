@@ -84,7 +84,7 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
     }
 
     [Fact]
-    public async Task BillCountsEqualTheEntriesOfTheStaticPageBecauseAWithdrawnCosponsorAndASponsorWhoAlsoCosponsorsCountOnce()
+    public async Task BillIssueCountsEqualTheEntriesOfTheStaticPageBecauseOnlySponsoredBillsOfATrackedIssueCount()
     {
         var bills = new[]
         {
@@ -99,9 +99,6 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
         {
             var named = entries.Where(entry => entry.Officials.Any(person => person.Id == official)).ToArray();
             var profile = TalkAndActionProfile.Of(119, named, []);
-            var cosponsored = entries.Count(entry => entry.CosponsorIds!.Contains(official));
-            Assert.Equal([$"{profile.SponsoredBills.Length} {cosponsored}"],
-                await QueryAsync($"SELECT coalesce(sponsored, 0) || ' ' || coalesce(cosponsored, 0) FROM public_api.official_bill_counts WHERE official_id = '{official}' AND congress = 119"));
             foreach (var issue in new[] { "health", "tax" })
                 Assert.Equal([profile.SponsoredOn(issue).Length.ToString(CultureInfo.InvariantCulture)], await QueryAsync($"""
                     SELECT coalesce(sum(records), 0) FROM public_api.official_issue_counts
@@ -127,17 +124,13 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
         Assert.Equal(["p0 3", "p1 1", "p2 0"], expected);
     }
 
-    // The static page counts a sponsored bill in the Congress of its last event date. The view counts it in the Congress of the bill number, so it equals billsInCongress.
+    // The static page counts a sponsored bill in the Congress of its last event date. The view counts it in the Congress of the bill number.
     [Fact]
-    public async Task ABillCountsInTheCongressOfItsBillNumberAndNotInTheCongressOfItsLastSponsorshipEvent()
+    public async Task ABillIssueCountIsInTheCongressOfItsBillNumberAndNotInTheCongressOfItsLastSponsorshipEvent()
     {
         await BillsSeed.AddBillsAsync(database,
-            new SeededBill('1', "2025-03-01") { BillNumber = 1, Congress = 118, Issues = ["health"], Sponsorships = [new("p0", "Sponsor", "2023-02-01"), new("p1", "Cosponsor", "2023-02-02"), new("p2", "Cosponsor", "2025-03-01")] },
-            new SeededBill('2', "2026-03-01") { BillNumber = 2, Congress = 119, Sponsorships = [new("p0", "Sponsor", "2026-01-10")] });
+            new SeededBill('1', "2025-03-01") { BillNumber = 1, Congress = 118, Issues = ["health"], Sponsorships = [new("p0", "Sponsor", "2023-02-01"), new("p1", "Cosponsor", "2023-02-02"), new("p2", "Cosponsor", "2025-03-01")] });
 
-        Assert.Equal(["118 1 0", "119 1 0"], await QueryAsync("SELECT congress || ' ' || sponsored || ' ' || cosponsored FROM public_api.official_bill_counts WHERE official_id = 'p0' ORDER BY congress"));
-        Assert.Equal(["118 0 1"], await QueryAsync("SELECT congress || ' ' || sponsored || ' ' || cosponsored FROM public_api.official_bill_counts WHERE official_id = 'p1'"));
-        Assert.Equal(["118 0 1"], await QueryAsync("SELECT congress || ' ' || sponsored || ' ' || cosponsored FROM public_api.official_bill_counts WHERE official_id = 'p2'"));
         Assert.Equal(["118 health 1"], await QueryAsync("SELECT congress || ' ' || issue_id || ' ' || records FROM public_api.official_issue_counts WHERE official_id = 'p0' AND source = 'bill'"));
     }
 
@@ -202,7 +195,7 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
     public async Task NoOfficialsViewShowsAPersonOrBioguideIdBecausePublicContractsKeyOfficialsByOurId()
     {
         await using var connection = await OpenPublicAsync();
-        foreach (var view in new[] { "officials", "official_attendance", "official_party_lines", "official_bill_counts", "official_issue_counts", "official_executive_actions" })
+        foreach (var view in new[] { "officials", "official_attendance", "official_party_lines", "official_issue_counts", "official_executive_actions" })
         {
             await AssertDeniedAsync(connection, $"SELECT person_id FROM public_api.{view}");
             await AssertDeniedAsync(connection, $"SELECT bioguide_id FROM public_api.{view}");
