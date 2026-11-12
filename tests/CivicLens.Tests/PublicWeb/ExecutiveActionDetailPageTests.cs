@@ -52,6 +52,39 @@ public sealed class ExecutiveActionDetailPageTests
     }
 
     [Fact]
+    public async Task DocumentTargetsKeepTheirOrderExactReferencesAndOnlyLinkTargetsInTheRelease()
+    {
+        var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(Action() with
+        {
+            Targets =
+            [
+                new(PublishedExecutiveActionRelation.Amends, PublishedExecutiveActionKind.ExecutiveOrder, "14100", "EO 14100, January 3, 2025", new('a', 64)),
+                new(PublishedExecutiveActionRelation.Revokes, PublishedExecutiveActionKind.Proclamation, "10001", "Proclamation 10001: café & <notice>", null)
+            ]
+        });
+
+        var section = page.QuerySelector("#executive-links-title")!.ParentElement!;
+        Assert.Equal("Links to other documents", section.QuerySelector("h2")!.TextContent);
+        var rows = section.QuerySelectorAll("li");
+        Assert.Equal(2, rows.Length);
+        Assert.Contains("Amends: Executive order 14100", rows[0].TextContent);
+        Assert.Equal("EO 14100, January 3, 2025", rows[0].QuerySelector(".detail-target-reference")!.TextContent);
+        Assert.Equal(Root + "records/" + new string('a', 64) + ".html", rows[0].QuerySelector("a")!.GetAttribute("href"));
+        Assert.Contains("Revokes: Proclamation 10001", rows[1].TextContent);
+        Assert.Equal("Proclamation 10001: café & <notice>", rows[1].QuerySelector(".detail-target-reference")!.TextContent);
+        Assert.Null(rows[1].QuerySelector("a"));
+        Assert.Null(rows[1].QuerySelector("notice"));
+    }
+
+    [Fact]
+    public async Task TheDocumentLinksSectionIsOmittedWhenThereAreNoTargets()
+    {
+        var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(Action());
+
+        Assert.Null(page.QuerySelector("#executive-links-title"));
+    }
+
+    [Fact]
     public async Task TheTrailEndsWithTheTitleBecauseTheKindHasNoShortNameAndTheFooterIsTheOnlyReportLink()
     {
         var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(Action());

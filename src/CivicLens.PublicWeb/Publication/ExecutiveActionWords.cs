@@ -13,6 +13,15 @@ public static class ExecutiveActionWords
 
     public const string KeyFactsHeading = "Key facts";
 
+    public const string LinksHeading = "Links to other documents";
+
+    public static string TargetRelation(PublishedExecutiveActionRelation relation) => relation switch
+    {
+        PublishedExecutiveActionRelation.Amends => "Amends",
+        PublishedExecutiveActionRelation.Revokes => "Revokes",
+        _ => throw new ArgumentOutOfRangeException(nameof(relation))
+    };
+
     public const string ReadIt = "Read it in the Federal Register";
 
     /// <summary>The text of a correction notice in three parts. The middle part is the link.</summary>
