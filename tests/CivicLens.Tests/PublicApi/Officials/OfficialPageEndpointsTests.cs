@@ -39,9 +39,13 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         new('d', "2026-02-06") { Casts = ["Nay", "Nay", "Yea"], PersonIds = ["p0", "p1", "p2"], RollCall = 4 }
     ];
 
-    private async Task<ApiHost> StartAsync(bool storeBillCounts = true)
+    private async Task<ApiHost> StartAsync(bool storeBillCounts = true, bool withBrowserApi = false)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
+        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with
+        {
+            PublicBaseUrl = BaseUrl,
+            BrowserApiUrl = withBrowserApi ? PublicBaseUrl.Parse("https://api.civic-lens.test", "test") : null
+        });
         var database = host.OperationalDatabase;
         await ViewsSeed.ActivateReleaseAsync(database, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await OfficialsSeed.AddOfficialsAsync(database, Officials);
@@ -75,6 +79,64 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         var body = await response.Content.ReadAsStringAsync();
         Assert.True(response.StatusCode == expected, $"{path} gave {(int)response.StatusCode}: {body}");
         return await new HtmlParser().ParseDocumentAsync(body);
+    }
+
+    [Fact]
+    public async Task TheOwnWebsiteOfTheOfficialShowsAsALinkNamedByItsHostAndIsAbsentWhenTheReleaseHoldsNone()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica; UPDATE release_officials SET website = 'https://able.house.gov/about' WHERE official_id = 'p0';");
+
+        var withSite = await GetPageAsync(host, "/web/officials/p0");
+        var withoutSite = await GetPageAsync(host, "/web/officials/p1");
+
+        var link = withSite.QuerySelector(".official-head a[href='https://able.house.gov/about']")!;
+        Assert.Equal("able.house.gov", link.TextContent);
+        Assert.Equal("Official site: able.house.gov.", link.ParentElement!.TextContent);
+        Assert.Equal("noopener noreferrer", link.GetAttribute("rel"));
+        Assert.Null(withoutSite.QuerySelector(".official-head a"));
+    }
+
+    [Fact]
+    public async Task AStoredWebsiteThatIsNotAValidHttpsAddressFailsThePageInsteadOfBecomingALink()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica; UPDATE release_officials SET website = 'javascript:alert(1)' WHERE official_id = 'p0';");
+
+        using var response = await host.Client.GetAsync("/web/officials/p0");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task TheTenureSentenceFollowsTheLedeAndAnOfficialWithNoHouseOrSenateTermHasNone()
+    {
+        await using var host = await StartAsync();
+
+        var member = await GetPageAsync(host, "/web/officials/p0");
+        var justice = await GetPageAsync(host, "/web/officials/justice");
+
+        Assert.EndsWith(" In the House since January 2025.", member.QuerySelector(".official-lede")!.TextContent);
+        Assert.DoesNotContain("since", justice.QuerySelector(".official-lede")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheCompareSectionIsAHiddenSlotForTheRememberedZipAndOnlyWhenTheBrowserApiOriginIsConfigured()
+    {
+        await using var host = await StartAsync(withBrowserApi: true);
+        await using var withoutApi = await StartAsync();
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+        var plain = await GetPageAsync(withoutApi, "/web/officials/p0");
+
+        var section = page.QuerySelector("section#your-members")!;
+        Assert.True(section.HasAttribute("hidden"));
+        Assert.Equal("Compare with your other members", section.QuerySelector("h2")!.TextContent);
+        var slot = section.QuerySelector("[data-official-members]")!;
+        Assert.Equal("p0", slot.GetAttribute("data-official-members"));
+        Assert.Equal("https://api.civic-lens.test", slot.GetAttribute("data-members-api"));
+        Assert.Equal(0, slot.ChildElementCount);
+        Assert.Null(plain.QuerySelector("#your-members"));
     }
 
     [Fact]

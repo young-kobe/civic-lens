@@ -107,7 +107,7 @@ Pages compose these components. The comparison page, the draft editor, and publi
 - A selector lives in one of `app.css`, `public.css`, and `review.css`. A selector with a `.public-` class lives only in `public.css`. A rendered public page uses no class that only `review.css` defines; see [publication](publication.md#rendering).
 - Only shared components render `del` and `ins`.
 - One shared vote row serves every public page that lists votes. `SharedVoteRows` in `PublicWeb` has a list mode, which Home uses, and a single-member mode, which the official page uses and the bill page will reuse. No page adds its own vote row markup or CSS. The cast badge has one owner, `SharedVoteCast`, which `SharedVoteRows`, the linked vote of a statement, and the member table of the vote page use. Enforcers: `SharedVoteRows` and `SharedVoteCast`. Tests: `SharedVoteRowsTests`, `VoteDetailPageTests.TheMemberTableShowsEachCastThroughTheSharedCastBadgeWithItsSide`, and `OfficialProfilePageTests.AVoteRowKeepsItsCongressSessionKindWordsAndOnlyTheCastOfTheOfficialWithoutAName`.
-- The lede rules of an office holder have one owner, `OfficeLede` in `PublicWeb`. `PublishedOfficialView` calls it for the static official page. Enforcer: `OfficeLede`. Test: `PublishedOfficialPageTests.TheLedeOfTheStaticAndTheServerPageComeFromOneOwner`.
+- The lede rules of an office holder have one owner, `OfficeLede` in `PublicWeb`. The tenure and the unbroken stretches of terms have one owner, `OfficeTenure`. `PublishedOfficialView` calls both for the static official page. Enforcers: `OfficeLede` and `OfficeTenure`. Test: `PublishedOfficialPageTests.TheLedeOfTheStaticAndTheServerPageComeFromOneOwner`.
 
 ### Health alerts
 

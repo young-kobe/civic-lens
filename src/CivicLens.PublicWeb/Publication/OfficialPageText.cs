@@ -36,6 +36,9 @@ public static class OfficialPageText
         return known && !ended && data.TermEndsOn is { } day ? $"{text} Current term ends {Moment.Day(day)}." : text;
     }
 
+    /// <summary>The tenure sentence, such as "In the House since January 2019." It is null when the release date is unknown or the terms hold no House or Senate term.</summary>
+    public static string? Tenure(OfficialPageData data) => data.PublishedOn is { } publishedOn ? OfficeTenure.Of(data.Terms, publishedOn) : null;
+
     /// <summary>The party figure of the page. One figure covers the page, so a member with two party lines shows the newest.</summary>
     public static OfficialPartyLineData? MainPartyLine(OfficialPageData data) =>
         data.PartyLines.OrderByDescending(line => line.LastVotedOn).ThenBy(line => line.Chamber).FirstOrDefault();
