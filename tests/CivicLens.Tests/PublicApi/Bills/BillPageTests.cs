@@ -199,6 +199,21 @@ public sealed class BillPageTests(PostgresCollection postgres)
         Assert.Equal(shown, page.Body!.TextContent.Contains("The text above summarizes the Congressional Research Service summary.", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("Model", "An AI summary of the official record")]
+    [InlineData("Code", "Written automatically from Congress.gov data, with no AI")]
+    [InlineData("Person", null)]
+    public async Task TheSourceFoldStatesTheWordingOfTheSummaryByItsStoredOriginAndAPersonSummaryHasNoWordingRow(string origin, string? wording)
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"SET session_replication_role = replica; UPDATE action_revisions SET text_origin = '{origin}' WHERE record_id = '{BillId}';");
+
+        var page = await ReadPageAsync(host, BillId);
+
+        var term = page.QuerySelectorAll("details#source dt").SingleOrDefault(item => item.TextContent == "Wording");
+        Assert.Equal(wording, term?.NextElementSibling!.TextContent);
+    }
+
     [Fact]
     public async Task AnUnknownRecordAndAMalformedRecordIdGetTheNotFoundPage()
     {
