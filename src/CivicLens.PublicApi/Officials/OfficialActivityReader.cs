@@ -20,24 +20,15 @@ internal static class OfficialActivityReader
         return CongressCalendar.CongressOn(publishedOn);
     }
 
-    private const string BillsSql = """
+    private const string StoredBillsSql = """
         WITH selected AS (
             SELECT DISTINCT official_id, congress FROM unnest(@officialIds, @congresses) AS pairs(official_id, congress)
-        ), base_bills AS (
-            SELECT congress, count(*) AS bills_in_congress
-              FROM public_api.bills
-             WHERE congress = ANY(@congresses)
-             GROUP BY congress
         )
-        SELECT selected.official_id, selected.congress, coalesce(counts.sponsored, 0), coalesce(counts.cosponsored, 0), coalesce(base_bills.bills_in_congress, 0)
+        SELECT selected.official_id, selected.congress, totals.bills, coalesce(members.sponsored, 0), coalesce(members.cosponsored, 0)
           FROM selected
-          LEFT JOIN base_bills ON base_bills.congress = selected.congress
-          LEFT JOIN LATERAL (
-               SELECT sponsored, cosponsored
-                 FROM public_api.official_bill_counts
-                WHERE official_id = selected.official_id AND congress = selected.congress
-                OFFSET 0
-               ) counts ON TRUE
+          LEFT JOIN public_api.release_bill_counts totals ON totals.congress = selected.congress
+          LEFT JOIN public_api.release_official_bill_counts members
+            ON members.official_id = selected.official_id AND members.congress = selected.congress
          ORDER BY selected.official_id
         """;
 
@@ -76,19 +67,22 @@ internal static class OfficialActivityReader
         return figures.ToDictionary(pair => pair.Key, pair => pair.Value.ToFigures(pair.Key.Congress));
     }
 
+    /// <summary>Reads the stored bill figures of the active release. A Congress with no stored total has no snapshot, so its figure stays absent and never shows zero.
+    /// A missing member row under a stored total means zero.</summary>
     private static async Task ReadBillsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string[] officialIds, int[] congresses,
         Dictionary<(string OfficialId, int Congress), MutableFigures> figures, CancellationToken cancellationToken)
     {
-        await using var command = new NpgsqlCommand(BillsSql, connection);
+        await using var command = new NpgsqlCommand(StoredBillsSql, connection);
         command.Transaction = transaction;
         command.Parameters.AddWithValue("officialIds", officialIds);
         command.Parameters.AddWithValue("congresses", congresses);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
+            if (reader.IsDBNull(2)) continue;
             var key = (reader.GetString(0), reader.GetInt32(1));
-            figures[key].Bills = new(key.Item2, ViewColumns.Number(reader, 2)!.Value, ViewColumns.Number(reader, 3)!.Value,
-                ViewColumns.Number(reader, 4)!.Value, OfficialScopes.Bills(key.Item2));
+            figures[key].Bills = new(key.Item2, ViewColumns.Number(reader, 3)!.Value, ViewColumns.Number(reader, 4)!.Value,
+                ViewColumns.Number(reader, 2)!.Value, OfficialScopes.Bills(key.Item2));
         }
     }
 
@@ -117,10 +111,15 @@ internal static class OfficialActivityReader
         public BillCountsFigure? Bills { get; set; }
         public List<IssueCountsFigure> Issues { get; } = [];
 
-        public OfficialActivityFigures ToFigures(int congress) => new(
-            Bills ?? throw new InvalidDataException("The published bill figures are missing."),
-            new(congress, OfficialScopes.Issues(congress), [.. Issues]));
+        public OfficialActivityFigures ToFigures(int congress) => new(Bills, new(congress, OfficialScopes.Issues(congress), [.. Issues]));
     }
 }
 
-internal sealed record OfficialActivityFigures(BillCountsFigure Bills, IssueCountsFigures Issues);
+internal sealed record OfficialActivityFigures(BillCountsFigure? Bills, IssueCountsFigures Issues)
+{
+    /// <summary>
+    /// True when the reader selected a Congress for the official but the release holds no stored bill count for it. The issue figures exist exactly when a Congress
+    /// is selected, because <see cref="OfficialActivityReader"/> always builds them for one. An official with no Congress shows no bill figure and no caption.
+    /// </summary>
+    public static bool BillCountsAbsent(BillCountsFigure? bills, IssueCountsFigures? issues) => issues is not null && bills is null;
+}

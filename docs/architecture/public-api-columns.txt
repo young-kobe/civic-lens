@@ -391,10 +391,6 @@ official_party_lines against_party
 official_party_lines cast_count
 official_party_lines first_voted_on
 official_party_lines last_voted_on
-official_bill_counts official_id
-official_bill_counts congress
-official_bill_counts sponsored
-official_bill_counts cosponsored
 official_issue_counts official_id
 official_issue_counts congress
 official_issue_counts issue_id
@@ -464,3 +460,12 @@ record_policy_areas policy_area_id
 record_first_publications record_id
 record_first_publications kind
 record_first_publications first_published_at_utc_ticks
+release_bill_counts release_number
+release_bill_counts congress
+release_bill_counts bills
+release_bill_counts expected_member_row_count
+release_official_bill_counts release_number
+release_official_bill_counts congress
+release_official_bill_counts official_id
+release_official_bill_counts sponsored
+release_official_bill_counts cosponsored

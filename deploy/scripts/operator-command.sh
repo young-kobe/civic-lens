@@ -138,6 +138,13 @@ case "$*" in
     ;;
   # usage: releases entries verify
   "releases entries verify") "$compose" run --rm cli releases entries verify ;;
+  # usage: releases tallies verify <count> [cursor]
+  "releases tallies verify "*)
+    [[ $# -eq 4 || $# -eq 5 ]] || refuse
+    [[ $1 == releases && $2 == tallies && $3 == verify ]] || refuse
+    number "$4"
+    "$compose" run --rm cli releases tallies verify "$4" "${@:5}"
+    ;;
   # usage: releases publish <key> [--rewrite-entries] [--rewrite-officials] [--rewrite-pages]
   "releases publish "*) shift 2; publish "$@" ;;
   *) refuse ;;
