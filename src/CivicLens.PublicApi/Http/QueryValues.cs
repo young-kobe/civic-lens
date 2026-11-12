@@ -37,6 +37,22 @@ internal static class QueryValues
             : throw new ArgumentException($"{name} holds at most {PublishedRecordEntry.MaximumFilterValueLength} characters.", name);
     }
 
+    /// <summary>Reads a bill number typed as "H.R. 5334" or "5334". An empty value is no filter. A text that is no bill number throws <see cref="ArgumentException"/>.</summary>
+    public static (string? BillType, int? BillNumber) BillNumber(IQueryCollection query, string name)
+    {
+        if (Filter(query, name) is not { } value) return (null, null);
+        return SearchBillNumber.TryParse(value, out var billType, out var number)
+            ? (billType, number)
+            : throw new ArgumentException($"{name} must be a bill number, such as H.R. 5334.", name);
+    }
+
+    /// <summary>The bill number as the page form types it, such as "H.R. 5334", or a bare number when the type is not known. Null when there is no number.</summary>
+    public static string? BillNumberText(string? billType, int? billNumber) => billNumber is not { } number ? null
+        : billType is null ? number.ToString(CultureInfo.InvariantCulture) : BillNumbers.Of(billType, number);
+
+    /// <summary>The text form of an enum value, as <see cref="Choice{T}"/> reads it.</summary>
+    public static string ChoiceText<T>(T choice) where T : struct, Enum => JsonSerializer.Serialize(choice, PublicationProtocol.JsonOptions).Trim('"');
+
     public static ArgumentException InvalidCursor() => new("Page cursor is not valid.", "cursor");
 
     public static DateOnly? Date(IQueryCollection query, string name)
@@ -61,6 +77,6 @@ internal static class QueryValues
     private static class ChoiceNames<T> where T : struct, Enum
     {
         public static readonly Dictionary<string, T> ByText =
-            Enum.GetValues<T>().ToDictionary(choice => JsonSerializer.Serialize(choice, PublicationProtocol.JsonOptions).Trim('"'), StringComparer.Ordinal);
+            Enum.GetValues<T>().ToDictionary(ChoiceText, StringComparer.Ordinal);
     }
 }

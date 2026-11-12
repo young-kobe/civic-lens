@@ -2,6 +2,7 @@ using System.Text.Json;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
 using Npgsql;
+using NpgsqlTypes;
 
 namespace CivicLens.PublicApi.DocumentChanges;
 
@@ -62,6 +63,67 @@ public sealed class DocumentChangeStore(NpgsqlDataSource views)
           LEFT JOIN public_api.document_changes d ON d.record_id = @id
           CROSS JOIN LATERAL (SELECT d.hunk_count BETWEEN 1 AND @maximum_changes AS ready) bounds
         """;
+
+    /// <summary>Reads one page of the list, newest change first. Null means that no release is active. The caller compares the release of the page with the release of the cursor.</summary>
+    public async Task<DocumentChangePage?> ListAsync(DocumentChangeListRequest request, CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand(ListSql(request));
+        command.Parameters.AddWithValue("take", request.Limit + 1);
+        if (request.Institution is not null) command.Parameters.AddWithValue("institution", request.Institution);
+        if (request.Issue is not null) command.Parameters.AddWithValue("issue", request.Issue);
+        if (request.From is { } from) command.Parameters.Add(new NpgsqlParameter("from", NpgsqlDbType.Date) { Value = from });
+        if (request.To is { } to) command.Parameters.Add(new NpgsqlParameter("to", NpgsqlDbType.Date) { Value = to });
+        if (request.Cursor is { } cursor)
+        {
+            command.Parameters.AddWithValue("cursor_id", cursor.RecordId);
+            if (cursor.ChangeDate is { } date) command.Parameters.Add(new NpgsqlParameter("cursor_date", NpgsqlDbType.Date) { Value = date });
+        }
+        var rows = new List<DocumentChangeListRow>();
+        int? release = null;
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                release = reader.GetInt32(0);
+                if (!reader.IsDBNull(1))
+                    rows.Add(new(reader.GetString(1), reader.GetString(2), ViewColumns.Text(reader, 3), reader.GetString(4), ViewColumns.Date(reader, 5), ViewColumns.Number(reader, 6)));
+            }
+        if (release is not { } active) return null;
+        var page = rows.Take(request.Limit).ToArray();
+        return new(active, page, rows.Count > request.Limit ? DocumentChangeCursor.Of(active, page[^1]).Encode() : null);
+    }
+
+    /// <summary>Lists the offices that document changes of the active release name, as a filter lists them.</summary>
+    public async Task<string[]> ListInstitutionsAsync(CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand("SELECT DISTINCT d.institution FROM public_api.document_changes d ORDER BY d.institution");
+        var names = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken)) names.Add(reader.GetString(0));
+        return [.. names];
+    }
+
+    private static string ListSql(DocumentChangeListRequest request) => $"""
+        SELECT a.release_number, d.record_id, d.headline, d.label, d.institution, d.change_date, d.hunk_count
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+          LEFT JOIN LATERAL (
+               SELECT d.* FROM public_api.document_changes d
+                WHERE TRUE{Filters(request)}{Cursor(request)}
+                ORDER BY d.change_date DESC NULLS LAST, d.record_id LIMIT @take) d ON TRUE
+         ORDER BY d.change_date DESC NULLS LAST, d.record_id
+        """;
+
+    private static string Filters(DocumentChangeListRequest request) =>
+        (request.Institution is null ? "" : " AND d.institution = @institution") +
+        (request.Issue is null ? "" : " AND @issue = ANY(d.issue_ids)") +
+        (request.From is null ? "" : " AND d.change_date >= @from") +
+        (request.To is null ? "" : " AND d.change_date <= @to");
+
+    private static string Cursor(DocumentChangeListRequest request) => request.Cursor switch
+    {
+        null => "",
+        { ChangeDate: null } => " AND d.change_date IS NULL AND d.record_id > @cursor_id",
+        _ => " AND (d.change_date < @cursor_date OR d.change_date IS NULL OR (d.change_date = @cursor_date AND d.record_id > @cursor_id))"
+    };
 
     public Task<(int? Release, DocumentChangeDetail? Detail)> FindAsync(string recordId, CancellationToken cancellationToken) =>
         ReadDetailAsync(views.CreateCommand(Sql), recordId, cancellationToken);

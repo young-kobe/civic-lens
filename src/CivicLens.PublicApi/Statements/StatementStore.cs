@@ -75,20 +75,29 @@ public sealed class StatementStore(NpgsqlDataSource views)
         return (reader.GetInt32(0), new(reader.GetInt32(0), statement, ViewColumns.Enum<PublishedApprover>(reader, 19), source, articleUrl, dateEvidence, quotations));
     }
 
-    public async Task<StatementPage?> ListAsync(StatementRequest request, CancellationToken cancellationToken)
+    public Task<StatementPage?> ListAsync(StatementRequest request, CancellationToken cancellationToken) =>
+        ReadPageAsync(views.CreateCommand(ListSql(request)), request, cancellationToken);
+
+    /// <summary>Reads the page inside the transaction of the caller, so that it shares a snapshot with the other reads of that transaction.</summary>
+    public Task<StatementPage?> ListAsync(NpgsqlTransaction transaction, StatementRequest request, CancellationToken cancellationToken) =>
+        ReadPageAsync(new NpgsqlCommand(ListSql(request), transaction.Connection, transaction), request, cancellationToken);
+
+    private static string ListSql(StatementRequest request) => $"""
+        SELECT a.release_number, s.record_id, s.revision_number, s.statement_date, s.headline, s.summary, s.text_origin, s.label,
+               ARRAY(SELECT p.official_id FROM public_api.statement_speakers p
+                      WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number ORDER BY p."position"),
+               s.issue_ids
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+          LEFT JOIN LATERAL (
+               SELECT s.* FROM public_api.statements s
+                WHERE TRUE{Filters(request)}{Cursor(request)}
+                ORDER BY s.statement_date DESC NULLS LAST, s.record_id LIMIT @take) s ON TRUE
+         ORDER BY s.statement_date DESC NULLS LAST, s.record_id
+        """;
+
+    private static async Task<StatementPage?> ReadPageAsync(NpgsqlCommand command, StatementRequest request, CancellationToken cancellationToken)
     {
-        await using var command = views.CreateCommand($"""
-            SELECT a.release_number, s.record_id, s.revision_number, s.statement_date, s.headline, s.summary, s.text_origin, s.label,
-                   ARRAY(SELECT p.official_id FROM public_api.statement_speakers p
-                          WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number ORDER BY p."position"),
-                   s.issue_ids
-              FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
-              LEFT JOIN LATERAL (
-                   SELECT s.* FROM public_api.statements s
-                    WHERE TRUE{Filters(request)}{Cursor(request)}
-                    ORDER BY s.statement_date DESC NULLS LAST, s.record_id LIMIT @take) s ON TRUE
-             ORDER BY s.statement_date DESC NULLS LAST, s.record_id
-            """);
+        await using var _ = command;
         command.Parameters.AddWithValue("take", request.Limit + 1);
         if (request.Official is not null) command.Parameters.AddWithValue("official", request.Official);
         if (request.Issue is not null) command.Parameters.AddWithValue("issue", request.Issue);

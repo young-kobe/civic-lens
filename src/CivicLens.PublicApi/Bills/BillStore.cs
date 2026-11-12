@@ -38,6 +38,18 @@ public sealed class BillStore(NpgsqlDataSource views)
             ON TRUE
          WHERE b.record_id = ANY(@ids)
         """;
+    private const string ListFactsSql = $"""
+        SELECT b.record_id, {SponsorNameSql}, t.latest_action_text, t.latest_action_date
+          FROM public_api.bills b
+          LEFT JOIN public_api.bill_status t ON t.record_id = b.record_id AND t.revision_number = b.revision_number
+         WHERE b.record_id = ANY(@ids)
+        """;
+
+    private const string PolicyAreasSql = """
+        SELECT DISTINCT b.policy_area_id, b.policy_area FROM public_api.bills b
+         WHERE b.policy_area_id IS NOT NULL AND b.policy_area IS NOT NULL ORDER BY b.policy_area, b.policy_area_id
+        """;
+
     private const string AfterCursor = " AND (b.event_date < @cursor_date OR (b.event_date = @cursor_date AND b.record_id > @cursor_id))";
 
     /// <summary>Reads one page. Null means that no release is active. The caller compares the release of the page with the release of the cursor.</summary>
@@ -119,6 +131,28 @@ public sealed class BillStore(NpgsqlDataSource views)
             facts[reader.GetString(0)] = new(reader.GetString(0), ViewColumns.Text(reader, 1), lawDate, vote);
         }
         return facts;
+    }
+
+    /// <summary>Reads the sponsor and the latest action of a bounded set of bills in one query. A bill that left the release has no entry.</summary>
+    public async Task<Dictionary<string, BillListFacts>> ReadListFactsAsync(string[] recordIds, CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand(ListFactsSql);
+        command.Parameters.AddWithValue("ids", recordIds);
+        var facts = new Dictionary<string, BillListFacts>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            facts[reader.GetString(0)] = new(ViewColumns.Text(reader, 1), ViewColumns.Text(reader, 2), ViewColumns.Date(reader, 3));
+        return facts;
+    }
+
+    /// <summary>Lists the policy areas that bills of the active release hold, as a filter lists them.</summary>
+    public async Task<SearchChoiceData[]> ListPolicyAreasAsync(CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand(PolicyAreasSql);
+        var areas = new List<SearchChoiceData>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken)) areas.Add(new(reader.GetString(0), reader.GetString(1)));
+        return [.. areas];
     }
 
     /// <summary>Reads one page of the sponsorships of a bill. Null means that no release is active or that the active release holds no such bill.</summary>
