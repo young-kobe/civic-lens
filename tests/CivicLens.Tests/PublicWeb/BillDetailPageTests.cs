@@ -193,9 +193,18 @@ public sealed class BillDetailPageTests
         Assert.Equal("Your members and this bill", card.QuerySelector("h2.bill-card-heading")!.TextContent);
         Assert.Same(card, Assert.Single(page.QuerySelectorAll(".bill-card-raised")));
         Assert.Equal(RecordId, card.GetAttribute("data-record-id"));
+        Assert.Equal(Bill.Release.ToString(System.Globalization.CultureInfo.InvariantCulture), card.GetAttribute("data-release"));
         Assert.Equal("Enter your ZIP to see how your members relate to this bill. Find my members", card.QuerySelector("[data-bill-members-prompt]")!.TextContent);
         Assert.Equal(Root + "index.html#zip-results", card.QuerySelector("[data-bill-members-prompt] a")!.GetAttribute("href"));
         Assert.Equal(0, card.QuerySelector("[data-bill-members-body]")!.ChildElementCount);
+    }
+
+    [Fact]
+    public void TheMembersCardShowsOnlyAFragmentOfThePageRelease()
+    {
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.PublicWeb", "wwwroot", "js", "public.js"));
+
+        Assert.Contains("if (fragment.dataset.release !== card.dataset.release) { clear(); return; }", script, StringComparison.Ordinal);
     }
 
     [Fact]

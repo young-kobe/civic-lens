@@ -587,6 +587,8 @@
                 if (template.content.childElementCount !== 1 || !fragment.matches("div[data-bill-members-fragment]")
                     || fragment.dataset.zcta !== zip || fragment.dataset.recordId !== card.dataset.recordId || !positiveRelease(fragment.dataset.release))
                     throw new TypeError("Invalid bill members answer.");
+                // The backers and votes of the page cover one release. A fragment of another release would disagree with them.
+                if (fragment.dataset.release !== card.dataset.release) { clear(); return; }
                 body.replaceChildren(fragment);
                 prompt.hidden = true;
             } catch {
