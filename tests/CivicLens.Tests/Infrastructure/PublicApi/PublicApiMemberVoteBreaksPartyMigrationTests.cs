@@ -3,6 +3,7 @@ using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Npgsql;
+using static CivicLens.Tests.PublicApi.Votes.ViewsSeed;
 
 namespace CivicLens.Tests.Infrastructure.PublicApi;
 
@@ -77,24 +78,7 @@ public sealed class PublicApiMemberVoteBreaksPartyMigrationTests(PostgresCollect
         await transaction.CommitAsync();
     }
 
-    private static async Task<string[]> ColumnNamesAsync(string database) => await ReadAsync(database,
-        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public_api' AND table_name = 'member_votes' ORDER BY ordinal_position", asPublic: false);
+    private static Task<string[]> ColumnNamesAsync(string database) => QueryAsync(database,
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public_api' AND table_name = 'member_votes' ORDER BY ordinal_position");
 
-    private static Task<string[]> QueryAsPublicAsync(string database, string sql) => ReadAsync(database, sql, asPublic: true);
-
-    private static async Task<string[]> ReadAsync(string database, string sql, bool asPublic)
-    {
-        await using var connection = new NpgsqlConnection(database);
-        await connection.OpenAsync();
-        if (asPublic)
-        {
-            await using var role = new NpgsqlCommand("SET ROLE civic_lens_public", connection);
-            await role.ExecuteNonQueryAsync();
-        }
-        var rows = new List<string>();
-        await using var command = new NpgsqlCommand(sql, connection);
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync()) rows.Add(reader.GetString(0));
-        return [.. rows];
-    }
 }

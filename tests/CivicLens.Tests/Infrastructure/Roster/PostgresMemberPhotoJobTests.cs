@@ -50,7 +50,7 @@ public sealed class PostgresMemberPhotoJobTests(PostgresCollection postgres) : I
     public async Task AWithheldPersonStillGetsAPhotoJobSoARestoreBringsBackTheNewestPhoto()
     {
         var registry = PostgresPersonRegistryStore.FromConnectionString(connectionString);
-        await registry.ImportAsync(People(), "owner", default);
+        await PersonSeed.InsertAsync(connectionString, "cantwell", "C000127");
         await new ChangePersonSetting(registry).WithholdPhotoAsync(new ReviewActor("owner", ReviewRole.Owner), "cantwell", "Takedown.", default);
 
         await roster.AdmitAsync(await ImportRosterAsync('a', 0), RosterFixtures.Members(), Photos(), default);
