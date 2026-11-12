@@ -53,7 +53,7 @@ public sealed class ActionKeyTermScope
             errors.Add($"The quote of the key term \"{Shorten(term)}\" is not an exact quote of the definitions section. Copy it exactly from that section.");
         else if (span.Length > ActionDraftRevision.MaximumTextQuoteLength)
             errors.Add($"The quote of the key term \"{Shorten(term)}\" spans {span.Length} characters of the stored text. Quote at most {ActionDraftRevision.MaximumTextQuoteLength}.");
-        else return Defined(new ActionKeyTerm(term, span, quotes.StoredQuote(span)), errors);
+        else return Defined(new ActionKeyTerm(term, span, quote), errors);
         return null;
     }
 

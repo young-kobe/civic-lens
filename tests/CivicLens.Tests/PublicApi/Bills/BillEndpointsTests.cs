@@ -189,7 +189,10 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
         Assert.Equal(["The term Secretary means the Secretary of Energy.", "The term grant means a payment under section 3."],
             listed.Select(item => item.GetProperty("definition").GetString()));
         Assert.Equal(BillTextWords.Label, withTerms.RootElement.GetProperty("bill").GetProperty("label").GetString());
+        Assert.Equal("Key terms chosen by an AI model. Each definition is an exact quote from the definitions section of the bill. Code checked the quotes, not the choice of terms.",
+            withTerms.RootElement.GetProperty("keyTermsLabel").GetString());
         Assert.Empty(without.RootElement.GetProperty("keyTerms").EnumerateArray());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, without.RootElement.GetProperty("keyTermsLabel").ValueKind);
     }
 
     [Fact]

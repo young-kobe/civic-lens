@@ -15,22 +15,23 @@ public sealed class ActionKeyTermTests
     private static readonly ActionDraftSettings On = new(10_000_000, concurrency: 1, draftsFromBillText: true, keyTermGlossary: GlossaryNames);
     private static readonly ActionDraftSettings Off = new(10_000_000, concurrency: 1, draftsFromBillText: true);
 
-    private static string Plain(string definition) => BillTextQuotes.Normalize(definition);
+    private static string Plain(string definition) => GpoQuoteMarks.Normalize(definition);
 
     private static readonly (string Term, string Quote) Secretary = ("Secretary", Plain(SecretaryDefinition));
     private static readonly (string Term, string Quote) Tenant = ("eligible tenant", Plain(TenantDefinition));
     private static readonly (string Term, string Quote) Landlord = ("landlord", Plain(LandlordDefinition));
 
     [Fact]
-    public async Task ADefinitionQuoteBecomesAKeyTermWithItsExactStoredCharactersAndItsSpanInsideTheDefinitionsSection()
+    public async Task ADefinitionQuoteBecomesAKeyTermWithPlainQuoteMarksAndAnExactSpanInsideTheDefinitionsSection()
     {
         var (store, model) = await RunAsync(On, [Secretary, Tenant]);
 
         var revision = Assert.Single(store.Revisions);
         var text = Of(BodyWithDefinitions);
         Assert.Equal(["Secretary", "eligible tenant"], revision.KeyTerms.Select(term => term.Term));
-        Assert.Equal([SecretaryDefinition, TenantDefinition], revision.KeyTerms.Select(term => term.Definition));
-        Assert.All(revision.KeyTerms, term => Assert.Equal(term.Definition, text.Text.Substring(term.Span.Start, term.Span.Length)));
+        Assert.Equal([Plain(SecretaryDefinition), Plain(TenantDefinition)], revision.KeyTerms.Select(term => term.Definition));
+        Assert.All(revision.KeyTerms, term => Assert.DoesNotContain("``", term.Definition, StringComparison.Ordinal));
+        Assert.Equal([SecretaryDefinition, TenantDefinition], revision.KeyTerms.Select(term => text.Text.Substring(term.Span.Start, term.Span.Length)));
         var section = BillDefinitionsSection.Find(text.Body)!;
         Assert.All(revision.KeyTerms, term => Assert.True(section.Contains(term.Span.Start - text.BodyStart, term.Span.Length)));
         var request = Assert.Single(model.Requests);
@@ -150,6 +151,7 @@ public sealed class ActionKeyTermTests
         accepted.ValidateAgainst(extractions);
 
         Assert.Throws<ArgumentException>(() => (accepted with { KeyTerms = [outside] }).ValidateAgainst(extractions));
+        Assert.Throws<ArgumentException>(() => (accepted with { KeyTerms = [term with { Definition = SecretaryDefinition }] }).ValidateAgainst(extractions));
         Assert.Throws<ArgumentException>(() => (accepted with { KeyTerms = [term with { Definition = term.Definition.Replace("Secretary", "Treasurer", StringComparison.Ordinal) }] }).ValidateAgainst(extractions));
     }
 

@@ -9,7 +9,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
     {
         private const string ViewSql = """
             CREATE VIEW public_api.bill_key_terms WITH (security_barrier = true) AS
-            SELECT a.record_id, a.revision_number, k."position", k.term, k.definition
+            SELECT a.record_id, a.revision_number, k."position", k.term, k.definition,
+                   'Key terms chosen by an AI model. Each definition is an exact quote from the definitions section of the bill. Code checked the quotes, not the choice of terms.' AS label
               FROM public_api.active_records a
               JOIN public.action_revisions r ON r.record_id = a.record_id AND r.revision_number = a.revision_number
               JOIN public.action_revision_key_terms k ON k.record_id = r.record_id AND k.revision_number = r.revision_number

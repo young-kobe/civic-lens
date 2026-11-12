@@ -733,6 +733,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
 
         Assert.Equal(["M|0|Secretary|The term Secretary means the Secretary.", "M|1|grant|The term grant means a payment."],
             await PublicAsync("SELECT record_id || '|' || \"position\" || '|' || term || '|' || definition FROM public_api.bill_key_terms ORDER BY record_id, \"position\""));
+        Assert.Equal(["Key terms chosen by an AI model. Each definition is an exact quote from the definitions section of the bill. Code checked the quotes, not the choice of terms."],
+            await PublicAsync("SELECT DISTINCT label FROM public_api.bill_key_terms"));
     }
 
     [Fact]

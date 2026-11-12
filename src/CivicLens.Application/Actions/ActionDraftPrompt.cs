@@ -81,7 +81,7 @@ public static class ActionDraftPrompt
     /// sent, and the total is the stored total less what the normalization removed from the part that is sent. A whole text then reads as whole.</summary>
     private static object BillTextSection(ActionDraftBillText billText, BillDefinitionsSection? definitions)
     {
-        var text = BillTextQuotes.Normalize(billText.Body);
+        var text = GpoQuoteMarks.Normalize(billText.Body);
         var removedByNormalizing = billText.Body.Length - text.Length;
         return new
         {

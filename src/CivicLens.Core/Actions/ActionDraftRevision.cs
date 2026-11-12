@@ -154,7 +154,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
             throw new ArgumentException($"A revision has at most {ActionKeyTerm.MaximumPerRevision} key terms.");
         if (terms.Any(item => string.IsNullOrWhiteSpace(item.Term) || item.Term.Length > ActionKeyTerm.MaximumTermLength ||
                 string.IsNullOrWhiteSpace(item.Definition) || !IsBounded(item.Span) || item.Span.Length > MaximumTextQuoteLength ||
-                item.Definition.Length != item.Span.Length || !item.IsDefinedBy(item.Definition)))
+                item.Definition.Length > item.Span.Length || !item.IsDefinedBy(item.Definition)))
             throw new ArgumentException("Each key term has a term that its bounded definition quote holds.");
         if (terms.Select(item => item.Term).Distinct(StringComparer.OrdinalIgnoreCase).Count() != terms.Length)
             throw new ArgumentException("A key term appears once in a revision.");
@@ -225,8 +225,8 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         {
             if (section is null || !section.Contains(term.Span.Start - bodyStart, term.Span.Length))
                 throw new ArgumentException("Each key term quotes the definitions section of the bill text.");
-            if (term.Definition != new DocumentTextSpan(extraction, term.Span.Start, term.Span.Length).Quote)
-                throw new ArgumentException("Each key term definition is the exact quote that its citation names.");
+            if (term.Definition != GpoQuoteMarks.Normalize(new DocumentTextSpan(extraction, term.Span.Start, term.Span.Length).Quote))
+                throw new ArgumentException("Each key term definition is the plain form of the exact quote that its citation names.");
         }
     }
 

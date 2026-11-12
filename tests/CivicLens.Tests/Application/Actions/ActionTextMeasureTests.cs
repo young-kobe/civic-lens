@@ -56,7 +56,7 @@ public sealed class ActionTextMeasureTests
         var bill = Assert.Single(report.Bills);
         Assert.True(report.KeyTermsOn);
         Assert.Equal("SEC. 2. DEFINITIONS.", bill.DefinitionsHeading);
-        Assert.Equal([("Secretary", SecretaryDefinition), ("eligible tenant", TenantDefinition)], bill.KeyTerms.Select(term => (term.Term, term.Definition)));
+        Assert.Equal([("Secretary", BillBodyQuote(SecretaryDefinition)), ("eligible tenant", BillBodyQuote(TenantDefinition))], bill.KeyTerms.Select(term => (term.Term, term.Definition)));
         Assert.Equal((1, 1, 2), (report.Totals.BillsWithDefinitions, report.Totals.BillsWithKeyTerms, report.Totals.KeyTerms));
         Assert.Contains("keyTerms", Assert.Single(model.Requests).SchemaJson, StringComparison.Ordinal);
     }
@@ -385,5 +385,5 @@ public sealed class ActionTextMeasureTests
         return (store, new ActionDraftStep(store, world.Reader(), model, settings ?? On, BillGateFixtures.Revision()));
     }
 
-    private static string BillBodyQuote(string storedDefinition) => BillTextQuotes.Normalize(storedDefinition);
+    private static string BillBodyQuote(string storedDefinition) => GpoQuoteMarks.Normalize(storedDefinition);
 }
