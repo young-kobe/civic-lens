@@ -47,12 +47,19 @@
                         }
                     </SourceFold>
                 }
-                @if (Data.Votes.Length > 0)
+                @if (Data.Votes.Length > 0 || Data.SenateVoteGap)
                 {
                     <section class="bill-section bill-votes" aria-labelledby="bill-votes-title">
                         <h2 id="bill-votes-title">Votes on this bill</h2>
                         <p class="bill-lede">Votes on this site that name @Data.Number.</p>
-                        <SharedVoteRows Data="voteRows" RootPath="@RootPath" SingleMember="true" />
+                        @if (Data.Votes.Length > 0)
+                        {
+                            <SharedVoteRows Data="voteRows" RootPath="@RootPath" SingleMember="true" />
+                        }
+                        @if (Data.SenateVoteGap)
+                        {
+                            <p class="small muted">This site has no Senate roll call vote on this bill.</p>
+                        }
                     </section>
                 }
                 @if (Data.Cosponsors is { } cosponsors)
@@ -62,6 +69,11 @@
             </div>
 
             <aside class="bill-rail" aria-label="Key facts">
+                <div class="bill-card bill-members" data-bill-members data-record-id="@Data.RecordId">
+                    <h2 class="bill-card-title">Your members and this bill</h2>
+                    <div data-bill-members-body></div>
+                    <p class="small muted" data-bill-members-prompt>Enter your ZIP to see how your members relate to this bill. <a href="@(RootPath + PublicationProtocol.HomePath)#zip-results">Find my members</a></p>
+                </div>
                 @if (Data.Issues.Length > 0 || Data.PolicyArea is not null)
                 {
                     <div class="bill-card">

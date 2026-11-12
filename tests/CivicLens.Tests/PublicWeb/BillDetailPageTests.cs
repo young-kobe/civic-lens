@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using CivicLens.PublicWeb.Components.Ui;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
@@ -144,6 +145,56 @@ public sealed class BillDetailPageTests
     }
 
     [Fact]
+    public async Task ALinkedVoteShowsTheChamberTotalsAsTheSharedPartyBarAndTheSplitBadgeFromItsAlignment()
+    {
+        var totals = VotePageView.CastBar("House members", PartyTone.Neutral, 262, 159, 0, 12, 0, false);
+        var votes = Bill.Votes.Select(vote => vote with { Totals = totals, Alignment = PublishedVoteAlignment.Split }).ToArray();
+
+        var page = await RenderAsync(Bill with { Votes = votes });
+        var row = page.QuerySelector(".bill-votes .shared-vote-row")!;
+
+        var legend = row.QuerySelectorAll(".party-bar-legend li").Select(item => Regex.Replace(item.TextContent, @"\s+", " ").Trim());
+        Assert.Equal(["262 Yes", "159 No", "12 Not voting"], legend);
+        Assert.Equal("Split vote", row.QuerySelector(".badge")!.TextContent);
+        Assert.Null(row.QuerySelector(".party-bar-mark"));
+    }
+
+    [Fact]
+    public async Task ALinkedVoteWithNoTotalsAndNoAlignmentShowsNoBarAndNoBadge()
+    {
+        var row = (await RenderAsync(Bill)).QuerySelector(".bill-votes .shared-vote-row")!;
+
+        Assert.Null(row.QuerySelector(".party-bar, .badge"));
+    }
+
+    [Fact]
+    public async Task TheSenateGapNoteShowsOnlyWhenTheStepperHasASenateStepAndSaysNothingAboutWhy()
+    {
+        const string note = "This site has no Senate roll call vote on this bill.";
+        var senateStep = Bill with { Steps = [.. Bill.Steps, new("Passed the Senate", "7 Aug 2026") { Chamber = PublishedChamber.Senate }], SenateVoteGap = true };
+
+        var shown = await RenderAsync(senateStep);
+        var hidden = await RenderAsync(Bill);
+
+        Assert.Contains(note, shown.QuerySelector(".bill-votes")!.TextContent);
+        Assert.DoesNotContain("release", shown.QuerySelector(".bill-votes p.muted")!.TextContent);
+        Assert.DoesNotContain(note, hidden.Body!.TextContent);
+        Assert.Contains(note, (await RenderAsync(senateStep with { Votes = [] })).QuerySelector(".bill-votes")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheMembersCardHoldsTheApprovedHeadingAndPromptAndTheRecordIdForTheDeviceFill()
+    {
+        var card = (await RenderAsync(Bill)).QuerySelector(".bill-members")!;
+
+        Assert.Equal("Your members and this bill", card.QuerySelector("h2")!.TextContent);
+        Assert.Equal(RecordId, card.GetAttribute("data-record-id"));
+        Assert.Equal("Enter your ZIP to see how your members relate to this bill. Find my members", card.QuerySelector("[data-bill-members-prompt]")!.TextContent);
+        Assert.Equal(Root + "index.html#zip-results", card.QuerySelector("[data-bill-members-prompt] a")!.GetAttribute("href"));
+        Assert.Equal(0, card.QuerySelector("[data-bill-members-body]")!.ChildElementCount);
+    }
+
+    [Fact]
     public async Task TheStatusBadgeIsTheSharedLabelAndAnActionThatNoRuleMatchesGetsNoBadge()
     {
         var page = await RenderAsync(Bill);
@@ -183,7 +234,7 @@ public sealed class BillDetailPageTests
         var page = await RenderAsync(Bill with { Votes = [], Issues = [], PolicyArea = null });
 
         Assert.Null(page.QuerySelector(".bill-votes"));
-        Assert.Null(page.QuerySelector(".bill-card"));
+        Assert.Null(page.QuerySelector(".bill-card:not(.bill-members)"));
     }
 
     [Fact]

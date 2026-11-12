@@ -1,4 +1,5 @@
 using CivicLens.PublicApi.Votes;
+using CivicLens.PublicWeb.Components.Ui;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 
@@ -78,14 +79,24 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes)
             Cosponsors = new(bill.BillType.StartsWith('h') ? "House" : "Senate",
                 [.. cosponsors.Where(row => row.IsOriginal).Select(Person)], [.. cosponsors.Where(row => !row.IsOriginal).Select(Person)]),
             Steps = steps,
-            Votes = [.. voteRows.Select(vote => new SharedVoteRowData(vote.RecordId, vote.VotedOn, vote.Congress, vote.Session, vote.RollCall, vote.Headline, vote.Label,
-                PlainVoteWords.Kind(vote.Kind), PlainVoteWords.Result(vote.Result), []))],
+            Votes = [.. voteRows.Select(VoteRowOf)],
+            SenateVoteGap = steps.Any(step => step.Chamber == PublishedChamber.Senate) && !voteRows.Any(vote => vote.Chamber == PublishedChamber.Senate),
             Issues = issues,
             CrsText = detail.CrsSummaryText,
             CrsVersion = detail.CrsSummaryVersion,
             CongressGovUrl = CongressGovBillPage.Url(bill.Congress, bill.BillType, bill.BillNumber)
         };
     }
+
+    /// <summary>The chamber bar uses the shared cast bar of the vote page with no half line. The source gives no counts for a vote for a candidate, so that row has no bar.</summary>
+    private static SharedVoteRowData VoteRowOf(VoteRow vote) => new(vote.RecordId, vote.VotedOn, vote.Congress, vote.Session, vote.RollCall, vote.Headline, vote.Label,
+        PlainVoteWords.Kind(vote.Kind), PlainVoteWords.Result(vote.Result), [])
+    {
+        Alignment = vote.Alignment,
+        Totals = vote is { Yea: { } yes, Nay: { } no, Present: { } present, NotVoting: { } notVoting } && yes + no + present + notVoting > 0
+            ? VotePageView.CastBar($"{vote.Chamber} members", PartyTone.Neutral, yes, no, present, notVoting, 0, false)
+            : null
+    };
 
     private static BillSponsorData Person(BillSponsorRow row) => new(row.OfficialId, row.Name, row.Party, row.SponsoredOn);
 }

@@ -487,6 +487,8 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .bill-kv dd { margin: 0; overflow-wrap: anywhere; }
 .bill-card { display: grid; gap: var(--s3); justify-items: start; padding: var(--s5); border-radius: 20px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
 .bill-card p { margin: 0; }
+.bill-members-list { display: grid; gap: var(--s3); margin: 0; padding: 0; list-style: none; }
+.bill-members-list p { margin: 0 0 var(--s2); }
 .bill-card-title { margin: 0; color: var(--muted); font-family: var(--ui); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 @media (min-width: 761px) {
     .bill-section { padding: 32px; }

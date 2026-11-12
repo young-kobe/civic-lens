@@ -498,6 +498,37 @@
         }
     };
 
+    // The bill page card holds no ZIP or member data in the cached page. A remembered ZIP fills it from the private fragment of the browser API.
+    const initBillMembers = (remembered, card, api) => {
+        const body = card.querySelector("[data-bill-members-body]");
+        const prompt = card.querySelector("[data-bill-members-prompt]");
+        let request = 0;
+        const clear = () => { request++; body.replaceChildren(); prompt.hidden = false; };
+        const run = async () => {
+            const zip = remembered.zip();
+            if (!validZip(zip) || !api) { clear(); return; }
+            const mine = ++request;
+            try {
+                const response = await fetch(`${api}/v1/zip-districts/${zip}/bills/${encodeURIComponent(card.dataset.recordId)}`, { headers: { Accept: "text/html" } });
+                if (!response.ok || !/^text\/html(?:;|$)/i.test(response.headers.get("Content-Type") ?? "")) throw new TypeError("Invalid bill members answer.");
+                const template = document.createElement("template");
+                template.innerHTML = await response.text();
+                const fragment = template.content.firstElementChild;
+                if (mine !== request) return;
+                if (template.content.childElementCount !== 1 || !fragment.matches("div[data-bill-members-fragment]")
+                    || fragment.dataset.zcta !== zip || fragment.dataset.recordId !== card.dataset.recordId || !positiveRelease(fragment.dataset.release))
+                    throw new TypeError("Invalid bill members answer.");
+                body.replaceChildren(fragment);
+                prompt.hidden = true;
+            } catch {
+                if (mine === request) clear();
+            }
+        };
+        remembered.onForget(clear);
+        remembered.onChange(run);
+        run();
+    };
+
     const initMemberStrip = (remembered, slot) => {
         if (document.querySelector("[data-zip-api]")) return;
         const api = slot.dataset.membersApi;
@@ -938,5 +969,6 @@
     document.querySelectorAll("[data-zip-api]").forEach(form => initZipLookup(form, rememberedMembers));
     const membersStrip = document.querySelector("#members-strip");
     if (membersStrip) initMemberStrip(rememberedMembers, membersStrip);
+    document.querySelectorAll("[data-bill-members]").forEach(card => initBillMembers(rememberedMembers, card, membersStrip?.dataset.membersApi));
     new Set(Array.from(document.querySelectorAll("th[data-sort]"), header => header.closest("table"))).forEach(initSortable);
 })();

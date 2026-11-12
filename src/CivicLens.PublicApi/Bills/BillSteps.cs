@@ -7,8 +7,8 @@ namespace CivicLens.PublicApi.Bills;
 
 /// <summary>
 /// The one owner of the steps of the bill page. Each rule reads one whole known shape of an official action text from its start. The step titles
-/// are the approved phrases of the Mosaic v2 bill page. A bill that sits in another stage, such as a veto, shows that stage only in its latest
-/// action line, because no approved step title exists for it.
+/// are the approved phrases of the Mosaic v2 bill page and the owner approved phrases for the presentation to the President and a veto. Each of those two
+/// steps shows the Congress.gov action date.
 /// </summary>
 public static partial class BillSteps
 {
@@ -18,29 +18,42 @@ public static partial class BillSteps
     {
         var chamber = ChamberOf(bill.BillType);
         var introducedBy = sponsorName is null ? "" : ", by " + sponsorName;
-        var steps = new List<BillStepData> { new($"Introduced in the {chamber}", Moment.Day(bill.EventDate) + introducedBy) };
+        var steps = new List<BillStepData> { new($"Introduced in the {chamber}", Moment.Day(bill.EventDate) + introducedBy) { Chamber = Chamber(chamber) } };
         var ordered = actions.OrderBy(action => action.ActionDate).ThenBy(action => action.ActionTime).ThenBy(action => action.Position).ToArray();
         steps.AddRange(Passages(ordered));
         steps.AddRange(AgreedChanges(ordered));
+        steps.AddRange(PresidentSteps(ordered));
         if (Law(ordered) is { } law) steps.Add(law);
         return [.. steps];
     }
 
     private static string ChamberOf(string billType) => billType.StartsWith('h') ? "House" : "Senate";
 
+    private static PublishedChamber Chamber(string name) => Enum.Parse<PublishedChamber>(name);
+
     private static IEnumerable<BillStepData> Passages(BillActionRow[] ordered) => ordered
         .Where(action => action.Type != ResolvingDifferences)
         .Select(action => (action, match: Passage().Match(action.Text)))
         .Where(item => item.match.Success)
         .DistinctBy(item => ChamberGroup(item.match))
-        .Select(item => new BillStepData($"Passed the {ChamberGroup(item.match)}", Detail(item.action)));
+        .Select(item => new BillStepData($"Passed the {ChamberGroup(item.match)}", Detail(item.action)) { Chamber = Chamber(ChamberGroup(item.match)) });
 
     private static IEnumerable<BillStepData> AgreedChanges(BillActionRow[] ordered) => ordered
         .Select(action => (action, match: AgreedToChanges().Match(action.Text)))
         .Where(item => item.match.Success && AgreementHolds(item.action.Text))
         .DistinctBy(item => item.match.Groups["chamber"].Value)
         .Select(item => new BillStepData(
-            $"{item.match.Groups["chamber"].Value} agreed to the {(item.match.Groups["chamber"].Value == "House" ? "Senate" : "House")} changes", Detail(item.action)));
+            $"{item.match.Groups["chamber"].Value} agreed to the {(item.match.Groups["chamber"].Value == "House" ? "Senate" : "House")} changes", Detail(item.action))
+        { Chamber = Chamber(item.match.Groups["chamber"].Value) });
+
+    // Each step takes the first action whose complete text has the known shape, and shows the Congress.gov action date.
+    private static IEnumerable<BillStepData> PresidentSteps(BillActionRow[] ordered)
+    {
+        if (ordered.FirstOrDefault(action => PresentedText().IsMatch(action.Text)) is { } presented)
+            yield return new("Presented to the President", Moment.Day(presented.ActionDate));
+        if (ordered.FirstOrDefault(action => VetoedText().IsMatch(action.Text)) is { } vetoed)
+            yield return new("Vetoed by the President", Moment.Day(vetoed.ActionDate));
+    }
 
     /// <summary>The action whose complete text states the public law number, or null.</summary>
     public static BillActionRow? LawAction(IEnumerable<BillActionRow> actions) =>
@@ -68,6 +81,12 @@ public static partial class BillSteps
     [GeneratedRegex(@"^Resolving differences -- (?<chamber>House|Senate) actions: .*?(?:agree to|concur in) the (?:Senate|House) amendments?",
         RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex AgreedToChanges();
+
+    [GeneratedRegex(@"\APresented to President\.?\z", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex PresentedText();
+
+    [GeneratedRegex(@"\AVetoed by President\.?\z", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex VetoedText();
 
     [GeneratedRegex(@"(?<![\d,])(?<yes>\d{1,3}) - (?<no>\d{1,3})(?![\d,])", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex VoteCount();

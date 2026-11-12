@@ -1,4 +1,5 @@
 using CivicLens.PublicApi.Bills;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.PublicApi.Bills;
 
@@ -28,8 +29,8 @@ public sealed class BillStepsTests
     [Fact]
     public void ABillAlwaysStartsWithItsIntroductionInTheChamberOfItsTypeAndNamesTheSponsor()
     {
-        Assert.Equal(new("Introduced in the House", "11 Sep 2025, by Pat One"), Assert.Single(BillSteps.Of(HouseBill, "Pat One", [])));
-        Assert.Equal(new("Introduced in the Senate", "11 Sep 2025"), Assert.Single(BillSteps.Of(Row("sjres"), null, [])));
+        Assert.Equal(new("Introduced in the House", "11 Sep 2025, by Pat One") { Chamber = PublishedChamber.House }, Assert.Single(BillSteps.Of(HouseBill, "Pat One", [])));
+        Assert.Equal(new("Introduced in the Senate", "11 Sep 2025") { Chamber = PublishedChamber.Senate }, Assert.Single(BillSteps.Of(Row("sjres"), null, [])));
     }
 
     [Fact]
@@ -43,8 +44,33 @@ public sealed class BillStepsTests
         ]);
 
         Assert.Equal(["Introduced in the House", "Passed the House", "Passed the Senate"], steps.Select(step => step.Title));
+        Assert.Equal([PublishedChamber.House, PublishedChamber.House, PublishedChamber.Senate], steps.Select(step => step.Chamber));
         Assert.Equal("12 Sep 2025, vote of 262 to 159", steps[1].Detail);
         Assert.Equal("7 Aug 2026", steps[2].Detail);
+    }
+
+    [Fact]
+    public void PresentationToThePresidentAndAVetoAreStepsThatShowTheCongressGovActionDateAndHaveNoChamber()
+    {
+        var steps = BillSteps.Of(HouseBill, null,
+        [
+            Action(0, "2026-09-17", "Presented to President."),
+            Action(1, "2026-09-25", "Vetoed by President.")
+        ]);
+
+        Assert.Equal(["Introduced in the House", "Presented to the President", "Vetoed by the President"], steps.Select(step => step.Title));
+        Assert.Equal(["17 Sep 2026", "25 Sep 2026"], steps.Skip(1).Select(step => step.Detail));
+        Assert.All(steps.Skip(1), step => Assert.Null(step.Chamber));
+    }
+
+    [Theory]
+    [InlineData("Presented to President. (Text of the message)")]
+    [InlineData("The bill was presented to President Smith.")]
+    [InlineData("Vetoed by President in part.")]
+    [InlineData("Veto message received from the President.")]
+    public void ATextThatIsNoWholePresidentShapeAddsNoStep(string text)
+    {
+        Assert.Single(BillSteps.Of(HouseBill, null, [Action(0, "2026-09-17", text)]));
     }
 
     [Theory]
@@ -77,7 +103,7 @@ public sealed class BillStepsTests
         ]);
 
         var step = Assert.Single(steps.Skip(1));
-        Assert.Equal(new("House agreed to the Senate changes", "16 Sep 2026, vote of 262 to 159"), step);
+        Assert.Equal(new("House agreed to the Senate changes", "16 Sep 2026, vote of 262 to 159") { Chamber = PublishedChamber.House }, step);
     }
 
     [Fact]
@@ -89,7 +115,7 @@ public sealed class BillStepsTests
         Assert.Equal(new("Became law", "18 Sep 2026, Public Law 119-111"), steps[^1]);
         Assert.Same(law, BillSteps.LawAction([law]));
         Assert.Null(BillSteps.LawAction([Action(0, "2026-09-18", "Became Public Law No: 119-111 after the veto.")]));
-        Assert.Single(BillSteps.Of(HouseBill, null, [Action(0, "2026-09-17", "Vetoed by President.")]));
+        Assert.Equal("Vetoed by the President", BillSteps.Of(HouseBill, null, [Action(0, "2026-09-17", "Vetoed by President.")])[^1].Title);
     }
 
     [Fact]

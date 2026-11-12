@@ -63,17 +63,20 @@ public sealed class BillPageTests(PostgresCollection postgres)
         Assert.StartsWith("\"r1-", response.Headers.ETag!.Tag);
         Assert.StartsWith("H.R. 7, ", page.QuerySelector("main h1")!.TextContent);
         Assert.Equal($"https://civic-lens.test/records/{BillId}.html", page.QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
-        Assert.Equal(["Introduced in the House", "Passed the House", "Became law"], page.QuerySelectorAll(".bill-stepper b").Select(step => step.TextContent));
+        Assert.Equal(["Introduced in the House", "Passed the House", "Presented to the President", "Became law"], page.QuerySelectorAll(".bill-stepper b").Select(step => step.TextContent));
         Assert.Equal("2 Mar 2026, by Pat One", page.QuerySelector(".bill-stepper li")!.QuerySelector(".bill-step-detail")!.TextContent);
         Assert.Contains("Sponsored by Pat One, a Democrat.", page.QuerySelector(".bill-head .bill-lede")!.TextContent);
         Assert.Contains("This site tracks 2 House members who cosponsored it: 1 on the day it was introduced and 1 who joined later.", page.QuerySelector("#bill-backers-title")!.ParentElement!.TextContent);
         Assert.DoesNotContain("Cy Four", page.QuerySelector("#bill-backers-title")!.ParentElement!.TextContent);
-        Assert.Equal(["1 Democrats", "1 Republicans"], page.QuerySelectorAll(".party-bar-legend li").Select(item => System.Text.RegularExpressions.Regex.Replace(item.TextContent, @"\s+", " ").Trim()));
+        Assert.Equal(["1 Democrats", "1 Republicans"], page.QuerySelectorAll("[aria-labelledby=bill-backers-title] .party-bar-legend li").Select(item => System.Text.RegularExpressions.Regex.Replace(item.TextContent, @"\s+", " ").Trim()));
         Assert.Equal("Bill on Congress.gov", page.QuerySelector("details#source a")!.TextContent);
         Assert.Equal("https://www.congress.gov/bill/119th-congress/house-bill/7", page.QuerySelector("details#source a")!.GetAttribute("href"));
         Assert.Equal(["Health care"], page.QuerySelectorAll(".link-chip").Select(chip => chip.TextContent));
         var votes = page.QuerySelectorAll(".bill-votes h3 a").ToArray();
         Assert.Equal([$"https://civic-lens.test/records/{new string('e', 64)}.html"], votes.Select(link => link.GetAttribute("href")));
+        var totals = page.QuerySelectorAll(".bill-votes .party-bar-legend li").Select(item => System.Text.RegularExpressions.Regex.Replace(item.TextContent, @"\s+", " ").Trim());
+        Assert.Equal(["2 Yes", "1 No", "0 Not voting"], totals);
+        Assert.DoesNotContain("This site has no Senate roll call vote", page.QuerySelector(".bill-votes")!.TextContent);
     }
 
     [Fact]
@@ -89,7 +92,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
             await using var host = await StartAsync(member);
             var response = await host.Client.GetAsync($"{ServerPageEndpoints.Prefix}/records/{BillId}.html");
             var page = await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
-            var legend = page.QuerySelectorAll(".party-bar-legend li").Select(item => System.Text.RegularExpressions.Regex.Replace(item.TextContent, @"\s+", " ").Trim());
+            var legend = page.QuerySelectorAll("[aria-labelledby=bill-backers-title] .party-bar-legend li").Select(item => System.Text.RegularExpressions.Regex.Replace(item.TextContent, @"\s+", " ").Trim());
 
             Assert.Equal(["1 Democrats", "1 No party listed"], legend);
         }
