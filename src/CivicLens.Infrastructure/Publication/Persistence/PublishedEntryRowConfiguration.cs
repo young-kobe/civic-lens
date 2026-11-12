@@ -30,7 +30,7 @@ internal sealed class PublishedEntryRowConfiguration : IEntityTypeConfiguration<
             table.HasCheckConstraint("ck_published_entries_bill_title",
                 $"(kind = '{Name(PublishedRecordKind.Action)}') = (bill_title IS NOT NULL) AND (bill_title IS NULL OR length(btrim(bill_title)) > 0)");
             table.HasCheckConstraint("ck_published_entries_approved_by",
-                "approved_by IS NULL OR (kind = 'statement' AND approved_by IN ('Code', 'Person'))");
+                "approved_by IS NULL OR (kind IN ('statement', 'relationship') AND approved_by IN ('Code', 'Person'))");
             table.HasCheckConstraint("ck_published_entries_bill_line",
                 $"bill_line IS NULL OR (kind = '{Name(PublishedRecordKind.Action)}' AND length(btrim(bill_line)) >= 1 AND " +
                 $"length(bill_line) <= {PublishedRecordEntry.MaximumBillLineLength})");

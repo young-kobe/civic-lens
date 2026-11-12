@@ -23,6 +23,7 @@ public sealed record PublishedRelationship
     public required PublishedOfficial[] Officials { get; init; }
     public required string[] IssueIds { get; init; }
     public required string[] PolicyAreaIds { get; init; }
+    public PublishedApprover ApprovedBy { get; init; } = PublishedApprover.Person;
     public required DateTimeOffset ApprovedAtUtc { get; init; }
     public required DateTimeOffset FirstPublishedAtUtc { get; init; }
     public required PublishedCorrection[] Corrections { get; init; }
@@ -34,6 +35,7 @@ public sealed record PublishedRelationship
         RevisionNumber = RevisionNumber,
         Headline = Headline,
         FirstPublishedAtUtc = FirstPublishedAtUtc,
+        ApprovedBy = ApprovedBy,
         ApprovedAtUtc = ApprovedAtUtc,
         Officials = Officials,
         IssueIds = IssueIds,

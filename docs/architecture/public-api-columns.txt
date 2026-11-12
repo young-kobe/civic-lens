@@ -256,6 +256,7 @@ record_links reason
 record_links quote_extraction_id
 record_links quote_start
 record_links quote_length
+record_links approver
 statement_approvers approved_by
 statement_approvers record_id
 statement_approvers revision_number

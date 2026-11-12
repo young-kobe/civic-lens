@@ -12,7 +12,7 @@ public sealed record PublishedEntriesBackfillResult(int Examined, int Added, int
     IReadOnlyDictionary<string, int> SkippedByReason, IReadOnlyList<SkippedPublishedEntry> SkippedEntries,
     int OpenRangesWithoutRow, int ClosedRangesWithoutKeptFolder, int ReadyRangesWithoutRow)
 {
-    public int OpenStatementsWithoutApprover { get; init; }
+    public int OpenRecordsWithoutApprover { get; init; }
 
     public int OpenRangesWithoutApprovalTime { get; init; }
 }

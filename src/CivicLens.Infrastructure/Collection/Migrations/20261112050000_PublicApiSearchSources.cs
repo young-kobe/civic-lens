@@ -17,12 +17,12 @@ public partial class PublicApiSearchSources : Migration
           LEFT JOIN public.collection_attempts attempt ON attempt.attempt_id = extraction.attempt_id
         """;
 
-    private const string LinkColumns = """
+    internal const string LinkColumns = """
         l.link_type, l.event_date AS statement_date, l.record_id AS link_record_id, r.reason,
                r.statement_quote_extraction_id AS quote_extraction_id, r.statement_quote_start AS quote_start, r.statement_quote_length AS quote_length
         """;
 
-    private const string LinkJoins = """
+    internal const string LinkJoins = """
           FROM public.published_entries l
           JOIN public_api.active_records a ON a.kind = 'relationship' AND a.record_id = l.record_id AND a.revision_number = l.revision_number
           JOIN public_api.active_records s ON s.kind = l.statement_kind AND s.record_id = l.statement_record_id
@@ -132,7 +132,7 @@ public partial class PublicApiSearchSources : Migration
         ALTER VIEW public_api.vote_sources OWNER TO civic_lens_public_owner;
         """;
 
-    private const string RecordLinks = $"""
+    internal const string RecordLinks = $"""
         CREATE OR REPLACE VIEW public_api.record_links WITH (security_barrier = true) AS
         SELECT l.statement_record_id AS record_id, 'statement' AS kind,
                t.kind AS related_kind, t.record_id AS related_record_id, h.headline AS related_headline, h.text_origin AS related_text_origin, h.label AS related_label,
