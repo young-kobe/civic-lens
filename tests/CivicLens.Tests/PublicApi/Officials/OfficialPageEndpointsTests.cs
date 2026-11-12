@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.PublicWeb.Publication;
@@ -25,7 +26,8 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         new("p0", "Ann Able", new SeededTerm("Representative", "Representative", "2025-01-03") { State = "MA", District = 7, Party = "Democrat", EndsOn = "2027-01-03" }),
         new("p1", "Ben Baker", new SeededTerm("Representative", "Representative", "2025-01-03") { State = "TX", District = 3, Party = "Republican" }),
         new("p2", "Cy Cole", new SeededTerm("Representative", "Representative", "2025-01-03") { State = "MA", District = 1, Party = "Democrat" }),
-        new("president", "Eve East", new SeededTerm("President", "Executive", "2025-01-20") { Party = "Republican" })
+        new("president", "Eve East", new SeededTerm("President", "Executive", "2025-01-20") { Party = "Republican" }),
+        new("justice", "Jo Judge", new SeededTerm("Associate Justice", "Judicial", "2020-10-27"))
     ];
 
     // p0 votes against the Democratic majority on a (split), misses b, votes with the party on c (split), and breaks on d, which is not a split vote.
@@ -37,7 +39,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         new('d', "2026-02-06") { Casts = ["Nay", "Nay", "Yea"], PersonIds = ["p0", "p1", "p2"], RollCall = 4 }
     ];
 
-    private async Task<ApiHost> StartAsync()
+    private async Task<ApiHost> StartAsync(bool storeBillCounts = true)
     {
         var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
         var database = host.OperationalDatabase;
@@ -63,6 +65,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
             new SeededBill('1', "2026-03-02") { BillNumber = 1, Sponsorships = [new("p0", "Sponsor", "2026-01-10")] },
             new SeededBill('2', "2026-03-03") { BillNumber = 2, BillLine = "Pays landlords.", Sponsorships = [new("p0", "Sponsor", "2026-03-03"), new("p1", "Cosponsor", "2026-03-03")] },
             new SeededBill('3', "2026-03-04") { BillNumber = 3, Sponsorships = [new("p1", "Sponsor", "2026-03-04")] });
+        if (storeBillCounts) await StoredBillCounts.FillAsync(database, 1, 119);
         return host;
     }
 
@@ -169,6 +172,41 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task KnownIssuesRemainVisibleWhenTheBillCountSnapshotIsUnavailable()
+    {
+        await using var host = await StartAsync(storeBillCounts: false);
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('4', "2026-03-05") { BillNumber = 4, Issues = ["housing"], Sponsorships = [new("p0", "Sponsor", "2026-03-05")] });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase,
+            "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'housing', 'Housing', 'Housing policy');");
+        using var detailResponse = await host.Client.GetAsync("/v1/officials/p0");
+        detailResponse.EnsureSuccessStatusCode();
+        using var detail = JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync());
+        Assert.Equal(JsonValueKind.Null, detail.RootElement.GetProperty("bills").ValueKind);
+        Assert.NotEmpty(detail.RootElement.GetProperty("issues").GetProperty("issues").EnumerateArray());
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        var issues = page.QuerySelector("#issues");
+        Assert.NotNull(issues);
+        Assert.Contains("119th Congress", issues.TextContent);
+        Assert.Equal("Housing 1", Assert.Single(issues.QuerySelectorAll(".official-chips a")).TextContent);
+        Assert.Empty(page.QuerySelectorAll("a[href='#bills']"));
+        Assert.Contains(OfficialPageText.BillCountsUnavailable, page.QuerySelector(".official-figs")!.TextContent);
+    }
+
+    [Fact]
+    public async Task AnOfficialWithNoCongressShowsNoBillCaptionEvenWhenTheReleaseHasNoBillCountSnapshot()
+    {
+        await using var host = await StartAsync(storeBillCounts: false);
+
+        var page = await GetPageAsync(host, "/web/officials/justice");
+
+        Assert.Equal("Jo Judge", page.QuerySelector("h1")!.TextContent);
+        Assert.DoesNotContain(OfficialPageText.BillCountsUnavailable, page.Body!.TextContent);
+    }
+
+    [Fact]
     public async Task PersonApprovalGivesAModelWrittenStatementTheCheckedByPersonLabel()
     {
         await using var host = await StartAsync();
@@ -179,7 +217,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
 
         var labels = page.QuerySelectorAll("#statements .official-source-label[data-origin=model]");
         Assert.Equal(2, labels.Length);
-        Assert.Contains(labels, label => label.TextContent == PublishedWording.ModelStatementCheckedByPerson);
+        Assert.Contains(labels, label => label.TextContent == PublishedRecordLabels.StatementCheckedByPersonWording);
         Assert.DoesNotContain(labels, label => label.TextContent == PublishedRecordLabels.StatementModelWording);
     }
 

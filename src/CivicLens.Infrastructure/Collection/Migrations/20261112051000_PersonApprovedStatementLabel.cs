@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace CivicLens.Infrastructure.Collection.Migrations;
 
-/// <summary>Gives a statement summary that a model wrote and a person approved its own AI label. The label of a code-approved statement stays as it was. The two views repeat PublishedRecordLabels.StatementWording, and a test compares them.</summary>
+/// <summary>Gives a statement summary that a model wrote and a person approved its own AI label. The label of a code-approved statement stays as it was. The two views repeat PublishedRecordLabels.StatementModelWording, StatementCheckedByPersonWording, and a test compares them.</summary>
 public partial class PersonApprovedStatementLabel : Migration
 {
     private const string CodeLabel = "An AI summary of this release.";

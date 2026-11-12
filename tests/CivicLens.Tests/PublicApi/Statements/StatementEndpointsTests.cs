@@ -75,7 +75,7 @@ public sealed class StatementEndpointsTests(PostgresCollection postgres)
         Assert.Equal(["official-z", "official-a"], rows['a'].GetProperty("speakerIds").EnumerateArray().Select(id => id.GetString()!).ToArray());
         Assert.Equal(PublishedRecordLabels.StatementModelWording, rows['a'].GetProperty("label").GetString());
         Assert.Equal("model", rows['b'].GetProperty("textOrigin").GetString());
-        Assert.Equal(PublishedWording.ModelStatementCheckedByPerson, rows['b'].GetProperty("label").GetString());
+        Assert.Equal(PublishedRecordLabels.StatementCheckedByPersonWording, rows['b'].GetProperty("label").GetString());
         Assert.Equal("person", rows['c'].GetProperty("textOrigin").GetString());
         Assert.Equal(JsonValueKind.Null, rows['c'].GetProperty("label").ValueKind);
     }

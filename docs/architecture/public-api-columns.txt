@@ -388,10 +388,6 @@ official_party_lines against_party
 official_party_lines cast_count
 official_party_lines first_voted_on
 official_party_lines last_voted_on
-official_bill_counts official_id
-official_bill_counts congress
-official_bill_counts sponsored
-official_bill_counts cosponsored
 official_issue_counts official_id
 official_issue_counts congress
 official_issue_counts issue_id
@@ -421,3 +417,12 @@ vote_sources extraction_id
 vote_sources url
 vote_sources observed_at_utc_ticks
 vote_sources text
+release_bill_counts release_number
+release_bill_counts congress
+release_bill_counts bills
+release_bill_counts expected_member_row_count
+release_official_bill_counts release_number
+release_official_bill_counts congress
+release_official_bill_counts official_id
+release_official_bill_counts sponsored
+release_official_bill_counts cosponsored

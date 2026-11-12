@@ -5,7 +5,7 @@
     var showVotes = Data.Votes.Length > 0 || Data.Marks.Length > 0;
     var showStatements = Data.Statements.Length > 0;
     var showBills = Data.Bills.Length > 0;
-    var showIssues = Data.Issues.Length > 0 && Data.BillsCongress is not null;
+    var showIssues = Data.Issues.Length > 0 && Data.IssuesCongress is not null;
     var showJump = showVotes || showStatements || showBills || showIssues;
     var showNoLinks = showJump && !Data.HasLinkedStatements;
     var marksCongress = Data.Attendance.FirstOrDefault()?.Congress ?? party?.Congress;
@@ -24,7 +24,7 @@
                     <p class="official-lede">@OfficialPageText.Lede(Data)</p>
                 </div>
             </header>
-            @if (Data.Attendance.Length > 0 || party is not null || Data.BillsCongress is not null)
+            @if (Data.Attendance.Length > 0 || party is not null || Data.BillsCongress is not null || Data.BillCountsAbsent)
             {
                 <aside class="official-rail" aria-label="Figures for @Data.Name">
                     <ul class="official-figs" role="list">
@@ -39,6 +39,10 @@
                         @if (Data.BillsCongress is not null)
                         {
                             <li><b>@Data.SponsoredBills</b><span>@OfficialPageText.BillsSponsored(Data)</span></li>
+                        }
+                        else if (Data.BillCountsAbsent)
+                        {
+                            <li><span>@OfficialPageText.BillCountsUnavailable</span></li>
                         }
                     </ul>
                 </aside>
@@ -109,7 +113,7 @@
                         <ul class="official-rows" role="list">
                             @foreach (var statement in Data.Statements)
                             {
-                                                                var voteLabel = statement.VoteLabel ?? (statement.VoteTextOrigin == PublishedTextOrigin.Model ? PublishedRecordLabels.ModelWording : null);
+                                var voteLabel = statement.VoteLabel ?? (statement.VoteTextOrigin == PublishedTextOrigin.Model ? PublishedRecordLabels.ModelWording : null);
                                 <li>
                                     <span class="official-icon" aria-hidden="true"><Icon Name="IconName.Statements" /></span>
                                     <div>
@@ -180,7 +184,7 @@
                 {
                     <section id="issues" class="official-section" aria-labelledby="issues-title">
                         <h2 id="issues-title">Issues in @(Data.Name)'s record</h2>
-                        <p class="official-lede">Each number counts the votes and bills in the @CongressCalendar.Ordinal(Data.BillsCongress!.Value) Congress that carry the issue tag. An AI model picks the tag, so a tag can be wrong. <a href="@(RootPath + PublicationProtocol.MethodPagePath)">How tags are chosen</a></p>
+                        <p class="official-lede">Each number counts the votes and bills in the @CongressCalendar.Ordinal(Data.IssuesCongress!.Value) Congress that carry the issue tag. An AI model picks the tag, so a tag can be wrong. <a href="@(RootPath + PublicationProtocol.MethodPagePath)">How tags are chosen</a></p>
                         <ul class="official-chips" role="list">
                             @foreach (var issue in Data.Issues)
                             {

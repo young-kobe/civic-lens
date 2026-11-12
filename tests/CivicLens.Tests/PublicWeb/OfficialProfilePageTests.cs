@@ -28,6 +28,7 @@ public sealed class OfficialProfilePageTests
         Attendance = [new(PublishedChamber.House, 119, 5, 675, new(2025, 1, 3), new(2026, 9, 16))],
         PartyLines = [new(PublishedChamber.House, 119, "Democrat", 248, 1, 249, new(2025, 1, 3), new(2026, 9, 16))],
         BillsCongress = 119,
+        IssuesCongress = 119,
         SponsoredBills = 43,
         Issues = [new("tax", "Federal taxes", 8)],
         Marks = [new(BreakId, new(2026, 9, 16), PublishedChamber.House, 309, false, "Democrat"),
@@ -61,6 +62,26 @@ public sealed class OfficialProfilePageTests
         Assert.StartsWith("248of 249 split votes", figures[1]);
         Assert.Contains("cast with most House Democrats, in the 119th Congress.", figures[1]);
         Assert.Contains("43bills and resolutions sponsored in the 119th Congress", figures[2]);
+    }
+
+    [Fact]
+    public async Task AnAbsentBillCountShowsTheUnavailableCaptionInTheFiguresAndNeverAZero()
+    {
+        var page = await RenderAsync<OfficialProfilePage>(Member() with { BillsCongress = null, SponsoredBills = 0, BillCountsAbsent = true });
+
+        var figures = page.QuerySelectorAll(".official-figs li").Select(item => item.TextContent).ToArray();
+        Assert.Equal(3, figures.Length);
+        Assert.Equal(OfficialPageText.BillCountsUnavailable, figures[2]);
+        Assert.DoesNotContain("bills and resolutions sponsored", page.QuerySelector(".official-figs")!.TextContent);
+        Assert.DoesNotContain("0bills", page.QuerySelector(".official-figs")!.TextContent);
+    }
+
+    [Fact]
+    public async Task AFigureShowsNoUnavailableCaptionWhenTheBillCountIsStored()
+    {
+        var page = await RenderAsync<OfficialProfilePage>(Member());
+
+        Assert.DoesNotContain(OfficialPageText.BillCountsUnavailable, page.DocumentElement.TextContent);
     }
 
     [Fact]
@@ -316,7 +337,7 @@ public sealed class OfficialProfilePageTests
     {
         var passages = new[]
         {
-            OfficialPageText.LinkMeaning, OfficialPageText.NoLinks, OfficialPageText.ExecutiveBox,
+            OfficialPageText.LinkMeaning, OfficialPageText.NoLinks, OfficialPageText.BillCountsUnavailable, OfficialPageText.ExecutiveBox,
             OfficialPageText.ExecutiveMeaning(PublishedExecutiveActionKind.ExecutiveOrder), OfficialPageText.ExecutiveMeaning(PublishedExecutiveActionKind.Proclamation),
             OfficialPageText.ExecutiveMeaning(PublishedExecutiveActionKind.Notice), OfficialPageText.ExecutiveMeaning(PublishedExecutiveActionKind.Memorandum)
         };
@@ -429,7 +450,7 @@ public sealed class OfficialProfilePageTests
     [Fact]
     public async Task AnIssueSectionWithoutItsCongressIsHiddenAndAPageWithNoSectionHasNoJumpList()
     {
-        var noCongress = await RenderAsync<OfficialProfilePage>(Member() with { BillsCongress = null });
+        var noCongress = await RenderAsync<OfficialProfilePage>(Member() with { IssuesCongress = null });
         var nothing = await RenderAsync<OfficialProfilePage>(Member() with { Marks = [], Votes = [], Statements = [], Bills = [], Issues = [], HasLinkedStatements = true });
 
         Assert.Null(noCongress.QuerySelector("#issues"));
