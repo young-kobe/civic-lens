@@ -77,6 +77,26 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task TheExecutiveActionPageMapsTypedTargetsInPositionOrderAndLinksOnlyActiveReleaseMatches()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 3, 0, 0, 0, TimeSpan.Zero));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + ExecutiveActionTargetRows.Seed());
+
+        var page = await GetPageAsync(host, Path(ExecutiveActionTargetRows.Source));
+
+        var targets = page.QuerySelectorAll("#executive-links-title + ul > li");
+        Assert.Equal(5, targets.Length);
+        Assert.Contains("Amends: Executive order 14100", targets[0].TextContent);
+        Assert.Equal("EO 14100, January 3, 2025", targets[0].QuerySelector(".detail-target-reference")!.TextContent);
+        Assert.Equal(BaseUrl.Join("records/" + ExecutiveActionTargetRows.LinkedOrder + ".html"), targets[0].QuerySelector("a")!.GetAttribute("href"));
+        Assert.Contains("Amends: Executive order 14101", targets[1].TextContent);
+        Assert.Null(targets[1].QuerySelector("a"));
+        Assert.Contains("Revokes: Proclamation 10001", targets[3].TextContent);
+        Assert.Equal(BaseUrl.Join("records/" + ExecutiveActionTargetRows.LinkedProclamation + ".html"), targets[3].QuerySelector("a")!.GetAttribute("href"));
+    }
+
+    [Fact]
     public async Task TheDocumentChangeRouteRendersTheRedlineFromTheExactStoredOffsets()
     {
         await using var host = await StartAsync();
