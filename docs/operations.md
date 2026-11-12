@@ -776,9 +776,13 @@ The limit is 100 when you give none. The command admits one text job for each of
 
 If a job of `federal-register-documents` or `federal-register-text` is queued or leased, `pendingJobs` is above 0. The command then admits nothing and exits with code 1. Check `jobs list`, wait until those jobs end, and run the command again. So each run waits for the jobs of the run before it.
 
-A document recorded before the detail job pinned `body_html_url` has no pinned URL, about 700 in production. For each such original, up to the limit, the command admits one refetch job of its detail. The job key is `federal-register/{source}/document/{number}/body-url`. The refetch only fills the null URL. It changes no other column and never replaces a pinned URL. The command prints `pendingJobs`, `examined`, `admitted`, and `refetches`. `admitted` counts text jobs. `refetches` counts refetch jobs.
+A document recorded before the detail job pinned `body_html_url` has no pinned URL, about 700 in production. For each such original, up to the limit, the command admits one refetch job of its detail. The job key is `federal-register/{source}/document/{number}/body-url`. The refetch only fills the null URL. It changes no other column and never replaces a pinned URL. When it fills the URL, it admits the text job in the same transaction.
 
-Run order: run the command and wait until its jobs end. Run it again, so the originals with a new URL get their text jobs. Repeat until `examined` and `refetches` are both 0. A refetch that returns no URL leaves the row null, and the command does not queue it again.
+Each list has its own limit. One run can admit up to the limit of text jobs and up to the limit of refetch jobs.
+
+The command prints `pendingJobs`, `examined`, `admitted`, `refetches`, and `noUrlWithRefetch`. `admitted` counts text jobs. `refetches` counts refetch jobs. `noUrlWithRefetch` counts the originals that have no body URL and already have a refetch job in any state. It is counted before the run admits its jobs.
+
+Run order: run the command and wait until its jobs end. Repeat until `examined` and `refetches` are both 0. Then read `noUrlWithRefetch`. A count above 0 after all jobs end means the origin gave no URL or a refetch job failed. Check `jobs list` for those jobs.
 
 ### Executive action revision backfill
 

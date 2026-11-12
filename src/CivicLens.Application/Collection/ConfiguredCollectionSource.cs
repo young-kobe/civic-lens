@@ -166,13 +166,8 @@ public sealed class ConfiguredCollectionSource
     {
         var source = ReadFederalRegisterSource();
         var template = PrepareDefinition(source, currentDate, null, article: false);
-        var documents = page.Items.Select(item => new ApiJob(FederalRegisterJobKeys.Document(SourceId, item.DocumentNumber),
-            template with
-            {
-                ApiResource = ApiResource.FederalRegisterDocument,
-                Url = FederalRegisterUrl.Document(source.Url, item.DocumentNumber),
-                Priority = CollectionJobPriority.OfDay(item.PublishedOn, currentDate)
-            }));
+        var documents = page.Items.Select(item => FederalRegisterDocumentJob(source, template,
+            FederalRegisterJobKeys.Document(SourceId, item.DocumentNumber), item.DocumentNumber, item.PublishedOn, currentDate));
         return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template, [.. documents]);
     }
 
@@ -181,15 +176,20 @@ public sealed class ConfiguredCollectionSource
     {
         var source = ReadFederalRegisterSource();
         var template = PrepareDefinition(source, currentDate, null, article: false);
-        var job = new ApiJob(FederalRegisterJobKeys.BodyUrl(SourceId, target.DocumentNumber),
-            template with
-            {
-                ApiResource = ApiResource.FederalRegisterDocument,
-                Url = FederalRegisterUrl.Document(source.Url, target.DocumentNumber),
-                Priority = CollectionJobPriority.OfDay(target.PublishedOn, currentDate)
-            });
+        var job = FederalRegisterDocumentJob(source, template, FederalRegisterJobKeys.BodyUrl(SourceId, target.DocumentNumber),
+            target.DocumentNumber, target.PublishedOn, currentDate);
         return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template, [job]);
     }
+
+    /// <summary>The one owner of the resource, URL, and priority of a Federal Register detail job.</summary>
+    private static ApiJob FederalRegisterDocumentJob(WatchedSourceConfiguration source, CollectionJobDefinition template, string jobKey,
+        string documentNumber, DateOnly publishedOn, DateOnly currentDate) =>
+        new(jobKey, template with
+        {
+            ApiResource = ApiResource.FederalRegisterDocument,
+            Url = FederalRegisterUrl.Document(source.Url, documentNumber),
+            Priority = CollectionJobPriority.OfDay(publishedOn, currentDate)
+        });
 
     /// <summary>The documents source that this text source reads. It is the owner of the refetch jobs.</summary>
     public ConfiguredCollectionSource FederalRegisterDocumentsSource() => new(Revision, FederalRegisterDocumentsSourceId, AsOf);

@@ -308,7 +308,7 @@ public sealed class JobPreparation(
         var document = FederalRegisterDocumentParser.Parse(response.Body, number);
         if (FederalRegisterJobKeys.IsBodyUrl(job.IdempotencyKey))
         {
-            await federalRegisterAdmissions.AdmitBodyUrlAsync(configured, number, document.BodyHtmlUrl, cancellationToken);
+            await federalRegisterAdmissions.AdmitBodyUrlAsync(configured, document, cancellationToken);
             return JobPreparationResult.Prepared();
         }
         var personId = ExecutiveActionSigner.PersonIdOf(configured.Revision.Configuration, document);

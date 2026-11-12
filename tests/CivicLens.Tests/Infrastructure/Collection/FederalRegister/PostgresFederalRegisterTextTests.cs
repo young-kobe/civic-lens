@@ -191,7 +191,7 @@ public sealed class PostgresFederalRegisterTextTests(PostgresCollection postgres
 
         var first = await backfill.ExecuteAsync(Owner, 2);
 
-        Assert.Equal(new FederalRegisterTextBackfillResult(0, 2, 2, 0), first);
+        Assert.Equal(new FederalRegisterTextBackfillResult(0, 2, 2, 0, 0), first);
         Assert.Equal(["2024-26714", "2025-01900"], await KeysAsync());
         Assert.Contains(FederalRegisterFixtures.ProclamationBodyUrl, await TextJobUrlsAsync());
 
@@ -200,8 +200,8 @@ public sealed class PostgresFederalRegisterTextTests(PostgresCollection postgres
         await MarkTextJobsSucceededAsync();
         var third = await backfill.ExecuteAsync(Owner, 2);
 
-        Assert.Equal(new FederalRegisterTextBackfillResult(0, 1, 1, 0), second);
-        Assert.Equal(new FederalRegisterTextBackfillResult(0, 0, 0, 0), third);
+        Assert.Equal(new FederalRegisterTextBackfillResult(0, 1, 1, 0, 0), second);
+        Assert.Equal(new FederalRegisterTextBackfillResult(0, 0, 0, 0, 0), third);
         Assert.Equal(["2024-25777", "2024-26714", "2025-01900"], await KeysAsync());
     }
 
@@ -214,18 +214,18 @@ public sealed class PostgresFederalRegisterTextTests(PostgresCollection postgres
 
         var refused = await backfill.ExecuteAsync(Owner, 10);
 
-        Assert.Equal(new FederalRegisterTextBackfillResult(1, 0, 0, 0), refused);
+        Assert.Equal(new FederalRegisterTextBackfillResult(1, 0, 0, 0, 0), refused);
         Assert.Empty(await KeysAsync());
 
         await SucceededJobs.MarkSucceededAsync(connectionString,
             (string)(await ScalarAsync("SELECT job_id FROM collection_jobs WHERE idempotency_key LIKE '%/document/2025-01901'"))!);
         var drained = await backfill.ExecuteAsync(Owner, 10);
 
-        Assert.Equal(new FederalRegisterTextBackfillResult(0, 1, 1, 0), drained);
+        Assert.Equal(new FederalRegisterTextBackfillResult(0, 1, 1, 0, 0), drained);
     }
 
     [Fact]
-    public async Task TheBackfillCountsOriginalsWithNoPinnedUrlAndSkipsADocumentThatHasItsTextJob()
+    public async Task TheBackfillSkipsADocumentThatHasItsTextJobAndQueuesARefetchForAnOriginalWithNoPinnedUrl()
     {
         var admitted = await AdmitDocumentAsync(Proclamation);
         await MarkTextJobsSucceededAsync();
@@ -235,7 +235,7 @@ public sealed class PostgresFederalRegisterTextTests(PostgresCollection postgres
 
         var result = await backfill.ExecuteAsync(Owner, 10);
 
-        Assert.Equal(new FederalRegisterTextBackfillResult(0, 1, 1, 1), result);
+        Assert.Equal(new FederalRegisterTextBackfillResult(0, 1, 1, 1, 0), result);
         Assert.Equal(["2024-26714", "2025-01900"], await KeysAsync());
         Assert.Single(admitted.Jobs);
     }
@@ -254,11 +254,15 @@ public sealed class PostgresFederalRegisterTextTests(PostgresCollection postgres
         await MarkRefetchJobsSucceededAsync();
         var rerun = await backfill.ExecuteAsync(Owner, 10);
 
-        Assert.Equal(new FederalRegisterTextBackfillResult(0, 1, 1, 2), first);
-        Assert.Equal(new FederalRegisterTextBackfillResult(3, 0, 0, 0), refused);
-        Assert.Equal(new FederalRegisterTextBackfillResult(0, 0, 0, 0), rerun);
+        Assert.Equal(new FederalRegisterTextBackfillResult(0, 1, 1, 2, 0), first);
+        Assert.Equal(new FederalRegisterTextBackfillResult(3, 0, 0, 0, 0), refused);
+        Assert.Equal(new FederalRegisterTextBackfillResult(0, 0, 0, 0, 2), rerun);
         Assert.Equal(["2024-25777", "2025-01900"], await RefetchKeysAsync());
         Assert.Equal(["2024-26714"], await KeysAsync());
+        Assert.Equal(["2024-25777|federalRegisterDocument|federal-register-documents|" + FederalRegisterUrl.Document(FederalRegisterFixtures.SourceUrl, "2024-25777"),
+            "2025-01900|federalRegisterDocument|federal-register-documents|" + FederalRegisterUrl.Document(FederalRegisterFixtures.SourceUrl, "2025-01900")],
+            await ColumnAsync("SELECT split_part(idempotency_key, '/', 4) || '|' || (definition_json::jsonb ->> 'apiResource') || '|' || source_id || '|' || (definition_json::jsonb ->> 'url') " +
+                "FROM collection_jobs WHERE idempotency_key LIKE '%/body-url' ORDER BY 1"));
     }
 
     [Fact]
@@ -272,56 +276,80 @@ public sealed class PostgresFederalRegisterTextTests(PostgresCollection postgres
         await MarkRefetchJobsSucceededAsync();
         var second = await backfill.ExecuteAsync(Owner, 1);
 
-        Assert.Equal(new FederalRegisterTextBackfillResult(0, 0, 0, 1), first);
-        Assert.Equal(new FederalRegisterTextBackfillResult(0, 0, 0, 1), second);
+        Assert.Equal(new FederalRegisterTextBackfillResult(0, 0, 0, 1, 0), first);
+        Assert.Equal(new FederalRegisterTextBackfillResult(0, 0, 0, 1, 1), second);
         Assert.Equal(["2024-25777", "2025-01900"], await RefetchKeysAsync());
     }
 
     [Fact]
-    public async Task ARefetchFillsANullBodyUrlAndTheNextBackfillRunAdmitsTheTextJob()
+    public async Task ARefetchThatFillsANullBodyUrlAdmitsTheTextJobInTheSameTransactionAndAReplayAdmitsNone()
     {
         await AdmitDocumentAsync(FederalRegisterFixtures.TrumpOrder, withText: false);
         var backfill = Backfill();
         await backfill.ExecuteAsync(Owner, 10);
         await MarkRefetchJobsSucceededAsync();
         var before = await DocumentRowAsync("2025-01900", withoutBodyUrl: true);
+        var detail = FederalRegisterFixtures.Document(PinnedOrder);
 
-        await store.AdmitBodyUrlAsync(DocumentsSource(), "2025-01900", FederalRegisterFixtures.TextSourceUrl + "2025/01/28/2025-01900.html", default);
-        var next = await backfill.ExecuteAsync(Owner, 10);
+        await store.AdmitBodyUrlAsync(DocumentsSource(), detail, default);
+        await store.AdmitBodyUrlAsync(DocumentsSource(), detail, default);
 
-        Assert.Equal(FederalRegisterFixtures.TextSourceUrl + "2025/01/28/2025-01900.html", await ScalarAsync("SELECT body_html_url FROM executive_action_documents"));
+        Assert.Equal(detail.BodyHtmlUrl, await ScalarAsync("SELECT body_html_url FROM executive_action_documents"));
         Assert.Equal(before, await DocumentRowAsync("2025-01900", withoutBodyUrl: true));
-        Assert.Equal(new FederalRegisterTextBackfillResult(0, 1, 1, 0), next);
+        Assert.Equal(["2025-01900"], await KeysAsync());
+        Assert.Equal([detail.BodyHtmlUrl!], await TextJobUrlsAsync());
+        await MarkTextJobsSucceededAsync();
+        Assert.Equal(new FederalRegisterTextBackfillResult(0, 0, 0, 0, 0), await backfill.ExecuteAsync(Owner, 10));
     }
 
     [Fact]
-    public async Task ARefetchNeverOverwritesAPinnedUrlOrAnotherColumnAndAReplayAddsNoRow()
+    public async Task ARefetchNeverOverwritesAPinnedUrlOrAnotherColumnAndAdmitsNoTextJobAndAReplayAddsNoRow()
     {
         await AdmitDocumentAsync(Proclamation, withText: false);
         var before = await DocumentRowAsync("2024-26714");
         var rows = await ScalarAsync("SELECT count(*) FROM executive_action_documents");
+        var other = FederalRegisterFixtures.Document(FederalRegisterFixtures.WithBodyUrl(Proclamation,
+            FederalRegisterFixtures.TextSourceUrl + "2024/11/13/2024-26714.html"));
 
-        await store.AdmitBodyUrlAsync(DocumentsSource(), "2024-26714", FederalRegisterFixtures.TextSourceUrl + "2024/11/13/2024-26714.html", default);
-        await store.AdmitBodyUrlAsync(DocumentsSource(), "2024-26714", null, default);
+        await store.AdmitBodyUrlAsync(DocumentsSource(), other, default);
 
         Assert.Equal(before, await DocumentRowAsync("2024-26714"));
         Assert.Equal(FederalRegisterFixtures.ProclamationBodyUrl, await ScalarAsync("SELECT body_html_url FROM executive_action_documents"));
         Assert.Equal(rows, await ScalarAsync("SELECT count(*) FROM executive_action_documents"));
+        Assert.Empty(await KeysAsync());
     }
 
     [Fact]
-    public async Task ARefetchOfAnUnpinnedDocumentThatStillHasNoUrlChangesNothingAndTheBackfillDoesNotQueueItAgain()
+    public async Task ARefetchThatStillReturnsNoUrlChangesNothingTheBackfillDoesNotQueueItAgainAndTheRunCountsIt()
     {
         await AdmitDocumentAsync(FederalRegisterFixtures.TrumpOrder, withText: false);
         var backfill = Backfill();
         await backfill.ExecuteAsync(Owner, 10);
         await MarkRefetchJobsSucceededAsync();
 
-        await store.AdmitBodyUrlAsync(DocumentsSource(), "2025-01900", null, default);
+        await store.AdmitBodyUrlAsync(DocumentsSource(), FederalRegisterFixtures.Document(FederalRegisterFixtures.TrumpOrder), default);
         var next = await backfill.ExecuteAsync(Owner, 10);
 
         Assert.Equal(DBNull.Value, await ScalarAsync("SELECT body_html_url FROM executive_action_documents"));
-        Assert.Equal(new FederalRegisterTextBackfillResult(0, 0, 0, 0), next);
+        Assert.Empty(await KeysAsync());
+        Assert.Equal(new FederalRegisterTextBackfillResult(0, 0, 0, 0, 1), next);
+    }
+
+    [Fact]
+    public async Task TheCountOfOriginalsWithNoUrlAndARefetchIncludesAFailedRefetchAndLeavesOutAFilledOne()
+    {
+        await AdmitDocumentAsync(FederalRegisterFixtures.TrumpOrder, withText: false);
+        await AdmitDocumentAsync(FederalRegisterFixtures.BidenNotice, withText: false);
+        var backfill = Backfill();
+        await backfill.ExecuteAsync(Owner, 10);
+        await MarkRefetchJobsSucceededAsync();
+        await ExecuteAsync("UPDATE collection_jobs SET state = 'Failed' WHERE idempotency_key LIKE '%/2024-25777/body-url'");
+        await store.AdmitBodyUrlAsync(DocumentsSource(), FederalRegisterFixtures.Document(PinnedOrder), default);
+        await MarkTextJobsSucceededAsync();
+
+        var next = await backfill.ExecuteAsync(Owner, 10);
+
+        Assert.Equal(new FederalRegisterTextBackfillResult(0, 0, 0, 0, 1), next);
     }
 
     [Fact]

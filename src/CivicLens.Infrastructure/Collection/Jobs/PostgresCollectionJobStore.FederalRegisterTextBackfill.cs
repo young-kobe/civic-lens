@@ -33,11 +33,14 @@ public sealed partial class PostgresCollectionJobStore : IFederalRegisterTextBac
             .OrderByDescending(row => row.PublishedOn).ThenBy(row => row.DocumentNumber)
             .Select(row => new { row.DocumentNumber, row.BodyHtmlUrl, row.PublishedOn }).Take(limit).ToListAsync(cancellationToken);
         var documentPrefix = FederalRegisterJobKeys.Document(sourceId, "");
-        var unpinned = await originals.Where(row => row.BodyHtmlUrl == null)
+        var withoutUrl = originals.Where(row => row.BodyHtmlUrl == null);
+        var noUrlWithRefetch = await withoutUrl.CountAsync(row => db.Set<JobRow>()
+            .Any(job => job.IdempotencyKey == documentPrefix + row.DocumentNumber + FederalRegisterJobKeys.BodyUrlSuffix), cancellationToken);
+        var unpinned = await withoutUrl
             .Where(row => !db.Set<JobRow>().Any(job => job.IdempotencyKey == documentPrefix + row.DocumentNumber + FederalRegisterJobKeys.BodyUrlSuffix))
             .OrderByDescending(row => row.PublishedOn).ThenBy(row => row.DocumentNumber)
             .Select(row => new FederalRegisterBodyUrlTarget(row.DocumentNumber, row.PublishedOn)).Take(limit).ToListAsync(cancellationToken);
-        return new([.. rows.Select(row => new FederalRegisterTextTarget(row.DocumentNumber, row.BodyHtmlUrl!, row.PublishedOn))], unpinned);
+        return new([.. rows.Select(row => new FederalRegisterTextTarget(row.DocumentNumber, row.BodyHtmlUrl!, row.PublishedOn))], unpinned, noUrlWithRefetch);
     }
 
     public Task<bool> AdmitBodyUrlJobAsync(ConfiguredCollectionSource textSource, FederalRegisterBodyUrlTarget target,

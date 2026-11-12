@@ -1038,9 +1038,9 @@ public sealed class JobPreparationTests
 
         public List<(string DocumentNumber, string? BodyUrl)> BodyUrls { get; } = [];
 
-        public Task AdmitBodyUrlAsync(ConfiguredCollectionSource source, string documentNumber, string? bodyUrl, CancellationToken cancellationToken)
+        public Task AdmitBodyUrlAsync(ConfiguredCollectionSource source, FederalRegisterDocument document, CancellationToken cancellationToken)
         {
-            BodyUrls.Add((documentNumber, bodyUrl));
+            BodyUrls.Add((document.DocumentNumber, document.BodyHtmlUrl));
             return Task.CompletedTask;
         }
 

@@ -58,13 +58,18 @@ public sealed partial class PostgresCollectionJobStore : IFederalRegisterAdmissi
         return result;
     }
 
-    public Task AdmitBodyUrlAsync(ConfiguredCollectionSource source, string documentNumber, string? bodyUrl, CancellationToken cancellationToken)
+    /// <summary>Fills a null body URL of a stored document and admits its text job in the same transaction. It never replaces a pinned URL.</summary>
+    public Task AdmitBodyUrlAsync(ConfiguredCollectionSource source, FederalRegisterDocument document, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
-        ArgumentException.ThrowIfNullOrWhiteSpace(documentNumber);
-        return TransactionAsync(async (db, _) => await db.Set<ExecutiveActionDocumentRow>()
-            .Where(row => row.SourceId == source.SourceId && row.DocumentNumber == documentNumber && row.BodyHtmlUrl == null)
-            .ExecuteUpdateAsync(set => set.SetProperty(row => row.BodyHtmlUrl, bodyUrl), cancellationToken), cancellationToken);
+        ArgumentNullException.ThrowIfNull(document);
+        return TransactionAsync(async (db, now) =>
+        {
+            var filled = await db.Set<ExecutiveActionDocumentRow>()
+                .Where(row => row.SourceId == source.SourceId && row.DocumentNumber == document.DocumentNumber && row.BodyHtmlUrl == null)
+                .ExecuteUpdateAsync(set => set.SetProperty(row => row.BodyHtmlUrl, document.BodyHtmlUrl), cancellationToken);
+            return filled == 1 ? await AdmitTextJobAsync(db, source, document, now, cancellationToken) : NoAdmission;
+        }, cancellationToken);
     }
 
     public Task AdmitTextAsync(ConfiguredCollectionSource textSource, string textJobId, FederalRegisterTextEvidence evidence,

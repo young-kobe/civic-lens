@@ -6,8 +6,10 @@ public sealed record FederalRegisterTextTarget(string DocumentNumber, string Bod
 /// <summary>An original document with no text row, no pinned body URL, and no refetch job.</summary>
 public sealed record FederalRegisterBodyUrlTarget(string DocumentNumber, DateOnly PublishedOn);
 
-/// <summary>The targets of one run. Each list holds at most the limit.</summary>
-public sealed record FederalRegisterTextListing(IReadOnlyList<FederalRegisterTextTarget> Targets, IReadOnlyList<FederalRegisterBodyUrlTarget> Unpinned);
+/// <summary>The targets of one run. Each list holds at most the limit. NoUrlWithRefetch counts all originals that have no body URL
+/// and have a refetch job in any state.</summary>
+public sealed record FederalRegisterTextListing(IReadOnlyList<FederalRegisterTextTarget> Targets, IReadOnlyList<FederalRegisterBodyUrlTarget> Unpinned,
+    int NoUrlWithRefetch);
 
 public interface IFederalRegisterTextBackfillStore
 {

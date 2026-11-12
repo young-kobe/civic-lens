@@ -4,8 +4,9 @@ using CivicLens.Core.Review;
 namespace CivicLens.Application.Collection.FederalRegister;
 
 /// <summary>PendingJobs above 0 means the run was refused and nothing was examined. Refetches counts the detail refetch jobs admitted
-/// for originals with no pinned body URL. Such an original gets its text job in a later run, after the refetch fills the URL.</summary>
-public sealed record FederalRegisterTextBackfillResult(int PendingJobs, int Examined, int Admitted, int Refetches);
+/// for originals with no pinned body URL. The refetch admits the text job when it fills the URL. NoUrlWithRefetch counts the originals
+/// that have no body URL and have a refetch job in any state. A count that stays above 0 after the refetch jobs end means the origin gave no URL or a job failed.</summary>
+public sealed record FederalRegisterTextBackfillResult(int PendingJobs, int Examined, int Admitted, int Refetches, int NoUrlWithRefetch);
 
 /// <summary>
 /// Admits a text job for original documents that were recorded before the text source existed. The jobs carry the revision
@@ -20,7 +21,7 @@ public sealed class BackfillFederalRegisterText(IFederalRegisterTextBackfillStor
         ReviewAuthorization.RequireOwner(actor);
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         var textSource = EnabledTextSource();
-        if (await store.CountPendingJobsAsync(textSource, cancellationToken) is var pending and > 0) return new(pending, 0, 0, 0);
+        if (await store.CountPendingJobsAsync(textSource, cancellationToken) is var pending and > 0) return new(pending, 0, 0, 0, 0);
         var listing = await store.ListNewestOriginalsWithoutTextAsync(textSource, limit, cancellationToken);
         var admitted = 0;
         foreach (var target in listing.Targets)
@@ -28,7 +29,7 @@ public sealed class BackfillFederalRegisterText(IFederalRegisterTextBackfillStor
         var refetches = 0;
         foreach (var target in listing.Unpinned)
             if (await store.AdmitBodyUrlJobAsync(textSource, target, cancellationToken)) refetches++;
-        return new(0, listing.Targets.Count, admitted, refetches);
+        return new(0, listing.Targets.Count, admitted, refetches, listing.NoUrlWithRefetch);
     }
 
     private ConfiguredCollectionSource EnabledTextSource() =>
