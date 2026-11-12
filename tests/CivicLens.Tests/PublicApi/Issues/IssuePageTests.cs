@@ -97,6 +97,22 @@ public sealed class IssuePageTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task TheScopePanelShowsTheStoredIncludesAndExcludesInStoredOrderAndOnlyOfThisIssue()
+    {
+        await using var host = await StartAsync([], []);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;" +
+            "INSERT INTO release_issue_includes (release_number, issue_id, \"position\", text) VALUES (1, 'tax', 1, 'Second'), (1, 'tax', 0, 'First <i>'), (1, 'other', 0, 'Elsewhere');" +
+            "INSERT INTO release_issue_excludes (release_number, issue_id, \"position\", text) VALUES (1, 'tax', 0, 'Not this');");
+
+        var page = await GetPageAsync(host);
+
+        Assert.Equal(["First <i>", "Second"], page.QuerySelectorAll(".issue-scope-card:first-child li").Select(item => item.TextContent));
+        Assert.Equal(["Not this"], page.QuerySelectorAll(".issue-scope-card:last-child li").Select(item => item.TextContent));
+        Assert.DoesNotContain("Elsewhere", page.DocumentElement.TextContent);
+        Assert.Null(page.QuerySelector(".issue-scope-card i"));
+    }
+
+    [Fact]
     public async Task TheVoteListStopsAtTheNewestTenAndNamesTheTotal()
     {
         var votes = Enumerable.Range(1, 12).Select(index => new SeededVote("0123456789abcdef"[index], $"2026-03-{index:00}") { Kind = "Passage", RollCall = index, Issues = ["tax"] }).ToArray();

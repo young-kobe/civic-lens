@@ -16,10 +16,6 @@ public static class PublishedFacetSummaryView
 
     public const string DefinitionTitle = "What this issue covers";
 
-    public const string IncludesLabel = "Includes";
-
-    public const string ExcludesLabel = "Does not include";
-
     public const string IssueTagsLinkText = "Where the issue tags come from";
 
 

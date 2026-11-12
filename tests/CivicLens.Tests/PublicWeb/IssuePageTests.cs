@@ -17,7 +17,7 @@ public sealed class IssuePageTests
     private static readonly IssueBillData Bill = new(new string('b', 64), "H.R. 1 would set storage rules.", PublishedRecordLabels.ModelWording, new(2026, 2, 1), "Current bill line.");
 
     private static IssuePageData Data(IssueLineUpData? lineUp = null, IssueVoteData[]? votes = null, IssueBillData[]? bills = null) =>
-        new(7, "firearms", "Firearms", "Federal firearms law and regulation.", 119, 3, 2, 186, votes ?? [Vote], bills ?? [Bill], lineUp);
+        new(7, "firearms", "Firearms", "Federal firearms law and regulation.", ["Background checks"], ["Crime statements"], 119, 3, 2, 186, votes ?? [Vote], bills ?? [Bill], lineUp);
 
     [Fact]
     public async Task TheCountLineNamesTheWhatTheTagAndTheReleaseAndTheTagCaveatFollowsIt()
@@ -53,6 +53,19 @@ public sealed class IssuePageTests
         var page = await RenderAsync(Data() with { SubstantiveVotes = 1, BillCount = 1 });
 
         Assert.Equal("This release holds 1 substantive roll call vote and 1 bill or resolution tagged Firearms in the 119th Congress.", page.QuerySelector("[data-issue-counts]")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheScopePanelListsWhatTheTagIncludesAndExcludesAndEachCardIsAbsentWhenItsListIsEmpty()
+    {
+        var both = await RenderAsync(Data());
+        var onlyIncludes = await RenderAsync(Data() with { Excludes = [] });
+        var none = await RenderAsync(Data() with { Includes = [], Excludes = [] });
+
+        Assert.Equal([PublishedWording.IssueIncludesLabel, PublishedWording.IssueExcludesLabel], both.QuerySelectorAll(".issue-scope-card h2").Select(heading => heading.TextContent));
+        Assert.Equal(["Background checks"], both.QuerySelectorAll(".issue-scope-card:first-child li").Select(item => item.TextContent));
+        Assert.Equal([PublishedWording.IssueIncludesLabel], onlyIncludes.QuerySelectorAll(".issue-scope-card h2").Select(heading => heading.TextContent));
+        Assert.Null(none.QuerySelector(".issue-scope"));
     }
 
     [Fact]
