@@ -64,7 +64,7 @@ public sealed class IndexTransaction : IAsyncDisposable
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task AddReleaseAsync(PublicationRelease release, CancellationToken cancellationToken)
+    public async Task AddReleaseAsync(SourceRelease release, CancellationToken cancellationToken)
     {
         await using var command = Command("INSERT INTO releases (release_number, published_at_utc) VALUES (@number, @published)",
             ("number", release.ReleaseNumber), ("published", release.PublishedAtUtc.UtcDateTime));

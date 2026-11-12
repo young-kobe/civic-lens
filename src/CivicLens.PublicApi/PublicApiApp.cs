@@ -32,9 +32,9 @@ namespace CivicLens.PublicApi;
 
 public static class PublicApiApp
 {
-    /// <summary>Builds the service. A test passes a handler that serves the release files in place of the network, one that answers the bot check, and a log provider.
+    /// <summary>Builds the service. A test passes a release source in place of the typed views, a handler that answers the bot check, and a log provider.
     /// The service lowers the request logs of ASP.NET Core to warnings, because an information log holds the request address with the search words.</summary>
-    public static WebApplication Build(PublicApiOptions options, string[] args, HttpMessageHandler? releaseHandler = null,
+    public static WebApplication Build(PublicApiOptions options, string[] args, IReleaseSource? releaseSource = null,
         HttpMessageHandler? turnstileHandler = null, ILoggerProvider? logProvider = null)
     {
         var builder = WebApplication.CreateBuilder(args);
@@ -44,16 +44,10 @@ public static class PublicApiApp
         var writer = NpgsqlDataSource.Create(options.Database);
         var reader = NpgsqlDataSource.Create(options.ReaderDatabase);
         var views = NpgsqlDataSource.Create(options.PublicViewsReaderDatabase);
-        var feed = new ReleaseFeed(new HttpClient(releaseHandler ?? new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.All })
-        {
-            BaseAddress = options.ReleaseBaseUrl,
-            MaxResponseContentBufferSize = ReleaseFeed.MaximumRecordBytes,
-            Timeout = TimeSpan.FromMinutes(1)
-        });
 
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(new SchemaMigrator(writer));
-        builder.Services.AddSingleton(new ReleaseIngest(feed, writer));
+        builder.Services.AddSingleton(new ReleaseIngest(releaseSource ?? new TypedReleaseSource(views), writer));
         builder.Services.AddSingleton(new SearchIndex(reader));
         builder.Services.AddSingleton(new ActiveReleaseReader(views));
         builder.Services.AddSingleton(new VoteStore(views));
