@@ -290,6 +290,21 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task IssueViewReturnsOnlyTheVotesOfTheCongressOfTheDistrictsThatThePageChecks()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('a', "2026-05-01") { RecordId = 1.ToString("x64"), RollCall = 1, Casts = ["Yea"], PersonIds = ["al2"], Issues = ["health"] },
+            new SeededVote('b', "2024-05-01") { RecordId = 2.ToString("x64"), RollCall = 2, Congress = 118, Casts = ["Nay"], PersonIds = ["al2"], Issues = ["health"] });
+
+        var document = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?view=issue&issue=health");
+
+        Assert.Equal("119", document.QuerySelector("[data-zip-member-fragment]")!.GetAttribute("data-congress"));
+        Assert.Single(document.QuerySelectorAll(".shared-vote-row"));
+        Assert.Equal("Yes (Yea)", document.QuerySelector(".shared-vote-cast-value")!.TextContent.Trim());
+    }
+
+    [Fact]
     public async Task IssueViewWithNoMatchingVoteStatesThatNoVoteIsRecorded()
     {
         await using var host = await StartAsync();

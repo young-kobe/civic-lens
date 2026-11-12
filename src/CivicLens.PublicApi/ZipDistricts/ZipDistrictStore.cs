@@ -112,7 +112,9 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
                 [.. districts.Rows.Select(row => new ZipDistrict(row.State, row.District, row.Representative))],
                 [.. stateAnswers]);
             var bare = ZipLookup.Of(bareAnswer) with { NewVoteCount = newVoteCount };
-            return shape == LookupShape.Issue ? await WithSharedVotesAsync(connection, transaction, bare, holderIds, issue, cancellationToken) : bare;
+            return shape == LookupShape.Issue
+                ? await WithSharedVotesAsync(connection, transaction, bare, new MemberVoteRequest { Officials = holderIds, Issue = issue, Congress = districts.Congress }, cancellationToken)
+                : bare;
         }
         var figures = await ReadHolderFiguresAsync(connection, transaction, holderIds, cancellationToken);
         var partyLines = await ReadHolderPartyLinesAsync(connection, transaction, holderIds, figures, cancellationToken);
@@ -131,15 +133,15 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         if (shape == LookupShape.Figures) return lookup;
         var issueOptions = await ReadIssueOptionsAsync(connection, transaction, cancellationToken);
         lookup = lookup with { IssueOptions = issueOptions };
-        return await WithSharedVotesAsync(connection, transaction, lookup, holderIds, issue, cancellationToken);
+        return await WithSharedVotesAsync(connection, transaction, lookup, new MemberVoteRequest { Officials = holderIds, Issue = issue }, cancellationToken);
     }
 
+    /// <summary>The issue shape passes the Congress of the district snapshot, the Congress that the issue page checks, so its votes match the counts of the page.</summary>
     private static async Task<ZipLookup> WithSharedVotesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, ZipLookup lookup,
-        string[] holderIds, string? issue, CancellationToken cancellationToken)
+        MemberVoteRequest request, CancellationToken cancellationToken)
     {
-        if (holderIds.Length == 0) return lookup;
-        var sharedVotes = await MemberVoteStore.ReadSharedAsync(connection, transaction,
-            new MemberVoteRequest { Officials = holderIds, Issue = issue }, cancellationToken);
+        if (request.Officials.Length == 0) return lookup;
+        var sharedVotes = await MemberVoteStore.ReadSharedAsync(connection, transaction, request, cancellationToken);
         if (sharedVotes is null || sharedVotes.Release != lookup.Answer!.Release)
             throw new InvalidDataException("The ZIP member votes do not match the active release snapshot.");
         return lookup with { SharedVotes = sharedVotes };

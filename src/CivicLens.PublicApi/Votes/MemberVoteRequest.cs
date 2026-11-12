@@ -11,6 +11,9 @@ public sealed record MemberVoteRequest
     /// <summary>One tracked issue ID. The answer then holds only votes that the release tags with the issue.</summary>
     public string? Issue { get; init; }
 
+    /// <summary>One Congress. The shared answer then holds only votes of that Congress, as the issue page counts and lists do (<c>release_issues.count_congress</c>).</summary>
+    public int? Congress { get; init; }
+
     /// <summary>Reads the query string. An invalid value throws <see cref="ArgumentException"/> that names the parameter.</summary>
     public static MemberVoteRequest Parse(IQueryCollection query) => Parse(query, OfficialFilter.Maximum);
 
