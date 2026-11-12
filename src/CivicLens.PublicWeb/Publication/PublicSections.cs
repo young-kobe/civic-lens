@@ -13,6 +13,24 @@ public static class PublicSections
     /// <summary>The static board that the header and the officials page link to, until the cutover PR maps <see cref="BoardsPath"/>.</summary>
     public static readonly string StaticBoardsPath = PublicationProtocol.BoardPagePath(PublishedChamber.House, PublishedPartyMajority.Democrat);
 
+    /// <summary>One gated per-kind list page of the server preview. The label is the tab text of the list.</summary>
+    public sealed record RecordList(PublishedRecordKind Kind, string Label, string Path);
+
+    /// <summary>The folder of the gated server preview. <c>ServerPageEndpoints</c> serves every preview route under it.</summary>
+    public const string PreviewFolder = "web";
+
+    /// <summary>The five per-kind list pages, in tab order. The one owner of their labels and paths.</summary>
+    public static readonly IReadOnlyList<RecordList> RecordLists =
+    [
+        new(PublishedRecordKind.Vote, "Votes", PreviewFolder + "/votes"),
+        new(PublishedRecordKind.Action, "Bills", PreviewFolder + "/bills"),
+        new(PublishedRecordKind.Statement, "Statements", PreviewFolder + "/statements"),
+        new(PublishedRecordKind.ExecutiveAction, "Executive actions", PreviewFolder + "/executive-actions"),
+        new(PublishedRecordKind.DocumentChange, "Document changes", PreviewFolder + "/document-changes")
+    ];
+
+    public static RecordList ListOf(PublishedRecordKind kind) => RecordLists.Single(list => list.Kind == kind);
+
     public static readonly IReadOnlyList<NavLink> Header =
     [
         new(PublicSection.Officials, "Officials", PublicationProtocol.OfficialsPagePath),
@@ -22,6 +40,17 @@ public static class PublicSections
         new(PublicSection.ExecutiveActions, "Executive actions", PublicationProtocol.SearchByKindPath(PublishedRecordKind.ExecutiveAction)),
         new(PublicSection.Boards, "Compare parties", StaticBoardsPath)
     ];
+
+    /// <summary>The header of a server-rendered page. The links of the kinds that have a preview list lead to it. The static header keeps the search links until the cutover PR.</summary>
+    public static readonly IReadOnlyList<NavLink> PreviewHeader = [.. Header.Select(link => PreviewKind(link.Section) is { } kind ? link with { Path = ListOf(kind).Path } : link)];
+
+    private static PublishedRecordKind? PreviewKind(PublicSection? section) => section switch
+    {
+        PublicSection.Votes => PublishedRecordKind.Vote,
+        PublicSection.Bills => PublishedRecordKind.Action,
+        PublicSection.ExecutiveActions => PublishedRecordKind.ExecutiveAction,
+        _ => null
+    };
 
     /// <summary>The old all records list. It is outside the header, and it names its own page in the trail.</summary>
     private static readonly NavLink AllRecords = new(PublicSection.AllRecords, "Votes and bills", PublicationProtocol.AllRecordsPagePath(1));
@@ -50,12 +79,15 @@ public static class PublicSections
         if (kind is { } recordKind) return new([home, RecordSection(recordKind)], shortName ?? title);
 
         var link = Header.Concat(Footer).Append(AllRecords).FirstOrDefault(candidate => section is not null && candidate.Section == section);
-        if (link is null || link.Path == canonicalPath || IsBoardsPage(link, canonicalPath)) return new([home], title);
+        if (link is null || link.Path == canonicalPath || IsBoardsPage(link, canonicalPath) || IsListPage(link, canonicalPath)) return new([home], title);
         return new([home, new(link.Text, link.Path)], title);
     }
 
     /// <summary>The header links the static board until the cutover, so the server boards page is the page of its own section link.</summary>
     private static bool IsBoardsPage(NavLink link, string? canonicalPath) => link.Section == PublicSection.Boards && canonicalPath == BoardsPath;
+
+    /// <summary>The header links the static search page until the cutover, so the preview list is the page of its own section link.</summary>
+    private static bool IsListPage(NavLink link, string? canonicalPath) => PreviewKind(link.Section) is { } kind && ListOf(kind).Path == canonicalPath;
 
     /// <summary>The header section of a record page. A kind with no header link marks none.</summary>
     public static PublicSection? OfRecord(PublishedRecordKind kind) => kind switch

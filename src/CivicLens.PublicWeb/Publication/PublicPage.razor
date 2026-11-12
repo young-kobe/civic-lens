@@ -40,7 +40,7 @@
     <a class="skip" href="#main">Skip to content</a>
     <header class="public-header">
         <a class="public-brand" href="@(RootPath + PublicationProtocol.HomePath)"><BrandMark />Civic Lens</a>
-        <nav class="public-nav" aria-label="Site">@NavLinks(PublicSections.Header)</nav>
+        <nav class="public-nav" aria-label="Site">@NavLinks(headerLinks)</nav>
         <form class="public-search" role="search" aria-label="Search the site" action="@(RootPath + PublicationProtocol.SearchPagePath)" method="get">
             <label class="visually-hidden" for="site-search">Search the site</label>
             <Icon Name="IconName.Search" />
@@ -54,7 +54,7 @@
             <PublicThemeMenu />
             <details class="public-menu">
                 <summary>Menu</summary>
-                <nav class="public-menu-nav" aria-label="Site">@NavLinks(PublicSections.Header)</nav>
+                <nav class="public-menu-nav" aria-label="Site">@NavLinks(headerLinks)</nav>
             </details>
         </div>
     </header>
@@ -88,6 +88,7 @@
     private PublicTrail? trail;
     private MembersStripSlot? membersStrip;
     private readonly GlossaryPageUse glossaryUse = new();
+    private IReadOnlyList<PublicSections.NavLink> headerLinks = PublicSections.Header;
 
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
     [Parameter, EditorRequired] public string Description { get; set; } = string.Empty;
@@ -103,6 +104,7 @@
     [Parameter] public bool NoIndex { get; set; }
     [Parameter, EditorRequired] public string? CanonicalPath { get; set; }
     [Parameter] public string? ExternalScript { get; set; }
+    /// <summary>The origin of a server-rendered page. A static page keeps it empty. A non-empty value also selects the preview header.</summary>
     [Parameter] public string RootPath { get; set; } = string.Empty;
     [Parameter] public RenderFragment? Hero { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
@@ -121,6 +123,7 @@
         documentTitle = PublicHead.DocumentTitle(Title, Page, PageCount);
         description = PublicHead.Description(Description);
         trail = CanonicalPath == string.Empty ? null : PublicSections.Trail(Section, Title, CanonicalPath, Record?.Kind ?? TrailKind, Record?.ShortName ?? TrailName);
+        headerLinks = RootPath.Length > 0 ? PublicSections.PreviewHeader : PublicSections.Header;
         membersStrip = Services.GetService<MembersStripSlot>();
         canonicalUrl = CanonicalPath is null ? null : Services.GetService<PublicBaseUrl>()?.Join(CanonicalPath);
     }
