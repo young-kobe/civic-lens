@@ -30,10 +30,16 @@ internal static class VoteStoredColumnRows
         WHERE r.record_id = k.record_id AND r.revision_number = k.revision_number AND NOT r.columns_written
         """;
 
-    // A revision counts as published when any record state row names it. The release range of the revision comes from all its state rows.
+    /// <summary>The release range of a vote revision over all its record state rows <c>s</c>, grouped by revision. The gaps and the tally verifier read it.</summary>
+    internal const string ReleaseRange = """
+        min(s.first_release) AS "FirstRelease", CASE WHEN bool_or(s.last_release IS NULL) THEN NULL ELSE max(s.last_release) END AS "LastRelease"
+
+        """;
+
+    // A revision counts as published when any record state row names it.
     private const string ReadGaps = """
         SELECT r.record_id AS "RecordId", r.revision_number AS "RevisionNumber", r.member_list_id AS "ListId",
-            min(s.first_release) AS "FirstRelease", CASE WHEN bool_or(s.last_release IS NULL) THEN NULL ELSE max(s.last_release) END AS "LastRelease"
+        """ + ReleaseRange + """
         FROM vote_revisions r
         JOIN publication_record_states s ON s.kind = 'vote' AND s.record_id = r.record_id AND s.revision_number = r.revision_number
         WHERE r.member_list_id IS NOT NULL AND (NOT r.columns_written OR r.party_tally_count IS NULL)
@@ -43,7 +49,7 @@ internal static class VoteStoredColumnRows
 
     public static async Task<IReadOnlyList<VoteColumnGap>> ReadGapsAsync(CollectionAttemptDbContext db, CancellationToken cancellationToken) =>
         [.. (await db.Database.SqlQueryRaw<GapRow>(ReadGaps).ToArrayAsync(cancellationToken))
-            .Select(row => new VoteColumnGap(row.RecordId, row.RevisionNumber, row.ListId, row.FirstRelease, row.LastRelease))];
+            .Select(row => new VoteColumnGap(row.RecordId, row.RevisionNumber, row.ListId, new(row.FirstRelease, row.LastRelease)))];
 
     public static async Task WriteAsync(CollectionAttemptDbContext db, IReadOnlyCollection<VoteStoredColumns> columns, CancellationToken cancellationToken)
     {
