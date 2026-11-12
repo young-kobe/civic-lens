@@ -44,6 +44,8 @@ public sealed class PostgresActionRevisionBackfillStore(IDbContextFactory<Collec
 
     private static async Task DeleteChildRowsAsync(CollectionAttemptDbContext db, ActionRevisionRow row, CancellationToken cancellationToken)
     {
+        await db.Set<ActionRevisionKeyTermRow>().Where(term => term.RecordId == row.RecordId && term.RevisionNumber == row.RevisionNumber)
+            .ExecuteDeleteAsync(cancellationToken);
         await db.Set<ActionRevisionTextCitationRow>().Where(citation => citation.RecordId == row.RecordId && citation.RevisionNumber == row.RevisionNumber)
             .ExecuteDeleteAsync(cancellationToken);
         await db.Set<ActionRevisionSponsorshipCitationRow>().Where(citation => citation.RecordId == row.RecordId && citation.RevisionNumber == row.RevisionNumber)
