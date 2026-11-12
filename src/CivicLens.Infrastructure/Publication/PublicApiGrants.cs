@@ -74,7 +74,9 @@ internal static class PublicApiGrants
             ON vote_revision_facts TO civic_lens_public_owner;
         GRANT SELECT (release_number, record_id, latest_action_text, latest_action_date, read_at_utc_ticks) ON release_bill_statuses TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, kind, document_number, signed_on, published_on, federal_register_citation, document_url,
-            person_id, president_name, title) ON executive_action_revisions TO civic_lens_public_owner;
+            person_id, president_name, title, presidential_number, disposition_notes) ON executive_action_revisions TO civic_lens_public_owner;
+        GRANT SELECT (record_id, revision_number, "position", relation, kind, number, reference_start, reference_length)
+            ON executive_action_revision_disposition_targets TO civic_lens_public_owner;
         GRANT SELECT (draft_id, revision_number, comparison_id, headline, summary, author_kind, significance, limits, institution, change_date)
             ON document_change_revisions TO civic_lens_public_owner;
         GRANT SELECT (comparison_id, before_extraction_id, after_extraction_id, hunk_count) ON document_comparisons TO civic_lens_public_owner;
@@ -115,7 +117,7 @@ internal static class PublicApiGrants
             public_api.release_issue_excludes, public_api.release_policy_areas, public_api.officials, public_api.official_attendance,
             public_api.official_party_lines, public_api.official_bill_counts, public_api.official_issue_counts, public_api.official_executive_actions,
             public_api.bill_status, public_api.record_headlines, public_api.record_links, public_api.vote_facts,
-            public_api.executive_actions, public_api.executive_action_notices, public_api.withdrawals, public_api.withdrawal_corrections,
+            public_api.executive_actions, public_api.executive_action_notices, public_api.executive_action_targets, public_api.withdrawals, public_api.withdrawal_corrections,
             public_api.vote_first_publications, public_api.vote_party_tallies, public_api.vote_evidence, public_api.vote_sources, public_api.release_issue_party_lineups,
             public_api.release_bill_counts, public_api.release_official_bill_counts TO civic_lens_public;
         GRANT SELECT ON public_api.statements, public_api.statement_speakers TO civic_lens_public;
