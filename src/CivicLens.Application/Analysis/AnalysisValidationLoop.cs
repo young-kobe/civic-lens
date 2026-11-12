@@ -4,11 +4,15 @@ using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Application.Analysis;
 
+/// <summary>Sends a request, resolves the answer, and sends the errors back until a pass is accepted or the passes run out.
+/// <paramref name="resolveLastPass"/>, when given, resolves the last pass in place of <paramref name="resolve"/>, so a task can relax a check that
+/// must not fail the whole draft.</summary>
 public sealed class AnalysisValidationLoop<TRun, TAccepted>(Func<AnalysisRun, TRun> wrap, IAnalysisAttempt<TRun> attempt,
     AnalysisRunOutcome completedOutcome, int maximumPasses, Func<ImmutableArray<string>, AnalysisModelRequest?> buildRequest,
     Func<AnalysisModelRequest, CancellationToken, Task<AnalysisModelResponse>> send,
     Func<string, AnalysisRun, AnalysisResolution<TAccepted>> resolve,
-    Func<string, CancellationToken, Task<AnalysisRun?>> readRun) where TRun : class
+    Func<string, CancellationToken, Task<AnalysisRun?>> readRun,
+    Func<string, AnalysisRun, AnalysisResolution<TAccepted>>? resolveLastPass = null) where TRun : class
 {
     public async Task<AnalysisLoopResult<TAccepted>> RunAsync(CancellationToken cancellationToken)
     {
@@ -35,7 +39,7 @@ public sealed class AnalysisValidationLoop<TRun, TAccepted>(Func<AnalysisRun, TR
                 return AnalysisLoopResult<TAccepted>.Settled(await attempt.SettleAsync(wrap(run), State.Failed,
                     AnalysisErrorCodes.ForOutcome(outcome), cancellationToken));
 
-            var resolution = resolve(response.OutputJson!, run);
+            var resolution = (number >= maximumPasses ? resolveLastPass ?? resolve : resolve)(response.OutputJson!, run);
             if (resolution.IsAccepted) return AnalysisLoopResult<TAccepted>.AcceptedBy(run, resolution.Accepted!);
 
             var rejected = run with

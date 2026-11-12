@@ -13,7 +13,7 @@ The system has one repository and three runtime parts. A C# application runs col
 ### Record terms
 
 - A **statement** is a public communication by an official in their own words. It comes from the official, their office, or the official record of their remarks. It states a position, makes a claim, or claims credit. One statement covers one source document, such as a press release or a floor speech. It holds the speaker, the date, a short account, and exact cited quotations.
-- An **executive action** is a presidential document that the Federal Register publishes: an executive order, a proclamation, a notice, or a memorandum. Its record holds the official title and the facts of the document. This slice holds no summary.
+- An **executive action** is a presidential document that the Federal Register publishes: an executive order, a proclamation, a notice, or a memorandum. Its record holds the official title and the facts of the document. An original document also has its body text, stored beside the record. This slice holds no summary.
 - An **action** is an act that an official performs in their official capacity. The institution where it happened records it. Examples are sponsoring or cosponsoring a bill, withdrawing a cosponsorship, and casting a roll-call vote. Each action states whether it is a proposal, a procedural act, or a decision. What happens to a bill later is context, because it is an act of Congress, not of the official.
 - A **relationship** is a reviewed link of a named type between a statement and an action or a vote. Examples are "describes own bill", "states position on", and "claims credit for". Chronology alone never creates one. The worker drafts relationships. A person reviews them. An approved relationship publishes in a static release.
 
@@ -284,6 +284,7 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Feed item statement extraction | `feed-item-statement-v1` plus the version of the HTML extraction | `src/CivicLens.Application/Collection/FeedStatements/FeedStatementExtractions.cs` | Extraction IDs, text, and citations of a feed item | The parse or the rendered text of a feed item changes |
 | Voteview Senate vote extraction | `voteview-senate-vote-v1` | `src/CivicLens.Application/Collection/VoteviewVotes/VoteviewParser.cs` | Extraction IDs, text, and citations of a Voteview Senate vote | The parse or the rendered text of a roll call changes |
 | Federal Register document extraction | `federal-register-document-v2` | `src/CivicLens.Application/Collection/FederalRegister/FederalRegisterDocumentParser.cs` | Extraction IDs, text, and citations of a Federal Register document | The parse or the rendered text of a document changes |
+| Federal Register text extraction | `federal-register-text-v1` plus the version of the HTML extraction | `src/CivicLens.Application/Collection/FederalRegister/FederalRegisterTextParser.cs` | Extraction IDs and text of the body of an original document | The extractor profile, the header, or the window rule changes |
 | Comparison algorithm | `line-lcs-context-v1` | `src/CivicLens.Core/Documents/DocumentComparison.cs` | Stored comparison IDs and hunks | Hunk or word-edit output changes |
 | Comparison settings | `bounded-lines-2000-...-v1` | same file | Limits recorded with each comparison | Any limit constant changes |
 | Draft task | `document-change-draft-v1` | `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs` | Analysis runs | Task flow or output handling changes |
@@ -295,10 +296,10 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Action draft task | `action-draft-v1` | `src/CivicLens.Application/Actions/ActionDraftTask.cs` | Action analysis runs | Task flow or output handling changes |
 | Action draft prompt | `action-draft-prompt-v5` | same file | Action analysis runs | Prompt text or input framing changes |
 | Action issue prompt | `action-issue-prompt-v3` | same file | Action analysis runs | Prompt text or input framing changes |
-| Action text prompt | `action-text-prompt-v6` | same file | Action analysis runs | Prompt text or input framing changes |
+| Action text prompt | `action-text-prompt-v6`, or `action-text-prompt-v7` for a bill with a definitions section when key terms are on; v6 stays current then | same file | Action analysis runs | Prompt text or input framing changes |
 | Action draft schema | `action-draft-schema-v2` | same file | Action analysis runs | The model output schema changes |
 | Action issue schema | `action-issue-schema-v1` | same file | Action analysis runs | The model output schema changes |
-| Action text schema | `action-text-schema-v1` | same file | Action analysis runs | The model output schema changes |
+| Action text schema | `action-text-schema-v2` | same file | Action analysis runs | The model output schema changes |
 | Vote draft task | `vote-draft-v1` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |
 | Vote draft prompt | `vote-draft-prompt-v5` | same file | Vote analysis runs | Prompt text or input framing changes |
 | Vote draft schema | `vote-draft-schema-v2` | same file | Vote analysis runs | The model output schema changes |

@@ -144,7 +144,7 @@ public sealed class ActionBillReader(ICollectionJobStore jobs, ApiResponseReader
         billText.ExtractionVersion == CongressBillTextParser.ExtractionVersion(textExtractor);
 
     private static bool HasRenderedWindow(ActionDraftBillText billText) =>
-        billText.BodyStart >= 0 && billText.Body.Length == billText.CharsRead && billText.CharsRead <= CongressBillRenderer.TextWindowLength;
+        billText.BodyStart >= 0 && billText.Body.Length == billText.CharsRead && billText.CharsRead <= TextWindow.Length;
 
     private static string? TextError(ActionDraftPage page, string rendered) =>
         string.Equals(rendered, page.Text, StringComparison.Ordinal) ? null : ActionDraftErrorCodes.RenderedTextMismatch;

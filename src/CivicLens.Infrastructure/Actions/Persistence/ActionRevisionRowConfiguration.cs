@@ -94,6 +94,7 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
             .HasForeignKey(row => new { row.Congress, row.BillType, row.BillNumber, row.TextPackageId })
             .HasPrincipalKey(text => new { text.Congress, text.BillType, text.BillNumber, text.PackageId }).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.TextCitations).WithOne().HasForeignKey(citation => new { citation.RecordId, citation.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
+        builder.HasMany(row => row.KeyTerms).WithOne().HasForeignKey(term => new { term.RecordId, term.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.Sponsorships).WithOne().HasForeignKey(item => new { item.RecordId, item.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
     }
 }

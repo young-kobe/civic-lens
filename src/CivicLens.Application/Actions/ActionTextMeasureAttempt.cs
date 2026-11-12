@@ -28,7 +28,7 @@ internal sealed class ActionTextMeasureAttempt(string candidateId, long tokenCap
     public async Task<AnalysisCall> CallModelAsync(AnalysisModelRequest modelRequest, string? previous,
         Func<AnalysisModelRequest, CancellationToken, Task<AnalysisModelResponse>> send, CancellationToken cancellationToken)
     {
-        RefusedOtherPrompt = modelRequest.PromptVersion != ActionDraftTask.TextPromptVersion;
+        RefusedOtherPrompt = modelRequest.PromptVersion is not (ActionDraftTask.TextPromptVersion or ActionDraftTask.KeyTermTextPromptVersion);
         StoppedByCap = !RefusedOtherPrompt && SpentTokens + modelRequest.ReservedTokens > tokenCap;
         if (RefusedOtherPrompt || StoppedByCap) return new(null, false);
         (RunId, previousRunId, request) = (Guid.NewGuid().ToString("N"), previous, modelRequest);

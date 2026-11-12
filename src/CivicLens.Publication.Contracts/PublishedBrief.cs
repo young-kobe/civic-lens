@@ -28,6 +28,7 @@ public sealed partial record PublishedBrief
         RevisionNumber = RevisionNumber,
         Headline = Headline,
         FirstPublishedAtUtc = FirstPublishedAtUtc,
+        ApprovedAtUtc = ApprovedAtUtc,
         Officials = [],
         IssueIds = [],
         PolicyAreaIds = [],

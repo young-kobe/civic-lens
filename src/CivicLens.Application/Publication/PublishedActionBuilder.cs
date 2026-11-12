@@ -65,7 +65,8 @@ internal sealed class PublishedActionBuilder(PublishedRecordRules rules)
                 Part = item.Part == ActionTextPart.Summary ? PublishedTextPart.Summary : PublishedTextPart.WhyItMatters,
                 Sentence = item.Sentence,
                 Citation = cite(item.Span)
-            })]
+            })],
+            KeyTerms = revision.KeyTermList.IsEmpty ? null : [.. revision.KeyTermList.Select(item => new PublishedKeyTerm { Term = item.Term, Citation = cite(item.Span) })]
         };
     }
 

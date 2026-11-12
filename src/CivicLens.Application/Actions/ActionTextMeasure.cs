@@ -11,6 +11,8 @@ namespace CivicLens.Application.Actions;
 /// It clears the draft history of each bill, so a bill with a current record is drafted again as a new bill.</summary>
 public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep step)
 {
+    private readonly bool keyTermsOn = step.DraftsKeyTerms;
+
     public async Task<ActionTextMeasureReport> RunAsync(IReadOnlyList<CongressBillListItem> bills, long tokenCap, CancellationToken cancellationToken)
     {
         if (tokenCap < 1) throw new ArgumentOutOfRangeException(nameof(tokenCap), tokenCap, "The spend cap must be at least 1 token.");
@@ -32,8 +34,9 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         return ReportOf(tokenCap, results);
     }
 
-    private static ActionTextMeasureReport ReportOf(long tokenCap, ImmutableArray<ActionTextMeasureBill>.Builder results) =>
-        new(ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model, tokenCap, results.ToImmutable());
+    private ActionTextMeasureReport ReportOf(long tokenCap, ImmutableArray<ActionTextMeasureBill>.Builder results) =>
+        new(keyTermsOn ? ActionDraftTask.KeyTermTextPromptVersion : ActionDraftTask.TextPromptVersion,
+            keyTermsOn ? ActionDraftTask.KeyTermTextSchemaVersion : ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model, tokenCap, keyTermsOn, results.ToImmutable());
 
     private static ActionTextMeasureBill NotRun(CongressBillListItem bill, IEnumerable<ActionTextMeasureBill> earlier) =>
         earlier.Any(item => item.Outcome == ActionTextMeasureOutcome.StoppedByModel)
@@ -61,13 +64,17 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         return Summarize(billId, evidence, billText, attempt);
     }
 
-    private static ActionTextMeasureBill Summarize(string billId, ActionDraftEvidence evidence, ActionDraftBillText billText,
+    private ActionTextMeasureBill Summarize(string billId, ActionDraftEvidence evidence, ActionDraftBillText billText,
         ActionTextMeasureAttempt attempt)
     {
         var usage = attempt.Runs.Aggregate(AnalysisTokenUsage.None, (sum, run) => new(sum.InputTokens + run.Usage.InputTokens,
             sum.OutputTokens + run.Usage.OutputTokens, sum.CacheReadTokens + run.Usage.CacheReadTokens, sum.CacheWriteTokens + run.Usage.CacheWriteTokens));
         var rejections = attempt.Runs.SelectMany(run => run.ValidationErrors).ToImmutableArray();
         var textFigures = BillFigures.Count(billText.Body);
+        var keyTerms = attempt.Revision is { TextPackageId: not null } text
+            ? text.KeyTermList.Select(term => new ActionTextMeasureKeyTerm(term.Term, term.Definition, term.Cut)).ToImmutableArray() : ImmutableArray<ActionTextMeasureKeyTerm>.Empty;
+        var droppedKeyTerms = attempt.Revision is { TextPackageId: not null } && attempt.Runs[^1].OutputJson is { } acceptedJson
+            ? DroppedKeyTerms(acceptedJson, keyTerms) : ImmutableArray<ActionTextMeasureDroppedKeyTerm>.Empty;
         ActionTextMeasureBill With(ActionTextMeasureOutcome outcome, string? reason, ImmutableArray<ActionTextMeasureSentence> sentences = default, double? passageGrade = null)
         {
             var kept = sentences.IsDefault ? [] : sentences;
@@ -75,7 +82,10 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
             var bill = new ActionTextMeasureBill(billId, TitleOf(evidence), outcome, reason, billText.CharsRead, billText.CharsTotal, attempt.Calls, usage,
                 attempt.Runs.Sum(run => run.ChargedTokens), kept, rejections,
                 [.. attempt.Runs.Where(run => run.OutputJson is not null).Select(run => new ActionTextMeasurePass(run.Outcome, run.OutputJson))],
-                textFigures, BillFigures.Count(sentenceText), passageGrade, []);
+                textFigures, BillFigures.Count(sentenceText), passageGrade, [], keyTerms, keyTermsOn ? BillDefinitionsSection.Find(billText.Body)?.Heading : null)
+            {
+                DroppedKeyTerms = droppedKeyTerms
+            };
             return bill.LosesFigures ? bill with { MissingDates = [.. BillFigures.MissingDates(billText.Body, sentenceText)] } : bill;
         }
 
@@ -93,6 +103,12 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         if (attempt.Calls == 0) return With(ActionTextMeasureOutcome.Skipped, attempt.ErrorCode);
         return With(IsResolverRefusal(attempt.Runs[^1].Outcome) ? ActionTextMeasureOutcome.Rejected : ActionTextMeasureOutcome.Failed, attempt.ErrorCode);
     }
+
+    /// <summary>The terms of the accepted answer that code left out: a failed check on the last pass, a glossary term, or a repeat.</summary>
+    private static ImmutableArray<ActionTextMeasureDroppedKeyTerm> DroppedKeyTerms(string acceptedJson, ImmutableArray<ActionTextMeasureKeyTerm> kept) =>
+        [.. (ActionTextOutput.Parse(acceptedJson)?.KeyTerms ?? []).OfType<AnalysisOutputKeyTerm>()
+            .Where(item => !kept.Any(term => term.Term == item.Term?.Trim()))
+            .Select(item => new ActionTextMeasureDroppedKeyTerm(item.Term ?? string.Empty, item.Quote ?? string.Empty))];
 
     private static bool IsResolverRefusal(AnalysisRunOutcome outcome) =>
         outcome is AnalysisRunOutcome.Drafted or AnalysisRunOutcome.OutputRejected or AnalysisRunOutcome.CitationRejected;

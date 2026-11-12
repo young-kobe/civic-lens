@@ -23,6 +23,13 @@ bill_issues issue_id
 bill_issues position
 bill_issues record_id
 bill_issues revision_number
+bill_key_terms cut
+bill_key_terms definition
+bill_key_terms label
+bill_key_terms position
+bill_key_terms record_id
+bill_key_terms revision_number
+bill_key_terms term
 bill_sponsorships is_original
 bill_sponsorships official_id
 bill_sponsorships position
@@ -451,6 +458,7 @@ record_entries statement_kind
 record_entries statement_record_id
 record_entries target_kind
 record_entries target_record_id
+record_entries approved_at_utc_ticks
 record_officials record_id
 record_officials kind
 record_officials revision_number

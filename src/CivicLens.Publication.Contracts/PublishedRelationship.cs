@@ -34,6 +34,7 @@ public sealed record PublishedRelationship
         RevisionNumber = RevisionNumber,
         Headline = Headline,
         FirstPublishedAtUtc = FirstPublishedAtUtc,
+        ApprovedAtUtc = ApprovedAtUtc,
         Officials = Officials,
         IssueIds = IssueIds,
         PolicyAreaIds = PolicyAreaIds,

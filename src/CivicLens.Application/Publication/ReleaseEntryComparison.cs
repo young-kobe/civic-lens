@@ -10,7 +10,7 @@ internal static class ReleaseEntryComparison
         Serialize(WithoutNewFields(first)) == Serialize(WithoutNewFields(second));
 
     private static PublishedRecordEntry WithoutNewFields(PublishedRecordEntry entry) =>
-        entry with { ApprovedBy = null, YeaCount = null, NayCount = null, Alignment = null, Chamber = null, VoteKind = null, Congress = null, CosponsorIds = null, BillLine = null };
+        entry with { ApprovedBy = null, ApprovedAtUtc = null, YeaCount = null, NayCount = null, Alignment = null, Chamber = null, VoteKind = null, Congress = null, CosponsorIds = null, BillLine = null };
 
     private static string Serialize(PublishedRecordEntry entry) => JsonSerializer.Serialize(entry, PublicationProtocol.JsonOptions);
 }
