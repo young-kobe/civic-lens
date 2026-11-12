@@ -176,6 +176,24 @@ public sealed class ConfiguredCollectionSource
         return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template, [.. documents]);
     }
 
+    /// <summary>The detail job of a stored document that has no pinned body URL. It has the URL of the detail job of the same document.</summary>
+    public ApiJobBatch CreateFederalRegisterBodyUrlBatch(FederalRegisterBodyUrlTarget target, DateOnly currentDate)
+    {
+        var source = ReadFederalRegisterSource();
+        var template = PrepareDefinition(source, currentDate, null, article: false);
+        var job = new ApiJob(FederalRegisterJobKeys.BodyUrl(SourceId, target.DocumentNumber),
+            template with
+            {
+                ApiResource = ApiResource.FederalRegisterDocument,
+                Url = FederalRegisterUrl.Document(source.Url, target.DocumentNumber),
+                Priority = CollectionJobPriority.OfDay(target.PublishedOn, currentDate)
+            });
+        return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template, [job]);
+    }
+
+    /// <summary>The documents source that this text source reads. It is the owner of the refetch jobs.</summary>
+    public ConfiguredCollectionSource FederalRegisterDocumentsSource() => new(Revision, FederalRegisterDocumentsSourceId, AsOf);
+
     public ConfiguredCollectionSource? EnabledFederalRegisterTextSource() =>
         Revision.Configuration.SourceOf(ApiParser.FederalRegisterText) is { Enabled: true } source
             ? new ConfiguredCollectionSource(Revision, source.Id, AsOf)

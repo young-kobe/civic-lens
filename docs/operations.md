@@ -772,11 +772,13 @@ Original documents that were recorded before the text source was enabled have no
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions text backfill 100
 ```
 
-The limit is 100 when you give none. The command admits one text job for each of the newest original documents that have a pinned body URL, no text row, and no text job, up to the limit. The job fetches that pinned URL. It prints `pendingJobs`, `examined`, `admitted`, and `unpinned`. A rerun lists only the documents that still have no job, so it is safe to repeat. The jobs use the current configuration, not the configuration of the old document jobs. The worker fetches the bodies at the pacing of the origin. A text job uses no model budget. [Executive actions](architecture/executive-actions.md#text) holds the rules.
+The limit is 100 when you give none. The command admits one text job for each of the newest original documents that have a pinned body URL, no text row, and no text job, up to the limit. The job fetches that pinned URL. A rerun lists only the documents that still have no job, so it is safe to repeat. The jobs use the current configuration, not the configuration of the old document jobs. The worker fetches the bodies at the pacing of the origin. A text job uses no model budget. [Executive actions](architecture/executive-actions.md#text) holds the rules.
 
-If a job of `federal-register-documents` or `federal-register-text` is queued or leased, `pendingJobs` is above 0. The command then admits nothing and exits with code 1. Check `jobs list`, wait until those jobs end, and run the command again. So each run waits for the text jobs of the run before it.
+If a job of `federal-register-documents` or `federal-register-text` is queued or leased, `pendingJobs` is above 0. The command then admits nothing and exits with code 1. Check `jobs list`, wait until those jobs end, and run the command again. So each run waits for the jobs of the run before it.
 
-`unpinned` counts the originals with no text row and no pinned body URL. A document recorded before the detail job pinned `body_html_url` has none, about 700 in production. The backfill cannot admit a text job for it. It first needs a refetch of its detail. The refetch is not built yet, because the detail job key of a known document already exists and dedupes a new job. Until it exists, `unpinned` stays above 0 for those documents.
+A document recorded before the detail job pinned `body_html_url` has no pinned URL, about 700 in production. For each such original, up to the limit, the command admits one refetch job of its detail. The job key is `federal-register/{source}/document/{number}/body-url`. The refetch only fills the null URL. It changes no other column and never replaces a pinned URL. The command prints `pendingJobs`, `examined`, `admitted`, and `refetches`. `admitted` counts text jobs. `refetches` counts refetch jobs.
+
+Run order: run the command and wait until its jobs end. Run it again, so the originals with a new URL get their text jobs. Repeat until `examined` and `refetches` are both 0. A refetch that returns no URL leaves the row null, and the command does not queue it again.
 
 ### Executive action revision backfill
 

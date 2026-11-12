@@ -32,8 +32,25 @@ public sealed partial class PostgresCollectionJobStore : IFederalRegisterTextBac
         var rows = await originals.Where(row => row.BodyHtmlUrl != null)
             .OrderByDescending(row => row.PublishedOn).ThenBy(row => row.DocumentNumber)
             .Select(row => new { row.DocumentNumber, row.BodyHtmlUrl, row.PublishedOn }).Take(limit).ToListAsync(cancellationToken);
-        var unpinned = await originals.CountAsync(row => row.BodyHtmlUrl == null, cancellationToken);
+        var documentPrefix = FederalRegisterJobKeys.Document(sourceId, "");
+        var unpinned = await originals.Where(row => row.BodyHtmlUrl == null)
+            .Where(row => !db.Set<JobRow>().Any(job => job.IdempotencyKey == documentPrefix + row.DocumentNumber + FederalRegisterJobKeys.BodyUrlSuffix))
+            .OrderByDescending(row => row.PublishedOn).ThenBy(row => row.DocumentNumber)
+            .Select(row => new FederalRegisterBodyUrlTarget(row.DocumentNumber, row.PublishedOn)).Take(limit).ToListAsync(cancellationToken);
         return new([.. rows.Select(row => new FederalRegisterTextTarget(row.DocumentNumber, row.BodyHtmlUrl!, row.PublishedOn))], unpinned);
+    }
+
+    public Task<bool> AdmitBodyUrlJobAsync(ConfiguredCollectionSource textSource, FederalRegisterBodyUrlTarget target,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(textSource);
+        ArgumentNullException.ThrowIfNull(target);
+        return TransactionAsync(async (db, now) =>
+        {
+            var batch = textSource.FederalRegisterDocumentsSource().CreateFederalRegisterBodyUrlBatch(target, Today(now));
+            var (result, _) = await AdmitApiJobsAsync(db, batch, ApiJobSaveBatchSize, now, cancellationToken);
+            return result.AdmittedCount > 0;
+        }, cancellationToken);
     }
 
     public Task<bool> AdmitTextJobAsync(ConfiguredCollectionSource textSource, FederalRegisterTextTarget target, CancellationToken cancellationToken)

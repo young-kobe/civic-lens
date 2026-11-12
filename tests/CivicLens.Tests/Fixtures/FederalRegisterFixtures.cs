@@ -39,8 +39,8 @@ internal static class FederalRegisterFixtures
     public const string TextSourceUrl = "https://www.federalregister.gov/documents/full_text/html/";
 
     /// <summary>Real <c>body_html_url</c> values that the owner session fetched from the API detail response on 2026-11-12. That fetch gave
-    /// 2024-26714 the publication_date 2024-11-14. <see cref="BidenProclamation"/> keeps the 2024-11-13 of its 2026-10-29 fetch, so its pinned
-    /// path date differs from its stored publication date.</summary>
+    /// 2024-26714 the publication_date 2024-11-14. <see cref="BidenProclamation"/> keeps the 2024-11-13 of its 2026-10-29 fetch exactly as captured. The owner decided on 2026-11-12 to keep it,
+    /// because it is the real case where the pinned URL date differs from the stored publication date.</summary>
     public const string ProclamationBodyUrl = "https://www.federalregister.gov/documents/full_text/html/2024/11/14/2024-26714.html";
 
     /// <summary>Document 2025-01953, publication_date 2025-01-29, from the same 2026-11-12 fetch.</summary>

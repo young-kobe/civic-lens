@@ -3,13 +3,14 @@ using CivicLens.Core.Review;
 
 namespace CivicLens.Application.Collection.FederalRegister;
 
-/// <summary>PendingJobs above 0 means the run was refused and nothing was examined. Unpinned counts the originals that need a detail
-/// refetch before they can get a text job.</summary>
-public sealed record FederalRegisterTextBackfillResult(int PendingJobs, int Examined, int Admitted, int Unpinned);
+/// <summary>PendingJobs above 0 means the run was refused and nothing was examined. Refetches counts the detail refetch jobs admitted
+/// for originals with no pinned body URL. Such an original gets its text job in a later run, after the refetch fills the URL.</summary>
+public sealed record FederalRegisterTextBackfillResult(int PendingJobs, int Examined, int Admitted, int Refetches);
 
 /// <summary>
 /// Admits a text job for original documents that were recorded before the text source existed. The jobs carry the revision
 /// of the current configuration, because the document jobs hold a revision with no enabled text source.
+/// An original with no pinned body URL gets a refetch job of its detail instead.
 /// A text job costs no model budget. The drain guard follows <see cref="Bills.BackfillBillText"/>.
 /// </summary>
 public sealed class BackfillFederalRegisterText(IFederalRegisterTextBackfillStore store, CollectionConfigurationRevision revision)
@@ -24,7 +25,10 @@ public sealed class BackfillFederalRegisterText(IFederalRegisterTextBackfillStor
         var admitted = 0;
         foreach (var target in listing.Targets)
             if (await store.AdmitTextJobAsync(textSource, target, cancellationToken)) admitted++;
-        return new(0, listing.Targets.Count, admitted, listing.Unpinned);
+        var refetches = 0;
+        foreach (var target in listing.Unpinned)
+            if (await store.AdmitBodyUrlJobAsync(textSource, target, cancellationToken)) refetches++;
+        return new(0, listing.Targets.Count, admitted, refetches);
     }
 
     private ConfiguredCollectionSource EnabledTextSource() =>

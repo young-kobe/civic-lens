@@ -306,6 +306,11 @@ public sealed class JobPreparation(
         var number = FederalRegisterUrl.ReadDocument(configured.SourceUrl, job.Definition.Url);
         var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
         var document = FederalRegisterDocumentParser.Parse(response.Body, number);
+        if (FederalRegisterJobKeys.IsBodyUrl(job.IdempotencyKey))
+        {
+            await federalRegisterAdmissions.AdmitBodyUrlAsync(configured, number, document.BodyHtmlUrl, cancellationToken);
+            return JobPreparationResult.Prepared();
+        }
         var personId = ExecutiveActionSigner.PersonIdOf(configured.Revision.Configuration, document);
         var text = FederalRegisterRenderer.Render(document);
         var extractionId = await SaveExtractionAsync(response.Captured, FederalRegisterDocumentParser.ExtractionVersion, text, cancellationToken);

@@ -416,6 +416,21 @@ public sealed class JobPreparationTests
         Assert.Equal(("job", saved.ExtractionId, "donald-trump", saved.Text), (call.JobId, call.Evidence.ExtractionId, call.Evidence.PersonId, call.Evidence.ExtractionText));
     }
 
+    [Fact]
+    public async Task ARefetchJobOnlyHandsTheBodyUrlToTheStoreAndSavesNoExtractionAndAdmitsNoDocument()
+    {
+        var key = FederalRegisterJobKeys.BodyUrl(FederalRegisterFixtures.SourceId, "2025-01900");
+        var body = FederalRegisterFixtures.WithBodyUrl(FederalRegisterFixtures.TrumpOrder,
+            FederalRegisterFixtures.TextSourceUrl + "2025/01/28/2025-01900.html");
+
+        var result = await Prepare(ApiResource.FederalRegisterDocument, FederalRegisterDocumentUrl, body, null, idempotencyKey: key);
+
+        Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
+        Assert.Equal(("2025-01900", FederalRegisterFixtures.TextSourceUrl + "2025/01/28/2025-01900.html"), Assert.Single(federalRegister.BodyUrls));
+        Assert.Empty(federalRegister.Documents);
+        Assert.Empty(extractions.Saved);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -820,7 +835,7 @@ public sealed class JobPreparationTests
     private async Task<JobPreparationResult?> Prepare(ApiResource? resource, string url, string body,
         IssueConfigurationRevision? issues, string? fragmentText = null, byte[]? bytes = null, string? contentType = null,
         CollectionConfiguration? rosterConfiguration = null, string? versionsBody = null, bool withVersionsJob = true,
-        string? extractedText = null)
+        string? extractedText = null, string idempotencyKey = "key")
     {
         var isPhoto = resource == ApiResource.MemberPhoto;
         bytes ??= isPhoto ? MemberPhotoFixtures.Jpeg() : Encoding.UTF8.GetBytes(body);
@@ -851,7 +866,7 @@ public sealed class JobPreparationTests
         if (resource is null) definition = definition with { ApiResource = null };
         var attempt = new CollectionJobAttempt("attempt", definition.CreateRequest("job", Path.GetFullPath("captures")),
             new CollectionAttemptResolution(CollectionJobAttemptOutcome.Succeeded), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch);
-        var job = new CollectionJobRecord("job", definition, "key", CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
+        var job = new CollectionJobRecord("job", definition, idempotencyKey, CollectionJobState.Succeeded, DateTimeOffset.UnixEpoch, null,
             false, [attempt]);
         var (jobs, bodyOf) = resource switch
         {
@@ -1019,6 +1034,14 @@ public sealed class JobPreparationTests
         {
             Documents.Add((documentJobId, evidence));
             return Task.FromResult(new DiscoveryAdmissionResult([], 0, 0));
+        }
+
+        public List<(string DocumentNumber, string? BodyUrl)> BodyUrls { get; } = [];
+
+        public Task AdmitBodyUrlAsync(ConfiguredCollectionSource source, string documentNumber, string? bodyUrl, CancellationToken cancellationToken)
+        {
+            BodyUrls.Add((documentNumber, bodyUrl));
+            return Task.CompletedTask;
         }
 
         public Task AdmitTextAsync(ConfiguredCollectionSource textSource, string textJobId, FederalRegisterTextEvidence evidence,

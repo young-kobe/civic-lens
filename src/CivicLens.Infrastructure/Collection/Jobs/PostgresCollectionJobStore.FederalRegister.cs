@@ -58,6 +58,15 @@ public sealed partial class PostgresCollectionJobStore : IFederalRegisterAdmissi
         return result;
     }
 
+    public Task AdmitBodyUrlAsync(ConfiguredCollectionSource source, string documentNumber, string? bodyUrl, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentNumber);
+        return TransactionAsync(async (db, _) => await db.Set<ExecutiveActionDocumentRow>()
+            .Where(row => row.SourceId == source.SourceId && row.DocumentNumber == documentNumber && row.BodyHtmlUrl == null)
+            .ExecuteUpdateAsync(set => set.SetProperty(row => row.BodyHtmlUrl, bodyUrl), cancellationToken), cancellationToken);
+    }
+
     public Task AdmitTextAsync(ConfiguredCollectionSource textSource, string textJobId, FederalRegisterTextEvidence evidence,
         CancellationToken cancellationToken)
     {
