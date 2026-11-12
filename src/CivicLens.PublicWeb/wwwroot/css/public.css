@@ -648,12 +648,13 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .vote-explain { background: var(--vote-surface); }
 .vote-party-bars { display: grid; gap: var(--s5); margin-top: var(--s4); }
 .vote-map-views[hidden] { display: none; }
-.vote-map-views { margin-bottom: var(--s3); }
+.vote-map-views { margin-block: var(--s4) var(--s3); }
+.vote-map-views-label { flex: 1 1 100%; color: var(--muted); font-size: var(--t-sm); font-weight: 650; }
 .vote-map-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .vote-map-frame svg { display: block; width: 100%; height: auto; }
 .vote-map-frame .vote-map-tiles, .vote-map-tile-note { display: none; }
 .vote-map-tile-note { margin-bottom: var(--s3); }
-.vote-map-tiles { max-width: 560px; }
+.vote-map-tiles { max-width: 392px; }
 .vote-map[data-view="tile"] .vote-map-shapes { display: none; }
 .vote-map[data-view="tile"] :is(.vote-map-tiles, .vote-map-tile-note) { display: block; }
 .vote-map-paper { fill: var(--surface); }

@@ -3,10 +3,11 @@ namespace CivicLens.PublicWeb.Publication;
 /// <summary>
 /// The one owner of the tile layout. Each state gets a square grid of equal tiles under its code, in the order of the groups given.
 /// A group starts a new row when it does not fit in the width that is left.
+/// The width is the narrowest map frame, a 360 px screen, so a phone draws the tiles and labels at full size.
 /// </summary>
 public static class VoteMapTiles
 {
-    public const double Width = 400;
+    public const double Width = 280;
     public const double Size = 22;
     private const double Gap = 3;
     private const double GroupGap = 16;

@@ -5,7 +5,7 @@ namespace CivicLens.PublicWeb.Publication;
 /// <summary>
 /// The vote map of one roll call: the seats in state name order, the House delegates, and the tile layout.
 /// The delegates are House members of a non-state seat. They show as circles below the map and are not in the seat grid.
-/// A member with no state in the release has no seat and counts as unplaced.
+/// A member with no state in the release, or a House member with a state and no district, has no seat and counts as unplaced.
 /// </summary>
 public sealed record VoteMapData(
     PublishedChamber Chamber,

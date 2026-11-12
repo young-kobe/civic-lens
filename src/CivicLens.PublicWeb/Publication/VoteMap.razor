@@ -5,7 +5,8 @@
 <section class="vote-map" aria-labelledby="vote-map-title" data-vote-map>
     <h2 id="vote-map-title">@VoteMapWords.Heading</h2>
     <p class="muted small">@VoteMapWords.Intro(Data.Chamber)</p>
-    <div class="segmented vote-map-views" role="group" aria-label="@VoteMapWords.ViewGroup" hidden data-vote-map-views>
+    <div class="segmented vote-map-views" role="group" aria-labelledby="vote-map-views-label" hidden data-vote-map-views>
+        <span class="vote-map-views-label" id="vote-map-views-label">@VoteMapWords.ViewGroup</span>
         <button class="segmented-item" type="button" data-view="shape" aria-pressed="false">@VoteMapWords.ShapeView(Data.Chamber)</button>
         <button class="segmented-item" type="button" data-view="tile" aria-pressed="false">@VoteMapWords.TileView</button>
     </div>

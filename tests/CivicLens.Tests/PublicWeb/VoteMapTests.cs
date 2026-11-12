@@ -95,6 +95,18 @@ public sealed class VoteMapTests
     }
 
     [Fact]
+    public async Task TheViewButtonsHaveAVisibleLabelThatNamesTheGroup()
+    {
+        var page = await RenderAsync(House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7)));
+
+        var group = page.QuerySelector("[data-vote-map-views]")!;
+        var label = page.GetElementById(group.GetAttribute("aria-labelledby")!)!;
+        Assert.Equal(VoteMapWords.ViewGroup, label.TextContent);
+        Assert.Same(group, label.ParentElement);
+        Assert.Null(group.GetAttribute("aria-label"));
+    }
+
+    [Fact]
     public async Task TheTileNoteTalksAboutDistrictsSoOnlyAHouseMapShowsIt()
     {
         var house = await RenderAsync(House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7)));
@@ -146,6 +158,18 @@ public sealed class VoteMapTests
     }
 
     [Fact]
+    public async Task AHouseMemberWithAStateAndNoDistrictCountsAsUnplacedAndTheLegendTotalLeavesThemOut()
+    {
+        var page = await RenderAsync(House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7), Member("o2", "Ben Baker", "Nay", "Democrat", "MA", null)));
+
+        var map = page.QuerySelector(".vote-map")!;
+        Assert.Contains("1 tracked member has no seat in the record, so the map leaves them out.", map.TextContent);
+        Assert.Equal(["1 Yes", "434 No member in the record"], page.QuerySelectorAll(".vote-map-legend li").Select(item => item.TextContent));
+        Assert.EndsWith("The counts add up to 435.", page.QuerySelector(".vote-map-legend")!.PreviousElementSibling!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain(page.QuerySelectorAll(".vote-map-frame title"), title => title.TextContent.Contains("Ben Baker"));
+    }
+
+    [Fact]
     public void TheTilesPutStatesInNameOrderEachInASquareGrid()
     {
         var map = VoteMapData.Of(House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7)))!;
@@ -159,14 +183,33 @@ public sealed class VoteMapTests
     }
 
     [Fact]
-    public void EachSenateStateSplitsInHalvesThatHoldFortyToSixtyPercentOfItsArea()
+    public void TheTilesLayOutForTheNarrowestFrameSoAPhoneDrawsTheLabelsAtElevenPixelsOrMore()
+    {
+        const double frameAtThreeHundredSixtyPixels = 360 - 2 * 16 - 2 * 24;
+        var css = WebStyleSheets.Read("public.css");
+        var cap = Pixels(css, @"\.vote-map-tiles \{ max-width: (\d+)px; \}");
+        var label = Pixels(css, @"\.vote-map-tile-label \{[^}]*font-size: (\d+)px;");
+
+        Assert.True(cap >= VoteMapTiles.Width, "The cap must not shrink the tiles below their layout size.");
+        Assert.True(label * Math.Min(frameAtThreeHundredSixtyPixels, cap) / VoteMapTiles.Width >= 11, "A tile label renders below 11 px at 360 px.");
+    }
+
+    private static double Pixels(string css, string pattern)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(css, pattern);
+        Assert.True(match.Success, $"No rule matches {pattern}.");
+        return double.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    [Fact]
+    public void EachSenateStateSplitsInHalvesThatHoldHalfOfItsArea()
     {
         Assert.NotEmpty(VoteMapGeometry.States);
         foreach (var state in VoteMapGeometry.States.Values)
         {
             var rings = VoteMapArea.Rings(state.Path);
             var share = VoteMapArea.LeftOf(rings, state.Middle) / VoteMapArea.Total(rings);
-            Assert.InRange(share, 0.4, 0.6);
+            Assert.InRange(share, 0.495, 0.505);
         }
     }
 
