@@ -479,6 +479,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .issue-section > p { max-width: var(--measure); }
 .issue-note { margin: 0 0 var(--s4); color: var(--ink-2); }
 .issue-members:not([hidden]) { display: grid; gap: var(--s4); }
+.issue-members > [data-zip-member-fragment] { display: grid; gap: var(--s4); }
 .public-hero:has(> .issue-hero) { padding-inline: var(--frame-pad); }
 .public-main:has(> .content > .issue-grid) { padding: 24px var(--frame-pad) 48px; }
 @media (min-width: 720px) {

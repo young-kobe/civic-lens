@@ -1,0 +1,8 @@
+@foreach (var state in States)
+{
+    <p class="small muted">@state has no senators.</p>
+}
+
+@code {
+    [Parameter, EditorRequired] public string[] States { get; set; } = default!;
+}

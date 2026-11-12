@@ -87,6 +87,29 @@ public sealed class IssueMemberVotesTests
         Assert.Equal([NoVotes], page.QuerySelectorAll("[data-member-votes-empty]").Select(note => note.TextContent));
     }
 
+    [Fact]
+    public async Task EachMemberSectionLinksTheOfficialPageAndNamesTheSeatOfThatMember()
+    {
+        var sam = new ZipMemberIdentityData("sam", "Sam Member", "Republican", null, null, [], []);
+        var votes = HouseVotes with { Members = [new("pat", "Pat Member"), new("sam", "Sam Member")], Votes = [HouseVotes.Votes[0] with { Casts = [new("pat", "Yes", "Yea"), new("sam", "No", "Nay")] }] };
+
+        var page = await RenderAsync(Data([new("Representative, Alabama district 2", Pat), new("Representative, Alabama district 1", sam)], votes));
+
+        var sections = page.QuerySelectorAll(".issue-member");
+        Assert.Equal(["https://civic-lens.test/" + PublicationProtocol.OfficialPagePath("pat"), "https://civic-lens.test/" + PublicationProtocol.OfficialPagePath("sam")],
+            sections.Select(section => section.QuerySelector("h3 a")!.GetAttribute("href")));
+        Assert.Equal(["Representative, Alabama district 2", "Representative, Alabama district 1"], sections.Select(section => section.QuerySelector("h3 + p")!.TextContent));
+    }
+
+    [Fact]
+    public async Task AZipWithAStateWithoutSenatorsSaysSoWithTheApprovedLine()
+    {
+        var page = await RenderAsync(Data([new("Delegate, District of Columbia", Pat)], HouseVotes) with { StatesWithoutSenators = ["District of Columbia"] });
+
+        Assert.Equal(["District of Columbia has no senators."], page.QuerySelectorAll(".issue-member ~ p.muted").Select(note => note.TextContent));
+        Assert.DoesNotContain("has no senators", (await RenderAsync(Data([new("House seat", Pat)], HouseVotes))).DocumentElement.TextContent);
+    }
+
     private static ZipMemberCardsData Data(ZipMemberSeatData[] seats, params SharedVoteRowsData[] votes) =>
         new(7, 119, "36009", 1, seats, []) { SharedVotes = votes, SelectedIssue = "health" };
 

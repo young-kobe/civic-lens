@@ -92,7 +92,7 @@ public sealed class IssuePageTests(PostgresCollection postgres)
         var page = await GetPageAsync(host);
 
         Assert.Equal("This release holds 2 substantive roll call votes and 1 bill or resolution tagged Taxes <b> in the 119th Congress.", page.QuerySelector("[data-issue-counts]")!.TextContent);
-        Assert.StartsWith("1 of those 2 votes were split votes", page.QuerySelector("[data-issue-split]")!.TextContent);
+        Assert.StartsWith("1 of those 2 votes was a split vote", page.QuerySelector("[data-issue-split]")!.TextContent);
         Assert.Equal(2, page.QuerySelectorAll("#votes .record-row").Length);
         Assert.Equal(1, page.QuerySelectorAll("#bills .record-row").Length);
     }
@@ -154,7 +154,7 @@ public sealed class IssuePageTests(PostgresCollection postgres)
     [Fact]
     public async Task ABillRowNamesItsSponsorAndNotItsCosponsorAndAnUnnamedSponsorShowsNoSponsorLine()
     {
-        var named = new SeededBill('a', "2026-03-01") { BillNumber = 1, Issues = ["tax"] };
+        var named = new SeededBill('a', "2026-03-01") { BillNumber = 1, Issues = ["tax"], Sponsorships = [new("p2", "Cosponsor", "2026-01-10"), new("p1", "Sponsor", "2026-01-10")] };
         var unnamed = new SeededBill('b', "2026-02-01") { BillNumber = 2, Issues = ["tax"], Sponsorships = [new("p9", "Sponsor", "2026-01-10")] };
         await using var host = await StartAsync([], [named, unnamed]);
         await ZipSeed.AddNamesAsync(host.OperationalDatabase, 1,
