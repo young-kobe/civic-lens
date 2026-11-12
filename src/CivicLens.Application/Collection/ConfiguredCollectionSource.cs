@@ -166,14 +166,59 @@ public sealed class ConfiguredCollectionSource
     {
         var source = ReadFederalRegisterSource();
         var template = PrepareDefinition(source, currentDate, null, article: false);
-        var documents = page.Items.Select(item => new ApiJob(FederalRegisterJobKeys.Document(SourceId, item.DocumentNumber),
+        var documents = page.Items.Select(item => FederalRegisterDocumentJob(source, template,
+            FederalRegisterJobKeys.Document(SourceId, item.DocumentNumber), item.DocumentNumber, item.PublishedOn, currentDate));
+        return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template, [.. documents]);
+    }
+
+    /// <summary>The detail job of a stored document that has no pinned body URL. It has the URL of the detail job of the same document.</summary>
+    public ApiJobBatch CreateFederalRegisterBodyUrlBatch(FederalRegisterBodyUrlTarget target, DateOnly currentDate)
+    {
+        var source = ReadFederalRegisterSource();
+        var template = PrepareDefinition(source, currentDate, null, article: false);
+        var job = FederalRegisterDocumentJob(source, template, FederalRegisterJobKeys.BodyUrl(SourceId, target.DocumentNumber),
+            target.DocumentNumber, target.PublishedOn, currentDate);
+        return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template, [job]);
+    }
+
+    /// <summary>The one owner of the resource, URL, and priority of a Federal Register detail job.</summary>
+    private static ApiJob FederalRegisterDocumentJob(WatchedSourceConfiguration source, CollectionJobDefinition template, string jobKey,
+        string documentNumber, DateOnly publishedOn, DateOnly currentDate) =>
+        new(jobKey, template with
+        {
+            ApiResource = ApiResource.FederalRegisterDocument,
+            Url = FederalRegisterUrl.Document(source.Url, documentNumber),
+            Priority = CollectionJobPriority.OfDay(publishedOn, currentDate)
+        });
+
+    /// <summary>The documents source that this text source reads. It is the owner of the refetch jobs.</summary>
+    public ConfiguredCollectionSource FederalRegisterDocumentsSource() => new(Revision, FederalRegisterDocumentsSourceId, AsOf);
+
+    public ConfiguredCollectionSource? EnabledFederalRegisterTextSource() =>
+        Revision.Configuration.SourceOf(ApiParser.FederalRegisterText) is { Enabled: true } source
+            ? new ConfiguredCollectionSource(Revision, source.Id, AsOf)
+            : null;
+
+    /// <summary>The source of the documents whose text this text source reads. Its ID is the source ID of the document rows.</summary>
+    public string FederalRegisterDocumentsSourceId =>
+        Revision.Configuration.SourceOf(ApiParser.FederalRegisterDocuments)?.Id
+            ?? throw new InvalidDataException("The configuration has no Federal Register documents source.");
+
+    /// <summary>The job fetches the pinned <paramref name="bodyUrl"/> as it is. A URL outside the source or of another document is invalid data.</summary>
+    public ApiJobBatch CreateFederalRegisterTextBatch(string documentNumber, string bodyUrl, DateOnly publishedOn, DateOnly currentDate)
+    {
+        var source = ReadFederalRegisterTextSource();
+        if (FederalRegisterTextUrl.TryReadNumber(source.Url, bodyUrl) != documentNumber)
+            throw new InvalidDataException("The body URL of a Federal Register document is outside the text source or names another document.");
+        var template = PrepareDefinition(source, currentDate, null, article: false);
+        var job = new ApiJob(FederalRegisterJobKeys.Text(SourceId, documentNumber),
             template with
             {
-                ApiResource = ApiResource.FederalRegisterDocument,
-                Url = FederalRegisterUrl.Document(source.Url, item.DocumentNumber),
-                Priority = CollectionJobPriority.OfDay(item.PublishedOn, currentDate)
-            }));
-        return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template, [.. documents]);
+                ApiResource = ApiResource.FederalRegisterText,
+                Url = bodyUrl,
+                Priority = CollectionJobPriority.OfDay(publishedOn, currentDate)
+            });
+        return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template, [job]);
     }
 
     public ApiJobBatch CreateVoteviewFollowOnBatch(ApiResource finished, string jobId, int congress, DateOnly currentDate)
@@ -304,6 +349,7 @@ public sealed class ConfiguredCollectionSource
             case ApiParser.MemberPhotos:
             case ApiParser.CongressBillText:
             case ApiParser.FederalRegisterDocuments:
+            case ApiParser.FederalRegisterText:
             case ApiParser.SenateVoteList:
                 return null;
             default:
@@ -322,6 +368,11 @@ public sealed class ConfiguredCollectionSource
         ReadSource() is { ApiParser: ApiParser.FederalRegisterDocuments } source
             ? source
             : throw new ArgumentException("Federal Register admission requires a configured Federal Register source.");
+
+    private WatchedSourceConfiguration ReadFederalRegisterTextSource() =>
+        ReadSource() is { ApiParser: ApiParser.FederalRegisterText } source
+            ? source
+            : throw new ArgumentException("Federal Register text admission requires a configured Federal Register text source.");
 
     private WatchedSourceConfiguration ReadVoteviewSource() =>
         ReadSource() is { ApiParser: ApiParser.VoteviewSenateVoteList } source

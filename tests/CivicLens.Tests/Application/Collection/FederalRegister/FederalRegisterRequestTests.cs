@@ -27,15 +27,25 @@ public sealed class FederalRegisterRequestTests
         var url = FederalRegisterUrl.Document(Source, "2025-01900");
 
         Assert.StartsWith("https://www.federalregister.gov/api/v1/documents/2025-01900.json?fields%5B%5D=document_number", url);
-        Assert.EndsWith("&fields%5B%5D=disposition_notes", url);
+        Assert.EndsWith("&fields%5B%5D=disposition_notes&fields%5B%5D=body_html_url", url);
         Assert.DoesNotContain("page_views", url);
         Assert.Equal("2025-01900", FederalRegisterUrl.TryReadDocument(Source, url));
         Assert.Null(FederalRegisterUrl.TryReadDocument(Source, url + "&fields%5B%5D=page_views"));
         Assert.Null(FederalRegisterUrl.TryReadDocument(Source, url.Replace("2025-01900", "../2025-01900")));
-        Assert.Equal("2025-01900", FederalRegisterUrl.TryReadDocument(Source, url.Replace("&fields%5B%5D=disposition_notes", "")));
-        Assert.Null(FederalRegisterUrl.TryReadDocument(Source, url.Replace("&fields%5B%5D=disposition_notes", "&fields%5B%5D=disposition_notes&fields%5B%5D=disposition_notes")));
-        Assert.Null(FederalRegisterUrl.TryReadDocument(Source, url.Replace("&fields%5B%5D=disposition_notes", "&fields%5B%5D=unknown")));
-        Assert.Null(FederalRegisterUrl.TryReadDocument(Source, url.Replace("&fields%5B%5D=html_url&fields%5B%5D=disposition_notes", "&fields%5B%5D=disposition_notes&fields%5B%5D=html_url")));
+        Assert.Null(FederalRegisterUrl.TryReadDocument(Source, url.Replace("&fields%5B%5D=body_html_url", "&fields%5B%5D=body_html_url&fields%5B%5D=body_html_url")));
+        Assert.Null(FederalRegisterUrl.TryReadDocument(Source, url.Replace("&fields%5B%5D=body_html_url", "&fields%5B%5D=unknown")));
+        Assert.Null(FederalRegisterUrl.TryReadDocument(Source, url.Replace("&fields%5B%5D=disposition_notes&fields%5B%5D=body_html_url", "&fields%5B%5D=body_html_url&fields%5B%5D=disposition_notes")));
+        Assert.Null(FederalRegisterUrl.TryReadDocument(Source, url.Replace("&fields%5B%5D=disposition_notes", "")));
+    }
+
+    [Fact]
+    public void AQueuedDocumentUrlWithEachExactEarlierFieldSetStillReadsBack()
+    {
+        var url = FederalRegisterUrl.Document(Source, "2025-01900");
+        var beforeBodyUrl = url.Replace("&fields%5B%5D=body_html_url", "", StringComparison.Ordinal);
+
+        Assert.Equal("2025-01900", FederalRegisterUrl.TryReadDocument(Source, beforeBodyUrl));
+        Assert.Equal("2025-01900", FederalRegisterUrl.TryReadDocument(Source, beforeBodyUrl.Replace("&fields%5B%5D=disposition_notes", "", StringComparison.Ordinal)));
     }
 
     [Fact]

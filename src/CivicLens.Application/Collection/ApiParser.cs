@@ -12,5 +12,6 @@ public enum ApiParser
     MemberPhotos,
     CensusZctaDistricts,
     CongressBillText,
-    FederalRegisterDocuments
+    FederalRegisterDocuments,
+    FederalRegisterText
 }
