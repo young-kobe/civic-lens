@@ -1,5 +1,6 @@
 @using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Publication
 
 <PublishedRecordFrame Kind="PublishedRecordKind.DocumentChange" Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Summary" Significance="@Record.Significance"
                       Limits="@Record.Limits" Facts="RecordFacts"
@@ -17,18 +18,18 @@
             @for (var index = 0; index < Record.Citations.Length; index++)
             {
                 var citation = Record.Citations[index];
-                var anchor = "#" + PublishedRecordView.CitationAnchor(index);
-                var target = PublishedRecordView.QuoteTarget(VersionLabel(citation).ToLowerInvariant(), index, Record.Citations.Length);
+                var anchor = "#" + CitedText.Anchor(index);
+                var target = ContextLink.QuoteTarget(DocumentChangeWords.VersionName(Record.Before, citation).ToLowerInvariant(), index, Record.Citations.Length);
                 <li>
-                    <CitationQuote Label="@VersionLabel(citation)" Quote="@citation.Quote">
+                    <CitationQuote Label="@DocumentChangeWords.VersionName(Record.Before, citation)" Quote="@citation.Quote">
                         <ContextLink Href="@anchor" Text="@ContextLink.FullVersionText" Target="@target" />
                     </CitationQuote>
                 </li>
             }
             @if (Record.ChangeDateEvidence is { } evidence)
             {
-                <DateEvidenceLine Label="@($"Evidence for the actual change date, {VersionLabel(evidence).ToLowerInvariant()}")" Quote="@evidence.Quote">
-                    <ContextLink Href="@($"#{PublishedRecordView.ChangeDateAnchor}")" Text="@ContextLink.FullVersionText" Target="@PublishedRecordView.QuoteTarget("actual change date")" />
+                <DateEvidenceLine Label="@($"Evidence for the actual change date, {DocumentChangeWords.VersionName(Record.Before, evidence).ToLowerInvariant()}")" Quote="@evidence.Quote">
+                    <ContextLink Href="@($"#{DocumentChangeWords.ChangeDateAnchor}")" Text="@ContextLink.FullVersionText" Target="@ContextLink.QuoteTarget("actual change date")" />
                 </DateEvidenceLine>
             }
         </ul>
@@ -36,20 +37,17 @@
 
     <Panel Title="Earlier version" Id="earlier-title" Padded="true">
         <VersionSource Version="Record.Before" />
-        <DocumentText Label="Earlier version text" Runs="CitedText.Split(Record.Before.Text, PublishedRecordView.RangesIn(Record, Record.Before))" />
+        <DocumentText Label="Earlier version text" Runs="CitedText.Split(Record.Before.Text, DocumentChangeWords.RangesIn(Record.Citations, Record.ChangeDateEvidence, Record.Before))" />
     </Panel>
     <Panel Title="Later version" Id="later-title" Padded="true">
         <VersionSource Version="Record.After" />
-        <DocumentText Label="Later version text" Runs="CitedText.Split(Record.After.Text, PublishedRecordView.RangesIn(Record, Record.After))" />
+        <DocumentText Label="Later version text" Runs="CitedText.Split(Record.After.Text, DocumentChangeWords.RangesIn(Record.Citations, Record.ChangeDateEvidence, Record.After))" />
     </Panel>
 </PublishedRecordFrame>
 
 @code {
     [Parameter, EditorRequired] public PublishedDocumentChange Record { get; set; } = default!;
     [Parameter, EditorRequired] public PublicationCatalog Catalog { get; set; } = default!;
-
-    private string VersionLabel(PublishedCitation citation) =>
-        citation.ExtractionId == Record.Before.ExtractionId ? "Earlier version" : "Later version";
 
     private IReadOnlyList<Fact> RecordFacts
     {
