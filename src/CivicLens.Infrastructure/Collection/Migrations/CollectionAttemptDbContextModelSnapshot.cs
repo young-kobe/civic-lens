@@ -4074,6 +4074,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("document_number");
 
+                    b.Property<string>("BodyHtmlUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("body_html_url");
+
                     b.Property<string>("DocumentJobId")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -4570,6 +4575,42 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_executive_action_revisions_kind", "kind IN ('ExecutiveOrder', 'Proclamation', 'Notice', 'Memorandum')");
 
                             t.HasCheckConstraint("ck_executive_action_revisions_number", "revision_number >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionTextRow", b =>
+                {
+                    b.Property<string>("SourceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("source_id");
+
+                    b.Property<string>("DocumentNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("document_number");
+
+                    b.Property<int>("CharsRead")
+                        .HasColumnType("integer")
+                        .HasColumnName("chars_read");
+
+                    b.Property<int>("CharsTotal")
+                        .HasColumnType("integer")
+                        .HasColumnName("chars_total");
+
+                    b.Property<string>("ExtractionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("extraction_id");
+
+                    b.HasKey("SourceId", "DocumentNumber");
+
+                    b.HasIndex("ExtractionId");
+
+                    b.ToTable("executive_action_texts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_executive_action_texts_chars", "chars_read >= 1 AND chars_read <= 60000 AND chars_read <= chars_total AND (chars_read = chars_total OR chars_total > 60000)");
                         });
                 });
 
@@ -5328,6 +5369,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("action_revision_number");
 
+                    b.Property<long?>("ApprovedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("approved_at_utc_ticks");
+
                     b.Property<string>("ApprovedBy")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
@@ -5468,6 +5513,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("published_entries", null, t =>
                         {
+                            t.HasCheckConstraint("ck_published_entries_approved_at_utc_ticks", "approved_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_published_entries_approved_by", "approved_by IS NULL OR (kind = 'statement' AND approved_by IN ('Code', 'Person'))");
 
                             t.HasCheckConstraint("ck_published_entries_bill_line", "bill_line IS NULL OR (kind = 'action' AND length(btrim(bill_line)) >= 1 AND length(bill_line) <= 200)");
@@ -10250,6 +10297,21 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionDraftRow", null)
                         .WithMany()
                         .HasForeignKey("RecordId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionTextRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Documents.Persistence.DocumentExtractionRow", null)
+                        .WithMany()
+                        .HasForeignKey("ExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionDocumentRow", null)
+                        .WithOne()
+                        .HasForeignKey("CivicLens.Infrastructure.ExecutiveActions.Persistence.ExecutiveActionTextRow", "SourceId", "DocumentNumber")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

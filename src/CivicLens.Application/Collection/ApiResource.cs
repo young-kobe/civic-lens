@@ -28,7 +28,8 @@ public enum ApiResource
     MemberPhoto,
     ZctaDistricts,
     FederalRegisterList,
-    FederalRegisterDocument
+    FederalRegisterDocument,
+    FederalRegisterText
 }
 
 public sealed class ApiResourceJsonConverter : JsonStringEnumConverter<ApiResource>
