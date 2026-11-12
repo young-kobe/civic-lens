@@ -1,0 +1,11 @@
+<details class="source-fold" id="source">
+    <summary>@Title</summary>
+    <div class="source-fold-body">@ChildContent</div>
+</details>
+
+@code {
+    /// <summary>The summary text of the fold. The check lines of a page link to it.</summary>
+    public const string Title = "Check the source";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}
