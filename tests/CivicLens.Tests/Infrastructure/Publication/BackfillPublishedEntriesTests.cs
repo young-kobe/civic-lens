@@ -546,6 +546,58 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
         Assert.Equal(["unknown"], await ReadAsync("SELECT coalesce(approved_by, 'unknown') FROM published_entries WHERE kind = 'statement'"));
     }
 
+    [Fact]
+    public async Task ApprovalTimeBackfillFillsANullFromTheKeptRecordFileAndNeverOverwritesAStoredTime()
+    {
+        var action = await SeedActionAsync('a');
+        await AddReleasesAsync(1);
+        await AddRangeAsync(action, 1, null);
+        await publications.AddEntriesAsync([action.ToEntry() with { ApprovedAtUtc = null }], default);
+        Keep(1, Listed(action, action.ToEntry() with { ApprovedAtUtc = null }));
+        Assert.True((await publications.ReadEntryCandidatesAsync(default)).Single().LacksApprovalTime);
+
+        var first = await RunAsync(10);
+        var second = await RunAsync(10);
+
+        Assert.Equal([action.ApprovedAtUtc.UtcTicks.ToString()], await ReadAsync("SELECT approved_at_utc_ticks FROM published_entries"));
+        Assert.Equal(0, first.OpenRangesWithoutApprovalTime);
+        Assert.Equal(0, second.Examined);
+        Assert.False((await publications.ReadEntryCandidatesAsync(default)).Single().LacksApprovalTime);
+        await Assert.ThrowsAsync<PublicationConflictException>(() => publications.FillApprovalTimesAsync(
+            [action.ToEntry() with { ApprovedAtUtc = action.ApprovedAtUtc.AddHours(1) }], default));
+        Assert.Equal([action.ApprovedAtUtc.UtcTicks.ToString()], await ReadAsync("SELECT approved_at_utc_ticks FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task ARecordFileWhoseApprovalTimeDiffersFromTheKeptManifestSkipsTheRangeBecauseTheTwoKeptFilesMustAgree()
+    {
+        var action = await SeedActionAsync('a');
+        await AddReleasesAsync(1);
+        await AddRangeAsync(action, 1, null);
+        await publications.AddEntriesAsync([action.ToEntry() with { ApprovedAtUtc = null }], default);
+        Keep(1, Listed(action, action.ToEntry() with { ApprovedAtUtc = action.ApprovedAtUtc.AddHours(1) }));
+
+        var result = await RunAsync(10);
+
+        Assert.Equal(new Dictionary<string, int> { ["recordFileDiffers"] = 1 }, result.SkippedByReason);
+        Assert.Equal(1, result.OpenRangesWithoutApprovalTime);
+        Assert.Equal(["unknown"], await ReadAsync("SELECT coalesce(approved_at_utc_ticks::text, 'unknown') FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task AnOpenRangeWithNoKeptManifestReportsItsMissingApprovalTimeSoTheBackfillCannotReportSuccess()
+    {
+        var action = await SeedActionAsync('a');
+        await AddReleasesAsync(1);
+        await AddRangeAsync(action, 1, null);
+        await publications.AddEntriesAsync([action.ToEntry() with { ApprovedAtUtc = null }], default);
+
+        var (exit, json) = await RunCommandAsync(10);
+
+        Assert.Equal(1, exit);
+        Assert.Equal(1, json.GetProperty("openRangesWithoutApprovalTime").GetInt32());
+    }
+
     private sealed record FolderRecord(PublishedRecordEntry Entry, object? File);
 
     private FolderRecord Listed(PublishedAction action, PublishedRecordEntry? entry = null, bool withFile = true, byte[]? file = null) =>
@@ -654,8 +706,8 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
     {
         var entry = action.ToEntry();
         return ExecuteAsync($"""
-            INSERT INTO published_entries (kind, record_id, revision_number, action_record_id, action_revision_number, headline, source_host, event_date, bill_title)
-            VALUES ('action', '{action.RecordId}', 1, '{action.RecordId}', 1, '{headline}', '{entry.SourceHost}', '{entry.EventDate:yyyy-MM-dd}', '{entry.BillTitle}');
+            INSERT INTO published_entries (kind, record_id, revision_number, action_record_id, action_revision_number, headline, source_host, event_date, bill_title, approved_at_utc_ticks)
+            VALUES ('action', '{action.RecordId}', 1, '{action.RecordId}', 1, '{headline}', '{entry.SourceHost}', '{entry.EventDate:yyyy-MM-dd}', '{entry.BillTitle}', {entry.ApprovedAtUtc!.Value.UtcTicks});
             INSERT INTO published_entry_officials (kind, record_id, revision_number, position, official_id, is_matched)
             VALUES ('action', '{action.RecordId}', 1, 0, 'o1', false)
             """);

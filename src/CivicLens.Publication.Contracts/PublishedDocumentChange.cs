@@ -31,6 +31,7 @@ public sealed record PublishedDocumentChange
         RevisionNumber = RevisionNumber,
         Headline = Headline,
         FirstPublishedAtUtc = FirstPublishedAtUtc,
+        ApprovedAtUtc = ApprovedAtUtc,
         Officials = Officials,
         IssueIds = IssueIds,
         PolicyAreaIds = [],

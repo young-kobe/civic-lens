@@ -267,6 +267,8 @@ The first full run drafts every roll call that has a tracked senator. Code appro
 
 ## Postgres adapter and migrations
 
+`PublishedEntryApprovalTime` adds `published_entries.approved_at_utc_ticks`. Run `releases entries backfill` after this migration, and then `releases entries verify`. The backfill reads the kept record files. Until it runs, a publish of a revision that has an entry without a time stops with a conflict, and the correction commands report a stored time that differs. New manifests include `approvedAtUtc`; older images reject that field. Before rolling back an image, activate a kept release from before this field was written.
+
 `PublishedStatementApprover` adds `published_entries.approved_by`. Run `releases entries backfill` before starting public serving after this migration. It reads the kept statement files and reports unresolved open classifiers. Statements with unknown classifiers stay hidden. New manifests include `approvedBy`; older images reject that field. Before rolling back an image, use the newer image to activate a kept release from before this field was written.
 
 Set `CIVIC_LENS_DATABASE` in your local environment to a Postgres connection string with Host and Database, and with authentication for your local server. Runtime commands need this variable and have no default database. Keep credentials out of committed files, command arguments, and captured output. The commands need a reachable Postgres server and enough database permissions. They do not install or start Postgres.
@@ -1054,8 +1056,10 @@ The command prints JSON with these keys:
 - `openRangesWithoutRow`: the open ranges that still have no row.
 - `closedRangesWithoutKeptFolder`: the closed ranges that no kept folder lists. These ranges get no row, and this is expected.
 - `readyRangesWithoutRow`: the open or closed ranges that passed every check but got no row, because the limit stopped the run.
+- `openStatementsWithoutApprover`: the open statement ranges that still have no approver.
+- `openRangesWithoutApprovalTime`: the open ranges whose row still has no approval time. The run fills a null time from the oldest kept record file and never changes a stored time.
 
-The exit code is 0 only when `skipped`, `openRangesWithoutRow`, and `readyRangesWithoutRow` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
+The exit code is 0 only when `skipped`, `openRangesWithoutRow`, `readyRangesWithoutRow`, `openStatementsWithoutApprover`, and `openRangesWithoutApprovalTime` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
 
 ### Correction history bootstrap
 
@@ -1190,7 +1194,7 @@ This command proves that the entry, state, first publication, and withdrawal tab
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases entries verify
 ```
 
-The command reads each kept manifest once. It writes the file again with no change, and it checks the bytes. Then it checks the records of the state table against the entries of the file. Last, it rebuilds the manifest from the tables and compares the bytes with the file. The rebuild takes the bill line from the table. It takes only the official names, the five other optional entry fields, `publishedAtUtc`, and some withdrawals from the file.
+The command reads each kept manifest once. It writes the file again with no change, and it checks the bytes. Then it checks the records of the state table against the entries of the file. Last, it rebuilds the manifest from the tables and compares the bytes with the file. The rebuild takes the bill line and the approval time from the table. A time that differs from the manifest fails the release with `bytesDiffer`. It takes only the official names, the five other optional entry fields, `publishedAtUtc`, and some withdrawals from the file.
 
 The command prints JSON with these keys:
 

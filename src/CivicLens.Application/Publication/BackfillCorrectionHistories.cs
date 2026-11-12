@@ -43,7 +43,8 @@ public sealed class BackfillCorrectionHistories(IPublicationStore publications, 
                         throw new InvalidDataException("Record identity differs from stored release state.");
                     var expected = ReleaseSplice.EntryOf(row, fileEntry);
                     if (!ReleaseEntryComparison.SameOutsideNewFields(fileEntry, expected) ||
-                        fileEntry.ApprovedBy is { } approver && expected.ApprovedBy != approver)
+                        fileEntry.ApprovedBy is { } approver && expected.ApprovedBy != approver ||
+                        fileEntry.ApprovedAtUtc is { } approvedAt && expected.ApprovedAtUtc != approvedAt)
                         throw new InvalidDataException("Record facts differ from stored release state.");
                     ready.Add((candidate.Release, new PublicationCorrectionHistory(
                         new PublishedRevisionBinding(row.Kind, row.RecordId, row.RevisionNumber), corrections)));

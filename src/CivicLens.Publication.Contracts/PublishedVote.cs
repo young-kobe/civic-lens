@@ -115,6 +115,7 @@ public sealed record PublishedVote
         RevisionNumber = RevisionNumber,
         Headline = Headline,
         FirstPublishedAtUtc = FirstPublishedAtUtc,
+        ApprovedAtUtc = ApprovedAtUtc,
         Officials = [],
         IssueIds = TrackedIssueIds,
         PolicyAreaIds = [],

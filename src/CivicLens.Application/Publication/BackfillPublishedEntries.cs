@@ -11,6 +11,7 @@ namespace CivicLens.Application.Publication;
 /// A range that fails a check gets a skip reason and no row.
 /// It also fills the bill line of action rows that hold none. The line is the one that the kept folders of the range hold. Folders from before the
 /// line hold none, and two folders that hold different lines fail the check. A row that holds a line is never changed.
+/// It also fills the approval time of rows that hold none, from the record file of the oldest kept folder. A row that holds a time is never changed.
 /// It also pins the bill statuses of each kept release that lacks them, from the status file of its folder. A release from before the file pins none.
 /// A row that exists is never changed.
 /// The release list is read before the candidates, so a commit between the two reads leaves a range that no listed folder covers.
@@ -41,6 +42,11 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
         {
             await publications.FillStatementApproversAsync([.. batch.Select(entry => entry.EntryToInsert!)], cancellationToken);
             foreach (var entry in batch) entry.ApproverFilled = true;
+        }
+        foreach (var batch in pending.Where(entry => !entry.WritesRow && entry.IsReady && entry.Entry!.ApprovedAtUtc is not null && entry.Candidate.LacksApprovalTime).Chunk(BatchSize))
+        {
+            await publications.FillApprovalTimesAsync([.. batch.Select(entry => entry.EntryToInsert!)], cancellationToken);
+            foreach (var entry in batch) entry.ApprovalTimeFilled = true;
         }
         var statusesPinned = await PinBillStatusesAsync(keptReleases, cancellationToken);
         return Report(added, filled, statusesPinned, candidates.Count(candidate => candidate.HasEntry) + racedIn, pending);
@@ -79,6 +85,7 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
         else if (pending.Entry is null)
             await ReadFirstEntryAsync(release, entry, pending, cancellationToken);
         else if (entry.ApprovedBy is { } approver && pending.Entry.ApprovedBy != approver ||
+                 entry.ApprovedAtUtc is { } approvedAt && pending.Entry.ApprovedAtUtc != approvedAt ||
                  !ReleaseEntryComparison.SameOutsideNewFields(pending.Entry, entry))
             pending.Block(FoldersDiffer);
     }
@@ -86,7 +93,7 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
     private async Task ReadFirstEntryAsync(PublicationReleaseSummary release, PublishedRecordEntry entry, PendingPublishedEntry pending,
         CancellationToken cancellationToken)
     {
-        if (pending.Candidate.HasEntry && !pending.Candidate.LacksStatementApprover)
+        if (pending.Candidate.HasEntry && !pending.Candidate.LacksStatementApprover && !pending.Candidate.LacksApprovalTime)
         {
             pending.Entry = entry;
             return;
@@ -103,8 +110,9 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
             return;
         }
         if (ReleaseEntryComparison.SameOutsideNewFields(entry, fromFile) &&
-            (entry.ApprovedBy is null || entry.ApprovedBy == fromFile.ApprovedBy))
-            pending.Entry = entry with { ApprovedBy = fromFile.ApprovedBy };
+            (entry.ApprovedBy is null || entry.ApprovedBy == fromFile.ApprovedBy) &&
+            (entry.ApprovedAtUtc is null || entry.ApprovedAtUtc == fromFile.ApprovedAtUtc))
+            pending.Entry = entry with { ApprovedBy = fromFile.ApprovedBy, ApprovedAtUtc = fromFile.ApprovedAtUtc };
         else pending.Block(RecordFileDiffers);
     }
 
@@ -170,7 +178,8 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
             pending.Count(entry => !entry.Candidate.IsOpen && entry.Entry is null && !entry.IsBlocked),
             pending.Count(entry => entry.IsReady && !entry.HasRow))
         {
-            OpenStatementsWithoutApprover = all.Count(entry => entry.Candidate.IsOpen && entry.Candidate.LacksStatementApprover && !entry.ApproverFilled)
+            OpenStatementsWithoutApprover = all.Count(entry => entry.Candidate.IsOpen && entry.Candidate.LacksStatementApprover && !entry.ApproverFilled),
+            OpenRangesWithoutApprovalTime = all.Count(entry => entry.Candidate.IsOpen && entry.Candidate.LacksApprovalTime && !entry.ApprovalTimeFilled)
         };
     }
 }

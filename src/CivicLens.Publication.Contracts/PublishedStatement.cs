@@ -31,6 +31,7 @@ public sealed record PublishedStatement
         RevisionNumber = RevisionNumber,
         Headline = Headline,
         FirstPublishedAtUtc = FirstPublishedAtUtc,
+        ApprovedAtUtc = ApprovedAtUtc,
         Officials = Speakers,
         IssueIds = IssueIds,
         PolicyAreaIds = PolicyAreaIds,
