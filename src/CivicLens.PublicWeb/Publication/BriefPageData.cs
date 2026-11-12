@@ -9,6 +9,7 @@ public sealed record BriefPageData(
     int RevisionNumber,
     DateOnly WeekStart,
     string Headline,
+    PublishedTextOrigin TextOrigin,
     string? Label,
     PublishedBriefParagraph[] Paragraphs,
     PublishedBriefCitation[] Citations)

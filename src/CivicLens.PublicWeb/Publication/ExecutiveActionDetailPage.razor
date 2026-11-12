@@ -14,15 +14,47 @@
             <p class="detail-lede">@ExecutiveActionWords.Lede(Data)</p>
             <p class="small muted">@ExecutiveActionWords.Approval(Data)</p>
         </header>
-        <div class="detail-stack">
-            <AiSummary>
-                <Check>@ExecutiveActionWords.Caveat <a href="#source">@SourceFold.Title</a></Check>
-            </AiSummary>
-            <section class="detail-card detail-facts" aria-labelledby="executive-facts-title">
-                <h2 id="executive-facts-title">@ExecutiveActionWords.KeyFactsHeading</h2>
-                <Facts Items="ExecutiveActionWords.KeyFacts(Data, RootPath)" />
-                <p><Button Href="@Data.DocumentUrl" Variant="ButtonVariant.Primary" rel="noopener noreferrer nofollow">@ExecutiveActionWords.ReadIt</Button></p>
-            </section>
+        <div class="detail-layout">
+            <div class="detail-main">
+                <AiSummary TextOrigin="PublishedTextOrigin.Code">
+                    <Check>@ExecutiveActionWords.Caveat <a href="#source">@SourceFold.Title</a></Check>
+                </AiSummary>
+                @if (Data.Targets.Length > 0)
+                {
+                    <section class="detail-section" aria-labelledby="executive-links-title">
+                        <h2 id="executive-links-title">@ExecutiveActionWords.LinksHeading</h2>
+                        <ul class="detail-list detail-targets">
+                            @foreach (var target in Data.Targets)
+                            {
+                                <li>
+                                    <p class="official-row-title">
+                                        <span>@ExecutiveActionWords.TargetRelation(target.Relation): </span>
+                                        @if (target.TargetRecordId is { } targetRecordId)
+                                        {
+                                            <a href="@(RootPath + PublicationProtocol.RecordPagePath(targetRecordId))">@PublishedRecordLabels.ExecutiveActionKind(target.Kind) @target.Number</a>
+                                        }
+                                        else
+                                        {
+                                            <span>@PublishedRecordLabels.ExecutiveActionKind(target.Kind) @target.Number</span>
+                                        }
+                                    </p>
+                                    @if (target.Reference is not null)
+                                    {
+                                        <p class="small muted detail-target-reference">@target.Reference</p>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </section>
+                }
+            </div>
+            <aside class="detail-rail">
+                <section class="detail-card detail-facts" aria-labelledby="executive-facts-title">
+                    <h2 id="executive-facts-title">@ExecutiveActionWords.KeyFactsHeading</h2>
+                    <Facts Items="ExecutiveActionWords.KeyFacts(Data, RootPath)" />
+                    <p><Button Href="@Data.DocumentUrl" Variant="ButtonVariant.Primary" rel="noopener noreferrer nofollow">@ExecutiveActionWords.ReadIt</Button></p>
+                </section>
+            </aside>
         </div>
         <SourceFold>
             <Facts Items="ExecutiveActionWords.SourceFacts(Data)" />

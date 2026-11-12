@@ -9,7 +9,7 @@
             <p class="detail-lede">@PublishedBriefView.WeekStartText(Data.WeekStart)</p>
         </header>
         <div class="detail-stack">
-            <AiSummary Label="@Data.Label">
+            <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label">
                 <ChildContent><PublishedBriefText Paragraphs="Data.Paragraphs" /></ChildContent>
                 <Check>@PublishedBriefView.SampleNote <a href="#cited">@PublishedBriefView.CitedRecordsTitle</a></Check>
             </AiSummary>

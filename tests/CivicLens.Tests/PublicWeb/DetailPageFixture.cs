@@ -38,7 +38,7 @@ internal static class DetailPageFixture
 
     public static ExecutiveActionPageData Action(params ExecutiveActionNoticeData[] notices) => new(
         7, ActionId, 1, "Implementing the Sanctioning Russia and Iran Act", PublishedExecutiveActionKind.ExecutiveOrder, "2026-21599",
-        new(2026, 10, 16), new(2026, 10, 21), "91 FR 66627", "https://www.federalregister.gov/d/2026-21599", "president", "Donald Trump", notices);
+        new(2026, 10, 16), new(2026, 10, 21), "91 FR 66627", "https://www.federalregister.gov/d/2026-21599", "president", "Donald Trump", notices, []);
 
     public const string BeforeText = "Visitors must book a tour at least seven days before the visit and bring a photo ID.";
     public const string AfterText = "Visitors must book a tour at least three days before the visit and bring a photo ID.";

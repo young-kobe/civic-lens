@@ -11,7 +11,7 @@ public sealed class BriefDetailPageTests
     private static readonly string StatementCited = new('5', 64);
 
     private static BriefPageData Brief(string? label = BriefLabel) => new(
-        7, BriefId, 3, new DateOnly(2026, 11, 2), "The week in Congress", label,
+        7, BriefId, 3, new DateOnly(2026, 11, 2), "The week in Congress", PublishedTextOrigin.Model, label,
         [new PublishedBriefParagraph { Text = "First <b>paragraph</b>.", CitationIds = ["R1", "R2"] }, new PublishedBriefParagraph { Text = "Second paragraph.", CitationIds = ["R2"] }],
         [new PublishedBriefCitation { Id = "R1", Kind = PublishedRecordKind.Statement, RecordId = StatementCited, RevisionNumber = 2, Headline = "Kelly announces a bill" },
          new PublishedBriefCitation { Id = "R2", Kind = PublishedRecordKind.ExecutiveAction, RecordId = ActionId, RevisionNumber = 1, Headline = "An order" }]);
@@ -37,6 +37,16 @@ public sealed class BriefDetailPageTests
         Assert.Equal("#cited", page.QuerySelector(".ai-summary-check a")!.GetAttribute("href"));
         Assert.Null(page.QuerySelector(".caveat"));
         Assert.Equal(1, page.QuerySelectorAll(".ai-summary-label").Length);
+    }
+
+    [Fact]
+    public async Task TheModelTextGetsTheAiBoxAndAPersonWrittenBriefDoesNot()
+    {
+        var model = await RenderAsync<BriefDetailPage, BriefPageData>(Brief());
+        var person = await RenderAsync<BriefDetailPage, BriefPageData>(Brief() with { TextOrigin = PublishedTextOrigin.Person });
+
+        Assert.NotNull(model.QuerySelector(".ai-summary-ai"));
+        Assert.Null(person.QuerySelector(".ai-summary-ai"));
     }
 
     [Fact]

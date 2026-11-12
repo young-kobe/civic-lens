@@ -10,6 +10,13 @@
     <div class="official-page president-page">
         <header class="official-head">
             <div>
+                <p class="official-office">
+                    President of the United States
+                    @if (Data.Party is { } party)
+                    {
+                        <span aria-hidden="true"> | </span><span>@party</span>
+                    }
+                </p>
                 <h1>@title</h1>
                 <p class="official-lede">@Description(executive)</p>
             </div>
@@ -21,7 +28,7 @@
                 <li><a href="#@OfficialPageText.ExecutiveAnchor(type.Kind)"><b>@type.Count</b><span>@OfficialPageText.ExecutivePlural(type.Kind, type.Count) signed by @Data.Name</span></a></li>
             }
         </ul>
-        <p><a class="btn" href="@allPath">See all @executive.Total executive actions</a></p>
+        <p><Button Variant="ButtonVariant.Primary" Href="@allPath">See all @executive.Total executive actions</Button></p>
 
         <aside class="official-fixed" aria-labelledby="president-box">
             <h2 id="president-box">@OfficialPageText.ExecutiveBoxTitle</h2>
@@ -37,7 +44,6 @@
                     @foreach (var action in type.Newest)
                     {
                         <li>
-                            <span class="official-icon" aria-hidden="true"><Icon Name="IconName.ExecutiveAction" /></span>
                             <div>
                                 <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(action.RecordId))">@action.Title</a>
                                 <p class="official-meta"><span>@PublishedRecordLabels.ExecutiveActionKind(type.Kind)</span><span>Signed @Moment.Day(action.SignedOn)</span></p>
@@ -45,7 +51,10 @@
                         </li>
                     }
                 </ul>
-                <p class="official-more"><a href="@allPath">See all @type.Count @OfficialPageText.ExecutivePlural(type.Kind, type.Count)</a></p>
+                @if (type.Count > type.Newest.Length)
+                {
+                    <p class="official-more"><a href="@allPath">See all @type.Count @OfficialPageText.ExecutivePlural(type.Kind, type.Count)</a></p>
+                }
             </section>
         }
     </div>
