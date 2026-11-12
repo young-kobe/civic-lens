@@ -227,6 +227,23 @@ public sealed class ActionKeyTermTests
     }
 
     [Fact]
+    public async Task ARevisionWithNoKeyTermsKeepsTheDefaultArrayAndItsJsonNamesNoKeyTermFieldSoARebuiltRowMatchesItsStoredJson()
+    {
+        var context = await ContextAsync();
+        var emptyList = Resolve(context, []).Accepted!;
+        var allDropped = Resolve(context, [("amendment", Plain(AmendmentDefinition))]).Accepted!;
+        var withTerms = Resolve(context, [Secretary]).Accepted!;
+        var web = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+
+        Assert.True(emptyList.KeyTerms.IsDefault);
+        Assert.True(allDropped.KeyTerms.IsDefault);
+        Assert.DoesNotContain("keyTerm", System.Text.Json.JsonSerializer.Serialize(emptyList, web), StringComparison.OrdinalIgnoreCase);
+        var json = System.Text.Json.JsonSerializer.Serialize(withTerms, web);
+        Assert.Contains("\"keyTerms\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("keyTermList", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheDefinitionsSectionIsTheFirstCapitalLetterDefinitionsHeadingAndEndsAtTheNextHeading()
     {
         var found = BillDefinitionsSection.Find(BodyWithDefinitions)!;

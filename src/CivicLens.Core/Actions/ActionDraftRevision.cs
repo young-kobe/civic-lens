@@ -47,6 +47,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
 
     private ImmutableArray<ActionTextCitation> TextCitationList => TextCitations.IsDefault ? [] : TextCitations;
 
+    [JsonIgnore]
     public ImmutableArray<ActionKeyTerm> KeyTermList => KeyTerms.IsDefault ? [] : KeyTerms;
 
     public ReviewAuthorKind AuthorKind => ReviewAuthor.KindOf(AuthorSubject);

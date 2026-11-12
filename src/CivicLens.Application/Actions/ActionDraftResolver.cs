@@ -72,7 +72,8 @@ public static class ActionDraftResolver
         var issueIds = context.Issues.Check(output.IssueIds, errors);
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
         var citations = summary.Concat(why).ToImmutableArray();
-        var source = new TextSource(billText.PackageId, ActionTextCitation.Join(why), citations, terms);
+        var source = new TextSource(billText.PackageId, ActionTextCitation.Join(why), citations,
+            terms.IsDefaultOrEmpty ? default : terms); // An empty list stays the default array, the one form that a stored row rebuilds to.
         return AnalysisResolution<ActionDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current,
             output.Headline.Text, ActionTextCitation.Join(summary), runId, context.Snapshot.Fingerprint), issueIds, context.Issues.SubjectsHash, null, null, source));
     }
