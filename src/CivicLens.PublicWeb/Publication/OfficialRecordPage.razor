@@ -17,8 +17,8 @@
     else
     {
         <section class="record-section" aria-label="The record of @Data.Name">
-            <FilterTabs Label="@OfficialRecordText.TabsLabel" Tabs="tabs" />
-            <p class="muted small">@OfficialRecordText.CountLine(Data.Selected, Data.SelectedCount, Data.Name)</p>
+            <div data-record-filters><FilterTabs Label="@OfficialRecordText.TabsLabel" Tabs="tabs" /></div>
+            <div class="records-lead"><p class="muted small">@OfficialRecordText.CountLine(Data.Selected, Data.SelectedCount, Data.Name)</p></div>
             @switch (Data.Selected)
             {
                 case OfficialRecordKind.Votes:

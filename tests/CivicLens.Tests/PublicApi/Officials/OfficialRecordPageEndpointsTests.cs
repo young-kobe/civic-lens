@@ -68,7 +68,7 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
 
         Assert.Equal("All records of Ann Able", page.QuerySelector("h1")!.TextContent);
         Assert.Equal(["Votes2"], Tabs(page));
-        Assert.Contains("This list holds 2 votes of Ann Able in this release", page.QuerySelector(".record-section > p")!.TextContent);
+        Assert.Contains("This list holds 2 votes of Ann Able in this release", page.QuerySelector(".records-lead p")!.TextContent);
         var rows = page.QuerySelectorAll(".shared-vote-row").ToArray();
         Assert.Equal([BaseUrl.Join($"records/{new string('c', 64)}.html"), BaseUrl.Join($"records/{new string('a', 64)}.html")],
             rows.Select(row => row.QuerySelector("a")!.GetAttribute("href")!).ToArray());
@@ -125,7 +125,7 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
             page.QuerySelectorAll(".record-row > div > a").Select(link => link.GetAttribute("href")!).ToArray());
         Assert.Contains("Pays landlords.", page.Body!.TextContent);
         Assert.Contains("Introduced 3 Mar 2026", page.QuerySelector(".record-row")!.TextContent);
-        Assert.Contains("2 bills and resolutions that Ann Able sponsored in this release", page.QuerySelector(".record-section > p")!.TextContent);
+        Assert.Contains("2 bills and resolutions that Ann Able sponsored in this release", page.QuerySelector(".records-lead p")!.TextContent);
     }
 
     [Fact]
