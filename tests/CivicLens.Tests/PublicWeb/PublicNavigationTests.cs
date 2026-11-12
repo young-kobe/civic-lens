@@ -58,13 +58,14 @@ public sealed class PublicNavigationTests
             [nameof(PublicPage.Title)] = "Test",
             [nameof(PublicPage.Description)] = "Test page",
             [nameof(PublicPage.CanonicalPath)] = null,
+            [nameof(PublicPage.RootPath)] = "../",
             [nameof(PublicPage.Section)] = PublicSection.Officials
         });
 
         var hrefs = page.QuerySelectorAll(".public-nav a").Select(link => link.GetAttribute("href")).ToArray();
 
-        Assert.Equal(PublicSections.Header.Select(link => link.Path), hrefs);
-        Assert.Contains(PublicationProtocol.SearchByKindPath(PublishedRecordKind.Vote), hrefs);
+        Assert.Equal(PublicSections.Header.Select(link => "../" + link.Path), hrefs);
+        Assert.Contains("../" + PublicationProtocol.SearchByKindPath(PublishedRecordKind.Vote), hrefs);
     }
 
     [Fact]
@@ -262,11 +263,13 @@ public sealed class PublicNavigationTests
         [nameof(PublicPage.RootPath)] = Root,
         [nameof(PublicPage.Section)] = section,
         [nameof(PublicPage.Record)] = record
-    });
+    }, preview: true);
 
-    private static async Task<IDocument> RenderAsync<TComponent>(Dictionary<string, object?> parameters) where TComponent : IComponent
+    private static async Task<IDocument> RenderAsync<TComponent>(Dictionary<string, object?> parameters, bool preview = false) where TComponent : IComponent
     {
-        await using var services = new ServiceCollection().BuildServiceProvider();
+        var collection = new ServiceCollection();
+        if (preview) collection.AddSingleton<PreviewNavigation>();
+        await using var services = collection.BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
         var html = await renderer.Dispatcher.InvokeAsync(async () =>
         {

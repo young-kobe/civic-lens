@@ -360,7 +360,11 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
         Assert.DoesNotContain(MembersStripSlot.ElementId, staticHtml);
         Assert.Contains($"id=\"{MembersStripSlot.ElementId}\"", served);
-        Assert.Equal(staticHtml, served.Replace(MembersStripHtml, string.Empty));
+        // The served page differs from the static page in two things: the members strip and the preview header links.
+        var withStaticHeader = PublicSections.RecordLists.Where(list => list.Kind is PublishedRecordKind.Vote or PublishedRecordKind.Action or PublishedRecordKind.ExecutiveAction)
+            .Aggregate(served.Replace(MembersStripHtml, string.Empty), (html, list) =>
+                html.Replace($"{BaseUrl.Join(list.Path)}\"", $"{BaseUrl.Join(PublicationProtocol.SearchByKindPath(list.Kind))}\""));
+        Assert.Equal(staticHtml, withStaticHeader);
         Assert.Contains("id=\"site-search\"", served);
     }
 

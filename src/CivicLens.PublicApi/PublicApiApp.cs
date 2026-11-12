@@ -85,6 +85,7 @@ public static class PublicApiApp
         if (options.PublicBaseUrl is { } baseUrl)
         {
             builder.Services.AddSingleton(baseUrl);
+            builder.Services.AddSingleton<PreviewNavigation>();
             builder.Services.AddSingleton(provider => new MembersStripSlot
             {
                 BrowserApiRoot = provider.GetRequiredService<HomePageReader>().BrowserApiRoot

@@ -104,7 +104,6 @@
     [Parameter] public bool NoIndex { get; set; }
     [Parameter, EditorRequired] public string? CanonicalPath { get; set; }
     [Parameter] public string? ExternalScript { get; set; }
-    /// <summary>The origin of a server-rendered page. A static page keeps it empty. A non-empty value also selects the preview header.</summary>
     [Parameter] public string RootPath { get; set; } = string.Empty;
     [Parameter] public RenderFragment? Hero { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
@@ -123,7 +122,7 @@
         documentTitle = PublicHead.DocumentTitle(Title, Page, PageCount);
         description = PublicHead.Description(Description);
         trail = CanonicalPath == string.Empty ? null : PublicSections.Trail(Section, Title, CanonicalPath, Record?.Kind ?? TrailKind, Record?.ShortName ?? TrailName);
-        headerLinks = RootPath.Length > 0 ? PublicSections.PreviewHeader : PublicSections.Header;
+        headerLinks = Services.GetService<PreviewNavigation>() is null ? PublicSections.Header : PublicSections.PreviewHeader;
         membersStrip = Services.GetService<MembersStripSlot>();
         canonicalUrl = CanonicalPath is null ? null : Services.GetService<PublicBaseUrl>()?.Join(CanonicalPath);
     }
