@@ -9,5 +9,9 @@ public sealed record PublishedDocumentVersion
     public required DateTimeOffset ObservedAtUtc { get; init; }
     public required string Text { get; init; }
 
+    /// <summary>Reads an exact UTF-16 quotation without splitting a character. An invalid or empty span has no quotation.</summary>
+    public static string? QuoteAt(string text, int start, int length) =>
+        length > 0 && PublishedEvidenceRules.IsRange(text, start, length) ? text.Substring(start, length) : null;
+
     internal string Host => new Uri(Url).Host;
 }
