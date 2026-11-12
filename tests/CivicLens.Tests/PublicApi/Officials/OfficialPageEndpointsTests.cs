@@ -207,7 +207,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task PersonApprovalDoesNotHideAModelWrittenStatementLabel()
+    public async Task PersonApprovalGivesAModelWrittenStatementTheCheckedByPersonLabel()
     {
         await using var host = await StartAsync();
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase,
@@ -217,7 +217,8 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
 
         var labels = page.QuerySelectorAll("#statements .official-source-label[data-origin=model]");
         Assert.Equal(2, labels.Length);
-        Assert.Contains(labels, label => label.TextContent == PublishedRecordLabels.StatementModelWording);
+        Assert.Contains(labels, label => label.TextContent == PublishedRecordLabels.StatementCheckedByPersonWording);
+        Assert.DoesNotContain(labels, label => label.TextContent == PublishedRecordLabels.StatementModelWording);
     }
 
     [Fact]
