@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Serialization;
 
 namespace CivicLens.Publication.Contracts;
 
@@ -34,6 +35,10 @@ public sealed record PublishedExecutiveAction
     public required DateTimeOffset FirstPublishedAtUtc { get; init; }
     public required PublishedCorrection[] Corrections { get; init; }
 
+    /// <summary>The AI summary of the body text. Absent when the record has none.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PublishedExecutiveSummary? Summary { get; init; }
+
     public PublishedRecordEntry ToEntry() => new()
     {
         Kind = PublishedRecordKind.ExecutiveAction,
@@ -50,7 +55,7 @@ public sealed record PublishedExecutiveAction
         DocumentType = Kind
     };
 
-    public IEnumerable<PublishedCitation> Citations() => Facts.Select(fact => fact.Citation);
+    public IEnumerable<PublishedCitation> Citations() => Facts.Select(fact => fact.Citation).Concat(Summary?.Citations() ?? []);
 
     public void Validate()
     {
@@ -64,6 +69,7 @@ public sealed record PublishedExecutiveAction
         if (Facts is null || Facts.Length is 0 or > MaximumFacts || Facts.Any(fact => fact?.Citation is null ||
                 string.IsNullOrWhiteSpace(fact.Label) || fact.Citation.Quote != $"{fact.Label}: {fact.Value}"))
             throw new InvalidDataException($"A published executive action holds 1 to {MaximumFacts} facts that equal their citations.");
+        Summary?.Validate();
         foreach (var citation in Citations()) PublishedEvidenceRules.RequireCitation(Sources, citation, "executive action");
         PublishedEvidenceRules.RequireEverySourceCited(Sources, Citations(), "executive action");
         RequireFact(DocumentNumberLabel, DocumentNumber);

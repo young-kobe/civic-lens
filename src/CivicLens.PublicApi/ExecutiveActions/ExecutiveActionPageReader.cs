@@ -13,6 +13,7 @@ public sealed class ExecutiveActionPageReader(ExecutiveActionStore actions)
         return new(detail.Release, row.RecordId, row.RevisionNumber, row.Headline, row.Kind, row.DocumentNumber, row.SignedOn, row.PublishedOn,
             row.FederalRegisterCitation, row.DocumentUrl, row.OfficialId, row.PresidentName,
             [.. detail.Notices.Select(notice => new ExecutiveActionNoticeData(notice.DocumentNumber, notice.PublishedOn, notice.Url))],
-            [.. detail.Targets.Select(target => new ExecutiveActionTargetData(target.Relation, target.Kind, target.Number, target.Reference, target.TargetRecordId))]);
+            [.. detail.Targets.Select(target => new ExecutiveActionTargetData(target.Relation, target.Kind, target.Number, target.Reference, target.TargetRecordId))],
+            detail.Summary is { } summary ? new(summary.TextOrigin, summary.Label, summary.Cut, summary.Sentences) : null);
     }
 }

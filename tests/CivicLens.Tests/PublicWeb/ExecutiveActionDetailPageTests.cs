@@ -30,6 +30,42 @@ public sealed class ExecutiveActionDetailPageTests
     }
 
     [Fact]
+    public async Task TheSummarySlotShowsTheViewLabelTheSentencesAndTheCheckLineAndNoCutNoteWhenTheModelReadAllOfTheText()
+    {
+        var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(WithSummary(cut: false));
+
+        var slot = page.QuerySelector(".ai-summary-ai")!;
+        Assert.Equal(ExecutiveSummaryWords.Label, slot.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal(["The order tells agencies to act.", "Each agency reports in 30 days."], slot.QuerySelectorAll("p").Where(p => p.ClassName is null or "").Select(p => p.TextContent));
+        Assert.StartsWith(ExecutiveActionWords.SummaryCheck, slot.QuerySelector(".ai-summary-check")!.TextContent);
+        Assert.DoesNotContain("Civic Lens did not summarize", page.TextContent);
+        Assert.DoesNotContain(ExecutiveSummaryWords.CutNote, page.TextContent);
+    }
+
+    [Fact]
+    public async Task ACutSummaryShowsTheCutNoteInsideTheSlot()
+    {
+        var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(WithSummary(cut: true));
+
+        Assert.Contains(ExecutiveSummaryWords.CutNote, page.QuerySelector(".ai-summary-ai")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ASummaryWithNoLabelGetsNoModelStylingBecauseOnlyTheViewLabelMakesTextModelText()
+    {
+        var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(
+            Action() with { Summary = new(PublishedTextOrigin.Model, null, false, ["A sentence."]) });
+
+        Assert.Null(page.QuerySelector(".ai-summary-ai"));
+        Assert.Null(page.QuerySelector(".ai-summary-label"));
+    }
+
+    private static ExecutiveActionPageData WithSummary(bool cut) => Action() with
+    {
+        Summary = new(PublishedTextOrigin.Model, ExecutiveSummaryWords.Label, cut, ["The order tells agencies to act.", "Each agency reports in 30 days."])
+    };
+
+    [Fact]
     public async Task EachCorrectionNoticeShowsItsExactDateAndLinksToTheNotice()
     {
         var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(

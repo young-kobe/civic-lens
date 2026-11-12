@@ -355,6 +355,64 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task TheSummaryViewHoldsOneRowForTheActiveRevisionWithItsLabelOnlyForTheModelOriginAndItsSentencesInPositionOrder()
+    {
+        await SeedAsync(PublicRecordPageRows.ExecutiveAction(Action1));
+        Assert.Equal(["0"], await PublicAsync("SELECT count(*)::text FROM public_api.executive_action_summaries"));
+        await ExecuteAsync(SummaryRows(Action1, "Model"));
+
+        Assert.Equal([$"2|Model|{ExecutiveSummaryWords.Label}|true"], await PublicAsync(
+            "SELECT revision_number || '|' || text_origin || '|' || label || '|' || cut FROM public_api.executive_action_summaries"));
+        Assert.Equal(["0|The order tells agencies to act.", "1|Each agency reports in 30 days."], await PublicAsync(
+            "SELECT \"position\" || '|' || sentence FROM public_api.executive_action_summary_sentences ORDER BY \"position\""));
+        Assert.Equal(["0"], await PublicAsync($"SELECT count(*)::text FROM public_api.executive_action_summaries WHERE revision_number = 1"));
+    }
+
+    [Fact]
+    public async Task ASummaryOfAnotherOriginHasNoLabelAndNoSentenceInTheViewBecauseOnlyTheModelOriginCarriesTheLabel()
+    {
+        await SeedAsync(PublicRecordPageRows.ExecutiveAction(Action1));
+        await ExecuteAsync("ALTER TABLE executive_action_revisions DROP CONSTRAINT ck_executive_action_revisions_summary_origin");
+        await ExecuteAsync(SummaryRows(Action1, "Person"));
+
+        Assert.Equal(["Person|"], await PublicAsync("SELECT text_origin || '|' || coalesce(label, '') FROM public_api.executive_action_summaries"));
+        Assert.Equal(["0"], await PublicAsync("SELECT count(*)::text FROM public_api.executive_action_summary_sentences"));
+    }
+
+    [Fact]
+    public async Task TheLabelTextOfTheViewEqualsTheWordsOwnerBecauseSqlCannotReadTheClass()
+    {
+        await SeedAsync(PublicRecordPageRows.ExecutiveAction(Action1));
+        await ExecuteAsync(SummaryRows(Action1, "Model"));
+
+        Assert.Equal([ExecutiveSummaryWords.Label], await PublicAsync("SELECT label FROM public_api.executive_action_summaries"));
+    }
+
+    [Fact]
+    public async Task TheExecutiveActionStoreReadsTheSummaryOfTheActiveRevisionAndNullWhenTheRevisionHasNone()
+    {
+        await SeedAsync(PublicRecordPageRows.ExecutiveAction(Action1));
+        var builder = new NpgsqlConnectionStringBuilder(connectionString) { Username = Role, Password = LoginPassword };
+        await using var views = NpgsqlDataSource.Create(builder.ConnectionString);
+        var store = new CivicLens.PublicApi.ExecutiveActions.ExecutiveActionStore(views);
+        Assert.Null((await store.FindAsync(Action1, default))!.Summary);
+
+        await ExecuteAsync(SummaryRows(Action1, "Model"));
+
+        var summary = (await store.FindAsync(Action1, default))!.Summary!;
+        Assert.Equal((PublishedTextOrigin.Model, ExecutiveSummaryWords.Label, true), (summary.TextOrigin, summary.Label, summary.Cut));
+        Assert.Equal(["The order tells agencies to act.", "Each agency reports in 30 days."], summary.Sentences);
+    }
+
+    private static string SummaryRows(string record, string origin) => $"""
+        SET session_replication_role = replica;
+        UPDATE executive_action_revisions SET summary_text_origin = '{origin}', summary_cut = true WHERE record_id = '{record}' AND revision_number = 2;
+        INSERT INTO executive_action_revision_summary_sentences (record_id, revision_number, "position", sentence, quote_extraction_id, quote_start, quote_length)
+          VALUES ('{record}', 2, 1, 'Each agency reports in 30 days.', '{new string('e', 64)}', 10, 20),
+                 ('{record}', 2, 0, 'The order tells agencies to act.', '{new string('e', 64)}', 0, 10);
+        """;
+
+    [Fact]
     public async Task ACorrectionNoticeWithNoUrlGivesNoRowBecauseTheRouteReadsTheUrlAsTextAndANullWouldFailTheRequest()
     {
         await SeedAsync(PublicRecordPageRows.ExecutiveAction(Action1));

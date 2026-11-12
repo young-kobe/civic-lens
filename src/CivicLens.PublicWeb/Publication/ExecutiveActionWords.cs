@@ -11,6 +11,10 @@ public static class ExecutiveActionWords
         "The headline is the official title from the Federal Register. Civic Lens did not summarize this document. " +
         "Code checked each fact against the saved Federal Register record. No person reviewed it. The title alone does not show what the document does. Read the document in the Federal Register.";
 
+    /// <summary>The check line under an AI summary. It is the line of the approved mockup. The label of the summary is in the view.</summary>
+    public const string SummaryCheck =
+        "The title, dates, citation and numbers on this page come from the Federal Register, checked by code. A model wrote only this summary.";
+
     public const string KeyFactsHeading = "Key facts";
 
     public const string LinksHeading = "Links to other documents";
