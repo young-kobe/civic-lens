@@ -11,6 +11,10 @@ public sealed record SearchPageData(SearchQueryData Query, int Release, IReadOnl
 /// <summary>The request as the reader typed it. <see cref="Official"/> is an official ID from an official card link.</summary>
 public sealed record SearchQueryData(string? Text, string? Kind, string? Official, string? Issue, string? From, string? To)
 {
+    /// <summary>The accepted sort and direction. A sorted page reads a sorted cursor, so the next page link must carry both.</summary>
+    public string? Sort { get; init; }
+    public string? Direction { get; init; }
+
     public bool IsEmpty => Text is null && !HasFilter;
 
     /// <summary>True when a kind, official, issue, or date filter narrows the results.</summary>

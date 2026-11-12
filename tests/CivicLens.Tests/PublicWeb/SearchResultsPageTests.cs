@@ -144,6 +144,15 @@ public sealed class SearchResultsPageTests
     }
 
     [Fact]
+    public async Task TheMoreResultsLinkKeepsTheSortBecauseASortedPageReadsASortedCursor()
+    {
+        var query = new SearchQueryData("rent", null, null, null, null, null) { Sort = "date", Direction = "asc" };
+        var page = await RenderAsync(Data(query, hits: [Hit('a', "x")], next: "s.1.abc"));
+
+        Assert.Equal("?q=rent&sort=date&direction=asc&cursor=s.1.abc", page.QuerySelector(".pager a[rel=next]")!.GetAttribute("href"));
+    }
+
+    [Fact]
     public async Task ABlankSearchShowsTheFormAndTheHintAndNoEmptyResultMessage()
     {
         var page = await RenderAsync(Data(Query(null)));
