@@ -1,5 +1,6 @@
 using CivicLens.PublicApi.Votes;
 using CivicLens.PublicApi.ZipDistricts;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi;
 using CivicLens.Tests.PublicApi.Votes;
@@ -50,6 +51,8 @@ public sealed class ZipMemberSnapshotTests(PostgresCollection postgres)
             await ZipSeed.AddNamesAsync(database, 2,
                 new SeededSeat("p0", "Pat Release Two", "Representative", "AL", 2),
                 new SeededSeat("p1", "Sam Release Two", "Senator", "AL", null));
+            await StoredBillCounts.FillAsync(database, 1, 119, onlyStoredRevisions: true);
+            await StoredBillCounts.FillAsync(database, 2, 119, onlyStoredRevisions: true);
             await using (var owner = new NpgsqlConnection(database))
             {
                 await owner.OpenAsync();

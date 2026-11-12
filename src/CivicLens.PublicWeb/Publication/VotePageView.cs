@@ -11,7 +11,6 @@ public static class VotePageView
     public const string ResultHeading = "Result";
     public const string BreakersHeading = "Members who voted against most of their party";
     public const string MembersHeading = "How each tracked member voted";
-    public const string SourceHeading = "Check the source";
     public const string BillHeading = "The bill";
     public const string IssuesHeading = "Issues";
 

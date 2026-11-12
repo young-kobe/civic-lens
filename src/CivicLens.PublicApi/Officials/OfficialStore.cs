@@ -7,7 +7,7 @@ using Npgsql;
 namespace CivicLens.PublicApi.Officials;
 
 /// <summary>
-/// Reads the views <c>public_api.officials</c>, <c>official_attendance</c>, <c>official_party_lines</c>, <c>official_bill_counts</c>, <c>official_issue_counts</c>, and <c>official_executive_actions</c>,
+/// Reads the views <c>public_api.officials</c>, <c>official_attendance</c>, <c>official_party_lines</c>, <c>official_issue_counts</c>, and <c>official_executive_actions</c>,
 /// and the name view <c>release_official_terms</c>. The kind rule of the vote counts is <see cref="PublishedVoteKindExtensions.IsSubstantive"/>.
 /// </summary>
 public sealed class OfficialStore(NpgsqlDataSource views)
@@ -69,6 +69,12 @@ public sealed class OfficialStore(NpgsqlDataSource views)
     {
         await using var connection = await views.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        return (await ReadDetailAsync(connection, transaction, officialId, cancellationToken))?.Detail;
+    }
+
+    /// <summary>Reads one official and the publish time of the release inside the caller's snapshot, so a page that reads more views shares the release of its figures.</summary>
+    internal static async Task<(OfficialDetail Detail, long? PublishedAtUtcTicks)?> ReadDetailAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
+    {
         var found = await ReadOfficialAsync(connection, transaction, officialId, cancellationToken);
         if (found is not var (release, publishedAtUtcTicks, official)) return null;
         var terms = await ReadTermsAsync(connection, transaction, officialId, cancellationToken);
@@ -83,7 +89,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         var bills = activity?.Bills;
         var issues = activity?.Issues;
         var executive = official.Kind == PublishedOfficeKind.Executive ? await ReadExecutiveActionsAsync(connection, transaction, officialId, cancellationToken) : null;
-        return new(release, official, OfficialScopes.RecordCount, terms, congress, missed, partyLines, bills, issues, executive);
+        return (new(release, official, OfficialScopes.RecordCount, terms, congress, missed, partyLines, bills, issues, executive), publishedAtUtcTicks);
     }
 
     // The view is read once. The CTE feeds both the count of the whole release and the filtered page.
@@ -119,7 +125,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         parameters.AddWithValue("cursor_id", cursor.OfficialId);
     }
 
-    private async Task<(int Release, long? PublishedAtUtcTicks, OfficialRow Official)?> ReadOfficialAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
+    private static async Task<(int Release, long? PublishedAtUtcTicks, OfficialRow Official)?> ReadOfficialAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(DetailSql, connection);
         command.Transaction = transaction;

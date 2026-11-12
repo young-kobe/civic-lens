@@ -97,5 +97,22 @@ public sealed record PublishedDocumentChange
             change.WordEdits.Any(edit => edit is null || !PublishedEvidenceRules.IsRange(before.Text, edit.BeforeStart, edit.BeforeLength) ||
                 !PublishedEvidenceRules.IsRange(after.Text, edit.AfterStart, edit.AfterLength)))
             throw new InvalidDataException("Published change offsets are outside their texts.");
+        ValidateWordEdits(change);
+    }
+
+    private static void ValidateWordEdits(PublishedChange change)
+    {
+        var beforeCursor = change.BeforeStart;
+        var afterCursor = change.AfterStart;
+        var beforeEnd = change.BeforeStart + change.BeforeLength;
+        var afterEnd = change.AfterStart + change.AfterLength;
+        foreach (var edit in change.WordEdits)
+        {
+            if (edit.BeforeStart < beforeCursor || edit.AfterStart < afterCursor ||
+                edit.BeforeLength > beforeEnd - edit.BeforeStart || edit.AfterLength > afterEnd - edit.AfterStart)
+                throw new InvalidDataException("Published word edits must be ordered, nonoverlapping, and inside their change.");
+            beforeCursor = edit.BeforeStart + edit.BeforeLength;
+            afterCursor = edit.AfterStart + edit.AfterLength;
+        }
     }
 }

@@ -1,24 +1,42 @@
 using CivicLens.Core.Documents;
+using CivicLens.Publication.Contracts;
 using CivicLens.PublicWeb.Components.Evidence;
+using CivicLens.PublicWeb.Publication;
 
 namespace CivicLens.Host.Components.Evidence;
 
 public static class Redline
 {
+    /// <summary>Builds the redline of one hunk. A hunk holds its changed text and its context windows, not the whole documents. The public builder reads offsets into whole texts, so the hunk becomes one small text on each side: the leading context and the removed text, then the added text and the trailing context.</summary>
     public static IReadOnlyList<RedlineSegment> Build(DocumentComparisonHunk hunk)
     {
         ArgumentNullException.ThrowIfNull(hunk);
-        var segments = new List<RedlineSegment>();
-        Add(segments, RedlineKind.Context, LeadingContext(hunk));
-        AddChange(segments, hunk);
-        Add(segments, RedlineKind.Context, TrailingContext(hunk));
-        return segments;
+        var leading = LeadingContext(hunk);
+        var trailing = TrailingContext(hunk);
+        var change = new PublishedChange
+        {
+            BeforeStart = leading.Length,
+            BeforeLength = hunk.BeforeText.Length,
+            AfterStart = 0,
+            AfterLength = hunk.AfterText.Length,
+            BeforeContextStart = 0,
+            BeforeContextLength = leading.Length + hunk.BeforeText.Length,
+            AfterContextStart = 0,
+            AfterContextLength = hunk.AfterText.Length + trailing.Length,
+            WordEdits = [.. hunk.WordEdits.Select(edit => new PublishedWordEdit
+            {
+                BeforeStart = leading.Length + edit.BeforeStart - hunk.BeforeStart,
+                BeforeLength = edit.BeforeLength,
+                AfterStart = edit.AfterStart - hunk.AfterStart,
+                AfterLength = edit.AfterLength
+            })]
+        };
+        return DocumentChangeRedline.Build(change, leading + hunk.BeforeText, hunk.AfterText + trailing);
     }
 
     public static IReadOnlyList<RedlineSegment> Excerpt(DocumentComparisonHunk hunk, int surroundingLength)
     {
-        var change = new List<RedlineSegment>();
-        AddChange(change, hunk);
+        var change = Build(hunk).Where(segment => segment.Kind != RedlineKind.Context).ToList();
         var first = change.FindIndex(segment => segment.Kind != RedlineKind.Same);
         var last = change.FindLastIndex(segment => segment.Kind != RedlineKind.Same);
         if (first < 0) return [];
@@ -27,28 +45,6 @@ public static class Redline
         excerpt.AddRange(change.Skip(first).Take(last - first + 1));
         if (last + 1 < change.Count) Add(excerpt, RedlineKind.Same, Head(change[last + 1].Text, surroundingLength));
         return excerpt;
-    }
-
-    private static void AddChange(List<RedlineSegment> segments, DocumentComparisonHunk hunk)
-    {
-        if (hunk.WordEdits.IsDefaultOrEmpty)
-        {
-            Add(segments, RedlineKind.Removed, hunk.BeforeText);
-            Add(segments, RedlineKind.Added, hunk.AfterText);
-            return;
-        }
-
-        var afterCursor = 0;
-        foreach (var edit in hunk.WordEdits)
-        {
-            var beforeIndex = edit.BeforeStart - hunk.BeforeStart;
-            var afterIndex = edit.AfterStart - hunk.AfterStart;
-            Add(segments, RedlineKind.Same, hunk.AfterText[afterCursor..afterIndex]);
-            Add(segments, RedlineKind.Removed, hunk.BeforeText.Substring(beforeIndex, edit.BeforeLength));
-            Add(segments, RedlineKind.Added, hunk.AfterText.Substring(afterIndex, edit.AfterLength));
-            afterCursor = afterIndex + edit.AfterLength;
-        }
-        Add(segments, RedlineKind.Same, hunk.AfterText[afterCursor..]);
     }
 
     private static string LeadingContext(DocumentComparisonHunk hunk)

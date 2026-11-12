@@ -1,4 +1,3 @@
-using System.Reflection;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Actions;
 using CivicLens.Infrastructure.Collection;
@@ -208,8 +207,8 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         var first = await publications.CommitBillCountsAsync(release, members, NoServedDirectory, default);
         var replay = await publications.CommitBillCountsAsync(release, members, NoServedDirectory, default);
 
-        Assert.True(first);
-        Assert.False(replay);
+        Assert.Equal(ReleaseSnapshotWrite.Added, first);
+        Assert.Equal(ReleaseSnapshotWrite.AlreadyPresent, replay);
         Assert.Equal(["119|1|2"], await TotalsAsync(1));
         Assert.Equal(["119|p1|1|0", "119|p2|0|1"], await MembersAsync(1));
         Assert.Equal(BillCountStatus.Verified, await publications.VerifyBillCountsAsync(release, members, NoServedDirectory, default));
@@ -420,44 +419,12 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         INSERT INTO release_officials (release_number, official_id, name) VALUES ({release}, '{id}', '{id}');
         """)));
 
-    private async Task FillAsync(int release, int congress)
-    {
-        var bindings = await SelectedBindingsAsync(release);
-        await using var db = NewContext();
-        await using var transaction = await db.Database.BeginTransactionAsync();
-        await FillInTransactionAsync(db, release, congress, bindings);
-        await transaction.CommitAsync();
-    }
+    private Task FillAsync(int release, int congress) => StoredBillCounts.FillAsync(connectionString, release, congress);
 
-    private async Task<PublishedRevisionBinding[]> SelectedBindingsAsync(int release)
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("""
-            SELECT kind, record_id, revision_number FROM publication_record_states
-             WHERE kind IN ('action', 'vote') AND first_release <= @release AND (last_release IS NULL OR last_release >= @release)
-            """, connection);
-        command.Parameters.AddWithValue("release", release);
-        await using var reader = await command.ExecuteReaderAsync();
-        var bindings = new List<PublishedRevisionBinding>();
-        while (await reader.ReadAsync())
-        {
-            var kind = reader.GetString(0) == "action" ? PublishedRecordKind.Action : PublishedRecordKind.Vote;
-            bindings.Add(new(kind, reader.GetString(1), reader.GetInt32(2)));
-        }
-        return [.. bindings];
-    }
+    private Task<PublishedRevisionBinding[]> SelectedBindingsAsync(int release) => StoredBillCounts.SelectedBindingsAsync(connectionString, release);
 
-    private static async Task FillInTransactionAsync(CollectionAttemptDbContext db, int release, int congress, PublishedRevisionBinding[] bindings)
-    {
-        var type = typeof(PostgresPublicationStore).Assembly.GetType("CivicLens.Infrastructure.Publication.ReleaseBillCounts", throwOnError: true)!;
-        var method = type.GetMethod("FillAsync", BindingFlags.Public | BindingFlags.Static)!;
-        var task = (Task)method.Invoke(null, [db, release, (int?)congress, bindings, CancellationToken.None])!;
-        await task;
-    }
-
-    private CollectionAttemptDbContext NewContext() => new(new DbContextOptionsBuilder<CollectionAttemptDbContext>()
-        .UseNpgsql(connectionString).Options);
+    private static Task FillInTransactionAsync(CollectionAttemptDbContext db, int release, int congress, PublishedRevisionBinding[] bindings) =>
+        StoredBillCounts.FillInTransactionAsync(db, release, congress, bindings);
 
     private Task<string[]> TotalsAsync(int release) => ReadAsync($"""
         SELECT congress || '|' || bills || '|' || expected_member_row_count

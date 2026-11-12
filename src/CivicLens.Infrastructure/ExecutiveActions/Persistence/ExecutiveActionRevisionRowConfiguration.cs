@@ -58,6 +58,7 @@ internal sealed class ExecutiveActionRevisionRowConfiguration : IEntityTypeConfi
         SourceSpanColumns.Configure(builder, "executive_action_revisions", "DispositionNotes", "disposition_notes", optional: true);
         builder.HasOne<ExecutiveActionDraftRow>().WithMany().HasForeignKey(row => row.RecordId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.Facts).WithOne().HasForeignKey(fact => new { fact.RecordId, fact.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(row => new { row.Kind, row.PresidentialNumber });
         builder.HasMany(row => row.Notices).WithOne().HasForeignKey(notice => new { notice.RecordId, notice.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.DispositionTargets).WithOne().HasForeignKey(target => new { target.RecordId, target.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
     }
