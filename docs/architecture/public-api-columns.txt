@@ -458,6 +458,7 @@ record_entries statement_kind
 record_entries statement_record_id
 record_entries target_kind
 record_entries target_record_id
+record_entries approved_at_utc_ticks
 record_officials record_id
 record_officials kind
 record_officials revision_number

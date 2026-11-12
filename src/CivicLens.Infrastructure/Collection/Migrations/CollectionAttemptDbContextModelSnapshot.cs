@@ -5430,6 +5430,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("action_revision_number");
 
+                    b.Property<long?>("ApprovedAtUtcTicks")
+                        .HasColumnType("bigint")
+                        .HasColumnName("approved_at_utc_ticks");
+
                     b.Property<string>("ApprovedBy")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
@@ -5570,6 +5574,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("published_entries", null, t =>
                         {
+                            t.HasCheckConstraint("ck_published_entries_approved_at_utc_ticks", "approved_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
+
                             t.HasCheckConstraint("ck_published_entries_approved_by", "approved_by IS NULL OR (kind = 'statement' AND approved_by IN ('Code', 'Person'))");
 
                             t.HasCheckConstraint("ck_published_entries_bill_line", "bill_line IS NULL OR (kind = 'action' AND length(btrim(bill_line)) >= 1 AND length(bill_line) <= 200)");

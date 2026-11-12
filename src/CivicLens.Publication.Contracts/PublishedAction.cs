@@ -36,6 +36,7 @@ public sealed record PublishedAction
         RevisionNumber = RevisionNumber,
         Headline = Headline,
         FirstPublishedAtUtc = FirstPublishedAtUtc,
+        ApprovedAtUtc = ApprovedAtUtc,
         Officials = [.. Sponsorships.Where(item => item.Role == PublishedSponsorshipRole.Sponsor).Select(item => item.Official)],
         IssueIds = TrackedIssueIds,
         PolicyAreaIds = PolicyAreaId is null ? [] : [PolicyAreaId],
