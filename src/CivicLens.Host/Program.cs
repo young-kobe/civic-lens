@@ -12,6 +12,7 @@ using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Collection.Discovery;
+using CivicLens.Application.Collection.FederalRegister;
 using CivicLens.Application.Collection.Processing;
 using CivicLens.Collection.Contracts;
 using CivicLens.Infrastructure.Collection;
@@ -108,6 +109,7 @@ if (args is [] or ["--help"] or ["help"])
           executive-actions revisions verify
           executive-actions targets backfill <limit>
           executive-actions targets verify
+          executive-actions text backfill [limit]
           document-changes revisions backfill <limit>
           document-changes revisions verify
           bills subjects backfill [limit]
@@ -147,6 +149,7 @@ if (args is [] or ["--help"] or ["help"])
         actions text measure calls the paid model and needs CIVIC_LENS_DATABASE, CIVIC_LENS_REVIEW_OWNER, CIVIC_LENS_ARTIFACT_DIRECTORY, CIVIC_LENS_ISSUES_CONFIG, and ANTHROPIC_API_KEY.
         actions text measure stops before a call that could pass the token cap, writes a report under artifacts/action-text-measure, and writes no database row.
         bills text backfill also needs CIVIC_LENS_COLLECTION_CONFIG with an enabled congress-bill-text source. It refuses while action draft jobs are pending.
+        executive-actions text backfill also needs CIVIC_LENS_COLLECTION_CONFIG with an enabled federal-register-text source. It refuses while Federal Register jobs are pending.
         worker also drafts House and Senate votes when CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
         worker also drafts relationships when CIVIC_LENS_RELATIONSHIP_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also drafts weekly briefs when CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
@@ -319,7 +322,7 @@ try
         var requeue = new RequeueAnalyses<AnalysisRun>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var redraftStale = new RedraftStaleAnalyses([
-            new("actions", new PostgresActionDraftStore(contexts, codeVersion)),
+            new("actions", new PostgresActionDraftStore(contexts, codeVersion, ActionDraftConfiguration.ReadDraftsKeyTerms())),
             new("votes", new PostgresVoteDraftStore(contexts)),
             new("statements", new PostgresStatementDraftStore(contexts)),
             new("document-changes", new PostgresDocumentChangeAnalysisStore(contexts)),
@@ -358,7 +361,7 @@ try
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
-        var draftStore = new PostgresActionDraftStore(contexts, codeVersion);
+        var draftStore = new PostgresActionDraftStore(contexts, codeVersion, ActionDraftConfiguration.ReadDraftsKeyTerms());
         var draftCommands = new AnalysisQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
         var backfillStore = new PostgresActionRevisionBackfillStore(contexts);
@@ -387,7 +390,10 @@ try
         var backfillStore = new PostgresExecutiveActionRevisionBackfillStore(AnalysisDbContextFactory.Create(connectionString));
         var targetStore = new PostgresExecutiveActionTargetBackfillStore(AnalysisDbContextFactory.Create(connectionString));
         var executiveActions = new ExecutiveActionCommand(new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore),
-            new BackfillRevisions(targetStore), new VerifyRevisions(targetStore), owner);
+            new BackfillRevisions(targetStore), new VerifyRevisions(targetStore),
+            () => new BackfillFederalRegisterText(CreateJobs(codeVersion), CollectionConfigurationRevision.Create(
+                ConfigurationFile.ReadCollectionFromEnvironment() ?? throw new ArgumentException("The text backfill requires CIVIC_LENS_COLLECTION_CONFIG."))),
+            owner);
         executing = true;
         return await executiveActions.ExecuteAsync(args, cancellation.Token);
     }
@@ -425,7 +431,7 @@ try
         return await new BillBackfillCommand(new BackfillBillActions(jobs, jobs,
                 PostgresDocumentExtractionStore.FromConnectionString(connectionString), responses, artifactRoot),
             new BackfillBillSubjects(jobs, jobs, responses, artifactRoot),
-            new BackfillBillStatus(jobs, jobs, responses, artifactRoot), () => new BackfillBillText(jobs, new PostgresActionDraftStore(AnalysisDbContextFactory.Create(connectionString), codeVersion),
+            new BackfillBillStatus(jobs, jobs, responses, artifactRoot), () => new BackfillBillText(jobs, new PostgresActionDraftStore(AnalysisDbContextFactory.Create(connectionString), codeVersion, ActionDraftConfiguration.ReadDraftsKeyTerms()),
                 CollectionConfigurationRevision.Create(
                 ConfigurationFile.ReadCollectionFromEnvironment() ?? throw new ArgumentException("The text backfill requires CIVIC_LENS_COLLECTION_CONFIG."))),
             owner).ExecuteAsync(args, cancellation.Token);

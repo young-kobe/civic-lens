@@ -1,3 +1,4 @@
+using CivicLens.Application.Collection;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
@@ -36,9 +37,9 @@ public sealed class CaptureDocumentTextExtractorTests
         var reading = CongressBillRenderer.RenderText(bill, version, text);
 
         Assert.DoesNotContain('\n', text);
-        Assert.True(text.Length > CongressBillRenderer.TextWindowLength);
+        Assert.True(text.Length > TextWindow.Length);
         Assert.Equal(text.Length, reading.CharsTotal);
-        Assert.True(reading.CharsRead is > 0 and <= CongressBillRenderer.TextWindowLength && text[reading.CharsRead] == ' ');
+        Assert.True(reading.CharsRead is > 0 and <= TextWindow.Length && text[reading.CharsRead] == ' ');
         Assert.EndsWith(text[..reading.CharsRead], reading.Text);
     }
 

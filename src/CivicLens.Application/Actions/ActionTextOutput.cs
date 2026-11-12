@@ -4,7 +4,7 @@ using CivicLens.Application.Analysis;
 namespace CivicLens.Application.Actions;
 
 internal sealed record ActionTextOutput(AnalysisOutputText Headline, AnalysisOutputSentences Summary, AnalysisOutputSentences WhyItMatters,
-    string[]? IssueIds = null)
+    string[]? IssueIds = null, AnalysisOutputKeyTerm?[]? KeyTerms = null)
 {
     public static ActionTextOutput? Parse(string outputJson)
     {
@@ -20,3 +20,5 @@ internal sealed record ActionTextOutput(AnalysisOutputText Headline, AnalysisOut
 internal sealed record AnalysisOutputSentences(AnalysisOutputSentence?[] Sentences, double Confidence);
 
 internal sealed record AnalysisOutputSentence(string? Sentence, string? Quote);
+
+internal sealed record AnalysisOutputKeyTerm(string? Term, string? Quote);

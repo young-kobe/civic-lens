@@ -623,6 +623,25 @@ public sealed partial class PostgresBillStreamTests
         Assert.True((await ActionStore().ReadEvidenceAsync(candidate, false, default))!.HasStaleDraft);
     }
 
+    [Fact]
+    public async Task AV6TextDraftStaysCurrentWithKeyTermsOnAsWellAsOffBecauseABillWithNoDefinitionsIsSentV6AndRedraftWouldPayAgain()
+    {
+        var candidate = await CandidateWithoutSummariesAsync();
+        await SettleAsync(candidate, Revision(candidate, 1));
+        _ = await InsertRunAsync(candidate, ActionDraftTask.TextPromptVersion, DateTimeOffset.UnixEpoch.UtcTicks + 1,
+            schemaVersion: ActionDraftTask.TextSchemaVersion);
+
+        Assert.Equal("action-text-prompt-v6", ActionDraftTask.TextPromptVersion);
+        Assert.False((await ActionStore(draftsKeyTerms: false).ReadEvidenceAsync(candidate, false, default))!.HasStaleDraft);
+        Assert.False((await ActionStore(draftsKeyTerms: true).ReadEvidenceAsync(candidate, false, default))!.HasStaleDraft);
+        Assert.Equal(0, await ActionStore(draftsKeyTerms: true).RequeueStaleAsync(default));
+
+        _ = await InsertRunAsync(candidate, ActionDraftTask.KeyTermTextPromptVersion, DateTimeOffset.UnixEpoch.UtcTicks + 2,
+            schemaVersion: ActionDraftTask.KeyTermTextSchemaVersion);
+
+        Assert.False((await ActionStore(draftsKeyTerms: true).ReadEvidenceAsync(candidate, false, default))!.HasStaleDraft);
+    }
+
     [Theory]
     [InlineData("action-draft-prompt-v3", 1)]
     [InlineData("action-draft-prompt-v4", 1)]
@@ -788,7 +807,7 @@ public sealed partial class PostgresBillStreamTests
     {
         var candidate = await CandidateWithoutSummariesAsync();
         var store = new PostgresActionDraftStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
-            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options), CodeVersion.Unknown);
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options), CodeVersion.Unknown, draftsKeyTerms: false);
         var claim = (await store.TryClaimAsync(candidate, Lease, default))!;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -973,8 +992,8 @@ public sealed partial class PostgresBillStreamTests
 
     private static string RecordId => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{SourceId.Length}:{SourceId}119:hr:7")));
 
-    private PostgresActionDraftStore ActionStore() => new(new PooledDbContextFactory<CollectionAttemptDbContext>(
-        new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options), TestCodeVersion.Current);
+    private PostgresActionDraftStore ActionStore(bool draftsKeyTerms = false) => new(new PooledDbContextFactory<CollectionAttemptDbContext>(
+        new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options), TestCodeVersion.Current, draftsKeyTerms);
 
     private async Task<string> CandidateWithoutSummariesAsync()
     {

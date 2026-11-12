@@ -52,6 +52,7 @@ internal static class ReleaseSplice
             PolicyAreaIds = facts.PolicyAreaIds,
             SourceHost = facts.SourceHost,
             ApprovedBy = fromFile.ApprovedBy is null ? null : facts.ApprovedBy,
+            ApprovedAtUtc = fromFile.ApprovedAtUtc is null || facts.ApprovedAtUtcTicks is not { } ticks ? null : new DateTimeOffset(ticks, TimeSpan.Zero),
             EventDate = facts.EventDate,
             BillTitle = facts.BillTitle,
             LinkType = facts.LinkType,

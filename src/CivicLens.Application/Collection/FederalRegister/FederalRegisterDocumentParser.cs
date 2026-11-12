@@ -21,7 +21,8 @@ public static class FederalRegisterDocumentParser
         [property: JsonPropertyName("correction_of")] string? CorrectionOf,
         [property: JsonPropertyName("presidential_document_number")] string? PresidentialDocumentNumber,
         [property: JsonPropertyName("html_url")] string? HtmlUrl,
-        [property: JsonPropertyName("disposition_notes")] string? DispositionNotes);
+        [property: JsonPropertyName("disposition_notes")] string? DispositionNotes,
+        [property: JsonPropertyName("body_html_url")] string? BodyHtmlUrl);
 
     private sealed record WirePresident(
         [property: JsonPropertyName("identifier")] string? Identifier,
@@ -41,7 +42,11 @@ public static class FederalRegisterDocumentParser
             Required(wire.Citation), Required(president?.Identifier), Required(president?.Name), RequiredUrl(wire.HtmlUrl));
         if (wire.DispositionNotes is { Length: > DocumentExtraction.MaximumTextLength })
             throw new InvalidDataException("Federal Register disposition notes exceed the extraction text limit.");
-        return document with { DispositionNotes = wire.DispositionNotes };
+        return document with
+        {
+            DispositionNotes = wire.DispositionNotes,
+            BodyHtmlUrl = wire.BodyHtmlUrl is null ? null : RequiredUrl(wire.BodyHtmlUrl)
+        };
     }
 
     private static string? CorrectedNumberOf(string? correctionOf) =>

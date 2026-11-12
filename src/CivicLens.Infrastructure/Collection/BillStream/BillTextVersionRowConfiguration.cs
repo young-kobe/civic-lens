@@ -1,3 +1,4 @@
+using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Infrastructure.Documents.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -16,8 +17,8 @@ internal sealed class BillTextVersionRowConfiguration : IEntityTypeConfiguration
                 "package_id ~ ('^BILLS-' || congress || bill_type || bill_number || '[a-z]+$') OR package_id ~ ('^PLAW-' || congress || '(publ|pvtl)[0-9]+$')");
             table.HasCheckConstraint("ck_bill_text_versions_type", "version_type = btrim(version_type) AND char_length(version_type) >= 1");
             table.HasCheckConstraint("ck_bill_text_versions_chars",
-                $"chars_read >= 1 AND chars_read <= {CongressBillRenderer.TextWindowLength} AND chars_read <= chars_total AND " +
-                $"(chars_read = chars_total OR chars_total > {CongressBillRenderer.TextWindowLength})");
+                $"chars_read >= 1 AND chars_read <= {TextWindow.Length} AND chars_read <= chars_total AND " +
+                $"(chars_read = chars_total OR chars_total > {TextWindow.Length})");
             table.HasCheckConstraint("ck_bill_text_versions_url", $"source_url LIKE '{CongressBillTextVersion.UrlPrefix}%'");
         });
         builder.Property(row => row.Congress).HasColumnName("congress");

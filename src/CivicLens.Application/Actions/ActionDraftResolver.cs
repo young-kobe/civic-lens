@@ -10,9 +10,11 @@ namespace CivicLens.Application.Actions;
 
 public static class ActionDraftResolver
 {
-    private readonly record struct TextSource(string? PackageId, string? WhyItMatters, ImmutableArray<ActionTextCitation> Citations)
+    private readonly record struct TextSource(string? PackageId, string? WhyItMatters, ImmutableArray<ActionTextCitation> Citations,
+        ImmutableArray<ActionKeyTerm> KeyTerms = default)
     {
-        public static TextSource Of(ActionDraftRevision revision) => new(revision.TextPackageId, revision.WhyItMatters, revision.TextCitations);
+        public static TextSource Of(ActionDraftRevision revision) =>
+            new(revision.TextPackageId, revision.WhyItMatters, revision.TextCitations, revision.KeyTerms);
     }
 
     public static AnalysisResolution<ActionDraftRevision> Resolve(string outputJson, ActionDraftContext context, string runId,
@@ -38,8 +40,11 @@ public static class ActionDraftResolver
             snapshot.SummaryVersion, snapshot.SummaryCitation, default));
     }
 
+    /// <summary>Key terms are resolved only with a scope, which exists when the key term setting is on and the bill text has a definitions section.
+    /// With no scope the draft has no key terms, whatever the model wrote. With <paramref name="dropFailingKeyTerms"/>, which the last pass sets,
+    /// a key term that fails a check is left out and its error is not sent, so the checked summary is kept.</summary>
     public static AnalysisResolution<ActionDraftRevision> ResolveBillText(string outputJson, ActionDraftContext context, string runId,
-        DateTimeOffset createdAtUtc)
+        DateTimeOffset createdAtUtc, ActionKeyTermScope? keyTerms = null, bool dropFailingKeyTerms = false)
     {
         var billText = context.Evidence.BillText ?? throw new ArgumentException("Bill text drafting needs the bill text.", nameof(context));
         var output = ActionTextOutput.Parse(outputJson);
@@ -61,10 +66,14 @@ public static class ActionDraftResolver
         CheckSentences(summary, "summary", context.Snapshot, figures, errors);
         CheckSentences(why, "whyItMatters", context.Snapshot, figures, errors);
         if (PassageGradeError(output) is { } passageGrade) errors.Add(passageGrade);
+        var keyTermErrors = new List<string>();
+        var terms = keyTerms?.Resolve(output.KeyTerms, quotes, keyTermErrors) ?? default;
+        if (!dropFailingKeyTerms) errors.AddRange(keyTermErrors);
         var issueIds = context.Issues.Check(output.IssueIds, errors);
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
         var citations = summary.Concat(why).ToImmutableArray();
-        var source = new TextSource(billText.PackageId, ActionTextCitation.Join(why), citations);
+        var source = new TextSource(billText.PackageId, ActionTextCitation.Join(why), citations,
+            terms.IsDefaultOrEmpty ? default : terms); // An empty list stays the default array, the one form that a stored row rebuilds to.
         return AnalysisResolution<ActionDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current,
             output.Headline.Text, ActionTextCitation.Join(summary), runId, context.Snapshot.Fingerprint), issueIds, context.Issues.SubjectsHash, null, null, source));
     }
@@ -177,7 +186,8 @@ public static class ActionDraftResolver
             candidate.IncludesSummaries, candidate.IncludesSubjects,
             snapshot.Fingerprint, summaryVersion, summaryCitation, snapshot.Bill.PolicyArea, snapshot.PolicyAreaCitation,
             policyAreaId, trackedIssueIds, issues.CandidateIds, issueRevisionId, snapshot.Sponsorships, snapshot.Bill.Title, subjectsHash,
-            text.Origin == ReviewTextOrigin.Code ? snapshot.BillCitation : null, textSource.PackageId, textSource.WhyItMatters, textSource.Citations);
+            text.Origin == ReviewTextOrigin.Code ? snapshot.BillCitation : null, textSource.PackageId, textSource.WhyItMatters, textSource.Citations,
+            textSource.KeyTerms);
         revision.ValidateAsWorkerRevision(current);
         return revision;
     }

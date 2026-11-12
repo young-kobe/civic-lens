@@ -19,7 +19,8 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SourceSpan? BillCitation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TextPackageId = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? WhyItMatters = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<ActionTextCitation> TextCitations = default)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<ActionTextCitation> TextCitations = default,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ImmutableArray<ActionKeyTerm> KeyTerms = default)
     : IHeadlineSummaryRevision
 {
     public const int MaximumHeadlineLength = 256;
@@ -46,11 +47,14 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
 
     private ImmutableArray<ActionTextCitation> TextCitationList => TextCitations.IsDefault ? [] : TextCitations;
 
+    [JsonIgnore]
+    public ImmutableArray<ActionKeyTerm> KeyTermList => KeyTerms.IsDefault ? [] : KeyTerms;
+
     public ReviewAuthorKind AuthorKind => ReviewAuthor.KindOf(AuthorSubject);
 
     public IEnumerable<SourceSpan> Citations => Sponsorships.SelectMany(item => item.Citations)
         .Concat(SummaryCitation is { } summary ? [summary] : []).Concat(PolicyAreaCitation is { } area ? [area] : [])
-        .Concat(BillCitation is { } bill ? [bill] : []).Concat(TextCitationList.Select(citation => citation.Span));
+        .Concat(BillCitation is { } bill ? [bill] : []).Concat(TextCitationList.Select(citation => citation.Span)).Concat(KeyTermList.Select(term => term.Span));
 
     public DateOnly EventOn() => Sponsorships.Max(item => item.WithdrawnOn ?? item.SponsoredOn);
 
@@ -123,7 +127,11 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         var citations = TextCitationList;
         if ((TextPackageId is null) != (WhyItMatters is null) || (TextPackageId is null) != citations.IsEmpty)
             throw new ArgumentException("A bill text package, a why it matters part, and text citations come together.");
-        if (TextPackageId is null) return;
+        if (TextPackageId is null)
+        {
+            if (!KeyTermList.IsEmpty) throw new ArgumentException("Key terms come from the bill text, so a revision with no bill text has none.");
+            return;
+        }
         if (SummaryCitation is not null || SummaryVersion is not null)
             throw new ArgumentException("An action revision cites the CRS summary or the bill text, never both.");
         ReviewTextRules.ValidateText(TextPackageId, MaximumTextPackageIdLength, nameof(TextPackageId));
@@ -137,6 +145,20 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
             throw new ArgumentException("Each text citation is a bounded span of one quote.");
         if (citations.Any(citation => string.IsNullOrWhiteSpace(citation.Sentence) || citation.Sentence.Length > MaximumTextSentenceLength))
             throw new ArgumentException("Each text sentence has text and at most the maximum length.");
+        ValidateKeyTerms();
+    }
+
+    private void ValidateKeyTerms()
+    {
+        var terms = KeyTermList;
+        if (terms.Length > ActionKeyTerm.MaximumPerRevision)
+            throw new ArgumentException($"A revision has at most {ActionKeyTerm.MaximumPerRevision} key terms.");
+        if (terms.Any(item => string.IsNullOrWhiteSpace(item.Term) || item.Term.Length > ActionKeyTerm.MaximumTermLength ||
+                string.IsNullOrWhiteSpace(item.Definition) || !IsBounded(item.Span) || item.Span.Length > MaximumTextQuoteLength ||
+                item.Definition.Length > item.Span.Length || !item.IsDefinedBy(item.Definition)))
+            throw new ArgumentException("Each key term has a term that its bounded definition quote holds.");
+        if (terms.Select(item => item.Term).Distinct(StringComparer.OrdinalIgnoreCase).Count() != terms.Length)
+            throw new ArgumentException("A key term appears once in a revision.");
     }
 
     private static void ValidateIssueIds(ImmutableArray<string> ids, string name)
@@ -187,9 +209,29 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     private void RequireTextSpansInTheBody(IReadOnlyDictionary<string, DocumentExtraction> extractions)
     {
         var extractionId = TextCitationList[0].Span.ExtractionId;
-        var bodyStart = BillTextBody.Start(extractions[extractionId].Text);
-        if (bodyStart < 0 || TextCitationList.Any(citation => citation.Span.ExtractionId != extractionId || citation.Span.Start < bodyStart))
+        var text = extractions[extractionId].Text;
+        var bodyStart = BillTextBody.Start(text);
+        if (bodyStart < 0 || TextCitationList.Select(citation => citation.Span).Concat(KeyTermList.Select(term => term.Span))
+                .Any(span => span.ExtractionId != extractionId || span.Start < bodyStart))
             throw new ArgumentException("Each text citation lies in the body of one bill text extraction.");
+        RequireKeyTermsInTheDefinitions(extractions[extractionId], bodyStart);
+    }
+
+    /// <summary>A key term defines itself by an exact quote of the definitions section. The section and the cut mark come from the same code rules that the draft step used.</summary>
+    private void RequireKeyTermsInTheDefinitions(DocumentExtraction extraction, int bodyStart)
+    {
+        if (KeyTermList.IsEmpty) return;
+        var body = extraction.Text[bodyStart..];
+        var section = BillDefinitionsSection.Find(body);
+        foreach (var term in KeyTermList)
+        {
+            if (section is null || !section.Contains(term.Span.Start - bodyStart, term.Span.Length))
+                throw new ArgumentException("Each key term quotes the definitions section of the bill text.");
+            if (term.Definition != GpoQuoteMarks.Normalize(new DocumentTextSpan(extraction, term.Span.Start, term.Span.Length).Quote))
+                throw new ArgumentException("Each key term definition is the plain form of the exact quote that its citation names.");
+            if (term.Cut != section.Cuts(body, term.Span.Start + term.Span.Length - bodyStart))
+                throw new ArgumentException("Each key term cut mark agrees with the definition paragraph of its quote.");
+        }
     }
 
     private void RequireQuotesOfEnoughWords(IReadOnlyDictionary<string, DocumentExtraction> extractions)
@@ -215,7 +257,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         CandidateIncludesSummaries == other.CandidateIncludesSummaries && CandidateIncludesSubjects == other.CandidateIncludesSubjects &&
         Fingerprint == other.Fingerprint && SummaryCitation == other.SummaryCitation && PolicyAreaCitation == other.PolicyAreaCitation &&
         BillCitation == other.BillCitation && TextPackageId == other.TextPackageId && WhyItMatters == other.WhyItMatters &&
-        TextCitationList.SequenceEqual(other.TextCitationList) &&
+        TextCitationList.SequenceEqual(other.TextCitationList) && KeyTermList.SequenceEqual(other.KeyTermList) &&
         HasSameBillFactsAs(other) && SubjectsHash == other.SubjectsHash && Sponsorships.SequenceEqual(other.Sponsorships);
 
     private bool HasSameBillFactsAs(ActionDraftRevision other) =>
