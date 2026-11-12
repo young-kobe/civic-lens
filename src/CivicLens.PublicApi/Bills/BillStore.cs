@@ -7,7 +7,7 @@ using NpgsqlTypes;
 
 namespace CivicLens.PublicApi.Bills;
 
-/// <summary>Reads the views <c>public_api.bills</c>, <c>public_api.bill_sponsorships</c>, <c>public_api.bill_issues</c>, <c>public_api.officials</c>, <c>public_api.release_issues</c>,
+/// <summary>Reads the views <c>public_api.bills</c>, <c>public_api.bill_sponsorships</c>, <c>public_api.bill_issues</c>, <c>public_api.bill_key_terms</c>, <c>public_api.officials</c>, <c>public_api.release_issues</c>,
 /// <c>public_api.record_entries</c> (the stored approval time), and <c>public_api.record_first_publications</c>. Every answer takes its release from the query that reads its rows.</summary>
 public sealed class BillStore(NpgsqlDataSource views)
 {
@@ -46,6 +46,14 @@ public sealed class BillStore(NpgsqlDataSource views)
                    ARRAY(SELECT i.issue_id FROM public_api.bill_issues i
                           WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number ORDER BY i."position"),
                    s.latest_action_text, s.latest_action_date, s.read_at_utc_ticks,
+                   ARRAY(SELECT k.term FROM public_api.bill_key_terms k
+                          WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position"),
+                   ARRAY(SELECT k.definition FROM public_api.bill_key_terms k
+                          WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position"),
+                   ARRAY(SELECT k.cut FROM public_api.bill_key_terms k
+                          WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position"),
+                   (SELECT k.label FROM public_api.bill_key_terms k
+                     WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number LIMIT 1),
                    e.approved_at_utc_ticks, f.first_published_at_utc_ticks, b.summary_from_crs
               FROM public_api.bills b
               LEFT JOIN public_api.bill_status s ON s.record_id = b.record_id AND s.revision_number = b.revision_number
@@ -57,12 +65,22 @@ public sealed class BillStore(NpgsqlDataSource views)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
         return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(27), ReadLatestAction(reader), ReadHistory(reader, 25, 26),
-            ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24))
+            ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24), ReadKeyTerms(reader))
         {
-            CheckedAtUtc = Utc(reader, 31),
-            FirstPublishedAtUtc = Utc(reader, 32),
-            SummaryFromCrs = reader.GetBoolean(33)
+            KeyTermsLabel = ViewColumns.Text(reader, 34),
+            CheckedAtUtc = Utc(reader, 35),
+            FirstPublishedAtUtc = Utc(reader, 36),
+            SummaryFromCrs = reader.GetBoolean(37)
         };
+    }
+
+    /// <summary>The three arrays come from one view, ordered by the same position, so they pair by index.</summary>
+    private static BillKeyTerm[] ReadKeyTerms(DbDataReader reader)
+    {
+        var terms = reader.GetFieldValue<string[]>(31);
+        var definitions = reader.GetFieldValue<string[]>(32);
+        var cuts = reader.GetFieldValue<bool[]>(33);
+        return [.. terms.Select((term, index) => new BillKeyTerm(term, definitions[index], cuts[index]))];
     }
 
     /// <summary>Reads one page of the sponsorships of a bill. Null means that no release is active or that the active release holds no such bill.</summary>
