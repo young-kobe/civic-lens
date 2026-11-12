@@ -5,7 +5,6 @@ using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
-using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.PublicApi;
 
@@ -56,17 +55,8 @@ public sealed class PersonApprovedStatementLabelMigrationTests(PostgresCollectio
         Assert.Equal(withLabel, await LabelsAsync("statements"));
     }
 
-    private async Task<string[]> LabelsAsync(string source)
-    {
-        await using var connection = new NpgsqlConnection(database);
-        await connection.OpenAsync();
-        await using (var role = new NpgsqlCommand("SET ROLE civic_lens_public", connection)) await role.ExecuteNonQueryAsync();
-        await using var command = new NpgsqlCommand($"SELECT headline || '|' || coalesce(label, 'null') FROM public_api.{source} ORDER BY 1", connection);
-        await using var reader = await command.ExecuteReaderAsync();
-        var rows = new List<string>();
-        while (await reader.ReadAsync()) rows.Add(reader.GetString(0));
-        return [.. rows];
-    }
+    private Task<string[]> LabelsAsync(string source) =>
+        ViewsSeed.QueryAsPublicAsync(database, $"SELECT headline || '|' || coalesce(label, 'null') FROM public_api.{source} ORDER BY 1");
 
     private async Task ApplyAsync(IReadOnlyList<MigrationOperation> operations)
     {
