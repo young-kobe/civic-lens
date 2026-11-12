@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>cb_2024_us_cd119_20m sample</name>
+    <Placemark>
+      <name>Sample district 1 of Colorado</name>
+      <ExtendedData><SchemaData schemaUrl="#sample">
+        <SimpleData name="STATEFP">08</SimpleData>
+        <SimpleData name="CD119FP">01</SimpleData>
+        <SimpleData name="GEOID">0801</SimpleData>
+      </SchemaData></ExtendedData>
+      <Polygon><outerBoundaryIs><LinearRing><coordinates>-109,37,0 -108,37,0 -107,37,0 -106,37,0 -105,37,0 -105,38,0 -105,39,0 -105,40,0 -105,41,0 -106,41,0 -107,41,0 -108,41,0 -109,41,0 -109,40,0 -109,39,0 -109,38,0 -109,37,0</coordinates></LinearRing></outerBoundaryIs></Polygon>
+    </Placemark>
+    <Placemark>
+      <name>Sample district 2 of Colorado</name>
+      <ExtendedData><SchemaData schemaUrl="#sample">
+        <SimpleData name="STATEFP">08</SimpleData>
+        <SimpleData name="CD119FP">02</SimpleData>
+        <SimpleData name="GEOID">0802</SimpleData>
+      </SchemaData></ExtendedData>
+      <Polygon><outerBoundaryIs><LinearRing><coordinates>-105,41,0 -105,40,0 -105,39,0 -105,38,0 -105,37,0 -104.25,37,0 -103.5,37,0 -102.75,37,0 -102,37,0 -102,38,0 -102,39,0 -102,40,0 -102,41,0 -102.75,41,0 -103.5,41,0 -104.25,41,0 -105,41,0</coordinates></LinearRing></outerBoundaryIs></Polygon>
+    </Placemark>
+    <Placemark>
+      <name>Sample at-large district of Alaska</name>
+      <ExtendedData><SchemaData schemaUrl="#sample">
+        <SimpleData name="STATEFP">02</SimpleData>
+        <SimpleData name="CD119FP">00</SimpleData>
+        <SimpleData name="GEOID">0200</SimpleData>
+      </SchemaData></ExtendedData>
+      <Polygon><outerBoundaryIs><LinearRing><coordinates>-160,60,0 -155,60,0 -150,60,0 -145,60,0 -140,60,0 -140,62,0 -140,64,0 -140,66,0 -140,68,0 -145,68,0 -150,68,0 -155,68,0 -160,68,0 -160,66,0 -160,64,0 -160,62,0 -160,60,0</coordinates></LinearRing></outerBoundaryIs></Polygon>
+    </Placemark>
+  </Document>
+</kml>

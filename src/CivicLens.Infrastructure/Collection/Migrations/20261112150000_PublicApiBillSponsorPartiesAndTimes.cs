@@ -10,7 +10,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations;
 /// approval of the published revision, the time the bill was first published, and whether the summary is model text drafted from the CRS summary.
 /// The checked time takes the approval with the highest review state version of the revision, as <c>PublishedRecordRules.GetApprovalTime</c> does.
 /// The rollback drops the dependent views <c>bill_actions</c> and <c>votes</c> and restores all three from <c>BillHistoryProjectionVersion</c>
-/// and <c>VoteMemberListTotals</c>.
+/// and <c>ReleaseVoteBills</c>.
 /// </summary>
 public partial class PublicApiBillSponsorPartiesAndTimes : Migration
 {
@@ -119,14 +119,11 @@ public partial class PublicApiBillSponsorPartiesAndTimes : Migration
                CASE WHEN t.other_count = 0 THEN t.not_voting_count::bigint END AS not_voting,
                v.question, v.result,
                v.alignment,
-               bill.record_id AS bill_record_id
+               bill.record_id::varchar(64) AS bill_record_id
           FROM public_api.active_records a
           JOIN public.vote_revisions v ON v.record_id = a.record_id AND v.revision_number = a.revision_number
-          LEFT JOIN (
-               SELECT b.congress, b.bill_type, b.bill_number, min(b.record_id)::varchar(64) AS record_id
-                 FROM public_api.bills b
-                GROUP BY b.congress, b.bill_type, b.bill_number
-          ) bill ON bill.congress = v.congress AND bill.bill_type = v.bill_type AND bill.bill_number = v.bill_number
+          LEFT JOIN public.release_vote_bills rb ON rb.release_number = a.release_number AND rb.vote_record_id = a.record_id
+          LEFT JOIN LATERAL (SELECT b.record_id FROM public_api.bills b WHERE b.record_id = rb.bill_record_id LIMIT 1) bill ON TRUE
           JOIN public.vote_member_lists t ON t.list_id = v.member_list_id
          WHERE a.kind = 'vote' AND v.member_list_id IS NOT NULL;
         ALTER VIEW public_api.votes OWNER TO civic_lens_public_owner;

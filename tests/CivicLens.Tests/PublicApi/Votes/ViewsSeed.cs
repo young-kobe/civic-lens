@@ -45,6 +45,12 @@ internal static class ViewsSeed
         ON CONFLICT (release_number) DO UPDATE SET is_active = true;
         """);
 
+    /// <summary>Pins the bill action that each vote links in the release, as the commit of the release does. The release row must exist.</summary>
+    public static Task LinkVoteBillsAsync(string database, int release, params (char Vote, char Bill)[] links) => ExecuteAsync(database, $"""
+        INSERT INTO release_vote_bills (release_number, vote_record_id, bill_record_id)
+        VALUES {string.Join(", ", links.Select(link => $"({release}, '{new string(link.Vote, 64)}', '{new string(link.Bill, 64)}')"))};
+        """);
+
     public static Task AddVotesAsync(string database, params SeededVote[] votes) => AddVotesAsync(database, false, votes);
 
     public static Task AddVotesBeforeMemberTotalsAsync(string database, params SeededVote[] votes) => AddVotesAsync(database, true, votes);

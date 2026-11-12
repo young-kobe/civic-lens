@@ -33,6 +33,7 @@ public sealed class PublicApiBillSponsorPartiesAndTimesMigrationTests(PostgresCo
                 INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, kind, actor_subject, created_at_utc_ticks)
                 VALUES ('{new string('1', 32)}', '{record}', 1, 1, 'Approve', 'code', 5);
                 INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('action', '{record}', 7);
+                INSERT INTO release_vote_bills (release_number, vote_record_id, bill_record_id) VALUES (1, '{new string('e', 64)}', '{record}');
                 RESET session_replication_role;
                 """);
             await using (var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options))
