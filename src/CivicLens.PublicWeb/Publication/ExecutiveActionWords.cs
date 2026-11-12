@@ -22,6 +22,34 @@ public static class ExecutiveActionWords
         _ => throw new ArgumentOutOfRangeException(nameof(relation))
     };
 
+    /// <summary>The line under the explainer of an executive order. The other kinds show none until the owner approves their text.</summary>
+    public const string OrderReadHint = "Read it to see which agencies it directs and what they must do.";
+
+    /// <summary>The kind name in running text, such as "executive order".</summary>
+    public static string KindName(PublishedExecutiveActionKind kind) => PublishedRecordLabels.ExecutiveActionKind(kind).ToLowerInvariant();
+
+    /// <summary>The heading of the fixed explainer, such as "What an executive order is".</summary>
+    public static string ExplainerHeading(PublishedExecutiveActionKind kind) => $"What {Article(KindName(kind))} {KindName(kind)} is";
+
+    /// <summary>The words after "An executive order is". They are the glossary meaning of the kind, so the page and the glossary share one text.</summary>
+    public static string ExplainerMeaning(PublishedExecutiveActionKind kind)
+    {
+        var means = Glossary.Term(PublishedRecordLabels.ExecutiveActionTermKey(kind)).Means;
+        return char.ToLowerInvariant(means[0]) + means[1..];
+    }
+
+    /// <summary>The sentences after the meaning: why the kind matters, from the glossary.</summary>
+    public static string ExplainerWhy(PublishedExecutiveActionKind kind) => Glossary.Term(PublishedRecordLabels.ExecutiveActionTermKey(kind)).WhyItMatters;
+
+    /// <summary>"A" or "An", the start of the first explainer sentence.</summary>
+    public static string ExplainerArticle(PublishedExecutiveActionKind kind)
+    {
+        var article = Article(KindName(kind));
+        return char.ToUpperInvariant(article[0]) + article[1..];
+    }
+
+    private static string Article(string word) => "aeiou".Contains(word[0]) ? "an" : "a";
+
     public const string ReadIt = "Read it in the Federal Register";
 
     /// <summary>The text of a correction notice in three parts. The middle part is the link.</summary>
