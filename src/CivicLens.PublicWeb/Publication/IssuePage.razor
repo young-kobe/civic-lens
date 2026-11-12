@@ -22,6 +22,13 @@
         </div>
     </Hero>
     <ChildContent>
+        @if (Data.Includes.Length > 0 || Data.Excludes.Length > 0)
+        {
+            <div class="issue-scope">
+                @Terms(PublishedWording.IssueIncludesLabel, Data.Includes)
+                @Terms(PublishedWording.IssueExcludesLabel, Data.Excludes)
+            </div>
+        }
         <nav class="issue-tabs" aria-label="On this page">
             <a href="#your-members">Your members</a>
             <a href="#votes">Votes</a>
@@ -108,6 +115,11 @@
         : null;
 
     protected override void OnParametersSet() => description = CountLine ?? Data.Definition ?? Data.Name;
+
+    private static RenderFragment Terms(string title, string[] terms) => terms.Length == 0 ? @<text></text> : @<section class="issue-scope-card">
+        <h2>@title</h2>
+        <ul>@foreach (var term in terms) {<li>@term</li>}</ul>
+    </section>;
 
     private const string BillNoun = "bill or resolution";
     private const string BillsNoun = "bills and resolutions";

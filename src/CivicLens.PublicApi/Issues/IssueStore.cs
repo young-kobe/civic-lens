@@ -58,6 +58,14 @@ public sealed class IssueStore(NpgsqlDataSource views)
 
     private const string OptionsSql = "SELECT issue_id, name FROM public_api.release_issues ORDER BY name, issue_id";
 
+    // The views hold the active release only. A term keeps its stored position within its list.
+    private const string TermsSql = """
+        SELECT 'includes' AS side, "position", text FROM public_api.release_issue_includes WHERE issue_id = @issue
+        UNION ALL
+        SELECT 'excludes', "position", text FROM public_api.release_issue_excludes WHERE issue_id = @issue
+        ORDER BY side, "position"
+        """;
+
     private const string LineUpSql = """
         SELECT unknown_bills, party, bills FROM public_api.release_issue_party_lineups WHERE issue_id = @issue ORDER BY bills DESC NULLS LAST, party
         """;
@@ -126,9 +134,10 @@ public sealed class IssueStore(NpgsqlDataSource views)
         if (await ReadHeaderAsync(connection, issueId, cancellationToken) is not { } header) return null;
         var lineUp = await ReadLineUpAsync(connection, issueId, header, cancellationToken);
         var totals = await ReadPageTotalsAsync(connection, issueId, header.HomeCongress, cancellationToken);
+        var (includes, excludes) = await ReadTermsAsync(connection, issueId, cancellationToken);
         var votes = await ReadVotesAsync(connection, issueId, header.HomeCongress, cancellationToken);
         var bills = await ReadBillsAsync(connection, issueId, header.HomeCongress, cancellationToken);
-        return new(header.Release, issueId, header.Name, header.Definition, header.HomeCongress, totals.Votes, totals.SplitVotes, totals.Bills, lineUp, votes, bills);
+        return new(header.Release, issueId, header.Name, header.Definition, includes, excludes, header.HomeCongress, totals.Votes, totals.SplitVotes, totals.Bills, lineUp, votes, bills);
     }
 
     private static async Task<IssueVote[]> ReadVotesAsync(NpgsqlConnection connection, string issueId, int? congress, CancellationToken cancellationToken)
@@ -157,6 +166,17 @@ public sealed class IssueStore(NpgsqlDataSource views)
         while (await reader.ReadAsync(cancellationToken))
             bills.Add(new(reader.GetString(0), reader.GetString(1), ViewColumns.Text(reader, 2), reader.GetFieldValue<DateOnly>(3), ViewColumns.Text(reader, 4)));
         return [.. bills];
+    }
+
+    private static async Task<(string[] Includes, string[] Excludes)> ReadTermsAsync(NpgsqlConnection connection, string issueId, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(TermsSql, connection);
+        command.Parameters.AddWithValue("issue", issueId);
+        var includes = new List<string>();
+        var excludes = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken)) (reader.GetString(0) == "includes" ? includes : excludes).Add(reader.GetString(2));
+        return ([.. includes], [.. excludes]);
     }
 
     private sealed record Header(int Release, DateOnly? PublishedOn, int? HomeCongress, int? HomeBills, string Name, string? Definition);

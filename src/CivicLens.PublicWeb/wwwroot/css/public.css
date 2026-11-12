@@ -461,6 +461,13 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .issue-definition { max-width: 34em; margin: var(--s4) 0 0; color: var(--bar-ink); font-size: 1.125rem; line-height: 1.5; }
 .issue-counts { max-width: 34em; margin: var(--s4) 0 var(--s3); color: var(--bar-ink); font-size: 1.125rem; line-height: 1.5; }
 .issue-hero .small { max-width: 40em; margin: 0; color: var(--bar-muted); }
+.issue-scope { display: grid; gap: var(--s3); max-width: 60rem; margin: 0 0 var(--s4); }
+.issue-scope-card { padding: var(--s4); border-radius: 20px; background: var(--raised); }
+.issue-scope-card h2 { margin: 0 0 var(--s2); font-size: var(--t-lg); }
+.issue-scope-card ul { margin: 0; padding-left: var(--s5); }
+@media (min-width: 720px) {
+    .issue-scope { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+}
 .issue-tabs { display: flex; gap: 2px; max-width: 60rem; margin: 0 0 var(--s4); border-bottom: 1px solid var(--line); overflow-x: auto; }
 .issue-tabs a { min-height: 44px; padding: 12px; border-bottom: 3px solid transparent; color: var(--muted); font-weight: 600; text-decoration: none; white-space: nowrap; }
 .issue-tabs a:hover { border-bottom-color: var(--info); color: var(--ink); }

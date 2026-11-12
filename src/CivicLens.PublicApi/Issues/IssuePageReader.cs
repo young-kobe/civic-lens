@@ -16,6 +16,6 @@ public sealed class IssuePageReader(IssueStore issues)
         var lineUp = answer.LineUp is { } split
             ? new IssueLineUpData(split.Congress, split.Bills, [.. split.Parties.Select(party => new IssueLineUpPartyData(party.Party, party.Bills))], split.UnknownBills)
             : null;
-        return new(answer.Release, answer.IssueId, answer.Name, answer.Definition, answer.Congress, answer.SubstantiveVotes, answer.SplitVotes, answer.BillCount, votes, bills, lineUp);
+        return new(answer.Release, answer.IssueId, answer.Name, answer.Definition, answer.Includes, answer.Excludes, answer.Congress, answer.SubstantiveVotes, answer.SplitVotes, answer.BillCount, votes, bills, lineUp);
     }
 }
