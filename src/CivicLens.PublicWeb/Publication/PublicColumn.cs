@@ -26,4 +26,7 @@ public static class PublicColumn
     public const string Original = "Original";
     public const string Sponsored = "Sponsored";
     public const string Withdrawn = "Withdrawn";
+    public const string KindOfVote = "Kind of vote";
+    public const string WordInTheRecord = "Word in the record";
+    public const string WhatAYesVoteMeans = "What a Yes vote means";
 }
