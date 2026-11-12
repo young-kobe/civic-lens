@@ -1,0 +1,92 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Evidence
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSection.AllRecords" Title="@Data.Headline" Description="@Data.Summary" CanonicalPath="@PublicationProtocol.RecordPagePath(Data.RecordId)" IsArticle="true" RootPath="@RootPath" Record="record">
+    <article class="detail">
+        <header class="detail-head">
+            <p class="detail-eyebrow">@StatementPageView.Eyebrow(Data)</p>
+            <h1 class="detail-headline">@Data.Headline</h1>
+            <p class="detail-lede">@StatementPageView.DateLine(Data) From <a href="@Data.OriginalUrl" rel="noopener noreferrer nofollow">@Data.OriginalUrl</a>.</p>
+        </header>
+        <div class="detail-layout">
+            <div class="detail-main">
+                <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label">
+                    <ChildContent><p>@Data.Summary</p></ChildContent>
+                    <Check>@StatementPageView.CheckFor(Data.TextOrigin) <a href="#source">@SourceFold.Title</a></Check>
+                </AiSummary>
+                <section class="detail-section" aria-labelledby="statement-quotes-title">
+                    <h2 id="statement-quotes-title">@StatementPageView.QuotationsHeading</h2>
+                    <p class="muted">@StatementPageView.QuotationsNote(Data)</p>
+                    <ul class="choices detail-quotes">
+                        @for (var index = 0; index < Math.Min(Data.Quotations.Length, StatementPageView.ShownQuotations); index++)
+                        {
+                            var position = index; // The child content runs after the loop moves on, so it reads a copy.
+                            var quotation = Data.Quotations[position];
+                            <li>
+                                <CitationQuote Label="@StatementPageView.QuotationLabel(position)" Quote="@quotation.Quote">
+                                    <span>@StatementPageView.QuotationNote(quotation)</span>
+                                    <ContextLink Href="@("#" + CitedText.Anchor(position))" Target="@ContextLink.QuoteTarget("statement", position, Data.Quotations.Length)" />
+                                </CitationQuote>
+                            </li>
+                        }
+                    </ul>
+                    @if (Data.Quotations.Length > StatementPageView.ShownQuotations)
+                    {
+                        <p class="small"><a href="#source">@StatementPageView.AllQuotationsLink(Data)</a></p>
+                    }
+                </section>
+            </div>
+            <aside class="detail-rail" aria-label="Speakers and issues">
+                <section class="detail-card" aria-labelledby="statement-speakers-title">
+                    <h2 id="statement-speakers-title">@(Data.Speakers.Length == 1 ? "Speaker" : "Speakers")</h2>
+                    <ul class="detail-list" role="list">
+                        @foreach (var speaker in Data.Speakers)
+                        {
+                            <li><a href="@(RootPath + PublicationProtocol.OfficialPagePath(speaker.OfficialId))">@speaker.Name</a></li>
+                        }
+                    </ul>
+                </section>
+                @if (Data.Issues.Length > 0)
+                {
+                    <section class="detail-card" aria-labelledby="statement-issues-title">
+                        <h2 id="statement-issues-title">@(Data.Issues.Length == 1 ? "Issue" : "Issues")</h2>
+                        <ul class="detail-chips" role="list">
+                            @foreach (var issue in Data.Issues)
+                            {
+                                <li>
+                                    @if (issue.IsConfigured)
+                                    {
+                                        <LinkChip Href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">@issue.Name</LinkChip>
+                                    }
+                                    else
+                                    {
+                                        @issue.Name
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </section>
+                }
+            </aside>
+        </div>
+        <SourceFold>
+            <Facts Items="StatementPageView.Facts(Data)" />
+            @if (Data.ArticleUrl is not null)
+            {
+                <p class="muted small">@StatementPageView.FeedNote</p>
+            }
+            <DocumentText Label="Source text" Runs="CitedText.Split(Data.Source.Text, StatementPageView.Ranges(Data.Quotations, Data.DateEvidence))" />
+        </SourceFold>
+    </article>
+</PublicPage>
+
+@code {
+    private ReportedRecord record = default!;
+
+    [Parameter, EditorRequired] public StatementPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    protected override void OnParametersSet() =>
+        record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.Statement, Data.Headline, Data.ShortName);
+}

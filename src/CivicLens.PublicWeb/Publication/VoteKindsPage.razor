@@ -1,0 +1,41 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSection.Glossary" CanonicalPath="@PublicationProtocol.VoteKindsPagePath" Title="@Glossary.KindsOfVotes" Description="@Glossary.VoteKindsIntro" RootPath="@RootPath">
+    <PageHeader Title="@Glossary.KindsOfVotes" Lede="@Glossary.VoteKindsIntro" />
+    <Panel Label="@Glossary.KindsOfVotes">
+        <DataTable Items="rows" Caption="@Glossary.KindsOfVotes">
+            <Head>
+                <TableCell Header>@PublicColumn.KindOfVote</TableCell>
+                <TableCell Header>@PublicColumn.WordInTheRecord</TableCell>
+                <TableCell Header>@PublicColumn.WhatAYesVoteMeans</TableCell>
+            </Head>
+            <Row Context="row">
+                <TableCell Main>@row.Name</TableCell>
+                <TableCell Label="@PublicColumn.WordInTheRecord">
+                    @if (row.Term is { } term)
+                    {
+                        <a href="@($"{RootPath}{PublicationProtocol.GlossaryPagePath}#{term.AnchorId}")">@row.RecordText</a>
+                    }
+                </TableCell>
+                <TableCell Label="@PublicColumn.WhatAYesVoteMeans">@row.Meaning</TableCell>
+            </Row>
+        </DataTable>
+    </Panel>
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+
+    private static readonly IReadOnlyList<KindRow> rows =
+    [
+        .. VoteMeaning.Kinds.Select(kind => new KindRow(
+            PlainVoteWords.Kind(kind),
+            PlainVoteWords.RecordTerm(kind)!,
+            Glossary.Term(PublishedRecordLabels.VoteKindTermKey(kind)!),
+            VoteMeaning.YesOnIndexOf(kind))),
+        new(PlainVoteWords.OtherKind, null, null, VoteMeaning.OtherOnIndex)
+    ];
+
+    private sealed record KindRow(string Name, string? RecordText, GlossaryTerm? Term, string Meaning);
+}

@@ -17,13 +17,7 @@
                 }
             </p>
             <h1 class="vote-headline">@Data.Headline</h1>
-            <div class="vote-summary @(Data.TextOrigin == PublishedTextOrigin.Model ? "vote-ai" : null)">
-                @if (summaryLabel is not null)
-                {
-                    <span class="vote-summary-label">@summaryLabel</span>
-                }
-                <p>@Data.Summary</p>
-            </div>
+            <AiSummary TextOrigin="@Data.TextOrigin" Label="@summaryLabel"><p>@Data.Summary</p></AiSummary>
         </header>
         <div class="vote-layout">
             <section class="vote-result" aria-labelledby="vote-result-title">
@@ -147,7 +141,7 @@
                             <Row Context="member">
                                 <TableCell Main Label="Member"><a href="@(RootPath + PublicationProtocol.OfficialPagePath(member.OfficialId))">@member.Name</a></TableCell>
                                 <TableCell Label="Party">@(member.Party ?? VoteWords.NoKnownParty)</TableCell>
-                                <TableCell Label="Vote"><span class="shared-vote-cast-value" data-side="@PublishedOfficialVote.SideOf(member.Cast)?.ToLowerInvariant()"><CastWord Cast="@member.Cast" /></span></TableCell>
+                                <TableCell Label="Vote"><SharedVoteCast Side="@PublishedOfficialVote.SideOf(member.Cast)"><CastWord Cast="@member.Cast" /></SharedVoteCast></TableCell>
                                 <TableCell Label="Source"><SourceLineLink Anchor="@anchors.Anchor(member.Citation)" Target="@($"{member.Name}, member line")" /></TableCell>
                             </Row>
                             <Empty><p class="small">No tracked member matches these filters.</p></Empty>
@@ -180,19 +174,16 @@
                         </ul>
                     </section>
                 }
-                <details class="vote-fold vote-source" id="source">
-                    <summary>@VotePageView.SourceHeading</summary>
-                    <div class="vote-source-body">
-                        <Facts Items="facts" />
-                        <SourceLinesNote>@VoteFacts.SavedData(Data.Source)</SourceLinesNote>
-                        @for (var index = 0; index < Data.Sources.Length; index++)
-                        {
-                            var source = Data.Sources[index];
-                            <VersionSource Version="source" Linked="false" />
-                            <DocumentText Label="@($"Source text {index + 1} of {Data.Sources.Length}")" Runs="CitedText.Split(source.Text, anchors.RangesIn(source))" />
-                        }
-                    </div>
-                </details>
+                <SourceFold>
+                    <Facts Items="facts" />
+                    <SourceLinesNote>@VoteFacts.SavedData(Data.Source)</SourceLinesNote>
+                    @for (var index = 0; index < Data.Sources.Length; index++)
+                    {
+                        var source = Data.Sources[index];
+                        <VersionSource Version="source" Linked="false" />
+                        <DocumentText Label="@($"Source text {index + 1} of {Data.Sources.Length}")" Runs="CitedText.Split(source.Text, anchors.RangesIn(source))" />
+                    }
+                </SourceFold>
             </aside>
         </div>
     </article>
