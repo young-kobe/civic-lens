@@ -19,7 +19,9 @@ public static class ReleaseCommand
     public static Task<int> ExecuteAsync(string[] args, PublishRelease publish,
         ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, BackfillFirstPublished backfill, BackfillPublishedEntries entries,
         BackfillStoredColumns columns, VerifyPublishedEntries verify, VerifyCorrectionHistories verifyCorrections,
-        BackfillCorrectionHistories corrections, BackfillReleaseBillCounts billCounts, VerifyReleaseBillCounts verifyBillCounts, VerifyVotePartyTallies verifyTallies, ReviewActor owner, TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
+        BackfillCorrectionHistories corrections, BackfillReleaseBillCounts billCounts, VerifyReleaseBillCounts verifyBillCounts,
+        BackfillReleasePartyLineUps lineUps, VerifyReleasePartyLineUps verifyLineUps, VerifyVotePartyTallies verifyTallies,
+        ReviewActor owner, TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
         OwnerCommand.RunAsync(async () =>
         {
             try
@@ -69,10 +71,10 @@ public static class ReleaseCommand
                         CommandOutput.Write(output, continuedVerification);
                         return continuedVerification.Failed == 0 ? 0 : 1;
                     case ["releases", "counts", "backfill", var countLimit, .. var countCursor]
-                        when TryParsePositive(countLimit, out var countTotal) && TryParseOptionalPositive(countCursor, out var countAfter):
+                        when TryParsePositive(countLimit, out var countTotal) && TryParseBackfillCursor(countCursor, out var countAfter):
                         var counted = await billCounts.ExecuteAsync(owner, countTotal, countAfter, cancellationToken);
                         CommandOutput.Write(output, counted);
-                        return counted.Failed == 0 ? 0 : 1;
+                        return counted.Failed == 0 && !counted.StaleCursor ? 0 : 1;
                     case ["releases", "counts", "verify", var countVerifyLimit, .. var countVerifyCursor]
                         when TryParsePositive(countVerifyLimit, out var countVerifyTotal) && countVerifyCursor.Length <= 1:
                         var countVerification = await verifyBillCounts.ExecuteAsync(owner, countVerifyTotal,
@@ -85,6 +87,17 @@ public static class ReleaseCommand
                             VotePartyTallyVerificationCursor.Parse(tallyCursor.FirstOrDefault()), cancellationToken);
                         CommandOutput.Write(output, tallyVerification);
                         return tallyVerification.Failed == 0 ? 0 : 1;
+                    case ["releases", "lineups", "backfill", var lineUpLimit, .. var lineUpCursor]
+                        when TryParsePositive(lineUpLimit, out var lineUpTotal) && TryParseBackfillCursor(lineUpCursor, out var lineUpAfter):
+                        var lineUpResult = await lineUps.ExecuteAsync(owner, lineUpTotal, lineUpAfter, cancellationToken);
+                        CommandOutput.Write(output, lineUpResult);
+                        return lineUpResult.Failed == 0 && !lineUpResult.StaleCursor ? 0 : 1;
+                    case ["releases", "lineups", "verify", var lineUpVerifyLimit, .. var lineUpVerifyCursor]
+                        when TryParsePositive(lineUpVerifyLimit, out var lineUpVerifyTotal) && lineUpVerifyCursor.Length <= 1:
+                        var lineUpVerification = await verifyLineUps.ExecuteAsync(owner, lineUpVerifyTotal,
+                            ReleaseBillCountVerificationCursor.Parse(lineUpVerifyCursor.FirstOrDefault()), cancellationToken);
+                        CommandOutput.Write(output, lineUpVerification);
+                        return lineUpVerification.Failed == 0 && !lineUpVerification.StaleCursor ? 0 : 1;
                     case ["releases", "columns", "backfill"]:
                         var filled = await columns.ExecuteAsync(owner, cancellationToken);
                         CommandOutput.Write(output, filled);
@@ -94,7 +107,7 @@ public static class ReleaseCommand
                         CommandOutput.Write(output, publishedVerification);
                         return publishedVerification.Failed == 0 ? 0 : 1;
                     default:
-                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases corrections verify <limit> [cursor], releases counts backfill <limit> [release-number], releases counts verify <limit> [cursor], releases tallies verify <limit> [cursor], releases columns backfill, or releases entries verify.");
+                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases corrections verify <limit> [cursor], releases counts backfill <limit> [cursor], releases counts verify <limit> [cursor], releases lineups backfill <limit> [cursor], releases lineups verify <limit> [cursor], releases tallies verify <limit> [cursor], releases columns backfill, or releases entries verify.");
                         return 2;
                 }
             }
@@ -144,10 +157,21 @@ public static class ReleaseCommand
         return new PublishReleaseRequest([.. records], key) { Withdrawals = [.. withdrawals], RewriteOfficials = rewriteOfficials, RewriteEntries = rewriteEntries, RewritePages = rewritePages };
     }
 
-    private static bool TryParseOptionalPositive(string[] arguments, out int value)
+    private static bool TryParseBackfillCursor(string[] arguments, out ReleaseBillCountVerificationCursor? cursor)
     {
-        value = 0;
-        return arguments is [] || arguments is [var text] && TryParsePositive(text, out value);
+        cursor = null;
+        if (arguments is []) return true;
+        if (arguments is not [var value]) return false;
+        if (TryParsePositive(value, out _)) return true;
+        try
+        {
+            cursor = ReleaseBillCountVerificationCursor.Parse(value);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 
     private static bool TryParsePositive(string text, out int value) =>

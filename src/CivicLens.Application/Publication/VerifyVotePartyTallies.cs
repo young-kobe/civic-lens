@@ -8,7 +8,7 @@ namespace CivicLens.Application.Publication;
 /// Proves in read-only transactions that the stored party tally groups of each vote revision equal the groups that <see cref="VoteTally.TalliesOf"/> rebuilds from the
 /// member list rows of the exact revision. It reports each missing group, extra group, and group with different counts, and never writes.
 /// A null marker stays unresolved and a zero marker stays unavailable, because a member list never proves that a published file had a complete tally.
-/// Revisions are immutable, so a cursor on the last examined revision stays valid while new revisions arrive.
+/// The cursor resumes after its last key. A fresh scan is needed to include revisions added before that key.
 /// </summary>
 public sealed class VerifyVotePartyTallies(IPublicationStore publications)
 {

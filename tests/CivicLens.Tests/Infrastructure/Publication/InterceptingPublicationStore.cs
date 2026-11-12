@@ -133,13 +133,21 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
     public Task<ReleaseBillCountSource> ReadBillCountSourceAsync(int releaseNumber, CancellationToken cancellationToken) =>
         inner.ReadBillCountSourceAsync(releaseNumber, cancellationToken);
 
-    public Task<bool> CommitBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+    public Task<ReleaseSnapshotWrite> CommitBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
         Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
         inner.CommitBillCountsAsync(release, validatedMembers, readServedDirectory, cancellationToken);
 
     public Task<BillCountStatus> VerifyBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
         Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
         inner.VerifyBillCountsAsync(release, validatedMembers, readServedDirectory, cancellationToken);
+
+    public Task<ReleaseSnapshotWrite> CommitPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.CommitPartyLineUpsAsync(release, validatedMembers, readServedDirectory, cancellationToken);
+
+    public Task<BillCountStatus> VerifyPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.VerifyPartyLineUpsAsync(release, validatedMembers, readServedDirectory, cancellationToken);
 
     public Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken) => inner.FindReplayAsync(actorSubject, idempotencyKey, payloadHash, cancellationToken);

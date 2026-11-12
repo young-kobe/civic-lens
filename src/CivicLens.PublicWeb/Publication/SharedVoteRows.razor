@@ -5,12 +5,15 @@
     var displayedVotes = DifferencesOnly ? Data.Votes.Where(vote => vote.MembersVotedTheSame == false).ToArray() : Data.Votes;
 }
 
-<section class="shared-vote-rows" data-chamber="@Data.Chamber.ToString().ToLowerInvariant()">
-    <h2>@(DifferencesOnly ? "Votes where your members differed" : $"How your {(Data.Chamber == PublishedChamber.Senate ? "senators" : "House members")} voted")</h2>
-    <p class="shared-vote-caption">Up to 10 recent published votes on passage, amendments, conference reports, veto overrides and nominations.</p>
-    @if (compared > 0)
+<section class="shared-vote-rows@(SingleMember ? " single" : "")" data-chamber="@Data.Chamber.ToString().ToLowerInvariant()">
+    @if (!SingleMember)
     {
-        <p class="shared-vote-caption shared-vote-comparison-caption">The comparison includes @compared @(compared == 1 ? "vote" : "votes") where every listed member cast Yes or No. Their votes differed on @different.</p>
+        <h2>@(DifferencesOnly ? "Votes where your members differed" : $"How your {(Data.Chamber == PublishedChamber.Senate ? "senators" : "House members")} voted")</h2>
+        <p class="shared-vote-caption">Up to 10 recent published votes on passage, amendments, conference reports, veto overrides and nominations.</p>
+        @if (compared > 0)
+        {
+            <p class="shared-vote-caption shared-vote-comparison-caption">The comparison includes @compared @(compared == 1 ? "vote" : "votes") where every listed member cast Yes or No. Their votes differed on @different.</p>
+        }
     }
     <ul class="shared-vote-list" role="list">
         @foreach (var vote in displayedVotes)
@@ -41,8 +44,11 @@
                             if (castsByOfficialId.TryGetValue(member.OfficialId, out var cast))
                             {
                                 <li class="shared-vote-cast">
-                                    <span class="shared-vote-member">@member.Name</span>
-                                    <span class="shared-vote-cast-value" data-side="@(cast.Side?.ToLowerInvariant())">@cast.CastWords</span>
+                                    @if (!SingleMember)
+                                    {
+                                        <span class="shared-vote-member">@member.Name</span>
+                                    }
+                                    <SharedVoteCast Side="@cast.Side">@cast.CastWords</SharedVoteCast>
                                 </li>
                             }
                         }
@@ -62,4 +68,6 @@
     [Parameter, EditorRequired] public SharedVoteRowsData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
     [Parameter] public bool DifferencesOnly { get; set; }
+    /// <summary>One member's page: no heading, no captions, no comparison, and each row shows only that member's cast without the name.</summary>
+    [Parameter] public bool SingleMember { get; set; }
 }

@@ -123,17 +123,20 @@ internal static class VotePartyTallyRows
         var revisions = await db.Database.SqlQueryRaw<EvidenceRevisionRow>(ReadRevisionPage, after?.RecordId ?? "", after?.RevisionNumber ?? 0, limit + 1)
             .ToArrayAsync(cancellationToken);
         var page = revisions.Take(limit).ToArray();
+        if (page.Length == 0) return new([], false);
         var records = page.Select(row => row.RecordId).ToArray();
         var numbers = page.Select(row => row.RevisionNumber).ToArray();
         var groups = (await ReadRowsAsync(db, records, numbers, cancellationToken)).ToLookup(row => (row.RecordId, row.RevisionNumber));
-        var lists = page.Where(row => row.ListId is not null).Select(row => row.ListId!).Distinct(StringComparer.Ordinal).ToArray();
-        var casts = (await db.Database.SqlQueryRaw<MemberCastRow>(ReadMemberCasts, [lists]).ToArrayAsync(cancellationToken)).ToLookup(row => row.ListId, StringComparer.Ordinal);
+        var lists = page.Where(row => row.PartyTallyCount > 0 && row.ListId is not null)
+            .Select(row => row.ListId!).Distinct(StringComparer.Ordinal).ToArray();
+        var casts = lists.Length == 0 ? [] : await db.Database.SqlQueryRaw<MemberCastRow>(ReadMemberCasts, [lists]).ToArrayAsync(cancellationToken);
+        var castsByList = casts.ToLookup(row => row.ListId, StringComparer.Ordinal);
         return new([.. page.Select(row => new VotePartyTallyEvidence(row.RecordId, row.RevisionNumber, row.PartyTallyCount,
             [.. groups[(row.RecordId, row.RevisionNumber)].Select(group => new PublishedPartyTally
             {
                 Party = group.Party, Yea = group.Yea, Nay = group.Nay, Present = group.Present, NotVoting = group.NotVoting, Other = group.Other
             }).OrderBy(group => group.Party, StringComparer.Ordinal)],
-            row.ListId is null ? [] : [.. casts[row.ListId].Select(cast => new VoteMemberCast(cast.Party, cast.VoteCast))]))], revisions.Length > limit);
+            row.ListId is null || row.PartyTallyCount is null or 0 ? [] : [.. castsByList[row.ListId].Select(cast => new VoteMemberCast(cast.Party, cast.VoteCast))]))], revisions.Length > limit);
     }
 
     private static Task<TallyReadRow[]> ReadRowsAsync(CollectionAttemptDbContext db, string[] records, int[] revisions, CancellationToken cancellationToken) =>
