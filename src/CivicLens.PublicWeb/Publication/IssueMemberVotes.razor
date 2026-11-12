@@ -1,11 +1,16 @@
 <div data-zip-member-fragment data-zcta="@Data.Zcta" data-release="@Data.Release" data-congress="@Data.Congress" data-issue="@Data.SelectedIssue" data-view="issue" data-since-release="" data-new-votes="">
-    @foreach (var (name, rows) in MemberRows)
+    @foreach (var (member, rows) in MemberRows)
     {
         <section class="issue-member">
-            <h3>@name</h3>
+            <h3><a href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(member.OfficialId)))">@member.Name</a></h3>
+            @if (SeatTitleOf(member.OfficialId) is { } title)
+            {
+                <p class="small muted">@title</p>
+            }
             <SharedVoteRows Data="rows" RootPath="@RootPath" SingleMember="true" HeadingLevel="3" />
         </section>
     }
+    <StatesWithoutSenatorsNote States="Data.StatesWithoutSenators" />
     @if (AChamberHasOnlyVacantSeats)
     {
         <p class="muted" data-member-votes-empty>No current member is in our records.</p>
@@ -20,12 +25,14 @@
     [Parameter, EditorRequired] public ZipMemberCardsData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
 
-    private (string Name, SharedVoteRowsData Rows)[] MemberRows { get; set; } = [];
+    private (SharedVoteMemberData Member, SharedVoteRowsData Rows)[] MemberRows { get; set; } = [];
 
     private bool AChamberHasOnlyVacantSeats => Data.Seats.GroupBy(seat => seat.Chamber).Any(chamber => chamber.All(seat => seat.Member is null));
 
-    protected override void OnParametersSet() => MemberRows = [.. Data.SharedVotes.SelectMany(group => group.Members.Select(member => (member.Name, Rows: OfMember(group, member))))
+    protected override void OnParametersSet() => MemberRows = [.. Data.SharedVotes.SelectMany(group => group.Members.Select(member => (member, Rows: OfMember(group, member))))
         .Where(member => member.Rows.Votes.Length > 0)];
+
+    private string? SeatTitleOf(string officialId) => Data.Seats.FirstOrDefault(seat => seat.Member?.OfficialId == officialId)?.Title;
 
     /// <summary>The votes of one member, each with only that member's cast, so the rows use the single-member layout of the official page.</summary>
     private static SharedVoteRowsData OfMember(SharedVoteRowsData group, SharedVoteMemberData member) =>

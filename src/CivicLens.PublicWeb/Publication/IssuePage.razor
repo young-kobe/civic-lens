@@ -15,7 +15,7 @@
                 <p class="issue-counts" data-issue-counts>@CountLine</p>
                 @if (Data.SubstantiveVotes > 0)
                 {
-                    <p class="issue-counts" data-issue-split>@Data.SplitVotes of @(Data.SubstantiveVotes == 1 ? "that 1 vote was a" : $"those {Data.SubstantiveVotes} votes were") <Term Key="split-vote">@(Data.SubstantiveVotes == 1 ? "split vote" : "split votes")</Term>.</p>
+                    <p class="issue-counts" data-issue-split>@{ var split = PublishedWording.SplitVoteLine(Data.SplitVotes, Data.SubstantiveVotes); }@split.Lead<Term Key="split-vote">@split.Term</Term>.</p>
                 }
             }
             <p class="small muted">@PublishedWording.IssueTagCaveat <a href="@(RootPath + PublicationProtocol.MethodPagePath + PublicationProtocol.IssueTagsAnchor)">Where tags come from</a></p>
@@ -44,7 +44,7 @@
                 <p class="issue-members-prompt" data-issue-members-prompt>Enter your ZIP to see how your members voted on this issue. <a href="@(RootPath + PublicationProtocol.HomePath)#zip-results">Find my members</a></p>
                 @if (BrowserApiUrl is not null)
                 {
-                    <div class="issue-members" data-issue-members="@Data.IssueId" data-members-api="@BrowserApiUrl" data-officials-page="@(RootPath + PublicationProtocol.OfficialsPagePath)" aria-live="polite" hidden></div>
+                    <div class="issue-members" data-issue-members="@Data.IssueId" data-release="@Data.Release" data-congress="@Data.Congress" data-members-api="@BrowserApiUrl" data-officials-page="@(RootPath + PublicationProtocol.OfficialsPagePath)" aria-live="polite" hidden></div>
                 }
             </section>
             <section class="issue-section" id="votes" aria-labelledby="issue-votes-title">

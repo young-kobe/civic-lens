@@ -11,7 +11,8 @@ internal sealed record ActionRevisionPage(IReadOnlyList<ActionRevisionRow> Rows,
     ILookup<(string RecordId, int RevisionNumber), ActionRevisionIssueRow> Issues,
     ILookup<(string RecordId, int RevisionNumber), ActionRevisionSponsorshipRow> Sponsorships,
     ILookup<(string RecordId, int RevisionNumber, short SponsorshipPosition), ActionRevisionSponsorshipCitationRow> Citations,
-    ILookup<(string RecordId, int RevisionNumber), ActionRevisionTextCitationRow> TextCitations) : IRevisionRowPage<ActionRevisionRow>
+    ILookup<(string RecordId, int RevisionNumber), ActionRevisionTextCitationRow> TextCitations,
+    ILookup<(string RecordId, int RevisionNumber), ActionRevisionKeyTermRow> KeyTerms) : IRevisionRowPage<ActionRevisionRow>
 {
     /// <summary>Rebuilds the revision of a row. A row with null columns fails here, and the JSON is no fallback.</summary>
     public ActionDraftRevision Rebuild(ActionRevisionRow row)
@@ -30,7 +31,7 @@ internal sealed record ActionRevisionPage(IReadOnlyList<ActionRevisionRow> Rows,
             [.. tracked], recorded ? [.. issues.Select(issue => issue.IssueId)] : default,
             row.IssueRevisionId!, SponsorshipsOf(row), row.BillTitle!, row.SubjectsHash,
             SpanOf(row.BillCitationExtractionId, row.BillCitationStart, row.BillCitationLength), row.TextPackageId, row.WhyItMatters,
-            TextCitationsOf(row));
+            TextCitationsOf(row), KeyTermsOf(row));
     }
 
     public IReadOnlyList<StoredRevision<ActionRevisionRow, ActionDraftRevision>> ToStoredRevisions() =>
@@ -41,6 +42,14 @@ internal sealed record ActionRevisionPage(IReadOnlyList<ActionRevisionRow> Rows,
         row.TextPackageId is null ? default
             : [.. TextCitations[(row.RecordId, row.RevisionNumber)].OrderBy(citation => citation.Position)
                 .Select(citation => new ActionTextCitation(citation.Part, new SourceSpan(citation.CitationExtractionId, citation.CitationStart, citation.CitationLength), citation.Sentence))];
+
+    /// <summary>A revision with no key terms keeps the default array, so its JSON leaves the field out.</summary>
+    private ImmutableArray<ActionKeyTerm> KeyTermsOf(ActionRevisionRow row)
+    {
+        var terms = KeyTerms[(row.RecordId, row.RevisionNumber)].OrderBy(term => term.Position).Select(term =>
+            new ActionKeyTerm(term.Term, new SourceSpan(term.CitationExtractionId, term.CitationStart, term.CitationLength), term.Definition, term.Cut)).ToImmutableArray();
+        return terms.IsEmpty ? default : terms;
+    }
 
     private ImmutableArray<ActionSponsorship> SponsorshipsOf(ActionRevisionRow row) =>
         [.. Sponsorships[(row.RecordId, row.RevisionNumber)].OrderBy(item => item.Position).Select(item => new ActionSponsorship(item.PersonId, item.BioguideId,

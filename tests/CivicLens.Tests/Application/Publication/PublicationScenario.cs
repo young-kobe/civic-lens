@@ -329,7 +329,7 @@ internal sealed class PublicationScenario
         $"Summary version: 00\nAction date: 2026-01-03\nAction: Introduced in House\nUpdated: 2026-01-05T08:00:00Z\nText:\n{text}";
 
     /// <summary>Turns an approved action into a text draft: its summary comes from bill text and it cites that text.</summary>
-    public void DraftActionFromBillText(string recordId)
+    public void DraftActionFromBillText(string recordId, bool withKeyTerm = false)
     {
         var publishable = Actions.Publishable[recordId];
         var text = Extraction("Package: BILLS-119hr7ih\nText:\nThe program ends on December 31, 2030.", "action-bill-text", "https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm");
@@ -345,7 +345,8 @@ internal sealed class PublicationScenario
                 Cite(ActionTextPart.Summary, start, 16, "One."),
                 Cite(ActionTextPart.Summary, start, 16, "Two."),
                 Cite(ActionTextPart.WhyItMatters, start, 16, "Three.")
-            ]
+            ],
+            KeyTerms = withKeyTerm ? [new ActionKeyTerm("program", new(text.ExtractionId, start, 16), "The program ends", Cut: false)] : default
         };
         Actions.Publishable[recordId] = publishable with
         {

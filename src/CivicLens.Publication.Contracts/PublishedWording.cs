@@ -17,4 +17,13 @@ public static class PublishedWording
 
     /// <summary>The source of a bill line, which takes the first sentence of the Congressional Research Service summary.</summary>
     public const string BillLineSource = "From the Congressional Research Service summary.";
+
+    /// <summary>The split vote line of an issue page, as the text before the glossary term and the term itself. One split vote reads "was a split vote". Any other count reads "were split votes".</summary>
+    public static (string Lead, string Term) SplitVoteLine(int splitVotes, int substantiveVotes)
+    {
+        var votes = substantiveVotes == 1 ? "that 1 vote" : $"those {substantiveVotes} votes";
+        return splitVotes == 1 || substantiveVotes == 1
+            ? ($"{splitVotes} of {votes} was a ", "split vote")
+            : ($"{splitVotes} of {votes} were ", "split votes");
+    }
 }

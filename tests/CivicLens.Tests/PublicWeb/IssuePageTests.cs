@@ -78,6 +78,18 @@ public sealed class IssuePageTests
         Assert.Null(none.QuerySelector("[data-issue-split]"));
     }
 
+    [Theory]
+    [InlineData(1, 3, "1 of those 3 votes was a split vote.")]
+    [InlineData(2, 3, "2 of those 3 votes were split votes.")]
+    [InlineData(0, 3, "0 of those 3 votes were split votes.")]
+    [InlineData(1, 1, "1 of that 1 vote was a split vote.")]
+    public async Task TheSplitVoteLineUsesTheSingularOnlyForOneSplitVote(int split, int substantive, string expected)
+    {
+        var page = await RenderAsync(Data() with { SplitVotes = split, SubstantiveVotes = substantive });
+
+        Assert.StartsWith(expected.TrimEnd('.'), page.QuerySelector("[data-issue-split]")!.TextContent);
+    }
+
     [Fact]
     public async Task AReleaseWithNoCongressShowsNoCountLineBecauseTheTimeFrameIsUnknown()
     {
@@ -187,6 +199,7 @@ public sealed class IssuePageTests
         var withoutApi = await RenderAsync(Data());
 
         Assert.Equal("firearms", withApi.QuerySelector("[data-issue-members]")!.GetAttribute("data-issue-members"));
+        Assert.Equal(["7", "119"], [withApi.QuerySelector("[data-issue-members]")!.GetAttribute("data-release")!, withApi.QuerySelector("[data-issue-members]")!.GetAttribute("data-congress")!]);
         Assert.Null(withoutApi.QuerySelector("[data-issue-members]"));
         Assert.Equal(Root + "index.html#zip-results", withoutApi.QuerySelector("[data-issue-members-prompt] a")!.GetAttribute("href"));
     }

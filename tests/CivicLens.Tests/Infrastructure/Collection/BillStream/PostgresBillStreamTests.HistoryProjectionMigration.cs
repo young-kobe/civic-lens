@@ -16,8 +16,9 @@ public sealed partial class PostgresBillStreamTests
     {
         var viewsBefore = await BillHistoryViewShapeAsync();
         await AssertPublicBillViewsReadableAsync();
-        await MigrateToAsync(BillHistoryImportsMigration);
+        // The draft goes first, because the draft code writes through the current model, which needs the tables of later migrations.
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await MigrateToAsync(BillHistoryImportsMigration);
         var detailJobId = (string)(await ScalarAsync("SELECT detail_job_id FROM bill_gates"))!;
         await SeedReleaseAsync(1, active: true);
         await SeedLegacyBillHistoryAsync(detailJobId);

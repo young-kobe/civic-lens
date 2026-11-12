@@ -381,7 +381,7 @@
     };
 
     // Loads one member fragment into a slot and follows the remembered ZIP. A view supplies frame(nodes), nodeOf(fragment), and optional onShow and onClear hooks.
-    const followMemberSlot = (remembered, slot, { api, view, issue = null, sinceMarker = true, frame, nodeOf, onShow, onClear }) => {
+    const followMemberSlot = (remembered, slot, { api, view, issue = null, sinceMarker = true, frame, nodeOf, accepts, onShow, onClear }) => {
         const loader = memberLoader(remembered, {
             api,
             view,
@@ -394,7 +394,10 @@
                 loading.textContent = "Looking up your officials.";
                 slot.replaceChildren(frame([loading]));
             },
-            onFragment: fragment => { slot.replaceChildren(nodeOf(fragment)); },
+            onFragment: fragment => {
+                if (accepts && !accepts(fragment)) { slot.replaceChildren(); onClear?.(); return true; }
+                slot.replaceChildren(nodeOf(fragment));
+            },
             onFailure: (call, status) => slot.replaceChildren(frame(memberFailureWithRetry(call.zip, status, slot.dataset.officialsPage, () => run(call.zip)))),
             onSettled: () => slot.removeAttribute("aria-busy")
         });
@@ -596,6 +599,8 @@
                 return content;
             },
             nodeOf: fragment => fragment,
+            // The vote list of the page covers one release and Congress. A fragment of another release or Congress would disagree with it.
+            accepts: fragment => fragment.dataset.release === slot.dataset.release && (!slot.dataset.congress || fragment.dataset.congress === slot.dataset.congress),
             onShow: () => {
                 if (prompt) prompt.hidden = true;
                 slot.hidden = false;
