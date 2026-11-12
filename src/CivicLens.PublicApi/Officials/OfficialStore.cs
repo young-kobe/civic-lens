@@ -7,7 +7,7 @@ using Npgsql;
 namespace CivicLens.PublicApi.Officials;
 
 /// <summary>
-/// Reads the views <c>public_api.officials</c>, <c>official_attendance</c>, <c>official_party_lines</c>, <c>official_bill_counts</c>, <c>official_issue_counts</c>, and <c>official_executive_actions</c>,
+/// Reads the views <c>public_api.officials</c>, <c>official_attendance</c>, <c>official_party_lines</c>, <c>official_issue_counts</c>, and <c>official_executive_actions</c>,
 /// and the name view <c>release_official_terms</c>. The kind rule of the vote counts is <see cref="PublishedVoteKindExtensions.IsSubstantive"/>.
 /// </summary>
 public sealed class OfficialStore(NpgsqlDataSource views)
