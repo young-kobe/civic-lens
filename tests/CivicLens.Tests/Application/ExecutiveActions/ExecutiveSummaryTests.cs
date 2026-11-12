@@ -257,6 +257,25 @@ public sealed class ExecutiveSummaryTests
         ExecutiveSummaryApproval.Validate(summary, extractions);
     }
 
+    [Fact]
+    public void ASummaryThatReadsAboveGradeTwelveFailsTheApprovalCheckEvenWhenItsQuotesAreExact()
+    {
+        const string Hard = "Notwithstanding antecedent administrative determinations, interdepartmental coordination necessitates comprehensive reconsideration of multifaceted regulatory methodologies.";
+        var evidence = Evidence();
+        var summary = Resolve(Good(), evidence).Accepted!;
+        var hard = summary with { Summary = summary.Summary! with { Sentences = [.. summary.Summary.Sentences.Select(sentence => sentence with { Sentence = Hard })] } };
+        var document = FederalRegisterFixtures.Document(FederalRegisterFixtures.TrumpOrder);
+        var extractions = new Dictionary<string, DocumentExtraction>
+        {
+            [Extraction("x", "facts-attempt").ExtractionId] = Extraction(FederalRegisterRenderer.Render(document), "facts-attempt"),
+            [evidence.Text.ExtractionId] = Extraction(evidence.Text.Text)
+        };
+
+        var failure = Assert.Throws<ArgumentException>(() => ExecutiveSummaryApproval.Validate(hard, extractions));
+
+        Assert.Contains("as one passage", failure.Message, StringComparison.Ordinal);
+    }
+
     private static ExecutiveSummaryStep Step(FakeExecutiveSummaryModel model) =>
         new(new FakeExecutiveSummaryStore(Evidence()), model, new ExecutiveSummarySettings(10_000_000, 1));
 
