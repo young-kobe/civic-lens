@@ -31,4 +31,7 @@ public sealed class ReleaseBillLines
     public bool AnyOf(IEnumerable<PublishedRecordEntry> entries) => entries.Any(entry => Of(entry) is not null);
 
     public VoteBillLink? BillOfVote(string voteRecordId) => votes.GetValueOrDefault(voteRecordId);
+
+    public IEnumerable<ReleaseVoteBill> VoteBills() =>
+        votes.OrderBy(vote => vote.Key, StringComparer.Ordinal).Select(vote => new ReleaseVoteBill(vote.Key, vote.Value.ActionRecordId));
 }
