@@ -11,14 +11,18 @@ public sealed record SearchPageData(SearchQueryData Query, int Release, IReadOnl
 /// <summary>The request as the reader typed it. <see cref="Official"/> is an official ID from an official card link.</summary>
 public sealed record SearchQueryData(string? Text, string? Kind, string? Official, string? Issue, string? From, string? To)
 {
-    /// <summary>The accepted sort and direction. A sorted page reads a sorted cursor, so the next page link must carry both.</summary>
+    /// <summary>The accepted parameters that the form has no field for. The search API accepts them, so the next page link carries each one,
+    /// and a later page keeps the same filters, sort, and page size.</summary>
+    public string? PolicyArea { get; init; }
+    public string? Source { get; init; }
     public string? Sort { get; init; }
     public string? Direction { get; init; }
+    public int? Limit { get; init; }
 
     public bool IsEmpty => Text is null && !HasFilter;
 
-    /// <summary>True when a kind, official, issue, or date filter narrows the results.</summary>
-    public bool HasFilter => Kind is not null || Official is not null || Issue is not null || From is not null || To is not null;
+    /// <summary>True when a kind, official, issue, policy area, source, or date filter narrows the results.</summary>
+    public bool HasFilter => Kind is not null || Official is not null || Issue is not null || PolicyArea is not null || Source is not null || From is not null || To is not null;
 }
 
 public sealed record SearchOfficialData(string OfficialId, string Name, PublishedOfficeKind? Kind, string? Office, string? State, int? District, string? Party);

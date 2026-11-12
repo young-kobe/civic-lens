@@ -180,8 +180,9 @@
     private static string RecordsOfHref(SearchOfficialData official) => "?" + Query(("official", official.OfficialId));
 
     private string NextHref(string cursor) => "?" + Query(("q", Data.Query.Text), ("kind", Data.Query.Kind), ("official", Data.Query.Official),
-        ("issue", Data.Query.Issue), ("from", Data.Query.From), ("to", Data.Query.To),
-        ("sort", Data.Query.Sort), ("direction", Data.Query.Direction), ("cursor", cursor));
+        ("issue", Data.Query.Issue), ("policyArea", Data.Query.PolicyArea), ("source", Data.Query.Source),
+        ("from", Data.Query.From), ("to", Data.Query.To), ("sort", Data.Query.Sort), ("direction", Data.Query.Direction),
+        ("limit", Data.Query.Limit?.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("cursor", cursor));
 
     private static string Query(params (string Name, string? Value)[] pairs) =>
         string.Join('&', pairs.Where(pair => pair.Value is not null).Select(pair => $"{pair.Name}={Uri.EscapeDataString(pair.Value!)}"));

@@ -144,12 +144,27 @@ public sealed class SearchResultsPageTests
     }
 
     [Fact]
-    public async Task TheMoreResultsLinkKeepsTheSortBecauseASortedPageReadsASortedCursor()
+    public async Task TheMoreResultsLinkKeepsEveryAcceptedParameterTheFormHasNoFieldFor()
     {
-        var query = new SearchQueryData("rent", null, null, null, null, null) { Sort = "date", Direction = "asc" };
+        var query = new SearchQueryData("rent", null, null, null, null, null)
+        {
+            PolicyArea = "Housing",
+            Source = "example.gov",
+            Sort = "date",
+            Direction = "asc",
+            Limit = 10
+        };
         var page = await RenderAsync(Data(query, hits: [Hit('a', "x")], next: "s.1.abc"));
 
-        Assert.Equal("?q=rent&sort=date&direction=asc&cursor=s.1.abc", page.QuerySelector(".pager a[rel=next]")!.GetAttribute("href"));
+        Assert.Equal("?q=rent&policyArea=Housing&source=example.gov&sort=date&direction=asc&limit=10&cursor=s.1.abc",
+            page.QuerySelector(".pager a[rel=next]")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public void ASourceOrPolicyAreaAloneIsAFilterSoTheSearchRuns()
+    {
+        Assert.False(new SearchQueryData(null, null, null, null, null, null) { Source = "example.gov" }.IsEmpty);
+        Assert.True(new SearchQueryData("rent", null, null, null, null, null) { PolicyArea = "Housing" }.HasFilter);
     }
 
     [Fact]

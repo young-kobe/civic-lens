@@ -41,8 +41,11 @@ public sealed class SearchPageReader(SearchIndex index, IssueStore issueStore, O
         request.Kind is { } kind ? PublicationProtocol.KindText(kind) : null, request.Official, request.Issue,
         request.From?.ToString("yyyy-MM-dd"), request.To?.ToString("yyyy-MM-dd"))
     {
+        PolicyArea = request.PolicyArea,
+        Source = request.Source,
         Sort = request.Sort is { } sort ? SearchSortKeys.Text(sort) : null,
-        Direction = request.Sort is null ? null : request.Descending ? "desc" : "asc"
+        Direction = request.Sort is null ? null : request.Descending ? "desc" : "asc",
+        Limit = request.Limit == SearchRequest.DefaultLimit ? null : request.Limit
     };
 
     private static SearchHitData Hit(RecordHit hit) => new(hit.Kind, hit.RecordId, hit.Headline, hit.EventDate, hit.BillLine, hit.Snippet,
