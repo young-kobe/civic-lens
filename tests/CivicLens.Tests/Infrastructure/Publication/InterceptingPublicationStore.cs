@@ -127,6 +127,9 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
         Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
         inner.ReadBillCountReleasePageAsync(afterReleaseNumber, selectionFingerprint, limit, readServedDirectory, cancellationToken);
 
+    public Task<VotePartyTallyPage> ReadVotePartyTallyEvidenceAsync(VotePartyTallyVerificationCursor? after, int limit, CancellationToken cancellationToken) =>
+        inner.ReadVotePartyTallyEvidenceAsync(after, limit, cancellationToken);
+
     public Task<ReleaseBillCountSource> ReadBillCountSourceAsync(int releaseNumber, CancellationToken cancellationToken) =>
         inner.ReadBillCountSourceAsync(releaseNumber, cancellationToken);
 
