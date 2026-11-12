@@ -153,6 +153,212 @@ public sealed class PublicPageReadingGradeTests
             "The whole section can hide a difficult model passage behind unrelated easy text.");
     }
 
+    private static readonly string[] BlockTags = ["P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "FIGCAPTION", "CAPTION", "SUMMARY", "DD", "DT", "LABEL", "LEGEND"];
+    private static readonly string[] HeadingTags = ["H1", "H2", "H3", "H4", "H5", "H6"];
+    private const string RecordDataSelector = "script, style, tbody, pre, blockquote, .ai-summary > p, .document-text, .source-text, option";
+    private const int MinimumPassageWords = 6;
+
+    /// <summary>The fixed text of a page: each block of at least <see cref="MinimumPassageWords"/> words that holds no record data. The first block under a heading
+    /// reads together with that heading, as an intro does. A shorter block is a label, not a passage.</summary>
+    private static List<string[]> FixedPassages(IDocument page, string[] recordData)
+    {
+        foreach (var data in page.QuerySelectorAll(RecordDataSelector).ToArray()) data.Remove();
+        var passages = new List<string[]>();
+        string? heading = null;
+        foreach (var block in page.QuerySelectorAll(string.Join(',', BlockTags)).Where(block => !block.QuerySelectorAll(string.Join(',', BlockTags)).Any()))
+        {
+            var text = NormalizeText(block);
+            if (text.Length == 0) continue;
+            if (HeadingTags.Contains(block.TagName))
+            {
+                heading = recordData.Any(text.Contains) ? null : text;
+                continue;
+            }
+            if (recordData.Any(text.Contains) || text.Split(' ').Length < MinimumPassageWords) continue;
+            passages.Add(heading is null ? [text] : [heading, text]);
+            heading = null;
+        }
+        return passages;
+    }
+
+    private const string PresidentialNoticeMeaning = "Presidential notice | A document from the President that gives public information, such as the continuation of a national emergency.";
+    private const string BillCrsSource = "From the Congressional Research Service summary.";
+
+    /// <summary>Fixed passages that read above the limit today. The owner chooses new words, so each has a skipped test below. The all-pages test expects exactly these and no others,
+    /// so a new hard passage fails it and a fixed one prompts removal here.</summary>
+    private static readonly Dictionary<string, double> OpenQuestions = new()
+    {
+        [PresidentialNoticeMeaning] = 12.3,
+        [BillCrsSource] = 12.3
+    };
+
+    [Fact]
+    public async Task EveryFixedPassageOnEveryServerPageReadsAtOrBelowTheSharedGradeLimitExceptTheOpenQuestions()
+    {
+        var failures = new Dictionary<string, double>();
+        foreach (var (name, render, recordData) in await ServerPagesAsync())
+        {
+            var passages = FixedPassages(await render(), recordData);
+            Assert.True(passages.Count > 0, $"The {name} page has no fixed passage to grade.");
+            foreach (var passage in passages)
+            {
+                var grade = ReadingGrade.RoundedPassage(passage);
+                if (grade > ReadingGrade.MaximumGrade) failures.TryAdd(string.Join(" | ", passage), grade);
+            }
+        }
+
+        Assert.Equal(OpenQuestions.OrderBy(pair => pair.Key), failures.OrderBy(pair => pair.Key));
+    }
+
+    [Fact]
+    public async Task AHardLongSentenceInFixedPageTextFailsTheGate()
+    {
+        var page = await RenderAsync<ComparePage>(new Dictionary<string, object?> { [nameof(ComparePage.RootPath)] = Root });
+        var extra = page.CreateElement("p");
+        extra.TextContent = DifficultSummary;
+        page.QuerySelector("main, body")!.AppendChild(extra);
+
+        var worst = FixedPassages(page, []).Max(ReadingGrade.RoundedPassage);
+
+        Assert.True(worst > ReadingGrade.MaximumGrade);
+    }
+
+    [Fact(Skip = "Owner question: \"Presidential notice | A document from the President that gives public information, such as the continuation of a national emergency.\" reads at grade 12.3.")]
+    public void ThePresidentialNoticeGlossaryEntryReadsAtOrBelowTheSharedGradeLimit() => AssertReadable(PresidentialNoticeMeaning);
+
+    [Fact(Skip = "Owner question: \"From the Congressional Research Service summary.\" reads at grade 12.3 when it stands alone on the bill page.")]
+    public void TheBillSummarySourceNoteReadsAtOrBelowTheSharedGradeLimit() => AssertReadable(BillCrsSource);
+
+    private static void AssertReadable(string passage)
+    {
+        var grade = ReadingGrade.RoundedPassage(passage.Split(" | "));
+        Assert.True(grade <= ReadingGrade.MaximumGrade, $"\"{passage}\" reads at grade {ReadingGrade.Format(grade)}.");
+    }
+
+    private static async Task<(string Name, Func<Task<IDocument>> Render, string[] RecordData)[]> ServerPagesAsync()
+    {
+        var sponsor = new BillSponsorData("p1", "Pat One", "Democrat", new(2025, 9, 11));
+        var bill = new BillPageData(7, new string('a', 64), 2, 119, "H.R. 5334", "The Example Act of 2026", "H.R. 5334 headline", PublishedChamber.House,
+            "The bill would add a tax credit.", PublishedTextOrigin.Model, "An AI summary of this bill.", new(2025, 9, 11))
+        {
+            Sponsors = [sponsor],
+            Cosponsors = new(PublishedChamber.House, [new("p2", "Ann Two", "Democrat", new(2025, 9, 11))], [new("p4", "Cy Four", "Republican", new(2025, 10, 2))]),
+            Steps = [new("Introduced in the House", "11 Sep 2025, by Pat One"), new("Became law", "18 Sep 2026, Public Law 119-111")],
+            PublicLaw = "119-111",
+            BecameLawOn = new(2026, 9, 18),
+            Status = "Became law: Public Law 119-111.",
+            StatusLabel = "Became law",
+            CongressGovUrl = "https://www.congress.gov/bill/119th-congress/house-bill/5334",
+            StatusDate = new(2026, 9, 18),
+            StatusReadAtUtc = new(2026, 11, 5, 9, 57, 0, TimeSpan.Zero),
+            CheckedAtUtc = new(2026, 11, 6, 9, 0, 0, TimeSpan.Zero),
+            CrsText = "This bill imposes sanctions.", CrsVersion = "55", SummaryFromCrs = true,
+            Issues = [new("foreign-policy", "Foreign policy and war")],
+            PolicyArea = "International Affairs",
+            BillLine = "This bill imposes sanctions.",
+            Votes = [new(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "House agrees to Senate changes", null, "Vote to pass or agree to", "Passed", [])]
+        };
+        var featured = new HomeFeaturedVoteData(new string('a', 64), new(2026, 3, 3), PublishedChamber.House, "Published headline", null, "Published summary",
+            PublishedTextOrigin.Model, "Passed", 216, 214, "Current bill line.", PublishedWording.BillLineSource);
+        var recent = Enumerable.Range(0, 4).Select(index => new HomeVoteData(new string((char)('a' + index), 64), new(2026, 3, 2), PublishedChamber.House,
+            "Published vote", "AI label", "Passed", 216, 214, "Current bill line.") { Alignment = PublishedVoteAlignment.Split }).ToArray();
+        var home = new HomePageData(7, featured, recent, new(new string('f', 64), "Published brief", PublishedWording.ModelBrief))
+        {
+            Issues = [new("health", "Health", 119, 3, 12)],
+            ExecutiveActions = [new(PublishedExecutiveActionKind.Notice, 4, new string('c', 64), "Newest notice title", new(2026, 5, 31))],
+            NewestHouseRollCall = new(2026, 5, 31),
+            NewestSenateRollCall = new(2026, 5, 29)
+        };
+        var official = new OfficialPageData(7, "p1", "Ann Able", PublishedOfficeKind.Representative, "House", "MA", 7, "Democrat", null, new(2027, 1, 3), null)
+        {
+            PublishedOn = new(2026, 11, 1),
+            HasLinkedStatements = true,
+            MarksTotal = 2,
+            Attendance = [new(PublishedChamber.House, 119, 5, 675, new(2025, 1, 3), new(2026, 9, 16))],
+            PartyLines = [new(PublishedChamber.House, 119, "Democrat", 248, 1, 249, new(2025, 1, 3), new(2026, 9, 16))],
+            BillsCongress = 119,
+            IssuesCongress = 119,
+            SponsoredBills = 43,
+            Issues = [new("tax", "Federal taxes", 8)],
+            Marks = [new(new string('b', 64), new(2026, 9, 16), PublishedChamber.House, 309, false, "Democrat"), new(new string('c', 64), new(2026, 9, 15), PublishedChamber.House, 305, true, null)],
+            Votes = [new(new string('a', 64), new(2026, 9, 16), 119, 2, 314, "House passes S 2403", "AI vote label", "Vote to pass the bill", "Passed", [new("p1", "Yes (Aye)", "Yea")])],
+            Statements = [new(new string('d', 64), new(2026, 9, 12), "A statement about H.R. 5334", "AI statement label", new string('a', 64), "House agrees to Senate changes", "AI linked vote label",
+                new(2026, 9, 16), PublishedChamber.House, 308, "Nay")],
+            Bills = [new(new string('e', 64), "hr", null, "H.R. 40 would study reparations.", new(2025, 1, 3), "Referred to the House Committee on the Judiciary.", new(2025, 1, 3))]
+        };
+        var president = new OfficialPageData(7, "p4", "Eve East", PublishedOfficeKind.Executive, "President", null, null, "Republican", null, null, null)
+        {
+            Executive = new(3, new(2025, 1, 20), new(2026, 11, 3),
+            [
+                new(PublishedExecutiveActionKind.ExecutiveOrder, 2, [new(new string('1', 64), "Housing Costs", new(2026, 10, 22)), new(new string('2', 64), "Women's Health", new(2026, 10, 19))]),
+                new(PublishedExecutiveActionKind.Proclamation, 1, [new(new string('3', 64), "Seafood Month", new(2026, 10, 22))])
+            ])
+        };
+        var issue = new IssuePageData(7, "firearms", "Firearms", "Federal firearms law and regulation.", ["Background checks"], ["Crime statements"], 119, 3, 2, 186,
+            [new(new string('a', 64), new(2026, 3, 3), PublishedChamber.Senate, "Senate passes a firearms bill", null, "Passed", 52, 48)],
+            [new(new string('b', 64), "H.R. 1 would set storage rules.", PublishedRecordLabels.ModelWording, new(2026, 2, 1), "Current bill line.", "Rosa DeLauro")],
+            new IssueLineUpData(119, 3, [new("Democrat", 2), new("Republican", 1)], 0));
+        var search = new SearchPageData(new("5334", null, null, null, null, null), 1028,
+            [new("jimmy-panetta", "Jimmy Panetta", PublishedOfficeKind.Representative, null, "CA", 19, "Democrat")], true,
+            new(new string('b', 64), "H.R. 5334, the Sanctioning Act", 119, "Jimmy Panetta", "119-111", new(2026, 9, 18), new(new string('v', 64), PublishedChamber.House), []),
+            [new(PublishedRecordKind.Action, new string('a', 64), "H.R. 5334 would impose sanctions", new(2026, 2, 23), null, null, ["Jimmy Panetta"])],
+            "next", [new("housing", "Housing")], null);
+        var brief = new BriefPageData(7, new string('b', 64), 3, new DateOnly(2026, 11, 2), "The week in Congress", PublishedTextOrigin.Model, "An AI draft from reviewed records.",
+            [new PublishedBriefParagraph { Text = "First paragraph.", CitationIds = ["R1"] }],
+            [new PublishedBriefCitation { Id = "R1", Kind = PublishedRecordKind.Statement, RecordId = DetailPageFixture.StatementId, RevisionNumber = 2, Headline = "Kelly announces a bill" }],
+            9, new PublishedBriefCoverage { Considered = 12, SentToModel = 8, Cited = 1 }, new DateTimeOffset(2026, 11, 6, 13, 5, 0, TimeSpan.Zero), new DateTimeOffset(2026, 11, 6, 14, 0, 0, TimeSpan.Zero));
+        var boards = new BoardsPageData(7, [new(PublishedChamber.House, "Democrat", 119, null, new DateOnly(2026, 9, 16), true,
+            [new(PublicationProtocol.OfficialPagePath("cuellar"), "Henry Cuellar", null, 254, 160)])],
+            [new(PublishedChamber.House, 119, [new(PublishedVoteKind.Passage, 15, 201)], 196, 254, 0, 450, 0)]);
+        var zip = new ZipMemberCardsData(8, 119, "36009", 2,
+            [new("Representative for Alabama, district 2", new ZipMemberIdentityData("pat", "Pat Member", "Democratic", new(2029, 1, 3), null, [], [])), new("Senator for Alabama", null)], []);
+
+        string[] VoteRecordData = ["Sanctioning", "H.R. 5334", "A bill line", "voted on a bill", "Ada Able", "Ben Baker", "Cy Cole", "Di Dole", "Ed Eaton", "Dee Cee", "Pat Rico", "Sam Solo", "Ed Ward", "Cal Ray"];
+        static VoteMemberData MapMember(string name, string cast, string party, string? state, int? district) =>
+            new("o-" + name, name, cast, party, VoteDetailPageFixture.Cite(VoteDetailPageFixture.Lines[4]), state, district);
+        static Func<Task<IDocument>> Page<TComponent>(Dictionary<string, object?> parameters) where TComponent : IComponent => () => RenderAsync<TComponent>(parameters.Where(pair => typeof(TComponent).GetProperty(pair.Key) is not null).ToDictionary());
+        static Dictionary<string, object?> With(string name, object? data, params (string Name, object? Value)[] more) =>
+            new Dictionary<string, object?> { [name] = data, ["RootPath"] = Root }.Concat(more.Select(pair => KeyValuePair.Create(pair.Name, pair.Value))).ToDictionary();
+
+        return
+        [
+            ("home", Page<HomePage>(With("Data", home)), ["Published", "Newest notice", "Health", "Current bill line"]),
+            ("home empty", Page<HomePage>(With("Data", new HomePageData(7, null, [], null))), []),
+            ("compare", Page<ComparePage>(With("Data", null)), []),
+            ("officials", Page<OfficialsPage>(With("Data", new OfficialsPageData(7, 542, [], OfficialsFilterData.None, null))), []),
+            ("officials filtered", Page<OfficialsPage>(With("Data", new OfficialsPageData(7, 542, [], new(null, null, null, "zzq"), null))), []),
+            ("boards", Page<BoardsPage>(With("Data", boards)), ["Henry Cuellar"]),
+            ("boards empty", Page<BoardsPage>(With("Data", new BoardsPageData(7, [], []))), []),
+            ("vote kinds", Page<VoteKindsPage>(With("Data", null)), []),
+            ("bill", Page<BillDetailPage>(With("Data", bill)), ["Pat One", "Ann Two", "Cy Four", "Example Act", "headline", "tax credit", "House agrees", "imposes sanctions", "International Affairs"]),
+            ("bill bare", Page<BillDetailPage>(With("Data", bill with { Votes = [], Issues = [], PolicyArea = null, Steps = [], Status = null, StatusLabel = null, Sponsors = [], Cosponsors = null, BillLine = null, CrsText = null, SenateVoteGap = true, TextOrigin = PublishedTextOrigin.Code })), ["Example Act", "headline", "tax credit"]),
+            ("vote", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote(), ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter()))), ["Sanctioning", "H.R. 5334", "A bill line", "voted on a bill", "Ada Able", "Ben Baker", "Cy Cole", "Di Dole", "Ed Eaton"]),
+            ("vote house map", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with { Kind = PublishedVoteKind.Suspension, Members = [MapMember("Ada Able", "Aye", "Democrat", "MA", 7), MapMember("Dee Cee", "Present", "Democrat", "DC", 0), MapMember("Pat Rico", "Nay", "Republican", "PR", 0), MapMember("Sam Solo", "Aye", "Republican", null, null)] }, ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter { Name = "zzq" }))), VoteRecordData),
+            ("vote senate map", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with { Chamber = PublishedChamber.Senate, Kind = PublishedVoteKind.VetoOverride, Members = [MapMember("Ed Ward", "Nay", "Democrat", "MA", null), MapMember("Cal Ray", "Not Voting", "Republican", "TX", null)], PartyTallies = null, Bill = null, Issues = [] }, ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter()))), VoteRecordData),
+            ("official bare", Page<OfficialProfilePage>(With("Data", new OfficialPageData(7, "p9", "Una Unseen", PublishedOfficeKind.Senator, "Senate", "TX", null, null, null, null, null) { BillCountsAbsent = true })), ["Una Unseen"]),
+            ("statement bare", Page<StatementDetailPage>(With("Data", DetailPageFixture.Statement(PublishedTextOrigin.Person, dated: false, quotes: 0))), ["Kelly announces", "A model wrote", "Mark Kelly", "Adam Schiff"]),
+            ("statement many quotes", Page<StatementDetailPage>(With("Data", DetailPageFixture.Statement(quotes: 2))), ["Kelly announces", "A model wrote", "Mark Kelly", "Adam Schiff"]),
+            ("document change dated", Page<DocumentChangeDetailPage>(With("Data", DetailPageFixture.Change(changeDate: new(2026, 10, 15), passages: 12))), ["Example Agency", "The agency cut", "A shorter notice", "The text alone"]),
+            ("brief empty", Page<BriefDetailPage>(With("Data", brief with { Label = null, TextOrigin = PublishedTextOrigin.Person, ApprovedAtUtc = null, FirstPublishedAtUtc = null })), ["The week in Congress", "First paragraph", "Kelly announces"]),
+            ("official", Page<OfficialProfilePage>(With("Data", official)), ["Ann Able", "House passes", "statement about", "H.R. 40", "Referred to"]),
+            ("president", Page<PresidentPage>(With("Data", president)), ["Eve East", "Housing Costs", "Women", "Seafood"]),
+            ("issue", Page<IssuePage>(With("Data", issue)), ["Federal firearms law", "Background checks", "Crime statements", "firearms bill", "H.R. 1 would"]),
+            ("statement", Page<StatementDetailPage>(With("Data", DetailPageFixture.Statement())), ["Kelly announces", "A model wrote", "Mark Kelly", "Adam Schiff"]),
+            ("document change", Page<DocumentChangeDetailPage>(With("Data", DetailPageFixture.Change())), ["Example Agency", "The agency cut", "A shorter notice", "The text alone"]),
+            ("executive action", Page<ExecutiveActionDetailPage>(With("Data", DetailPageFixture.Action())), ["Implementing the Sanctioning", "Donald Trump", "2026-21599", "91 FR"]),
+            ("brief", Page<BriefDetailPage>(With("Data", brief)), ["The week in Congress", "First paragraph", "Kelly announces"]),
+            ("withdrawal", Page<PublishedWithdrawalPage>(With("Withdrawal", WithdrawalNoticePageTests.Notice)), ["The quote came"]),
+            ("report", Page<PublishedReportPage>(new() { ["RootPath"] = Root, ["PublicApiUrl"] = "https://api.civic-lens.test", ["TurnstileSiteKey"] = "key" }), []),
+            ("report off", Page<PublishedReportPage>(new() { ["RootPath"] = Root }), []),
+            ("search", Page<SearchResultsPage>(With("Data", search)), ["5334", "Panetta", "Sanctioning", "impose sanctions", "Housing"]),
+            ("search empty", Page<SearchResultsPage>(With("Data", search with { Query = new("zzqxv", null, null, null, null, null), Officials = [], Bill = null, Hits = [], NextCursor = null })), ["zzqxv"]),
+            ("search none", Page<SearchResultsPage>(With("Data", search with { Query = new(null, null, null, null, null, null), Officials = [], Bill = null, Hits = [], NextCursor = null })), []),
+            ("glossary", Page<PublishedGlossaryPage>(new() { ["RootPath"] = Root }), []),
+            ("not found", Page<PublishedNotFoundPage>(new() { ["RootPath"] = Root }), []),
+            ("zip cards", Page<ZipMemberCards>(With("Data", zip)), ["Pat Member"]),
+        ];
+    }
+
     private static double FeaturedModelGrade(IDocument page)
     {
         var modelSection = Assert.Single(page.QuerySelectorAll(".home-featured"));
