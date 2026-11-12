@@ -12,6 +12,8 @@ public static class OfficialPageText
 
     public const string StatementsHeading = "What they said and how they voted";
 
+    public const string BillCountsUnavailable = "Bill counts for this Congress are not available in this release.";
+
     public const string NothingToShow = "This page has no votes, bills or linked statements to show yet.";
 
     public const string ExecutiveBoxTitle = "What these documents are";
