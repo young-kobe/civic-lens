@@ -56,6 +56,7 @@ public interface IPublicationStore
 
     Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses, CancellationToken cancellationToken);
 
+    /// <summary>Adds the vote links of one release and returns the number of rows added.</summary>
     Task<int> AddVoteBillsAsync(int releaseNumber, IReadOnlyCollection<ReleaseVoteBill> voteBills, CancellationToken cancellationToken);
 
     /// <summary>The vote links that the store holds for one release.</summary>
