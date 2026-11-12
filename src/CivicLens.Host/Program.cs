@@ -493,6 +493,7 @@ try
             new BackfillStoredColumns(publications, releases, PostgresVoteReviewStore.FromConnectionString(connectionString)), new VerifyPublishedEntries(publications, releases),
             new VerifyCorrectionHistories(publications, releases), new BackfillCorrectionHistories(publications, releases),
             new BackfillReleaseBillCounts(publications, releases), new VerifyReleaseBillCounts(publications, releases),
+            new BackfillReleasePartyLineUps(publications, releases), new VerifyReleasePartyLineUps(publications, releases),
             new VerifyReleaseVoteBills(publications, releases, PostgresVoteReviewStore.FromConnectionString(connectionString)), owner,
             Console.Out, Console.Error, cancellation.Token);
     }

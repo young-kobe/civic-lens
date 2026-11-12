@@ -208,8 +208,8 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         var first = await publications.CommitBillCountsAsync(release, members, NoServedDirectory, default);
         var replay = await publications.CommitBillCountsAsync(release, members, NoServedDirectory, default);
 
-        Assert.True(first);
-        Assert.False(replay);
+        Assert.Equal(ReleaseSnapshotWrite.Added, first);
+        Assert.Equal(ReleaseSnapshotWrite.AlreadyPresent, replay);
         Assert.Equal(["119|1|2"], await TotalsAsync(1));
         Assert.Equal(["119|p1|1|0", "119|p2|0|1"], await MembersAsync(1));
         Assert.Equal(BillCountStatus.Verified, await publications.VerifyBillCountsAsync(release, members, NoServedDirectory, default));

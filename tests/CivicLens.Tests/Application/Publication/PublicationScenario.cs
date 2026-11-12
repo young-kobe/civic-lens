@@ -771,6 +771,12 @@ internal sealed class FakePublicationStore : IPublicationStore
     public HashSet<int> ExistingBillCounts { get; } = [];
     public List<(int ReleaseNumber, IReadOnlyCollection<PublishedRevisionBinding> Members)> CommittedBillCounts { get; } = [];
     public List<int> VerifiedBillCounts { get; } = [];
+    public Dictionary<int, Exception> PartyLineUpCommitFailures { get; } = [];
+    public Dictionary<int, BillCountStatus> PartyLineUpStatuses { get; } = [];
+    public HashSet<int> ExistingPartyLineUps { get; } = [];
+    public HashSet<int> NoPartyLineUpRows { get; } = [];
+    public List<int> CommittedPartyLineUps { get; } = [];
+    public List<int> VerifiedPartyLineUps { get; } = [];
     public Action? BeforeReadingVerificationFingerprint { get; set; }
     public Action? BeforeReadingVerificationSelection { get; set; }
     public Action<int>? BeforeReadingVerificationPage { get; set; }
@@ -880,12 +886,12 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Task<ReleaseBillCountSource> ReadBillCountSourceAsync(int releaseNumber, CancellationToken cancellationToken) =>
         Task.FromResult(BillCountSources.GetValueOrDefault(releaseNumber) ?? new ReleaseBillCountSource([], [], [], []));
 
-    public Task<bool> CommitBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+    public Task<ReleaseSnapshotWrite> CommitBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
         Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
     {
         if (BillCountCommitFailures.TryGetValue(release.ReleaseNumber, out var failure)) throw failure;
         CommittedBillCounts.Add((release.ReleaseNumber, validatedMembers));
-        return Task.FromResult(!ExistingBillCounts.Contains(release.ReleaseNumber));
+        return Task.FromResult(ExistingBillCounts.Contains(release.ReleaseNumber) ? ReleaseSnapshotWrite.AlreadyPresent : ReleaseSnapshotWrite.Added);
     }
 
     public Task<BillCountStatus> VerifyBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
@@ -893,6 +899,22 @@ internal sealed class FakePublicationStore : IPublicationStore
     {
         VerifiedBillCounts.Add(release.ReleaseNumber);
         return Task.FromResult(BillCountStatuses.GetValueOrDefault(release.ReleaseNumber, BillCountStatus.Verified));
+    }
+
+    public Task<ReleaseSnapshotWrite> CommitPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        if (PartyLineUpCommitFailures.TryGetValue(release.ReleaseNumber, out var failure)) throw failure;
+        CommittedPartyLineUps.Add(release.ReleaseNumber);
+        return Task.FromResult(ExistingPartyLineUps.Contains(release.ReleaseNumber) ? ReleaseSnapshotWrite.AlreadyPresent
+            : NoPartyLineUpRows.Contains(release.ReleaseNumber) ? ReleaseSnapshotWrite.NothingExpected : ReleaseSnapshotWrite.Added);
+    }
+
+    public Task<BillCountStatus> VerifyPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        VerifiedPartyLineUps.Add(release.ReleaseNumber);
+        return Task.FromResult(PartyLineUpStatuses.GetValueOrDefault(release.ReleaseNumber, BillCountStatus.Verified));
     }
 
     private string VerificationFingerprint()
