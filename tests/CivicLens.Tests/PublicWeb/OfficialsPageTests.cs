@@ -5,14 +5,13 @@ namespace CivicLens.Tests.PublicWeb;
 
 public sealed class OfficialsPageTests
 {
-    private const string TotalScope = "Officials that the active release lists, with or without a term. A filter does not change this number.";
-    private const string Scope = "Records of the active release that name the official. Votes are not counted.";
+    private const string Scope = "The number of officials covers this whole release. A filter does not change it. Each record count covers the published records that name the official. Votes are not in it.";
 
     private static OfficialListRowData Row(string id, string name, PublishedOfficeKind kind, string? state, int? district, string? party,
-        DateOnly? end, int count) => new(id, name, kind, kind.ToString(), state, district, party, null, end, count);
+        DateOnly? end, int count) => new(id, name, kind, kind.ToString(), state, district, party, end, count);
 
     private static OfficialsPageData Page(OfficialListRowData[] rows, OfficialsFilterData? filter = null, string? next = null) =>
-        new(7, Scope, 542, TotalScope, rows, filter ?? OfficialsFilterData.None, next);
+        new(7, 542, rows, filter ?? OfficialsFilterData.None, next);
 
     private static Task<AngleSharp.Dom.IDocument> RenderAsync(OfficialsPageData data) =>
         ListPageRender.RenderAsync<OfficialsPage>(data, nameof(OfficialsPage.Data));
@@ -34,8 +33,8 @@ public sealed class OfficialsPageTests
         Assert.Equal("1 record other than votes", rows[1].QuerySelector(".list-row-side")!.TextContent);
         Assert.Equal(Root + "officials/aaron-bean.html", rows[0].QuerySelector("a")!.GetAttribute("href"));
         var scope = Assert.Single(page.QuerySelectorAll(".list-scope"));
-        Assert.Contains(TotalScope, scope.TextContent);
-        Assert.Contains(Scope, scope.TextContent);
+        Assert.Equal(Scope, scope.TextContent);
+        Assert.DoesNotContain("entry row", page.Body!.TextContent);
         Assert.Single(page.Body!.TextContent.Split(Scope).Skip(1));
     }
 
@@ -83,6 +82,8 @@ public sealed class OfficialsPageTests
 
         Assert.Equal("?chamber=senate&state=MA&party=democrat&name=an%20d&cursor=o.7.abc",
             next.QuerySelector(".pager a[rel=next]")!.GetAttribute("href"));
+        Assert.Single(next.QuerySelectorAll(".pager a, .pager button"));
+        Assert.DoesNotContain("Newer", next.QuerySelector(".pager")!.TextContent);
         Assert.Null(last.QuerySelector(".pager"));
     }
 

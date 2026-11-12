@@ -49,11 +49,11 @@
     {
         @if (Page.NewerCongress is { } newer)
         {
-            <p>@PublishedBoardView.KeptCongress(newer, congress)</p>
+            <p>@BoardWords.KeptCongress(newer, congress)</p>
         }
         @if (Page.NewestRollCall is { } newest)
         {
-            <p class="muted small">@PublishedBoardView.NewestRollCall(congress, newest)</p>
+            <p class="muted small">@BoardWords.NewestRollCall(congress, newest)</p>
         }
         <Panel Title="@PublishedBoardView.BreakersTitle(Board)" Padded="true">
             <p>@VoteWords.SplitMeaning</p>

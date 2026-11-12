@@ -3,30 +3,24 @@
 
 <PublicPage Section="null" CanonicalPath="@PublicationProtocol.SearchPagePath" NoIndex="true" Title="Search records" Description="Search the published records of Civic Lens by words, official, issue, kind, and date." RootPath="@RootPath">
     <PageHeader Title="Search records" />
-    <form class="search-box" role="search" method="get">
+    <form class="search-box" role="search" method="get" aria-label="Search records">
         <label class="visually-hidden" for="search-text">Search bills, votes, officials and statements</label>
         <input id="search-text" type="search" name="q" maxlength="@MaximumTextLength" value="@Data.Query.Text" autocomplete="off" />
         <Button Type="submit" Variant="ButtonVariant.Primary">Search</Button>
     </form>
     @if (Data.Query.IsEmpty)
     {
-        <p class="list-scope muted">Type a topic or a bill number, or choose an official above.</p>
+        <p class="list-scope muted">Type a topic, a bill number, or the name of an official.</p>
     }
-    else if (Data.Hits.Count == 0 && Data.Bill is null && Data.Officials.Count == 0)
+    @if (Data.Query.Official is not null)
     {
-        <EmptyState Title="@NoRecords" Text="Next steps:">
-            <ul class="search-next">
-                <li>Check the spelling, or type fewer words.</li>
-                <li>Search a bill number, such as <a href="?q=5334">5334</a>, or an official's last name.</li>
-                <li>Browse by <a href="@(RootPath + PublicationProtocol.FacetsPath)">issue</a>, by <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">official</a>, or <a href="@(RootPath + PublicationProtocol.AllRecordsPagePath(1))">all records</a>.</li>
-                <li>A record you expected is missing? <a href="@(RootPath + PublicationProtocol.ReportPagePath)">Tell us</a>.</li>
-            </ul>
-        </EmptyState>
+        <p class="list-scope search-filter-official">Only records that name @(Data.FilterOfficialName ?? "one official") are shown. <a href="@WithoutOfficialHref">Show records about any official</a></p>
     }
     @foreach (var official in Data.Officials)
     {
-        <section class="search-official" aria-label="Official">
-            <h2><a href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(official.OfficialId)))">@official.Name</a></h2>
+        var headingId = $"search-official-{official.OfficialId}";
+        <section class="search-official" aria-labelledby="@headingId">
+            <h2 id="@headingId"><a href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(official.OfficialId)))">@official.Name</a></h2>
             <p class="muted">@OfficialLine(official)</p>
             <p>
                 <Button Href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(official.OfficialId)))" Small="true">Open the page of @official.Name</Button>
@@ -39,17 +33,33 @@
         <section class="search-pin" aria-label="Bill number match">
             <p class="search-pin-label">Bill number match</p>
             <h2><a href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@bill.Line</a></h2>
-            <p class="muted">Bill in the @CongressCalendar.Ordinal(bill.Congress) Congress.@(bill.PublicLaw is { } law ? $" Became law as Public Law {law}." : string.Empty)</p>
-            <p><Button Href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" Small="true">Open the bill</Button></p>
-            @if (bill.Others > 0)
-            {
-                <p class="small muted">A number match can find another bill with the same number.</p>
-            }
+            <p class="muted">@PinLine(bill)</p>
+            <p class="search-pin-actions">
+                <Button Href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">Open the bill</Button>
+                @if (bill.HouseVoteRecordId is { } vote)
+                {
+                    <Button Href="@(RootPath + PublicationProtocol.RecordPagePath(vote))">House vote on it</Button>
+                }
+            </p>
         </section>
+    }
+    @if (!Data.Query.IsEmpty && Data.Hits.Count == 0)
+    {
+        <EmptyState Title="@NoRecords" Text="Next steps:">
+            <ul class="search-next">
+                @if (Data.Query.Text is not null)
+                {
+                    <li>Check the spelling, or type fewer words.</li>
+                }
+                <li>Search a bill number, such as <a href="?q=5334">5334</a>, or an official's last name.</li>
+                <li>Browse by <a href="@(RootPath + PublicationProtocol.FacetsPath)">issue</a>, by <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">official</a>, or <a href="@(RootPath + PublicationProtocol.AllRecordsPagePath(1))">all records</a>.</li>
+                <li>A record you expected is missing? <a href="@(RootPath + PublicationProtocol.ReportPagePath)">Tell us</a>.</li>
+            </ul>
+        </EmptyState>
     }
     @if (Data.Hits.Count > 0)
     {
-        <p class="list-status" role="status">@(Data.Hits.Count) @(Data.Hits.Count == 1 ? "result" : "results")@(Data.Query.Text is null ? string.Empty : $" for \"{Data.Query.Text}\""). Release @Data.Release.</p>
+        <p class="list-status" role="status">@StatusLine</p>
         <h2 class="search-results-title">Records</h2>
         <ul class="record-rows" role="list">
             @foreach (var hit in Data.Hits)
@@ -58,9 +68,19 @@
                                  Headline="@hit.Headline" Meta="@Meta(hit)" Snippet="@Snippet(hit)" />
             }
         </ul>
+        @if (Data.Bill is { } numbered && (numbered.Others.Count > 0 || numbered.MoreOthers))
+        {
+            <p class="small muted search-other-bills">
+                @foreach (var other in numbered.Others)
+                {
+                    <a href="@(RootPath + PublicationProtocol.RecordPagePath(other.RecordId))">@other.Number</a>@OtherLine(other)<text> </text>
+                }
+                A number match can find another bill with the same number.
+            </p>
+        }
         @if (Data.NextCursor is { } cursor)
         {
-            <Pager Label="Search pages" OlderHref="@NextHref(cursor)" OlderText="Show more results" Summary="@($"Results 1 to {Data.Hits.Count} on this page.")" />
+            <Pager Label="Search pages" ForwardOnly="true" OlderHref="@NextHref(cursor)" OlderText="Show more results" />
         }
     }
     <details class="list-fold" open="@(!Data.Query.IsEmpty && Data.Query.Text is null)">
@@ -112,9 +132,34 @@
 
     private string NoRecords => Data.Query.Text is { } text ? $"No records match \"{text}\"." : "No records match these filters.";
 
+    /// <summary>Names the count and its scope. A count with a next page covers only this page, so it says so.</summary>
+    private string StatusLine
+    {
+        get
+        {
+            var count = $"{Data.Hits.Count} {(Data.Hits.Count == 1 ? "result" : "results")}{(Data.NextCursor is null ? string.Empty : " on this page")}";
+            var text = Data.Query.Text is { } query ? $" for \"{query}\"" : string.Empty;
+            return $"{count}{text}. Release {Data.Release}.";
+        }
+    }
+
+    private static string PinLine(SearchBillData bill)
+    {
+        var sponsor = bill.Sponsor is { } name ? $" Sponsored by {name}." : string.Empty;
+        var law = bill.PublicLaw is not { } number ? string.Empty
+            : bill.LawDate is { } day ? $" Became law on {Moment.Day(day)} as Public Law {number}." : $" Became law as Public Law {number}.";
+        return $"Bill in the {CongressCalendar.Ordinal(bill.Congress)} Congress.{sponsor}{law}";
+    }
+
+    private static string OtherLine(SearchOtherBillData other) =>
+        $", a {other.Chamber} bill{(other.Sponsor is { } name ? $" introduced by {name}" : string.Empty)}, is also in the list.";
+
+    private string WithoutOfficialHref => "?" + Query(("q", Data.Query.Text), ("kind", Data.Query.Kind), ("issue", Data.Query.Issue),
+        ("from", Data.Query.From), ("to", Data.Query.To));
+
     private static string OfficialLine(SearchOfficialData official)
     {
-        var seat = OfficialSeat.Text(official.Kind, null, official.State, official.District);
+        var seat = OfficialSeat.Text(official.Kind, official.Office, official.State, official.District);
         return official.Party is { } party ? $"{seat}. {party}." : $"{seat}.";
     }
 
@@ -126,7 +171,7 @@
     private static RenderFragment? Snippet(SearchHitData hit) =>
         hit.Snippet is { } snippet ? Marked(snippet) : hit.BillLine is { } line ? builder => builder.AddContent(0, line) : null;
 
-    private string RecordsOfHref(SearchOfficialData official) => "?" + Query(("q", Data.Query.Text), ("official", official.OfficialId));
+    private static string RecordsOfHref(SearchOfficialData official) => "?" + Query(("official", official.OfficialId));
 
     private string NextHref(string cursor) => "?" + Query(("q", Data.Query.Text), ("kind", Data.Query.Kind), ("official", Data.Query.Official),
         ("issue", Data.Query.Issue), ("from", Data.Query.From), ("to", Data.Query.To), ("cursor", cursor));
@@ -134,21 +179,31 @@
     private static string Query(params (string Name, string? Value)[] pairs) =>
         string.Join('&', pairs.Where(pair => pair.Value is not null).Select(pair => $"{pair.Name}={Uri.EscapeDataString(pair.Value!)}"));
 
-    /// <summary>Wraps each marked match in mark. Razor encodes every text part, so stored text never becomes markup.</summary>
+    /// <summary>Wraps each marked match in mark. Only text between a start mark and the next end mark is marked. A stray mark is dropped and its text kept.
+    /// Razor encodes every text part, so stored text never becomes markup.</summary>
     private static RenderFragment Marked(string snippet) => builder =>
     {
-        foreach (var part in snippet.Split(MarkStart))
+        var open = false;
+        var start = 0;
+        for (var index = 0; index <= snippet.Length; index++)
         {
-            var sections = part.Split(MarkEnd);
-            if (sections.Length == 1)
+            var atEnd = index == snippet.Length;
+            var mark = atEnd ? '\0' : snippet[index];
+            if (!atEnd && mark != MarkStart && mark != MarkEnd) continue;
+            var text = snippet[start..index];
+            if (open && !atEnd && mark == MarkEnd)
             {
-                builder.AddContent(0, sections[0]);
-                continue;
+                builder.OpenElement(0, "mark");
+                builder.AddContent(1, text);
+                builder.CloseElement();
+                open = false;
             }
-            builder.OpenElement(1, "mark");
-            builder.AddContent(2, sections[0]);
-            builder.CloseElement();
-            builder.AddContent(3, sections[1]);
+            else
+            {
+                builder.AddContent(2, text);
+                if (!atEnd && mark == MarkStart) open = true;
+            }
+            start = index + 1;
         }
     };
 }

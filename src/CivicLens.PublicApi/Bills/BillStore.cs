@@ -15,6 +15,24 @@ public sealed class BillStore(NpgsqlDataSource views)
         b.why_it_matters, b.text_version_name, b.text_version_date, b.text_chars_read, b.text_chars_total, b.public_law
         """;
     private const string Order = "b.event_date DESC, b.record_id";
+
+    /// <summary>The name of the first sponsor of the bill <c>b</c>, in stored order, or null when the release names none. The one owner of that rule.</summary>
+    internal const string SponsorNameSql = """
+        (SELECT o.name FROM public_api.bill_sponsorships s
+           JOIN public_api.officials o ON o.official_id = s.official_id
+          WHERE s.record_id = b.record_id AND s.revision_number = b.revision_number AND s.role = 'Sponsor'
+          ORDER BY s."position" LIMIT 1)
+        """;
+
+    private const string PinFactsSql = $"""
+        SELECT b.record_id, {SponsorNameSql}, t.latest_action_text, t.latest_action_date,
+               (SELECT v.record_id FROM public_api.votes v
+                 WHERE v.congress = b.congress AND v.bill_type = b.bill_type AND v.bill_number = b.bill_number AND v.chamber = 'House'
+                 ORDER BY v.voted_on DESC, v.session_number DESC, v.roll_call_number DESC LIMIT 1)
+          FROM public_api.bills b
+          LEFT JOIN public_api.bill_status t ON t.record_id = b.record_id AND t.revision_number = b.revision_number
+         WHERE b.record_id = ANY(@ids)
+        """;
     private const string AfterCursor = " AND (b.event_date < @cursor_date OR (b.event_date = @cursor_date AND b.record_id > @cursor_id))";
 
     /// <summary>Reads one page. Null means that no release is active. The caller compares the release of the page with the release of the cursor.</summary>
@@ -53,6 +71,21 @@ public sealed class BillStore(NpgsqlDataSource views)
         if (!await reader.ReadAsync(cancellationToken)) return null;
         return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(27), ReadLatestAction(reader), ReadHistory(reader, 25, 26),
             ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24));
+    }
+
+    /// <summary>Reads the facts of the bill number match for a bounded set of bills in one query. A bill that left the release has no entry.</summary>
+    public async Task<Dictionary<string, BillPinFacts>> ReadPinFactsAsync(string[] recordIds, CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand(PinFactsSql);
+        command.Parameters.AddWithValue("ids", recordIds);
+        var facts = new Dictionary<string, BillPinFacts>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var lawDate = ViewColumns.Text(reader, 2) is { } text && BillStatusMeaning.PublicLawNumberOf(text) is not null ? ViewColumns.Date(reader, 3) : null;
+            facts[reader.GetString(0)] = new(reader.GetString(0), ViewColumns.Text(reader, 1), lawDate, ViewColumns.Text(reader, 4));
+        }
+        return facts;
     }
 
     /// <summary>Reads one page of the sponsorships of a bill. Null means that no release is active or that the active release holds no such bill.</summary>

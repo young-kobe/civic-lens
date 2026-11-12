@@ -19,6 +19,9 @@ public static class BillNumbers
     public static string Of(string billType, int number) =>
         $"{(TypeLabels.TryGetValue(billType.ToLowerInvariant(), out var label) ? label : billType.ToUpperInvariant())} {number}";
 
+    /// <summary>The chamber where a bill of the stored type starts. A House type starts with "h" and a Senate type with "s".</summary>
+    public static PublishedChamber ChamberOf(string billType) => billType.StartsWith('h') ? PublishedChamber.House : PublishedChamber.Senate;
+
     /// <summary>Whether the lower case stored code is a bill type in the table.</summary>
     public static bool IsType(string billType) => TypeLabels.ContainsKey(billType);
 

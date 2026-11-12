@@ -14,8 +14,11 @@ public sealed class SearchResultsPageTests
         new(PublishedRecordKind.Action, new string(id, 64), headline, new(2026, 2, 23), billLine, snippet, ["Jimmy Panetta"]);
 
     private static SearchPageData Data(SearchQueryData? query = null, SearchOfficialData[]? officials = null, SearchBillData? bill = null,
-        SearchHitData[]? hits = null, string? next = null) =>
-        new(query ?? Query(), 1028, officials ?? [], bill, hits ?? [], next, [new("housing", "Housing")]);
+        SearchHitData[]? hits = null, string? next = null, string? filterName = null) =>
+        new(query ?? Query(), 1028, officials ?? [], bill, hits ?? [], next, [new("housing", "Housing")], filterName);
+
+    private static SearchOfficialData Official(string id = "jimmy-panetta", string name = "Jimmy Panetta") =>
+        new(id, name, PublishedOfficeKind.Representative, null, "CA", 19, "Democrat");
 
     private static Task<AngleSharp.Dom.IDocument> RenderAsync(SearchPageData data) =>
         ListPageRender.RenderAsync<SearchResultsPage>(data, nameof(SearchResultsPage.Data));
@@ -40,26 +43,37 @@ public sealed class SearchResultsPageTests
     public async Task OfficialThenBillPinThenResultsThenFiltersInThatOrder()
     {
         var page = await RenderAsync(Data(
-            officials: [new("jimmy-panetta", "Jimmy Panetta", PublishedOfficeKind.Representative, "CA", 19, "Democrat")],
-            bill: new(BillId, "H.R. 5334, the Sanctioning Act", 119, "119-111", 1),
+            officials: [Official()],
+            bill: new(BillId, "H.R. 5334, the Sanctioning Act", 119, "Jimmy Panetta", "119-111", new(2026, 9, 18), new string('v', 64),
+                [new(new string('s', 64), "S. 5334", PublishedChamber.Senate, "John Cornyn")], false),
             hits: [Hit('a', "H.R. 5334 would impose sanctions")]));
 
         var ordered = new[] { ".search-official", ".search-pin", ".record-rows", ".list-fold" }.Select(selector => page.QuerySelector(selector)!).ToArray();
         for (var index = 1; index < ordered.Length; index++) Assert.True(ListPageRender.Precedes(ordered[index - 1], ordered[index]));
         Assert.Equal("Representative for CA, district 19. Democrat.", page.QuerySelector(".search-official p")!.TextContent);
-        Assert.Contains("Bill in the 119th Congress. Became law as Public Law 119-111.", page.QuerySelector(".search-pin")!.TextContent);
-        Assert.Equal(Root + $"records/{BillId}.html", page.QuerySelector(".search-pin h2 a")!.GetAttribute("href"));
-        Assert.Contains("another bill with the same number", page.QuerySelector(".search-pin")!.TextContent);
+        var pin = page.QuerySelector(".search-pin")!;
+        Assert.Equal("Bill in the 119th Congress. Sponsored by Jimmy Panetta. Became law on 18 Sep 2026 as Public Law 119-111.", pin.QuerySelector("p.muted")!.TextContent);
+        Assert.Equal(Root + $"records/{BillId}.html", pin.QuerySelector("h2 a")!.GetAttribute("href"));
+        Assert.Equal(Root + $"records/{new string('v', 64)}.html", pin.QuerySelectorAll(".search-pin-actions a").Single(link => link.TextContent == "House vote on it").GetAttribute("href"));
+        var others = page.QuerySelector(".search-other-bills")!;
+        Assert.True(ListPageRender.Precedes(page.QuerySelector(".record-rows")!, others));
+        Assert.Contains("S. 5334, a Senate bill introduced by John Cornyn, is also in the list. A number match can find another bill with the same number.",
+            string.Join(' ', others.TextContent.Split((char[])[' ', '\n'], StringSplitOptions.RemoveEmptyEntries)));
+        Assert.Equal(Root + $"records/{new string('s', 64)}.html", others.QuerySelector("a")!.GetAttribute("href"));
         Assert.Equal("1 result for \"5334\". Release 1028.", page.QuerySelector(".list-status")!.TextContent);
     }
 
     [Fact]
     public async Task TheDuplicateNumberNoteAppearsOnlyWhenAnotherBillHasTheNumber()
     {
-        var page = await RenderAsync(Data(bill: new(BillId, "H.R. 1", 119, null, 0), hits: [Hit('a', "x")]));
+        var page = await RenderAsync(Data(bill: new(BillId, "H.R. 1", 119, null, null, null, null, [], false), hits: [Hit('a', "x")]));
+        var more = await RenderAsync(Data(bill: new(BillId, "H.R. 1", 119, null, null, null, null, [], true), hits: [Hit('a', "x")]));
 
-        Assert.DoesNotContain("another bill", page.QuerySelector(".search-pin")!.TextContent);
+        Assert.Null(page.QuerySelector(".search-other-bills"));
         Assert.DoesNotContain("Public Law", page.QuerySelector(".search-pin")!.TextContent);
+        Assert.DoesNotContain("Sponsored by", page.QuerySelector(".search-pin")!.TextContent);
+        Assert.DoesNotContain("House vote on it", page.QuerySelector(".search-pin")!.TextContent);
+        Assert.Contains("another bill with the same number", more.QuerySelector(".search-other-bills")!.TextContent);
     }
 
     [Fact]
@@ -105,8 +119,71 @@ public sealed class SearchResultsPageTests
         var page = await RenderAsync(Data(Query(null)));
 
         Assert.Null(page.QuerySelector(".empty"));
-        Assert.Contains("Type a topic or a bill number", page.QuerySelector(".list-scope")!.TextContent);
+        Assert.Equal("Type a topic, a bill number, or the name of an official.", page.QuerySelector(".list-scope")!.TextContent);
         Assert.Equal("", page.QuerySelector("#search-text")!.GetAttribute("value") ?? "");
+    }
+
+    [Fact]
+    public async Task OfficialCardsWithNoRecordStillShowTheEmptyGuidanceAfterTheCards()
+    {
+        var page = await RenderAsync(Data(Query("member"), officials: [Official()]));
+
+        var empty = page.QuerySelector(".empty")!;
+        Assert.Contains("No records match \"member\".", empty.TextContent);
+        Assert.True(ListPageRender.Precedes(page.QuerySelector(".search-official")!, empty));
+    }
+
+    [Fact]
+    public async Task AFilterOnlySearchLeavesOutTheSpellingStep()
+    {
+        var page = await RenderAsync(Data(Query(null) with { Kind = "statement" }));
+
+        Assert.Contains("No records match these filters.", page.QuerySelector(".empty")!.TextContent);
+        Assert.Equal(3, page.QuerySelectorAll(".search-next li").Length);
+        Assert.DoesNotContain("spelling", page.QuerySelector(".empty")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheRecordsOfAnOfficialLinkDropsTheTextAndTheActiveFilterNamesTheOfficialWithAWayToRemoveIt()
+    {
+        var cards = await RenderAsync(Data(Query("panetta"), officials: [Official()], hits: [Hit('a', "x")]));
+        var filtered = await RenderAsync(Data(new("rent", "statement", "jimmy-panetta", null, null, null), hits: [Hit('a', "x")], filterName: "Jimmy Panetta"));
+
+        Assert.Equal("?official=jimmy-panetta", cards.QuerySelectorAll(".search-official a").Single(link => link.TextContent == "Records that name Jimmy Panetta").GetAttribute("href"));
+        Assert.Null(cards.QuerySelector(".search-filter-official"));
+        var active = filtered.QuerySelector(".search-filter-official")!;
+        Assert.StartsWith("Only records that name Jimmy Panetta are shown.", active.TextContent);
+        Assert.Equal("?q=rent&kind=statement", active.QuerySelector("a")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task ACountWithAnotherPageSaysItCoversThisPageAndThePagerOffersNoWayBack()
+    {
+        var page = await RenderAsync(Data(hits: [Hit('a', "x"), Hit('b', "y")], next: "r.1.abc"));
+
+        Assert.Equal("2 results on this page for \"5334\". Release 1028.", page.QuerySelector(".list-status")!.TextContent);
+        Assert.Single(page.QuerySelectorAll(".pager a, .pager button"));
+    }
+
+    [Fact]
+    public async Task OnlyBalancedMarksWrapTextAndAStrayMarkKeepsItsText()
+    {
+        var page = await RenderAsync(Data(hits: [Hit('a', "Headline", "\uE000one\uE001 two\uE001 three \uE000four")]));
+
+        var text = page.QuerySelector(".search-snippet")!;
+        Assert.Equal(["one"], text.QuerySelectorAll("mark").Select(mark => mark.TextContent));
+        Assert.Equal("one two three four", text.TextContent);
+    }
+
+    [Fact]
+    public async Task AnExecutiveOfficialCardNamesTheOfficeAndEachCardRegionIsNamedByItsHeading()
+    {
+        var page = await RenderAsync(Data(Query("trump"), officials: [new("donald-trump", "Donald J. Trump", PublishedOfficeKind.Executive, "President", null, null, "Republican")]));
+
+        var card = page.QuerySelector(".search-official")!;
+        Assert.Equal("President. Republican.", card.QuerySelector("p")!.TextContent);
+        Assert.Equal(card.QuerySelector("h2")!.Id, card.GetAttribute("aria-labelledby"));
+        Assert.Equal("Search records", page.QuerySelector("form.search-box")!.GetAttribute("aria-label"));
     }
 
     [Fact]

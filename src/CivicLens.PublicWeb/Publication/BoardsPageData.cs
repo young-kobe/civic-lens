@@ -6,9 +6,12 @@ namespace CivicLens.PublicWeb.Publication;
 public sealed record BoardsPageData(int Release, IReadOnlyList<BoardPanelData> Boards, IReadOnlyList<BoardAgreementData> Agreements);
 
 /// <summary>One chamber and party. A null Congress means that the release holds no vote figures for the board.
-/// <see cref="Rows"/> hold the members who voted against most of their party, highest share first.</summary>
-public sealed record BoardPanelData(PublishedChamber Chamber, string Party, int? Congress, IReadOnlyList<BoardRowData> Rows,
-    string? PartyLineScope);
+/// <see cref="NewerCongress"/> is the newest Congress of the chamber while the board keeps an older one, else null.
+/// <see cref="NewestRollCall"/> is the day of the newest roll call that the counts include.
+/// <see cref="Rows"/> hold the members who voted against most of their party at least once, highest share first.
+/// <see cref="Ranked"/> says whether any member had enough split votes to be ranked, so an empty list is told apart from no ranked member.</summary>
+public sealed record BoardPanelData(PublishedChamber Chamber, string Party, int? Congress, int? NewerCongress, DateOnly? NewestRollCall,
+    bool Ranked, IReadOnlyList<BoardRowData> Rows);
 
 /// <summary><see cref="Seat"/> names a delegate or resident commissioner, and is null for a voting member.</summary>
 public sealed record BoardRowData(string OfficialId, string Name, string? Seat, int Cast, int Breaks);

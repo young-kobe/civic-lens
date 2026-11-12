@@ -7,7 +7,6 @@ public enum PublicSection
     Votes,
     Bills,
     ExecutiveActions,
-    Statements,
     Boards,
     AllRecords,
     About,

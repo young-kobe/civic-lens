@@ -19,9 +19,10 @@ public sealed class BoardsPageReader(BoardStore boards)
     private static BoardPanelData Panel(BoardPageAnswer board)
     {
         var members = (board.Members ?? []).ToDictionary(member => member.OfficialId, StringComparer.Ordinal);
-        var rows = (board.Breakers ?? []).Take(PanelSize).Select(id => members[id]).Select(Row).ToArray();
-        var scope = rows.Length == 0 ? null : members[board.Breakers![0]].PartyLineScope;
-        return new(board.Board.Chamber, board.Board.Party, board.Congress, rows, scope);
+        var ranked = (board.Breakers ?? []).Select(id => members[id]).ToArray();
+        var rows = ranked.Where(member => member.Breaks > 0).Take(PanelSize).Select(Row).ToArray();
+        var newest = members.Values.Select(member => member.MissedVotes?.LastVotedOn).Max();
+        return new(board.Board.Chamber, board.Board.Party, board.Congress, board.NewerCongress, newest, ranked.Length > 0, rows);
     }
 
     private static BoardRowData Row(BoardMemberAnswer member)

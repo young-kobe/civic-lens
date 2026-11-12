@@ -12,9 +12,9 @@ public sealed class OfficialsPageReader(OfficialStore officials)
     {
         if (await officials.ListAsync(request with { Limit = PageSize }, cancellationToken) is not { } page) return null;
         var rows = page.Officials.Select(row => new OfficialListRowData(row.OfficialId, row.Name, row.Kind, row.Office, row.State,
-            row.District, row.Party, row.Caucus, row.TermEndsOn, row.RecordCount)).ToArray();
+            row.District, row.Party, row.TermEndsOn, row.RecordCount)).ToArray();
         var filter = new OfficialsFilterData(Chamber(request.Kind), request.State, request.Party, request.NamePrefix);
-        return new(page.Release, page.RecordCountScope, page.OfficialsInRelease, page.OfficialsInReleaseScope, rows, filter, page.NextCursor);
+        return new(page.Release, page.OfficialsInRelease, rows, filter, page.NextCursor);
     }
 
     private static string? Chamber(PublishedOfficeKind? kind) => kind switch

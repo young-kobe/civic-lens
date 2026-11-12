@@ -76,6 +76,24 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task TheBoardsPageListsNoMemberWithoutABreakAndNamesTheKeptCongressAndNoSharedCongressEyebrow()
+    {
+        var votes = Enumerable.Range(0, 25).Select(index => Vote((char)('a' + index), "House", 118, index + 1, ["p0", "p1"], ["Yea", "Nay"], "Split"))
+            .Append(Vote('1', "House", 119, 1, ["p0", "p1"], ["Yea", "Nay"], "Split"))
+            .Concat(Enumerable.Range(0, 25).Select(index => Vote((char)('A' + index), "Senate", 119, index + 2, ["p2", "p4"], ["Yea", "Nay"], "Split") with
+            { RecordId = (index + 4).ToString("x64") })).ToArray();
+        await using var host = await StartAsync(votes, serverPages: true);
+
+        var page = new AngleSharp.Html.Parser.HtmlParser().ParseDocument(await host.Client.GetStringAsync("/web/boards"));
+
+        var houseDemocrats = page.QuerySelectorAll(".board-panel")[0];
+        Assert.Contains("The 119th Congress has no member with 25 split votes yet, so this page keeps the 118th Congress.", houseDemocrats.TextContent);
+        Assert.Contains("No member of the House Democrats voted against most Democrats on a split vote in the 118th Congress.", houseDemocrats.TextContent);
+        Assert.Empty(page.QuerySelectorAll(".board-panel .list-row"));
+        Assert.Null(page.QuerySelector(".page-header-eyebrow"));
+    }
+
+    [Fact]
     public async Task AValidEmptyReleaseReturnsFourKnownEmptyBoardsAndTwoExplicitNullAgreements()
     {
         await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
@@ -145,9 +163,11 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }
 
-    private async Task<ApiHost> StartAsync(BoardVote[] votes, bool pinParties = true, bool writeAlignment = true)
+    private async Task<ApiHost> StartAsync(BoardVote[] votes, bool pinParties = true, bool writeAlignment = true, bool serverPages = false)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => serverPages
+            ? options with { PublicBaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test") }
+            : options);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
             new("p0", "Ada Able", new SeededTerm("House", "Representative", "2021-01-03") { State = "NY", District = 1, Party = "Democrat" }),

@@ -20,7 +20,6 @@ public static class PublicSections
         new(PublicSection.Votes, "Votes", PublicationProtocol.SearchByKindPath(PublishedRecordKind.Vote)),
         new(PublicSection.Bills, "Bills", PublicationProtocol.SearchByKindPath(PublishedRecordKind.Action)),
         new(PublicSection.ExecutiveActions, "Executive actions", PublicationProtocol.SearchByKindPath(PublishedRecordKind.ExecutiveAction)),
-        new(PublicSection.Statements, "Statements", PublicationProtocol.SearchByKindPath(PublishedRecordKind.Statement)),
         new(PublicSection.Boards, "Compare parties", StaticBoardsPath)
     ];
 
@@ -51,9 +50,12 @@ public static class PublicSections
         if (record is not null) return new([home, RecordSection(record.Kind)], record.ShortName ?? title);
 
         var link = Header.Concat(Footer).Append(AllRecords).FirstOrDefault(candidate => section is not null && candidate.Section == section);
-        if (link is null || link.Path == canonicalPath) return new([home], title);
+        if (link is null || link.Path == canonicalPath || IsBoardsPage(link, canonicalPath)) return new([home], title);
         return new([home, new(link.Text, link.Path)], title);
     }
+
+    /// <summary>The header links the static board until the cutover, so the server boards page is the page of its own section link.</summary>
+    private static bool IsBoardsPage(NavLink link, string? canonicalPath) => link.Section == PublicSection.Boards && canonicalPath == BoardsPath;
 
     /// <summary>The header section of a record page. A kind with no header link marks none.</summary>
     public static PublicSection? OfRecord(PublishedRecordKind kind) => kind switch
@@ -61,7 +63,6 @@ public static class PublicSections
         PublishedRecordKind.Vote => PublicSection.Votes,
         PublishedRecordKind.Action => PublicSection.Bills,
         PublishedRecordKind.ExecutiveAction => PublicSection.ExecutiveActions,
-        PublishedRecordKind.Statement => PublicSection.Statements,
         _ => null
     };
 

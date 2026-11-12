@@ -6,7 +6,7 @@ namespace CivicLens.Tests.PublicWeb;
 public sealed class BoardsPageTests
 {
     private static BoardPanelData Panel(PublishedChamber chamber, string party, int? congress, params BoardRowData[] rows) =>
-        new(chamber, party, congress, rows, rows.Length == 0 ? null : "Scope words of the party line.");
+        new(chamber, party, congress, null, rows.Length == 0 ? null : new DateOnly(2026, 9, 16), rows.Length > 0, rows);
 
     private static BoardRowData Row(string id, string name, string? seat, int cast, int breaks) => new(id, name, seat, cast, breaks);
 
@@ -32,7 +32,41 @@ public sealed class BoardsPageTests
         Assert.Equal(["House Democrats"], rows[0].QuerySelectorAll(".list-row-meta span").Select(span => span.TextContent));
         Assert.Equal(["House Democrats", "Delegate for GU"], rows[1].QuerySelectorAll(".list-row-meta span").Select(span => span.TextContent));
         Assert.Contains("Count first, then the base it comes from.", page.QuerySelector(".board-lede")!.TextContent);
-        Assert.Contains("Scope words of the party line.", page.QuerySelector(".board-panel details")!.TextContent);
+        Assert.Equal("The newest roll call counted here, in the 119th Congress, is on 16 Sep 2026. No count includes a later day.",
+            page.QuerySelector(".board-panel details .muted")!.TextContent);
+        Assert.DoesNotContain("Congress 119", page.Body!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheEyebrowNamesTheCongressWhenEveryBoardSharesItAndIsAbsentWhenTheChambersDiffer()
+    {
+        var shared = await RenderAsync(Data([
+            Panel(PublishedChamber.House, "Democrat", 119, Row("a", "Ann", null, 30, 10)),
+            Panel(PublishedChamber.Senate, "Republican", 119, Row("b", "Bob", null, 30, 5)),
+            Panel(PublishedChamber.Senate, "Democrat", null)]));
+        var mixed = await RenderAsync(Data([
+            Panel(PublishedChamber.House, "Democrat", 118, Row("a", "Ann", null, 30, 10)),
+            Panel(PublishedChamber.Senate, "Republican", 119, Row("b", "Bob", null, 30, 5))]));
+
+        Assert.Equal("119th Congress | Four lists, one for each chamber and party", shared.QuerySelector(".page-header-eyebrow")!.TextContent);
+        Assert.Null(mixed.QuerySelector(".page-header-eyebrow"));
+    }
+
+    [Fact]
+    public async Task ABoardThatKeepsAnOlderCongressSaysSoAboveItsList()
+    {
+        var page = await RenderAsync(Data([Panel(PublishedChamber.House, "Democrat", 118, Row("a", "Ann", null, 30, 10)) with { NewerCongress = 119 }]));
+
+        Assert.Contains("The 119th Congress has no member with 25 split votes yet, so this page keeps the 118th Congress.", page.QuerySelector(".board-panel")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheMethodLinkUsesTheApprovedTextAndLeadsToTheMethodPage()
+    {
+        var page = await RenderAsync(Data());
+
+        var link = page.QuerySelectorAll("a").Single(link => link.TextContent == "Read the method note: how Civic Lens counts split votes and agreed votes");
+        Assert.Equal(ListPageRender.Root + PublicationProtocol.MethodPagePath, link.GetAttribute("href"));
     }
 
     [Fact]

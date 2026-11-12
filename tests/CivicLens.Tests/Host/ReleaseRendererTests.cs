@@ -2978,7 +2978,7 @@ public sealed class ReleaseRendererTests
         return
         [
             ("record", PublicationProtocol.RecordPagePath(Record().RecordId), await renderer.RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None), "All records"),
-            ("statement", PublicationProtocol.RecordPagePath(Statement().RecordId), await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None), "Statements"),
+            ("statement", PublicationProtocol.RecordPagePath(Statement().RecordId), await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None), null),
             ("action", PublicationProtocol.RecordPagePath(Action().RecordId), await renderer.RenderActionAsync(Action(), null, [], PublicationCatalogs.None, CancellationToken.None), "Bills"),
             ("vote", PublicationProtocol.RecordPagePath(Vote().RecordId), await renderer.RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None), "Votes"),
             ("relationship", PublicationProtocol.RecordPagePath(relationship.RecordId), await renderer.RenderRelationshipAsync(relationship, PublicationCatalogs.None, CancellationToken.None), "All records"),

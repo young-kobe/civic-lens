@@ -1,5 +1,6 @@
 using System.Data;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicApi.Bills;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Votes;
 using Npgsql;
@@ -77,11 +78,7 @@ public sealed class IssueStore(NpgsqlDataSource views)
         """;
 
     private const string BillsSql = $"""
-        SELECT b.record_id, b.headline, b.label, b.event_date, b.bill_line,
-               (SELECT o.name FROM public_api.bill_sponsorships s
-                  JOIN public_api.officials o ON o.official_id = s.official_id
-                 WHERE s.record_id = b.record_id AND s.revision_number = b.revision_number AND s.role = 'Sponsor'
-                 ORDER BY s."position" LIMIT 1)
+        SELECT b.record_id, b.headline, b.label, b.event_date, b.bill_line, {BillStore.SponsorNameSql}
           {PageBillSet}
          ORDER BY b.event_date DESC, b.record_id LIMIT @take
         """;

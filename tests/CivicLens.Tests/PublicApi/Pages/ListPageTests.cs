@@ -127,6 +127,35 @@ public sealed class ListPageTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task TheBillPinNamesTheSponsorLinksTheNewestHouseVoteAndNamesTheOtherBillWithItsSponsor()
+    {
+        var site = new FakeReleaseSite();
+        site.Publish(1, PublishedSamples.Statement('a', "H.R. 5334 debate", official: "p1"));
+        await using var host = await StartAsync(site);
+        await host.WaitForReleaseAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
+            new SeededOfficial("p1", "Jimmy Panetta", new SeededTerm("House", "Representative", "2021-01-03") { State = "CA", District = 19, Party = "Democrat" }),
+            new SeededOfficial("p3", "John Cornyn", new SeededTerm("Senate", "Senator", "2021-01-03") { State = "TX", Party = "Republican" }));
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('1', "2026-03-03") { BillNumber = 5334, BillLine = "H.R. 5334, the Sanctions Act" },
+            new SeededBill('2', "2026-02-01") { BillType = "s", BillNumber = 5334, Sponsorships = [new("p3", "Sponsor", "2026-01-10")] });
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('3', "2026-03-01") { BillNumber = 5334, RollCall = 1 },
+            new SeededVote('4', "2026-03-02") { BillNumber = 5334, RollCall = 2 },
+            new SeededVote('5', "2026-03-04") { BillNumber = 5334, RollCall = 3, Chamber = "Senate" });
+
+        var page = await ParseAsync(await host.Client.GetAsync("/web/search?q=5334"));
+        var pin = page.QuerySelector(".search-pin")!;
+
+        Assert.Equal("Bill in the 119th Congress. Sponsored by Jimmy Panetta.", pin.QuerySelector("p.muted")!.TextContent);
+        Assert.Equal("https://civic-lens.test/" + PublicationProtocol.RecordPagePath(new string('4', 64)),
+            pin.QuerySelectorAll(".search-pin-actions a").Single(link => link.TextContent == "House vote on it").GetAttribute("href"));
+        Assert.Contains("a Senate bill introduced by John Cornyn, is also in the list.", page.QuerySelector(".search-other-bills")!.TextContent);
+        Assert.Equal("S. 5334", page.QuerySelector(".search-other-bills a")!.TextContent);
+    }
+
+    [Fact]
     public async Task SearchPutsAnOfficialWhoseWholeNameEqualsTheTextBeforeAnEarlierNameThatOnlyContainsItAsAWord()
     {
         var site = new FakeReleaseSite();

@@ -25,14 +25,15 @@ public sealed class SearchPageReader(SearchIndex index, IssueStore issueStore, O
         if (await index.FindReleaseAsync(request.Release, cancellationToken) is not { } release) return null;
         var issues = (await issueStore.ListOptionsAsync(cancellationToken)).Select(issue => new SearchChoiceData(issue.IssueId, issue.Name)).ToArray();
         var typed = Typed(request);
-        if (typed.IsEmpty) return new(typed, release.ReleaseNumber, [], null, [], null, issues);
+        if (typed.IsEmpty) return new(typed, release.ReleaseNumber, [], null, [], null, issues, null);
 
         var page = await index.SearchAsync(release.ReleaseNumber, request, cancellationToken);
         var hits = page.Hits.Select(Hit).ToArray();
         var first = request.Cursor is null && request.Text is not null;
         var officials = first ? await FindOfficialsAsync(request.Text!, cancellationToken) : [];
         var bill = first ? await FindBillAsync(request.Text!, cancellationToken) : null;
-        return new(typed, release.ReleaseNumber, officials, bill, hits, page.NextCursor, issues);
+        var filterName = page.Hits.SelectMany(hit => hit.Officials).FirstOrDefault(official => official.Id == request.Official)?.Name;
+        return new(typed, release.ReleaseNumber, officials, bill, hits, page.NextCursor, issues, filterName);
     }
 
     private static SearchQueryData Typed(SearchRequest request) => new(request.Text,
@@ -48,7 +49,7 @@ public sealed class SearchPageReader(SearchIndex index, IssueStore issueStore, O
         var name = text.Trim().ToLowerInvariant();
         if (name.Length < MinimumOfficialText) return [];
         var found = await officialStore.ListAsync(new OfficialRequest { NamePrefix = name, ExactNameFirst = true, Limit = MaximumOfficials }, cancellationToken);
-        return found is null ? [] : [.. found.Officials.Select(row => new SearchOfficialData(row.OfficialId, row.Name, row.Kind, row.State, row.District, row.Party))];
+        return found is null ? [] : [.. found.Officials.Select(row => new SearchOfficialData(row.OfficialId, row.Name, row.Kind, row.Office, row.State, row.District, row.Party))];
     }
 
     private async Task<SearchBillData?> FindBillAsync(string text, CancellationToken cancellationToken)
@@ -56,8 +57,12 @@ public sealed class SearchPageReader(SearchIndex index, IssueStore issueStore, O
         if (!SearchBillNumber.TryParse(text, out var billType, out var number)) return null;
         var found = await bills.ListAsync(new BillRequest { BillNumber = number, BillType = billType, Limit = BillMatchLimit }, cancellationToken);
         if (found is null || found.Bills.Length == 0) return null;
+        var facts = await bills.ReadPinFactsAsync([.. found.Bills.Select(bill => bill.RecordId)], cancellationToken);
         var newest = found.Bills[0];
-        var others = found.Bills.Length - 1 + (found.NextCursor is null ? 0 : 1);
-        return new(newest.RecordId, newest.BillLine ?? newest.Headline, newest.Congress, newest.PublicLaw, others);
+        var pin = facts.GetValueOrDefault(newest.RecordId);
+        var others = found.Bills.Skip(1).Select(bill => new SearchOtherBillData(bill.RecordId, BillNumbers.Of(bill.BillType, bill.BillNumber),
+            BillNumbers.ChamberOf(bill.BillType), facts.GetValueOrDefault(bill.RecordId)?.Sponsor)).ToArray();
+        return new(newest.RecordId, newest.BillLine ?? newest.Headline, newest.Congress, pin?.Sponsor, newest.PublicLaw, pin?.LawDate, pin?.HouseVoteRecordId,
+            others, found.NextCursor is not null);
     }
 }
