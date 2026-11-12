@@ -28,21 +28,17 @@ internal static class VotePartyTallyRows
         """;
 
     private const string ReadRevisionPage = """
-        SELECT r.record_id AS "RecordId", r.revision_number AS "RevisionNumber", r.member_list_id AS "ListId", r.party_tally_count AS "PartyTallyCount"
+        SELECT r.record_id AS "RecordId", r.revision_number AS "RevisionNumber", r.party_tally_count AS "PartyTallyCount", count(s.record_id) AS "StateCount",
+        """ + VoteStoredColumnRows.ReleaseRange + """
         FROM vote_revisions r
+        LEFT JOIN publication_record_states s ON s.kind = 'vote' AND s.record_id = r.record_id AND s.revision_number = r.revision_number
         WHERE (r.record_id, r.revision_number) > ({0}, {1})
             AND (r.party_tally_count IS NOT NULL
-                OR EXISTS (SELECT 1 FROM vote_revision_party_tallies t WHERE t.record_id = r.record_id AND t.revision_number = r.revision_number)
-                OR EXISTS (SELECT 1 FROM publication_record_states s WHERE s.kind = 'vote' AND s.record_id = r.record_id AND s.revision_number = r.revision_number))
+                OR s.record_id IS NOT NULL
+                OR EXISTS (SELECT 1 FROM vote_revision_party_tallies t WHERE t.record_id = r.record_id AND t.revision_number = r.revision_number))
+        GROUP BY r.record_id, r.revision_number, r.party_tally_count
         ORDER BY r.record_id, r.revision_number
         LIMIT {2}
-        """;
-
-    private const string ReadMemberCasts = """
-        SELECT e.list_id AS "ListId", e.party AS "Party", e.vote_cast AS "VoteCast"
-        FROM vote_member_list_entries e
-        WHERE e.list_id = ANY({0}::text[])
-        ORDER BY e.list_id, e.position
         """;
 
     private const string InsertRows = """
@@ -124,19 +120,14 @@ internal static class VotePartyTallyRows
             .ToArrayAsync(cancellationToken);
         var page = revisions.Take(limit).ToArray();
         if (page.Length == 0) return new([], false);
-        var records = page.Select(row => row.RecordId).ToArray();
-        var numbers = page.Select(row => row.RevisionNumber).ToArray();
-        var groups = (await ReadRowsAsync(db, records, numbers, cancellationToken)).ToLookup(row => (row.RecordId, row.RevisionNumber));
-        var lists = page.Where(row => row.PartyTallyCount > 0 && row.ListId is not null)
-            .Select(row => row.ListId!).Distinct(StringComparer.Ordinal).ToArray();
-        var casts = lists.Length == 0 ? [] : await db.Database.SqlQueryRaw<MemberCastRow>(ReadMemberCasts, [lists]).ToArrayAsync(cancellationToken);
-        var castsByList = casts.ToLookup(row => row.ListId, StringComparer.Ordinal);
+        var groups = (await ReadRowsAsync(db, [.. page.Select(row => row.RecordId)], [.. page.Select(row => row.RevisionNumber)], cancellationToken))
+            .ToLookup(row => (row.RecordId, row.RevisionNumber));
         return new([.. page.Select(row => new VotePartyTallyEvidence(row.RecordId, row.RevisionNumber, row.PartyTallyCount,
             [.. groups[(row.RecordId, row.RevisionNumber)].Select(group => new PublishedPartyTally
             {
                 Party = group.Party, Yea = group.Yea, Nay = group.Nay, Present = group.Present, NotVoting = group.NotVoting, Other = group.Other
             }).OrderBy(group => group.Party, StringComparer.Ordinal)],
-            row.ListId is null || row.PartyTallyCount is null or 0 ? [] : [.. castsByList[row.ListId].Select(cast => new VoteMemberCast(cast.Party, cast.VoteCast))]))], revisions.Length > limit);
+            row.StateCount == 0 ? null : new KeptReleaseRange(row.FirstRelease!.Value, row.LastRelease)))], revisions.Length > limit);
     }
 
     private static Task<TallyReadRow[]> ReadRowsAsync(CollectionAttemptDbContext db, string[] records, int[] revisions, CancellationToken cancellationToken) =>
@@ -181,15 +172,10 @@ internal static class VotePartyTallyRows
     {
         public string RecordId { get; set; } = "";
         public int RevisionNumber { get; set; }
-        public string? ListId { get; set; }
         public short? PartyTallyCount { get; set; }
-    }
-
-    private sealed class MemberCastRow
-    {
-        public string ListId { get; set; } = "";
-        public string? Party { get; set; }
-        public string VoteCast { get; set; } = "";
+        public int? FirstRelease { get; set; }
+        public int? LastRelease { get; set; }
+        public long StateCount { get; set; }
     }
 
     private sealed class TallyReadRow

@@ -56,23 +56,15 @@ internal sealed class VoteTally
     }
 
     private static PublishedPartyTally[] Tallies(VoteMemberLine[] lines, Dictionary<string, string> partyBySourceId) =>
-        TalliesOf(lines.Select(line => (partyBySourceId[line.SourceId], line.CastText)));
-
-    /// <summary>The one grouping rule for party cast tallies. Publication reads its casts from the saved member lines, and the tally verifier reads them from the member list rows.</summary>
-    internal static PublishedPartyTally[] TalliesOf(IEnumerable<(string Party, string CastText)> casts) =>
-        casts.GroupBy(cast => cast.Party)
-            .Select(group =>
+        lines.GroupBy(line => partyBySourceId[line.SourceId])
+            .Select(group => new PublishedPartyTally
             {
-                var kinds = group.Select(cast => VoteMemberLine.KnownCastOf(cast.CastText)).ToArray();
-                return new PublishedPartyTally
-                {
-                    Party = group.Key,
-                    Yea = kinds.Count(kind => kind == VoteCastKind.Yea),
-                    Nay = kinds.Count(kind => kind == VoteCastKind.Nay),
-                    Present = kinds.Count(kind => kind == VoteCastKind.Present),
-                    NotVoting = kinds.Count(kind => kind == VoteCastKind.NotVoting),
-                    Other = kinds.Count(kind => kind is null)
-                };
+                Party = group.Key,
+                Yea = group.Count(line => line.KnownCast == VoteCastKind.Yea),
+                Nay = group.Count(line => line.KnownCast == VoteCastKind.Nay),
+                Present = group.Count(line => line.KnownCast == VoteCastKind.Present),
+                NotVoting = group.Count(line => line.KnownCast == VoteCastKind.NotVoting),
+                Other = group.Count(line => line.KnownCast is null)
             })
             .OrderBy(tally => tally.Party, StringComparer.Ordinal).ToArray();
 

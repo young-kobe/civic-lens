@@ -441,7 +441,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat"))]);
         await SeedAsync(published, published.Vote.RevisionNumber, inRelease: true);
         await new BackfillStoredColumns(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
-        var verify = new VerifyVotePartyTallies(publications);
+        var verify = new VerifyVotePartyTallies(publications, published.Scenario.Releases);
         const string snapshotSql = "SELECT coalesce(string_agg(t.party || t.yea || t.nay || t.present || t.not_voting || t.other, ',' ORDER BY t.party), '') || '/' || (SELECT coalesce(max(party_tally_count), -1) FROM vote_revisions) FROM vote_revision_party_tallies t";
 
         var exact = await verify.ExecuteAsync(PublicationScenario.Owner, 10, null);
@@ -462,6 +462,28 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
     }
 
     [Fact]
+    public async Task TheTallyVerifierMergesTheReleaseRangeOfEveryStateRowSoAFileThatOnlyTheOlderFolderHoldsStillProvesTheGroups()
+    {
+        var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat"))]);
+        await SeedAsync(published, published.Vote.RevisionNumber, inRelease: true);
+        await new BackfillStoredColumns(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
+        // The revision leaves release 1 and comes back in release 2, whose folder does not hold the file. The merged range is 1 to open.
+        var newer = $"000002-{Guid.NewGuid():N}";
+        published.Scenario.Releases.Directories[newer] = new();
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            UPDATE publication_record_states SET last_release = 1;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES (2, '{newer}', 'test', 2, 1, false);
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('vote', '{published.Vote.RecordId}', 2, {published.Vote.RevisionNumber}, NULL);
+            """);
+
+        var result = await new VerifyVotePartyTallies(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner, 10, null);
+
+        Assert.Equal((1, 1, 0, 0, 0), (result.Examined, result.Verified, result.OpenWithoutKeptFile, result.ClosedWithoutKeptFile, result.Failed));
+    }
+
+    [Fact]
     public async Task TheTallyVerifierKeepsAnUnknownCountNullAndNeverWritesZeroWhenNoKeptFileProvesIt()
     {
         var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat"))], otherLines: [], totals: [PublicationScenario.DefaultPartyTotal]);
@@ -469,7 +491,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         published.Scenario.Releases.Directories.Clear();
         await new BackfillStoredColumns(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
-        var result = await new VerifyVotePartyTallies(publications).ExecuteAsync(PublicationScenario.Owner, 10, null);
+        var result = await new VerifyVotePartyTallies(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner, 10, null);
 
         Assert.Equal((1, 1, 0, 0), (result.Examined, result.Unresolved, result.Verified + result.Unavailable + result.Failed, result.Failures.Count));
         Assert.Equal([""], await ReadAsync("SELECT coalesce(party_tally_count::text, '') FROM vote_revisions"));
@@ -482,7 +504,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         var published = await PublishVoteAsync([]);
         await SeedAsync(published, 1, throughRevision: 3);
         await ExecuteAsync("UPDATE vote_revisions SET party_tally_count = 0");
-        var verify = new VerifyVotePartyTallies(publications);
+        var verify = new VerifyVotePartyTallies(publications, published.Scenario.Releases);
 
         var first = await verify.ExecuteAsync(PublicationScenario.Owner, 1, null);
         var second = await verify.ExecuteAsync(PublicationScenario.Owner, 1, VotePartyTallyVerificationCursor.Parse(first.NextCursor));

@@ -395,10 +395,10 @@ public sealed class ReleaseCommandTests
     public async Task TallyVerifyExitsWithOneOnAFailedRevisionAndWithZeroWhenEveryRevisionMatchesAndLeavesUnresolvedRevisionsAlone()
     {
         var scenario = new PublicationScenario();
-        var verify = new VerifyVotePartyTallies(scenario.Publications);
-        scenario.Publications.TallyEvidence.Add(new("a", 1, null, [], []));
+        var verify = new VerifyVotePartyTallies(scenario.Publications, scenario.Releases);
+        scenario.Publications.TallyEvidence.Add(new("a", 1, null, [], null));
         var unresolved = await RunTalliesAsync(["releases", "tallies", "verify", "5"], verify, TextWriter.Null, TextWriter.Null);
-        scenario.Publications.TallyEvidence.Add(new("a", 2, 0, [new PublishedPartyTally { Party = "Forged", Yea = 1, Nay = 0, Present = 0, NotVoting = 0, Other = 0 }], []));
+        scenario.Publications.TallyEvidence.Add(new("a", 2, 0, [new PublishedPartyTally { Party = "Forged", Yea = 1, Nay = 0, Present = 0, NotVoting = 0, Other = 0 }], null));
         var forged = await RunTalliesAsync(["releases", "tallies", "verify", "5"], verify, TextWriter.Null, TextWriter.Null);
 
         Assert.Equal((0, 1), (unresolved, forged));
@@ -408,8 +408,8 @@ public sealed class ReleaseCommandTests
     public async Task TallyVerifyPrintsJsonAndItsCursorContinuesTheScanAndABadCursorExitsWithTwo()
     {
         var scenario = new PublicationScenario();
-        scenario.Publications.TallyEvidence.AddRange([new("a", 1, 0, [], []), new("b", 1, 0, [], [])]);
-        var verify = new VerifyVotePartyTallies(scenario.Publications);
+        scenario.Publications.TallyEvidence.AddRange([new("a", 1, 0, [], null), new("b", 1, 0, [], null)]);
+        var verify = new VerifyVotePartyTallies(scenario.Publications, scenario.Releases);
         var firstOutput = new StringWriter();
         await RunTalliesAsync(["releases", "tallies", "verify", "1"], verify, firstOutput, TextWriter.Null);
         using var firstJson = JsonDocument.Parse(firstOutput.ToString());
@@ -422,6 +422,7 @@ public sealed class ReleaseCommandTests
         using var continuedJson = JsonDocument.Parse(continuedOutput.ToString());
         Assert.Equal(("1:a", 0, 2), (cursor, continued, rejected));
         Assert.Equal(1, continuedJson.RootElement.GetProperty("unavailable").GetInt32());
+        Assert.Equal((0, 0), (continuedJson.RootElement.GetProperty("openWithoutKeptFile").GetInt32(), continuedJson.RootElement.GetProperty("closedWithoutKeptFile").GetInt32()));
     }
 
     [Theory]
@@ -433,7 +434,7 @@ public sealed class ReleaseCommandTests
     {
         var error = new StringWriter();
 
-        var exit = await RunTalliesAsync(["releases", "tallies", .. arguments.Split(' ')], new(null!), TextWriter.Null, error);
+        var exit = await RunTalliesAsync(["releases", "tallies", .. arguments.Split(' ')], new(null!, null!), TextWriter.Null, error);
 
         Assert.Equal(2, exit);
         Assert.Contains("releases tallies verify <limit> [cursor]", error.ToString(), StringComparison.Ordinal);
