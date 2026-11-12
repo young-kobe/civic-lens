@@ -22,7 +22,7 @@ public sealed class SearchPageReader(SearchIndex index, IssueStore issueStore, O
 
     public async Task<SearchPageData?> ReadAsync(IQueryCollection query, CancellationToken cancellationToken)
     {
-        var request = SearchRequest.Parse(query);
+        var request = SearchRequest.Parse(WithoutSort(query));
         if (await index.FindReleaseAsync(request.Release, cancellationToken) is not { } release) return null;
         var issues = (await issueStore.ListOptionsAsync(cancellationToken)).Select(issue => new SearchChoiceData(issue.IssueId, issue.Name)).ToArray();
         var typed = Typed(request);
@@ -36,6 +36,10 @@ public sealed class SearchPageReader(SearchIndex index, IssueStore issueStore, O
         var filterName = page.Hits.SelectMany(hit => hit.Officials).FirstOrDefault(official => official.Id == request.Official)?.Name;
         return new(typed, release.ReleaseNumber, officials, moreOfficials, bill, hits, page.NextCursor, issues, filterName);
     }
+
+    /// <summary>The page has no sort control and its next link carries none, so it ignores a typed sort. A sorted cursor then fails as an invalid cursor, not as a ranked page with the wrong key.</summary>
+    private static QueryCollection WithoutSort(IQueryCollection query) =>
+        new(query.Where(pair => pair.Key is not ("sort" or "direction")).ToDictionary(pair => pair.Key, pair => pair.Value));
 
     private static SearchQueryData Typed(SearchRequest request) => new(request.Text,
         request.Kind is { } kind ? PublicationProtocol.KindText(kind) : null, request.Official, request.Issue,
