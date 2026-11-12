@@ -31,7 +31,6 @@
 <section aria-labelledby="l-info">
 <p class="fresh" id="l-info" role="status" aria-live="polite" style="scroll-margin-top:180px"></p>
 <ul class="chips" id="l-chips" aria-label="Active filters"></ul>
-<div class="ai"><span class="tag">AI summaries. Drafted by an AI model from the source text.</span><p>The title of each statement below is drafted by an AI model. The quotes on each statement page are the exact words of the source. <span class="example">example wording</span></p></div>
 <ul class="rows rec-statement" id="l-list"></ul>
 <div class="empty" id="l-none" hidden><p><b>No statement matches these filters.</b> <span class="example">example wording</span></p><ul><li>Check the spelling of the name.</li><li>A date filter leaves out statements with no date. Clear the dates to see them. <span class="example">example wording</span></li><li><a href="search.html">Search all records</a></li></ul></div>
 <div class="pager" id="l-pager"><span class="info" id="l-page">Page 1 of 1</span><a class="btn ghost" id="l-prev" aria-disabled="true">Previous 25</a><a class="btn ghost" id="l-next" href="statements.html?page=2">Next 25</a></div>
@@ -42,7 +41,8 @@ match:function(o,f){return CL.words(f.official.value,o.sp)&&CL.has(o.i,f.issue.v
 noun:['statement','statements'],
 chips:function(f){var c=[],s=f.official.value.trim();if(s)c.push('Official: '+s);if(f.issue.value)c.push(f.issue.value);return c.concat(CL.range(f))},
 row:function(o){var m='<span>'+CL.esc(o.sp)+', '+o.se+', '+o.pa+'</span><span>'+(o.d?'Said on '+CL.day(o.d):'Date not stated')+'</span><span>From '+o.src+'</span>';
-return '<li class="row"><div><a class="t" href="'+o.h+'">'+CL.esc(o.t)+'</a><div class="meta">'+m+'</div></div><div class="side">'+(o.ln?'<span class="badge">Linked to a vote</span>':'')+'</div></li>'}};</script>
+return '<li class="row"><div><a class="t" href="'+o.h+'">'+CL.esc(o.t)+'</a>'+CL.label(o.l)+'<div class="meta">'+m+'</div></div><div class="side">'+(o.ln?'<span class="badge">Linked to a vote</span>':'')+'</div></li>'}};</script>
+<script>/* Prototype data: each row shows the label column of its public view. */LIST.rows.forEach(function(o,i){o.l='An AI summary of this release.'});</script>
 <script src="list.js"></script>
 </div></main>
 <footer class="site"><div class="wrap"><a href="#">How we check records</a><a href="#">Glossary</a><a href="#">About</a><a href="report.html">Report a problem with this page</a><span class="muted" style="padding:10px 0">Prototype. Not the live site.</span></div></footer>

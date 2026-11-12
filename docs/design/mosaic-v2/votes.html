@@ -31,7 +31,6 @@
 <section aria-labelledby="l-info">
 <p class="fresh" id="l-info" role="status" aria-live="polite" style="scroll-margin-top:180px"></p>
 <ul class="chips" id="l-chips" aria-label="Active filters"></ul>
-<div class="ai"><span class="tag">AI summaries. Drafted by an AI model from reviewed records.</span><p>The title of each vote below is drafted by an AI model. The date, the kind of vote, the result and the counts come from the official roll call. <span class="example">example wording</span></p></div>
 <ul class="rows rec-vote" id="l-list"></ul>
 <div class="empty" id="l-none" hidden><p><b>No vote matches these filters.</b> <span class="example">example wording</span></p><ul><li>Clear one filter, such as the kind of vote. <span class="example">example wording</span></li><li>Use a wider date range. <span class="example">example wording</span></li><li>Search a bill number, such as <a href="search.html?q=5334">5334</a>.</li><li><a href="search.html">Search all records</a></li></ul></div>
 <div class="pager" id="l-pager"><span class="info" id="l-page">Page 1 of 1</span><a class="btn ghost" id="l-prev" aria-disabled="true">Previous 25</a><a class="btn ghost" id="l-next" href="votes.html?page=2">Next 25</a></div>
@@ -42,7 +41,8 @@ match:function(o,f){var b=f.bill.value.replace(/[^a-z0-9]/gi,'').toLowerCase();r
 noun:['vote','votes'],
 chips:function(f){var c=[];if(f.chamber.value)c.push(f.chamber.value==='house'?'House':'Senate');if(f.kind.value)c.push(KW[f.kind.value]);if(f.bill.value.trim())c.push('Bill '+f.bill.value.trim());if(f.issue.value)c.push(f.issue.value);return c.concat(CL.range(f))},
 row:function(o){var m='<span>Voted on '+CL.day(o.d)+'</span><span>'+(o.c==='house'?'House':'Senate')+' roll call '+o.r+'</span><span>'+KW[o.k]+'</span>'+(o.b?'<span>'+o.b+'</span>':'')+'<span>Result: '+o.res+'</span>';
-return '<li class="row"><div><a class="t" href="'+o.h+'">'+CL.esc(o.t)+'</a><div class="meta">'+m+'</div>'+CL.tally(o.t,o.y,o.n,o.p,o.nv)+'</div><div class="side">'+(o.s?'<span class="badge split">Split vote</span>':'')+'</div></li>'}};</script>
+return '<li class="row"><div><a class="t" href="'+o.h+'">'+CL.esc(o.t)+'</a>'+CL.label(o.l)+'<div class="meta">'+m+'</div>'+CL.tally(o.t,o.y,o.n,o.p,o.nv)+'</div><div class="side">'+(o.s?'<span class="badge split">Split vote</span>':'')+'</div></li>'}};</script>
+<script>/* Prototype data: each row shows the label column of its public view. */LIST.rows.forEach(function(o,i){o.l=i%4===3?'Written automatically from Congress.gov data, with no AI':'An AI summary of the official record'});</script>
 <script src="list.js"></script>
 </div></main>
 <footer class="site"><div class="wrap"><a href="#">How we check records</a><a href="#">Glossary</a><a href="#">About</a><a href="report.html">Report a problem with this page</a><span class="muted" style="padding:10px 0">Prototype. Not the live site.</span></div></footer>

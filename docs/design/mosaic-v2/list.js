@@ -17,7 +17,8 @@ function words(v,text){return !v||text.toLowerCase().indexOf(v.trim().toLowerCas
 function tally(title,y,n,p,nv){var t=y+n+p+nv,x=0;function seg(c,k){var w=k/t*100,r='<rect class="'+c+'" x="'+x.toFixed(2)+'%" width="'+w.toFixed(2)+'%" height="100%"/>';x+=w;return k?r:''}
 var lg='<li><span class="sw y"></span><b>'+y+'</b> Yes</li><li><span class="sw n"></span><b>'+n+'</b> No</li>'+(p?'<li><span class="sw nv"></span><b>'+p+'</b> present</li>':'')+'<li><span class="sw nv"></span><b>'+nv+'</b> not voting</li>';
 return '<div class="row-tally"><svg class="tally" role="img" aria-label="'+esc(title)+': '+y+' Yes, '+n+' No, '+(p?p+' present, ':'')+nv+' not voting">'+seg('y',y)+seg('n',n)+seg('nv',p+nv)+'</svg><ul class="legend">'+lg+'</ul></div>'}
-return{esc:esc,day:day,inRange:inRange,range:range,has:has,words:words,tally:tally}})();
+function label(text){return text?'<p class="row-label">'+esc(text)+'</p>':''}
+return{esc:esc,day:day,inRange:inRange,range:range,has:has,words:words,tally:tally,label:label}})();
 
 (function(){
 var L=window.LIST,f=document.getElementById('l-form'),ul=document.getElementById('l-list'),info=document.getElementById('l-info'),chips=document.getElementById('l-chips'),none=document.getElementById('l-none'),

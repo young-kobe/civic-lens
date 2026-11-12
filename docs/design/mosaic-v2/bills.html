@@ -31,7 +31,6 @@
 <section aria-labelledby="l-info">
 <p class="fresh" id="l-info" role="status" aria-live="polite" style="scroll-margin-top:180px"></p>
 <ul class="chips" id="l-chips" aria-label="Active filters"></ul>
-<div class="ai"><span class="tag">AI summaries. Drafted by an AI model from reviewed records.</span><p>The one-line summary on each bill below is drafted by an AI model. It states what the bill would do, in plain words.</p></div>
 <ul class="rows rec-bill" id="l-list"></ul>
 <div class="empty" id="l-none" hidden><p><b>No bill matches these filters.</b> <span class="example">example wording</span></p><ul><li>Clear one filter, such as the status. <span class="example">example wording</span></li><li>Check the spelling of the sponsor. <span class="example">example wording</span></li><li>Search a bill number, such as <a href="search.html?q=5334">5334</a>.</li><li><a href="search.html">Search all records</a></li></ul></div>
 <div class="pager" id="l-pager"><span class="info" id="l-page">Page 1 of 1</span><a class="btn ghost" id="l-prev" aria-disabled="true">Previous 25</a><a class="btn ghost" id="l-next" href="bills.html?page=2">Next 25</a></div>
@@ -42,7 +41,8 @@ match:function(o,f){var b=f.bill.value.replace(/[^a-z0-9]/gi,'').toLowerCase();r
 noun:['bill or resolution','bills and resolutions'],
 chips:function(f){var c=[],b=f.bill.value.trim(),sp=f.sponsor.value.trim();if(f.type.value)c.push(TN[f.type.value].charAt(0).toUpperCase()+TN[f.type.value].slice(1));if(b)c.push('Number '+b);if(sp)c.push('Sponsor: '+sp);if(f.status.value)c.push(f.status.value);if(f.issue.value)c.push(f.issue.value);if(f.policyArea.value)c.push(f.policyArea.value);return c.concat(CL.range(f))},
 row:function(o){var m='<span>Sponsor: '+CL.esc(o.sp)+'</span><span>Latest sponsorship '+CL.day(o.d)+'</span><span>Latest official action '+CL.day(o.ad)+': '+o.aw+'</span>',b=o.st==='Other'?'':'<span class="badge'+(o.st==='Became law'?' law':'')+'">'+o.st+'</span>';
-return '<li class="row"><div><a class="t" href="'+o.h+'">'+CL.esc(o.t)+'</a><div class="meta">'+m+'</div></div><div class="side">'+b+'</div></li>'}};</script>
+return '<li class="row"><div><a class="t" href="'+o.h+'">'+CL.esc(o.t)+'</a>'+CL.label(o.l)+'<div class="meta">'+m+'</div></div><div class="side">'+b+'</div></li>'}};</script>
+<script>/* Prototype data: each row shows the label column of its public view. */LIST.rows.forEach(function(o,i){o.l=i%4===3?'Written automatically from Congress.gov data, with no AI':'An AI summary of the official record'});</script>
 <script src="list.js"></script>
 </div></main>
 <footer class="site"><div class="wrap"><a href="#">How we check records</a><a href="#">Glossary</a><a href="#">About</a><a href="report.html">Report a problem with this page</a><span class="muted" style="padding:10px 0">Prototype. Not the live site.</span></div></footer>

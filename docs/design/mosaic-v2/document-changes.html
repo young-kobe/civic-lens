@@ -32,7 +32,6 @@
 <section aria-labelledby="l-info">
 <p class="fresh" id="l-info" role="status" aria-live="polite" style="scroll-margin-top:180px"></p>
 <ul class="chips" id="l-chips" aria-label="Active filters"></ul>
-<div class="ai"><span class="tag">AI summaries. Drafted by an AI model from reviewed records.</span><p>The title of each change below is drafted by an AI model. The change page shows the exact words from both versions. <span class="example">example wording</span></p></div>
 <ul class="rows" id="l-list"></ul>
 <div class="empty" id="l-none" hidden><p><b>No document change matches these filters.</b> <span class="example">example wording</span></p><ul><li>Clear one filter, such as the office. <span class="example">example wording</span></li><li>Use a wider date range. <span class="example">example wording</span></li><li><a href="search.html">Search all records</a></li></ul></div>
 <div class="pager" id="l-pager"><span class="info" id="l-page">Page 1 of 1</span><a class="btn ghost" id="l-prev" aria-disabled="true">Previous 25</a><a class="btn ghost" id="l-next" href="document-changes.html?page=2">Next 25</a></div>
@@ -42,7 +41,8 @@
 match:function(o,f){return(!f.institution.value||o.o===f.institution.value)&&CL.has(o.i,f.issue.value)&&CL.inRange(o.d,f)},
 noun:['document change','document changes'],
 chips:function(f){var c=[];if(f.institution.value)c.push(f.institution.value);if(f.issue.value)c.push(f.issue.value);return c.concat(CL.range(f))},
-row:function(o){return '<li class="row"><div><a class="t" href="'+o.h+'">'+CL.esc(o.t)+'</a><div class="meta"><span>'+o.o+'</span><span>Found on '+CL.day(o.d)+'</span><span>Changed in '+o.n+(o.n===1?' place':' places')+'</span></div></div></li>'}};</script>
+row:function(o){return '<li class="row"><div><a class="t" href="'+o.h+'">'+CL.esc(o.t)+'</a>'+CL.label(o.l)+'<div class="meta"><span>'+o.o+'</span><span>Found on '+CL.day(o.d)+'</span><span>Changed in '+o.n+(o.n===1?' place':' places')+'</span></div></div></li>'}};</script>
+<script>/* Prototype data: each row shows the label column of its public view. */LIST.rows.forEach(function(o,i){o.l='Drafted by an AI model from these source versions. A person checked it before publication.'});</script>
 <script src="list.js"></script>
 </div></main>
 <footer class="site"><div class="wrap"><a href="#">How we check records</a><a href="#">Glossary</a><a href="#">About</a><a href="report.html">Report a problem with this page</a><span class="muted" style="padding:10px 0">Prototype. Not the live site.</span></div></footer>
