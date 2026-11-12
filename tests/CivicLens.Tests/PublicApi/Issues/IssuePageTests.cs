@@ -7,6 +7,7 @@ using CivicLens.PublicApi.Pages;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
+using CivicLens.Tests.PublicApi.ZipDistricts;
 using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Issues;
@@ -148,6 +149,22 @@ public sealed class IssuePageTests(PostgresCollection postgres)
         Assert.Contains(PublishedWording.BillLineSource, rows[0].TextContent);
         Assert.DoesNotContain(PublishedWording.BillLineSource, rows[1].TextContent);
         Assert.Equal("https://civic-lens.test/" + PublicationProtocol.RecordPagePath(bill.RecordId), rows[0].QuerySelector("a")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task ABillRowNamesItsSponsorAndNotItsCosponsorAndAnUnnamedSponsorShowsNoSponsorLine()
+    {
+        var named = new SeededBill('a', "2026-03-01") { BillNumber = 1, Issues = ["tax"] };
+        var unnamed = new SeededBill('b', "2026-02-01") { BillNumber = 2, Issues = ["tax"], Sponsorships = [new("p9", "Sponsor", "2026-01-10")] };
+        await using var host = await StartAsync([], [named, unnamed]);
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 1,
+            new SeededSeat("p1", "Rosa Sponsor", "Representative", "CT", 3), new SeededSeat("p2", "Gabe Cosponsor", "Representative", "RI", 2));
+
+        var rows = (await GetPageAsync(host)).QuerySelectorAll("#bills .record-row");
+
+        Assert.Contains("Sponsor: Rosa Sponsor", rows[0].TextContent);
+        Assert.DoesNotContain("Gabe Cosponsor", rows[0].TextContent);
+        Assert.DoesNotContain("Sponsor:", rows[1].TextContent);
     }
 
     [Fact]

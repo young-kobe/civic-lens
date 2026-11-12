@@ -49,6 +49,18 @@ public sealed class IssueMemberVotesTests
     }
 
     [Fact]
+    public async Task TwoSenatorsWhoVotedDifferentlyGetNoComparisonBadgeInTheirOwnSections()
+    {
+        var votes = new SharedVoteRowsData(PublishedChamber.Senate, [new("pat", "Pat Member"), new("sam", "Sam Member")],
+            [HouseVotes.Votes[0] with { Casts = [new("pat", "Yes", "Yea"), new("sam", "No", "Nay")], MembersVotedTheSame = false }]);
+
+        var page = await RenderAsync(Data([new("Senate seat", Pat) { Chamber = PublishedChamber.Senate }], votes));
+
+        Assert.Equal(2, page.QuerySelectorAll(".issue-member").Length);
+        Assert.Empty(page.QuerySelectorAll(".shared-vote-comparison"));
+    }
+
+    [Fact]
     public async Task AZipWhoseSeatsAreAllVacantSaysSoAndNotThatMembersHaveNoVote()
     {
         var page = await RenderAsync(Data([new("House seat", null), new("Senate seat", null) { Chamber = PublishedChamber.Senate }]));

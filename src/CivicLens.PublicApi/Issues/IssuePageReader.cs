@@ -12,7 +12,7 @@ public sealed class IssuePageReader(IssueStore issues)
         if (issueId.Length > PublishedRecordEntry.MaximumFilterValueLength) return null;
         if (await issues.FindPageAsync(issueId, cancellationToken) is not { } answer) return null;
         var votes = answer.Votes.Select(vote => new IssueVoteData(vote.RecordId, vote.VotedOn, vote.Chamber, vote.Headline, vote.Label, vote.ResultWords, vote.Yea, vote.Nay)).ToArray();
-        var bills = answer.Bills.Select(bill => new IssueBillData(bill.RecordId, bill.Headline, bill.Label, bill.EventDate, bill.BillLine)).ToArray();
+        var bills = answer.Bills.Select(bill => new IssueBillData(bill.RecordId, bill.Headline, bill.Label, bill.EventDate, bill.BillLine, bill.Sponsor)).ToArray();
         var lineUp = answer.LineUp is { } split
             ? new IssueLineUpData(split.Congress, split.Bills, [.. split.Parties.Select(party => new IssueLineUpPartyData(party.Party, party.Bills))], split.UnknownBills)
             : null;

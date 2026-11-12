@@ -97,6 +97,30 @@ public sealed class VoteMembersEndpointsTests(PostgresCollection postgres)
         Assert.Equal(JsonValueKind.Null, members[2].GetProperty("caucus").ValueKind);
     }
 
+    [Fact]
+    public async Task MemberRowsExposeTheTermStateAndDistrictWithNullForASenatorDistrictAndAMemberWithNoTerm()
+    {
+        await using var host = await StartWithVotesAsync(House, Senate);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
+            new SeededOfficial("p0", "Ann Able", new SeededTerm("Representative", "Representative", "2025-01-03") { State = "CA", District = 12 }),
+            new SeededOfficial("p1", "Ben Baker",
+                new SeededTerm("Representative", "Representative", "2025-01-03") { State = "AK", District = 0 },
+                new SeededTerm("Senator", "Senator", "2025-01-03") { State = "TX" }));
+
+        using var house = await GetAsync(host, $"/v1/votes/{House.RecordId}/members");
+        using var senate = await GetAsync(host, $"/v1/votes/{Senate.RecordId}/members");
+
+        var houseMembers = house.RootElement.GetProperty("members").EnumerateArray().ToArray();
+        Assert.Equal(("CA", 12), (houseMembers[0].GetProperty("state").GetString(), houseMembers[0].GetProperty("district").GetInt32()));
+        Assert.Equal(("AK", 0), (houseMembers[1].GetProperty("state").GetString(), houseMembers[1].GetProperty("district").GetInt32()));
+        Assert.Equal(JsonValueKind.Null, houseMembers[2].GetProperty("state").ValueKind);
+        Assert.Equal(JsonValueKind.Null, houseMembers[2].GetProperty("district").ValueKind);
+        var senateMembers = senate.RootElement.GetProperty("members").EnumerateArray().ToArray();
+        Assert.Equal("TX", senateMembers[1].GetProperty("state").GetString());
+        Assert.Equal(JsonValueKind.Null, senateMembers[1].GetProperty("district").ValueKind);
+        Assert.Equal(JsonValueKind.Null, senateMembers[0].GetProperty("state").ValueKind);
+    }
+
     [Theory]
     [InlineData("Nay")]
     [InlineData("nay")]

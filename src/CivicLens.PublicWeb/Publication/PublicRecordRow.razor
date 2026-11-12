@@ -9,6 +9,10 @@
             {
                 <span class="muted small">@Label</span>
             }
+            @if (Sponsor is not null)
+            {
+                <span class="muted small">Sponsor: @Sponsor</span>
+            }
             <span class="muted small">@Meta</span>
         </a>
         @if (Yea is { } yea && Nay is { } nay)
@@ -37,6 +41,8 @@
     [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
     [Parameter, EditorRequired] public string Headline { get; set; } = string.Empty;
     [Parameter] public string? Label { get; set; }
+    /// <summary>The name of the bill sponsor, shown as "Sponsor: {name}" above the meta line.</summary>
+    [Parameter] public string? Sponsor { get; set; }
     [Parameter, EditorRequired] public string Meta { get; set; } = string.Empty;
     [Parameter] public int? Yea { get; set; }
     [Parameter] public int? Nay { get; set; }

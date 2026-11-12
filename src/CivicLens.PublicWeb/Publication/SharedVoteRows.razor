@@ -29,7 +29,7 @@
                             {
                                 <span class="shared-vote-label">@vote.Label</span>
                             }
-                            @if (vote.MembersVotedTheSame is { } membersVotedTheSame)
+                            @if (!SingleMember && vote.MembersVotedTheSame is { } membersVotedTheSame)
                             {
                                 <span class="shared-vote-comparison">@(membersVotedTheSame ? "Same vote" : "Voted differently")</span>
                             }

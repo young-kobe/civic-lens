@@ -8,7 +8,7 @@ internal static class PeopleCommand
 {
     private const string NoteOption = "--note";
 
-    private const string Usage = "Use people import <config.json>, people photo withhold|restore <person-id> [--note <text>], " +
+    private const string Usage = "Use people photo withhold|restore <person-id> [--note <text>], " +
         "people website set <person-id> <url> [--note <text>], or people website clear <person-id> [--note <text>].";
 
     public static bool Matches(string[] args) => args is ["people", ..];
@@ -25,8 +25,6 @@ internal static class PeopleCommand
             var settings = new ChangePersonSetting(people);
             object? result = words switch
             {
-                ["people", "import", var path] when note is null =>
-                    await people.ImportAsync(ConfigurationFile.ReadCollection(path).People, owner.Subject, cancellationToken),
                 ["people", "photo", "withhold", var id] =>
                     await settings.WithholdPhotoAsync(owner, id, note ?? "Photo withheld by the owner.", cancellationToken),
                 ["people", "photo", "restore", var id] =>

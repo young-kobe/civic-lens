@@ -6012,6 +6012,33 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseVoteBillRow", b =>
+                {
+                    b.Property<int>("ReleaseNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("release_number");
+
+                    b.Property<string>("VoteRecordId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("vote_record_id");
+
+                    b.Property<string>("BillRecordId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("bill_record_id");
+
+                    b.HasKey("ReleaseNumber", "VoteRecordId");
+
+                    b.ToTable("release_vote_bills", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_release_vote_bills_bill_record_id", "bill_record_id ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_release_vote_bills_vote_record_id", "vote_record_id ~ '^[0-9a-f]{64}$'");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Relationships.Persistence.RelationshipAnalysisBudgetRow", b =>
                 {
                     b.Property<DateOnly>("DayUtc")
@@ -10550,6 +10577,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleasePolicyAreaRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseVoteBillRow", b =>
                 {
                     b.HasOne("CivicLens.Infrastructure.Publication.Persistence.PublicationReleaseRow", null)
                         .WithMany()

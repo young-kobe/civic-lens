@@ -90,6 +90,22 @@ public sealed class SharedVoteRowsTests
     }
 
     [Fact]
+    public async Task ASingleMemberRowShowsNoComparisonBadgeEvenWhenTheGroupComparedTheVote()
+    {
+        var different = new SharedVoteRowData(new string('f', 64), new(2026, 9, 16), 119, 2, 8,
+            "Members differ", null, "Vote to pass", "Passed", [new("first", "Yes (Yea)", "Yea")])
+        {
+            MembersVotedTheSame = false
+        };
+
+        var document = await RenderAsync(new(PublishedChamber.House, [new("first", "Alex")], [different]), singleMember: true);
+
+        Assert.Single(document.QuerySelectorAll(".shared-vote-row"));
+        Assert.Empty(document.QuerySelectorAll(".shared-vote-comparison"));
+        Assert.DoesNotContain("Voted differently", document.DocumentElement!.TextContent);
+    }
+
+    [Fact]
     public async Task DifferencesOnlyKeepsTheOriginalComparisonCaptionAndShowsTheApprovedEmptyCopy()
     {
         var same = new SharedVoteRowData(new string('a', 64), new(2026, 9, 16), 119, 2, 7,
@@ -133,7 +149,7 @@ public sealed class SharedVoteRowsTests
         Assert.Equal("A vote", normal.QuerySelector("h3 a")!.TextContent);
     }
 
-    private static async Task<IDocument> RenderAsync(SharedVoteRowsData data, bool differencesOnly = false, int headingLevel = 2)
+    private static async Task<IDocument> RenderAsync(SharedVoteRowsData data, bool differencesOnly = false, int headingLevel = 2, bool singleMember = false)
     {
         await using var services = new ServiceCollection().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
@@ -145,7 +161,8 @@ public sealed class SharedVoteRowsTests
                     [nameof(SharedVoteRows.Data)] = data,
                     [nameof(SharedVoteRows.RootPath)] = Root,
                     [nameof(SharedVoteRows.DifferencesOnly)] = differencesOnly,
-                    [nameof(SharedVoteRows.HeadingLevel)] = headingLevel
+                    [nameof(SharedVoteRows.HeadingLevel)] = headingLevel,
+                    [nameof(SharedVoteRows.SingleMember)] = singleMember
                 }));
             return output.ToHtmlString();
         });
