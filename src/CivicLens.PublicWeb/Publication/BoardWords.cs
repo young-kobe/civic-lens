@@ -13,6 +13,12 @@ public static class BoardWords
     public static string NewestRollCall(int congress, DateOnly day) =>
         $"The newest roll call counted here, in the {CongressCalendar.Ordinal(congress)} Congress, is on {Moment.Day(day)}. No count includes a later day.";
 
-    public static string KeptCongress(int newer, int kept) =>
-        $"The {CongressCalendar.Ordinal(newer)} Congress has no member with {OfficialBoardPage.MinimumSplitVotes} split votes yet, so this page keeps the {CongressCalendar.Ordinal(kept)} Congress.";
+    /// <summary>The kept Congress words of a static board page, which shows one board.</summary>
+    public static string KeptCongress(int newer, int kept) => Kept(newer, kept, "this page");
+
+    /// <summary>The kept Congress words of one list on the server boards page. The House and the Senate lists on that page can keep different Congresses.</summary>
+    public static string KeptCongressInList(int newer, int kept) => Kept(newer, kept, "this list");
+
+    private static string Kept(int newer, int kept, string place) =>
+        $"The {CongressCalendar.Ordinal(newer)} Congress has no member with {OfficialBoardPage.MinimumSplitVotes} split votes yet, so {place} keeps the {CongressCalendar.Ordinal(kept)} Congress.";
 }

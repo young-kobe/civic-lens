@@ -25,6 +25,10 @@
             else
             {
                 @Kept(board, congress)
+                @if (Eyebrow is null && board.NewestRollCall is { } shown)
+                {
+                    <p class="small muted">@BoardWords.NewestRollCall(congress, shown)</p>
+                }
                 <p class="board-lede">The @board.Rows.Count @(board.Rows.Count == 1 ? "member" : "members") of the @PublishedPartyNames.PartyOf(board.Chamber, board.Party) with the highest share of split votes cast against most @PublishedPartyNames.Members(board.Party). Count first, then the base it comes from.</p>
                 <ul class="list-rows" role="list">
                     @foreach (var row in board.Rows)
@@ -53,7 +57,7 @@
                     <div class="in">
                         <p><b>Count</b>: split votes where the member voted Yes or No with the other side's majority, against most @PublishedPartyNames.Members(board.Party). <b>Base</b>: split votes where the member cast Yes or No. Present and not voting are not counted.</p>
                         <p>Only members of the @PublishedPartyNames.PartyOf(board.Chamber, board.Party) with at least @OfficialBoardPage.MinimumSplitVotes split votes cast are listed. A shorter record could put a member first by chance. A vote against the party is not a mistake. A vote with the party is not a sign of good work.</p>
-                        @if (board.NewestRollCall is { } newest)
+                        @if (Eyebrow is not null && board.NewestRollCall is { } newest)
                         {
                             <p class="small muted">@BoardWords.NewestRollCall(congress, newest)</p>
                         }
@@ -105,13 +109,15 @@
     private IReadOnlyList<FilterTab> Tabs => [.. Data.Boards.Select(board =>
         FilterTab.Link(PublishedPartyNames.PartyOf(board.Chamber, board.Party), "#h-" + Anchor(board), false))];
 
-    /// <summary>The Congress of every board with vote figures, when they share one. The House and the Senate can keep different Congresses.</summary>
-    private string? Eyebrow => Data.Boards.Select(board => board.Congress).OfType<int>().Distinct().ToArray() is [var congress]
-        ? BoardWords.Eyebrow(congress)
-        : null;
+    /// <summary>The Congress of every board with vote figures, when they share one. The House and the Senate can keep different Congresses.
+    /// Without this eyebrow, each ranked panel names its Congress in its newest roll call line above the list. With it, that line sits in the fold.</summary>
+    private string? Eyebrow { get; set; }
+
+    protected override void OnParametersSet() =>
+        Eyebrow = Data.Boards.Select(board => board.Congress).OfType<int>().Distinct().ToArray() is [var congress] ? BoardWords.Eyebrow(congress) : null;
 
     private static RenderFragment Kept(BoardPanelData board, int congress) => board.NewerCongress is { } newer
-        ? @<p>@BoardWords.KeptCongress(newer, congress)</p>
+        ? @<p>@BoardWords.KeptCongressInList(newer, congress)</p>
         : @<text></text>;
 
     private static string Anchor(BoardPanelData board) => $"{board.Chamber}-{board.Party}".ToLowerInvariant();

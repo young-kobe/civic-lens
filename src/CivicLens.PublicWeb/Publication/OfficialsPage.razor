@@ -52,7 +52,7 @@
     @if (Data.Officials.Count > 0)
     {
         <p class="list-status" role="status">Showing @Data.Officials.Count @(Data.Officials.Count == 1 ? "official" : "officials") on this page. Release @Data.Release.</p>
-        <p class="list-scope muted small">The number of officials covers this whole release. A filter does not change it. Each record count covers the published records that name the official. Votes are not in it.</p>
+        <p class="list-scope muted small">The officials count covers this whole release. Each record count leaves out votes.</p>
         <ul class="list-rows" role="list">
             @foreach (var official in Data.Officials)
             {
@@ -72,7 +72,7 @@
                 </li>
             }
         </ul>
-        <Pager Label="Officials pages" ForwardOnly="true" OlderHref="@NextHref" OlderText="@($"Next {Data.Officials.Count}")" />
+        <Pager Label="Officials pages" ForwardOnly="true" OlderHref="@NextHref" OlderText="Next page" />
     }
 </PublicPage>
 

@@ -722,6 +722,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .list-fold > summary { display: flex; align-items: center; min-height: 44px; padding: 0 var(--s4); font-weight: 650; cursor: pointer; }
 .list-fold[open] > summary { border-bottom: 1px solid var(--line); }
 .list-fold .in { padding: var(--s4); }
+.list-fold .in .lists-filter { margin-top: 0; padding: 0; border-radius: 0; background: none; box-shadow: none; }
 .board-lede { max-width: var(--measure); color: var(--muted); }
 .board-panel + .board-panel, .board-panel + .board-agreement, .board-agreement + .board-agreement { margin-top: var(--s5); }
 .board-kinds { margin: 0 0 var(--s3); }
@@ -738,8 +739,10 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .search-pin > p { margin: var(--s2) 0 0; }
 .content:has(> .search-box) > .page-header h1 { font-size: clamp(1.75rem, 4vw, 2.25rem); }
 .search-other-bills { margin: var(--s3) 0 0; }
-.search-pin-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.search-pin-actions, .search-official-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.search-more-officials { margin: var(--s3) 0 0; }
 .search-pin-actions .btn, .search-official .btn { min-height: 44px; }
+.search-official-actions .btn { max-width: 100%; padding-block: var(--s1); white-space: normal; text-align: left; }
 .search-pin > .search-pin-label { margin: 0 0 var(--s1); color: var(--muted); font-size: var(--t-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .search-results-title { margin: var(--s4) 0 0; font-size: var(--t-lg); }
 .search-snippet { margin: var(--s1) 0 0; color: var(--muted); font-size: var(--t-sm); overflow-wrap: anywhere; }

@@ -87,7 +87,7 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
         var page = new AngleSharp.Html.Parser.HtmlParser().ParseDocument(await host.Client.GetStringAsync("/web/boards"));
 
         var houseDemocrats = page.QuerySelectorAll(".board-panel")[0];
-        Assert.Contains("The 119th Congress has no member with 25 split votes yet, so this page keeps the 118th Congress.", houseDemocrats.TextContent);
+        Assert.Contains("The 119th Congress has no member with 25 split votes yet, so this list keeps the 118th Congress.", houseDemocrats.TextContent);
         Assert.Contains("No member of the House Democrats voted against most Democrats on a split vote in the 118th Congress.", houseDemocrats.TextContent);
         Assert.Empty(page.QuerySelectorAll(".board-panel .list-row"));
         Assert.Null(page.QuerySelector(".page-header-eyebrow"));

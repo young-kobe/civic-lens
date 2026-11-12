@@ -57,7 +57,25 @@ public sealed class BoardsPageTests
     {
         var page = await RenderAsync(Data([Panel(PublishedChamber.House, "Democrat", 118, Row("a", "Ann", null, 30, 10)) with { NewerCongress = 119 }]));
 
-        Assert.Contains("The 119th Congress has no member with 25 split votes yet, so this page keeps the 118th Congress.", page.QuerySelector(".board-panel")!.TextContent);
+        Assert.Contains("The 119th Congress has no member with 25 split votes yet, so this list keeps the 118th Congress.", page.QuerySelector(".board-panel")!.TextContent);
+        Assert.DoesNotContain("this page keeps", page.Body!.TextContent);
+    }
+
+    [Fact]
+    public async Task WhenTheChambersKeepDifferentCongressesEachRankedPanelNamesItsCongressAboveTheListOutsideTheFold()
+    {
+        var page = await RenderAsync(Data([
+            Panel(PublishedChamber.House, "Democrat", 118, Row("a", "Ann", null, 30, 10)),
+            Panel(PublishedChamber.Senate, "Republican", 119, Row("b", "Bob", null, 30, 5))]));
+
+        var panels = page.QuerySelectorAll(".board-panel");
+        foreach (var (panel, ordinal) in panels.Zip(["118th", "119th"]))
+        {
+            var line = Assert.Single(panel.Children.Where(child => child.LocalName == "p"), paragraph => paragraph.TextContent.StartsWith("The newest roll call counted here", StringComparison.Ordinal));
+            Assert.Equal($"The newest roll call counted here, in the {ordinal} Congress, is on 16 Sep 2026. No count includes a later day.", line.TextContent);
+            Assert.True(ListPageRender.Precedes(line, panel.QuerySelector(".list-rows")!));
+            Assert.DoesNotContain("The newest roll call", panel.QuerySelector("details")!.TextContent);
+        }
     }
 
     [Fact]

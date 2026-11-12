@@ -127,10 +127,10 @@ public sealed class ListPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheBillPinNamesTheSponsorLinksTheNewestHouseVoteAndNamesTheOtherBillWithItsSponsor()
+    public async Task TheBillPinNamesTheSponsorLinksTheNewestHouseVoteAndNamesOnlyTheOtherBillThatIsAResult()
     {
         var site = new FakeReleaseSite();
-        site.Publish(1, PublishedSamples.Statement('a', "H.R. 5334 debate", official: "p1"));
+        site.Publish(1, PublishedSamples.Statement('a', "H.R. 5334 debate", official: "p1"), PublishedSamples.Action("S. 5334 names a clinic", "A short account.", "Clinic act", "Xq the source text."));
         await using var host = await StartAsync(site);
         await host.WaitForReleaseAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
@@ -139,20 +139,73 @@ public sealed class ListPageTests(PostgresCollection postgres)
             new SeededOfficial("p3", "John Cornyn", new SeededTerm("Senate", "Senator", "2021-01-03") { State = "TX", Party = "Republican" }));
         await BillsSeed.AddBillsAsync(host.OperationalDatabase,
             new SeededBill('1', "2026-03-03") { BillNumber = 5334, BillLine = "H.R. 5334, the Sanctions Act" },
-            new SeededBill('2', "2026-02-01") { BillType = "s", BillNumber = 5334, Sponsorships = [new("p3", "Sponsor", "2026-01-10")] });
+            new SeededBill('f', "2026-02-01") { BillType = "s", BillNumber = 5334, Sponsorships = [new("p3", "Sponsor", "2026-01-10")] },
+            new SeededBill('6', "2026-01-15") { BillType = "hjres", BillNumber = 5334, Sponsorships = [new("p3", "Sponsor", "2026-01-10")] });
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
             new SeededVote('3', "2026-03-01") { BillNumber = 5334, RollCall = 1 },
             new SeededVote('4', "2026-03-02") { BillNumber = 5334, RollCall = 2 },
             new SeededVote('5', "2026-03-04") { BillNumber = 5334, RollCall = 3, Chamber = "Senate" });
 
         var page = await ParseAsync(await host.Client.GetAsync("/web/search?q=5334"));
+        var filtered = await ParseAsync(await host.Client.GetAsync("/web/search?q=5334&kind=vote"));
         var pin = page.QuerySelector(".search-pin")!;
 
         Assert.Equal("Bill in the 119th Congress. Sponsored by Jimmy Panetta.", pin.QuerySelector("p.muted")!.TextContent);
-        Assert.Equal("https://civic-lens.test/" + PublicationProtocol.RecordPagePath(new string('4', 64)),
-            pin.QuerySelectorAll(".search-pin-actions a").Single(link => link.TextContent == "House vote on it").GetAttribute("href"));
-        Assert.Contains("a Senate bill introduced by John Cornyn, is also in the list.", page.QuerySelector(".search-other-bills")!.TextContent);
-        Assert.Equal("S. 5334", page.QuerySelector(".search-other-bills a")!.TextContent);
+        var vote = Assert.Single(pin.QuerySelectorAll(".search-pin-actions a"), link => link.TextContent.EndsWith("vote on it", StringComparison.Ordinal));
+        Assert.Equal("House vote on it", vote.TextContent);
+        Assert.Equal("https://civic-lens.test/" + PublicationProtocol.RecordPagePath(new string('4', 64)), vote.GetAttribute("href"));
+        var others = page.QuerySelector(".search-other-bills")!;
+        Assert.Contains("a Senate bill introduced by John Cornyn, is also in the list.", others.TextContent);
+        Assert.Equal("S. 5334", Assert.Single(others.QuerySelectorAll("a")).TextContent);
+        Assert.Null(filtered.QuerySelector(".search-pin"));
+        Assert.Null(filtered.QuerySelector(".search-other-bills"));
+    }
+
+    [Fact]
+    public async Task TheBillPinLinksTheNewestSenateVoteWhenTheBillHasNoHouseVote()
+    {
+        var site = new FakeReleaseSite();
+        site.Publish(1, PublishedSamples.Statement('a', "Rent cap", official: "p1"));
+        await using var host = await StartAsync(site);
+        await host.WaitForReleaseAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
+            new SeededOfficial("p1", "John Cornyn", new SeededTerm("Senate", "Senator", "2021-01-03") { State = "TX", Party = "Republican" }));
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('1', "2026-03-03") { BillType = "s", BillNumber = 77, Sponsorships = [new("p1", "Sponsor", "2026-01-10")] });
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('3', "2026-03-04") { BillType = "s", BillNumber = 77, RollCall = 1, Chamber = "Senate" },
+            new SeededVote('4', "2026-03-05") { BillType = "s", BillNumber = 77, RollCall = 2, Chamber = "Senate" });
+
+        var pin = (await ParseAsync(await host.Client.GetAsync("/web/search?q=S.%2077"))).QuerySelector(".search-pin")!;
+
+        var vote = Assert.Single(pin.QuerySelectorAll(".search-pin-actions a"), link => link.TextContent.EndsWith("vote on it", StringComparison.Ordinal));
+        Assert.Equal("Senate vote on it", vote.TextContent);
+        Assert.Equal("https://civic-lens.test/" + PublicationProtocol.RecordPagePath(new string('4', 64)), vote.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task SearchShowsThreeOfficialsAndLinksTheOfficialsListWhenAFourthMatches()
+    {
+        var site = new FakeReleaseSite();
+        site.Publish(1, PublishedSamples.Statement('a', "Rent cap", official: "p1"));
+        await using var host = await StartAsync(site);
+        await host.WaitForReleaseAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, [.. new[] { "Ann", "Bo", "Cy", "Di" }.Select((first, index) =>
+            new SeededOfficial($"p{index}", $"{first} Leeds", new SeededTerm("House", "Representative", "2021-01-03") { State = "MA", District = index + 1, Party = "Democrat" }))]);
+
+        var four = await ParseAsync(await host.Client.GetAsync("/web/search?q=leeds"));
+        var one = await ParseAsync(await host.Client.GetAsync("/web/search?q=ann%20leeds"));
+
+        Assert.Equal(3, four.QuerySelectorAll(".search-official").Length);
+        var more = four.QuerySelector(".search-more-officials")!;
+        Assert.Equal("More officials match. See all of them in the officials list.", more.TextContent);
+        Assert.Equal("https://civic-lens.test/" + PublicationProtocol.OfficialsPagePath + "?name=leeds", more.QuerySelector("a")!.GetAttribute("href"));
+        var list = await ParseAsync(await host.Client.GetAsync("/web/officials?name=leeds"));
+        Assert.Equal(4, list.QuerySelectorAll(".list-row").Length);
+        Assert.Single(one.QuerySelectorAll(".search-official"));
+        Assert.Null(one.QuerySelector(".search-more-officials"));
     }
 
     [Fact]

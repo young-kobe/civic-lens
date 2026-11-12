@@ -22,11 +22,15 @@
         <section class="search-official" aria-labelledby="@headingId">
             <h2 id="@headingId"><a href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(official.OfficialId)))">@official.Name</a></h2>
             <p class="muted">@OfficialLine(official)</p>
-            <p>
+            <p class="search-official-actions">
                 <Button Href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(official.OfficialId)))" Small="true">Open the page of @official.Name</Button>
                 <a href="@RecordsOfHref(official)">Records that name @official.Name</a>
             </p>
         </section>
+    }
+    @if (Data.MoreOfficials)
+    {
+        <p class="search-more-officials">More officials match. <a href="@MoreOfficialsHref">See all of them in the officials list.</a></p>
     }
     @if (Data.Bill is { } bill)
     {
@@ -36,9 +40,9 @@
             <p class="muted">@PinLine(bill)</p>
             <p class="search-pin-actions">
                 <Button Href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">Open the bill</Button>
-                @if (bill.HouseVoteRecordId is { } vote)
+                @if (bill.Vote is { } vote)
                 {
-                    <Button Href="@(RootPath + PublicationProtocol.RecordPagePath(vote))">House vote on it</Button>
+                    <Button Href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))">@vote.Chamber vote on it</Button>
                 }
             </p>
         </section>
@@ -68,7 +72,7 @@
                                  Headline="@hit.Headline" Meta="@Meta(hit)" Snippet="@Snippet(hit)" />
             }
         </ul>
-        @if (Data.Bill is { } numbered && (numbered.Others.Count > 0 || numbered.MoreOthers))
+        @if (Data.Bill is { Others.Count: > 0 } numbered)
         {
             <p class="small muted search-other-bills">
                 @foreach (var other in numbered.Others)
@@ -95,7 +99,7 @@
                     <Field Label="Kind of record" For="search-kind">
                         <select id="search-kind" name="kind">
                             <option value="">Any</option>
-                            @foreach (var kind in Enum.GetValues<PublishedRecordKind>())
+                            @foreach (var kind in PublishedRecordLabels.FilterOrder)
                             {
                                 var text = PublicationProtocol.KindText(kind);
                                 <option value="@text" selected="@(Data.Query.Kind == text)">@PublishedRecordLabels.Kind(kind)</option>
@@ -167,6 +171,8 @@
 
     private static string Meta(SearchHitData hit) =>
         string.Join(", ", new[] { PublishedRecordLabels.Kind(hit.Kind), hit.Day is { } day ? Moment.Day(day) : null }.Concat(hit.Officials).OfType<string>());
+
+    private string MoreOfficialsHref => RootPath + PublicationProtocol.OfficialsPagePath + "?" + Query(("name", Data.Query.Text?.Trim()));
 
     private static RenderFragment? Snippet(SearchHitData hit) =>
         hit.Snippet is { } snippet ? Marked(snippet) : hit.BillLine is { } line ? builder => builder.AddContent(0, line) : null;

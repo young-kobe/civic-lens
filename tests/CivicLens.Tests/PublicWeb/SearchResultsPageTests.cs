@@ -14,8 +14,8 @@ public sealed class SearchResultsPageTests
         new(PublishedRecordKind.Action, new string(id, 64), headline, new(2026, 2, 23), billLine, snippet, ["Jimmy Panetta"]);
 
     private static SearchPageData Data(SearchQueryData? query = null, SearchOfficialData[]? officials = null, SearchBillData? bill = null,
-        SearchHitData[]? hits = null, string? next = null, string? filterName = null) =>
-        new(query ?? Query(), 1028, officials ?? [], bill, hits ?? [], next, [new("housing", "Housing")], filterName);
+        SearchHitData[]? hits = null, string? next = null, string? filterName = null, bool moreOfficials = false) =>
+        new(query ?? Query(), 1028, officials ?? [], moreOfficials, bill, hits ?? [], next, [new("housing", "Housing")], filterName);
 
     private static SearchOfficialData Official(string id = "jimmy-panetta", string name = "Jimmy Panetta") =>
         new(id, name, PublishedOfficeKind.Representative, null, "CA", 19, "Democrat");
@@ -44,8 +44,8 @@ public sealed class SearchResultsPageTests
     {
         var page = await RenderAsync(Data(
             officials: [Official()],
-            bill: new(BillId, "H.R. 5334, the Sanctioning Act", 119, "Jimmy Panetta", "119-111", new(2026, 9, 18), new string('v', 64),
-                [new(new string('s', 64), "S. 5334", PublishedChamber.Senate, "John Cornyn")], false),
+            bill: new(BillId, "H.R. 5334, the Sanctioning Act", 119, "Jimmy Panetta", "119-111", new(2026, 9, 18), new(new string('v', 64), PublishedChamber.House),
+                [new(new string('s', 64), "S. 5334", PublishedChamber.Senate, "John Cornyn")]),
             hits: [Hit('a', "H.R. 5334 would impose sanctions")]));
 
         var ordered = new[] { ".search-official", ".search-pin", ".record-rows", ".list-fold" }.Select(selector => page.QuerySelector(selector)!).ToArray();
@@ -64,16 +64,46 @@ public sealed class SearchResultsPageTests
     }
 
     [Fact]
-    public async Task TheDuplicateNumberNoteAppearsOnlyWhenAnotherBillHasTheNumber()
+    public async Task TheDuplicateNumberNoteAppearsOnlyWhenAnotherBillWithTheNumberIsListed()
     {
-        var page = await RenderAsync(Data(bill: new(BillId, "H.R. 1", 119, null, null, null, null, [], false), hits: [Hit('a', "x")]));
-        var more = await RenderAsync(Data(bill: new(BillId, "H.R. 1", 119, null, null, null, null, [], true), hits: [Hit('a', "x")]));
+        var page = await RenderAsync(Data(bill: new(BillId, "H.R. 1", 119, null, null, null, null, []), hits: [Hit('a', "x")]));
 
         Assert.Null(page.QuerySelector(".search-other-bills"));
         Assert.DoesNotContain("Public Law", page.QuerySelector(".search-pin")!.TextContent);
         Assert.DoesNotContain("Sponsored by", page.QuerySelector(".search-pin")!.TextContent);
-        Assert.DoesNotContain("House vote on it", page.QuerySelector(".search-pin")!.TextContent);
-        Assert.Contains("another bill with the same number", more.QuerySelector(".search-other-bills")!.TextContent);
+        Assert.DoesNotContain("vote on it", page.QuerySelector(".search-pin")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ABillWhoseOnlyVoteIsInTheSenateLinksThatVoteAsTheSenateVote()
+    {
+        var page = await RenderAsync(Data(bill: new(BillId, "S. 1", 119, null, null, null, new(new string('v', 64), PublishedChamber.Senate), []), hits: [Hit('a', "x")]));
+
+        var link = Assert.Single(page.QuerySelectorAll(".search-pin-actions a"), link => link.TextContent.EndsWith("vote on it", StringComparison.Ordinal));
+        Assert.Equal("Senate vote on it", link.TextContent);
+        Assert.Equal(Root + $"records/{new string('v', 64)}.html", link.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task MoreMatchingOfficialsLinkTheOfficialsListFilteredByTheTypedName()
+    {
+        var more = await RenderAsync(Data(Query(" ann lee "), officials: [Official()], moreOfficials: true));
+        var three = await RenderAsync(Data(Query("ann lee"), officials: [Official()]));
+
+        var line = more.QuerySelector(".search-more-officials")!;
+        Assert.Equal("More officials match. See all of them in the officials list.", line.TextContent);
+        Assert.Equal(Root + PublicationProtocol.OfficialsPagePath + "?name=ann%20lee", line.QuerySelector("a")!.GetAttribute("href"));
+        Assert.True(ListPageRender.Precedes(more.QuerySelector(".search-official")!, line));
+        Assert.Null(three.QuerySelector(".search-more-officials"));
+    }
+
+    [Fact]
+    public async Task TheKindFilterListsKindsInTheMockupOrder()
+    {
+        var page = await RenderAsync(Data());
+
+        Assert.Equal(["Any", "Bill or resolution", "Executive action", "Statement", "Vote", "Weekly brief", "Document change", "Relationship"],
+            page.QuerySelectorAll("#search-kind option").Select(option => option.TextContent));
     }
 
     [Fact]
