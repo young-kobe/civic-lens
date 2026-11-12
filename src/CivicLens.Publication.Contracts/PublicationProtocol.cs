@@ -21,6 +21,7 @@ public static class PublicationProtocol
     public const string SearchPagePath = "search.html";
     public const string ReportPagePath = "report.html";
     public const string MethodPagePath = "method.html";
+    public const string IssueTagsAnchor = "#issue-tags";
     public const string OfficialsPath = "officials.json";
     public const string OfficialSummariesPath = "officials-summary.json";
     public const string BillStatusPath = "bill-status.json";

@@ -52,10 +52,7 @@
                 }
             </ul>
         }
-        @foreach (var state in Data.StatesWithoutSenators)
-        {
-            <p class="small muted">@state has no senators.</p>
-        }
+        <StatesWithoutSenatorsNote States="Data.StatesWithoutSenators" />
         @if (View.Length == 0 && (Data.IssueOptions.Length > 0 || Data.SelectedIssue is not null))
         {
             <ZipMemberIssueFilter IssueOptions="Data.IssueOptions" SelectedIssue="@Data.SelectedIssue" />

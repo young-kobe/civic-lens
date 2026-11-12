@@ -23,7 +23,7 @@
                     <p class="home-featured-meta muted small"><span class="home-featured-result">@featured.ResultWords</span><span>@featured.Chamber</span><span>@featured.VotedOn.ToString("d MMM yyyy")</span></p>
                     @if (featured.Yea is { } yea && featured.Nay is { } nay)
                     {
-                        <p class="home-vote-counts"><span><b>@yea</b> Yes</span><span><b>@nay</b> No</span></p>
+                        <p class="record-counts"><span><b>@yea</b> Yes</span><span><b>@nay</b> No</span></p>
                     }
                     @if (featured.TextOrigin == PublishedTextOrigin.Model)
                     {
@@ -91,33 +91,11 @@
                     {
                         <p class="muted small home-vote-caption">All four votes shown split the parties. Among members voting Yes or No, most Democrats and most Republicans chose opposite sides.</p>
                     }
-                    <ul class="latest-rows" role="list">
+                    <ul class="record-rows" role="list">
                         @foreach (var vote in Data.Votes)
                         {
-                            <li class="home-record">
-                                <span class="home-record-icon"><Icon Name="IconName.Vote" /></span>
-                                <div>
-                                    <a href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))">
-                                        <span>@vote.Headline</span>
-                                        @if (vote.Label is not null)
-                                        {
-                                            <span class="muted small">@vote.Label</span>
-                                        }
-                                        <span class="muted small">@vote.Chamber, @vote.VotedOn.ToString("d MMM yyyy")</span>
-                                    </a>
-                                    <p class="home-vote-counts"><span><b>@vote.Yea</b> Yes</span><span><b>@vote.Nay</b> No</span><span>@vote.ResultWords</span></p>
-                                    @if (vote.BillLine is not null)
-                                    {
-                                        <p class="small muted">
-                                            @vote.BillLine
-                                            @if (vote.BillLineSource is not null)
-                                            {
-                                                <span>@(" " + vote.BillLineSource)</span>
-                                            }
-                                        </p>
-                                    }
-                                </div>
-                            </li>
+                            <PublicRecordRow Icon="IconName.Vote" Href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))" Headline="@vote.Headline" Label="@vote.Label"
+                                             Meta="@($"{vote.Chamber}, {Moment.Day(vote.VotedOn)}")" Yea="vote.Yea" Nay="vote.Nay" ResultWords="@vote.ResultWords" BillLine="@vote.BillLine" />
                         }
                     </ul>
                 </section>
@@ -149,7 +127,7 @@
                         @foreach (var action in Data.ExecutiveActions)
                         {
                             <li>
-                                <div class="home-record-icon home-executive-icon"><Icon Name="IconName.ExecutiveAction" /></div>
+                                <div class="record-row-icon home-executive-icon"><Icon Name="IconName.ExecutiveAction" /></div>
                                 <div>
                                     <p class="muted small">@PublishedRecordLabels.ExecutiveActionKind(action.Kind)</p>
                                     <a href="@(RootPath + PublicationProtocol.RecordPagePath(action.NewestRecordId))">@action.NewestTitle</a>

@@ -43,7 +43,7 @@ public sealed class HomePageTests
     {
         var page = await RenderAsync(new(7, Featured with { Yea = null, Nay = null }, [], null));
 
-        Assert.Null(page.QuerySelector(".home-featured .home-vote-counts"));
+        Assert.Null(page.QuerySelector(".home-featured .record-counts"));
         Assert.Equal("Passed", page.QuerySelector(".home-featured-result")!.TextContent);
         Assert.Contains("Current bill line. " + PublishedWording.BillLineSource, page.QuerySelector(".home-featured")!.TextContent);
     }
@@ -159,7 +159,7 @@ public sealed class HomePageTests
         Assert.Contains("All four votes shown", caption.TextContent);
         Assert.Contains("Among members voting Yes or No", caption.TextContent);
         Assert.Contains("most Democrats and most Republicans chose opposite sides", caption.TextContent);
-        Assert.Equal(4, recent.QuerySelectorAll(".latest-rows > li").Length);
+        Assert.Equal(4, recent.QuerySelectorAll(".record-rows > li").Length);
         Assert.Same(recent, page.QuerySelector(".home-brief-line")!.NextElementSibling);
     }
 
@@ -174,7 +174,7 @@ public sealed class HomePageTests
         var page = await RenderAsync(new(7, Featured, votes, null));
 
         Assert.Null(page.QuerySelector(".home-vote-caption"));
-        Assert.Equal(4, page.QuerySelectorAll(".latest-rows > li").Length);
+        Assert.Equal(4, page.QuerySelectorAll(".record-rows > li").Length);
     }
 
     [Fact]
@@ -183,12 +183,33 @@ public sealed class HomePageTests
         var page = await RenderAsync(new(7, Featured, RecentVotes(PublishedVoteAlignment.Split)[..3], null));
 
         Assert.Null(page.QuerySelector(".home-vote-caption"));
-        Assert.Equal(3, page.QuerySelectorAll(".latest-rows > li").Length);
+        Assert.Equal(3, page.QuerySelectorAll(".record-rows > li").Length);
+    }
+
+    [Fact]
+    public async Task ARecentVoteRowShowsItsLinkMetaCountsResultAndTheBillLineWithItsSource()
+    {
+        var votes = RecentVotes(PublishedVoteAlignment.Split);
+        votes[0] = votes[0] with { Label = "AI label", BillLine = "Current bill line." };
+        var rows = (await RenderAsync(new(7, Featured, votes, null))).QuerySelectorAll(".record-rows > li");
+        var row = rows[0];
+
+        Assert.Equal("Published vote", row.QuerySelector("a > span")!.TextContent);
+        Assert.Contains("AI label", row.QuerySelector("a")!.TextContent);
+        Assert.Contains("House, 2 Mar 2026", row.QuerySelector("a")!.TextContent);
+        Assert.Equal("216Yes214NoPassed", row.QuerySelector(".record-counts")!.TextContent.Replace(" ", ""));
+        Assert.Equal("Current bill line.", row.QuerySelector(".bill-line")!.TextContent);
+        Assert.Contains(PublishedWording.BillLineSource, row.TextContent);
+        var billParagraph = row.QuerySelector(".bill-line")!.ParentElement!;
+        Assert.Equal("Current bill line. " + PublishedWording.BillLineSource, billParagraph.TextContent.Trim());
+        Assert.Single(row.QuerySelectorAll("p.small"));
+        Assert.Null(rows[1].QuerySelector(".bill-line"));
+        Assert.DoesNotContain(PublishedWording.BillLineSource, rows[1].TextContent);
     }
 
     private static HomeVoteData[] RecentVotes(PublishedVoteAlignment alignment) =>
         [.. Enumerable.Range(0, 4).Select(index => new HomeVoteData(new string((char)('b' + index), 64), new(2026, 3, 2),
-            index < 2 ? PublishedChamber.House : PublishedChamber.Senate, "Published vote", null, "Passed", 216, 214, null, null)
+            index < 2 ? PublishedChamber.House : PublishedChamber.Senate, "Published vote", null, "Passed", 216, 214, null)
         { Alignment = alignment })];
 
     private static async Task<IDocument> RenderAsync(HomePageData data, string? browserApiUrl = null)
