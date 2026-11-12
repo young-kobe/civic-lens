@@ -318,12 +318,19 @@ def ring_path(points):
     return 'M' + ' '.join(f'{x} {y}' for x, y in points) + 'Z'
 
 
-def paths_of(rings_parts, arcs):
-    """Return the path of a list of rings. A ring of fewer than 3 distinct points is dropped. None when no ring is left."""
+def ring_area(points):
+    return sum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1) in zip(points, points[1:] + points[:1])) / 2
+
+
+def paths_of(rings_parts, arcs, strict=True):
+    """Return the path of a list of rings, or None when no ring is left.
+
+    A ring of fewer than 3 distinct points is dropped. So is a ring with no area, when `strict` is set,
+    because rounding can leave 3 points on one line, and such a ring draws nothing."""
     drawn = []
     for parts in rings_parts:
         points = ring_points(parts, arcs)
-        if len(set(points)) >= 3:
+        if len(set(points)) >= 3 and (not strict or ring_area(points) != 0):
             drawn.append(ring_path(points))
     return ''.join(drawn) if drawn else None
 
@@ -381,12 +388,15 @@ def build(districts):
         failing = [rings for rings in district_rings.values() if paths_of(rings, reduced) is None]
         if not failing:
             break
-        # A district with fewer than 3 points keeps all the points of its arcs. Its neighbors share those arcs.
+        # A district with no visible ring keeps all the points of its arcs. Its neighbors share those arcs.
         more = {arc_id for rings in failing for parts in rings for arc_id, _ in parts} - full_arcs
         if not more:
-            raise GeometryError('A district has fewer than 3 points.')
+            break  # the district is smaller than one unit even at full resolution
         full_arcs |= more
-    paths = {key: paths_of(rings, reduced) for key, rings in district_rings.items()}
+    paths = {key: paths_of(rings, reduced) or paths_of(rings, reduced, strict=False) for key, rings in district_rings.items()}
+    for key, path in paths.items():
+        if path is None:
+            raise GeometryError(f'District {key} has fewer than 3 points.')
 
     state_paths = {}
     for state in sorted({key[0] for key in drawn}):
@@ -410,7 +420,7 @@ def build(districts):
         'viewBox': f'0 0 {WIDTH} {height}',
         'districts': [
             {'state': key[0], 'district': key[1], 'delegate': key[0] in DELEGATE_AREAS, 'path': paths.get(key, '')}
-            for key in sorted(districts)
+            for key in sorted(set(districts) | {(area, 0) for area in DELEGATE_AREAS})
         ],
         'states': [{'state': state, 'path': state_paths[state]} for state in sorted(state_paths)],
     }

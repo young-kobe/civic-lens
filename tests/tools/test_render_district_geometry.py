@@ -56,13 +56,14 @@ class RenderDistrictGeometryTests(unittest.TestCase):
 
     def test_districts_and_states_are_sorted_and_an_at_large_district_is_zero(self):
         asset = self.build()
-        self.assertEqual([('AK', 0), ('CO', 1), ('CO', 2)], [(d['state'], d['district']) for d in asset['districts']])
+        self.assertEqual([('AK', 0), ('AS', 0), ('CO', 1), ('CO', 2), ('DC', 0), ('GU', 0), ('MP', 0), ('PR', 0), ('VI', 0)],
+                         [(d['state'], d['district']) for d in asset['districts']])
         self.assertEqual(['AK', 'CO'], [s['state'] for s in asset['states']])
 
     def test_every_path_number_is_a_whole_unit_inside_the_view_box(self):
         asset = self.build()
         height = int(asset['viewBox'].split()[3])
-        for item in asset['districts'] + asset['states']:
+        for item in [d for d in asset['districts'] if not d['delegate']] + asset['states']:
             self.assertRegex(item['path'], r'^(M(-?\d+ -?\d+)( -?\d+ -?\d+)*Z)+$')
             for x, y in points(item['path']):
                 self.assertTrue(0 <= x <= 800 and 0 <= y <= height, (item['state'], x, y))
@@ -77,6 +78,17 @@ class RenderDistrictGeometryTests(unittest.TestCase):
     def test_points_round_half_up_to_whole_units_and_a_repeated_rounded_point_is_dropped(self):
         self.assertEqual([(1, 2), (2, 3), (3, 3)], tool.reduce_arc([(0.5, 1.5), (0.7, 1.9), (2.4, 2.6), (3.2, 3.4)], True))
         self.assertEqual([(1, 2), (3, 3)], tool.reduce_arc([(0.5, 1.5), (1.2, 2.2), (3.2, 3.4)], False))
+
+    def test_every_delegate_area_is_listed_with_no_shape_even_when_the_file_has_no_polygon_for_it(self):
+        delegates = {d['state']: d for d in self.build()['districts'] if d['delegate']}
+        self.assertEqual(['AS', 'DC', 'GU', 'MP', 'PR', 'VI'], sorted(delegates))
+        self.assertTrue(all(d['district'] == 0 and d['path'] == '' for d in delegates.values()))
+
+    def test_a_ring_with_no_area_is_not_a_visible_ring_when_rounding_leaves_its_points_on_one_line(self):
+        arcs = {0: [(726, 173), (726, 174), (726, 172), (726, 173)], 1: [(0, 0), (4, 0), (4, 4), (0, 4), (0, 0)]}
+        self.assertIsNone(tool.paths_of([[(0, False)]], arcs))
+        self.assertEqual('M726 173 726 174 726 172Z', tool.paths_of([[(0, False)]], arcs, strict=False))
+        self.assertEqual('M0 0 4 0 4 4 0 4Z', tool.paths_of([[(0, False)], [(1, False)]], arcs))
 
     def test_a_ring_is_simplified_to_a_quarter_of_its_points_and_keeps_its_corners(self):
         asset = self.build()
@@ -102,8 +114,8 @@ class RenderDistrictGeometryTests(unittest.TestCase):
             source = zip_with(directory, kml)
             with pinned_to(source):
                 asset = tool.build(tool.parse_districts(tool.read_kml(source)))
-        self.assertEqual([('AK', 0, False), ('CO', 1, False), ('CO', 2, False), ('DC', 0, True)],
-                         [(d['state'], d['district'], d['delegate']) for d in asset['districts']])
+        delegates = [d['state'] for d in asset['districts'] if d['delegate']]
+        self.assertEqual(['AS', 'DC', 'GU', 'MP', 'PR', 'VI'], delegates)
         self.assertEqual('', next(d['path'] for d in asset['districts'] if d['state'] == 'DC'))
         self.assertEqual(['AK', 'CO'], [s['state'] for s in asset['states']])
 
@@ -112,7 +124,7 @@ class RenderDistrictGeometryTests(unittest.TestCase):
             first, second = tool.generate(FIXTURE), tool.generate(FIXTURE)
         self.assertEqual(first, second)
         self.assertTrue(first.endswith('}\n'))
-        self.assertEqual(3, sum('"district":' in line for line in first.splitlines()))
+        self.assertEqual(9, sum('"district":' in line for line in first.splitlines()))
 
     def test_a_member_with_another_size_is_rejected(self):
         result = subprocess.run([sys.executable, str(SCRIPT), '--source', str(FIXTURE), '--output', '/dev/null'],
