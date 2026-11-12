@@ -682,14 +682,17 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task APersonApprovedStatementKeepsItsApprovedWordingAndShowsNoAiLabel()
+    public async Task APersonApprovedStatementThatAPersonWroteKeepsItsApprovedWordingAndShowsNoAiLabel()
     {
-        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None);
+        var statement = Statement() with { TextOrigin = PublishedTextOrigin.Person, ApprovedBy = PublishedApprover.Person };
+
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None);
 
         var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
         Assert.Contains("Approved 10 May 2026, 12:00 UTC", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Checked by code", text, StringComparison.Ordinal);
         Assert.DoesNotContain("AI summary", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(PublishedWording.ModelStatementCheckedByPerson, text, StringComparison.Ordinal);
         Assert.DoesNotContain("chosen by AI", text, StringComparison.Ordinal);
     }
 
@@ -715,7 +718,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task AnAiStatementThatAPersonApprovedShowsApprovedAndNoAiLabelBecauseAPersonApprovedIt()
+    public async Task AnAiStatementThatAPersonApprovedShowsApprovedAndTheCheckedByPersonAiLabelBecauseAnAiWroteItAndAPersonCheckedIt()
     {
         var statement = Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Person };
 
@@ -723,7 +726,8 @@ public sealed class ReleaseRendererTests
 
         var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
         Assert.Contains("Approved 10 May 2026, 12:00 UTC", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("AI summary", text, StringComparison.Ordinal);
+        Assert.Contains(PublishedWording.ModelStatementCheckedByPerson, text, StringComparison.Ordinal);
+        Assert.DoesNotContain(PublishedRecordLabels.StatementModelWording, text, StringComparison.Ordinal);
     }
 
     [Fact]

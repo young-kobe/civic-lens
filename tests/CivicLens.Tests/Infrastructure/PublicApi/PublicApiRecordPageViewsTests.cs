@@ -225,7 +225,8 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
 
         Assert.Equal(expected, fromView);
         Assert.Contains($"Statement 0|Model|{PublishedRecordLabels.StatementModelWording}", fromView);
-        Assert.Contains("Statement 1|Model|none", fromView);
+        Assert.Contains($"Statement 1|Model|{PublishedWording.ModelStatementCheckedByPerson}", fromView);
+        Assert.Contains("Statement 2|Person|none", fromView);
     }
 
     [Fact]
@@ -271,7 +272,7 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
     // The C# rule for an action or a vote is PublishedRecordLabels.Wording.
     private static string LabelOfRecord(PublishedTextOrigin origin) => PublishedRecordLabels.Wording(origin).SingleOrDefault()?.Value ?? "none";
 
-    // The C# rule for a statement is PublishedRecordLabels.StatementWording. It gives a label only when code approved the statement.
+    // The C# rule for a statement is PublishedRecordLabels.StatementWording. It gives the code label when code approved a model statement, the person-checked label when a person did, and none for person text.
     private static string LabelOfStatement(PublishedTextOrigin origin, PublishedApprover approver) =>
         PublishedRecordLabels.StatementWording(PublishedStatementTests.Statement() with { TextOrigin = origin, ApprovedBy = approver }).SingleOrDefault()?.Value ?? "none";
 

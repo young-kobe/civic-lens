@@ -260,7 +260,7 @@ public sealed class OfficialProfilePageTests
     }
 
     [Fact]
-    public async Task TypedModelOriginsKeepCanonicalLabelsWhenAStoredLabelIsMissing()
+    public async Task AStatementLabelComesOnlyFromTheViewButAModelVoteKeepsItsCanonicalLabelWhenItsStoredLabelIsMissing()
     {
         var data = Member();
         var page = await RenderAsync<OfficialProfilePage>(data with
@@ -273,7 +273,7 @@ public sealed class OfficialProfilePageTests
         });
 
         var labels = page.QuerySelectorAll("#statements .official-source-label[data-origin=model]");
-        Assert.Equal([PublishedRecordLabels.StatementModelWording, PublishedRecordLabels.ModelWording], labels.Select(label => label.TextContent).ToArray());
+        Assert.Equal([PublishedRecordLabels.ModelWording], labels.Select(label => label.TextContent).ToArray());
     }
 
     [Fact]

@@ -93,7 +93,10 @@ public static class PublishedRecordLabels
     public const string StatementModelWording = "An AI summary of this release.";
 
     public static IEnumerable<Fact> StatementWording(PublishedStatement statement) =>
-        statement.ApprovedBy == PublishedApprover.Code ? Wording(statement.TextOrigin, StatementModelWording) : [];
+        statement.TextOrigin == PublishedTextOrigin.Model ? [new("Wording", StatementModelLabel(statement.ApprovedBy))] : [];
+
+    private static string StatementModelLabel(PublishedApprover approver) =>
+        approver == PublishedApprover.Code ? StatementModelWording : PublishedWording.ModelStatementCheckedByPerson;
 
     public const string ModelDateCheckedByCode = "Date found by an AI model and checked by code against the quote";
 
