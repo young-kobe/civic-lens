@@ -11,7 +11,7 @@
         </header>
         <div class="detail-layout">
             <div class="detail-main">
-                <AiSummary Label="@Data.Label">
+                <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label">
                     <ChildContent><p>@Data.Summary</p></ChildContent>
                     <Check>@StatementPageView.CheckFor(Data.TextOrigin) <a href="#source">@SourceFold.Title</a></Check>
                 </AiSummary>

@@ -479,7 +479,8 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .ai-summary > :last-child { margin-bottom: 0; }
 .ai-summary-ai { border: 1.5px solid var(--ai-line); background: var(--ai-surface); color: var(--ai-ink); box-shadow: none; }
 .ai-summary-ai a { color: inherit; font-weight: 700; }
-.ai-summary-label { display: inline-block; margin-bottom: var(--s2); padding: 5px 10px; border-radius: 999px; background: var(--ai-line); color: var(--ai-label-ink); font-size: .75rem; font-weight: 700; text-transform: uppercase; }
+.ai-summary-label { display: inline-block; margin-bottom: var(--s2); color: var(--muted); font-size: .75rem; font-weight: 700; }
+.ai-summary-ai .ai-summary-label { padding: 5px 10px; border-radius: 999px; background: var(--ai-line); color: var(--ai-label-ink); text-transform: uppercase; }
 .ai-summary-check { font-size: var(--t-sm); }
 .link-chip { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font-weight: 550; text-decoration: none; }
 .link-chip:hover { border-color: var(--info); }

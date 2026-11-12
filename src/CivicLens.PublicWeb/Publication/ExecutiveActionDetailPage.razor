@@ -14,15 +14,19 @@
             <p class="detail-lede">@ExecutiveActionWords.Lede(Data)</p>
             <p class="small muted">@ExecutiveActionWords.Approval(Data)</p>
         </header>
-        <div class="detail-stack">
-            <AiSummary>
-                <Check>@ExecutiveActionWords.Caveat <a href="#source">@SourceFold.Title</a></Check>
-            </AiSummary>
-            <section class="detail-card detail-facts" aria-labelledby="executive-facts-title">
-                <h2 id="executive-facts-title">@ExecutiveActionWords.KeyFactsHeading</h2>
-                <Facts Items="ExecutiveActionWords.KeyFacts(Data, RootPath)" />
-                <p><Button Href="@Data.DocumentUrl" Variant="ButtonVariant.Primary" rel="noopener noreferrer nofollow">@ExecutiveActionWords.ReadIt</Button></p>
-            </section>
+        <div class="detail-layout">
+            <div class="detail-main">
+                <AiSummary TextOrigin="PublishedTextOrigin.Code">
+                    <Check>@ExecutiveActionWords.Caveat <a href="#source">@SourceFold.Title</a></Check>
+                </AiSummary>
+            </div>
+            <aside class="detail-rail">
+                <section class="detail-card detail-facts" aria-labelledby="executive-facts-title">
+                    <h2 id="executive-facts-title">@ExecutiveActionWords.KeyFactsHeading</h2>
+                    <Facts Items="ExecutiveActionWords.KeyFacts(Data, RootPath)" />
+                    <p><Button Href="@Data.DocumentUrl" Variant="ButtonVariant.Primary" rel="noopener noreferrer nofollow">@ExecutiveActionWords.ReadIt</Button></p>
+                </section>
+            </aside>
         </div>
         <SourceFold>
             <Facts Items="ExecutiveActionWords.SourceFacts(Data)" />
