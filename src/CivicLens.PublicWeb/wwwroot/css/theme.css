@@ -147,6 +147,8 @@ body.public {
     --marigold: #f5b301;
     --vote-ink: #1f7074;
     --vote-surface: #def3f4;
+    --statement-surface: #f5eadc;
+    --bill-surface: #e6f1e5;
     --exec-ink: #45658d;
     --exec-surface: #e5f0fe;
     --ai-surface: #f3f0ff;
@@ -180,7 +182,7 @@ body.public {
     --party-dem: #1d63c9;
     --party-rep: #c4302b;
     --info-bg: #e7ecfc;
-    --against: #b86300;
+    --against: #8a4700;
     --r-control: 12px;
     --r-panel: 20px;
 }
@@ -193,6 +195,8 @@ body.public {
     body.public {
         --vote-ink: light-dark(#1f7074, #81cdd1);
         --vote-surface: light-dark(#def3f4, #183031);
+        --statement-surface: light-dark(#f5eadc, #30271f);
+        --bill-surface: light-dark(#e6f1e5, #203027);
         --exec-ink: light-dark(#45658d, #9dc1ee);
         --exec-surface: light-dark(#e5f0fe, #212c3a);
         --ai-surface: light-dark(#f3f0ff, #1f1a40);
@@ -219,7 +223,7 @@ body.public {
         --party-dem: light-dark(#1d63c9, #6ea8ff);
         --party-rep: light-dark(#c4302b, #ff7a70);
         --info-bg: light-dark(#e7ecfc, rgba(111, 140, 255, .16));
-        --against: light-dark(#b86300, #f5a623);
+        --against: light-dark(#8a4700, #f5a623);
     }
 }
 
@@ -249,6 +253,8 @@ body.public .btn-primary:hover { filter: brightness(1.04); }
         --ground: #15171a;
         --surface: #1d2024;
         --raised: #24282d;
+        --statement-surface: #30271f;
+        --bill-surface: #203027;
         --ink: #e6e8eb;
         --ink-2: #c3c8ce;
         --muted: #8f96a0;
@@ -294,6 +300,8 @@ body.public .btn-primary:hover { filter: brightness(1.04); }
     --ground: #15171a;
     --surface: #1d2024;
     --raised: #24282d;
+    --statement-surface: #30271f;
+    --bill-surface: #203027;
     --ink: #e6e8eb;
     --ink-2: #c3c8ce;
     --muted: #8f96a0;
