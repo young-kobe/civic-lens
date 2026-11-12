@@ -1,14 +1,16 @@
 using CivicLens.Application.Collection;
+using CivicLens.Application.People;
 using CivicLens.Application.Roster;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
+using CivicLens.Infrastructure.People.Persistence;
 using CivicLens.Infrastructure.Roster.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace CivicLens.Infrastructure.Roster;
 
-/// <summary>Retains one append-only snapshot of the member roster for each capture body not yet seen.</summary>
+/// <summary>Retains one append-only snapshot of the member roster for each capture body not yet seen. The snapshot commits with the people rows of its new members.</summary>
 public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory) : IMemberRosterStore
 {
     public static PostgresMemberRosterStore FromConnectionString(string connectionString)
@@ -36,6 +38,7 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
             : await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.CollectionJobs, cancellationToken);
         if (photos is not null) await AddPhotoJobsAsync(db, photos, cancellationToken);
         RosterSnapshotRules.AddHeader(db, attemptId);
+        await AddNewPeopleAsync(db, attemptId, members, cancellationToken);
         foreach (var member in members)
         {
             db.Add(ToRow(attemptId, member));
@@ -99,6 +102,28 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
         var terms = (await db.Set<RosterTermRow>().AsNoTracking().Where(row => row.AttemptId == snapshotAttemptId)
             .OrderBy(row => row.TermIndex).ToListAsync(cancellationToken)).ToLookup(row => row.BioguideId);
         return [.. members.Select(member => ToMember(member, terms[member.BioguideId]))];
+    }
+
+    // A member with no person row gets one in the snapshot transaction. People are matched by bioguide ID. The roster has no other key.
+    // The read is not repeated for correctness: the unique keys of people refuse a concurrent mint of the same member.
+    private static async Task AddNewPeopleAsync(CollectionAttemptDbContext db, string attemptId, IReadOnlyList<RosterMember> members,
+        CancellationToken cancellationToken)
+    {
+        var known = await db.Set<PersonRow>().AsNoTracking().Select(row => new { row.PersonId, row.BioguideId }).ToListAsync(cancellationToken);
+        var knownBioguideIds = known.Where(row => row.BioguideId is not null).Select(row => row.BioguideId!).ToHashSet(StringComparer.Ordinal);
+        var newMembers = members.Where(member => !knownBioguideIds.Contains(member.BioguideId))
+            .OrderBy(member => member.BioguideId, StringComparer.Ordinal).ToArray();
+        if (newMembers.Length == 0) return;
+
+        var takenIds = known.Select(row => row.PersonId).ToHashSet(StringComparer.Ordinal);
+        var now = (await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks;
+        db.AddRange(newMembers.Select(member => new PersonRow
+        {
+            PersonId = PersonIdRule.Mint(member.FullName, member.BioguideId, takenIds),
+            BioguideId = member.BioguideId,
+            CreatedAtUtcTicks = now,
+            CreatedByAttemptId = attemptId
+        }));
     }
 
     private static async Task AddPhotoJobsAsync(CollectionAttemptDbContext db, ConfiguredCollectionSource photos,

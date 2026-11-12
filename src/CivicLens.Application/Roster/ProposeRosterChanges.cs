@@ -1,11 +1,9 @@
-using System.Globalization;
-using System.Text;
-using System.Text.RegularExpressions;
 using CivicLens.Application.Collection;
+using CivicLens.Application.People;
 
 namespace CivicLens.Application.Roster;
 
-public sealed partial class ProposeRosterChanges(IMemberRosterStore roster)
+public sealed class ProposeRosterChanges(IMemberRosterStore roster, IPersonRegistryStore people)
 {
     public async Task<RosterProposal?> ExecuteAsync(CollectionConfiguration configuration, CancellationToken cancellationToken)
     {
@@ -17,27 +15,18 @@ public sealed partial class ProposeRosterChanges(IMemberRosterStore roster)
         var configured = configuration.People.Where(person => person.BioguideId is not null)
             .ToDictionary(person => person.BioguideId!, StringComparer.Ordinal);
         var current = members.ToDictionary(member => member.BioguideId, StringComparer.Ordinal);
-        var takenIds = configuration.People.Select(person => person.Id).ToHashSet(StringComparer.Ordinal);
-        var joins = members.Where(member => !configured.ContainsKey(member.BioguideId)).OrderBy(member => member.BioguideId, StringComparer.Ordinal)
-            .Select(member => new ProposedMember(ProposeId(member, takenIds), member.FullName, member.BioguideId)).ToArray();
+        var newMembers = members.Where(member => !configured.ContainsKey(member.BioguideId))
+            .OrderBy(member => member.BioguideId, StringComparer.Ordinal).ToArray();
+        // The people table owns minted IDs. A row can outlive its member, so the configuration cannot say which IDs are taken.
+        // AdmitAsync reads the same rows, so one read of every key keeps the proposed ID and the minted ID equal.
+        var keys = await people.ReadKeysAsync(cancellationToken);
+        var minted = keys.Where(key => key.BioguideId is not null).ToDictionary(key => key.BioguideId!, key => key.PersonId, StringComparer.Ordinal);
+        var takenIds = configuration.People.Select(person => person.Id).Concat(keys.Select(key => key.PersonId)).ToHashSet(StringComparer.Ordinal);
+        var joins = newMembers.Select(member => new ProposedMember(
+            minted.TryGetValue(member.BioguideId, out var id) ? id : PersonIdRule.Mint(member.FullName, member.BioguideId, takenIds),
+            member.FullName, member.BioguideId)).ToArray();
         var leaves = configured.Values.Where(person => person.Offices is null && !current.ContainsKey(person.BioguideId!))
             .OrderBy(person => person.Id, StringComparer.Ordinal).ToArray();
         return new RosterProposal(joins, leaves);
     }
-
-    private static string ProposeId(RosterMember member, HashSet<string> takenIds)
-    {
-        var id = NotLowerAlphanumeric().Replace(WithoutAccents(member.FullName).ToLowerInvariant(), "-").Trim('-');
-        if (id.Length == 0) id = member.BioguideId.ToLowerInvariant();
-        if (!takenIds.Add(id)) id = $"{id}-{member.BioguideId.ToLowerInvariant()}";
-        takenIds.Add(id);
-        return id;
-    }
-
-    private static string WithoutAccents(string text) =>
-        new(text.Normalize(NormalizationForm.FormD)
-            .Where(character => CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark).ToArray());
-
-    [GeneratedRegex("[^a-z0-9]+")]
-    private static partial Regex NotLowerAlphanumeric();
 }

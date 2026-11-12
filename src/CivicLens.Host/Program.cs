@@ -126,7 +126,6 @@ if (args is [] or ["--help"] or ["help"])
           brief revisions backfill <limit>
           brief revisions verify
           roster propose <config.json>
-          people import <config.json>
           releases publish <idempotency-key> <draft-id>...
           releases list [limit]
           releases activate <release-number>
@@ -452,9 +451,11 @@ try
     {
         var rosterConfiguration = args is ["roster", "propose", var rosterConfigPath]
             ? ConfigurationFile.ReadCollection(rosterConfigPath) : null;
-        var roster = PostgresMemberRosterStore.FromConnectionString(Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!);
+        var rosterDatabase = Environment.GetEnvironmentVariable("CIVIC_LENS_DATABASE")!;
+        var roster = PostgresMemberRosterStore.FromConnectionString(rosterDatabase);
+        var rosterPeople = PostgresPersonRegistryStore.FromConnectionString(rosterDatabase);
         executing = true;
-        return await RosterCommand.ExecuteAsync(args, rosterConfiguration, new ProposeRosterChanges(roster), cancellation.Token);
+        return await RosterCommand.ExecuteAsync(args, rosterConfiguration, new ProposeRosterChanges(roster, rosterPeople), cancellation.Token);
     }
 
     if (PeopleCommand.Matches(args))
