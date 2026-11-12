@@ -41,6 +41,7 @@ public sealed record PublishedExecutiveAction
         RevisionNumber = RevisionNumber,
         Headline = Headline,
         FirstPublishedAtUtc = FirstPublishedAtUtc,
+        ApprovedAtUtc = ApprovedAtUtc,
         Officials = [President],
         IssueIds = [],
         PolicyAreaIds = [],

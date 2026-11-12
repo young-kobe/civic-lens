@@ -64,6 +64,7 @@ internal sealed class PublishedEntryRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.BillLine).HasColumnName("bill_line");
         builder.Property(row => row.Congress).HasColumnName("congress");
         builder.Property(row => row.ApprovedBy).HasColumnName("approved_by").HasConversion<string>().HasMaxLength(32);
+        builder.Property(row => row.ApprovedAtUtcTicks).HasColumnName("approved_at_utc_ticks");
 
         ConfigureRevisionColumns(builder);
         builder.HasOne<PublishedRecordRow>().WithMany().HasForeignKey(row => new { row.Kind, row.RecordId }).OnDelete(DeleteBehavior.Restrict);

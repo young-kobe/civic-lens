@@ -49,8 +49,17 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
     public Task<int> FillStatementApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         inner.FillStatementApproversAsync(entries, cancellationToken);
 
+    public Task<int> FillApprovalTimesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
+        inner.FillApprovalTimesAsync(entries, cancellationToken);
+
     public Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses, CancellationToken cancellationToken) =>
         inner.AddBillStatusesAsync(releaseNumber, statuses, cancellationToken);
+
+    public Task<int> AddVoteBillsAsync(int releaseNumber, IReadOnlyCollection<ReleaseVoteBill> voteBills, CancellationToken cancellationToken) =>
+        inner.AddVoteBillsAsync(releaseNumber, voteBills, cancellationToken);
+
+    public Task<IReadOnlyList<ReleaseVoteBill>> ReadVoteBillsAsync(int releaseNumber, CancellationToken cancellationToken) =>
+        inner.ReadVoteBillsAsync(releaseNumber, cancellationToken);
 
     public Task<StoredRelease> ReadReleaseAsync(int releaseNumber, CancellationToken cancellationToken) => inner.ReadReleaseAsync(releaseNumber, cancellationToken);
 

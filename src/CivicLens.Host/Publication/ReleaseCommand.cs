@@ -20,7 +20,7 @@ public static class ReleaseCommand
         ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, BackfillFirstPublished backfill, BackfillPublishedEntries entries,
         BackfillStoredColumns columns, VerifyPublishedEntries verify, VerifyCorrectionHistories verifyCorrections,
         BackfillCorrectionHistories corrections, BackfillReleaseBillCounts billCounts, VerifyReleaseBillCounts verifyBillCounts,
-        BackfillReleasePartyLineUps lineUps, VerifyReleasePartyLineUps verifyLineUps, VerifyVotePartyTallies verifyTallies,
+        BackfillReleasePartyLineUps lineUps, VerifyReleasePartyLineUps verifyLineUps, VerifyReleaseVoteBills verifyVoteBills, VerifyVotePartyTallies verifyTallies,
         ReviewActor owner, TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
         OwnerCommand.RunAsync(async () =>
         {
@@ -49,7 +49,7 @@ public static class ReleaseCommand
                     case ["releases", "entries", "backfill", var entriesLimit] when TryParsePositive(entriesLimit, out var entriesCount):
                         var result = await entries.ExecuteAsync(owner, entriesCount, cancellationToken);
                         CommandOutput.Write(output, result);
-                        return result.Skipped == 0 && result.OpenRangesWithoutRow == 0 && result.ReadyRangesWithoutRow == 0 && result.OpenStatementsWithoutApprover == 0 ? 0 : 1;
+                        return result.Skipped == 0 && result.OpenRangesWithoutRow == 0 && result.ReadyRangesWithoutRow == 0 && result.OpenStatementsWithoutApprover == 0 && result.OpenRangesWithoutApprovalTime == 0 ? 0 : 1;
                     case ["releases", "corrections", "backfill", var correctionLimit] when TryParsePositive(correctionLimit, out var correctionCount):
                         var resultWithoutCursor = await corrections
                             .ExecuteAsync(owner, correctionCount, null, cancellationToken);
@@ -101,13 +101,17 @@ public static class ReleaseCommand
                     case ["releases", "columns", "backfill"]:
                         var filled = await columns.ExecuteAsync(owner, cancellationToken);
                         CommandOutput.Write(output, filled);
-                        return filled.OpenVoteRevisionsWithoutKeptFile == 0 ? 0 : 1;
+                        return filled.OpenVoteRevisionsWithoutKeptFile == 0 && filled.ReleasesWithUnreadableManifest == 0 ? 0 : 1;
+                    case ["releases", "vote-bills", "verify"]:
+                        var voteBillVerification = await verifyVoteBills.ExecuteAsync(owner, cancellationToken);
+                        CommandOutput.Write(output, voteBillVerification);
+                        return voteBillVerification.Failed == 0 ? 0 : 1;
                     case ["releases", "entries", "verify"]:
                         var publishedVerification = await verify.ExecuteAsync(owner, cancellationToken);
                         CommandOutput.Write(output, publishedVerification);
                         return publishedVerification.Failed == 0 ? 0 : 1;
                     default:
-                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases corrections verify <limit> [cursor], releases counts backfill <limit> [cursor], releases counts verify <limit> [cursor], releases lineups backfill <limit> [cursor], releases lineups verify <limit> [cursor], releases tallies verify <limit> [cursor], releases columns backfill, or releases entries verify.");
+                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases corrections verify <limit> [cursor], releases counts backfill <limit> [cursor], releases counts verify <limit> [cursor], releases lineups backfill <limit> [cursor], releases lineups verify <limit> [cursor], releases tallies verify <limit> [cursor], releases columns backfill, releases vote-bills verify, or releases entries verify.");
                         return 2;
                 }
             }

@@ -175,11 +175,33 @@ public sealed partial class PostgresPublicationStore : IPublicationStore
         return filled;
     }
 
+    public async Task<int> FillApprovalTimesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var filled = await PublishedEntries.FillApprovalTimesAsync(db, entries,
+            "The published approval time differs from its kept record file.", cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return filled;
+    }
+
     public async Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses,
         CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await ReleaseBillStatusRows.InsertMissingAsync(db, releaseNumber, statuses, cancellationToken);
+    }
+
+    public async Task<int> AddVoteBillsAsync(int releaseNumber, IReadOnlyCollection<ReleaseVoteBill> voteBills, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await ReleaseVoteBillRows.InsertMissingAsync(db, releaseNumber, voteBills, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ReleaseVoteBill>> ReadVoteBillsAsync(int releaseNumber, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await ReleaseVoteBillRows.ReadAsync(db, releaseNumber, cancellationToken);
     }
 
     public async Task<PublicationReleaseSummary> ActivateAsync(int releaseNumber, Func<string, CancellationToken, Task> requireFiles,
@@ -279,6 +301,7 @@ public sealed partial class PostgresPublicationStore : IPublicationStore
         db.Add(ToRow(actorSubject, commit, publishedAt, codeVersion));
         ReleaseNameRows.Add(db, commit.ReleaseNumber, commit.Names);
         ReleaseBillStatusRows.Add(db, commit.ReleaseNumber, commit.BillStatuses);
+        ReleaseVoteBillRows.Add(db, commit.ReleaseNumber, commit.VoteBills);
         ReviewIdempotency.Add(db, actorSubject, PublishOperation, idempotencyKey, payloadHash, ReviewJson.Serialize(summary));
         await SaveAsync(db, cancellationToken);
         await PublicationRecordStates.RecordAsync(db, commit, cancellationToken);
@@ -556,7 +579,7 @@ public sealed partial class PostgresPublicationStore : IPublicationStore
         ReleasePaths.RequireDirectoryName(commit.DirectoryName);
         if (!commit.DirectoryName.StartsWith($"{commit.ReleaseNumber:D6}-", StringComparison.Ordinal))
             throw new ArgumentException("Release directory name does not match the release number.", nameof(commit));
-        if (commit.Records.IsDefault || commit.AddedRecords.IsDefault || commit.WithdrawnRecords.IsDefault || commit.Withdrawals.IsDefault || commit.AddedEntries.IsDefault || commit.RewrittenEntries.IsDefault || commit.VoteColumns.IsDefault || commit.BillHistories.IsDefault || commit.CorrectionHistories.IsDefault)
+        if (commit.Records.IsDefault || commit.AddedRecords.IsDefault || commit.WithdrawnRecords.IsDefault || commit.Withdrawals.IsDefault || commit.AddedEntries.IsDefault || commit.RewrittenEntries.IsDefault || commit.VoteColumns.IsDefault || commit.VoteBills.IsDefault || commit.BillHistories.IsDefault || commit.CorrectionHistories.IsDefault)
             throw new ArgumentException("Release records are required.", nameof(commit));
     }
 }

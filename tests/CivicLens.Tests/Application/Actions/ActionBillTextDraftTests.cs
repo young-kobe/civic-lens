@@ -1,3 +1,4 @@
+using CivicLens.Application.Collection;
 using System.Text.Json;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
@@ -366,7 +367,7 @@ public sealed class ActionBillTextDraftTests
         using var facts = JsonDocument.Parse(user["Facts:\n".Length..]);
         var sent = facts.RootElement.GetProperty("billText");
         var body = sent.GetProperty("text").GetString()!;
-        Assert.True(body.Length <= CongressBillRenderer.TextWindowLength);
+        Assert.True(body.Length <= TextWindow.Length);
         Assert.Equal(text.CharsRead, body.Length);
         Assert.StartsWith("word word", body, StringComparison.Ordinal);
         Assert.Equal((text.CharsRead, long_.Length), (sent.GetProperty("charactersRead").GetInt32(), sent.GetProperty("charactersTotal").GetInt32()));

@@ -60,5 +60,6 @@ public partial class PublicApiVoteMemberDistricts : Migration
           LEFT JOIN public.document_extractions extraction ON extraction.extraction_id = cited.extraction_id
           LEFT JOIN public.collection_attempts attempt ON attempt.attempt_id = extraction.attempt_id;
         ALTER VIEW public_api.vote_sources OWNER TO civic_lens_public_owner;
+        GRANT SELECT ON public_api.vote_members, public_api.vote_sources TO civic_lens_public;
         """);
 }

@@ -6,7 +6,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations;
 
 public partial class PublicApiRecordLinkReason : Migration
 {
-    private const string UpSql = """
+    internal const string UpSql = """
         CREATE OR REPLACE VIEW public_api.record_links WITH (security_barrier = true) AS
         SELECT l.statement_record_id AS record_id, 'statement' AS kind,
                t.kind AS related_kind, t.record_id AS related_record_id, h.headline AS related_headline, h.text_origin AS related_text_origin, h.label AS related_label,

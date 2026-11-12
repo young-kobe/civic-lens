@@ -215,6 +215,8 @@ A release that holds the correction field `factsUnchanged` needs the same order.
 
 To stop the source, set `enabled` to `false` and restart the worker.
 
+The source `federal-register-text` reads the body text of each original document. It ships with `enabled: false`. Set it to `true` with `federal-register-documents` and restart the worker. Each new original then admits one text job at the `body_html_url` of its detail response. A document that was recorded earlier needs the [text backfill](#executive-action-text-backfill).
+
 The first run lists every document from `backfillFrom` 2024-10-29. It admits one job for each document, about 700 over two years. Each check after that runs every 6 hours and lists from 2 days before the newest stored publication date. Run `jobs list` and `jobs get` as in [managed collection jobs](#managed-collection-jobs) to see progress. A blocked job names its reason.
 
 To withdraw a record, open `/Review/ExecutiveActions/{id}` and use Take off site; see [take a record off the site](#take-a-record-off-the-site). Withdrawing approval alone does not change the public site.
@@ -266,6 +268,8 @@ What to watch:
 The first full run drafts every roll call that has a tracked senator. Code approves each draft after it checks the citations. A Senate vote from Voteview rests on Voteview data, and the record page names Voteview as the source.
 
 ## Postgres adapter and migrations
+
+`PublishedEntryApprovalTime` adds `published_entries.approved_at_utc_ticks`. Run `releases entries backfill` after this migration, and then `releases entries verify`. The backfill reads the kept record files. Until it runs, a publish of a revision that has an entry without a time stops with a conflict, and the correction commands report a stored time that differs. New manifests include `approvedAtUtc`; older images reject that field. Before rolling back an image, activate a kept release from before this field was written.
 
 `PublishedStatementApprover` adds `published_entries.approved_by`. Run `releases entries backfill` before starting public serving after this migration. It reads the kept statement files and reports unresolved open classifiers. Statements with unknown classifiers stay hidden. New manifests include `approvedBy`; older images reject that field. Before rolling back an image, use the newer image to activate a kept release from before this field was written.
 
@@ -762,6 +766,26 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ac
 
 Run order: `db migrate`, then `backfill`, then `verify`. Every action reader reads the columns and fails on a row with null columns. That includes the review pages, the queue, the relationship and brief readers, and the redraft skip. On production, `deploy` restarts the worker and the review host, so run `backfill` right after the deploy. For a manual run, start the new code only when `verify` exits 0, so `legacy` and `mismatched` are both 0.
 
+### Executive action text backfill
+
+Original documents that were recorded before the text source was enabled have no text. The command needs the variables of the other owner commands. It also needs `CIVIC_LENS_COLLECTION_CONFIG` for a configuration where `federal-register-text` has `enabled` set to `true`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions text backfill 100
+```
+
+The limit is 100 when you give none. The command admits one text job for each of the newest original documents that have a pinned body URL, no text row, and no text job, up to the limit. The job fetches that pinned URL. A rerun lists only the documents that still have no job, so it is safe to repeat. The jobs use the current configuration, not the configuration of the old document jobs. The worker fetches the bodies at the pacing of the origin. A text job uses no model budget. [Executive actions](architecture/executive-actions.md#text) holds the rules.
+
+If a job of `federal-register-documents` or `federal-register-text` is queued or leased, `pendingJobs` is above 0. The command then admits nothing and exits with code 1. Check `jobs list`, wait until those jobs end, and run the command again. So each run waits for the jobs of the run before it.
+
+A document recorded before the detail job pinned `body_html_url` has no pinned URL, about 700 in production. For each such original, up to the limit, the command admits one refetch job of its detail. The job key is `federal-register/{source}/document/{number}/body-url`. The refetch only fills the null URL. It changes no other column and never replaces a pinned URL. When it fills the URL, it admits the text job in the same transaction.
+
+Each list has its own limit. One run can admit up to the limit of text jobs and up to the limit of refetch jobs.
+
+The command prints `pendingJobs`, `examined`, `admitted`, `refetches`, and `noUrlWithRefetch`. `admitted` counts text jobs. `refetches` counts refetch jobs. `noUrlWithRefetch` counts the originals that have no body URL and already have a refetch job in any state. It is counted before the run admits its jobs.
+
+Run order: run the command and wait until its jobs end. Repeat until `examined` and `refetches` are both 0. Then read `noUrlWithRefetch`. A count above 0 after all jobs end means the origin gave no URL or a refetch job failed. Check `jobs list` for those jobs.
+
 ### Executive action revision backfill
 
 R-63 step 3 moves old executive action revisions into columns and child rows. A revision written by current code already has them. The migration `ExecutiveActionRevisionColumns` also moves each `notice_json` of a document into the notice columns, and drops `notice_json`. It sets the code author on each old revision. It fails and changes nothing when a notice differs from its row, when a revision names another author, or when a `notice_json` or `revision_json` is not valid JSON. The error names the row. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
@@ -934,17 +958,9 @@ Enable the source `member-photos` to capture one portrait for each configured me
 
 The output lists the members to add and the configured people who left the roster. Edit the configuration by hand and commit it. Press sources of a new member are a manual step. See [roster](architecture/roster.md#proposals).
 
-### Import people into tables
-
-The tables `people`, `person_setting_revisions`, `person_office_revisions`, and `person_office_revision_terms` hold the people of the configuration. Run the import after `db migrate`, and again after each configuration change that adds a person. A person added to the configuration has no row until an import runs. It needs `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`. It prints `added` and `alreadyKnown`. Two imports at the same time make the second fail with exit code 1 and write nothing, so run one at a time. A repeat adds nothing, so the import is safe to run again. It exits with code 2 and writes nothing when a bioguide ID or a Wikidata ID belongs to another person. Only the owner settings have a reader today. See [roster](architecture/roster.md#officials-in-tables).
-
-```sh
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- people import config/federal-coverage.json
-```
-
 ### Take down a member photo
 
-Run `people import` first when the person is new in the configuration. A takedown of a person with no row fails with "Person '<id>' is unknown. Run people import first." Then run `people photo withhold <person-id>`. It needs `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`. Add `--note <text>` to name the reason. The command adds one setting revision and prints it. It needs no commit and no restart, because each publish reads the newest setting. Then run `releases publish <idempotency-key>` with no record. The command makes a release that applies the setting. When the person has no published record, no release shows their photo. The command then refuses with "Nothing to publish", and nothing needs to be done. The new release shows no photo for the person, and the official page shows the neutral line "No portrait is shown for this official." Collection continues. Run `people photo restore <person-id>` and publish again to restore the newest photo. The revisions keep the history, with the owner, the time, and the note.
+A takedown of a person with no row fails with "Person '<id>' is unknown." A member gets a row when a roster snapshot first lists them. Run `people photo withhold <person-id>` for a person with a row. It needs `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`. Add `--note <text>` to name the reason. The command adds one setting revision and prints it. It needs no commit and no restart, because each publish reads the newest setting. Then run `releases publish <idempotency-key>` with no record. The command makes a release that applies the setting. When the person has no published record, no release shows their photo. The command then refuses with "Nothing to publish", and nothing needs to be done. The new release shows no photo for the person, and the official page shows the neutral line "No portrait is shown for this official." Collection continues. Run `people photo restore <person-id>` and publish again to restore the newest photo. The revisions keep the history, with the owner, the time, and the note.
 
 To set or clear the website of a person, run `people website set <person-id> <url>` or `people website clear <person-id>`. The URL must be an absolute https URL with no user info. A member with a valid roster URL keeps the roster URL. The command still saves the setting. Set `CIVIC_LENS_COLLECTION_CONFIG` to the collection configuration file. The command then reads the latest member roster. When the person is a member with a valid roster URL, the command prints one warning on standard error and exits with 0. The warning is "Warning: <person-id> has a roster website, <roster-url>. The roster website publishes, not this one." The saved URL publishes only after the person leaves the roster. Without the variable, the command prints no warning.
 
@@ -1062,8 +1078,10 @@ The command prints JSON with these keys:
 - `openRangesWithoutRow`: the open ranges that still have no row.
 - `closedRangesWithoutKeptFolder`: the closed ranges that no kept folder lists. These ranges get no row, and this is expected.
 - `readyRangesWithoutRow`: the open or closed ranges that passed every check but got no row, because the limit stopped the run.
+- `openStatementsWithoutApprover`: the open statement ranges that still have no approver.
+- `openRangesWithoutApprovalTime`: the open ranges whose row still has no approval time. The run fills a null time from the oldest kept record file and never changes a stored time. The limit bounds only the new rows, not the fills. Like the approver fill, the run reads one record file for each range with no time.
 
-The exit code is 0 only when `skipped`, `openRangesWithoutRow`, and `readyRangesWithoutRow` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
+The exit code is 0 only when `skipped`, `openRangesWithoutRow`, `readyRangesWithoutRow`, `openStatementsWithoutApprover`, and `openRangesWithoutApprovalTime` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
 
 ### Correction history bootstrap
 
@@ -1143,15 +1161,15 @@ The verifier writes nothing. It repeats the file checks of the backfill. Then it
 
 ### Stored columns backfill
 
-The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, and the Congress of each entry. This command fills them for rows that earlier releases wrote.
+The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, the Congress of each entry, and the bill link of each vote of a release. This command fills them for rows that earlier releases wrote.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases columns backfill
 ```
 
-Run this command after `db migrate` and before the worker starts. The worker publishes by itself. A redraft that shares an old member list with no pinned parties would pin the parties of today's roster. `deploy/scripts/update.sh` runs the command for you, in this order: it stops the worker and the review host, runs `db migrate`, runs `releases columns backfill`, and then starts the services. If the command exits with 1, `update.sh` stops and the worker stays stopped. Find the revisions that `openVoteRevisionsWithoutKeptFile` counts, restore their kept folders, and run `update.sh` again with the same SHA. To deploy by hand, follow the same order.
+Run this command after `db migrate` and before the worker starts. The worker publishes by itself. A redraft that shares an old member list with no pinned parties would pin the parties of today's roster. `deploy/scripts/update.sh` runs the command for you, in this order: it stops the worker and the review host, runs `db migrate`, runs `releases columns backfill`, and then starts the services. If the command exits with 1, `update.sh` stops and the worker stays stopped. Two counts stop the deploy. `openVoteRevisionsWithoutKeptFile` counts the revisions that no kept folder holds. Restore their kept folders. `releasesWithUnreadableManifest` counts the kept releases whose manifest is invalid. Restore the folder of each such release from a backup, so that its manifest is whole. Then run `update.sh` again with the same SHA. To deploy by hand, follow the same order.
 
-The command reads the kept release folders. A vote revision takes its values from its own vote file, which the newest kept folder in its release range holds. The parties are the ones that the release gave on the vote day. A member list that holds no parties takes them from the published revision with the lowest revision number that has a kept file. A later revision of the list never changes them. An official takes the photo path of the officials file of its release. An entry takes the Congress of its event date, or of its first publication day when it has no event date. The command writes in batches of 25 rows. It fills only what is not filled yet, so you can run it again at any time. A written vote revision has `columns_written` set.
+The command reads the kept release folders. A vote revision takes its values from its own vote file, which the newest kept folder in its release range holds. The parties are the ones that the release gave on the vote day. A member list that holds no parties takes them from the published revision with the lowest revision number that has a kept file. A later revision of the list never changes them. An official takes the photo path of the officials file of its release. An entry takes the Congress of its event date, or of its first publication day when it has no event date. A release takes the bill links of its votes from its manifest: each vote links the first action record on its bill that the release holds, as `ReleaseBillLines` gives it at publication. A release with no manifest folder is skipped. A release whose manifest cannot be read is skipped and counted in `releasesWithUnreadableManifest`. Until this command runs after the migration `ReleaseVoteBills`, the API shows a null bill link for the votes of the releases that the migration found. The command writes in batches of 25 rows. It fills only what is not filled yet, so you can run it again at any time. A written vote revision has `columns_written` set.
 
 The command prints JSON with these keys:
 
@@ -1159,9 +1177,20 @@ The command prints JSON with these keys:
 - `voteRevisionsWritten`: the revisions that this run wrote. A revision that the release gives null columns counts as written.
 - `openVoteRevisionsWithoutKeptFile`: the revisions in the active release range that no kept folder holds. They stay unwritten.
 - `closedVoteRevisionsWithoutKeptFile`: the revisions that left the active release and that no kept folder holds. They stay unwritten. This is expected after a prune.
-- `officialPhotoPathsFilled` and `entryCongressesFilled`: the rows that this run filled.
+- `officialPhotoPathsFilled`, `entryCongressesFilled`, and `voteBillLinksFilled`: the rows that this run filled.
+- `releasesWithUnreadableManifest`: the kept releases whose manifest is invalid. The run wrote no vote link for them. Restore the folder, then run the command again.
 
-The exit code is 0 only when `openVoteRevisionsWithoutKeptFile` is 0. Otherwise it is 1.
+The exit code is 0 only when `openVoteRevisionsWithoutKeptFile` and `releasesWithUnreadableManifest` are both 0. Otherwise it is 1.
+
+### Vote bills verify
+
+This command proves that the stored vote links of each kept release equal the links that the rule gives over its manifest. Run it after `releases columns backfill` exits with 0. It writes nothing and takes no lock, so it is safe beside the worker. It needs the same three variables as the backfill.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases vote-bills verify
+```
+
+For each kept release, the command reads the manifest once and computes the expected links with `ReleaseBillLines`. This is the old rule of the grouped view applied to the entries of the release: the lowest-ID action entry of the bill. Then it compares them with the rows of `release_vote_bills` in both directions. The JSON result holds `passed`, `failed`, `retired`, `failedByReason`, and `failedReleases`. A failed release holds its number, its folder, a reason, and the first vote as `vote:<id>`. Reasons are `manifestInvalid`, `linkMissing`, `linkExtra`, and `linkChanged`. A release with no manifest folder is counted in `retired` and does not fail. The exit code is 0 only when `failed` is 0. Otherwise it is 1.
 
 ### Vote party tally verification
 
@@ -1187,7 +1216,7 @@ This command proves that the entry, state, first publication, and withdrawal tab
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases entries verify
 ```
 
-The command reads each kept manifest once. It writes the file again with no change, and it checks the bytes. Then it checks the records of the state table against the entries of the file. Last, it rebuilds the manifest from the tables and compares the bytes with the file. The rebuild takes the bill line from the table. It takes only the official names, the five other optional entry fields, `publishedAtUtc`, and some withdrawals from the file.
+The command reads each kept manifest once. It writes the file again with no change, and it checks the bytes. Then it checks the records of the state table against the entries of the file. Last, it rebuilds the manifest from the tables and compares the bytes with the file. The rebuild takes the bill line and the approval time from the table. A time that differs from the manifest fails the release with `bytesDiffer`. It takes only the official names, the five other optional entry fields, `publishedAtUtc`, and some withdrawals from the file.
 
 The command prints JSON with these keys:
 
