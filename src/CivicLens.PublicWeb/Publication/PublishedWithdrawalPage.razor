@@ -1,10 +1,22 @@
 @using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Evidence
+@using CivicLens.PublicWeb.Components.Ui
 
-<PublicPage Section="PublicSection.AllRecords" CanonicalPath="@PublicationProtocol.RecordPagePath(Withdrawal.RecordId)" Title="@Title" Description="@PublishedWithdrawalView.Banner(Withdrawal)" RootPath="@RootPath" NoIndex="true">
-    <RecordView HeadingLevel="1" Headline="This record was withdrawn"
-                Summary="@PublishedWithdrawalView.Banner(Withdrawal)"
-                Facts="PublishedWithdrawalView.Facts(Withdrawal)" />
-    <PublishedCorrectionList Corrections="Withdrawal.Corrections" />
+<PublicPage Section="PublicSection.AllRecords" CanonicalPath="@PublicationProtocol.RecordPagePath(Withdrawal.RecordId)" Title="@Title" Description="@PublishedWithdrawalView.Banner(Withdrawal)" RootPath="@RootPath" TrailKind="Withdrawal.Kind" NoIndex="true">
+    <article class="detail">
+        <Notice Tone="Tone.Neutral" Title="Withdrawn record"><b>@PublishedWithdrawalView.Banner(Withdrawal)</b> @PublishedWithdrawalView.DoNotRely</Notice>
+        <header class="detail-head">
+            <p class="detail-eyebrow">@PublishedRecordLabels.Kind(Withdrawal.Kind)</p>
+            <h1 class="detail-headline">This record was withdrawn</h1>
+        </header>
+        <div class="detail-stack">
+            <section class="detail-section" aria-labelledby="withdrawal-facts-title">
+                <h2 id="withdrawal-facts-title">What was withdrawn</h2>
+                <Facts Items="PublishedWithdrawalView.Facts(Withdrawal)" />
+            </section>
+            <PublishedCorrectionList Corrections="Withdrawal.Corrections" />
+        </div>
+    </article>
 </PublicPage>
 
 @code {

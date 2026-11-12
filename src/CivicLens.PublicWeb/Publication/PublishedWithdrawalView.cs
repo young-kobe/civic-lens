@@ -11,6 +11,9 @@ internal static class PublishedWithdrawalView
     public static string Banner(PublishedWithdrawal withdrawal) =>
         $"Civic Lens withdrew this {PublishedRecordLabels.Kind(withdrawal.Kind).ToLowerInvariant()} on {Moment.Full(withdrawal.WithdrawnAtUtc)}.";
 
+    /// <summary>The owner-approved sentence that tells the reader to drop the withdrawn record.</summary>
+    public const string DoNotRely = "Do not rely on it. The page keeps this notice so old links do not break.";
+
     public static IReadOnlyList<Fact> Facts(PublishedWithdrawal withdrawal) =>
     [
         new("Kind", PublishedRecordLabels.Kind(withdrawal.Kind)),

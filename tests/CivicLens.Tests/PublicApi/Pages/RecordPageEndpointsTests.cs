@@ -196,12 +196,13 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         Assert.Equal("Published brief headline", page.QuerySelector("h1")!.TextContent);
         Assert.Equal(["Textparagraphone[R1]", "Textparagraphtwo[R2][R3]"], page.QuerySelectorAll(".ai-summary p.record-body").Select(text => Regex.Replace(text.TextContent, @"\s+", "")));
         Assert.Equal(["Pinned statement headline", "Pinned document headline", "Bill 7"], page.QuerySelectorAll(".detail-cited li a").Select(link => link.TextContent));
-        Assert.Equal("Starts Monday 5 Oct 2026, New York time", page.QuerySelector(".detail-lede")!.TextContent);
+        Assert.Null(page.QuerySelector(".detail-lede"));
         Assert.NotNull(page.QuerySelector(".ai-summary-label"));
     }
 
     public static TheoryData<PublishedRecordKind> WithdrawableKinds => new()
     {
+        PublishedRecordKind.Vote,
         PublishedRecordKind.Statement,
         PublishedRecordKind.ExecutiveAction,
         PublishedRecordKind.DocumentChange,
@@ -232,6 +233,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         var page = await GetPageAsync(host, Path(id));
 
         Assert.Equal("This record was withdrawn", page.QuerySelector("h1")!.TextContent);
+        Assert.Equal(["Home", PublishedRecordLabels.KindPlural(kind)], page.QuerySelectorAll(".public-breadcrumbs a").Select(link => link.TextContent));
         Assert.Equal([PublishedRecordLabels.Kind(kind), id, "5", "2 Jan 2026, 03:04 UTC", "2 Jun 2026, 12:30 UTC", "Withdrawn after a report"],
             page.QuerySelectorAll("dd").Select(value => value.TextContent.Trim()));
         var history = page.QuerySelectorAll(".corrections li").Select(item => item.TextContent).ToArray();

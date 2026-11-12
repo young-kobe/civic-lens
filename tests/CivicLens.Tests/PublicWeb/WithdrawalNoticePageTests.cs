@@ -54,6 +54,28 @@ public sealed class WithdrawalNoticePageTests
     }
 
     [Fact]
+    public async Task TheNoticeIsAStatusBannerThatTellsTheReaderNotToRelyOnTheRecordAndWhyTheNoticeStays()
+    {
+        var page = await RenderAsync(Notice);
+
+        var banner = page.QuerySelector(".notice[role=status]")!;
+        Assert.Contains("Civic Lens withdrew this statement on 6 Nov 2026, 12:30 UTC.", banner.TextContent);
+        Assert.Contains("Do not rely on it. The page keeps this notice so old links do not break.", banner.TextContent);
+        Assert.NotNull(page.QuerySelector("article.detail h1.detail-headline"));
+    }
+
+    [Fact]
+    public async Task TheTrailNamesTheSectionOfTheWithdrawnKindAndLinksTheSearchByKind()
+    {
+        var page = await RenderAsync(Notice);
+
+        var links = page.QuerySelectorAll(".public-breadcrumbs a");
+        Assert.Equal(["Home", "Statements"], links.Select(link => link.TextContent));
+        Assert.EndsWith(PublicationProtocol.SearchByKindPath(PublishedRecordKind.Statement), links[1].GetAttribute("href"));
+        Assert.DoesNotContain("Votes and bills", page.QuerySelector(".public-breadcrumbs")!.TextContent);
+    }
+
+    [Fact]
     public async Task TheNoticeSaysWhatWasWithdrawnAndWhenWithTheExactRevisionAndDatesAndTheEscapedNote()
     {
         var page = await RenderAsync(Notice);

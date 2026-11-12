@@ -9,16 +9,7 @@
     </Panel>
 
     <Panel Title="@PublishedBriefView.CitedRecordsTitle" Id="citations-title" Padded="true">
-        <ul class="choices">
-            @foreach (var citation in Record.Citations)
-            {
-                <li id="@PublishedBriefView.CitationAnchor(citation.Id)">
-                    <span class="choice-label">@citation.Id</span>
-                    <a href="@PublishedRecordView.RecordLink(citation.RecordId)">@citation.Headline</a>
-                    <span class="muted small">@PublishedBriefView.CitedRecordNote(citation)</span>
-                </li>
-            }
-        </ul>
+        <PublishedBriefCitations Citations="Record.Citations" RecordHref="PublishedRecordView.RecordLink" />
     </Panel>
 </PublishedRecordFrame>
 

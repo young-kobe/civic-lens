@@ -239,9 +239,9 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 | Record row, status badge | All lists | What is this record? | Per-kind views | Implemented. Planned: event-named date, one bill number format |
 | Search results | Search | Find a person, bill, or vote | Search service | Partial. Planned: ranking and snippets |
 | Weekly brief page | Brief | What happened this week? | `briefs`, `brief_paragraphs`, `brief_citations` | Partial. The gated `/web/records/{id}.html` preview shows the week, the labeled text with its citation links, one check line that holds the sample caveat, and every cited record. Planned: the live route |
-| Correction and withdrawal pages | Record | What changed on this record? | `record_corrections`, `withdrawals` | The withdrawal read API is implemented at `/v1/records/{kind}/{recordId}/withdrawal`. The gated `/web/{kind}/{id}` routes for statements, executive actions, document changes, and briefs show the notice for a withdrawn record, with its correction history. Planned: the correction history of a record that is not withdrawn, which waits for the correction views of a separate PR, and the same notice on the routes of the other kinds |
+| Correction and withdrawal pages | Record | What changed on this record? | `record_corrections`, `withdrawals` | The withdrawal read API is implemented at `/v1/records/{kind}/{recordId}/withdrawal`. The one gated `/web/records/{id}.html` route shows the notice for a withdrawn record of any kind, with its correction history. Planned: the correction history of a record that is not withdrawn, which waits for the correction views of a separate PR |
 
-`PublicPage` renders one breadcrumb trail before the hero on every page except Home. The trail is Home, then the section link, then the page title. The section link is absent when it leads to the page itself. The check compares paths, so page 1 of a list drops it and page 2 keeps it. `PublicSections.Trail` builds the trail, so no page builds its own. A page that shows one record passes a `ReportedRecord` with its ID, revision, kind, title, and an optional short name. The trail then names the section of the kind and ends with the short name. A kind with no short name ends with the title. The footer report link reads "Report a problem with this {kind}". It adds the title as hidden text for assistive technology.
+`PublicPage` renders one breadcrumb trail before the hero on every page except Home. The trail is Home, then the section link, then the page title. The section link is absent when it leads to the page itself. The check compares paths, so page 1 of a list drops it and page 2 keeps it. `PublicSections.Trail` builds the trail, so no page builds its own. A page that shows one record passes a `ReportedRecord` with its ID, revision, kind, title, and an optional short name. The trail then names the section of the kind and ends with the short name. A kind with no short name ends with the title. The withdrawal notice passes only the kind, so its trail names the section of the withdrawn kind and its footer keeps the fixed report link. The footer report link reads "Report a problem with this {kind}". It adds the title as hidden text for assistive technology.
 
 ## Storage and contracts
 
@@ -286,9 +286,6 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 ## Limits and planned work
 
 The roadmap step [R-68](../roadmap.md#active-r-68-redesign) holds the plan: the views, the route moves, and the accepted design changes. This page holds no second plan.
-
-Limits:
-
 
 Open choices:
 

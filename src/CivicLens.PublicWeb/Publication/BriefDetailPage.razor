@@ -7,7 +7,6 @@
         <header class="detail-head">
             <p class="detail-eyebrow">@PublishedBriefView.Eyebrow | @PublishedBriefView.WeekRange(Data.WeekStart)</p>
             <h1 class="detail-headline">@Data.Headline</h1>
-            <p class="detail-lede">@PublishedBriefView.WeekStartText(Data.WeekStart)</p>
         </header>
         <div class="detail-stack">
             <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label">
@@ -20,16 +19,7 @@
             </section>
             <section class="detail-section" id="cited" aria-labelledby="brief-cited-title">
                 <h2 id="brief-cited-title">@PublishedBriefView.CitedRecordsTitle</h2>
-                <ul class="choices detail-cited" role="list">
-                    @foreach (var citation in Data.Citations)
-                    {
-                        <li id="@PublishedBriefView.CitationAnchor(citation.Id)">
-                            <span class="choice-label">@citation.Id</span>
-                            <a href="@(RootPath + PublicationProtocol.RecordPagePath(citation.RecordId))">@citation.Headline</a>
-                            <span class="muted small">@PublishedBriefView.CitedRecordNote(citation)</span>
-                        </li>
-                    }
-                </ul>
+                <PublishedBriefCitations Citations="Data.Citations" ListClass="choices detail-cited" RecordHref="citedId => RootPath + PublicationProtocol.RecordPagePath(citedId)" />
             </section>
         </div>
     </article>

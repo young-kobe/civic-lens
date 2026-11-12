@@ -13,7 +13,6 @@ namespace CivicLens.Tests.Host;
 public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private readonly string configurationPath = Path.Combine(Path.GetTempPath(), "people-config-" + Guid.NewGuid().ToString("N") + ".json");
-    private static readonly string ShippedConfiguration = Path.Combine(RepositoryRoot.FullName, "config", "federal-coverage.json");
     private static readonly Dictionary<string, string> Owner = new() { ["CIVIC_LENS_REVIEW_OWNER"] = "owner-subject" };
     private string connectionString = null!;
 
@@ -25,26 +24,9 @@ public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLife
         await postgres.DropDatabaseAsync(connectionString);
     }
 
-    [Fact]
-    public async Task ImportKeepsEveryShippedPersonIdAndKeyAndALaterRunAddsNothing()
-    {
-        var expected = JsonDocument.Parse(await File.ReadAllTextAsync(ShippedConfiguration)).RootElement.GetProperty("people").EnumerateArray()
-            .Select(person => (person.GetProperty("id").GetString()!, Key(person, "bioguideId"), Key(person, "wikidataId"))).OrderBy(person => person.Item1, StringComparer.Ordinal).ToList();
-
-        var first = await ImportAsync();
-        var second = await ImportAsync();
-
-        Assert.Equal(0, first.ExitCode);
-        Assert.Equal(expected.Count, JsonDocument.Parse(first.Output).RootElement.GetProperty("added").GetInt32());
-        Assert.Equal(expected, await ReadPeopleAsync());
-        Assert.Equal(0, second.ExitCode);
-        Assert.Equal(0, JsonDocument.Parse(second.Output).RootElement.GetProperty("added").GetInt32());
-        Assert.Equal(expected, await ReadPeopleAsync());
-    }
-
     [Theory]
     [InlineData("people")]
-    [InlineData("people", "import")]
+    [InlineData("people", "import", "config.json")]
     [InlineData("people", "export", "x")]
     [InlineData("people", "photo", "withhold")]
     [InlineData("people", "photo", "withhold", "--note")]
@@ -54,19 +36,18 @@ public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLife
     [InlineData("people", "website", "set", "mayor")]
     [InlineData("people", "website", "clear", "mayor", "https://example.gov/")]
     [InlineData("people", "website", "clear", "mayor", "--note")]
-    [InlineData("people", "import", "config.json", "--note", "x")]
     public async Task BadArgumentsShowTheUsage(params string[] arguments)
     {
         var result = await HostProcess.RunWithEnvironmentAsync(connectionString, null, Owner, arguments);
 
         Assert.Equal(2, result.ExitCode);
-        Assert.Contains("Use people import", result.Error, StringComparison.Ordinal);
+        Assert.Contains("Use people photo withhold|restore", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task WithholdRestoreAndWebsiteEachAddOneRevisionWithTheOwnerAndTheNote()
     {
-        await ImportAsync();
+        await SeedPresidentAsync();
 
         var withhold = await RunAsync("people", "photo", "withhold", "donald-trump", "--note", "Takedown request 7.");
         var website = await RunAsync("people", "website", "set", "donald-trump", "https://www.whitehouse.gov/");
@@ -147,7 +128,7 @@ public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLife
     [Fact]
     public async Task APhotoCommandDoesNotReadTheCollectionConfigurationSoABadPathDoesNotFailIt()
     {
-        await ImportAsync();
+        await SeedPresidentAsync();
 
         var result = await HostProcess.RunWithEnvironmentAsync(connectionString, null,
             new Dictionary<string, string>(Owner) { ["CIVIC_LENS_COLLECTION_CONFIG"] = Path.Combine(Path.GetTempPath(), "missing-collection.json") },
@@ -175,8 +156,9 @@ public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLife
             RosterFixtures.Person("maria-cantwell", "Maria Cantwell", "C000127"),
             RosterFixtures.Person("no-bioguide", "No Bioguide", null),
             RosterFixtures.Person("former-member", "Former Member", "F000001")), ConfigurationJson.Options));
-        var imported = await HostProcess.RunWithEnvironmentAsync(connectionString, null, Owner, "people", "import", configurationPath);
-        Assert.Equal(0, imported.ExitCode);
+        await PersonSeed.InsertAsync(connectionString, "maria-cantwell", "C000127");
+        await PersonSeed.InsertAsync(connectionString, "no-bioguide");
+        await PersonSeed.InsertAsync(connectionString, "former-member", "F000001");
         var attempts = PostgresCollectionAttemptStore.FromConnectionString(connectionString);
         var attemptId = await RosterFixtures.ImportCaptureAsync(attempts, new string('a', 64), DateTimeOffset.UtcNow);
         await PostgresMemberRosterStore.FromConnectionString(connectionString)
@@ -194,7 +176,7 @@ public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLife
     [InlineData("people", "website", "set", "donald-trump", "https://user@www.whitehouse.gov/")]
     public async Task AnUnknownPersonOrAnInvalidUrlExitsWithTwoAndWritesNothing(params string[] arguments)
     {
-        await ImportAsync();
+        await SeedPresidentAsync();
 
         var result = await RunAsync(arguments);
 
@@ -205,7 +187,7 @@ public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLife
     [Fact]
     public async Task ASettingChangeNeedsTheOwnerVariableSoNoAnonymousWriteReachesTheRegistry()
     {
-        await ImportAsync();
+        await SeedPresidentAsync();
 
         var result = await HostProcess.RunAsync(connectionString, "people", "photo", "withhold", "donald-trump");
 
@@ -214,18 +196,7 @@ public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLife
         Assert.Empty(await ReadSettingsAsync());
     }
 
-    [Fact]
-    public async Task ImportNeedsTheOwnerVariableSoNoAnonymousWriteReachesTheRegistry()
-    {
-        var result = await HostProcess.RunAsync(connectionString, "people", "import", ShippedConfiguration);
-
-        Assert.Equal(2, result.ExitCode);
-        Assert.Contains("Invalid input/configuration", result.Error, StringComparison.Ordinal);
-        Assert.Empty(await ReadPeopleAsync());
-    }
-
-    private Task<(int ExitCode, string Output, string Error)> ImportAsync() =>
-        HostProcess.RunWithEnvironmentAsync(connectionString, null, Owner, "people", "import", ShippedConfiguration);
+    private Task SeedPresidentAsync() => PersonSeed.InsertAsync(connectionString, "donald-trump", wikidataId: "Q22686");
 
     private Task<(int ExitCode, string Output, string Error)> RunAsync(params string[] arguments) =>
         HostProcess.RunWithEnvironmentAsync(connectionString, null, Owner, arguments);
@@ -243,20 +214,6 @@ public sealed class PeopleCommandTests(PostgresCollection postgres) : IAsyncLife
             Assert.Equal("owner-subject", reader.GetString(4));
             rows.Add((reader.GetInt32(0), reader.GetBoolean(1), reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetString(3)));
         }
-        return rows;
-    }
-
-    private static string? Key(JsonElement person, string name) => person.TryGetProperty(name, out var value) ? value.GetString() : null;
-
-    private async Task<List<(string, string?, string?)>> ReadPeopleAsync()
-    {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand("SELECT person_id, bioguide_id, wikidata_id FROM people ORDER BY person_id COLLATE \"C\"", connection);
-        await using var reader = await command.ExecuteReaderAsync();
-        var rows = new List<(string, string?, string?)>();
-        while (await reader.ReadAsync())
-            rows.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2)));
         return rows;
     }
 }

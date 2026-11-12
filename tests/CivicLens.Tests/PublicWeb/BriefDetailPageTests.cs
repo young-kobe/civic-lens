@@ -24,7 +24,8 @@ public sealed class BriefDetailPageTests
 
         Assert.Equal("The week in Congress", page.QuerySelector("h1")!.TextContent);
         Assert.Equal("Weekly brief | 2 Nov to 8 Nov 2026", page.QuerySelector(".detail-eyebrow")!.TextContent);
-        Assert.Equal("Starts Monday 2 Nov 2026, New York time", page.QuerySelector(".detail-lede")!.TextContent);
+        Assert.Null(page.QuerySelector(".detail-lede"));
+        Assert.Equal("Starts Monday 2 Nov 2026, New York time", page.QuerySelectorAll(".facts dd").First().TextContent.Trim());
         Assert.Equal("Week of 2 Nov 2026", page.QuerySelector(".public-breadcrumbs [aria-current=page]")!.TextContent);
     }
 

@@ -299,3 +299,11 @@ END
 - cols release_number integer, policy_area_id varchar(256), name varchar(256)
 - check ck_release_policy_areas_name: length(btrim(name)) > 0
 - check ck_release_policy_areas_policy_area_id: length(btrim(policy_area_id)) > 0
+
+## release_vote_bills
+
+- pk (release_number, vote_record_id)
+- fk (release_number) -> publication_releases (release_number) on delete restrict
+- cols release_number integer, vote_record_id varchar(64), bill_record_id varchar(64)
+- check ck_release_vote_bills_bill_record_id: bill_record_id ~ '^[0-9a-f]{64}$'
+- check ck_release_vote_bills_vote_record_id: vote_record_id ~ '^[0-9a-f]{64}$'

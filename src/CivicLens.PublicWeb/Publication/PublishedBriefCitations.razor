@@ -1,0 +1,19 @@
+@using CivicLens.Publication.Contracts
+
+<ul class="@ListClass" role="list">
+    @foreach (var citation in Citations)
+    {
+        <li id="@PublishedBriefView.CitationAnchor(citation.Id)">
+            <span class="choice-label">@citation.Id</span>
+            <a href="@RecordHref(citation.RecordId)">@citation.Headline</a>
+            <span class="muted small">@PublishedBriefView.CitedRecordNote(citation)</span>
+        </li>
+    }
+</ul>
+
+@code {
+    [Parameter, EditorRequired] public PublishedBriefCitation[] Citations { get; set; } = [];
+    /// <summary>Builds the link to a cited record. The static page and the server page keep different roots.</summary>
+    [Parameter, EditorRequired] public Func<string, string> RecordHref { get; set; } = default!;
+    [Parameter] public string ListClass { get; set; } = "choices";
+}
