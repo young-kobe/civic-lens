@@ -245,7 +245,10 @@ public sealed class ExecutiveSummaryTests
     {
         var evidence = Evidence();
         var summary = Resolve(Good(), evidence).Accepted!;
-        var header = summary with { Summary = summary.Summary! with { Sentences = [summary.Summary.Sentences[0], summary.Summary.Sentences[1] with { Quote = summary.Summary.Sentences[1].Quote with { Start = 0, Length = 20 } }] } };
+        var headerLine = evidence.Text.Text.Split('\n')[1];
+        Assert.True(headerLine.StartsWith("Characters read:", StringComparison.Ordinal) && headerLine.Split(' ').Length >= 4);
+        var headerQuote = summary.Summary!.Sentences[1].Quote with { Start = evidence.Text.Text.IndexOf(headerLine, StringComparison.Ordinal), Length = headerLine.Length };
+        var header = summary with { Summary = summary.Summary with { Sentences = [summary.Summary.Sentences[0], summary.Summary.Sentences[1] with { Quote = headerQuote }] } };
         var document = FederalRegisterFixtures.Document(FederalRegisterFixtures.TrumpOrder);
         var extractions = new Dictionary<string, DocumentExtraction>
         {
