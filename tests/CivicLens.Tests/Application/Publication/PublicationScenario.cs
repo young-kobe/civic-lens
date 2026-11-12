@@ -883,6 +883,16 @@ internal sealed class FakePublicationStore : IPublicationStore
         return Task.FromResult(new BillCountReleasePage([.. following.Take(limit)], fingerprint, following.Length > limit));
     }
 
+    public List<VotePartyTallyEvidence> TallyEvidence { get; } = [];
+
+    public Task<VotePartyTallyPage> ReadVotePartyTallyEvidenceAsync(VotePartyTallyVerificationCursor? after, int limit, CancellationToken cancellationToken)
+    {
+        var rest = TallyEvidence.OrderBy(item => item.RecordId, StringComparer.Ordinal).ThenBy(item => item.RevisionNumber)
+            .Where(item => after is null || string.CompareOrdinal(item.RecordId, after.RecordId) > 0 ||
+                (item.RecordId == after.RecordId && item.RevisionNumber > after.RevisionNumber)).ToArray();
+        return Task.FromResult(new VotePartyTallyPage([.. rest.Take(limit)], rest.Length > limit));
+    }
+
     public Task<ReleaseBillCountSource> ReadBillCountSourceAsync(int releaseNumber, CancellationToken cancellationToken) =>
         Task.FromResult(BillCountSources.GetValueOrDefault(releaseNumber) ?? new ReleaseBillCountSource([], [], [], []));
 
