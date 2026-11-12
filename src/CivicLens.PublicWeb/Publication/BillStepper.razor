@@ -1,0 +1,14 @@
+<ol class="bill-stepper" aria-label="Where the bill went">
+    @for (var index = 0; index < Steps.Length; index++)
+    {
+        var step = Steps[index];
+        <li aria-current="@(index == Steps.Length - 1 ? "step" : null)">
+            <b>@step.Title</b>
+            <span class="bill-step-detail">@step.Detail</span>
+        </li>
+    }
+</ol>
+
+@code {
+    [Parameter, EditorRequired] public BillStepData[] Steps { get; set; } = [];
+}

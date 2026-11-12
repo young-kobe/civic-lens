@@ -83,7 +83,7 @@ public partial class PublicApiSearchSources : Migration
          WHERE m.record_id = v.record_id AND m.revision_number = v.revision_number
         """;
 
-    private static readonly string ActionSources = $"""
+    internal static readonly string ActionSources = $"""
         CREATE VIEW public_api.action_sources WITH (security_barrier = true) AS
         SELECT b.record_id, b.revision_number, cited."position", {SourceColumns}
           FROM public_api.bills b

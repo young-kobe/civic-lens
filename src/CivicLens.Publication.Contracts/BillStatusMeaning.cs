@@ -53,7 +53,7 @@ public static partial class BillStatusMeaning
 
     private static Status? Chamber(string text, string billType)
     {
-        var fromHouse = billType.StartsWith('h');
+        var fromHouse = BillNumbers.ChamberOf(billType) == PublishedChamber.House;
         if (fromHouse && ReceivedInSenate().IsMatch(text)) return new("Passed the House", "Passed the House. Now in the Senate.");
         if (!fromHouse && ReceivedInHouse().IsMatch(text)) return new("Passed the Senate", "Passed the Senate. Now in the House.");
         return null;

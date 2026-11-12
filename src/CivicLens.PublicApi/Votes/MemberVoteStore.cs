@@ -108,6 +108,36 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
         return release is { } active ? new(active, [.. request.Officials.Select(official => new OfficialVotes(official, [.. votes[official]]))]) : null;
     }
 
+    private const string CastsOnBillSql = """
+        SELECT a.release_number, v.official_id, v.chamber, v.voted_on, v.vote_cast, v.side
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+          LEFT JOIN public_api.member_votes v ON v.official_id = ANY(@officials)
+                AND v.congress = @congress AND v.bill_type = @bill_type AND v.bill_number = @bill_number
+         ORDER BY v.voted_on, v.chamber, v.session_number, v.roll_call_number, v.record_id
+        """;
+
+    /// <summary>Reads every recorded cast of the asked officials on the roll call votes that name one bill, oldest first. Null means that no release is active.
+    /// One statement reads the release and the casts. The rows are bounded by the asked officials times the roll calls on one bill.</summary>
+    public async Task<MemberCastAnswer?> FindBillCastsAsync(string[] officials, int congress, string billType, int billNumber, CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand(CastsOnBillSql);
+        command.Parameters.AddWithValue("officials", officials);
+        command.Parameters.AddWithValue("congress", congress);
+        command.Parameters.AddWithValue("bill_type", billType);
+        command.Parameters.AddWithValue("bill_number", billNumber);
+        var casts = new List<MemberBillCast>();
+        int? release = null;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            release = reader.GetInt32(0);
+            if (reader.IsDBNull(1)) continue;
+            casts.Add(new(reader.GetString(1), ViewColumns.Enum<PublishedChamber>(reader, 2), reader.GetFieldValue<DateOnly>(3),
+                PlainVoteWords.Cast(reader.GetString(4)), ViewColumns.Text(reader, 5)));
+        }
+        return release is { } active ? new(active, [.. casts]) : null;
+    }
+
     /// <summary>Reads a bounded shared set and every requested official's recorded cast in one release snapshot.</summary>
     public async Task<SharedMemberVoteAnswer?> FindSharedAsync(MemberVoteRequest request, CancellationToken cancellationToken)
     {

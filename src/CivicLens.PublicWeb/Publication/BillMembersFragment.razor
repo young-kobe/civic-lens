@@ -1,0 +1,42 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<div data-bill-members-fragment data-zcta="@Data.Zcta" data-record-id="@Data.RecordId" data-release="@Data.Release">
+    <ul class="bill-members-list" role="list">
+        @foreach (var member in Data.Members)
+        {
+            <li>
+                <p>@Relation(member)</p>
+                @foreach (var cast in member.Casts)
+                {
+                    <p>@member.Name voted <SharedVoteCast Side="@cast.Side">@cast.CastWords</SharedVoteCast> on the @member.Chamber vote of @Moment.Day(cast.VotedOn).</p>
+                }
+            </li>
+        }
+    </ul>
+    @foreach (var chamber in ChambersWithoutVote)
+    {
+        <p class="small muted">@NoVote(chamber)</p>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public BillMembersData Data { get; set; } = default!;
+
+    private IEnumerable<PublishedChamber> ChambersWithoutVote => Data.Members.Select(member => member.Chamber).Distinct()
+        .Where(chamber => !Data.VotedChambers.Contains(chamber)).Order();
+
+    private static string Relation(BillMemberData member) => member.Relation switch
+    {
+        BillMemberRelation.Sponsor => $"{member.Name} sponsored it.",
+        BillMemberRelation.Cosponsor => $"{member.Name} cosponsored it on {Moment.Day(member.JoinedOn!.Value)}.",
+        _ => $"{member.Name} did not sponsor or cosponsor it."
+    };
+
+    private string NoVote(PublishedChamber chamber)
+    {
+        var count = Data.Members.Count(member => member.Chamber == chamber);
+        var who = chamber == PublishedChamber.Senate ? (count == 1 ? "senator has" : "senators have") : (count == 1 ? "House member has" : "House members have");
+        return $"Your {who} no {chamber} vote on this bill in this release.";
+    }
+}

@@ -44,6 +44,30 @@ public sealed class VoteStore(NpgsqlDataSource views)
         return new(active, page, next);
     }
 
+    private const string BillChambersSql = """
+        SELECT a.release_number,
+               EXISTS (SELECT 1 FROM public_api.votes v
+                        WHERE v.congress = @congress AND v.bill_type = @bill_type AND v.bill_number = @bill_number AND v.chamber = 'House'),
+               EXISTS (SELECT 1 FROM public_api.votes v
+                        WHERE v.congress = @congress AND v.bill_type = @bill_type AND v.bill_number = @bill_number AND v.chamber = 'Senate')
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+        """;
+
+    /// <summary>Reads which chambers hold a roll call vote that names the bill, with one EXISTS for each chamber, so the answer is complete however many votes the bill has.
+    /// Null means that no release is active.</summary>
+    public async Task<BillVoteChambers?> FindBillChambersAsync(int congress, string billType, int billNumber, CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand(BillChambersSql);
+        command.Parameters.AddWithValue("congress", congress);
+        command.Parameters.AddWithValue("bill_type", billType);
+        command.Parameters.AddWithValue("bill_number", billNumber);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+        PublishedChamber[] chambers = [.. new[] { (PublishedChamber.House, reader.GetBoolean(1)), (PublishedChamber.Senate, reader.GetBoolean(2)) }
+            .Where(item => item.Item2).Select(item => item.Item1)];
+        return new(reader.GetInt32(0), chambers);
+    }
+
     private static readonly string DetailSql = $"""
             SELECT v.release_number, {Columns},
                    ARRAY(SELECT i.issue_id FROM public_api.vote_issues i
