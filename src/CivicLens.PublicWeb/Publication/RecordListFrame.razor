@@ -1,0 +1,68 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSections.OfRecord(Kind)" CanonicalPath="@List.Path" Title="@List.Label" Description="@Description" RootPath="@RootPath">
+    <PageHeader Title="@List.Label" Lede="@Lede"><Meta>@Meta</Meta></PageHeader>
+    <FilterTabs Label="Lists of records" Tabs="Tabs" />
+    @if (RowCount > 0 || Filter.IsActive)
+    {
+        <details class="list-fold" open="@Filter.IsActive">
+            <summary>@FilterSummary</summary>
+            <form class="in" method="get" aria-label="@($"Filter {List.Label.ToLowerInvariant()}")">
+                <div class="lists-filter">@Fields</div>
+                <div class="lists-filter-actions">
+                    <Button Type="submit" Variant="ButtonVariant.Primary">Apply filters</Button>
+                    @if (Filter.IsActive)
+                    {
+                        <a href="?">Clear filters</a>
+                    }
+                </div>
+            </form>
+        </details>
+    }
+    @if (RowCount == 0)
+    {
+        <EmptyState Title="@EmptyTitle">
+            <ul class="search-next">@EmptyTips</ul>
+        </EmptyState>
+    }
+    else
+    {
+        <p class="list-status" role="status">Showing @RowCount @(RowCount == 1 ? Singular : Plural) on this page. Release @Release.</p>
+        <p class="list-scope muted small">@Scope</p>
+        @Intro
+        <ul class="record-rows" role="list">@Rows</ul>
+        @if (NextCursor is { } cursor)
+        {
+            <Pager Label="@($"{List.Label} pages")" ForwardOnly="true" OlderHref="@Filter.Query(cursor)" OlderText="Next page" />
+        }
+    }
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    [Parameter, EditorRequired] public string Description { get; set; } = default!;
+    [Parameter, EditorRequired] public string Lede { get; set; } = default!;
+    [Parameter, EditorRequired] public string FilterSummary { get; set; } = default!;
+    [Parameter, EditorRequired] public string Singular { get; set; } = default!;
+    [Parameter, EditorRequired] public string Plural { get; set; } = default!;
+    /// <summary>Names who and what the count covers and its time frame. Each list states its own.</summary>
+    [Parameter, EditorRequired] public string Scope { get; set; } = default!;
+    [Parameter, EditorRequired] public int Release { get; set; }
+    [Parameter, EditorRequired] public int RowCount { get; set; }
+    [Parameter, EditorRequired] public RecordListFilter Filter { get; set; } = default!;
+    [Parameter] public string? NextCursor { get; set; }
+    /// <summary>Links that stand in the page header, such as the page that the lede names.</summary>
+    [Parameter] public RenderFragment? Meta { get; set; }
+    [Parameter, EditorRequired] public string EmptyTitle { get; set; } = default!;
+    [Parameter, EditorRequired] public RenderFragment EmptyTips { get; set; } = default!;
+    [Parameter, EditorRequired] public RenderFragment Fields { get; set; } = default!;
+    [Parameter, EditorRequired] public RenderFragment Rows { get; set; } = default!;
+    /// <summary>A note that stands above the rows, such as what the documents of the list are.</summary>
+    [Parameter] public RenderFragment? Intro { get; set; }
+
+    private PublicSections.RecordList List => PublicSections.ListOf(Kind);
+
+    private IReadOnlyList<FilterTab> Tabs => [.. PublicSections.RecordLists.Select(list => FilterTab.Link(list.Label, RootPath + list.Path, list.Kind == Kind))];
+}

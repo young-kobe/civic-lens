@@ -1,0 +1,45 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<RecordListFrame Kind="PublishedRecordKind.DocumentChange" RootPath="@RootPath" Release="Data.Release" RowCount="Data.Changes.Count" Filter="Data.Filter" NextCursor="@Data.NextCursor"
+                 Description="Public pages of government offices that changed between two of our checks, newest first. Each change page shows both versions and marks the words that changed."
+                 Lede="Public pages of government offices that changed between two of our checks, newest first. Each change page shows both versions and marks the words that changed."
+                 FilterSummary="Filter by office, issue or date" Singular="document change" Plural="document changes"
+                 Scope="This page counts changes of public pages of government offices in this release that match the filters. A page holds 25."
+                 EmptyTitle="@(Data.Filter.IsActive ? "No document change matches these filters." : "No document changes are published yet.")">
+    <Fields>
+        <RecordListSelect Id="changes-office" Name="institution" Label="Office" Choices="Data.Institutions" Selected="@Data.Filter.Value("institution")" />
+        <RecordListSelect Id="changes-issue" Name="issue" Label="Issue" Choices="Data.Issues" Selected="@Data.Filter.Value("issue")" />
+        <RecordListDates IdPrefix="changes" Filter="Data.Filter" />
+    </Fields>
+    <EmptyTips>
+        @if (Data.Filter.IsActive)
+        {
+            <li>Clear one filter, such as the office.</li>
+            <li>Use a wider date range.</li>
+        }
+        else
+        {
+            <li><a href="@(RootPath + PublicSections.ListOf(PublishedRecordKind.Vote).Path)">See the newest votes</a></li>
+        }
+        <li><a href="@(RootPath + PublicationProtocol.SearchPagePath)">Search all records</a></li>
+    </EmptyTips>
+    <Rows>
+        @foreach (var change in Data.Changes)
+        {
+            <PublicRecordRow Icon="IconName.DocumentChange" Href="@(RootPath + PublicationProtocol.RecordPagePath(change.RecordId))" Headline="@change.Headline" Label="@change.Label"
+                             Meta="@Meta(change)" />
+        }
+    </Rows>
+</RecordListFrame>
+
+@code {
+    [Parameter, EditorRequired] public DocumentChangeListPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    private static string Meta(DocumentChangeListRowData change) => string.Join(", ", new[]
+    {
+        change.Institution, change.ChangeDate is { } day ? $"Found on {Moment.Day(day)}" : null,
+        change.PlaceCount is { } count ? $"Changed in {count} {(count == 1 ? "place" : "places")}" : null
+    }.OfType<string>());
+}

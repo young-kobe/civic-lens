@@ -1,0 +1,9 @@
+@using CivicLens.PublicWeb.Components.Ui
+
+<Field Label="From date" For="@($"{IdPrefix}-from")"><input id="@($"{IdPrefix}-from")" name="from" type="date" value="@Filter.Value("from")" /></Field>
+<Field Label="To date" For="@($"{IdPrefix}-to")"><input id="@($"{IdPrefix}-to")" name="to" type="date" value="@Filter.Value("to")" /></Field>
+
+@code {
+    [Parameter, EditorRequired] public string IdPrefix { get; set; } = default!;
+    [Parameter, EditorRequired] public RecordListFilter Filter { get; set; } = default!;
+}

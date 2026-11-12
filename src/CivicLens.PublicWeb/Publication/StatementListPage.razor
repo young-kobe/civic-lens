@@ -1,0 +1,39 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<RecordListFrame Kind="PublishedRecordKind.Statement" RootPath="@RootPath" Release="Data.Release" RowCount="Data.Statements.Count" Filter="Data.Filter" NextCursor="@Data.NextCursor"
+                 Description="What members of Congress and the President said in their own press releases, newest first. Each statement links to its source."
+                 Lede="What members of Congress and the President said in their own press releases, newest first. Each statement links to its source."
+                 FilterSummary="Filter by issue or date" Singular="statement" Plural="statements"
+                 Scope="@Scope" EmptyTitle="No statement matches these filters.">
+    <Fields>
+        @if (Data.Filter.Value("official") is { } official)
+        {
+            <input type="hidden" name="official" value="@official" />
+        }
+        <RecordListSelect Id="statements-issue" Name="issue" Label="Issue" Choices="Data.Issues" Selected="@Data.Filter.Value("issue")" />
+        <RecordListDates IdPrefix="statements" Filter="Data.Filter" />
+    </Fields>
+    <EmptyTips>
+        <li>A date filter leaves out statements with no date. Clear the dates to see them.</li>
+        <li><a href="@(RootPath + PublicationProtocol.SearchPagePath)">Search all records</a></li>
+    </EmptyTips>
+    <Rows>
+        @foreach (var statement in Data.Statements)
+        {
+            <PublicRecordRow Icon="IconName.Statements" Href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))" Headline="@statement.Headline" Label="@statement.Label"
+                             Meta="@Meta(statement)" />
+        }
+    </Rows>
+</RecordListFrame>
+
+@code {
+    [Parameter, EditorRequired] public StatementListPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    private string Scope => "This page counts statements in this release that match the filters"
+        + (Data.OfficialName is { } name ? $", and only statements by {name}" : string.Empty) + ". A page holds 25.";
+
+    private static string Meta(StatementListRowData statement) => string.Join(", ", statement.Speakers
+        .Append(statement.StatementDate is { } day ? $"Said on {Moment.Day(day)}" : "Date not stated"));
+}

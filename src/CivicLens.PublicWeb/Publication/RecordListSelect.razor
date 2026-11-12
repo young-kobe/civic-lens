@@ -1,0 +1,20 @@
+@using CivicLens.PublicWeb.Components.Ui
+
+<Field Label="@Label" For="@Id">
+    <select id="@Id" name="@Name">
+        <option value="">@AnyText</option>
+        @foreach (var choice in Choices)
+        {
+            <option value="@choice.Value" selected="@(Selected == choice.Value)">@choice.Label</option>
+        }
+    </select>
+</Field>
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = default!;
+    [Parameter, EditorRequired] public string Name { get; set; } = default!;
+    [Parameter, EditorRequired] public string Label { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<SearchChoiceData> Choices { get; set; } = default!;
+    [Parameter] public string? Selected { get; set; }
+    [Parameter] public string AnyText { get; set; } = "Any";
+}

@@ -1,0 +1,42 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<RecordListFrame Kind="PublishedRecordKind.Action" RootPath="@RootPath" Release="Data.Release" RowCount="Data.Bills.Count" Filter="Data.Filter" NextCursor="@Data.NextCursor"
+                 Description="Bills and resolutions of the published release, with the latest official action on each. A bill moves up the list when a member signs on to it."
+                 Lede="Bills and resolutions, with the latest official action on each. A bill moves up the list when a member signs on to it."
+                 FilterSummary="Filter by issue, policy area or date" Singular="bill or resolution" Plural="bills and resolutions"
+                 Scope="This page counts bills and resolutions in this release that match the filters. The date of each is the day of its latest sponsorship. A page holds 25."
+                 EmptyTitle="No bill matches these filters.">
+    <Fields>
+        <RecordListSelect Id="bills-issue" Name="issue" Label="Issue" Choices="Data.Issues" Selected="@Data.Filter.Value("issue")" />
+        <RecordListSelect Id="bills-area" Name="policyArea" Label="Policy area" Choices="Data.PolicyAreas" Selected="@Data.Filter.Value("policyArea")" />
+        <Field Label="Bill number" For="bills-number"><input id="bills-number" type="search" name="bill" placeholder="H.R. 5334" autocomplete="off" value="@Data.Filter.Value("bill")" /></Field>
+        <RecordListDates IdPrefix="bills" Filter="Data.Filter" />
+    </Fields>
+    <EmptyTips>
+        <li>Clear one filter, such as the policy area.</li>
+        <li>Search a bill number, such as <a href="@(RootPath + PublicationProtocol.SearchPagePath)?q=5334">5334</a>.</li>
+        <li><a href="@(RootPath + PublicationProtocol.SearchPagePath)">Search all records</a></li>
+    </EmptyTips>
+    <Rows>
+        @foreach (var bill in Data.Bills)
+        {
+            <PublicRecordRow Icon="IconName.Bill" IconClass="record-row-icon-bill" Href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" Headline="@bill.Headline" Label="@bill.Label"
+                             Sponsor="@bill.Sponsor" Meta="@($"Latest sponsorship {Moment.Day(bill.EventDate)}")">
+                @if (bill.LatestActionText is { } text && bill.LatestActionDate is { } day)
+                {
+                    <p class="small muted">Latest official action @Moment.Day(day): @BillStatusMeaning.Plain(text, bill.BillType)</p>
+                    @if (BillStatusMeaning.Label(text, bill.BillType) is { } status)
+                    {
+                        <p><StatusBadge Text="@status" /></p>
+                    }
+                }
+            </PublicRecordRow>
+        }
+    </Rows>
+</RecordListFrame>
+
+@code {
+    [Parameter, EditorRequired] public BillListPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+}
