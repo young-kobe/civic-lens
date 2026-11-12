@@ -97,8 +97,8 @@ public static class PublishedRecordLabels
 
     public const string ModelDateCheckedByCode = "Date found by an AI model and checked by code against the quote";
 
-    public static string StatementDate(PublishedStatement statement, string date) =>
-        statement.ApprovedBy == PublishedApprover.Code && statement.StatementDateEvidence is not null ? $"{date}. {ModelDateCheckedByCode}." : date;
+    public static string StatementDate(PublishedApprover approver, bool hasDateEvidence, string date) =>
+        approver == PublishedApprover.Code && hasDateEvidence ? $"{date}. {ModelDateCheckedByCode}." : date;
 
     public const string PersonApproval = "Approved";
 

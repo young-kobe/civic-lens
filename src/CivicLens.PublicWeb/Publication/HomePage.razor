@@ -25,13 +25,20 @@
                     {
                         <p class="home-vote-counts"><span><b>@yea</b> Yes</span><span><b>@nay</b> No</span></p>
                     }
-                    <div class="home-featured-summary @(featured.TextOrigin == PublishedTextOrigin.Model ? "home-ai-summary" : null)">
-                        @if (summaryLabel is not null)
-                        {
-                            <span id="home-featured-origin" class="muted small">@summaryLabel</span>
-                        }
-                        <p>@featured.Summary</p>
-                    </div>
+                    @if (featured.TextOrigin == PublishedTextOrigin.Model)
+                    {
+                        <AiSummary TextOrigin="@featured.TextOrigin" Label="@summaryLabel" LabelId="home-featured-origin"><p>@featured.Summary</p></AiSummary>
+                    }
+                    else
+                    {
+                        <div class="home-featured-summary">
+                            @if (summaryLabel is not null)
+                            {
+                                <span id="home-featured-origin" class="muted small">@summaryLabel</span>
+                            }
+                            <p>@featured.Summary</p>
+                        </div>
+                    }
                     @if (featured.BillLine is not null)
                     {
                         <p class="small muted">

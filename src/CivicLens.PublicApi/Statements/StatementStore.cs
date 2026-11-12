@@ -19,21 +19,30 @@ public sealed class StatementStore(NpgsqlDataSource views)
                     'start', q.quotation_start, 'length', q.quotation_length, 'kind', q.kind) ORDER BY q.position)
                   FROM (SELECT record_id, revision_number, position, extraction_id, quotation_start, quotation_length, kind
                           FROM public_api.statement_quotations
-                         WHERE record_id = s.record_id AND revision_number = s.revision_number ORDER BY position LIMIT @quotation_limit) q)
+                         WHERE record_id = s.record_id AND revision_number = s.revision_number ORDER BY position LIMIT @quotation_limit) q),
+               ap.approved_by
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN public_api.statements s ON s.record_id = @id
           LEFT JOIN public_api.statement_sources src ON src.record_id = s.record_id AND src.revision_number = s.revision_number
+          LEFT JOIN public_api.statement_approvers ap ON ap.record_id = s.record_id AND ap.revision_number = s.revision_number
         """;
 
-    public async Task<(int? Release, StatementDetail? Detail)> FindAsync(string recordId, CancellationToken cancellationToken)
+    public Task<(int? Release, StatementDetail? Detail)> FindAsync(string recordId, CancellationToken cancellationToken) =>
+        ReadDetailAsync(views.CreateCommand(DetailSql), recordId, cancellationToken);
+
+    /// <summary>Reads the detail inside the transaction of the caller, so that it shares a snapshot with the other reads of that transaction.</summary>
+    public Task<(int? Release, StatementDetail? Detail)> FindAsync(NpgsqlTransaction transaction, string recordId, CancellationToken cancellationToken) =>
+        ReadDetailAsync(new NpgsqlCommand(DetailSql, transaction.Connection, transaction), recordId, cancellationToken);
+
+    private static async Task<(int? Release, StatementDetail? Detail)> ReadDetailAsync(NpgsqlCommand command, string recordId, CancellationToken cancellationToken)
     {
-        await using var command = views.CreateCommand(DetailSql);
+        await using var _ = command;
         command.Parameters.AddWithValue("id", recordId);
         command.Parameters.AddWithValue("quotation_limit", PublishedStatement.MaximumQuotations + 1);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken) || reader.IsDBNull(0)) return (null, null);
         if (reader.IsDBNull(1)) return (reader.GetInt32(0), null);
-        if (reader.IsDBNull(10) || reader.IsDBNull(11) || reader.IsDBNull(12) || reader.IsDBNull(13) || reader.IsDBNull(18))
+        if (reader.IsDBNull(10) || reader.IsDBNull(11) || reader.IsDBNull(12) || reader.IsDBNull(13) || reader.IsDBNull(18) || reader.IsDBNull(19))
             throw new InvalidDataException("The active statement has no published evidence content.");
 
         var statement = ReadRow(reader);
@@ -63,7 +72,7 @@ public sealed class StatementStore(NpgsqlDataSource views)
         var dateEvidence = ReadDateEvidence(reader, source.Text);
         var articleUrl = ViewColumns.Text(reader, 14);
         PublishedStatement.ValidateContent(source, quotations, dateEvidence, articleUrl);
-        return (reader.GetInt32(0), new(reader.GetInt32(0), statement, source, articleUrl, dateEvidence, quotations));
+        return (reader.GetInt32(0), new(reader.GetInt32(0), statement, ViewColumns.Enum<PublishedApprover>(reader, 19), source, articleUrl, dateEvidence, quotations));
     }
 
     public async Task<StatementPage?> ListAsync(StatementRequest request, CancellationToken cancellationToken)

@@ -169,4 +169,30 @@ public sealed class BillStatusMeaningTests
         Assert.Throws<ArgumentException>(() => BillStatusMeaning.Of(" ", "hr"));
         Assert.Throws<ArgumentException>(() => BillStatusMeaning.Of("Passed House.", ""));
     }
+
+    [Theory]
+    [InlineData("Referred to the House Committee on Ways and Means.", "hr", "In committee")]
+    [InlineData("Referred to the Subcommittee on Health.", "hr", "In committee")]
+    [InlineData("Received in the Senate.", "hr", "Passed the House")]
+    [InlineData("Received in the House.", "s", "Passed the Senate")]
+    [InlineData("Placed on Senate Legislative Calendar under General Orders. Calendar No. 70.", "s", "Waiting for a possible Senate floor vote")]
+    [InlineData("Placed on the Union Calendar, Calendar No. 12.", "hr", "Waiting for a possible House floor vote")]
+    [InlineData("Ordered to be Reported by Voice Vote.", "hr", "A committee voted to send this to the full chamber")]
+    [InlineData("Became Public Law No: 119-4.", "hr", "Became law")]
+    public void EachStatusHasOneShortLabelAndEveryWordOfItIsInThePlainMeaningOfTheSameText(string text, string billType, string label)
+    {
+        var meaning = BillStatusMeaning.Of(text, billType);
+        var meaningWords = meaning.Split([' ', '.', ':', ','], StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
+
+        Assert.Equal(label, BillStatusMeaning.Label(text, billType));
+        Assert.All(label.Split(' '), word => Assert.Contains(word, meaningWords));
+    }
+
+    [Theory]
+    [InlineData("Something odd happened", "hr")]
+    [InlineData("Motion to reconsider laid on the table.", "s")]
+    public void AnUnmatchedTextHasNoLabelSoNoBadgeRepeatsTheOfficialWordsOfTheLine(string text, string billType)
+    {
+        Assert.Null(BillStatusMeaning.Label(text, billType));
+    }
 }

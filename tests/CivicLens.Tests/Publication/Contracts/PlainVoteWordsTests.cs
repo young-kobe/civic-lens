@@ -33,6 +33,15 @@ public sealed class PlainVoteWordsTests
         Assert.All(names, name => Assert.False(string.IsNullOrWhiteSpace(name)));
     }
 
+    [Fact]
+    public void RecordTermsCoverEveryNamedKindAndOtherHasNoSingleTerm()
+    {
+        Assert.Equal(
+            ["Rule", "Previous question", "Motion to recommit", "Amendment", "Suspension of the rules", "Passage or agreement", "Conference report", "Veto override", "Nomination", "Cloture", "Motion to proceed"],
+            Enum.GetValues<PublishedVoteKind>().Where(kind => kind != PublishedVoteKind.Other).Select(PlainVoteWords.RecordTerm));
+        Assert.Null(PlainVoteWords.RecordTerm(PublishedVoteKind.Other));
+    }
+
     [Theory]
     [InlineData(PublishedVoteKind.Passage, "Vote to pass or agree to")]
     [InlineData(PublishedVoteKind.Cloture, "Vote to end debate")]
