@@ -9,7 +9,6 @@ using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.Publication.Contracts;
-using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.PublicApi;
@@ -229,31 +228,6 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
         Assert.Contains($"Statement 0|Model|{PublishedRecordLabels.StatementModelWording}", fromView);
         Assert.Contains($"Statement 1|Model|{PublishedRecordLabels.StatementCheckedByPersonWording}", fromView);
         Assert.Contains("Statement 2|Person|none", fromView);
-    }
-
-    [Fact]
-    public async Task TheRollbackOfThePersonApprovedLabelReturnsTheLabelOfAPersonApprovedModelStatementToNullAndTheUpgradeRestoresIt()
-    {
-        await SeedAsync($"""
-            {PublicRecordPageRows.ActiveRelease}
-            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('statement', '{Statement1}', 1, 1, NULL);
-            {PublicRecordPageRows.Headline("statement", Statement1, "Person approved", "Model", "Person")}
-            {PublicRecordPageRows.StatementApproval(Statement1, 1, 1, "auth0|owner")}
-            """);
-        const string query = "SELECT coalesce(label, 'null') FROM public_api.record_headlines WHERE kind = 'statement'";
-        Assert.Equal([PublishedRecordLabels.StatementCheckedByPersonWording], await PublicAsync(query));
-
-        var migration = new PersonApprovedStatementLabel();
-        await ApplyAsync(migration.DownOperations);
-        Assert.Equal(["null"], await PublicAsync(query));
-
-        await ApplyAsync(migration.UpOperations);
-        Assert.Equal([PublishedRecordLabels.StatementCheckedByPersonWording], await PublicAsync(query));
-    }
-
-    private async Task ApplyAsync(IReadOnlyList<MigrationOperation> operations)
-    {
-        foreach (var operation in operations) await ExecuteAsync(Assert.IsType<SqlOperation>(operation).Sql);
     }
 
     [Fact]

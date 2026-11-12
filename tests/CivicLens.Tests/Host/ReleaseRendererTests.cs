@@ -356,7 +356,8 @@ public sealed class ReleaseRendererTests
 
         Assert.Contains("Here, code means software that we wrote. It follows fixed rules. No AI decides an approval.", text, StringComparison.Ordinal);
         Assert.Contains("Code also approves a statement when the statement comes from the own website of the office of that official and names no other speaker. An AI model drafts these statements, finds their issues, and proposes their date. Code then checks the quote and the date against the saved page.", text, StringComparison.Ordinal);
-        Assert.Contains("On a statement page, a summary that a model wrote has the label \"An AI summary of this release.\"", text, StringComparison.Ordinal);
+        Assert.Contains("a summary that a model wrote has this label when code approved it: \"An AI summary of this release.\" When a person approved it, the label is this: \"Drafted by an AI model from this source. A person checked it before publication.\"", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(".\".", text, StringComparison.Ordinal);
         Assert.Contains($"within {StatementCodeApproval.DateWindowDays} days before Civic Lens saved the page", text, StringComparison.Ordinal);
         Assert.Contains("and each statement that code does not approve", text, StringComparison.Ordinal);
     }
