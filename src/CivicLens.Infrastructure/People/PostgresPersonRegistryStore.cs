@@ -61,14 +61,10 @@ public sealed class PostgresPersonRegistryStore(IDbContextFactory<CollectionAtte
         return newest.ToDictionary(row => row.PersonId, row => new PersonSetting(row.WithholdPhoto, row.Website), StringComparer.Ordinal);
     }
 
-    public async Task<IReadOnlyDictionary<string, string>> ReadIdsByBioguideAsync(IReadOnlyCollection<string> bioguideIds,
-        CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PersonKey>> ReadKeysAsync(CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(bioguideIds);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var rows = await db.Set<PersonRow>().AsNoTracking()
-            .Where(row => row.BioguideId != null && bioguideIds.Contains(row.BioguideId))
-            .Select(row => new { row.BioguideId, row.PersonId }).ToListAsync(cancellationToken);
-        return rows.ToDictionary(row => row.BioguideId!, row => row.PersonId, StringComparer.Ordinal);
+        return await db.Set<PersonRow>().AsNoTracking().OrderBy(row => row.PersonId)
+            .Select(row => new PersonKey(row.PersonId, row.BioguideId)).ToListAsync(cancellationToken);
     }
 }

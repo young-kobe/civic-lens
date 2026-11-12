@@ -105,18 +105,19 @@ public sealed class PostgresPersonRegistryStoreTests(PostgresCollection postgres
     }
 
     [Fact]
-    public async Task TheMintedIdsOfManyBioguideIdsCostOneQueryAndAMemberWithNoRowIsAbsent()
+    public async Task TheKeysOfEveryPersonCostOneQueryAndAPersonWithNoBioguideIdKeepsItsId()
     {
         await PersonSeed.InsertAsync(connectionString, "john-smith", "S000001");
         await PersonSeed.InsertAsync(connectionString, "john-smith-s000002", "S000002");
+        await ExecuteAsync("INSERT INTO people (person_id, created_at_utc_ticks, created_by_actor) VALUES ('president', 1, 'o')");
         var counter = new ReadCounter();
         var counted = new PostgresPersonRegistryStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
             new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(counter).Options));
 
-        var ids = await counted.ReadIdsByBioguideAsync(["S000002", "S000003"], default);
+        var keys = await counted.ReadKeysAsync(default);
 
         Assert.Equal(1, counter.Reads);
-        Assert.Equal(new Dictionary<string, string> { ["S000002"] = "john-smith-s000002" }, ids);
+        Assert.Equal([new("john-smith", "S000001"), new("john-smith-s000002", "S000002"), new("president", null)], keys);
     }
 
     [Theory]

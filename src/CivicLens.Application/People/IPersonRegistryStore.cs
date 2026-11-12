@@ -13,7 +13,6 @@ public interface IPersonRegistryStore
     Task<IReadOnlyDictionary<string, PersonSetting>> ReadNewestSettingsAsync(IReadOnlyCollection<string> personIds,
         CancellationToken cancellationToken);
 
-    /// <summary>Reads the person ID of each named bioguide ID in one query. A bioguide ID with no person row is absent.</summary>
-    Task<IReadOnlyDictionary<string, string>> ReadIdsByBioguideAsync(IReadOnlyCollection<string> bioguideIds,
-        CancellationToken cancellationToken);
+    /// <summary>Reads the person ID and bioguide ID of every people row in one query. The table holds one row for each person ever listed.</summary>
+    Task<IReadOnlyList<PersonKey>> ReadKeysAsync(CancellationToken cancellationToken);
 }

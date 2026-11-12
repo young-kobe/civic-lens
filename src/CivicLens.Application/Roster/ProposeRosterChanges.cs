@@ -18,8 +18,10 @@ public sealed class ProposeRosterChanges(IMemberRosterStore roster, IPersonRegis
         var newMembers = members.Where(member => !configured.ContainsKey(member.BioguideId))
             .OrderBy(member => member.BioguideId, StringComparer.Ordinal).ToArray();
         // The people table owns minted IDs. A row can outlive its member, so the configuration cannot say which IDs are taken.
-        var minted = await people.ReadIdsByBioguideAsync(newMembers.Select(member => member.BioguideId).ToArray(), cancellationToken);
-        var takenIds = configuration.People.Select(person => person.Id).Concat(minted.Values).ToHashSet(StringComparer.Ordinal);
+        // AdmitAsync reads the same rows, so one read of every key keeps the proposed ID and the minted ID equal.
+        var keys = await people.ReadKeysAsync(cancellationToken);
+        var minted = keys.Where(key => key.BioguideId is not null).ToDictionary(key => key.BioguideId!, key => key.PersonId, StringComparer.Ordinal);
+        var takenIds = configuration.People.Select(person => person.Id).Concat(keys.Select(key => key.PersonId)).ToHashSet(StringComparer.Ordinal);
         var joins = newMembers.Select(member => new ProposedMember(
             minted.TryGetValue(member.BioguideId, out var id) ? id : PersonIdRule.Mint(member.FullName, member.BioguideId, takenIds),
             member.FullName, member.BioguideId)).ToArray();
