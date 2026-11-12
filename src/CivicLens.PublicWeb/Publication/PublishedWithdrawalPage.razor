@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="PublicSection.AllRecords" CanonicalPath="@PublicationProtocol.RecordPagePath(Withdrawal.RecordId)" Title="@Title" Description="A person withdrew this record. Its content is no longer published." RootPath="../" NoIndex="true">
+<PublicPage Section="PublicSections.OfRecord(Withdrawal.Kind)" CanonicalPath="@PublicationProtocol.RecordPagePath(Withdrawal.RecordId)" Title="@Title" Description="A person withdrew this record. Its content is no longer published." RootPath="../" NoIndex="true">
     <RecordView HeadingLevel="1" Headline="This record was withdrawn"
                 Summary="A person withdrew this record. Its content is no longer published."
                 Facts="PublishedWithdrawalView.Facts(Withdrawal)" />

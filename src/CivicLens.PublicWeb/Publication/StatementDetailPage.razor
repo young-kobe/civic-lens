@@ -2,7 +2,7 @@
 @using CivicLens.PublicWeb.Components.Evidence
 @using CivicLens.PublicWeb.Components.Ui
 
-<PublicPage Section="PublicSection.AllRecords" Title="@Data.Headline" Description="@Data.Summary" CanonicalPath="@PublicationProtocol.RecordPagePath(Data.RecordId)" IsArticle="true" RootPath="@RootPath" Record="record">
+<PublicPage Section="PublicSection.Statements" Title="@Data.Headline" Description="@Data.Summary" CanonicalPath="@PublicationProtocol.RecordPagePath(Data.RecordId)" IsArticle="true" RootPath="@RootPath" Record="record">
     <article class="detail">
         <header class="detail-head">
             <p class="detail-eyebrow">@StatementPageView.Eyebrow(Data)</p>

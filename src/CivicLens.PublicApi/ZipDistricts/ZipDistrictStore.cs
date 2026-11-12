@@ -1,3 +1,4 @@
+using CivicLens.PublicApi.Issues;
 using System.Data;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Officials;
@@ -12,8 +13,6 @@ namespace CivicLens.PublicApi.ZipDistricts;
 public sealed class ZipDistrictStore(NpgsqlDataSource views)
 {
     private const int SenateSeatsPerState = 2;
-
-    private const string IssueOptionsSql = "SELECT issue_id, name FROM public_api.release_issues ORDER BY name, issue_id";
 
     private const string CurrentTerm = "t.start_on <= current_date AND (t.end_on IS NULL OR t.end_on >= current_date)";
 
@@ -129,7 +128,7 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         var lookup = ZipLookup.Of(answer);
         lookup = lookup with { NewVoteCount = newVoteCount };
         if (shape == LookupShape.Figures) return lookup;
-        var issueOptions = await ReadIssueOptionsAsync(connection, transaction, cancellationToken);
+        var issueOptions = await IssueStore.ListOptionsAsync(connection, transaction, cancellationToken);
         lookup = lookup with { IssueOptions = issueOptions };
         return await WithSharedVotesAsync(connection, transaction, lookup, holderIds, issue, cancellationToken);
     }
@@ -155,16 +154,6 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         command.Parameters.AddWithValue("sinceRelease", sinceRelease.Value);
         command.Parameters.AddWithValue("officialIds", officialIds);
         return (long)(await command.ExecuteScalarAsync(cancellationToken))!;
-    }
-
-    private static async Task<ZipMemberIssueOption[]> ReadIssueOptionsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
-    {
-        await using var command = new NpgsqlCommand(IssueOptionsSql, connection, transaction);
-        var options = new List<ZipMemberIssueOption>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-            options.Add(new(reader.GetString(0), reader.GetString(1)));
-        return [.. options];
     }
 
     private static SeatHolder?[] SenateSeats(string state, Dictionary<string, List<SeatHolder>> senators)

@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="Section" Title="@Headline" Description="@(string.IsNullOrWhiteSpace(Summary) ? Headline : Summary)" CanonicalPath="@PublicationProtocol.RecordPagePath(RecordId)" IsArticle="true" RootPath="../" Record="record">
+<PublicPage Section="PublicSections.OfRecord(Kind)" Title="@Headline" Description="@(string.IsNullOrWhiteSpace(Summary) ? Headline : Summary)" CanonicalPath="@PublicationProtocol.RecordPagePath(RecordId)" IsArticle="true" RootPath="../" Record="record">
     <RecordView HeadingLevel="1" Headline="@Headline" Summary="@Summary" Significance="@Significance"
                 Limits="@Limits" Facts="Facts" />
     <PublishedCorrectionList Corrections="Corrections" />
@@ -11,7 +11,6 @@
 @code {
     private ReportedRecord record = default!;
 
-    [Parameter] public PublicSection? Section { get; set; } = PublicSection.AllRecords;
     [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
     [Parameter, EditorRequired] public string RecordId { get; set; } = string.Empty;
     [Parameter, EditorRequired] public int RevisionNumber { get; set; }

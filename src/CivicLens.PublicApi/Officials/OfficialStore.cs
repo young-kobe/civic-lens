@@ -45,6 +45,8 @@ public sealed class OfficialStore(NpgsqlDataSource views)
     /// <summary>Reads one page. Null means that no release is active. The caller compares the release of the page with the release of the cursor.</summary>
     public async Task<OfficialPage?> ListAsync(OfficialRequest request, CancellationToken cancellationToken)
     {
+        if (request.ExactNameFirst && (request.NamePrefix is null || request.Cursor is not null))
+            throw new ArgumentException("An exact name first order needs a name and no cursor.", nameof(request));
         await using var command = views.CreateCommand(ListSql(request));
         AddParameters(command, request);
         var rows = new List<OfficialRow>();
@@ -100,10 +102,13 @@ public sealed class OfficialStore(NpgsqlDataSource views)
           LEFT JOIN LATERAL (
                SELECT o.* FROM listed o
                 WHERE TRUE{Filters(request)}
-                ORDER BY {Order} LIMIT @take) o
+                ORDER BY {OrderOf(request)} LIMIT @take) o
             ON TRUE
-         ORDER BY {Order}
+         ORDER BY {OrderOf(request)}
         """;
+
+    // An exact name match sorts first. The cursor does not carry that rule, so the request refuses the two together.
+    private static string OrderOf(OfficialRequest request) => request.ExactNameFirst ? $"(lower(o.name) = @name_prefix) DESC, {Order}" : Order;
 
     private static string Filters(OfficialRequest request) =>
         (request.Kind is null ? "" : " AND o.kind = @kind") +

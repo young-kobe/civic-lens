@@ -1,3 +1,4 @@
+using CivicLens.PublicApi.Issues;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Votes;
@@ -9,7 +10,7 @@ namespace CivicLens.PublicApi.ZipDistricts;
 internal static class ZipMemberCardsMapper
 {
     public static ZipMemberCardsData Map(ZipDistrictAnswer answer, SharedMemberVoteAnswer? sharedVotes,
-        ZipMemberIssueOption[] issueOptions, string? selectedIssue)
+        IssueOption[] issueOptions, string? selectedIssue)
     {
         if (sharedVotes is not null && sharedVotes.Release != answer.Release)
             throw new InvalidDataException("ZIP members and shared votes must come from the same release.");

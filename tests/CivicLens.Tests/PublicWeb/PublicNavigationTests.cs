@@ -35,16 +35,16 @@ public sealed class PublicNavigationTests
     }
 
     [Fact]
-    public async Task TheHeaderHasOneLinkForEachKindAndForThePartyBoardsAndNoLinkForTheOldAllRecordsList()
+    public async Task TheHeaderHasOneLinkForEachKindAndTheStaticPartyBoardUntilTheCutoverAndNoLinkForTheOldAllRecordsList()
     {
-        var page = await RenderAsync(section: PublicSection.Boards, title: "Compare the parties", canonicalPath: PublicSections.BoardsPath);
+        var page = await RenderAsync(section: PublicSection.Boards, title: "Compare the parties", canonicalPath: PublicSections.StaticBoardsPath);
         var nav = page.QuerySelector(".public-nav")!;
 
         Assert.Equal(["Officials", "Issues", "Votes", "Bills", "Executive actions", "Statements", "Compare parties"], nav.QuerySelectorAll("a").Select(link => link.TextContent));
         Assert.Equal(
             [PublicationProtocol.OfficialsPagePath, PublicationProtocol.FacetsPath,
              PublicationProtocol.SearchByKindPath(PublishedRecordKind.Vote), PublicationProtocol.SearchByKindPath(PublishedRecordKind.Action),
-             PublicationProtocol.SearchByKindPath(PublishedRecordKind.ExecutiveAction), PublicationProtocol.SearchByKindPath(PublishedRecordKind.Statement), "boards.html"],
+             PublicationProtocol.SearchByKindPath(PublishedRecordKind.ExecutiveAction), PublicationProtocol.SearchByKindPath(PublishedRecordKind.Statement), PublicSections.StaticBoardsPath],
             nav.QuerySelectorAll("a").Select(link => link.GetAttribute("href")![Root.Length..]));
         Assert.DoesNotContain(nav.QuerySelectorAll("a"), link => link.GetAttribute("href")!.Contains("all.html"));
         Assert.Equal("Compare parties", Assert.Single(nav.QuerySelectorAll("[aria-current=page]")).TextContent);

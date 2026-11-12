@@ -92,7 +92,6 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new OfficialStore(views));
         builder.Services.AddSingleton<OfficialsPageReader>();
         builder.Services.AddSingleton<BoardsPageReader>();
-        builder.Services.AddSingleton(new SearchPageStore(views));
         builder.Services.AddSingleton<SearchPageReader>();
         builder.Services.AddSingleton(new OfficialPageReader(views));
         builder.Services.AddSingleton(new ReportStore(writer, options));

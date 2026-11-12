@@ -97,10 +97,11 @@ public sealed class OfficialsPageTests
         Assert.Equal("MA", filtered.QuerySelector("#officials-state option[selected]")!.GetAttribute("value"));
         Assert.Equal("democrat", filtered.QuerySelector("#officials-party option[selected]")!.GetAttribute("value"));
         Assert.Equal("An", filtered.QuerySelector("#officials-name")!.GetAttribute("value"));
-        Assert.Contains("that match your filters", filtered.QuerySelector(".list-status")!.TextContent);
+        Assert.StartsWith("Showing 1 official on this page.", filtered.QuerySelector(".list-status")!.TextContent);
         Assert.NotNull(filtered.QuerySelector(".lists-filter-actions a"));
         Assert.Null(plain.QuerySelector(".lists-filter-actions a"));
-        Assert.DoesNotContain("match your filters", plain.QuerySelector(".list-status")!.TextContent);
+        Assert.DoesNotContain("match", filtered.QuerySelector(".list-status")!.TextContent);
+        Assert.DoesNotContain("match", plain.QuerySelector(".list-status")!.TextContent);
     }
 
     [Fact]

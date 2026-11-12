@@ -7,8 +7,11 @@ public static class PublicSections
     /// <summary>One link of the header or footer. HiddenText is read by assistive technology after the link text.</summary>
     public sealed record NavLink(PublicSection? Section, string Text, string Path, string? HiddenText = null);
 
-    /// <summary>The path of the party boards page. The cutover PR maps it to the server page.</summary>
+    /// <summary>The path that the server boards page names as its own. The cutover PR maps it to that page.</summary>
     public const string BoardsPath = "boards.html";
+
+    /// <summary>The static board that the header and the officials page link to, until the cutover PR maps <see cref="BoardsPath"/>.</summary>
+    public static readonly string StaticBoardsPath = PublicationProtocol.BoardPagePath(PublishedChamber.House, PublishedPartyMajority.Democrat);
 
     public static readonly IReadOnlyList<NavLink> Header =
     [
@@ -18,7 +21,7 @@ public static class PublicSections
         new(PublicSection.Bills, "Bills", PublicationProtocol.SearchByKindPath(PublishedRecordKind.Action)),
         new(PublicSection.ExecutiveActions, "Executive actions", PublicationProtocol.SearchByKindPath(PublishedRecordKind.ExecutiveAction)),
         new(PublicSection.Statements, "Statements", PublicationProtocol.SearchByKindPath(PublishedRecordKind.Statement)),
-        new(PublicSection.Boards, "Compare parties", BoardsPath)
+        new(PublicSection.Boards, "Compare parties", StaticBoardsPath)
     ];
 
     /// <summary>The old all records list. It is outside the header, and it names its own page in the trail.</summary>
@@ -51,6 +54,16 @@ public static class PublicSections
         if (link is null || link.Path == canonicalPath) return new([home], title);
         return new([home, new(link.Text, link.Path)], title);
     }
+
+    /// <summary>The header section of a record page. A kind with no header link marks none.</summary>
+    public static PublicSection? OfRecord(PublishedRecordKind kind) => kind switch
+    {
+        PublishedRecordKind.Vote => PublicSection.Votes,
+        PublishedRecordKind.Action => PublicSection.Bills,
+        PublishedRecordKind.ExecutiveAction => PublicSection.ExecutiveActions,
+        PublishedRecordKind.Statement => PublicSection.Statements,
+        _ => null
+    };
 
     private static PublicBreadcrumbItem RecordSection(PublishedRecordKind kind) => kind switch
     {

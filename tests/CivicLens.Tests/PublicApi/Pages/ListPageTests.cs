@@ -127,6 +127,39 @@ public sealed class ListPageTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task SearchPutsAnOfficialWhoseWholeNameEqualsTheTextBeforeAnEarlierNameThatOnlyContainsItAsAWord()
+    {
+        var site = new FakeReleaseSite();
+        site.Publish(1, PublishedSamples.Statement('a', "Rent cap", official: "p1"));
+        await using var host = await StartAsync(site);
+        await host.WaitForReleaseAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
+            new SeededOfficial("p1", "Abe Ann Lee", new SeededTerm("House", "Representative", "2021-01-03") { State = "MA", District = 7, Party = "Democrat" }),
+            new SeededOfficial("p2", "Ann Lee", new SeededTerm("House", "Representative", "2021-01-03") { State = "TX", District = 2, Party = "Republican" }));
+
+        var page = await ParseAsync(await host.Client.GetAsync("/web/search?q=ann%20lee"));
+
+        Assert.Equal(["Ann Lee", "Abe Ann Lee"], page.QuerySelectorAll(".search-official h2").Select(heading => heading.TextContent));
+    }
+
+    [Fact]
+    public async Task TheSearchIssueFilterListsTheIssuesOfTheActiveReleaseByNameFromTheIssueStore()
+    {
+        var site = new FakeReleaseSite();
+        site.Publish(1, PublishedSamples.Statement('a', "Rent cap", official: "p1"));
+        await using var host = await StartAsync(site);
+        await host.WaitForReleaseAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;" +
+            "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'tax', 'Taxes', 'd'), (1, 'air', 'Air', 'd');");
+
+        var page = await ParseAsync(await host.Client.GetAsync("/web/search?q=rent"));
+
+        Assert.Equal(["air", "tax"], page.QuerySelectorAll("#search-issue option").Select(option => option.GetAttribute("value")).Where(value => !string.IsNullOrEmpty(value)));
+    }
+
+    [Fact]
     public async Task ASearchWithNoMatchGivesGuidanceAndABlankSearchRunsNoQuery()
     {
         var site = new FakeReleaseSite();
