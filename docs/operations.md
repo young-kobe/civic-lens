@@ -208,7 +208,7 @@ A release that holds the correction field `factsUnchanged` needs the same order.
 
 To stop the source, set `enabled` to `false` and restart the worker.
 
-The source `federal-register-text` reads the body text of each original document. It ships with `enabled: false`. Set it to `true` with `federal-register-documents` and restart the worker. Each new original then admits one text job. A document that was recorded earlier needs the [text backfill](#executive-action-text-backfill).
+The source `federal-register-text` reads the body text of each original document. It ships with `enabled: false`. Set it to `true` with `federal-register-documents` and restart the worker. Each new original then admits one text job at the `body_html_url` of its detail response. A document that was recorded earlier needs the [text backfill](#executive-action-text-backfill).
 
 The first run lists every document from `backfillFrom` 2024-10-29. It admits one job for each document, about 700 over two years. Each check after that runs every 6 hours and lists from 2 days before the newest stored publication date. Run `jobs list` and `jobs get` as in [managed collection jobs](#managed-collection-jobs) to see progress. A blocked job names its reason.
 
@@ -765,7 +765,11 @@ Original documents that were recorded before the text source was enabled have no
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions text backfill 100
 ```
 
-The limit is 100 when you give none. The command admits one text job for each of the newest original documents that have no text row and no text job, up to the limit. It prints `examined` and `admitted`. A rerun lists only the documents that still have no job, so it is safe to repeat. About 700 documents since 2024-10-29 need 7 runs of 100. The jobs use the current configuration, not the configuration of the old document jobs. The worker fetches the bodies at the pacing of the origin. A text job uses no model budget. [Executive actions](architecture/executive-actions.md#text) holds the rules.
+The limit is 100 when you give none. The command admits one text job for each of the newest original documents that have a pinned body URL, no text row, and no text job, up to the limit. The job fetches that pinned URL. It prints `pendingJobs`, `examined`, `admitted`, and `unpinned`. A rerun lists only the documents that still have no job, so it is safe to repeat. The jobs use the current configuration, not the configuration of the old document jobs. The worker fetches the bodies at the pacing of the origin. A text job uses no model budget. [Executive actions](architecture/executive-actions.md#text) holds the rules.
+
+If a job of `federal-register-documents` or `federal-register-text` is queued or leased, `pendingJobs` is above 0. The command then admits nothing and exits with code 1. Check `jobs list`, wait until those jobs end, and run the command again. So each run waits for the text jobs of the run before it.
+
+`unpinned` counts the originals with no text row and no pinned body URL. A document recorded before the detail job pinned `body_html_url` has none, about 700 in production. The backfill cannot admit a text job for it. It first needs a refetch of its detail. The refetch is not built yet, because the detail job key of a known document already exists and dedupes a new job. Until it exists, `unpinned` stays above 0 for those documents.
 
 ### Executive action revision backfill
 
