@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
@@ -37,7 +38,7 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
         new('3', "2024-05-01") { BillNumber = 3, Congress = 118, Issues = ["tax"], Sponsorships = [new("p0", "Sponsor", "2024-05-01")] }
     ];
 
-    private async Task<ApiHost> StartAsync(bool withVotesAndBills = false)
+    private async Task<ApiHost> StartAsync(bool withVotesAndBills = false, bool storeBillCounts = true)
     {
         var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
@@ -48,6 +49,7 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
         if (!withVotesAndBills) return host;
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Votes);
         await BillsSeed.AddBillsAsync(host.OperationalDatabase, Bills);
+        if (storeBillCounts) await StoredBillCounts.FillAsync(host.OperationalDatabase, 1, 119);
         return host;
     }
 
@@ -388,6 +390,47 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
         Assert.Empty(other.RootElement.GetProperty("partyLines").EnumerateArray());
     }
 
+    [Theory]
+    [InlineData("p0", "2 0 2")]
+    [InlineData("p1", "0 2 2")]
+    [InlineData("p3", "0 0 2")]
+    public async Task StoredBillFiguresEqualTheCountsOfTheSeededBillsBecauseAWithdrawnCosponsorAndAMissingMemberRowCountZero(string official, string expected)
+    {
+        await using var host = await StartAsync(withVotesAndBills: true);
+
+        using var detail = await GetAsync(host, $"/v1/officials/{official}");
+        var bills = detail.RootElement.GetProperty("bills");
+
+        Assert.Equal(119, bills.GetProperty("congress").GetInt32());
+        Assert.Equal(expected, $"{bills.GetProperty("sponsored").GetInt32()} {bills.GetProperty("cosponsored").GetInt32()} {bills.GetProperty("billsInCongress").GetInt32()}");
+    }
+
+    [Fact]
+    public async Task TheOfficialRouteServesTheStoredBillRowsAndNotARecount()
+    {
+        await using var host = await StartAsync(withVotesAndBills: true);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
+            UPDATE release_bill_counts SET bills = 40 WHERE congress = 119;
+            UPDATE release_official_bill_counts SET sponsored = 9 WHERE official_id = 'p0' AND congress = 119;
+            """);
+
+        using var detail = await GetAsync(host, "/v1/officials/p0");
+        var bills = detail.RootElement.GetProperty("bills");
+
+        Assert.Equal([9, 40], [bills.GetProperty("sponsored").GetInt32(), bills.GetProperty("billsInCongress").GetInt32()]);
+    }
+
+    [Fact]
+    public async Task AReleaseWithNoStoredBillRowShowsTheBillFigureAsAbsentAndNeverAsZeroWhileTheIssueFiguresStay()
+    {
+        await using var host = await StartAsync(withVotesAndBills: true, storeBillCounts: false);
+
+        using var detail = await GetAsync(host, "/v1/officials/p0");
+
+        Assert.Equal(JsonValueKind.Null, detail.RootElement.GetProperty("bills").ValueKind);
+        Assert.NotEmpty(detail.RootElement.GetProperty("issues").GetProperty("issues").EnumerateArray());
+    }
+
     [Fact]
     public async Task AnExecutiveOfficialShowsTheExecutiveActionsByDocumentTypeWithTheBaseOfTheRelease()
     {
@@ -443,6 +486,7 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
             new SeededBill('f', "2025-01-02") { Congress = 118, BillNumber = 6, Issues = ["health"], Sponsorships = [new("p5", "Sponsor", "2025-01-02")] },
             new SeededBill('9', "2025-01-03") { Congress = 119, BillNumber = 7, Issues = ["tax"], Sponsorships = [new("p5", "Sponsor", "2025-01-03")] });
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health policy', 'Health'), (1, 'tax', 'Tax policy', 'Tax');");
+        if (expectedCongress is { } storedCongress) await StoredBillCounts.FillAsync(host.OperationalDatabase, 1, storedCongress);
 
         using var detail = await GetAsync(host, "/v1/officials/p5");
         var root = detail.RootElement;

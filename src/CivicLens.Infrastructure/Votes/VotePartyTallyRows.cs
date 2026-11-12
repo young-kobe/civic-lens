@@ -27,6 +27,20 @@ internal static class VotePartyTallyRows
         ) tally
         """;
 
+    private const string ReadRevisionPage = """
+        SELECT r.record_id AS "RecordId", r.revision_number AS "RevisionNumber", r.party_tally_count AS "PartyTallyCount",
+        """ + VoteStoredColumnRows.ReleaseRange + """
+        FROM vote_revisions r
+        LEFT JOIN publication_record_states s ON s.kind = 'vote' AND s.record_id = r.record_id AND s.revision_number = r.revision_number
+        WHERE (r.record_id, r.revision_number) > ({0}, {1})
+            AND (r.party_tally_count IS NOT NULL
+                OR s.record_id IS NOT NULL
+                OR EXISTS (SELECT 1 FROM vote_revision_party_tallies t WHERE t.record_id = r.record_id AND t.revision_number = r.revision_number))
+        GROUP BY r.record_id, r.revision_number, r.party_tally_count
+        ORDER BY r.record_id, r.revision_number
+        LIMIT {2}
+        """;
+
     private const string InsertRows = """
         INSERT INTO vote_revision_party_tallies (record_id, revision_number, party, yea, nay, present, not_voting, other)
         SELECT k.record_id, k.revision_number, k.party, k.yea, k.nay, k.present, k.not_voting, k.other
@@ -98,6 +112,24 @@ internal static class VotePartyTallyRows
         }
     }
 
+    /// <summary>Reads the evidence of the next <paramref name="limit"/> revisions after the cursor. Stored groups stay unvalidated, so a forged row reaches the verifier.</summary>
+    public static async Task<VotePartyTallyPage> ReadEvidenceAsync(CollectionAttemptDbContext db, VotePartyTallyVerificationCursor? after, int limit,
+        CancellationToken cancellationToken)
+    {
+        var revisions = await db.Database.SqlQueryRaw<EvidenceRevisionRow>(ReadRevisionPage, after?.RecordId ?? "", after?.RevisionNumber ?? 0, limit + 1)
+            .ToArrayAsync(cancellationToken);
+        var page = revisions.Take(limit).ToArray();
+        if (page.Length == 0) return new([], false);
+        var groups = (await ReadRowsAsync(db, [.. page.Select(row => row.RecordId)], [.. page.Select(row => row.RevisionNumber)], cancellationToken))
+            .ToLookup(row => (row.RecordId, row.RevisionNumber));
+        return new([.. page.Select(row => new VotePartyTallyEvidence(row.RecordId, row.RevisionNumber, row.PartyTallyCount,
+            [.. groups[(row.RecordId, row.RevisionNumber)].Select(group => new PublishedPartyTally
+            {
+                Party = group.Party, Yea = group.Yea, Nay = group.Nay, Present = group.Present, NotVoting = group.NotVoting, Other = group.Other
+            }).OrderBy(group => group.Party, StringComparer.Ordinal)],
+            row.FirstRelease is { } first ? new KeptReleaseRange(first, row.LastRelease) : null))], revisions.Length > limit);
+    }
+
     private static Task<TallyReadRow[]> ReadRowsAsync(CollectionAttemptDbContext db, string[] records, int[] revisions, CancellationToken cancellationToken) =>
         db.Database.SqlQueryRaw<TallyReadRow>(ReadRows, records, revisions, PublishedVote.MaximumParties + 1).ToArrayAsync(cancellationToken);
 
@@ -134,6 +166,15 @@ internal static class VotePartyTallyRows
         public string RecordId { get; set; } = "";
         public int RevisionNumber { get; set; }
         public short? PartyTallyCount { get; set; }
+    }
+
+    private sealed class EvidenceRevisionRow
+    {
+        public string RecordId { get; set; } = "";
+        public int RevisionNumber { get; set; }
+        public short? PartyTallyCount { get; set; }
+        public int? FirstRelease { get; set; }
+        public int? LastRelease { get; set; }
     }
 
     private sealed class TallyReadRow
