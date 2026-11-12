@@ -81,6 +81,21 @@ public sealed class ZipMemberCardsTests
     }
 
     [Fact]
+    public async Task ACardWithNoStoredBillCountShowsTheUnavailableCaptionInPlaceOfTheBillFigureAndNeverAZero()
+    {
+        var absent = new ZipMemberIdentityData("pat", "Pat Member", null, null, null, [], []) { BillCountsAbsent = true };
+        var present = absent with { OfficialId = "sam", Name = "Sam Member", BillCountsAbsent = false };
+        var document = await RenderAsync(new(9, 120, "36009", 2, [new("Representative for Alabama, district 2", absent), new("Senator for Alabama", present)], []));
+
+        var cards = document.QuerySelectorAll(".zip-member-card");
+        Assert.Equal(OfficialPageText.BillCountsUnavailable, cards[0].QuerySelector(".zip-member-bills")!.TextContent.Trim());
+        Assert.Equal("Bill counts for this Congress are not available in this release.", OfficialPageText.BillCountsUnavailable);
+        Assert.Empty(cards[0].QuerySelectorAll(".zip-member-bills h4"));
+        Assert.DoesNotContain("0 bills", cards[0].TextContent);
+        Assert.Null(cards[1].QuerySelector(".zip-member-bills"));
+    }
+
+    [Fact]
     public async Task MemberFiguresUseTheirOwnCongressAndIssueNamesAndScopeDetails()
     {
         var member = new ZipMemberIdentityData("pat", "Pat Member", null, null, null, [], [])
