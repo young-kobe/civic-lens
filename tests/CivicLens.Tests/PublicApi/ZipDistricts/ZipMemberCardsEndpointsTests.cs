@@ -273,6 +273,68 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task IssueViewReturnsOnlyTheSharedVotesOfThatIssueWithTheMembersCastsAndNoCards()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('a', "2026-05-01") { RecordId = 1.ToString("x64"), Casts = ["Yea"], PersonIds = ["al2"], Issues = ["health"] },
+            new SeededVote('b', "2026-05-02") { RecordId = 2.ToString("x64"), Casts = ["Nay"], PersonIds = ["al2"], Issues = ["other"] });
+
+        var document = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?view=issue&issue=health");
+        var root = document.QuerySelector("[data-zip-member-fragment]")!;
+
+        Assert.Equal(("issue", "health", ""), (root.GetAttribute("data-view"), root.GetAttribute("data-issue"), root.GetAttribute("data-since-release")));
+        Assert.Single(document.QuerySelectorAll(".shared-vote-row"));
+        Assert.Equal("Yes (Yea)", document.QuerySelector(".shared-vote-cast-value")!.TextContent.Trim());
+        Assert.Empty(document.QuerySelectorAll(".zip-member-card, [data-member-issue-filter], template"));
+    }
+
+    [Fact]
+    public async Task IssueViewKeepsOnlyTheVotesOfTheCongressThatTheIssuePageCountsAndAnIssueWithoutOneIsNotFiltered()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica; INSERT INTO release_issues (release_number, issue_id, name, definition, count_congress, substantive_votes, bills) VALUES (1, 'health', 'Health', 'd', 119, 1, 0), (1, 'tax', 'Tax', 'd', NULL, NULL, NULL);");
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('a', "2026-05-01") { RecordId = 1.ToString("x64"), Congress = 119, Casts = ["Yea"], PersonIds = ["al2"], Issues = ["health", "tax"] },
+            new SeededVote('b', "2024-05-02") { RecordId = 2.ToString("x64"), Congress = 118, Casts = ["Nay"], PersonIds = ["al2"], Issues = ["health", "tax"] });
+
+        var scoped = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?view=issue&issue=health");
+        var unscoped = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?view=issue&issue=tax");
+
+        Assert.Single(scoped.QuerySelectorAll(".shared-vote-row"));
+        Assert.Contains("119th Congress", scoped.QuerySelector(".shared-vote-meta")!.TextContent);
+        Assert.Equal(2, unscoped.QuerySelectorAll(".shared-vote-row").Length);
+    }
+
+    [Fact]
+    public async Task IssueViewWithNoMatchingVoteStatesThatNoVoteIsRecorded()
+    {
+        await using var host = await StartAsync();
+
+        var document = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?view=issue&issue=health");
+
+        Assert.Empty(document.QuerySelectorAll(".shared-vote-row"));
+        Assert.Equal("None of your members has a recorded vote on this issue in this release.", document.QuerySelector("[data-member-votes-empty]")!.TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task IssueViewWithoutAnIssueIsRejectedBeforeLookup()
+    {
+        await using var host = await StartAsync();
+
+        await AssertProblemAsync(host, "/v1/zip-districts/36009/members?view=issue", HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task IssueViewRejectsAReleaseMarkerBeforeLookupAsTheStripRejectsAnIssue()
+    {
+        await using var host = await StartAsync(withNames: false);
+
+        foreach (var query in new[] { "sinceRelease=1", "sinceRelease=", "sinceRelease=x" })
+            await AssertProblemAsync(host, "/v1/zip-districts/36009/members?view=issue&issue=health&" + query, HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task MembersRouteRejectsRepeatedAndUnsupportedViewsBeforeLookup()
     {
         await using var host = await StartAsync();

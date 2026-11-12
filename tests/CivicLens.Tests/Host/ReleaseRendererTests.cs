@@ -1919,7 +1919,7 @@ public sealed class ReleaseRendererTests
 
         var panel = PanelOf(issue);
         Assert.Equal("Rent and home prices.", panel.QuerySelector("p")!.TextContent);
-        Assert.Equal([PublishedFacetSummaryView.IncludesLabel, PublishedFacetSummaryView.ExcludesLabel], panel.QuerySelectorAll("h3").Select(label => label.TextContent));
+        Assert.Equal([PublishedWording.IssueIncludesLabel, PublishedWording.IssueExcludesLabel], panel.QuerySelectorAll("h3").Select(label => label.TextContent));
         Assert.Equal(panel.QuerySelectorAll("h3").Select(label => label.Id), panel.QuerySelectorAll("ul").Select(list => list.GetAttribute("aria-labelledby")));
         Assert.Equal(["Rent caps", "Eviction rules"], panel.QuerySelectorAll("ul")[0].QuerySelectorAll("li").Select(item => item.TextContent));
         Assert.Equal(["Zoning votes"], panel.QuerySelectorAll("ul")[1].QuerySelectorAll("li").Select(item => item.TextContent));
@@ -1934,7 +1934,7 @@ public sealed class ReleaseRendererTests
 
         var panel = PanelOf(new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 1, ReleaseBillLines.None, CancellationToken.None)));
 
-        Assert.Equal([PublishedFacetSummaryView.IncludesLabel], panel.QuerySelectorAll("h3").Select(label => label.TextContent));
+        Assert.Equal([PublishedWording.IssueIncludesLabel], panel.QuerySelectorAll("h3").Select(label => label.TextContent));
         Assert.Single(panel.QuerySelectorAll("ul"));
     }
 

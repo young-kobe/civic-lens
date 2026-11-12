@@ -96,6 +96,31 @@ public sealed class ZipMemberUpdatesStoreTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task IssueViewReadsOnlyHoldersAndTheSharedVotesOfTheIssueAndNoFiguresOrIssueOptions()
+    {
+        var database = await postgres.CreateMigratedDatabaseAsync();
+        try
+        {
+            await SetUpDistrictAsync(database, 4);
+            await ViewsSeed.AddVotesAsync(database,
+                new SeededVote('a', "2026-05-01") { Casts = ["Yea"], PersonIds = ["p0"], Issues = ["health"] });
+            await ViewsSeed.ExecuteAsync(database, "REVOKE SELECT ON public_api.officials, public_api.official_attendance, public_api.official_party_lines, public_api.release_bill_counts, public_api.release_official_bill_counts, public_api.official_issue_counts FROM civic_lens_public");
+
+            await using var views = OpenPublicViews(database);
+            var lookup = await new ZipDistrictStore(views).FindIssueVotesAsync(new ZipDistrictRequest { Zcta = "36009" }, "health", default);
+
+            Assert.Equal("Pat House", lookup.Answer!.Districts[0].Representative!.Name);
+            Assert.Single(lookup.SharedVotes!.Votes);
+            Assert.Empty(lookup.IssueOptions);
+            Assert.Null(lookup.NewVoteCount);
+        }
+        finally
+        {
+            await postgres.DropDatabaseAsync(database);
+        }
+    }
+
+    [Fact]
     public async Task StripMembersAndNewVoteCountUseTheReleaseReadBeforeActivationChanges()
     {
         var database = await postgres.CreateMigratedDatabaseAsync();

@@ -8,7 +8,7 @@
 <section class="shared-vote-rows@(SingleMember ? " single" : "")" data-chamber="@Data.Chamber.ToString().ToLowerInvariant()">
     @if (!SingleMember)
     {
-        <h2>@(DifferencesOnly ? "Votes where your members differed" : $"How your {(Data.Chamber == PublishedChamber.Senate ? "senators" : "House members")} voted")</h2>
+        @Heading(HeadingLevel, DifferencesOnly ? "Votes where your members differed" : $"How your {(Data.Chamber == PublishedChamber.Senate ? "senators" : "House members")} voted")
         <p class="shared-vote-caption">Up to 10 recent published votes on passage, amendments, conference reports, veto overrides and nominations.</p>
         @if (compared > 0)
         {
@@ -22,14 +22,14 @@
                 <span class="shared-vote-icon" aria-hidden="true"><Icon Name="IconName.Vote" /></span>
                 <div class="shared-vote-content">
                     <div class="shared-vote-summary">
-                        <h3><a href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))">@vote.Headline</a></h3>
+                        @RowHeading(vote)
                         <p class="shared-vote-meta">
                             <time datetime="@vote.VotedOn.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)">@Moment.Day(vote.VotedOn)</time>, roll call @vote.RollCall, @CongressCalendar.Ordinal(vote.Congress) Congress, session @vote.Session. @(vote.KindWords). Result: @vote.ResultWords
                             @if (vote.Label is not null)
                             {
                                 <span class="shared-vote-label">@vote.Label</span>
                             }
-                            @if (vote.MembersVotedTheSame is { } membersVotedTheSame)
+                            @if (!SingleMember && vote.MembersVotedTheSame is { } membersVotedTheSame)
                             {
                                 <span class="shared-vote-comparison">@(membersVotedTheSame ? "Same vote" : "Voted differently")</span>
                             }
@@ -70,4 +70,24 @@
     [Parameter] public bool DifferencesOnly { get; set; }
     /// <summary>One member's page: no heading, no captions, no comparison, and each row shows only that member's cast without the name.</summary>
     [Parameter] public bool SingleMember { get; set; }
+
+    /// <summary>The level of the section heading. Its row headings are one level lower. The default 2 suits a page whose h1 is the only heading above the section.</summary>
+    [Parameter] public int HeadingLevel { get; set; } = 2;
+
+    private RenderFragment RowHeading(SharedVoteRowData vote) => Heading(HeadingLevel + 1, builder =>
+    {
+        builder.OpenElement(0, "a");
+        builder.AddAttribute(1, "href", RootPath + PublicationProtocol.RecordPagePath(vote.RecordId));
+        builder.AddContent(2, vote.Headline);
+        builder.CloseElement();
+    });
+
+    private static RenderFragment Heading(int level, string text) => Heading(level, builder => builder.AddContent(0, text));
+
+    private static RenderFragment Heading(int level, RenderFragment content) => builder =>
+    {
+        builder.OpenElement(0, "h" + level);
+        builder.AddContent(1, content);
+        builder.CloseElement();
+    };
 }
