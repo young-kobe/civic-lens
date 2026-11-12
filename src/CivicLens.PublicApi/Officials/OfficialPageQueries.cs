@@ -53,8 +53,11 @@ internal static class OfficialPageQueries
                             WHERE l.kind = 'statement' AND l.record_id = s.record_id AND l.related_kind = 'action' OFFSET 0))
         """;
 
-    private const string BillsSql = """
-        SELECT b.record_id, b.bill_type, b.bill_line, b.bill_title, p.sponsored_on, t.latest_action_text, t.latest_action_date
+    /// <summary>The columns of one sponsored bill, in the order of <see cref="ReadBill"/>.</summary>
+    internal const string BillColumns = "b.record_id, b.bill_type, b.bill_line, b.bill_title, p.sponsored_on, t.latest_action_text, t.latest_action_date";
+
+    private const string BillsSql = $"""
+        SELECT {BillColumns}
           FROM public_api.bill_sponsorships p
           JOIN public_api.bills b ON b.record_id = p.record_id AND b.revision_number = p.revision_number
           LEFT JOIN public_api.bill_status t ON t.record_id = b.record_id AND t.revision_number = b.revision_number
@@ -130,10 +133,12 @@ internal static class OfficialPageQueries
         var bills = new List<OfficialBillData>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-            bills.Add(new(reader.GetString(0), reader.GetString(1), ViewColumns.Text(reader, 2), reader.GetString(3), reader.GetFieldValue<DateOnly>(4),
-                ViewColumns.Text(reader, 5), ViewColumns.Date(reader, 6)));
+            bills.Add(ReadBill(reader));
         return [.. bills];
     }
+
+    internal static OfficialBillData ReadBill(NpgsqlDataReader reader) => new(reader.GetString(0), reader.GetString(1), ViewColumns.Text(reader, 2), reader.GetString(3),
+        reader.GetFieldValue<DateOnly>(4), ViewColumns.Text(reader, 5), ViewColumns.Date(reader, 6));
 
     /// <summary>Reads the newest actions of each document type and the signing span. The counts come from the official figure, so every number has one owner.</summary>
     public static async Task<OfficialExecutiveData?> ReadExecutiveAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId,

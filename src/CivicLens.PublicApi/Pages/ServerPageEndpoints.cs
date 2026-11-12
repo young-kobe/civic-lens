@@ -65,6 +65,22 @@ public static class ServerPageEndpoints
             ApiResults.GuardAsync(async () => PublicationProtocol.IsPathSegment(id) && await officials.ReadAsync(id, cancellationToken) is { } page
                 ? await RespondOfficialAsync(context, responder, page, baseUrl, cancellationToken)
                 : await NotFoundAsync(context, responder, baseUrl, cancellationToken)));
+        routes.MapGet(Prefix + "/" + PublicationProtocol.OfficialRecordPagePath("{id}"), (string id, HttpContext context, OfficialRecordPageReader records, ServerPageResponder responder,
+            CancellationToken cancellationToken) =>
+            ApiResults.GuardAsync(async () =>
+        {
+            var request = OfficialRecordRequest.Parse(context.Request.Query);
+            if (!PublicationProtocol.IsPathSegment(id) || await records.ReadAsync(id, request, cancellationToken) is not { } page)
+                return await NotFoundAsync(context, responder, baseUrl, cancellationToken);
+            // A cursor of a release that is no longer active starts the same kind again.
+            if (request.Cursor is { } cursor && cursor.Release != page.Release)
+                return Results.Redirect(context.Request.Path + QueryString.Create(context.Request.Query.Where(pair => pair.Key != "cursor")).ToUriComponent());
+            return await responder.RespondAsync<OfficialRecordPage>(context, StatusCodes.Status200OK, page.Release, new Dictionary<string, object?>
+            {
+                [nameof(OfficialRecordPage.Data)] = page,
+                [nameof(OfficialRecordPage.RootPath)] = baseUrl.Join(string.Empty)
+            }, cancellationToken);
+        }));
         routes.MapGet(RecordRoute("{recordId}"), (string recordId, HttpContext context, RecordKindStore kinds, VotePageReader votes, BillPageReader bills, StatementPageReader statements,
             ExecutiveActionPageReader actions, DocumentChangePageReader changes, BriefPageReader briefs, WithdrawalStore withdrawals, ServerPageResponder responder,
             CancellationToken cancellationToken) =>

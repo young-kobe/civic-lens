@@ -197,12 +197,12 @@ public sealed class OfficialProfilePageTests
     }
 
     [Fact]
-    public async Task SeeAllLinksLeadToTheFullRecordPageOfTheOfficial()
+    public async Task SeeAllLinksLeadToTheTabOfTheirKindOnTheFullRecordPageOfTheOfficial()
     {
         var page = await RenderAsync<OfficialProfilePage>(Member());
 
-        Assert.All(page.QuerySelectorAll(".official-more a"), link => Assert.Equal(Root + "officials/p1/record.html", link.GetAttribute("href")));
-        Assert.Equal(3, page.QuerySelectorAll(".official-more a").Length);
+        Assert.Equal([Root + "officials/p1/record.html?kind=votes", Root + "officials/p1/record.html?kind=statements", Root + "officials/p1/record.html?kind=bills"],
+            page.QuerySelectorAll(".official-more a").Select(link => link.GetAttribute("href")!).ToArray());
     }
 
     [Fact]
@@ -423,7 +423,7 @@ public sealed class OfficialProfilePageTests
 
         var note = cut.QuerySelector("#votes p.muted")!;
         Assert.StartsWith("The 12 newest of 40.", note.TextContent);
-        Assert.Equal(Root + "officials/p1/record.html", note.QuerySelector("a")!.GetAttribute("href"));
+        Assert.Equal(Root + "officials/p1/record.html?kind=votes", note.QuerySelector("a")!.GetAttribute("href"));
         Assert.DoesNotContain("newest of", whole.QuerySelector("#votes")!.TextContent);
     }
 

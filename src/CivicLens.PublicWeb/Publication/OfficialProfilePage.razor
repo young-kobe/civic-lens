@@ -11,7 +11,7 @@
     var marksCongress = Data.Attendance.FirstOrDefault()?.Congress ?? party?.Congress;
     var voteRows = new SharedVoteRowsData(Data.Kind == PublishedOfficeKind.Senator ? PublishedChamber.Senate : PublishedChamber.House,
         [new(Data.OfficialId, Data.Name)], Data.Votes);
-    var recordPath = RootPath + PublicationProtocol.OfficialRecordPagePath(Data.OfficialId);
+    string RecordPath(OfficialRecordKind kind) => OfficialRecordText.Path(RootPath, Data.OfficialId, kind);
 }
 
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@PublicationProtocol.OfficialPagePath(Data.OfficialId)" Title="@Data.Name" Description="@OfficialPageText.Lede(Data)" RootPath="@RootPath">
@@ -85,7 +85,7 @@
                             </ul>
                             @if (Data.MarksTotal > Data.Marks.Length)
                             {
-                                <p class="muted small">The @Data.Marks.Length newest of @Data.MarksTotal. <a href="@recordPath">See all votes and records of @Data.Name</a></p>
+                                <p class="muted small">The @Data.Marks.Length newest of @Data.MarksTotal. <a href="@RecordPath(OfficialRecordKind.Votes)">See all votes and records of @Data.Name</a></p>
                             }
                             <ul class="official-legend" role="list">
                                 @foreach (var line in Data.PartyLines.Where(line => line.AgainstParty > 0).OrderBy(line => line.FirstVotedOn))
@@ -101,7 +101,7 @@
                         @if (Data.Votes.Length > 0)
                         {
                             <SharedVoteRows Data="voteRows" RootPath="@RootPath" SingleMember="true" />
-                            <p class="official-more"><a href="@recordPath">See all votes and records of @Data.Name</a></p>
+                            <p class="official-more"><a href="@RecordPath(OfficialRecordKind.Votes)">See all votes and records of @Data.Name</a></p>
                         }
                     </section>
                 }
@@ -138,7 +138,7 @@
                             }
                         </ul>
                         <p class="muted small">@OfficialPageText.LinkMeaning <a href="@(RootPath + PublicationProtocol.MethodPagePath)">What a link is</a></p>
-                        <p class="official-more"><a href="@recordPath">See all statements by @Data.Name</a></p>
+                        <p class="official-more"><a href="@RecordPath(OfficialRecordKind.Statements)">See all statements by @Data.Name</a></p>
                     </section>
                 }
 
@@ -175,7 +175,7 @@
                         </ul>
                         @if (Data.SponsoredBills > Data.Bills.Length)
                         {
-                            <p class="official-more"><a href="@recordPath">See all @Data.SponsoredBills bills</a></p>
+                            <p class="official-more"><a href="@RecordPath(OfficialRecordKind.Bills)">See all @Data.SponsoredBills bills</a></p>
                         }
                     </section>
                 }

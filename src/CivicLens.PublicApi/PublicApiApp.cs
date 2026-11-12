@@ -97,6 +97,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton<BoardsPageReader>();
         builder.Services.AddSingleton<SearchPageReader>();
         builder.Services.AddSingleton(new OfficialPageReader(views));
+        builder.Services.AddSingleton(new OfficialRecordPageReader(views));
         builder.Services.AddSingleton(new ReportStore(writer, options));
         if (options.Turnstile is { } turnstile)
             builder.Services.AddSingleton(new TurnstileVerifier(

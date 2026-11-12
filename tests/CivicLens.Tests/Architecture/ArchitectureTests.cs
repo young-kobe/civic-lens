@@ -99,7 +99,8 @@ public sealed class ArchitectureTests
             var readsViews = source.Contains("NpgsqlDataSource views", StringComparison.Ordinal)
                 || path == Path.Combine(apiRoot, "Officials", "OfficialAttendanceReader.cs")
                 || path == Path.Combine(apiRoot, "Officials", "OfficialActivityReader.cs")
-                || path == Path.Combine(apiRoot, "Officials", "OfficialPageQueries.cs");
+                || path == Path.Combine(apiRoot, "Officials", "OfficialPageQueries.cs")
+                || path == Path.Combine(apiRoot, "Officials", "OfficialRecordQueries.cs");
             violations.AddRange(ForbiddenSqlTables(source, readsViews, ownTables)
                 .Select(name => $"{Path.GetFileName(path)}: {name}"));
         }
