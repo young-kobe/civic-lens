@@ -85,6 +85,15 @@ public sealed class PresentationArchitectureTests
         Assert.Single(Regex.Matches(css, @"(?m)^\s*\.public-breadcrumbs \+ \.public-hero > \.home-preview-hero\b"));
     }
 
+    [Fact]
+    public void ThePagerWrapsAndLetsItsStatusTextTakeTheRowWhenTheButtonsLeaveNoRoomAtThreeHundredSixtyPixels()
+    {
+        var css = WebStyleSheets.Read("app.css");
+
+        Assert.Contains("flex-wrap: wrap;", Declarations(css, ".pager"), StringComparison.Ordinal);
+        Assert.Contains("flex: 1 1 12rem;", Declarations(css, ".pager > :is(p, span)"), StringComparison.Ordinal);
+    }
+
     private static string Declarations(string css, string selector)
     {
         var match = Regex.Match(css, @"(?m)^\s*" + Regex.Escape(selector) + @"\s*\{([^}]*)\}");

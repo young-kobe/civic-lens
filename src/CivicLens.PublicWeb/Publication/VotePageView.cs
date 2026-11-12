@@ -47,7 +47,7 @@ public static class VotePageView
     {
         List<PartyBarSegment> segments = [new(PlainVoteWords.Yes, yes, tone, PartyBarFill.Solid), new(PlainVoteWords.No, no, tone, PartyBarFill.Stripes)];
         if (present > 0) segments.Add(new(PlainVoteWords.Present, present, PartyTone.Quiet, PartyBarFill.Dots));
-        if (other > 0) segments.Add(new("Other", other, PartyTone.Quiet, PartyBarFill.Grid));
+        if (other > 0) segments.Add(new(PlainVoteWords.OtherCast, other, PartyTone.Quiet, PartyBarFill.Grid));
         segments.Add(new(PlainVoteWords.NotVoting, notVoting, PartyTone.Quiet, PartyBarFill.Open));
         return new(name, segments, drawHalfLine && yes + no > 0 ? new(MarkLabel, (yes + no) / 2.0) : null);
     }

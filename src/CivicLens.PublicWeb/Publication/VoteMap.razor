@@ -1,0 +1,150 @@
+@using System.Globalization
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<section class="vote-map" aria-labelledby="vote-map-title" data-vote-map>
+    <h2 id="vote-map-title">@VoteMapWords.Heading</h2>
+    <p class="muted small">@VoteMapWords.Intro(Data.Chamber)</p>
+    <div class="segmented vote-map-views" role="group" aria-labelledby="vote-map-views-label" hidden data-vote-map-views>
+        <span class="vote-map-views-label" id="vote-map-views-label">@VoteMapWords.ViewGroup</span>
+        <button class="segmented-item" type="button" data-view="shape" aria-pressed="false">@VoteMapWords.ShapeView(Data.Chamber)</button>
+        <button class="segmented-item" type="button" data-view="tile" aria-pressed="false">@VoteMapWords.TileView</button>
+    </div>
+    @if (Data.Chamber == PublishedChamber.House)
+    {
+        <p class="muted small vote-map-tile-note">@VoteMapWords.TileNote</p>
+    }
+    <h3>@VoteMapWords.LegendHeading</h3>
+    <p class="muted small">@VoteMapWords.LegendNote(Data.Chamber, RollCall, legend.Sum(entry => entry.Count), Data.Delegates.Count > 0)</p>
+    <ul class="vote-map-legend" role="list">
+        @foreach (var (mark, count) in legend)
+        {
+            <li><svg class="vote-map-swatch" viewBox="0 0 18 18" aria-hidden="true" focusable="false"><rect class="vote-map-seat" data-mark="@VoteMapMarks.Name(mark)" x="1" y="1" width="16" height="16" rx="3" /></svg><b>@count</b> @VoteMapMarks.Label(mark)</li>
+        }
+    </ul>
+    <svg class="vote-map-defs" aria-hidden="true" focusable="false">
+        <defs>
+            <pattern id="vote-map-no" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <rect class="vote-map-paper" width="6" height="6" />
+                <rect class="vote-map-ink" width="3" height="6" />
+            </pattern>
+            <pattern id="vote-map-present" width="4" height="4" patternUnits="userSpaceOnUse">
+                <rect class="vote-map-paper" width="4" height="4" />
+                <circle class="vote-map-ink" cx="2" cy="2" r="1.2" />
+            </pattern>
+            <pattern id="vote-map-not-voting" width="8" height="8" patternUnits="userSpaceOnUse">
+                <rect class="vote-map-paper" width="8" height="8" />
+                <circle class="vote-map-ring" cx="4" cy="4" r="2.4" />
+            </pattern>
+            <pattern id="vote-map-other" width="6" height="6" patternUnits="userSpaceOnUse">
+                <rect class="vote-map-paper" width="6" height="6" />
+                <path class="vote-map-line" d="M0 3H6M3 0V6" />
+            </pattern>
+        </defs>
+    </svg>
+    <div class="vote-map-frame">
+        <svg class="vote-map-shapes" viewBox="@VoteMapGeometry.ViewBox" role="img" aria-label="@VoteMapWords.Description(Data.Chamber)" focusable="false">
+            @if (Data.SplitStates.Count > 0)
+            {
+                <defs>
+                    @foreach (var state in Data.SplitStates)
+                    {
+                        <path id="@ShapeId(state.State)" d="@state.Path" />
+                        <clipPath id="@ClipId(state.State, 0)"><rect x="@N(state.Left)" y="@N(state.Top)" width="@N(state.Middle - state.Left)" height="@N(state.Bottom - state.Top)" /></clipPath>
+                        <clipPath id="@ClipId(state.State, 1)"><rect x="@N(state.Middle)" y="@N(state.Top)" width="@N(state.Right - state.Middle)" height="@N(state.Bottom - state.Top)" /></clipPath>
+                        <clipPath id="@ClipId(state.State, 2)"><use href="#@ShapeId(state.State)" /></clipPath>
+                    }
+                </defs>
+            }
+            @foreach (var seat in Data.Seats)
+            {
+                if (seat.Path is { } path)
+                {
+                    <path class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" d="@path"><title>@VoteMapWords.Describe(seat)</title></path>
+                }
+                else
+                {
+                    <use class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" href="#@ShapeId(seat.State)" clip-path="url(#@ClipId(seat.State, seat.Half))"><title>@VoteMapWords.Describe(seat)</title></use>
+                }
+            }
+            @foreach (var state in Data.SplitStates)
+            {
+                <line class="vote-map-split" x1="@N(state.Middle)" x2="@N(state.Middle)" y1="@N(state.Top)" y2="@N(state.Bottom)" clip-path="url(#@ClipId(state.State, 2))" />
+            }
+        </svg>
+        <svg class="vote-map-tiles" viewBox="0 0 @N(VoteMapTiles.Width) @N(Data.Tiles.Height)" role="img" aria-label="@VoteMapWords.Description(Data.Chamber)" focusable="false">
+            @foreach (var label in Data.Tiles.Labels)
+            {
+                @Label(label)
+            }
+            @foreach (var seat in Data.Seats)
+            {
+                <rect class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" x="@N(seat.Tile.X)" y="@N(seat.Tile.Y)" width="@N(VoteMapTiles.Size)" height="@N(VoteMapTiles.Size)" rx="3"><title>@VoteMapWords.Describe(seat)</title></rect>
+            }
+        </svg>
+    </div>
+    @if (Data.Delegates.Count > 0)
+    {
+        <h3>@VoteMapWords.DelegatesHeading</h3>
+        <p class="muted small">@VoteMapWords.DelegatesNote</p>
+        <ul class="vote-map-delegates" role="list">
+            @foreach (var member in Data.Delegates)
+            {
+                <li><svg class="vote-map-circle" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle class="vote-map-seat" data-mark="@VoteMapMarks.Name(VoteMapMarks.Of(member))" cx="12" cy="12" r="10" /></svg><span>@VoteMapWords.DelegateSeat(member): @VoteMapWords.Member(member)</span></li>
+            }
+        </ul>
+    }
+    @if (Data.Unplaced > 0)
+    {
+        <p class="muted small">@VoteMapWords.Unplaced(Data.Unplaced)</p>
+    }
+    <details class="vote-fold">
+        <summary>@VoteMapWords.TableFold</summary>
+        <DataTable TItem="VoteMapRow" Items="rows" Caption="@VoteMapWords.TableCaption(Data.Chamber, RollCall)" Scroll="true" PagedRows="seats">
+            <Head>
+                <TableCell Header>Seat</TableCell>
+                <TableCell Header>Member</TableCell>
+                <TableCell Header>Party</TableCell>
+                <TableCell Header>Vote</TableCell>
+            </Head>
+            <Row Context="row">
+                <TableCell Main Label="Seat">@row.Seat</TableCell>
+                @if (row.Member is { } member)
+                {
+                    <VoteMemberCells Member="member" RootPath="@RootPath" />
+                }
+                else
+                {
+                    <TableCell Label="Member">@VoteMapMarks.NoMember</TableCell>
+                    <TableCell Label="Party"></TableCell>
+                    <TableCell Label="Vote"></TableCell>
+                }
+            </Row>
+        </DataTable>
+    </details>
+</section>
+
+@code {
+    private IReadOnlyList<VoteMapRow> rows = [];
+    private IReadOnlyList<(VoteMapMark Mark, int Count)> legend = [];
+
+    [Parameter, EditorRequired] public VoteMapData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public int RollCall { get; set; }
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    protected override void OnParametersSet()
+    {
+        legend = Data.Legend;
+        rows = [.. Data.Seats.Select(seat => new VoteMapRow(VoteMapWords.SeatName(seat), seat.Member)), .. Data.Delegates.Select(member => new VoteMapRow(VoteMapWords.DelegateSeat(member), member))];
+    }
+
+    private static string ShapeId(string state) => $"vote-map-state-{state.ToLowerInvariant()}";
+
+    private static string ClipId(string state, int part) => $"vote-map-clip-{state.ToLowerInvariant()}-{part}";
+
+    /// <summary>Razor reserves the text tag, so the label markup is built here. The state code is encoded.</summary>
+    private static MarkupString Label(VoteMapTileLabel label) =>
+        new($"<text class=\"vote-map-tile-label\" x=\"{N(label.X)}\" y=\"{N(label.Y)}\">{System.Net.WebUtility.HtmlEncode(label.State)}</text>");
+
+    private static string N(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+}
