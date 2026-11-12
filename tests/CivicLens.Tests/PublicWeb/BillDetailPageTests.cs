@@ -310,7 +310,10 @@ public sealed class BillDetailPageTests
     {
         const string line = "The text above summarizes the Congressional Research Service summary.";
 
-        Assert.Contains(line, (await RenderAsync(Bill with { SummaryFromCrs = true })).QuerySelector(".ai-summary")!.TextContent);
+        var fromCrs = await RenderAsync(Bill with { SummaryFromCrs = true });
+        Assert.Contains(line, fromCrs.QuerySelector(".ai-summary")!.TextContent);
+        var target = fromCrs.QuerySelector(".ai-summary-check a")!.GetAttribute("href")!;
+        Assert.Contains("This bill imposes sanctions.", fromCrs.QuerySelector($"details{target}")!.TextContent);
         var other = await RenderAsync(Bill with { SummaryFromCrs = false });
         Assert.DoesNotContain(line, other.Body!.TextContent);
         Assert.Null(other.QuerySelector(".ai-summary-check"));

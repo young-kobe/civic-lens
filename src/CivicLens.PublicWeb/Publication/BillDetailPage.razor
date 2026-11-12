@@ -35,7 +35,7 @@
                 }
                 @if (Data.CrsText is not null)
                 {
-                    <SourceFold Summary="From the Congressional Research Service (CRS)" FoldId="@null">
+                    <SourceFold Summary="From the Congressional Research Service (CRS)" FoldId="@CrsFoldId">
                         @foreach (var paragraph in Data.CrsText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                         {
                             <p>@paragraph</p>
@@ -118,8 +118,10 @@
     [Parameter, EditorRequired] public BillPageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
 
+    private const string CrsFoldId = "crs-source";
+
     private RenderFragment? CrsCheck => !Data.SummaryFromCrs ? null
-        : @<text>The text above summarizes the Congressional Research Service summary. <a href="#source">@SourceFold.Title</a></text>;
+        : @<text>The text above summarizes the Congressional Research Service summary. <a href="#@CrsFoldId">@SourceFold.Title</a></text>;
 
     protected override void OnParametersSet()
     {
