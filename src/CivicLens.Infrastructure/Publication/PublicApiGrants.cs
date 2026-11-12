@@ -62,7 +62,6 @@ internal static class PublicApiGrants
         GRANT SELECT (record_id, revision_number, "position", term, definition, cut) ON action_revision_key_terms TO civic_lens_public_owner;
         GRANT SELECT (crs_summary_text, summary_version) ON action_revisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, week_start, headline, text_origin, cutoff_release_number, coverage_considered, coverage_sent_to_model) ON brief_revisions TO civic_lens_public_owner;
-        GRANT SELECT (record_id, revision_number, review_state_version, kind, created_at_utc_ticks) ON brief_review_decisions TO civic_lens_public_owner;
         GRANT SELECT (summary_citation_extraction_id, policy_area_citation_extraction_id, bill_citation_extraction_id)
             ON action_revisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, sponsorship_position, "position", citation_extraction_id)

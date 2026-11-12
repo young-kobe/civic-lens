@@ -639,7 +639,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
-    public async Task ABriefShowsItsCoverageItsCutoffTheTimeOfItsLatestApprovalAndItsFirstPublicationTime()
+    public async Task ABriefShowsItsCoverageItsCutoffItsPublishedApprovalTimeAndNotALaterApprovalAndItsFirstPublicationTime()
     {
         await ExecuteAsync("""
             SET session_replication_role = replica;
@@ -655,9 +655,11 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
               ('00000000000000000000000000000002', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 2, 'test', 'Approve', 200),
               ('00000000000000000000000000000003', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 3, 'test', 'RequestChanges', 300);
             INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('brief', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 50);
+            INSERT INTO published_entries (kind, record_id, revision_number, brief_record_id, brief_revision_number, headline, approved_at_utc_ticks)
+              VALUES ('brief', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 'Headline', 100);
             """);
 
-        Assert.Equal(["4|9|6|200|50"], await PublicAsync(
+        Assert.Equal(["4|9|6|100|50"], await PublicAsync(
             "SELECT cutoff_release_number || '|' || coverage_considered || '|' || coverage_sent_to_model || '|' || approved_at_utc_ticks || '|' || first_published_at_utc_ticks FROM public_api.briefs"));
     }
 
