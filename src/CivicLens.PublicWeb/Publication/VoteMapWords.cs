@@ -23,6 +23,9 @@ public static class VoteMapWords
     public static string Description(PublishedChamber chamber) =>
         $"{Heading} of the {chamber} seats. The legend and the table below hold the same facts.";
 
+    public static string LegendNote(PublishedChamber chamber, int rollCall, int total, bool withDelegates) =>
+        $"Each mark counts {chamber} seats{(withDelegates ? " and delegate circles" : "")} on roll call {rollCall} by how the member voted. The counts add up to {total}.";
+
     public static string Unplaced(int count) => count == 1
         ? "1 tracked member has no seat in the record, so the map leaves them out."
         : $"{count} tracked members have no seat in the record, so the map leaves them out.";
@@ -46,5 +49,5 @@ public static class VoteMapWords
         seat.Member is { } member ? $"{SeatName(seat)}: {Member(member)}" : $"{SeatName(seat)}: {VoteMapMarks.NoMember}";
 
     public static string Member(VoteMemberData member) =>
-        $"{member.Name}, {member.Party ?? VoteWords.NoKnownParty}, {PlainVoteWords.Cast(member.Cast)}";
+        $"{member.Name}, {member.PartyLabel}, {PlainVoteWords.Cast(member.Cast)}";
 }

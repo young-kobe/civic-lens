@@ -652,6 +652,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .vote-map-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .vote-map-frame svg { display: block; width: 100%; height: auto; }
 .vote-map-frame .vote-map-tiles, .vote-map-tile-note { display: none; }
+.vote-map-tile-note { margin-bottom: var(--s3); }
 .vote-map-tiles { max-width: 560px; }
 .vote-map[data-view="tile"] .vote-map-shapes { display: none; }
 .vote-map[data-view="tile"] :is(.vote-map-tiles, .vote-map-tile-note) { display: block; }
@@ -672,6 +673,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .vote-map-split { stroke: var(--surface); stroke-width: 1.5px; }
 .vote-map-tile-label { fill: var(--muted); font-size: 13px; font-weight: 700; }
 .vote-map-legend, .vote-map-delegates { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin: 0; padding: 0; list-style: none; font-size: .875rem; }
+.vote-map-legend { margin-bottom: var(--s4); }
 .vote-map-legend li, .vote-map-delegates li { display: flex; align-items: center; gap: var(--s2); }
 .vote-map-legend b { font-variant-numeric: tabular-nums; }
 .vote-map-swatch { flex: none; width: 18px; height: 18px; }

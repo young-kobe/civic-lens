@@ -9,7 +9,18 @@
         <button class="segmented-item" type="button" data-view="shape" aria-pressed="false">@VoteMapWords.ShapeView(Data.Chamber)</button>
         <button class="segmented-item" type="button" data-view="tile" aria-pressed="false">@VoteMapWords.TileView</button>
     </div>
-    <p class="muted small vote-map-tile-note">@VoteMapWords.TileNote</p>
+    @if (Data.Chamber == PublishedChamber.House)
+    {
+        <p class="muted small vote-map-tile-note">@VoteMapWords.TileNote</p>
+    }
+    <h3>@VoteMapWords.LegendHeading</h3>
+    <p class="muted small">@VoteMapWords.LegendNote(Data.Chamber, RollCall, legend.Sum(entry => entry.Count), Data.Delegates.Count > 0)</p>
+    <ul class="vote-map-legend" role="list">
+        @foreach (var (mark, count) in legend)
+        {
+            <li><svg class="vote-map-swatch" viewBox="0 0 18 18" aria-hidden="true" focusable="false"><rect class="vote-map-seat" data-mark="@VoteMapMarks.Name(mark)" x="1" y="1" width="16" height="16" rx="3" /></svg><b>@count</b> @VoteMapMarks.Label(mark)</li>
+        }
+    </ul>
     <svg class="vote-map-defs" aria-hidden="true" focusable="false">
         <defs>
             <pattern id="vote-map-no" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -82,13 +93,6 @@
             }
         </ul>
     }
-    <h3>@VoteMapWords.LegendHeading</h3>
-    <ul class="vote-map-legend" role="list">
-        @foreach (var (mark, count) in Data.Legend)
-        {
-            <li><svg class="vote-map-swatch" viewBox="0 0 18 18" aria-hidden="true" focusable="false"><rect class="vote-map-seat" data-mark="@VoteMapMarks.Name(mark)" x="1" y="1" width="16" height="16" rx="3" /></svg><b>@count</b> @VoteMapMarks.Label(mark)</li>
-        }
-    </ul>
     @if (Data.Unplaced > 0)
     {
         <p class="muted small">@VoteMapWords.Unplaced(Data.Unplaced)</p>
@@ -106,9 +110,7 @@
                 <TableCell Main Label="Seat">@row.Seat</TableCell>
                 @if (row.Member is { } member)
                 {
-                    <TableCell Label="Member"><a href="@(RootPath + PublicationProtocol.OfficialPagePath(member.OfficialId))">@member.Name</a></TableCell>
-                    <TableCell Label="Party">@(member.Party ?? VoteWords.NoKnownParty)</TableCell>
-                    <TableCell Label="Vote"><CastWord Cast="@member.Cast" /></TableCell>
+                    <VoteMemberCells Member="member" RootPath="@RootPath" />
                 }
                 else
                 {
@@ -123,13 +125,17 @@
 
 @code {
     private IReadOnlyList<VoteMapRow> rows = [];
+    private IReadOnlyList<(VoteMapMark Mark, int Count)> legend = [];
 
     [Parameter, EditorRequired] public VoteMapData Data { get; set; } = default!;
     [Parameter, EditorRequired] public int RollCall { get; set; }
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
 
-    protected override void OnParametersSet() =>
+    protected override void OnParametersSet()
+    {
+        legend = Data.Legend;
         rows = [.. Data.Seats.Select(seat => new VoteMapRow(VoteMapWords.SeatName(seat), seat.Member)), .. Data.Delegates.Select(member => new VoteMapRow(VoteMapWords.DelegateSeat(member), member))];
+    }
 
     private static string ShapeId(string state) => $"vote-map-state-{state.ToLowerInvariant()}";
 

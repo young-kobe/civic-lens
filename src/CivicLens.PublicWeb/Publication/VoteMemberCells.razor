@@ -1,0 +1,12 @@
+@using CivicLens.Publication.Contracts
+
+<TableCell Main="MemberIsMain" Label="Member"><a href="@(RootPath + PublicationProtocol.OfficialPagePath(Member.OfficialId))">@Member.Name</a></TableCell>
+<TableCell Label="Party">@Member.PartyLabel</TableCell>
+<TableCell Label="Vote"><SharedVoteCast Side="@PublishedOfficialVote.SideOf(Member.Cast)"><CastWord Cast="@Member.Cast" /></SharedVoteCast></TableCell>
+
+@code {
+    /// <summary>The member, party, and vote cells of one tracked member. The member table and the map seat table both show them.</summary>
+    [Parameter, EditorRequired] public VoteMemberData Member { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    [Parameter] public bool MemberIsMain { get; set; }
+}

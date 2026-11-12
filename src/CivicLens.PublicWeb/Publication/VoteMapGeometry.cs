@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 
 namespace CivicLens.PublicWeb.Publication;
@@ -34,14 +33,12 @@ public static class VoteMapGeometry
         return new(file.Congress, file.ViewBox, districts, states);
     }
 
-    /// <summary>The path holds only move and close commands, so every number pair after M is a point.</summary>
     private static VoteMapStateShape Outline(string state, string path)
     {
-        var numbers = path.Split([' ', 'M', 'Z'], StringSplitOptions.RemoveEmptyEntries)
-            .Select(number => double.Parse(number, CultureInfo.InvariantCulture)).ToArray();
-        var xs = numbers.Where((_, index) => index % 2 == 0).ToArray();
-        var ys = numbers.Where((_, index) => index % 2 == 1).ToArray();
-        return new(state, path, xs.Min(), ys.Min(), xs.Max(), ys.Max());
+        var rings = VoteMapArea.Rings(path);
+        var points = rings.SelectMany(ring => ring).ToArray();
+        var (left, right) = (points.Min(point => point.X), points.Max(point => point.X));
+        return new(state, path, left, points.Min(point => point.Y), right, points.Max(point => point.Y), VoteMapArea.HalvingX(rings, left, right));
     }
 
     private sealed record Shapes(int Congress, string ViewBox, IReadOnlyDictionary<(string, int), string> Districts, IReadOnlyDictionary<string, VoteMapStateShape> States);

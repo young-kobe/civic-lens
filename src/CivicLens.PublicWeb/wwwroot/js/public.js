@@ -938,7 +938,10 @@
             buttons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.view === view)));
         };
         buttons.forEach(button => button.addEventListener("click", () => show(button.dataset.view)));
-        buttons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.view === (matchMedia("(max-width: 719px)").matches ? "tile" : "shape"))));
+        const narrow = matchMedia("(max-width: 719px)");
+        const showWidthView = () => show(narrow.matches ? "tile" : "shape");
+        narrow.addEventListener("change", showWidthView);
+        showWidthView();
         views.hidden = false;
     };
 

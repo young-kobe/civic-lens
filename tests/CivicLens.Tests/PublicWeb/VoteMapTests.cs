@@ -1,6 +1,7 @@
 using AngleSharp.Dom;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicWeb.Publication;
+using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.PublicWeb.VoteDetailPageFixture;
 
 namespace CivicLens.Tests.PublicWeb;
@@ -86,7 +87,30 @@ public sealed class VoteMapTests
         Assert.Equal(used, legend.Order());
         Assert.Equal(["1 Yes", "1 No", "1 Present", "1 Not voting", "1 Other", "431 No member in the record"],
             page.QuerySelectorAll(".vote-map-legend li").Select(item => item.TextContent));
-        Assert.All(legend, mark => Assert.NotNull(page.QuerySelector(mark is "yes" or "no-member" ? ".vote-map" : $"#vote-map-{mark}")));
+        var css = WebStyleSheets.Read("public.css");
+        Assert.All(legend, mark => Assert.Matches($@"\.vote-map-seat\[data-mark=""{mark}""\] \{{ fill: [^;]+;", css));
+        Assert.Equal("Each mark counts House seats and delegate circles on roll call 308 by how the member voted. The counts add up to 436.",
+            page.QuerySelector(".vote-map-legend")!.PreviousElementSibling!.TextContent);
+        Assert.True(Position(page, ".vote-map-legend") < Position(page, ".vote-map-frame"));
+    }
+
+    [Fact]
+    public async Task TheTileNoteTalksAboutDistrictsSoOnlyAHouseMapShowsIt()
+    {
+        var house = await RenderAsync(House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7)));
+        var senate = await RenderAsync(Senate(Member("s1", "Ed Ward", "Nay", "Democrat", "MA", null)));
+
+        Assert.NotNull(house.QuerySelector(".vote-map-tile-note"));
+        Assert.Equal(VoteMapWords.TileNote, house.QuerySelector(".vote-map-tile-note")!.TextContent);
+        Assert.Null(senate.QuerySelector(".vote-map-tile-note"));
+    }
+
+    [Fact]
+    public async Task TheSeatTableShowsTheCastLikeTheMemberTable()
+    {
+        var page = await RenderAsync(House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7)));
+
+        Assert.Equal("yea", page.QuerySelector(".vote-map tbody td[data-label=Vote] .shared-vote-cast-value")!.GetAttribute("data-side"));
     }
 
     [Fact]
@@ -95,9 +119,11 @@ public sealed class VoteMapTests
         var otherCongress = House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7)) with { Congress = 118 };
         var twoOnOneSeat = House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7), Member("o2", "Ben Baker", "Nay", "Democrat", "MA", 7));
         var noShape = House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 40));
+        var noDistrict = House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", null));
+        var noStateShape = Senate(Member("s1", "A", "Yea", "Democrat", "ZZ", null));
         var threeSenators = Senate(Member("s1", "A", "Yea", "Democrat", "MA", null), Member("s2", "B", "Yea", "Democrat", "MA", null), Member("s3", "C", "Yea", "Democrat", "MA", null));
 
-        foreach (var vote in new[] { otherCongress, twoOnOneSeat, noShape, threeSenators, Vote() })
+        foreach (var vote in new[] { otherCongress, twoOnOneSeat, noShape, noDistrict, noStateShape, threeSenators, Vote() })
             Assert.Null((await RenderAsync(vote)).QuerySelector(".vote-map"));
     }
 
@@ -130,6 +156,26 @@ public sealed class VoteMapTests
         Assert.Equal(8, california.Select(item => item.tile.X).Distinct().Count());
         Assert.Equal(7, california.Select(item => item.tile.Y).Distinct().Count());
         Assert.Equal(Enumerable.Range(1, 52).Cast<int?>(), california.Select(item => item.seat.District));
+    }
+
+    [Fact]
+    public void EachSenateStateSplitsInHalvesThatHoldFortyToSixtyPercentOfItsArea()
+    {
+        Assert.NotEmpty(VoteMapGeometry.States);
+        foreach (var state in VoteMapGeometry.States.Values)
+        {
+            var rings = VoteMapArea.Rings(state.Path);
+            var share = VoteMapArea.LeftOf(rings, state.Middle) / VoteMapArea.Total(rings);
+            Assert.InRange(share, 0.4, 0.6);
+        }
+    }
+
+    [Fact]
+    public void TheHalvingLineOfATriangleSitsWhereTheLeftPartHoldsHalfTheArea()
+    {
+        var triangle = VoteMapArea.Rings("M0 0 10 0 0 10Z");
+
+        Assert.Equal(10 * (1 - Math.Sqrt(0.5)), VoteMapArea.HalvingX(triangle, 0, 10), 3);
     }
 
     private static int Position(IDocument page, string selector) =>

@@ -167,8 +167,11 @@ These decisions come from the component audit. The owner accepted every recommen
 - The vote member filters narrow the table by name, cast, and party. Enforcer: `VoteMemberFilter`. Tests: `VoteDetailPageTests.TheMemberTableIsFoldedAndFiltersByNameVoteAndParty` and `VotePageEndpointsTests.TheQueryFiltersTheMemberTableAndALongNameFilterAnswers400`.
 - A map seat with no member row is never a cast. It has a plain fill, a dashed line, and the words "No member in the record" in its hover text, the legend, and the table. The map never says "vacant". Enforcer: `VoteMapMarks.Of`. Test: `VoteMapTests.ASeatWithNoMemberRowIsNeverLabeledAsACast`.
 - A Senate state splits in two in the position order of the vote members, in the map and in the tiles. The first senator takes the left half and the first tile. Enforcer: `VoteMapData.Of`. Test: `VoteMapTests.ASenateStateSplitsInTwoInThePositionOrderOfTheVoteMembersInBothViews`.
+- The split line of a Senate state halves its area, not its box, so each senator gets equal room. Enforcer: `VoteMapArea.HalvingX`, called by `VoteMapGeometry`. Test: `VoteMapTests.EachSenateStateSplitsInHalvesThatHoldFortyToSixtyPercentOfItsArea`.
+- The tile note speaks of districts, so only a House map shows it. Enforcer: `VoteMap`. Test: `VoteMapTests.TheTileNoteTalksAboutDistrictsSoOnlyAHouseMapShowsIt`.
+- The shared pager wraps, so its status text never shrinks to a letter per line at 360 px. Enforcer: the `.pager` rules in `app.css`. Test: `PresentationArchitectureTests.ThePagerWrapsAndLetsItsStatusTextTakeTheRowWhenTheButtonsLeaveNoRoomAtThreeHundredSixtyPixels`.
 - Delegates are circles below the map. They are never in the shapes or the tiles. The map shows only delegates who have a vote row. Enforcer: `VoteMapData.Of` and `VoteMap`. Test: `VoteMapTests.DelegatesAreCirclesBelowTheMapAndNeverInTheSeatGrid`.
-- The map legend lists every mark in use, with counts that add up to every seat and circle. Each mark has its own pattern, so color is never the only cue. Enforcers: `VoteMapData.Legend` and `VoteMap`. Test: `VoteMapTests.TheLegendListsEveryPatternInUseWithCountsThatAddUpToEverySeatAndCircle`.
+- The map legend lists every mark in use, with counts that add up to every seat and circle. A sentence under the legend heading names the unit, the roll call, and the total. The legend sits above the map. Each mark has its own pattern, so color is never the only cue. Enforcers: `VoteMapData.Legend` and `VoteMap`. Test: `VoteMapTests.TheLegendListsEveryPatternInUseWithCountsThatAddUpToEverySeatAndCircle`.
 - The map shows only a true join. It stays off for a House vote of another Congress than the shapes, or a member whose seat has no shape. It also stays off for two members on one House seat, more than two senators in one state, or no placed member. Enforcer: `VoteMapData.Of`. Test: `VoteMapTests.TheMapStaysOffWhenItCannotShowTheVoteTruly`.
 - The tiles put the states in name order, each in a square grid, as the mockup `drawTiles` does. Enforcer: `VoteMapTiles.Place`. Test: `VoteMapTests.TheTilesPutStatesInNameOrderEachInASquareGrid`.
 - The map shapes come only from the committed asset `districts-119.json`, which the PublicWeb assembly embeds. Enforcer: `VoteMapGeometry`. Test: No test checks that no other source exists.
@@ -283,7 +286,7 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 | Public API and its views | `src/CivicLens.PublicApi` |
 | Gated SSR reader pages and inputs | `src/CivicLens.PublicWeb/Publication/HomePage.razor`, `ComparePage.razor`, `VoteKindsPage.razor`, `ZipLookupForm.razor`, `ZipLookupResults.razor`, `HomePageData.cs`, `src/CivicLens.PublicApi/Home/HomePageReader.cs`, `src/CivicLens.PublicApi/Pages/ServerPageEndpoints.cs` |
 | Gated SSR record pages | `StatementDetailPage.razor`, `ExecutiveActionDetailPage.razor`, `DocumentChangeDetailPage.razor` in `src/CivicLens.PublicWeb/Publication`; `AiSummary.razor`, `SourceFold.razor`, and `LinkChip.razor` in `src/CivicLens.PublicWeb/Components/Ui`; `ExecutiveActionTargetData.cs` in `src/CivicLens.PublicWeb/Publication`; `StatementPageReader`, `ExecutiveActionPageReader`, `DocumentChangePageReader`, `RecordSnapshot`, and `RecordKindStore` in `src/CivicLens.PublicApi`, with the one record route in `ServerPageEndpoints` |
-| Vote map | `src/CivicLens.PublicWeb/Publication/VoteMap.razor`, `VoteMapData.cs`, `VoteMapSeat.cs`, `VoteMapMarks.cs`, `VoteMapWords.cs`, `VoteMapTiles.cs`, `VoteMapTileLayout.cs`, `VoteMapTile.cs`, `VoteMapTileLabel.cs`, `VoteMapRow.cs`, `VoteMapGeometry.cs`, `VoteMapStateShape.cs`, `src/CivicLens.PublicWeb/wwwroot/data/districts-119.json`, `tests/CivicLens.Tests/PublicWeb/VoteMapTests.cs` |
+| Vote map | `src/CivicLens.PublicWeb/Publication/VoteMap.razor`, `VoteMapData.cs`, `VoteMapSeat.cs`, `VoteMapMarks.cs`, `VoteMapWords.cs`, `VoteMapTiles.cs`, `VoteMapTileLayout.cs`, `VoteMapTile.cs`, `VoteMapTileLabel.cs`, `VoteMapRow.cs`, `VoteMapGeometry.cs`, `VoteMapArea.cs`, `VoteMapStateShape.cs`, `VoteMemberCells.razor`, `src/CivicLens.PublicWeb/wwwroot/data/districts-119.json`, `tests/CivicLens.Tests/PublicWeb/VoteMapTests.cs` |
 | Shared member layout | `src/CivicLens.PublicWeb/Publication/ZipMemberCards.razor`, `ZipMemberCard.razor`, `ZipMemberIssueFilter.razor`, `SharedVoteRows.razor`, `SharedVoteCast.razor`, `OfficeLede.cs` |
 | Style files | `src/CivicLens.PublicWeb/wwwroot/css/theme.css`, `src/CivicLens.PublicWeb/wwwroot/css/app.css`, `src/CivicLens.PublicWeb/wwwroot/css/public.css` |
 | Presentation rules test | `tests/CivicLens.Tests/Architecture/PresentationArchitectureTests.cs` |
@@ -300,8 +303,5 @@ Limits:
 
 Open choices:
 
-- The approved text of these `VoteMapWords` strings: the map heading, the legend heading, and the view group name.
-- The approved text of the House view name, the tile view name, the table fold, and the delegates heading.
-- The approved text of the House intro and the tile note.
-- Approved by the owner: "Map of states", the Senate intro, the delegates note, and the unplaced line. Also the description, the table caption, and "No member in the record".
+- Approved by the owner: every `VoteMapWords` string except the strings listed in the open questions of the map pull request.
 - The approved text for each glossary term that still shows example wording.
