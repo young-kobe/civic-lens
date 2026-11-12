@@ -35,7 +35,6 @@ internal sealed class PublishedEntryRowConfiguration : IEntityTypeConfiguration<
                 $"bill_line IS NULL OR (kind = '{Name(PublishedRecordKind.Action)}' AND length(btrim(bill_line)) >= 1 AND " +
                 $"length(bill_line) <= {PublishedRecordEntry.MaximumBillLineLength})");
             table.HasCheckConstraint("ck_published_entries_congress", "congress IS NULL OR congress >= 1");
-            table.HasCheckConstraint("ck_published_entries_approved_at_utc_ticks", "approved_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
             table.HasCheckConstraint("ck_published_entries_document_type",
                 $"(kind = '{Name(PublishedRecordKind.ExecutiveAction)}') = (document_type IS NOT NULL) AND " +
                 $"(document_type IS NULL OR {EnumChecks.InList("document_type", Enum.GetNames<PublishedExecutiveActionKind>())})");
