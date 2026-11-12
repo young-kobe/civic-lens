@@ -1,10 +1,15 @@
+using CivicLens.PublicApi.Boards;
+using CivicLens.PublicApi.Votes;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.PublicApi.Home;
 
-/// <summary>Maps the current public home answer to the public presentation contract without rereading its release.</summary>
-public sealed class HomePageReader(HomeStore home, PublicBaseUrl? browserApiUrl)
+/// <summary>
+/// Maps the current public home answer to the public presentation contract. The featured vote page and the party boards come from their own readers.
+/// Each one joins the page only when it read the same release as the home answer, so the page never mixes two releases.
+/// </summary>
+public sealed class HomePageReader(HomeStore home, VotePageReader votes, BoardsPageReader boards, PublicBaseUrl? browserApiUrl)
 {
     public string? BrowserApiRoot => browserApiUrl?.Join(string.Empty).TrimEnd('/');
 
@@ -30,5 +35,16 @@ public sealed class HomePageReader(HomeStore home, PublicBaseUrl? browserApiUrl)
             NewestHouseRollCall = answer.NewestHouseRollCall,
             NewestSenateRollCall = answer.NewestSenateRollCall
         };
+    }
+
+    /// <summary>
+    /// Adds the featured vote page and the four party boards. They are the costly reads, so the home route calls this only when it renders, not for a 304.
+    /// Each one joins only when it read the release of the home answer.
+    /// </summary>
+    public async Task<HomePageData> WithDetailAsync(HomePageData page, CancellationToken cancellationToken)
+    {
+        var detail = page.FeaturedVote is { } featured && await votes.ReadAsync(featured.RecordId, cancellationToken) is { } vote && vote.Release == page.Release ? vote : null;
+        var panels = await boards.ReadAsync(cancellationToken) is { } board && board.Release == page.Release ? board.Boards : [];
+        return page with { FeaturedVoteDetail = detail, Boards = panels };
     }
 }
