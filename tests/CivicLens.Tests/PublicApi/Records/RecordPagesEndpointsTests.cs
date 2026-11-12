@@ -163,7 +163,128 @@ public sealed class RecordPagesEndpointsTests(PostgresCollection postgres)
         Assert.Equal("president", action.GetProperty("officialId").GetString());
         Assert.Equal("2026-01-20", action.GetProperty("signedOn").GetString());
         Assert.Equal(["2026-00009", "2026-00005"], detail.RootElement.GetProperty("notices").EnumerateArray().Select(notice => notice.GetProperty("documentNumber").GetString()));
+        Assert.Equal(["https://fr.example/9", "https://fr.example/5"], detail.RootElement.GetProperty("notices").EnumerateArray().Select(notice => notice.GetProperty("url").GetString()));
         Assert.DoesNotContain("bioguide", detail.RootElement.GetRawText(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AnExecutiveActionListsItsTypedTargetsWithARecordIdOnlyForAnExactMatchInTheActiveRelease()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 3, 0, 0, 0, TimeSpan.Zero));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + ExecutiveActionTargetRows.Seed());
+
+        using var detail = await GetAsync(host, $"/v1/executive-actions/{ExecutiveActionTargetRows.Source}");
+        using var plain = await GetAsync(host, $"/v1/executive-actions/{ExecutiveActionTargetRows.LinkedOrder}");
+
+        Assert.Equal([
+            $"0|amends|executiveOrder|14100|EO 14100, January 3, 2025|{ExecutiveActionTargetRows.LinkedOrder}",
+            "1|amends|executiveOrder|14101|EO 14101|none",
+            "2|amends|executiveOrder|14102|EO 14102|none",
+            $"3|revokes|proclamation|10001|Proc. 10001|{ExecutiveActionTargetRows.LinkedProclamation}",
+            "4|revokes|executiveOrder|14000|EO 14000|none"
+        ], detail.RootElement.GetProperty("targets").EnumerateArray().Select(target =>
+            $"{target.GetProperty("position").GetInt32()}|{target.GetProperty("relation").GetString()}|{target.GetProperty("kind").GetString()}|{target.GetProperty("number").GetString()}|" +
+            $"{target.GetProperty("reference").GetString()}|{(target.GetProperty("targetRecordId").ValueKind == JsonValueKind.Null ? "none" : target.GetProperty("targetRecordId").GetString())}"));
+        Assert.Empty(plain.RootElement.GetProperty("targets").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task ATargetReferenceUsesItsExactUtf16SpanAfterSupplementaryCharactersAndRepeatedNumbers()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, DateTimeOffset.UnixEpoch.AddDays(1));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + ExecutiveActionTargetRows.Seed());
+        var notes = "See: " + string.Concat(Enumerable.Repeat(char.ConvertFromUtf32(0x20000), 27))
+            + "\nAmends: EO 14100, January 3, 2025; EO 14100, February 4, 2025";
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            UPDATE executive_action_revisions SET disposition_notes = '{notes}' WHERE record_id = '{ExecutiveActionTargetRows.Source}';
+            DELETE FROM executive_action_revision_disposition_targets WHERE record_id = '{ExecutiveActionTargetRows.Source}' AND position > 0;
+            UPDATE executive_action_revision_disposition_targets SET reference_start = 68, reference_length = 25
+             WHERE record_id = '{ExecutiveActionTargetRows.Source}' AND position = 0;
+            """);
+
+        using var detail = await GetAsync(host, $"/v1/executive-actions/{ExecutiveActionTargetRows.Source}");
+        var target = Assert.Single(detail.RootElement.GetProperty("targets").EnumerateArray());
+
+        Assert.Equal("EO 14100, January 3, 2025", target.GetProperty("reference").GetString());
+        Assert.Equal(ExecutiveActionTargetRows.LinkedOrder, target.GetProperty("targetRecordId").GetString());
+    }
+
+    [Theory]
+    [InlineData(100000, 1)]
+    [InlineData(1, int.MaxValue)]
+    public async Task ATargetOutsideItsNoteHasNoReference(int start, int length)
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, DateTimeOffset.UnixEpoch.AddDays(1));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + ExecutiveActionTargetRows.Seed());
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            UPDATE executive_action_revision_disposition_targets SET reference_start = {start}, reference_length = {length}
+             WHERE record_id = '{ExecutiveActionTargetRows.Source}' AND position = 0;
+            """);
+
+        using var detail = await GetAsync(host, $"/v1/executive-actions/{ExecutiveActionTargetRows.Source}");
+
+        Assert.Equal(JsonValueKind.Null, detail.RootElement.GetProperty("targets")[0].GetProperty("reference").ValueKind);
+    }
+
+    [Fact]
+    public async Task ATargetWhoseKindDoesNotMatchItsReferenceHasNoReference()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, DateTimeOffset.UnixEpoch.AddDays(1));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + ExecutiveActionTargetRows.Seed());
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            UPDATE executive_action_revision_disposition_targets SET kind = 'Proclamation'
+             WHERE record_id = '{ExecutiveActionTargetRows.Source}' AND position = 0;
+            """);
+
+        using var detail = await GetAsync(host, $"/v1/executive-actions/{ExecutiveActionTargetRows.Source}");
+
+        Assert.Equal(JsonValueKind.Null, detail.RootElement.GetProperty("targets")[0].GetProperty("reference").ValueKind);
+    }
+
+    [Fact]
+    public async Task ATargetSpanThatSplitsASupplementaryCharacterHasNoReference()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, DateTimeOffset.UnixEpoch.AddDays(1));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + ExecutiveActionTargetRows.Seed());
+        var notes = "Amends: EO 14100, " + char.ConvertFromUtf32(0x20000);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            UPDATE executive_action_revisions SET disposition_notes = '{notes}' WHERE record_id = '{ExecutiveActionTargetRows.Source}';
+            UPDATE executive_action_revision_disposition_targets SET reference_start = 8, reference_length = 11
+             WHERE record_id = '{ExecutiveActionTargetRows.Source}' AND position = 0;
+            """);
+
+        using var detail = await GetAsync(host, $"/v1/executive-actions/{ExecutiveActionTargetRows.Source}");
+
+        Assert.Equal(JsonValueKind.Null, detail.RootElement.GetProperty("targets")[0].GetProperty("reference").ValueKind);
+    }
+
+    [Theory]
+    [InlineData(100, HttpStatusCode.OK)]
+    [InlineData(101, HttpStatusCode.InternalServerError)]
+    public async Task TheTargetCountBoundaryReturnsCompleteDataOrAnOperationalFailure(int count, HttpStatusCode expected)
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, DateTimeOffset.UnixEpoch.AddDays(1));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + ExecutiveActionTargetRows.Seed());
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            DELETE FROM executive_action_revision_disposition_targets WHERE record_id = '{ExecutiveActionTargetRows.Source}';
+            INSERT INTO executive_action_revision_disposition_targets (record_id, revision_number, position, relation, kind, number, reference_start, reference_length)
+            SELECT '{ExecutiveActionTargetRows.Source}', 1, n, 'Amends', 'ExecutiveOrder', (20000 + n)::text, 0, 1 FROM generate_series(0, {count - 1}) n;
+            """);
+
+        using var response = await host.Client.GetAsync($"/v1/executive-actions/{ExecutiveActionTargetRows.Source}");
+        Assert.Equal(expected, response.StatusCode);
+        if (response.IsSuccessStatusCode)
+        {
+            using var detail = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal(count, detail.RootElement.GetProperty("targets").GetArrayLength());
+        }
     }
 
     private static string[] Describe(JsonDocument page) => [.. page.RootElement.GetProperty("related").EnumerateArray().Select(link =>
