@@ -17,6 +17,7 @@ using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Publication;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.PublicApi;
@@ -38,7 +39,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
          "document_extractions", "statement_revision_quotations",
          "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_issue_party_lineups", "release_issue_party_counts", "release_bill_counts", "release_official_bill_counts", "release_policy_areas", "published_entry_officials",
          "published_bill_histories", "published_bill_history_actions", "release_bill_histories",
-         "release_bill_statuses", "statement_review_decisions", "statement_revisions", "statement_revision_speakers", "statement_revision_issues",
+         "release_bill_statuses", "release_vote_bills", "statement_review_decisions", "statement_revisions", "statement_revision_speakers", "statement_revision_issues",
          "statement_drafts", "statement_candidates", "executive_action_revisions", "executive_action_revision_notices", "executive_action_documents",
          "publication_withdrawals", "publication_withdrawal_corrections", "published_records"];
 
@@ -264,28 +265,75 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.active_records"));
     }
 
+    // The links are the rows that the commit of each release writes. The old view grouped public_api.bills for each read, and OldBillLinkSql repeats that rule so the test proves that the pinned rows give the same value.
+    private const string VoteBillLinks = "SELECT left(v.record_id, 1) || ' ' || coalesce(left(v.bill_record_id, 1), 'none') FROM public_api.votes v ORDER BY v.record_id";
+
+    private const string OldBillLinkSql = """
+        SELECT left(a.record_id, 1) || ' ' || coalesce(left((SELECT min(b.record_id) FROM public_api.bills b
+                                                            WHERE b.congress = v.congress AND b.bill_type = v.bill_type AND b.bill_number = v.bill_number), 1), 'none')
+          FROM public_api.active_records a JOIN public.vote_revisions v ON v.record_id = a.record_id AND v.revision_number = a.revision_number
+         WHERE a.kind = 'vote' ORDER BY a.record_id
+        """;
+
     [Fact]
-    public async Task VotesLinkOnlyToTheLowestIdMatchingBillInTheActivePublishedRelease()
+    public async Task VotesShowTheBillLinkThatTheActiveReleasePinnedAndItEqualsTheLowestIdMatchingBillOfThatRelease()
     {
         await ViewsSeed.ActivateReleaseAsync(connectionString, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.AddVotesAsync(connectionString,
             new SeededVote('7', "2026-03-03") { BillNumber = 7 },
             new SeededVote('8', "2026-03-02") { BillNumber = 8 },
-            new SeededVote('9', "2026-03-01") { BillType = null, BillNumber = null });
+            new SeededVote('9', "2026-03-01") { BillType = null, BillNumber = null },
+            new SeededVote('c', "2026-02-28") { BillNumber = 11 });
         await BillsSeed.AddBillsAsync(connectionString,
             new SeededBill('b', "2026-01-01") { BillNumber = 7, LastRelease = 1 },
             new SeededBill('d', "2026-01-01") { BillNumber = 7, LastRelease = 1 },
             new SeededBill('e', "2026-01-01") { BillNumber = 7, FirstRelease = 2 },
+            new SeededBill('f', "2026-01-01") { BillNumber = 11, FirstRelease = 2 },
             new SeededBill('0', "2026-01-01") { BillNumber = 7, Congress = 118 },
             new SeededBill('1', "2026-01-01") { BillNumber = 7, BillType = "s" });
+        await ViewsSeed.LinkVoteBillsAsync(connectionString, 1, ('7', 'b'));
 
-        Assert.Equal(["7 b", "8 none", "9 none"], await PublicAsync("SELECT left(v.record_id, 1) || ' ' || coalesce(left(v.bill_record_id, 1), 'none') FROM public_api.votes v ORDER BY v.record_id"));
+        Assert.Equal(["7 b", "8 none", "9 none", "c none"], await PublicAsync(VoteBillLinks));
+        Assert.Equal(await PublicAsync(VoteBillLinks), await QueryAsync(OldBillLinkSql, connectionString));
 
         await ViewsSeed.ActivateReleaseAsync(connectionString, 2, new DateTimeOffset(2026, 6, 9, 0, 0, 0, TimeSpan.Zero));
-        Assert.Equal(["7 e", "8 none", "9 none"], await PublicAsync("SELECT left(v.record_id, 1) || ' ' || coalesce(left(v.bill_record_id, 1), 'none') FROM public_api.votes v ORDER BY v.record_id"));
+        await ViewsSeed.LinkVoteBillsAsync(connectionString, 2, ('7', 'e'), ('c', 'f'));
+        Assert.Equal(["7 e", "8 none", "9 none", "c f"], await PublicAsync(VoteBillLinks));
+        Assert.Equal(await PublicAsync(VoteBillLinks), await QueryAsync(OldBillLinkSql, connectionString));
 
         await ViewsSeed.ActivateReleaseAsync(connectionString, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
-        Assert.Equal(["7 b", "8 none", "9 none"], await PublicAsync("SELECT left(v.record_id, 1) || ' ' || coalesce(left(v.bill_record_id, 1), 'none') FROM public_api.votes v ORDER BY v.record_id"));
+        Assert.Equal(["7 b", "8 none", "9 none", "c none"], await PublicAsync(VoteBillLinks));
+        Assert.Equal(await PublicAsync(VoteBillLinks), await QueryAsync(OldBillLinkSql, connectionString));
+    }
+
+    // The rows come from PublishRelease and from the commit of PostgresPublicationStore. Only the review rows of the records are seeded, because the commit of this test holds no records.
+    [Fact]
+    public async Task APublishedReleaseGivesTheLinksOfTheOldRuleAndAHiddenBillGivesNullBecauseNoRouteServesThatBill()
+    {
+        var scenario = new PublicationScenario();
+        var (visibleLow, visibleHigh, hidden, visibleOther) = (scenario.AddAction('b'), scenario.AddAction('d'), scenario.AddAction('3'), scenario.AddAction('e'));
+        var linked = scenario.AddVote('1', billActionRecordIds: [visibleLow, visibleHigh]);
+        var hiddenFirst = scenario.AddVote('2', billType: "s", billActionRecordIds: [hidden, visibleOther]);
+        var noBill = scenario.AddVote('4', billType: null);
+        PublishedRecordReference[] references = [.. new[] { visibleLow, visibleHigh, hidden, visibleOther }.Select(id => new PublishedRecordReference(PublishedRecordKind.Action, id)),
+            .. new[] { linked, hiddenFirst, noBill }.Select(id => new PublishedRecordReference(PublishedRecordKind.Vote, id))];
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", references));
+        await ViewsSeed.AddVotesAsync(connectionString, new SeededVote('1', "2026-03-03") { BillNumber = 7 }, new SeededVote('2', "2026-03-02") { BillType = "s", BillNumber = 7 },
+            new SeededVote('4', "2026-03-01") { BillType = null, BillNumber = null });
+        await BillsSeed.AddBillsAsync(connectionString, new SeededBill('b', "2026-01-01") { BillNumber = 7 }, new SeededBill('d', "2026-01-01") { BillNumber = 7 },
+            new SeededBill('3', "2026-01-01") { BillType = "s", Sponsorships = [] }, new SeededBill('e', "2026-01-01") { BillType = "s" });
+
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
+        var published = scenario.Publications.LastCommit!;
+        var commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications,
+            new PublicationCommit(1, null, $"000001-{Guid.NewGuid():N}", published.Records, []) { Withdrawals = [], Names = ReleaseNameFixtures.None, AddedEntries = published.AddedEntries, VoteBills = published.VoteBills });
+        await publications.CommitAsync("auth0|owner", commit, "key", new string('1', 64), default);
+
+        Assert.Equal(["1 b", "2 none", "4 none"], await PublicAsync(VoteBillLinks));
+        Assert.Equal(["1 b", "2 e", "4 none"], await QueryAsync(OldBillLinkSql, connectionString));
+        Assert.Equal((await QueryAsync(OldBillLinkSql, connectionString)).Where(row => !row.StartsWith("2 ", StringComparison.Ordinal)),
+            (await PublicAsync(VoteBillLinks)).Where(row => !row.StartsWith("2 ", StringComparison.Ordinal)));
+        Assert.Equal(["3"], await QueryAsync($"SELECT left(bill_record_id, 1) FROM release_vote_bills WHERE vote_record_id = '{hiddenFirst}'", connectionString));
     }
 
     [Fact]

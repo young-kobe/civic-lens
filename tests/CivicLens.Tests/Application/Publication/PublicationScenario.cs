@@ -968,6 +968,19 @@ internal sealed class FakePublicationStore : IPublicationStore
 
     public Dictionary<int, List<PublishedBillStatus>> BackfilledBillStatuses { get; } = [];
 
+    public Dictionary<int, List<ReleaseVoteBill>> StoredVoteBills { get; } = [];
+
+    public Task<int> AddVoteBillsAsync(int releaseNumber, IReadOnlyCollection<ReleaseVoteBill> voteBills, CancellationToken cancellationToken)
+    {
+        if (!StoredVoteBills.TryGetValue(releaseNumber, out var stored)) StoredVoteBills[releaseNumber] = stored = [];
+        var missing = voteBills.Where(voteBill => stored.All(link => link.VoteRecordId != voteBill.VoteRecordId)).ToArray();
+        stored.AddRange(missing);
+        return Task.FromResult(missing.Length);
+    }
+
+    public Task<IReadOnlyList<ReleaseVoteBill>> ReadVoteBillsAsync(int releaseNumber, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ReleaseVoteBill>>(StoredVoteBills.TryGetValue(releaseNumber, out var stored) ? [.. stored] : []);
+
     public Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses, CancellationToken cancellationToken)
     {
         BackfilledBillStatuses[releaseNumber] = [.. statuses];

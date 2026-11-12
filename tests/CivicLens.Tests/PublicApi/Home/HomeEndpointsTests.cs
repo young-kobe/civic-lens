@@ -19,6 +19,14 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
 {
     private static readonly DateTimeOffset Published = new(2026, 6, 2, 0, 0, 0, TimeSpan.Zero);
 
+    // The commit pins the lowest-ID action of the bill of each vote. A hidden bill stays pinned, and the view then shows no link.
+    private static async Task LinkVotesToTheirLowestBillAsync(string database, SeededVote[] votes, SeededBill[] bills)
+    {
+        var links = votes.Select(vote => (Vote: vote.Id, Bill: bills.Where(bill => bill.RecordKind == "action" && (bill.Congress, bill.BillType, bill.BillNumber) == (vote.Congress, vote.BillType, vote.BillNumber))
+            .OrderBy(bill => bill.RecordId, StringComparer.Ordinal).FirstOrDefault()?.Id)).Where(link => link.Bill is not null).Select(link => (link.Vote, link.Bill!.Value)).ToArray();
+        if (links.Length > 0) await ViewsSeed.LinkVoteBillsAsync(database, 1, links);
+    }
+
     private async Task<ApiHost> StartAsync(SeededVote[] votes, SeededBill[]? bills = null, SeededBrief[]? briefs = null, SeededExecutiveAction[]? executiveActions = null)
     {
         var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
@@ -27,6 +35,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
             await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, Published);
             await ViewsSeed.AddVotesAsync(host.OperationalDatabase, votes);
             await BillsSeed.AddBillsAsync(host.OperationalDatabase, bills ?? []);
+            await LinkVotesToTheirLowestBillAsync(host.OperationalDatabase, votes, bills ?? []);
             await HomeSeed.AddBriefsAsync(host.OperationalDatabase, briefs ?? []);
             await HomeSeed.AddExecutiveActionsAsync(host.OperationalDatabase, executiveActions ?? []);
             return host;
@@ -577,6 +586,23 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(expected, served);
         Assert.Equal(new string?[] { "Line c.", null }, served);
         Assert.Equal(JsonValueKind.Null, answer.GetProperty("featuredVote").GetProperty("billLine").ValueKind);
+    }
+
+    [Fact]
+    public async Task TheBillLineFollowsTheStoredBillOfTheVoteSoAHiddenStoredBillGivesNullAndNeverTheLineOfAnotherBill()
+    {
+        var votes = new[] { House('1', "2026-05-01", 1) };
+        var bills = new[]
+        {
+            new SeededBill('a', "2026-03-01") { BillNumber = 1, BillLine = "Hidden line.", Sponsorships = [] },
+            new SeededBill('b', "2026-03-01") { BillNumber = 1, BillLine = "Visible line." }
+        };
+        await using var host = await StartAsync(votes, bills);
+
+        var featured = (await GetAsync(host)).GetProperty("featuredVote");
+
+        Assert.Equal(JsonValueKind.Null, featured.GetProperty("billLine").ValueKind);
+        Assert.Equal(JsonValueKind.Null, featured.GetProperty("billLineSource").ValueKind);
     }
 
     [Fact]

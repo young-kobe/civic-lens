@@ -65,6 +65,7 @@ public sealed partial class VoteEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartWithVotesAsync(E);
         await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('a', "2026-01-01") { BillNumber = 1 });
+        await ViewsSeed.LinkVoteBillsAsync(host.OperationalDatabase, 1, ('e', 'a'));
 
         using var page = await GetAsync(host, "/v1/votes");
 
