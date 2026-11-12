@@ -67,6 +67,7 @@ internal static class ActionRevisionRows
         row.CosponsorCount = revision.CosponsorCount();
         row.Issues = [.. IssueIds(revision).Select((issueId, position) => IssueRow(revision, issueId, position))];
         row.TextCitations = [.. revision.TextCitations.IsDefault ? [] : revision.TextCitations.Select((citation, position) => TextCitationRow(revision, citation, position))];
+        row.KeyTerms = [.. revision.KeyTermList.Select((term, position) => KeyTermRow(revision, term, position))];
         row.Sponsorships = [.. revision.Sponsorships.Select((sponsorship, position) => SponsorshipRow(revision, sponsorship, position))];
     }
 
@@ -107,7 +108,9 @@ internal static class ActionRevisionRows
             .AsNoTracking().ToListAsync(cancellationToken)).ToLookup(citation => (citation.RecordId, citation.RevisionNumber, citation.SponsorshipPosition));
         var textCitations = (await db.Set<ActionRevisionTextCitationRow>().FromSqlRaw(ReviewQueries.RevisionChildren("action_revision_text_citations"), recordIds, numbers)
             .AsNoTracking().ToListAsync(cancellationToken)).ToLookup(citation => (citation.RecordId, citation.RevisionNumber));
-        return new(rows, issues, sponsorships, citations, textCitations);
+        var keyTerms = (await db.Set<ActionRevisionKeyTermRow>().FromSqlRaw(ReviewQueries.RevisionChildren("action_revision_key_terms"), recordIds, numbers)
+            .AsNoTracking().ToListAsync(cancellationToken)).ToLookup(term => (term.RecordId, term.RevisionNumber));
+        return new(rows, issues, sponsorships, citations, textCitations, keyTerms);
     }
 
     /// <summary>The failure of a reader that meets an action revision row with null columns. Only the backfill fixes such a row.</summary>
@@ -208,6 +211,19 @@ internal static class ActionRevisionRows
         CitationStart = citation.Span.Start,
         CitationLength = citation.Span.Length,
         Sentence = citation.Sentence
+    };
+
+    private static ActionRevisionKeyTermRow KeyTermRow(ActionDraftRevision revision, ActionKeyTerm term, int position) => new()
+    {
+        RecordId = revision.RecordId,
+        RevisionNumber = revision.RevisionNumber,
+        Position = (short)position,
+        Term = term.Term,
+        CitationExtractionId = term.Span.ExtractionId,
+        CitationStart = term.Span.Start,
+        CitationLength = term.Span.Length,
+        Definition = term.Definition,
+        Cut = term.Cut
     };
 
     private static ActionRevisionSponsorshipCitationRow CitationRow(ActionDraftRevision revision, short sponsorshipPosition, SourceSpan citation, int position) => new()

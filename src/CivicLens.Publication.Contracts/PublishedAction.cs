@@ -82,14 +82,14 @@ public sealed record PublishedAction
 
     public IEnumerable<PublishedCitation> Citations() => Sponsorships.SelectMany(item => item.Citations)
         .Concat(PolicyAreaCitation is { } area ? [area] : []).Concat(SummaryCitation is { } summary ? [summary] : [])
-        .Concat(BillCitation is { } bill ? [bill] : []).Concat(BillText?.Sentences.Select(item => item.Citation) ?? []);
+        .Concat(BillCitation is { } bill ? [bill] : []).Concat(BillText?.Citations() ?? []);
 
     private void ValidateBillText()
     {
         if (BillText is null) return;
         if (SummaryCitation is not null) throw new InvalidDataException("A published action cites the CRS summary or the bill text, never both.");
         BillText.Validate();
-        foreach (var sentence in BillText.Sentences) ValidateCitation(sentence.Citation);
+        foreach (var citation in BillText.Citations()) ValidateCitation(citation);
     }
 
     private void ValidateSponsorship(PublishedSponsorship? sponsorship)

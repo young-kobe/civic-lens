@@ -5,7 +5,7 @@ using CivicLens.Tests.PublicApi.Votes;
 namespace CivicLens.Tests.PublicApi.Bills;
 
 /// <summary>The bill text version that a text summary cites, and the characters of it that the model read.</summary>
-internal sealed record SeededBillText(int CharsRead, int CharsTotal);
+internal sealed record SeededBillText(int CharsRead, int CharsTotal, (string Term, string Definition, bool Cut)[]? KeyTerms = null);
 
 internal sealed record SeededSponsorship(string Person, string Role, string SponsoredOn, string? WithdrawnOn = null, bool IsOriginal = true);
 
@@ -50,6 +50,7 @@ internal static class BillsSeed
               VALUES ({bill.Congress}, '{bill.BillType}', {bill.BillNumber}, '{package}', 'Introduced in House', '2025-01-03',
                       'https://www.congress.gov/{bill.Congress}/bills/{bill.BillType}{bill.BillNumber}/{package}.htm', 'x', {bill.Text.CharsTotal}, {bill.Text.CharsRead});
             UPDATE action_revisions SET text_package_id = '{package}', why_it_matters = 'It pays landlords.' WHERE record_id = '{bill.RecordId}';
+            {string.Join("\n", (bill.Text.KeyTerms ?? []).Select((item, position) => $"INSERT INTO action_revision_key_terms (record_id, revision_number, position, term, citation_extraction_id, citation_start, citation_length, definition, cut) VALUES ('{bill.RecordId}', 1, {position}, '{item.Term}', 'x', {position * 100}, {item.Definition.Length}, '{item.Definition}', {(item.Cut ? "true" : "false")});"))}
             """;
     }
 
