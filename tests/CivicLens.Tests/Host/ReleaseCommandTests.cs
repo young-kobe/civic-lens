@@ -268,7 +268,7 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
-    public async Task BillCountBackfillReturnsAReleaseNumberCursorThatCanBePassedToTheNextCommand()
+    public async Task BillCountBackfillReturnsAFingerprintedCursorThatCanBePassedToTheNextCommand()
     {
         var scenario = new PublicationScenario();
         BillCountReleaseFixture.Add(scenario, 1);
@@ -277,16 +277,51 @@ public sealed class ReleaseCommandTests
         var firstOutput = new StringWriter();
         var firstExit = await RunCountsAsync(["releases", "counts", "backfill", "1"], backfill, null!, PublicationScenario.Owner, firstOutput, TextWriter.Null);
         using var firstJson = JsonDocument.Parse(firstOutput.ToString());
-        var cursor = firstJson.RootElement.GetProperty("nextCursor").GetInt32();
+        var cursor = firstJson.RootElement.GetProperty("nextCursor").GetString()!;
 
         var secondOutput = new StringWriter();
         var secondExit = await RunCountsAsync(["releases", "counts", "backfill", "1", cursor.ToString()], backfill, null!, PublicationScenario.Owner,
             secondOutput, TextWriter.Null);
         using var secondJson = JsonDocument.Parse(secondOutput.ToString());
 
-        Assert.Equal((0, 0, 1), (firstExit, secondExit, cursor));
+        Assert.Equal((0, 0), (firstExit, secondExit));
         Assert.Equal(JsonValueKind.Null, secondJson.RootElement.GetProperty("nextCursor").ValueKind);
         Assert.Equal(new[] { 1, 2 }, scenario.Publications.CommittedBillCounts.Select(item => item.ReleaseNumber));
+    }
+
+    [Fact]
+    public async Task LegacyNumericBackfillCursorRestartsFromTheBeginning()
+    {
+        var scenario = new PublicationScenario();
+        BillCountReleaseFixture.Add(scenario, 1);
+        BillCountReleaseFixture.Add(scenario, 2);
+        var backfill = new BackfillReleaseBillCounts(scenario.Publications, scenario.Releases);
+
+        var exit = await RunCountsAsync(["releases", "counts", "backfill", "1", "2"], backfill, null!, PublicationScenario.Owner,
+            TextWriter.Null, TextWriter.Null);
+
+        Assert.Equal(0, exit);
+        Assert.Equal(new[] { 1 }, scenario.Publications.CommittedBillCounts.Select(item => item.ReleaseNumber));
+    }
+
+    [Fact]
+    public async Task BillCountBackfillExitsWithOneWhenItsSelectionCursorIsStale()
+    {
+        var scenario = new PublicationScenario();
+        BillCountReleaseFixture.Add(scenario, 2);
+        BillCountReleaseFixture.Add(scenario, 3);
+        var backfill = new BackfillReleaseBillCounts(scenario.Publications, scenario.Releases);
+        var firstOutput = new StringWriter();
+        await RunCountsAsync(["releases", "counts", "backfill", "1"], backfill, null!, PublicationScenario.Owner, firstOutput, TextWriter.Null);
+        using var firstJson = JsonDocument.Parse(firstOutput.ToString());
+        var cursor = firstJson.RootElement.GetProperty("nextCursor").GetString()!;
+        BillCountReleaseFixture.Add(scenario, 1);
+
+        var exit = await RunCountsAsync(["releases", "counts", "backfill", "5", cursor], backfill, null!, PublicationScenario.Owner,
+            TextWriter.Null, TextWriter.Null);
+
+        Assert.Equal(1, exit);
+        Assert.DoesNotContain(scenario.Publications.CommittedBillCounts, item => item.ReleaseNumber == 1);
     }
 
     [Fact]
@@ -349,7 +384,7 @@ public sealed class ReleaseCommandTests
         var exit = await RunCountsAsync(["releases", "counts", .. arguments.Split(' ')], new(null!, null!), new(null!, null!), PublicationScenario.Owner, TextWriter.Null, error);
 
         Assert.Equal(2, exit);
-        Assert.Contains("releases counts backfill <limit> [release-number], releases counts verify <limit> [cursor]", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("releases counts backfill <limit> [cursor], releases counts verify <limit> [cursor]", error.ToString(), StringComparison.Ordinal);
     }
 
     private static Task<int> RunCountsAsync(string[] args, BackfillReleaseBillCounts backfill, VerifyReleaseBillCounts verify, ReviewActor actor,
@@ -380,13 +415,13 @@ public sealed class ReleaseCommandTests
         var firstOutput = new StringWriter();
         var firstExit = await RunLineUpsAsync(["releases", "lineups", "backfill", "1"], backfill, null!, PublicationScenario.Owner, firstOutput, TextWriter.Null);
         using var firstJson = JsonDocument.Parse(firstOutput.ToString());
-        var cursor = firstJson.RootElement.GetProperty("nextCursor").GetInt32();
+        var cursor = firstJson.RootElement.GetProperty("nextCursor").GetString()!;
         scenario.Publications.PartyLineUpCommitFailures[2] = new BillCountRefusedException("Partial snapshot.");
 
         var secondExit = await RunLineUpsAsync(["releases", "lineups", "backfill", "1", cursor.ToString()], backfill, null!, PublicationScenario.Owner,
             TextWriter.Null, TextWriter.Null);
 
-        Assert.Equal((0, 1, 1), (firstExit, secondExit, cursor));
+        Assert.Equal((0, 1), (firstExit, secondExit));
         Assert.Empty(scenario.Publications.CommittedBillCounts);
     }
 
@@ -447,7 +482,7 @@ public sealed class ReleaseCommandTests
         var exit = await RunLineUpsAsync(["releases", "lineups", .. arguments.Split(' ')], new(null!, null!), new(null!, null!), PublicationScenario.Owner, TextWriter.Null, error);
 
         Assert.Equal(2, exit);
-        Assert.Contains("releases lineups backfill <limit> [release-number], releases lineups verify <limit> [cursor]", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("releases lineups backfill <limit> [cursor], releases lineups verify <limit> [cursor]", error.ToString(), StringComparison.Ordinal);
     }
 
     private static Task<int> RunLineUpsAsync(string[] args, BackfillReleasePartyLineUps backfill, VerifyReleasePartyLineUps verify, ReviewActor actor,

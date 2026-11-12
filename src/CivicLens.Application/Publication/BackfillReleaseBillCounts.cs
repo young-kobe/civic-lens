@@ -9,7 +9,7 @@ namespace CivicLens.Application.Publication;
 /// </summary>
 public sealed class BackfillReleaseBillCounts(IPublicationStore publications, IReleaseDirectory releases)
 {
-    public Task<ReleaseBillCountBackfillResult> ExecuteAsync(ReviewActor actor, int limit, int after, CancellationToken cancellationToken = default)
+    public Task<ReleaseBillCountBackfillResult> ExecuteAsync(ReviewActor actor, int limit, ReleaseBillCountVerificationCursor? after, CancellationToken cancellationToken = default)
     {
         ReviewAuthorization.RequireOwner(actor);
         return RetainedReleaseScan.BackfillAsync(publications, releases, ReleaseSnapshotKind.BillCounts, limit, after,

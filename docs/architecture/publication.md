@@ -422,6 +422,8 @@ Each line gives the rule, what enforces it, and the test that protects it. Cross
 - The role cannot write. It has a 2 second statement limit and a small connection limit. It closes an idle session after 60 seconds. The pool of the API closes its idle connections after 30 seconds, so the role never ends a session that the pool still holds. A deploy leaves it without LOGIN and without a password. Enforced by `PublicApiGrants`. Tests: `PublicApiViewsTests.TheGrantsStepRunTwiceChangesNothingBecauseEveryDbMigrateRunsIt` and `PublicApiViewsTests.TheRoleIsReadOnlyShortLivedAndLimitedAndTheMigrationLeavesItWithoutLoginOrPassword`. The test reads the role state before it sets a login for its own connection. A role that exists keeps its state. So the test shows the state after the migration and the cleanup of earlier tests. It does not show a new create.
 - The base grants of the view owner list only the columns that the views read, and no table grant. Enforced by `PublicApiGrants`. Test: `PublicApiViewsTests.TheOwnerHoldsGrantsOnlyOnColumnsThatAViewReadsBecauseASpareColumnGrantWouldWidenWhatAViewCanShow`.
 
+- Both retained-release snapshot backfills bind their cursors to the selected releases, following the verifier. A changed selection returns a stale cursor and requires a restart. Old numeric backfill cursors restart from the beginning. Exact immutable writes remain idempotent. Enforced by `RetainedReleaseScan` and `ReleaseCommand`. Tests: `BackfillReleaseBillCountsTests` and `ReleaseCommandTests`.
+
 ## Behavior
 
 ### Public reader experience

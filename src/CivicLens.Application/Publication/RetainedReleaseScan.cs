@@ -3,7 +3,7 @@ namespace CivicLens.Application.Publication;
 /// <summary>
 /// Owns the bounded walk over the retained, active, and served releases that the bill count and party line-up owner commands share. It reads a page of
 /// releases, checks the files of each release, and then asks the caller to write or verify one release in its own transaction.
-/// A fingerprint pins the selection of the verifier across pages.
+/// A fingerprint pins the selected releases across pages and is refreshed after file work before a terminal result.
 /// </summary>
 internal static class RetainedReleaseScan
 {
@@ -11,23 +11,26 @@ internal static class RetainedReleaseScan
     private const int MaximumReportedFailures = 50;
 
     public static async Task<ReleaseBillCountBackfillResult> BackfillAsync(IPublicationStore publications, IReleaseDirectory releases,
-        ReleaseSnapshotKind kind, int limit, int after, Func<PublicationReleaseSummary, IReadOnlyList<PublishedRevisionBinding>, Task<ReleaseSnapshotWrite>> commit,
+        ReleaseSnapshotKind kind, int limit, ReleaseBillCountVerificationCursor? after, Func<PublicationReleaseSummary, IReadOnlyList<PublishedRevisionBinding>, Task<ReleaseSnapshotWrite>> commit,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
-        ArgumentOutOfRangeException.ThrowIfNegative(after);
         var examined = 0;
         var added = 0;
         var alreadyPresent = 0;
         var skipped = 0;
         var failures = new List<ReleaseBillCountFailure>();
         var failed = 0;
-        var cursor = after;
-        int? continuation = null;
+        var cursor = after?.ReleaseNumber ?? 0;
+        var selectionFingerprint = after?.SelectionFingerprint;
+        string? continuation = null;
         while (examined < limit)
         {
-            var page = await publications.ReadBillCountReleasePageAsync(cursor, null, Math.Min(BatchSize, limit - examined),
+            var page = await publications.ReadBillCountReleasePageAsync(cursor, selectionFingerprint, Math.Min(BatchSize, limit - examined),
                 releases.GetActiveAsync, cancellationToken);
+            if (page.StaleCursor)
+                return new(examined, added, alreadyPresent, skipped, failed, failures, null, true) { SelectionFingerprint = page.SelectionFingerprint };
+            selectionFingerprint = page.SelectionFingerprint;
             foreach (var release in page.Releases)
             {
                 examined++;
@@ -49,9 +52,16 @@ internal static class RetainedReleaseScan
                 }
             }
             if (!page.HasMore) break;
-            if (examined == limit) continuation = cursor;
+            if (examined == limit) continuation = new ReleaseBillCountVerificationCursor(selectionFingerprint, cursor).Encode();
         }
-        return new(examined, added, alreadyPresent, skipped, failed, failures, continuation);
+        if (continuation is null)
+        {
+            // File reads run outside the short database snapshot, so refresh the selection before declaring the scan terminal.
+            var currentFingerprint = await publications.ReadRetainedReleaseFingerprintAsync(releases.GetActiveAsync, cancellationToken);
+            if (currentFingerprint != selectionFingerprint)
+                return new(examined, added, alreadyPresent, skipped, failed, failures, null, true) { SelectionFingerprint = currentFingerprint };
+        }
+        return new(examined, added, alreadyPresent, skipped, failed, failures, continuation, false) { SelectionFingerprint = selectionFingerprint ?? "" };
     }
 
     public static async Task<ReleaseBillCountVerificationResult> VerifyAsync(IPublicationStore publications, IReleaseDirectory releases,

@@ -14,7 +14,7 @@ public sealed class BackfillReleasePartyLineUpsTests
         BillCountReleaseFixture.Add(scenario, 2);
         scenario.Publications.ExistingPartyLineUps.Add(2);
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, null);
 
         Assert.Equal((2, 1, 1, 0, 0), (result.Examined, result.Added, result.AlreadyPresent, result.Skipped, result.Failed));
         Assert.Equal(new[] { 1, 2 }, scenario.Publications.CommittedPartyLineUps);
@@ -29,7 +29,7 @@ public sealed class BackfillReleasePartyLineUpsTests
         BillCountReleaseFixture.Add(scenario, 2);
         scenario.Publications.NoPartyLineUpRows.Add(2);
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, null);
 
         Assert.Equal((2, 1, 0, 1, 0), (result.Examined, result.Added, result.AlreadyPresent, result.Skipped, result.Failed));
     }
@@ -41,10 +41,10 @@ public sealed class BackfillReleasePartyLineUpsTests
         foreach (var number in new[] { 1, 2, 3 }) BillCountReleaseFixture.Add(scenario, number);
         var backfill = Backfill(scenario);
 
-        var first = await backfill.ExecuteAsync(PublicationScenario.Owner, 2, 0);
-        var second = await backfill.ExecuteAsync(PublicationScenario.Owner, 2, first.NextCursor!.Value);
+        var first = await backfill.ExecuteAsync(PublicationScenario.Owner, 2, null);
+        var second = await backfill.ExecuteAsync(PublicationScenario.Owner, 2, ReleaseBillCountVerificationCursor.Parse(first.NextCursor));
 
-        Assert.Equal((2, 2, 1, null), (first.Examined, first.NextCursor, second.Examined, second.NextCursor));
+        Assert.Equal((2, 2, 1, null), (first.Examined, ReleaseBillCountVerificationCursor.Parse(first.NextCursor)!.ReleaseNumber, second.Examined, second.NextCursor));
         Assert.Equal(new[] { 1, 2, 3 }, scenario.Publications.CommittedPartyLineUps);
     }
 
@@ -57,7 +57,7 @@ public sealed class BackfillReleasePartyLineUpsTests
         BillCountReleaseFixture.Add(scenario, 2);
         scenario.Publications.PartyLineUpCommitFailures[2] = new BillCountRefusedException("Partial line-up.");
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, null);
 
         Assert.Equal((2, 0, 0, 2), (result.Examined, result.Added, result.Skipped, result.Failed));
         Assert.Equal(new[] { (1, "recordMissing"), (2, "lineUpsInvalid") }, result.Failures.Select(failure => (failure.ReleaseNumber, failure.Reason)));
@@ -70,8 +70,8 @@ public sealed class BackfillReleasePartyLineUpsTests
         var scenario = new PublicationScenario();
         var reviewer = new ReviewActor("auth0|reviewer", ReviewRole.Reviewer);
 
-        await Assert.ThrowsAnyAsync<Exception>(() => Backfill(scenario).ExecuteAsync(reviewer, 1, 0));
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 0, 0));
+        await Assert.ThrowsAnyAsync<Exception>(() => Backfill(scenario).ExecuteAsync(reviewer, 1, null));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 0, null));
     }
 
     private static BackfillReleasePartyLineUps Backfill(PublicationScenario scenario) => new(scenario.Publications, scenario.Releases);
