@@ -4,6 +4,7 @@ using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Npgsql;
+using static CivicLens.Tests.PublicApi.Votes.ViewsSeed;
 
 namespace CivicLens.Tests.Infrastructure.PublicApi;
 
@@ -32,8 +33,7 @@ public sealed class PublicApiReleaseBillCountsMigrationTests(PostgresCollection 
 
             await ApplyAsync(database, migration.UpOperations);
             await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
-            var grants = typeof(PublicApiReleaseBillCounts).Assembly.GetType("CivicLens.Infrastructure.Publication.PublicApiGrants")!;
-            await (Task)grants.GetMethod("ApplyAsync")!.Invoke(null, [db, CancellationToken.None])!;
+            await ApplyGrantsAsync(database);
             Assert.Equal("true|true|false|false", await ScalarAsync(database));
         }
         finally { await postgres.DropDatabaseAsync(database); }

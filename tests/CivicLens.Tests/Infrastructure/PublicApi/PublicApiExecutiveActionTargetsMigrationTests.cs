@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Npgsql;
+using static CivicLens.Tests.PublicApi.Votes.ViewsSeed;
 
 namespace CivicLens.Tests.Infrastructure.PublicApi;
 
@@ -97,8 +98,7 @@ public sealed class PublicApiExecutiveActionTargetsMigrationTests(PostgresCollec
         await ApplyAsync(migration.UpOperations);
         await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
         await db.GetService<IMigrator>().MigrateAsync();
-        var grants = typeof(PublicApiExecutiveActionTargets).Assembly.GetType("CivicLens.Infrastructure.Publication.PublicApiGrants")!;
-        await (Task)grants.GetMethod("ApplyAsync")!.Invoke(null, [db, CancellationToken.None])!;
+        await ApplyGrantsAsync(database);
         Assert.Equal("true|true|false", await GrantStateAsync());
         Assert.Equal(["1"], await QueryAsync("SELECT count(*)::text FROM pg_indexes WHERE indexname = 'IX_executive_action_revisions_kind_presidential_number'", publicRole: false));
         Assert.Equal(["5"], await QueryAsPublicAsync("SELECT count(*)::text FROM public_api.executive_action_targets"));

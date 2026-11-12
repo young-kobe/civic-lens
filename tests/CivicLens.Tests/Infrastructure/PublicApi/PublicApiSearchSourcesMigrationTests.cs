@@ -16,6 +16,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
+using static CivicLens.Tests.PublicApi.Votes.ViewsSeed;
 
 namespace CivicLens.Tests.Infrastructure.PublicApi;
 
@@ -24,10 +25,11 @@ namespace CivicLens.Tests.Infrastructure.PublicApi;
 public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection postgres)
 {
     private const string Migration = "20261112050000_PublicApiSearchSources";
-    private static readonly DocumentExtraction[] Extractions = [.. Enumerable.Range(0, 5).Select(Extraction)];
+    private static readonly DocumentExtraction[] Extractions = [.. Enumerable.Range(0, 11).Select(Extraction)];
     private static readonly string ActionId = new('a', 64);
     private static readonly string VoteId = new('b', 64);
     private static readonly string ExecutiveId = new('c', 64);
+    private static readonly string CrsActionId = new('f', 64);
     private static readonly string RetiredActionId = new('d', 64);
     private static readonly string RetiredExecutiveId = new('e', 64);
 
@@ -43,14 +45,18 @@ public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection post
             var action = ActionRevision(ActionId);
             var vote = VoteRevision();
             var executive = ExecutiveRevision(ExecutiveId);
+            var crsAction = CrsSummaryActionRevision(CrsActionId);
             await WriteAsync(database, action, vote, executive);
+            await WriteCrsActionAsync(database, crsAction);
 
             AssertOrderTellsTheRulesApart(action.Citations);
+            Assert.NotEqual(crsAction.Citations.Select(span => span.ExtractionId).Order(StringComparer.Ordinal), crsAction.Citations.Select(span => span.ExtractionId));
             AssertOrderTellsTheRulesApart(vote.Citations);
             AssertOrderTellsTheRulesApart(executive.Citations);
-            Assert.Equal(Expected(ActionId, action.Citations), await QueryAsPublicAsync(database, SourcesSql("action_sources")));
-            Assert.Equal(Expected(VoteId, vote.Citations), await QueryAsPublicAsync(database, SourcesSql("vote_sources")));
-            Assert.Equal(Expected(ExecutiveId, executive.Citations), await QueryAsPublicAsync(database, SourcesSql("executive_action_sources")));
+            Assert.Equal(Expected(ActionId, action.Citations), await QueryAsPublicAsync(database, SourcesSql("action_sources", ActionId)));
+            Assert.Equal(Expected(CrsActionId, crsAction.Citations), await QueryAsPublicAsync(database, SourcesSql("action_sources", CrsActionId)));
+            Assert.Equal(Expected(VoteId, vote.Citations), await QueryAsPublicAsync(database, SourcesSql("vote_sources", VoteId)));
+            Assert.Equal(Expected(ExecutiveId, executive.Citations), await QueryAsPublicAsync(database, SourcesSql("executive_action_sources", ExecutiveId)));
         }
         finally { await postgres.DropDatabaseAsync(database); }
     }
@@ -79,6 +85,31 @@ public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection post
                 var exception = await Assert.ThrowsAsync<PostgresException>(() => QueryAsPublicAsync(database, $"SELECT record_id FROM public.{table}"));
                 Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, exception.SqlState);
             }
+        }
+        finally { await postgres.DropDatabaseAsync(database); }
+    }
+
+    [Fact]
+    public async Task AnExecutiveActionNoticeWithNoNoticeCitationKeepsItsSourceRowWithANullExtractionSoTheReaderRejectsTheRecord()
+    {
+        var database = await postgres.CreateMigratedDatabaseAsync();
+        try
+        {
+            await ViewsSeed.ActivateReleaseAsync(database, 1, DateTimeOffset.UnixEpoch);
+            await ViewsSeed.ActivateReleaseAsync(database, 2, DateTimeOffset.UnixEpoch.AddDays(1));
+            await SeedExtractionsAsync(database);
+            var executive = ExecutiveRevision(ExecutiveId);
+            await WriteAsync(database, ActionRevision(ActionId), VoteRevision(), executive);
+            var uncited = executive.Notices[1].DocumentNumber;
+            await ExecuteAsync(database, $"""
+                UPDATE executive_action_documents SET revision_number = 1, notice_url = NULL, notice_citation_extraction_id = NULL, notice_citation_start = NULL, notice_citation_length = NULL
+                 WHERE document_number = '{uncited}';
+                """);
+
+            var rows = await QueryAsPublicAsync(database, $"SELECT \"position\" || '|' || coalesce(extraction_id, 'null') || '|' || coalesce(url, 'null') FROM public_api.executive_action_sources WHERE record_id = '{ExecutiveId}' ORDER BY \"position\"");
+            Assert.Equal(5, rows.Length);
+            Assert.Equal("4|null|null", rows[^1]);
+            Assert.DoesNotContain(rows[..^1], row => row.Contains("null", StringComparison.Ordinal));
         }
         finally { await postgres.DropDatabaseAsync(database); }
     }
@@ -131,7 +162,7 @@ public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection post
                 "SELECT count(*)::text FROM public_api.vote_sources UNION ALL SELECT count(*)::text FROM public_api.record_links"));
 
             await db.GetService<IMigrator>().MigrateAsync();
-            await ApplyGrantsAsync(db);
+            await ApplyGrantsAsync(database);
             Assert.Equal(upgraded, await ColumnsAsync(database));
             Assert.Equal("21", await AddedGrantCountAsync(database));
         }
@@ -152,8 +183,8 @@ public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection post
         [.. PublishedRecordRules.Sources(citations, Extractions.ToDictionary(extraction => extraction.ExtractionId, StringComparer.Ordinal))
             .Select((source, position) => string.Join('|', recordId, position, source.ExtractionId, source.Url, source.ObservedAtUtc.UtcTicks, source.Text))];
 
-    private static string SourcesSql(string view) =>
-        $"SELECT record_id || '|' || \"position\" || '|' || extraction_id || '|' || url || '|' || observed_at_utc_ticks || '|' || text FROM public_api.{view} ORDER BY \"position\"";
+    private static string SourcesSql(string view, string recordId) =>
+        $"SELECT record_id || '|' || \"position\" || '|' || extraction_id || '|' || url || '|' || observed_at_utc_ticks || '|' || text FROM public_api.{view} WHERE record_id = '{recordId}' ORDER BY \"position\"";
 
     private static DocumentExtraction Extraction(int index) => new(new CapturedAttemptResult(index.ToString("x32", CultureInfo.InvariantCulture), "search-test",
         $"https://requested.example/{index}", $"https://final.example/{index}", DateTimeOffset.UnixEpoch.AddMinutes(index + 1),
@@ -170,7 +201,9 @@ public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection post
 
     private static SourceSpan Cite(int index) => new(Extractions[index].ExtractionId, 0, 6);
 
-    // Sponsorship 0 cites 2 then 3, sponsorship 1 cites 1 then 2. A swap of the two sponsorship keys gives 2, 1, 3.
+    // Each group of the rank array holds extractions that no earlier group cites, so a swap of two groups, or of two rows inside one group, changes the order.
+    // Sponsorship 0 cites 2 then 3, sponsorship 1 cites 1 then 2, the policy area cites 4, the bill cites 6, and the text cites 0, 8, and 7.
+    // A swap of the two sponsorship keys gives 2, 1, 3.
     private static ActionDraftRevision ActionRevision(string recordId) => ActionRevisionFixtures.TextModel() with
     {
         RecordId = recordId,
@@ -181,21 +214,34 @@ public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection post
         PolicyArea = "Housing",
         PolicyAreaId = "housing",
         PolicyAreaCitation = Cite(4),
-        BillCitation = Cite(1),
-        TextCitations = [new(ActionTextPart.Summary, Cite(0), "First sentence."), new(ActionTextPart.Summary, Cite(4), "Second sentence."),
-            new(ActionTextPart.WhyItMatters, Cite(3), "Third sentence.")]
+        BillCitation = Cite(6),
+        TextCitations = [new(ActionTextPart.Summary, Cite(0), "First sentence."), new(ActionTextPart.Summary, Cite(8), "Second sentence."),
+            new(ActionTextPart.WhyItMatters, Cite(7), "Third sentence.")]
+    };
+
+    // An action cites the CRS summary or the bill text, never both, so this revision tests the summary group. It cites 9, then 5, 10, and 6.
+    private static ActionDraftRevision CrsSummaryActionRevision(string recordId) => ActionRevisionFixtures.Model() with
+    {
+        RecordId = recordId,
+        Sponsorships = [ActionRevisionFixtures.Sponsorship() with { Citations = [Cite(9)] }],
+        SummaryVersion = "Introduced",
+        SummaryCitation = Cite(5),
+        PolicyArea = "Housing",
+        PolicyAreaId = "housing",
+        PolicyAreaCitation = Cite(10),
+        BillCitation = Cite(6)
     };
 
     private static VoteDraftRevision VoteRevision() => new(VoteId, 1, "auth0|editor", DateTimeOffset.UnixEpoch, "Vote headline", "Vote summary",
         ReviewTextOrigin.Person, null, "congress-house-votes", VoteSource.CongressGov, Chamber.House, 119, 1, 100, null, null, new string('f', 64),
-        DateTimeOffset.UnixEpoch, [new("Question: On Passage", Cite(1)), new("Result: Passed", Cite(3))], new DateOnly(2026, 1, 2), Cite(3),
+        DateTimeOffset.UnixEpoch, [new("Question: On Passage", Cite(1)), new("Result: Passed", Cite(6))], new DateOnly(2026, 1, 2), Cite(3),
         VoteKind.Passage, Cite(0), [new("m1", "M000001", "Yea", Cite(4)), new("m2", "M000002", "Nay", Cite(1)), new("m3", "M000003", "Yea", Cite(2))],
         [], [], new string('e', 64));
 
     private static ExecutiveActionRevision ExecutiveRevision(string recordId) => new(recordId, 1, ReviewAuthor.CodeSubject, DateTimeOffset.UnixEpoch,
         "fr", $"2026-{recordId[..5]}", ExecutiveActionKind.ExecutiveOrder, "14000", "Title", new DateOnly(2026, 1, 20), new DateOnly(2026, 1, 23), "91 FR 1",
-        "Jane Roe", "president", "https://fr.example/1", [new("Title", "Title", Cite(4)), new("Signed", "January 20, 2026", Cite(2))],
-        [new($"2026-{recordId[..4]}9", new DateOnly(2026, 2, 1), "https://fr.example/9", Cite(1)), new($"2026-{recordId[..4]}8", new DateOnly(2026, 2, 2), "https://fr.example/8", Cite(4))])
+        "Jane Roe", "president", "https://fr.example/1", [new("Title", "Title", Cite(4)), new("Signed", "January 20, 2026", Cite(2)), new("Published", "January 23, 2026", Cite(4))],
+        [new($"2026-{recordId[..4]}9", new DateOnly(2026, 2, 1), "https://fr.example/9", Cite(1)), new($"2026-{recordId[..4]}8", new DateOnly(2026, 2, 2), "https://fr.example/8", Cite(5))])
     {
         DispositionNotes = new(ExecutiveActionFacts.DispositionNotes, "Revokes: EO 1", Cite(0))
     };
@@ -218,6 +264,12 @@ public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection post
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES
               ('action', '{action.RecordId}', 2, 1, NULL), ('vote', '{vote.RecordId}', 1, 1, NULL), ('executiveAction', '{executive.RecordId}', 2, 1, NULL);
             """);
+    }
+
+    private static async Task WriteCrsActionAsync(string database, ActionDraftRevision action)
+    {
+        await ActionRevisionSeeder.AddAsync(database, action);
+        await ExecuteAsync(database, $"INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('action', '{action.RecordId}', 2, 1, NULL);");
     }
 
     private static async Task WriteRetiredAsync(string database)
@@ -273,41 +325,4 @@ public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection post
         WHERE has_column_privilege('civic_lens_public_owner', added.table_name, added.column_name, 'SELECT')
         """))[0];
 
-    private static async Task ApplyGrantsAsync(CollectionAttemptDbContext db)
-    {
-        var grants = typeof(PublicApiSearchSources).Assembly.GetType("CivicLens.Infrastructure.Publication.PublicApiGrants")!;
-        await (Task)grants.GetMethod("ApplyAsync")!.Invoke(null, [db, CancellationToken.None])!;
-    }
-
-    private static async Task ExecuteAsync(string database, string sql)
-    {
-        await using var connection = new NpgsqlConnection(database);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
-    }
-
-    private static async Task<string[]> QueryAsPublicAsync(string database, string sql)
-    {
-        await using var connection = new NpgsqlConnection(database);
-        await connection.OpenAsync();
-        await using (var role = new NpgsqlCommand("SET ROLE civic_lens_public", connection)) await role.ExecuteNonQueryAsync();
-        return await ReadAsync(connection, sql);
-    }
-
-    private static async Task<string[]> QueryAsync(string database, string sql)
-    {
-        await using var connection = new NpgsqlConnection(database);
-        await connection.OpenAsync();
-        return await ReadAsync(connection, sql);
-    }
-
-    private static async Task<string[]> ReadAsync(NpgsqlConnection connection, string sql)
-    {
-        await using var command = new NpgsqlCommand(sql, connection);
-        await using var reader = await command.ExecuteReaderAsync();
-        var rows = new List<string>();
-        while (await reader.ReadAsync()) rows.Add(reader.GetString(0));
-        return [.. rows];
-    }
 }

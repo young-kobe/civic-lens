@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using CivicLens.Infrastructure.Collection;
 using CivicLens.Tests.Fixtures;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Votes;
@@ -149,5 +151,39 @@ internal static class ViewsSeed
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         await command.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>Runs the query as the public role and returns the first column of each row as text.</summary>
+    internal static async Task<string[]> QueryAsPublicAsync(string database, string sql)
+    {
+        await using var connection = new NpgsqlConnection(database);
+        await connection.OpenAsync();
+        await using (var role = new NpgsqlCommand("SET ROLE civic_lens_public", connection)) await role.ExecuteNonQueryAsync();
+        return await ReadAsync(connection, sql);
+    }
+
+    /// <summary>Runs the query as the connection owner and returns the first column of each row as text.</summary>
+    internal static async Task<string[]> QueryAsync(string database, string sql)
+    {
+        await using var connection = new NpgsqlConnection(database);
+        await connection.OpenAsync();
+        return await ReadAsync(connection, sql);
+    }
+
+    /// <summary>Applies the public API grants after a test has rolled a migration forward again.</summary>
+    internal static async Task ApplyGrantsAsync(string database)
+    {
+        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
+        var grants = typeof(CollectionAttemptDbContext).Assembly.GetType("CivicLens.Infrastructure.Publication.PublicApiGrants")!;
+        await (Task)grants.GetMethod("ApplyAsync")!.Invoke(null, [db, CancellationToken.None])!;
+    }
+
+    private static async Task<string[]> ReadAsync(NpgsqlConnection connection, string sql)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        var rows = new List<string>();
+        while (await reader.ReadAsync()) rows.Add(reader.GetString(0));
+        return [.. rows];
     }
 }

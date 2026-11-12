@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
+using static CivicLens.Tests.PublicApi.Votes.ViewsSeed;
 
 namespace CivicLens.Tests.Infrastructure.PublicApi;
 
@@ -66,6 +67,35 @@ public sealed class PublicApiSearchEntriesMigrationTests(PostgresCollection post
     }
 
     [Fact]
+    public async Task EachEntryViewCarriesTheBillTitleDocumentTypeLinkColumnsAndMatchedOfficialThatEqualTheManifestEntryOfTheActiveRelease()
+    {
+        var database = await postgres.CreateMigratedDatabaseAsync();
+        try
+        {
+            string executiveId = new('c', 64), relationshipId = new('d', 64), statementId = new('e', 64);
+            var statement = PublishedEntryFixtures.DocumentChange(statementId, 1, "A statement", FirstPublished) with { Kind = PublishedRecordKind.Statement };
+            PublishedRecordEntry[] entries = [statement, PublishedEntryFixtures.Action(ActionId, FirstPublished), PublishedEntryFixtures.ExecutiveAction(executiveId, FirstPublished),
+                PublishedEntryFixtures.Relationship(relationshipId, statementId, ActionId, FirstPublished), PublishedEntryFixtures.Vote(new string('f', 64), FirstPublished)];
+            await PublishedEntryFixtures.SeedEntriesAsync(database, entries, allowMissingRevisionParents: true);
+            await ViewsSeed.ActivateReleaseAsync(database, 1, DateTimeOffset.UnixEpoch);
+            await ExecuteAsync(database, string.Join('\n', entries.Select(entry =>
+                $"INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('{PublishedRecordReference.NameOf(entry.Kind)}', '{entry.RecordId}', 1, 1, NULL);")));
+
+            string[] expected = [.. entries.OrderBy(entry => entry.RecordId, StringComparer.Ordinal).Select(entry => string.Join('|', entry.RecordId, entry.BillTitle, entry.DocumentType?.ToString(),
+                entry.LinkType?.ToString(), entry.StatementRecordId is null ? null : "statement", entry.StatementRecordId, entry.TargetKind is { } target ? PublishedRecordReference.NameOf(target) : null,
+                entry.TargetRecordId, string.Join(',', entry.Officials.Select(official => official.Id + ":" + (official.Id == entry.MatchedOfficialId).ToString().ToLowerInvariant()))))];
+            Assert.Equal(expected, await QueryAsPublicAsync(database, """
+                SELECT concat_ws('|', e.record_id, coalesce(e.bill_title, ''), coalesce(e.document_type, ''), coalesce(e.link_type, ''), coalesce(e.statement_kind, ''),
+                       coalesce(e.statement_record_id, ''), coalesce(e.target_kind, ''), coalesce(e.target_record_id, ''),
+                       (SELECT coalesce(string_agg(o.official_id || ':' || o.is_matched::text, ',' ORDER BY o."position"), '') FROM public_api.record_officials o
+                         WHERE o.kind = e.kind AND o.record_id = e.record_id AND o.revision_number = e.revision_number))
+                  FROM public_api.record_entries e ORDER BY e.record_id
+                """));
+        }
+        finally { await postgres.DropDatabaseAsync(database); }
+    }
+
+    [Fact]
     public async Task DowngradeDropsTheEntryViewsAndRevokesOnlyTheGrantsThatNoOlderViewReads()
     {
         var database = await postgres.CreateMigratedDatabaseAsync();
@@ -87,8 +117,8 @@ public sealed class PublicApiSearchEntriesMigrationTests(PostgresCollection post
                 """));
 
             await db.GetService<IMigrator>().MigrateAsync();
-            await ApplyGrantsAsync(db);
-            Assert.Equal("13", await AddedGrantCountAsync(database));
+            await ApplyGrantsAsync(database);
+            Assert.Equal("15", await AddedGrantCountAsync(database));
             await SeedAsync(database);
             Assert.Equal(Expected(NewAction), await EntryAsync(database));
         }
@@ -132,7 +162,8 @@ public sealed class PublicApiSearchEntriesMigrationTests(PostgresCollection post
 
     private static async Task<string> AddedGrantCountAsync(string database) => (await QueryAsync(database, """
         SELECT count(*)::text FROM (VALUES
-            ('published_entries', 'headline'), ('published_entries', 'source_host'), ('published_entry_officials', 'position'),
+            ('published_entries', 'headline'), ('published_entries', 'source_host'), ('published_entries', 'bill_title'),
+            ('published_entry_officials', 'position'), ('published_entry_officials', 'is_matched'),
             ('published_entry_issues', 'kind'), ('published_entry_issues', 'record_id'), ('published_entry_issues', 'revision_number'),
             ('published_entry_issues', 'position'), ('published_entry_issues', 'issue_id'),
             ('published_entry_policy_areas', 'kind'), ('published_entry_policy_areas', 'record_id'), ('published_entry_policy_areas', 'revision_number'),
@@ -141,41 +172,4 @@ public sealed class PublicApiSearchEntriesMigrationTests(PostgresCollection post
         WHERE has_column_privilege('civic_lens_public_owner', added.table_name, added.column_name, 'SELECT')
         """))[0];
 
-    private static async Task ApplyGrantsAsync(CollectionAttemptDbContext db)
-    {
-        var grants = typeof(PublicApiSearchEntries).Assembly.GetType("CivicLens.Infrastructure.Publication.PublicApiGrants")!;
-        await (Task)grants.GetMethod("ApplyAsync")!.Invoke(null, [db, CancellationToken.None])!;
-    }
-
-    private static async Task ExecuteAsync(string database, string sql)
-    {
-        await using var connection = new NpgsqlConnection(database);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
-    }
-
-    private static async Task<string[]> QueryAsPublicAsync(string database, string sql)
-    {
-        await using var connection = new NpgsqlConnection(database);
-        await connection.OpenAsync();
-        await using (var role = new NpgsqlCommand("SET ROLE civic_lens_public", connection)) await role.ExecuteNonQueryAsync();
-        return await ReadAsync(connection, sql);
-    }
-
-    private static async Task<string[]> QueryAsync(string database, string sql)
-    {
-        await using var connection = new NpgsqlConnection(database);
-        await connection.OpenAsync();
-        return await ReadAsync(connection, sql);
-    }
-
-    private static async Task<string[]> ReadAsync(NpgsqlConnection connection, string sql)
-    {
-        await using var command = new NpgsqlCommand(sql, connection);
-        await using var reader = await command.ExecuteReaderAsync();
-        var rows = new List<string>();
-        while (await reader.ReadAsync()) rows.Add(reader.GetString(0));
-        return [.. rows];
-    }
 }

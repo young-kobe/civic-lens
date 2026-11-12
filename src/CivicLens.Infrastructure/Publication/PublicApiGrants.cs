@@ -41,10 +41,10 @@ internal static class PublicApiGrants
             ON vote_revision_party_tallies TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, revision_number, event_date, link_type, statement_kind, statement_record_id, target_kind, target_record_id, bill_line, document_type, approved_by)
             ON published_entries TO civic_lens_public_owner;
-        GRANT SELECT (headline, source_host) ON published_entries TO civic_lens_public_owner;
+        GRANT SELECT (headline, source_host, bill_title) ON published_entries TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, reason, statement_quote_extraction_id, statement_quote_start, statement_quote_length)
             ON relationship_revisions TO civic_lens_public_owner;
-        GRANT SELECT (kind, record_id, revision_number, "position", official_id) ON published_entry_officials TO civic_lens_public_owner;
+        GRANT SELECT (kind, record_id, revision_number, "position", official_id, is_matched) ON published_entry_officials TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, revision_number, "position", issue_id) ON published_entry_issues TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, revision_number, "position", policy_area_id) ON published_entry_policy_areas TO civic_lens_public_owner;
         GRANT SELECT (list_id, "position", person_id, vote_cast, party, citation_extraction_id, citation_start, citation_length)
