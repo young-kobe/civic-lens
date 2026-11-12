@@ -43,8 +43,24 @@ public sealed class HomePageReader(HomeStore home, VotePageReader votes, BoardsP
     /// </summary>
     public async Task<HomePageData> WithDetailAsync(HomePageData page, CancellationToken cancellationToken)
     {
-        var detail = page.FeaturedVote is { } featured && await votes.ReadAsync(featured.RecordId, cancellationToken) is { } vote && vote.Release == page.Release ? vote : null;
+        var detail = page.FeaturedVote is { } featured ? await ReadFeaturedVoteAsync(featured.RecordId, page.Release, cancellationToken) : null;
         var panels = await boards.ReadAsync(cancellationToken) is { } board && board.Release == page.Release ? board.Boards : [];
         return page with { FeaturedVoteDetail = detail, Boards = panels };
+    }
+
+    /// <summary>
+    /// The vote page data of the featured vote. A vote whose members lack official names cannot draw a map, and the vote page would refuse it too,
+    /// so Home keeps its own answer and omits the map and party bars instead of failing.
+    /// </summary>
+    private async Task<VotePageData?> ReadFeaturedVoteAsync(string recordId, int release, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await votes.ReadAsync(recordId, cancellationToken) is { } vote && vote.Release == release ? vote : null;
+        }
+        catch (InvalidDataException)
+        {
+            return null;
+        }
     }
 }
