@@ -408,7 +408,7 @@ public sealed class ReleaseCommandTests
     public async Task TallyVerifyPrintsJsonAndItsCursorContinuesTheScanAndABadCursorExitsWithTwo()
     {
         var scenario = new PublicationScenario();
-        scenario.Publications.TallyEvidence.AddRange([new("a", 1, 0, [], null), new("b", 1, 0, [], null)]);
+        scenario.Publications.TallyEvidence.AddRange([new("a", 1, 0, [], new KeptReleaseRange(1, 1)), new("b", 1, 0, [], new KeptReleaseRange(1, 1))]);
         var verify = new VerifyVotePartyTallies(scenario.Publications, scenario.Releases);
         var firstOutput = new StringWriter();
         await RunTalliesAsync(["releases", "tallies", "verify", "1"], verify, firstOutput, TextWriter.Null);

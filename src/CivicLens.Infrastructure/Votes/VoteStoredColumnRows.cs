@@ -33,6 +33,7 @@ internal static class VoteStoredColumnRows
     /// <summary>The release range of a vote revision over all its record state rows <c>s</c>, grouped by revision. The gaps and the tally verifier read it.</summary>
     internal const string ReleaseRange = """
         min(s.first_release) AS "FirstRelease", CASE WHEN bool_or(s.last_release IS NULL) THEN NULL ELSE max(s.last_release) END AS "LastRelease"
+
         """;
 
     // A revision counts as published when any record state row names it.

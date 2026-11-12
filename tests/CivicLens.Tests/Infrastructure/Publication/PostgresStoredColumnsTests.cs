@@ -503,7 +503,13 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
     {
         var published = await PublishVoteAsync([]);
         await SeedAsync(published, 1, throughRevision: 3);
-        await ExecuteAsync("UPDATE vote_revisions SET party_tally_count = 0");
+        // Each revision sits in its own closed release range, and no kept folder holds a file, so each zero marker stays unavailable.
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            UPDATE vote_revisions SET party_tally_count = 0;
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
+            VALUES ('vote', '{published.Vote.RecordId}', 1, 1, 1), ('vote', '{published.Vote.RecordId}', 2, 2, 2), ('vote', '{published.Vote.RecordId}', 3, 3, 3);
+            """);
         var verify = new VerifyVotePartyTallies(publications, published.Scenario.Releases);
 
         var first = await verify.ExecuteAsync(PublicationScenario.Owner, 1, null);

@@ -28,7 +28,7 @@ internal static class KeptVoteFiles
             vote.Validate();
             return vote.RecordId == recordId && vote.RevisionNumber == revisionNumber ? vote : null;
         }
-        catch (Exception exception) when (exception is FileNotFoundException or InvalidDataException or JsonException)
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException or InvalidDataException or JsonException)
         {
             return null;
         }

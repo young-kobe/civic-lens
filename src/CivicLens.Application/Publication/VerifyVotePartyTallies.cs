@@ -8,7 +8,8 @@ namespace CivicLens.Application.Publication;
 /// Proves that the stored party tally groups of each vote revision equal the party tallies of its kept vote file, the same immutable file that
 /// <see cref="BackfillStoredColumns"/> converts and that publication wrote from the full roll. A member list holds tracked members only, so it never proves a group.
 /// Stored rows are read in read-only transactions, and the command never writes. A null marker stays unresolved and a zero marker stays unavailable.
-/// A positive marker whose file no kept folder holds stays unproven, counted apart for an open and a closed release range. The cursor resumes after its last key. A fresh scan is needed to include revisions added before that key.
+/// A marker on a revision that no record state names is a failure. A file that no kept folder holds is an open miss for an open release range, which the active folder must
+/// hold. For a closed range, a positive marker counts as a closed miss and a zero marker stays unavailable. The cursor resumes after its last key. A fresh scan is needed to include revisions added before that key.
 /// </summary>
 public sealed class VerifyVotePartyTallies(IPublicationStore publications, IReleaseDirectory releases)
 {
@@ -62,10 +63,14 @@ public sealed class VerifyVotePartyTallies(IPublicationStore publications, IRele
         else if (marker != evidence.StoredGroups.Count)
             Fail(VotePartyTallyFailure.MarkerWithoutRows, $"The expected group count is {marker} and {evidence.StoredGroups.Count} rows are stored.");
 
-        var file = evidence.Releases is { } range
-            ? await KeptVoteFiles.ReadAsync(releases, newestFirst, evidence.RecordId, evidence.RevisionNumber, range, cancellationToken)
-            : null;
-        if (file is null) return (failures, marker == 0 ? Outcome.Unavailable : evidence.Releases?.IsOpen == true ? Outcome.OpenWithoutKeptFile : Outcome.ClosedWithoutKeptFile);
+        // Both marker writers act only on a revision with record states, so a marker without one is a bad row, not a pruned file.
+        if (evidence.Releases is not { } range)
+        {
+            Fail(VotePartyTallyFailure.MarkerWithoutState, "The revision has a marker but no record state names it.");
+            return (failures, Outcome.Unavailable);
+        }
+        var file = await KeptVoteFiles.ReadAsync(releases, newestFirst, evidence.RecordId, evidence.RevisionNumber, range, cancellationToken);
+        if (file is null) return (failures, range.IsOpen ? Outcome.OpenWithoutKeptFile : marker == 0 ? Outcome.Unavailable : Outcome.ClosedWithoutKeptFile);
         var expected = VoteStoredColumns.From(file).PartyTallies is { IsDefault: false } tallies ? tallies.ToArray() : [];
         if (expected.Length != marker)
             Fail(VotePartyTallyFailure.MarkerDiffersFromFile, $"The expected group count is {marker} and the kept vote file holds {expected.Length} groups.");

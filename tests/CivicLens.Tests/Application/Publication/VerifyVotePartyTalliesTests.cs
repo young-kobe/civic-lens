@@ -87,9 +87,9 @@ public sealed class VerifyVotePartyTalliesTests
     }
 
     [Fact]
-    public async Task AZeroMarkerWithNoKeptFileIsUnavailable()
+    public async Task AZeroMarkerOnAClosedRangeWithNoKeptFileIsUnavailable()
     {
-        var result = await RunAsync(vote => [Evidence(vote, 0, []) with { Releases = null }]);
+        var result = await RunAsync(vote => [Evidence(vote, 0, [], releases: new(2, 3))]);
 
         Assert.Equal((1, 0, 1, 0, 0, 0), (result.Examined, result.Verified, result.Unavailable, result.Unresolved, result.OpenWithoutKeptFile + result.ClosedWithoutKeptFile, result.Failed));
     }
@@ -105,7 +105,7 @@ public sealed class VerifyVotePartyTalliesTests
     [Fact]
     public async Task RowsOnAZeroMarkerRevisionAreReportedOneByOne()
     {
-        var result = await RunAsync(vote => [Evidence(vote, 0, vote.PartyTallies) with { Releases = null }]);
+        var result = await RunAsync(vote => [Evidence(vote, 0, vote.PartyTallies, releases: new(2, 3))]);
 
         Assert.Equal(2, result.Failures.Count);
         Assert.All(result.Failures, failure => Assert.Equal(VotePartyTallyFailure.ExtraGroup, failure.Reason));
@@ -113,13 +113,30 @@ public sealed class VerifyVotePartyTalliesTests
     }
 
     [Fact]
+    public async Task AMarkerOnARevisionThatNoRecordStateNamesFailsBecauseNoWriterSetsOne()
+    {
+        var positive = await RunAsync(vote => [Evidence(vote, 2, vote.PartyTallies) with { Releases = null }]);
+        var zero = await RunAsync(vote => [Evidence(vote, 0, []) with { Releases = null }]);
+
+        Assert.Equal(VotePartyTallyFailure.MarkerWithoutState, Assert.Single(positive.Failures).Reason);
+        Assert.Equal(VotePartyTallyFailure.MarkerWithoutState, Assert.Single(zero.Failures).Reason);
+        Assert.Equal((1, 1), (positive.Failed, zero.Failed));
+    }
+
+    [Fact]
+    public async Task AZeroMarkerOnAnOpenRangeWhoseFileTheActiveFolderLacksIsAnOpenMiss()
+    {
+        var result = await RunAsync(vote => [Evidence(vote, 0, [], releases: new(2, null))]);
+
+        Assert.Equal((0, 1, 0), (result.Unavailable, result.OpenWithoutKeptFile, result.Failed));
+    }
+
+    [Fact]
     public async Task APositiveMarkerWhoseFileNoKeptFolderHoldsStaysUnprovenAndCountsApartForAnOpenAndAClosedRange()
     {
-        var noState = await RunAsync(vote => [Evidence(vote, 2, vote.PartyTallies) with { Releases = null }]);
         var openOutside = await RunAsync(vote => [Evidence(vote, 2, vote.PartyTallies, releases: new(2, null))]);
         var closedOutside = await RunAsync(vote => [Evidence(vote, 2, vote.PartyTallies, releases: new(2, 3))]);
 
-        Assert.Equal((0, 0, 1, 0), (noState.Verified, noState.OpenWithoutKeptFile, noState.ClosedWithoutKeptFile, noState.Failed));
         Assert.Equal((0, 1, 0, 0), (openOutside.Verified, openOutside.OpenWithoutKeptFile, openOutside.ClosedWithoutKeptFile, openOutside.Failed));
         Assert.Equal((0, 0, 1, 0), (closedOutside.Verified, closedOutside.OpenWithoutKeptFile, closedOutside.ClosedWithoutKeptFile, closedOutside.Failed));
     }

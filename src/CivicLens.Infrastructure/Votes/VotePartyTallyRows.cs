@@ -28,7 +28,7 @@ internal static class VotePartyTallyRows
         """;
 
     private const string ReadRevisionPage = """
-        SELECT r.record_id AS "RecordId", r.revision_number AS "RevisionNumber", r.party_tally_count AS "PartyTallyCount", count(s.record_id) AS "StateCount",
+        SELECT r.record_id AS "RecordId", r.revision_number AS "RevisionNumber", r.party_tally_count AS "PartyTallyCount",
         """ + VoteStoredColumnRows.ReleaseRange + """
         FROM vote_revisions r
         LEFT JOIN publication_record_states s ON s.kind = 'vote' AND s.record_id = r.record_id AND s.revision_number = r.revision_number
@@ -127,7 +127,7 @@ internal static class VotePartyTallyRows
             {
                 Party = group.Party, Yea = group.Yea, Nay = group.Nay, Present = group.Present, NotVoting = group.NotVoting, Other = group.Other
             }).OrderBy(group => group.Party, StringComparer.Ordinal)],
-            row.StateCount == 0 ? null : new KeptReleaseRange(row.FirstRelease!.Value, row.LastRelease)))], revisions.Length > limit);
+            row.FirstRelease is { } first ? new KeptReleaseRange(first, row.LastRelease) : null))], revisions.Length > limit);
     }
 
     private static Task<TallyReadRow[]> ReadRowsAsync(CollectionAttemptDbContext db, string[] records, int[] revisions, CancellationToken cancellationToken) =>
@@ -175,7 +175,6 @@ internal static class VotePartyTallyRows
         public short? PartyTallyCount { get; set; }
         public int? FirstRelease { get; set; }
         public int? LastRelease { get; set; }
-        public long StateCount { get; set; }
     }
 
     private sealed class TallyReadRow
