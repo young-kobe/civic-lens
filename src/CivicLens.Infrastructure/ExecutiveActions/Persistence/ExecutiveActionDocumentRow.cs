@@ -13,5 +13,6 @@ internal sealed class ExecutiveActionDocumentRow
     public int? NoticeCitationStart { get; set; }
     public int? NoticeCitationLength { get; set; }
     public DateOnly PublishedOn { get; set; }
+    public string? BodyHtmlUrl { get; set; }
     public string DocumentJobId { get; set; } = string.Empty;
 }

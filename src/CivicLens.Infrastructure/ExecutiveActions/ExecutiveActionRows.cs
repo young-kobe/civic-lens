@@ -46,6 +46,7 @@ internal sealed class ExecutiveActionRows
             DocumentNumber = document.DocumentNumber,
             RecordId = recordId,
             PublishedOn = document.PublishedOn,
+            BodyHtmlUrl = document.BodyHtmlUrl,
             DocumentJobId = documentJobId
         };
         db.Add(row);

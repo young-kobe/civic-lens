@@ -113,15 +113,14 @@
                         <ul class="official-rows" role="list">
                             @foreach (var statement in Data.Statements)
                             {
-                                var statementLabel = statement.Label ?? (statement.TextOrigin == PublishedTextOrigin.Model ? PublishedRecordLabels.StatementModelWording : null);
                                 var voteLabel = statement.VoteLabel ?? (statement.VoteTextOrigin == PublishedTextOrigin.Model ? PublishedRecordLabels.ModelWording : null);
                                 <li>
                                     <span class="official-icon" aria-hidden="true"><Icon Name="IconName.Statements" /></span>
                                     <div>
                                         <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))">@statement.Headline</a>
-                                        @if (statementLabel is not null)
+                                        @if (statement.Label is not null)
                                         {
-                                            <span class="official-source-label" data-origin="@statement.TextOrigin?.ToString().ToLowerInvariant()">@statementLabel</span>
+                                            <span class="official-source-label" data-origin="@statement.TextOrigin?.ToString().ToLowerInvariant()">@statement.Label</span>
                                         }
                                         <p class="official-meta"><span>@(statement.StatementDate is { } said ? "Said on " + Moment.Day(said) : "Date not stated")</span></p>
                                         <p class="official-related"><span>Related vote</span> <a href="@(RootPath + PublicationProtocol.RecordPagePath(statement.VoteRecordId))">@statement.VoteChamber roll call @statement.VoteRollCall, @Moment.Day(statement.VotedOn): @statement.VoteHeadline</a>

@@ -37,6 +37,13 @@ public sealed class BillNumbersTests
     [InlineData("s", PublishedChamber.Senate)]
     [InlineData("sconres", PublishedChamber.Senate)]
     [InlineData("SRES", PublishedChamber.Senate)]
-    public void EachBillTypeStartsInTheChamberOfItsFirstLetter(string type, PublishedChamber expected) =>
+    public void EachBillTypeStartsInTheChamberOfItsTableRow(string type, PublishedChamber expected) =>
         Assert.Equal(expected, BillNumbers.ChamberOf(type));
+
+    [Theory]
+    [InlineData("samdt")]
+    [InlineData("hamdt")]
+    [InlineData("x")]
+    public void ABillTypeOutsideTheTableHasNoChamber(string type) =>
+        Assert.Throws<KeyNotFoundException>(() => BillNumbers.ChamberOf(type));
 }

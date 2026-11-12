@@ -478,8 +478,8 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .bill-step-detail { color: var(--muted); font-size: .875rem; }
 .bill-legend { max-width: 46rem; margin: 0; color: var(--muted); font-size: var(--t-sm); }
 .bill-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s5); }
-.bill-main { display: grid; gap: var(--s4); align-content: start; min-width: 0; }
-.bill-rail { display: grid; gap: var(--s4); align-content: start; min-width: 0; }
+/* One shrinkable track and anywhere wrapping keep a long word or URL in stored text from widening the page. */
+.bill-main, .bill-rail { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); align-content: start; min-width: 0; overflow-wrap: anywhere; }
 .bill-section { padding: 20px 14px; border-radius: 28px; background: var(--surface); }
 .bill-section > h2 { margin: 0 0 var(--s2); font-size: clamp(var(--t-h2), 3vw, 2rem); font-weight: 800; letter-spacing: -.015em; }
 .bill-kv { display: grid; gap: 2px var(--s4); margin: 0; }
@@ -490,6 +490,9 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .bill-members-list { display: grid; gap: var(--s3); margin: 0; padding: 0; list-style: none; }
 .bill-members-list p { margin: 0 0 var(--s2); }
 .bill-card-title { margin: 0; color: var(--muted); font-family: var(--ui); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.bill-card-raised { box-shadow: inset 0 0 0 2px var(--marigold); }
+.bill-members [data-bill-members-body]:empty { display: none; }
+.bill-card-heading { margin: 0; font-family: var(--heading); font-size: 1.25rem; font-weight: 800; letter-spacing: -.015em; }
 @media (min-width: 761px) {
     .bill-section { padding: 32px; }
     .bill-kv { grid-template-columns: 200px minmax(0, 1fr); }

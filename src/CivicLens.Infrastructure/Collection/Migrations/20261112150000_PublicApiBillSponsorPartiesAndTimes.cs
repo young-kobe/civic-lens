@@ -6,17 +6,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations;
 
 /// <summary>
 /// Adds the view <c>public_api.bill_sponsorship_parties</c>, the one SQL owner of the term party on the sponsorship date. A day that no term holds,
-/// a blank term party, and terms of two parties on one day give no party. It also adds three columns to <c>public_api.bills</c>: the time of the
-/// approval of the published revision, the time the bill was first published, and whether the summary is model text drafted from the CRS summary.
-/// The checked time takes the approval with the highest review state version of the revision, as <c>PublishedRecordRules.GetApprovalTime</c> does.
-/// The rollback drops the dependent views <c>bill_actions</c> and <c>votes</c> and restores all three from <c>BillHistoryProjectionVersion</c>
-/// and <c>ReleaseVoteBills</c>.
+/// a blank term party, and terms of two parties on one day give no party. It also adds one column to <c>public_api.bills</c>: whether the summary
+/// is model text drafted from the CRS summary. The bill page reads the checked time from <c>public_api.record_entries</c> and the first publication
+/// time from <c>public_api.record_first_publications</c>, so it never copies the rules that pick them. The rollback drops the dependent views
+/// <c>bill_actions</c>, <c>votes</c>, and <c>action_sources</c> and restores them from <c>BillHistoryProjectionVersion</c>, <c>ReleaseVoteBills</c>,
+/// and <c>PublicApiSearchSources</c>.
 /// </summary>
 public partial class PublicApiBillSponsorPartiesAndTimes : Migration
 {
     private const string UpSql = """
-        GRANT SELECT (record_id, revision_number, kind, review_state_version, created_at_utc_ticks) ON action_review_decisions TO civic_lens_public_owner;
-
         CREATE OR REPLACE VIEW public_api.bills WITH (security_barrier = true) AS
         SELECT a.record_id, a.revision_number, a.release_number,
                r.congress, r.bill_type, r.bill_number, r.bill_title, r.headline, r.summary, r.text_origin,
@@ -30,11 +28,6 @@ public partial class PublicApiBillSponsorPartiesAndTimes : Migration
                t.version_type AS text_version_name, t.version_date AS text_version_date, t.chars_read AS text_chars_read, t.chars_total AS text_chars_total,
                h.public_law, h.observed_at_utc_ticks AS history_observed_at_utc_ticks, h.action_count AS history_action_count,
                r.crs_summary_text, CASE WHEN r.crs_summary_text IS NOT NULL THEN r.summary_version END AS crs_summary_version,
-               (SELECT d.created_at_utc_ticks FROM public.action_review_decisions d
-                 WHERE d.record_id = a.record_id AND d.revision_number = a.revision_number AND d.kind = 'Approve'
-                 ORDER BY d.review_state_version DESC LIMIT 1) AS checked_at_utc_ticks,
-               (SELECT p.first_published_at_utc_ticks FROM public.published_records p
-                 WHERE p.kind = 'action' AND p.record_id = a.record_id) AS first_published_at_utc_ticks,
                r.text_origin = 'Model' AND r.text_package_id IS NULL AND r.summary_version IS NOT NULL AS summary_from_crs
           FROM public_api.active_records a
           JOIN public.action_revisions r ON r.record_id = a.record_id AND r.revision_number = a.revision_number
@@ -64,9 +57,9 @@ public partial class PublicApiBillSponsorPartiesAndTimes : Migration
         ALTER VIEW public_api.bill_sponsorship_parties OWNER TO civic_lens_public_owner;
         """;
 
-    private const string DownSql = """
+    private static readonly string DownSql = """
         DROP VIEW public_api.bill_sponsorship_parties;
-        DROP VIEW public_api.bill_actions, public_api.votes;
+        DROP VIEW public_api.bill_actions, public_api.votes, public_api.action_sources;
         DROP VIEW public_api.bills;
         CREATE VIEW public_api.bills WITH (security_barrier = true) AS
         SELECT a.record_id, a.revision_number, a.release_number,
@@ -127,9 +120,9 @@ public partial class PublicApiBillSponsorPartiesAndTimes : Migration
           JOIN public.vote_member_lists t ON t.list_id = v.member_list_id
          WHERE a.kind = 'vote' AND v.member_list_id IS NOT NULL;
         ALTER VIEW public_api.votes OWNER TO civic_lens_public_owner;
+        """ + PublicApiSearchSources.ActionSources + """
 
-        GRANT SELECT ON public_api.bills, public_api.bill_actions, public_api.votes TO civic_lens_public;
-        REVOKE SELECT (record_id, revision_number, kind, review_state_version, created_at_utc_ticks) ON action_review_decisions FROM civic_lens_public_owner;
+        GRANT SELECT ON public_api.bills, public_api.bill_actions, public_api.votes, public_api.action_sources TO civic_lens_public;
         """;
 
     /// <inheritdoc />

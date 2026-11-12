@@ -4,6 +4,7 @@ using AngleSharp.Html.Parser;
 using CivicLens.PublicWeb.Components.Ui;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
@@ -119,7 +120,7 @@ public sealed class BillDetailPageTests
         Assert.Equal("Tracked House cosponsors by party on the day each one joined", bar.QuerySelector("figcaption")!.TextContent);
         Assert.Equal(["2 Democrats", "1 Republicans", "1 No party listed"], bar.QuerySelectorAll(".party-bar-legend li").Select(item => Regex.Replace(item.TextContent, @"\s+", " ").Trim()));
         Assert.Equal(["solid", "stripes", "open"], bar.QuerySelectorAll(".party-bar-legend rect").Select(rect => rect.GetAttribute("data-fill")));
-        Assert.Null(section.QuerySelector(".bill-party"));
+        Assert.Single(section.QuerySelectorAll(".party-bar"));
         Assert.Contains("Cy Four (2 Oct 2025)", section.QuerySelector("dd:last-of-type")!.TextContent);
     }
 
@@ -141,7 +142,7 @@ public sealed class BillDetailPageTests
         Assert.Contains("roll call 410, 119th Congress, session 2. Vote to pass or agree to. Result: Passed", row.QuerySelector(".shared-vote-meta")!.TextContent);
         Assert.Equal("AI summary. Drafted by an AI model from reviewed records.", row.QuerySelector(".shared-vote-label")!.TextContent);
         Assert.Null(row.QuerySelector(".shared-vote-casts"));
-        Assert.Null(page.QuerySelector(".bill-tally, .bill-badge, .shared-vote-rows > h2"));
+        Assert.Null(page.QuerySelector(".shared-vote-rows > h2"));
     }
 
     [Fact]
@@ -155,7 +156,8 @@ public sealed class BillDetailPageTests
 
         var legend = row.QuerySelectorAll(".party-bar-legend li").Select(item => Regex.Replace(item.TextContent, @"\s+", " ").Trim());
         Assert.Equal(["262 Yes", "159 No", "12 Not voting"], legend);
-        Assert.Equal("Split vote", row.QuerySelector(".badge")!.TextContent);
+        Assert.Single(row.QuerySelectorAll(".party-bar"));
+        Assert.Equal("Split vote", Assert.Single(row.QuerySelectorAll(".badge")).TextContent);
         Assert.Null(row.QuerySelector(".party-bar-mark"));
     }
 
@@ -185,13 +187,34 @@ public sealed class BillDetailPageTests
     [Fact]
     public async Task TheMembersCardHoldsTheApprovedHeadingAndPromptAndTheRecordIdForTheDeviceFill()
     {
-        var card = (await RenderAsync(Bill)).QuerySelector(".bill-members")!;
+        var page = await RenderAsync(Bill);
+        var card = page.QuerySelector(".bill-members")!;
 
-        Assert.Equal("Your members and this bill", card.QuerySelector("h2")!.TextContent);
+        Assert.Equal("Your members and this bill", card.QuerySelector("h2.bill-card-heading")!.TextContent);
+        Assert.Same(card, Assert.Single(page.QuerySelectorAll(".bill-card-raised")));
         Assert.Equal(RecordId, card.GetAttribute("data-record-id"));
         Assert.Equal("Enter your ZIP to see how your members relate to this bill. Find my members", card.QuerySelector("[data-bill-members-prompt]")!.TextContent);
         Assert.Equal(Root + "index.html#zip-results", card.QuerySelector("[data-bill-members-prompt] a")!.GetAttribute("href"));
         Assert.Equal(0, card.QuerySelector("[data-bill-members-body]")!.ChildElementCount);
+    }
+
+    [Fact]
+    public void OnlyTheMembersCardGetsTheAccentRingAndTheHeadingSizeTitle()
+    {
+        var css = WebStyleSheets.Read("public.css");
+
+        Assert.Matches(@"\.bill-card-raised \{ box-shadow: inset 0 0 0 2px var\(--marigold\); \}", css);
+        Assert.Matches(@"\.bill-card-heading \{[^}]*font-family: var\(--heading\);[^}]*font-size: 1\.25rem;", css);
+        Assert.Matches(@"\.bill-card-title \{[^}]*text-transform: uppercase;", css);
+        Assert.Matches(@"\.bill-members \[data-bill-members-body\]:empty \{ display: none; \}", css);
+    }
+
+    [Fact]
+    public void BothBillColumnsShrinkBelowTheLongestWordSoALongTokenNeverWidensThePage()
+    {
+        var css = WebStyleSheets.Read("public.css");
+
+        Assert.Matches(@"\.bill-main, \.bill-rail \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*overflow-wrap: anywhere;", css);
     }
 
     [Fact]
@@ -288,7 +311,9 @@ public sealed class BillDetailPageTests
         const string line = "The text above summarizes the Congressional Research Service summary.";
 
         Assert.Contains(line, (await RenderAsync(Bill with { SummaryFromCrs = true })).QuerySelector(".ai-summary")!.TextContent);
-        Assert.DoesNotContain(line, (await RenderAsync(Bill with { SummaryFromCrs = false })).Body!.TextContent);
+        var other = await RenderAsync(Bill with { SummaryFromCrs = false });
+        Assert.DoesNotContain(line, other.Body!.TextContent);
+        Assert.Null(other.QuerySelector(".ai-summary-check"));
     }
 
     private static async Task<IDocument> RenderAsync(BillPageData data)

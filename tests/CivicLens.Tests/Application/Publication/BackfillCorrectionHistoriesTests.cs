@@ -165,5 +165,5 @@ public sealed class BackfillCorrectionHistoriesTests
         entry.FirstPublishedAtUtc, new PublishedEntryFacts(entry.Headline, entry.SourceHost, entry.EventDate, entry.BillTitle,
             entry.LinkType, entry.StatementRecordId, entry.TargetKind, entry.TargetRecordId, entry.DocumentType,
             [.. entry.Officials.Select(official => official.Id)], entry.MatchedOfficialId, entry.IssueIds, entry.PolicyAreaIds,
-            entry.BillLine, entry.ApprovedBy));
+            entry.BillLine, entry.ApprovedBy, entry.ApprovedAtUtc?.UtcTicks));
 }

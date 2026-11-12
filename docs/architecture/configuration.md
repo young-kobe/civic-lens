@@ -54,7 +54,7 @@ A feed source can set `statementTextInFeed` to `true`. It is off by default. A p
 
 A source can set `officeOf` to the ID of one person. It says that the source is the own office of that person. The person must be in the coverage list of the source. Coverage alone does not show authorship or officeholding, so code can use this field to know that a source is the official's own office. The shipped file sets it on all 1,392 member sources, each with the one member it covers. It does not set it on the two White House feeds, because the feeds also list other people. It does not set it on `api` sources. Snapshots leave out an absent `officeOf`, so a configuration that sets no `officeOf` keeps its revision ID. Enforced by `CollectionConfiguration`. Tests: `ConfigurationTests.OfficeOfIsRefusedForAPersonTheSourceDoesNotCoverBecauseCodeApprovesOnlyAnOfficialsOwnOffice` and `ConfigurationTests.OfficeOfIsOptionalAndASourceWithoutItSavesNoNewField`. `StatementCodeApproval` reads the field; see [statements](statements.md#statement-code-approval).
 
-An `api` source has no coverage list. They are the bill list, the House and Senate vote lists, and the two rosters. They also cover the ZIP districts, the member photos, the bill text, and the Federal Register documents. See [bills](bills.md#source-configuration), [votes](votes.md#source-configuration), and [roster](roster.md#source-configuration).
+An `api` source has no coverage list. They are the bill list, the House and Senate vote lists, and the two rosters. They also cover the ZIP districts, the member photos, the bill text, the Federal Register documents, and the Federal Register text. See [bills](bills.md#source-configuration), [votes](votes.md#source-configuration), and [roster](roster.md#source-configuration).
 
 ### Dates and intervals
 
@@ -156,7 +156,7 @@ The file has a `version` (only 1 is supported) and `icons`, a map from issue ID 
 ## Limits and planned work
 
 - Offices and dated terms are facts, not our choices. The [roster](roster.md) captures them. The configuration keeps the tracked people and their bioguide IDs. `roster propose` lists members to add and people to review.
-- The configuration stays in version-controlled files until automatic source discovery ([R-27](../roadmap.md#accepted-plans)) needs runtime writes. The people tables and their one-time import exist; see [roster](roster.md#officials-in-tables). Sources and coverage then move to tables too, and immutable revisions keep binding jobs as they do now.
+- The configuration stays in version-controlled files until automatic source discovery ([R-27](../roadmap.md#accepted-plans)) needs runtime writes. The people tables, the minting of members, and the owner settings exist; see [roster](roster.md#officials-in-tables). Sources and coverage then move to tables too, and immutable revisions keep binding jobs as they do now.
 - The roster lists current members only. A member who leaves stays covered until a person edits the configuration.
 - Agencies and committees will get an institution owner in the schema, not a synthetic person.
 - The first tracked-issue list in `config/issues.json` is a proposal for the owner to edit before use.

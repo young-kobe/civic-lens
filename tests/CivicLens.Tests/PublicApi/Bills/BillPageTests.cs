@@ -154,17 +154,18 @@ public sealed class BillPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheSourceFoldShowsTheApprovalAndFirstPublicationTimesFromTheBillView()
+    public async Task TheSourceFoldShowsTheStoredApprovalTimeAndTheFirstPublicationTime()
     {
         await using var host = await StartAsync();
         var checkedAt = new DateTimeOffset(2026, 11, 5, 10, 5, 0, TimeSpan.Zero);
         var firstPublished = new DateTimeOffset(2026, 11, 5, 10, 7, 0, TimeSpan.Zero);
+        // A later approval decision proves that the page reads the stored column and does not pick a decision itself.
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
             SET session_replication_role = replica;
+            INSERT INTO published_entries (kind, record_id, revision_number, action_record_id, action_revision_number, headline, bill_title, approved_at_utc_ticks)
+            VALUES ('action', '{BillId}', 1, '{BillId}', 1, 'H', 'T', {checkedAt.UtcTicks});
             INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, kind, actor_subject, created_at_utc_ticks)
-            VALUES ('{new string('1', 32)}', '{BillId}', 1, 1, 'Approve', 'code', {checkedAt.AddHours(-1).UtcTicks}),
-                   ('{new string('2', 32)}', '{BillId}', 1, 2, 'WithdrawApproval', 'person', {checkedAt.AddHours(-1).UtcTicks}),
-                   ('{new string('3', 32)}', '{BillId}', 1, 3, 'Approve', 'code', {checkedAt.UtcTicks});
+            VALUES ('{new string('1', 32)}', '{BillId}', 1, 1, 'Approve', 'code', {checkedAt.AddHours(2).UtcTicks});
             INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('action', '{BillId}', {firstPublished.UtcTicks});
             RESET session_replication_role;
             """);

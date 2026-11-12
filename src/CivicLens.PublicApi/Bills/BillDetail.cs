@@ -1,6 +1,6 @@
 namespace CivicLens.PublicApi.Bills;
 
-/// <summary><c>LatestAction</c> is null when the active release pinned no status for the bill. <c>CheckedAtUtc</c> is the time of the approval of the published revision.
+/// <summary><c>LatestAction</c> is null when the active release pinned no status for the bill. <c>CheckedAtUtc</c> is the stored approval time of the published revision, null until the entries backfill fills it.
 /// <c>SummaryFromCrs</c> is true when the stored summary is model text drafted from the CRS summary, with no bill text.</summary>
 public sealed record BillDetail(int Release, BillRow Bill, string[] IssueIds, BillLatestAction? LatestAction, BillHistory? History,
     string? CrsSummaryText, string? CrsSummaryVersion)

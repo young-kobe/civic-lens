@@ -29,9 +29,8 @@
             <div class="bill-main">
                 @if (!string.IsNullOrWhiteSpace(Data.Summary))
                 {
-                    <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label">
-                        <ChildContent><p>@Data.Summary</p></ChildContent>
-                        <Check>@CrsCheck</Check>
+                    <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label" Check="CrsCheck">
+                        <p>@Data.Summary</p>
                     </AiSummary>
                 }
                 @if (Data.CrsText is not null)
@@ -65,8 +64,8 @@
             </div>
 
             <aside class="bill-rail" aria-label="Key facts">
-                <div class="bill-card bill-members" data-bill-members data-record-id="@Data.RecordId">
-                    <h2 class="bill-card-title">Your members and this bill</h2>
+                <div class="bill-card bill-card-raised bill-members" data-bill-members data-record-id="@Data.RecordId">
+                    <h2 class="bill-card-heading">Your members and this bill</h2>
                     <div data-bill-members-body></div>
                     <p class="small muted" data-bill-members-prompt>Enter your ZIP to see how your members relate to this bill. <a href="@(RootPath + PublicationProtocol.HomePath)#zip-results">Find my members</a></p>
                 </div>

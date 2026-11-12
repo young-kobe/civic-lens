@@ -7,7 +7,8 @@ using NpgsqlTypes;
 
 namespace CivicLens.PublicApi.Bills;
 
-/// <summary>Reads the views <c>public_api.bills</c>, <c>public_api.bill_sponsorships</c>, <c>public_api.bill_issues</c>, <c>public_api.officials</c>, and <c>public_api.release_issues</c>. Every answer takes its release from the query that reads its rows.</summary>
+/// <summary>Reads the views <c>public_api.bills</c>, <c>public_api.bill_sponsorships</c>, <c>public_api.bill_issues</c>, <c>public_api.officials</c>, <c>public_api.release_issues</c>,
+/// <c>public_api.record_entries</c> (the stored approval time), and <c>public_api.record_first_publications</c>. Every answer takes its release from the query that reads its rows.</summary>
 public sealed class BillStore(NpgsqlDataSource views)
 {
     private const string Columns = """
@@ -45,9 +46,11 @@ public sealed class BillStore(NpgsqlDataSource views)
                    ARRAY(SELECT i.issue_id FROM public_api.bill_issues i
                           WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number ORDER BY i."position"),
                    s.latest_action_text, s.latest_action_date, s.read_at_utc_ticks,
-                   b.checked_at_utc_ticks, b.first_published_at_utc_ticks, b.summary_from_crs
+                   e.approved_at_utc_ticks, f.first_published_at_utc_ticks, b.summary_from_crs
               FROM public_api.bills b
               LEFT JOIN public_api.bill_status s ON s.record_id = b.record_id AND s.revision_number = b.revision_number
+              LEFT JOIN public_api.record_entries e ON e.kind = 'action' AND e.record_id = b.record_id AND e.revision_number = b.revision_number
+              LEFT JOIN public_api.record_first_publications f ON f.kind = 'action' AND f.record_id = b.record_id
              WHERE b.record_id = @id
             """);
         command.Parameters.AddWithValue("id", recordId);
