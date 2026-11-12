@@ -105,7 +105,7 @@ public sealed class PostgresReleaseVoteBillsTests(PostgresCollection postgres) :
         var backfill = new BackfillStoredColumns(publications, scenario.Releases, scenario.Votes);
 
         var result = await backfill.ExecuteAsync(PublicationScenario.Owner);
-        var exit = await ReleaseCommand.ExecuteAsync(["releases", "columns", "backfill"], null!, null!, null!, null!, null!, null!, backfill, null!, null!, null!, null!, null!, null!, null!, null!, null!,
+        var exit = await ReleaseCommand.ExecuteAsync(["releases", "columns", "backfill"], null!, null!, null!, null!, null!, null!, backfill, null!, null!, null!, null!, null!, null!, null!, null!,
             PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal((0, 1), (result.VoteBillLinksFilled, result.ReleasesWithUnreadableManifest));
