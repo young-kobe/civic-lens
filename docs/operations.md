@@ -18,6 +18,13 @@ python3 tools/check-docs.py --check
 
 CI runs the tests in 4 parallel jobs, each with its own Postgres container. A new push to a pull request cancels the CI run of its older head, as the image workflow already does. A later push does not cancel a running `main` workflow. A newer pending run can replace an older pending run. `tools/test-shards.py` assigns each test class to one job. It sorts classes by the seconds in `tools/test-shard-weights.json`, heaviest first, and gives each to the lightest shard. A class missing from the table gets the mean weight. To refresh the table, run the full suite with `--logger trx --results-directory /tmp/trx`, then run `python3 tools/test-shards.py --write-weights /tmp/trx/*.trx`. To run one job locally after the Release build, run `python3 tools/test-shards.py --shards 4 --index 0 --runsettings shard.runsettings`. Then run `dotnet test tests/CivicLens.Tests --configuration Release --no-build --settings shard.runsettings`.
 
+The district shapes of the vote map come from a Census file, not from the build. Download `cb_2024_us_cd119_20m.zip` from the URL in the tool, then run the tool on the local copy. The tool needs only Python 3 and never downloads. It stops when the size or the sha256 of the zip differs from the pinned values. `--check` makes the shapes in memory and fails when the committed asset differs. The tool test runs with `python3 -m unittest discover -s tests/tools`.
+
+```sh
+python3 tools/render-district-geometry.py --source /path/to/cb_2024_us_cd119_20m.zip
+python3 tools/render-district-geometry.py --source /path/to/cb_2024_us_cd119_20m.zip --check
+```
+
 Tests never call the paid Claude API. They use a fake model at each drafting port. The live tests, in category `LiveAi`, are skipped unless you set `CIVIC_LENS_LIVE_AI=1` and `ANTHROPIC_API_KEY`. CI does not set them. Each live test sends paid requests, so run them on request only:
 
 ```sh
