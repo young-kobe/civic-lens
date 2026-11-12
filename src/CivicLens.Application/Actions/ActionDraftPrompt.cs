@@ -52,7 +52,7 @@ public static class ActionDraftPrompt
         }, AnalysisPromptText.CompactJson);
 
     internal static string UserPrompt(ActionBillSnapshot snapshot, BillIssueChoice issues,
-        ImmutableArray<string> previousErrors, bool withSummary, ActionDraftBillText? billText)
+        ImmutableArray<string> previousErrors, bool withSummary, ActionDraftBillText? billText, BillDefinitionsSection? definitions = null)
     {
         var bill = snapshot.Bill;
         var document = new
@@ -71,7 +71,7 @@ public static class ActionDraftPrompt
             sponsors = snapshot.Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor)
                 .Select(item => snapshot.OfficialNames[item.PersonId]),
             summary = !withSummary || snapshot.NewestSummary is not { } newest ? null : new { text = newest.Text },
-            billText = billText is null ? null : BillTextSection(billText)
+            billText = billText is null ? null : BillTextSection(billText, definitions)
         };
         var builder = new StringBuilder("Facts:\n").Append(JsonSerializer.Serialize(document, AnalysisPromptText.EvidenceJson));
         return AnalysisPromptText.WithRejectionReasons(builder, previousErrors);
@@ -79,9 +79,9 @@ public static class ActionDraftPrompt
 
     /// <summary>The text is the normalized body. Both counts use that normalized text: the characters read are the length of the text that is
     /// sent, and the total is the stored total less what the normalization removed from the part that is sent. A whole text then reads as whole.</summary>
-    private static object BillTextSection(ActionDraftBillText billText)
+    private static object BillTextSection(ActionDraftBillText billText, BillDefinitionsSection? definitions)
     {
-        var text = BillTextQuotes.Normalize(billText.Body);
+        var text = GpoQuoteMarks.Normalize(billText.Body);
         var removedByNormalizing = billText.Body.Length - text.Length;
         return new
         {
@@ -89,6 +89,7 @@ public static class ActionDraftPrompt
             versionDate = billText.VersionDate is { } date ? Date(date) : null,
             charactersRead = text.Length,
             charactersTotal = billText.CharsTotal - removedByNormalizing,
+            definitionsSection = definitions is null ? null : new { heading = definitions.Heading, endsBefore = definitions.NextHeading },
             text
         };
     }

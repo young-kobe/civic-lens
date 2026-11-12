@@ -241,6 +241,7 @@ public sealed class PublishActionTests
         var files = scenario.Releases.Directories[summary.DirectoryName];
         var record = JsonSerializer.Deserialize<PublishedAction>(files[PublicationProtocol.RecordDataPath(action)], PublicationProtocol.JsonOptions)!;
         var text = record.BillText!;
+        Assert.Null(text.KeyTerms);
         Assert.Equal(["One.", "Two.", "Three."], text.Sentences.Select(item => item.Sentence));
         Assert.Equal([PublishedTextPart.Summary, PublishedTextPart.Summary, PublishedTextPart.WhyItMatters], text.Sentences.Select(item => item.Part));
         Assert.All(text.Sentences, item => Assert.Equal("The program ends", item.Citation.Quote));
@@ -248,6 +249,22 @@ public sealed class PublishActionTests
         var source = Assert.Single(record.Sources, item => item.ExtractionId == text.Sentences[0].Citation.ExtractionId);
         Assert.Contains("The program ends on December 31, 2030.", source.Text, StringComparison.Ordinal);
         Assert.Null(Assert.Single(ReadManifest(scenario, summary.DirectoryName).Records).BillLine);
+    }
+
+    [Fact]
+    public async Task AKeyTermPublishesWithItsExactDefinitionQuoteInTheSameSourceAsTheSentences()
+    {
+        var scenario = new PublicationScenario();
+        var withTerm = scenario.AddAction('c');
+        scenario.DraftActionFromBillText(withTerm, withKeyTerm: true);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", withTerm));
+
+        var files = scenario.Releases.Directories[summary.DirectoryName];
+        var published = JsonSerializer.Deserialize<PublishedAction>(files[PublicationProtocol.RecordDataPath(withTerm)], PublicationProtocol.JsonOptions)!;
+        var term = Assert.Single(published.BillText!.KeyTerms!);
+        Assert.Equal(("program", "The program ends"), (term.Term, term.Citation.Quote));
+        Assert.Equal(published.BillText.Sentences[0].Citation.ExtractionId, term.Citation.ExtractionId);
     }
 
     [Fact]

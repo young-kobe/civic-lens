@@ -32,7 +32,7 @@ public static class AnalysisSchema
         return schema.ToJsonString(AnalysisPromptText.CompactJson);
     }
 
-    public static string BillTextDraft(JsonObject? issueIds = null)
+    public static string BillTextDraft(JsonObject? issueIds = null, bool withKeyTerms = false)
     {
         var properties = new JsonObject { ["headline"] = TextWithConfidence(), ["summary"] = SentencesWithConfidence(), ["whyItMatters"] = SentencesWithConfidence() };
         var required = new JsonArray("headline", "summary", "whyItMatters");
@@ -40,6 +40,11 @@ public static class AnalysisSchema
         {
             properties["issueIds"] = issueIds;
             required.Add("issueIds");
+        }
+        if (withKeyTerms)
+        {
+            properties["keyTerms"] = new JsonObject { ["type"] = "array", ["items"] = QuotedTerm() };
+            required.Add("keyTerms");
         }
         var schema = new JsonObject { ["type"] = "object", ["additionalProperties"] = false, ["required"] = required, ["properties"] = properties };
         return schema.ToJsonString(AnalysisPromptText.CompactJson);
@@ -57,6 +62,14 @@ public static class AnalysisSchema
         };
         return schema.ToJsonString(AnalysisPromptText.CompactJson);
     }
+
+    private static JsonObject QuotedTerm() => new()
+    {
+        ["type"] = "object",
+        ["additionalProperties"] = false,
+        ["required"] = new JsonArray("term", "quote"),
+        ["properties"] = new JsonObject { ["term"] = new JsonObject { ["type"] = "string" }, ["quote"] = new JsonObject { ["type"] = "string" } }
+    };
 
     private static JsonObject QuotedSentence() => new()
     {

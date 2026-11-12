@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace CivicLens.Publication.Contracts;
 
 /// <summary>
@@ -18,6 +20,13 @@ public sealed record PublishedBillText
     public required int CharsTotal { get; init; }
     public required PublishedTextSentence[] Sentences { get; init; }
 
+    /// <summary>The key terms that the model chose, each defined by an exact quote of the definitions section. Absent when the bill has none.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PublishedKeyTerm[]? KeyTerms { get; init; }
+
+    public IEnumerable<PublishedCitation> Citations() =>
+        Sentences.Select(item => item.Citation).Concat(KeyTerms?.Select(item => item.Citation) ?? []);
+
     public IEnumerable<PublishedTextSentence> In(PublishedTextPart part) => Sentences.Where(item => item.Part == part);
 
     public void Validate()
@@ -33,5 +42,16 @@ public sealed record PublishedBillText
         var summaryComesFirst = Sentences.Take(summary).All(item => item.Part == PublishedTextPart.Summary);
         if (summary is < MinimumSummarySentences or > MaximumSummarySentences || why is < 1 or > MaximumWhyItMattersSentences || !summaryComesFirst)
             throw new InvalidDataException("Published bill text gives 2 or 3 summary sentences, then 1 to 3 why it matters sentences.");
+        ValidateKeyTerms();
+    }
+
+    private void ValidateKeyTerms()
+    {
+        if (KeyTerms is null) return;
+        if (KeyTerms.Length is 0 or > PublishedKeyTerm.MaximumTerms || KeyTerms.Any(item => item is null ||
+                string.IsNullOrWhiteSpace(item.Term) || item.Term.Length > PublishedKeyTerm.MaximumTermLength || item.Citation is null))
+            throw new InvalidDataException($"Published key terms are absent or number 1 to {PublishedKeyTerm.MaximumTerms}, each with a term and a citation.");
+        if (KeyTerms.Select(item => item.Term).Distinct(StringComparer.OrdinalIgnoreCase).Count() != KeyTerms.Length)
+            throw new InvalidDataException("A published key term appears once.");
     }
 }
