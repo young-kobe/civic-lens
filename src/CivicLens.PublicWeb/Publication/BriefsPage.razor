@@ -1,0 +1,43 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="null" Title="Weekly briefs" CanonicalPath="@PublicationProtocol.BriefsPagePath(Data.Page)" Page="Data.Page" PageCount="PageCount" Description="@Description" RootPath="@RootPath">
+    <PageHeader Title="Weekly briefs" Lede="@($"Release {Data.Release}, published {Moment.Full(Data.PublishedAtUtc)}.")" />
+    @if (Data.Total == 0)
+    {
+        <Panel Label="Weekly briefs" Padded="true">
+            <EmptyState Title="No weekly briefs yet" Text="Civic Lens has not published a weekly brief. Browse the published records instead.">
+                <Action><Button Href="@(RootPath + PublicationProtocol.AllRecordsPagePath(1))">All records</Button></Action>
+            </EmptyState>
+        </Panel>
+    }
+    else
+    {
+        <Panel Label="Weekly briefs">
+            <ul class="record-rows" role="list">
+                @foreach (var brief in Data.Briefs)
+                {
+                    <PublicRecordRow Icon="PublishedRecordLabels.Icon(PublishedRecordKind.Brief)" Href="@(RootPath + PublicationProtocol.RecordPagePath(brief.RecordId))"
+                                     Headline="@brief.Headline" Label="@brief.Label" Meta="@Meta(brief)" />
+                }
+            </ul>
+            <Pager Label="Pages" Summary="@($"Page {Data.Page} of {PageCount}")" NewerText="Previous" OlderText="Next"
+                   NewerHref="@(Data.Page > 1 ? RootPath + PublicationProtocol.BriefsPagePath(Data.Page - 1) : null)"
+                   OlderHref="@(Data.Page < PageCount ? RootPath + PublicationProtocol.BriefsPagePath(Data.Page + 1) : null)" />
+        </Panel>
+    }
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public BriefsPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+
+    private int PageCount => PublicationProtocol.PageCount(Data.Total);
+
+    private string Description => Data.Total == 0
+        ? "Civic Lens has not published a weekly brief yet."
+        : $"All {Data.Total} weekly briefs of Civic Lens, newest week first. Each brief cites the records behind it.";
+
+    private static string Meta(BriefListItemData brief) => PublishedBriefView.ShortName(brief.WeekStart) +
+        (brief.FirstPublishedAtUtc is { } first ? $" | {PublicColumn.FirstPublished} {Moment.Day(first)}" : string.Empty);
+}

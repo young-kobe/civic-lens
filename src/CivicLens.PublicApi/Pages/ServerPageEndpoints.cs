@@ -44,6 +44,7 @@ public static class ServerPageEndpoints
                     [nameof(ComparePage.RootPath)] = baseUrl.Join(string.Empty),
                     [nameof(ComparePage.BrowserApiUrl)] = home.BrowserApiRoot
                 }, cancellationToken)));
+        routes.MapFixedPages(baseUrl);
         routes.MapGet(Prefix + "/officials", OfficialsPageEndpoint.RespondAsync);
         routes.MapGet(Prefix + "/boards", BoardsPageEndpoint.RespondAsync);
         routes.MapGet(Prefix + "/search", SearchPageEndpoint.RespondAsync);
@@ -132,8 +133,11 @@ public static class ServerPageEndpoints
     private static string RecordRoute(string recordId) => $"{Prefix}/{PublicationProtocol.RecordPagePath(recordId)}";
 
     private static Task<IResult> NotFoundAsync(HttpContext context, ServerPageResponder responder, PublicBaseUrl baseUrl, CancellationToken cancellationToken) =>
+        NotFoundAsync(context, responder, baseUrl.Join(string.Empty), cancellationToken);
+
+    internal static Task<IResult> NotFoundAsync(HttpContext context, ServerPageResponder responder, string rootPath, CancellationToken cancellationToken) =>
         responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,
-            new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken);
+            new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = rootPath }, cancellationToken);
 
     /// <summary>An official with executive actions gets the President layout. Every other official gets the member layout.</summary>
     private static Task<IResult> RespondOfficialAsync(HttpContext context, ServerPageResponder responder, OfficialPageData page, PublicBaseUrl baseUrl,
