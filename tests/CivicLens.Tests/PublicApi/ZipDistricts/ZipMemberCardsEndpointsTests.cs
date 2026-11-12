@@ -290,18 +290,20 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task IssueViewReturnsOnlyTheVotesOfTheCongressOfTheDistrictsThatThePageChecks()
+    public async Task IssueViewKeepsOnlyTheVotesOfTheCongressThatTheIssuePageCountsAndAnIssueWithoutOneIsNotFiltered()
     {
         await using var host = await StartAsync();
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica; INSERT INTO release_issues (release_number, issue_id, name, definition, count_congress, substantive_votes, bills) VALUES (1, 'health', 'Health', 'd', 119, 1, 0), (1, 'tax', 'Tax', 'd', NULL, NULL, NULL);");
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
-            new SeededVote('a', "2026-05-01") { RecordId = 1.ToString("x64"), RollCall = 1, Casts = ["Yea"], PersonIds = ["al2"], Issues = ["health"] },
-            new SeededVote('b', "2024-05-01") { RecordId = 2.ToString("x64"), RollCall = 2, Congress = 118, Casts = ["Nay"], PersonIds = ["al2"], Issues = ["health"] });
+            new SeededVote('a', "2026-05-01") { RecordId = 1.ToString("x64"), Congress = 119, Casts = ["Yea"], PersonIds = ["al2"], Issues = ["health", "tax"] },
+            new SeededVote('b', "2024-05-02") { RecordId = 2.ToString("x64"), Congress = 118, Casts = ["Nay"], PersonIds = ["al2"], Issues = ["health", "tax"] });
 
-        var document = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?view=issue&issue=health");
+        var scoped = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?view=issue&issue=health");
+        var unscoped = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?view=issue&issue=tax");
 
-        Assert.Equal("119", document.QuerySelector("[data-zip-member-fragment]")!.GetAttribute("data-congress"));
-        Assert.Single(document.QuerySelectorAll(".shared-vote-row"));
-        Assert.Equal("Yes (Yea)", document.QuerySelector(".shared-vote-cast-value")!.TextContent.Trim());
+        Assert.Single(scoped.QuerySelectorAll(".shared-vote-row"));
+        Assert.Contains("119th Congress", scoped.QuerySelector(".shared-vote-meta")!.TextContent);
+        Assert.Equal(2, unscoped.QuerySelectorAll(".shared-vote-row").Length);
     }
 
     [Fact]

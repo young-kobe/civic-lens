@@ -11,7 +11,7 @@ public sealed record MemberVoteRequest
     /// <summary>One tracked issue ID. The answer then holds only votes that the release tags with the issue.</summary>
     public string? Issue { get; init; }
 
-    /// <summary>One Congress. The shared answer then holds only votes of that Congress, as the issue page counts and lists do (<c>release_issues.count_congress</c>).</summary>
+    /// <summary>When set, the shared selection takes only the votes of this Congress. The issue page sets it to the Congress of its own counts. The query string never sets it.</summary>
     public int? Congress { get; init; }
 
     /// <summary>Reads the query string. An invalid value throws <see cref="ArgumentException"/> that names the parameter.</summary>

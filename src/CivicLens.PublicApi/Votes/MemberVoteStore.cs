@@ -46,11 +46,13 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
          ORDER BY {VoteStore.Order.Replace("v.", "selected.", StringComparison.Ordinal)}
         """;
 
+    private static string CongressFilter(MemberVoteRequest request) => request.Congress is null ? "" : " AND v.congress = @congress";
+
     private static string SharedSelection(MemberVoteRequest request) => request.Issue is null ? $"""
         SELECT v.record_id, v.voted_on, v.chamber, v.congress, v.session_number, v.roll_call_number, v.kind, v.bill_type, v.bill_number,
                v.headline, v.label, v.result
           FROM public_api.votes v
-         WHERE v.chamber = chambers.chamber AND v.kind = ANY(@kinds){CongressFilter(request)}
+         WHERE v.chamber = chambers.chamber AND v.kind = ANY(@kinds)
          ORDER BY {VoteStore.Order} LIMIT @take
         """ : $"""
         SELECT v.record_id, v.voted_on, v.chamber, v.congress, v.session_number, v.roll_call_number, v.kind, v.bill_type, v.bill_number,
@@ -65,8 +67,6 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
                OFFSET 0) v
          ORDER BY {VoteStore.Order} LIMIT @take
         """;
-
-    private static string CongressFilter(MemberVoteRequest request) => request.Congress is null ? "" : " AND v.congress = @congress";
 
     private const string SharedCastsSql = $"""
         SELECT o.official_id, v.record_id, v.vote_cast, v.side, v.party_majority_cast
