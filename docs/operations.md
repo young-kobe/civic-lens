@@ -18,6 +18,13 @@ python3 tools/check-docs.py --check
 
 CI runs the tests in 4 parallel jobs, each with its own Postgres container. A new push to a pull request cancels the CI run of its older head, as the image workflow already does. A later push does not cancel a running `main` workflow. A newer pending run can replace an older pending run. `tools/test-shards.py` assigns each test class to one job. It sorts classes by the seconds in `tools/test-shard-weights.json`, heaviest first, and gives each to the lightest shard. A class missing from the table gets the mean weight. To refresh the table, run the full suite with `--logger trx --results-directory /tmp/trx`, then run `python3 tools/test-shards.py --write-weights /tmp/trx/*.trx`. To run one job locally after the Release build, run `python3 tools/test-shards.py --shards 4 --index 0 --runsettings shard.runsettings`. Then run `dotnet test tests/CivicLens.Tests --configuration Release --no-build --settings shard.runsettings`.
 
+The district shapes of the vote map come from a Census file, not from the build. Download `cb_2024_us_cd119_20m.zip` from the URL in the tool, then run the tool on the local copy. The tool needs only Python 3 and never downloads. It stops when the size or the sha256 of the zip differs from the pinned values. `--check` makes the shapes in memory and fails when the committed asset differs. The tool test runs with `python3 -m unittest discover -s tests/tools`.
+
+```sh
+python3 tools/render-district-geometry.py --source /path/to/cb_2024_us_cd119_20m.zip
+python3 tools/render-district-geometry.py --source /path/to/cb_2024_us_cd119_20m.zip --check
+```
+
 Tests never call the paid Claude API. They use a fake model at each drafting port. The live tests, in category `LiveAi`, are skipped unless you set `CIVIC_LENS_LIVE_AI=1` and `ANTHROPIC_API_KEY`. CI does not set them. Each live test sends paid requests, so run them on request only:
 
 ```sh
@@ -1128,15 +1135,15 @@ The verifier writes nothing. It repeats the file checks of the backfill. Then it
 
 ### Stored columns backfill
 
-The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, and the Congress of each entry. This command fills them for rows that earlier releases wrote.
+The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, the Congress of each entry, and the bill link of each vote of a release. This command fills them for rows that earlier releases wrote.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases columns backfill
 ```
 
-Run this command after `db migrate` and before the worker starts. The worker publishes by itself. A redraft that shares an old member list with no pinned parties would pin the parties of today's roster. `deploy/scripts/update.sh` runs the command for you, in this order: it stops the worker and the review host, runs `db migrate`, runs `releases columns backfill`, and then starts the services. If the command exits with 1, `update.sh` stops and the worker stays stopped. Find the revisions that `openVoteRevisionsWithoutKeptFile` counts, restore their kept folders, and run `update.sh` again with the same SHA. To deploy by hand, follow the same order.
+Run this command after `db migrate` and before the worker starts. The worker publishes by itself. A redraft that shares an old member list with no pinned parties would pin the parties of today's roster. `deploy/scripts/update.sh` runs the command for you, in this order: it stops the worker and the review host, runs `db migrate`, runs `releases columns backfill`, and then starts the services. If the command exits with 1, `update.sh` stops and the worker stays stopped. Two counts stop the deploy. `openVoteRevisionsWithoutKeptFile` counts the revisions that no kept folder holds. Restore their kept folders. `releasesWithUnreadableManifest` counts the kept releases whose manifest is invalid. Restore the folder of each such release from a backup, so that its manifest is whole. Then run `update.sh` again with the same SHA. To deploy by hand, follow the same order.
 
-The command reads the kept release folders. A vote revision takes its values from its own vote file, which the newest kept folder in its release range holds. The parties are the ones that the release gave on the vote day. A member list that holds no parties takes them from the published revision with the lowest revision number that has a kept file. A later revision of the list never changes them. An official takes the photo path of the officials file of its release. An entry takes the Congress of its event date, or of its first publication day when it has no event date. The command writes in batches of 25 rows. It fills only what is not filled yet, so you can run it again at any time. A written vote revision has `columns_written` set.
+The command reads the kept release folders. A vote revision takes its values from its own vote file, which the newest kept folder in its release range holds. The parties are the ones that the release gave on the vote day. A member list that holds no parties takes them from the published revision with the lowest revision number that has a kept file. A later revision of the list never changes them. An official takes the photo path of the officials file of its release. An entry takes the Congress of its event date, or of its first publication day when it has no event date. A release takes the bill links of its votes from its manifest: each vote links the first action record on its bill that the release holds, as `ReleaseBillLines` gives it at publication. A release with no manifest folder is skipped. A release whose manifest cannot be read is skipped and counted in `releasesWithUnreadableManifest`. Until this command runs after the migration `ReleaseVoteBills`, the API shows a null bill link for the votes of the releases that the migration found. The command writes in batches of 25 rows. It fills only what is not filled yet, so you can run it again at any time. A written vote revision has `columns_written` set.
 
 The command prints JSON with these keys:
 
@@ -1144,9 +1151,20 @@ The command prints JSON with these keys:
 - `voteRevisionsWritten`: the revisions that this run wrote. A revision that the release gives null columns counts as written.
 - `openVoteRevisionsWithoutKeptFile`: the revisions in the active release range that no kept folder holds. They stay unwritten.
 - `closedVoteRevisionsWithoutKeptFile`: the revisions that left the active release and that no kept folder holds. They stay unwritten. This is expected after a prune.
-- `officialPhotoPathsFilled` and `entryCongressesFilled`: the rows that this run filled.
+- `officialPhotoPathsFilled`, `entryCongressesFilled`, and `voteBillLinksFilled`: the rows that this run filled.
+- `releasesWithUnreadableManifest`: the kept releases whose manifest is invalid. The run wrote no vote link for them. Restore the folder, then run the command again.
 
-The exit code is 0 only when `openVoteRevisionsWithoutKeptFile` is 0. Otherwise it is 1.
+The exit code is 0 only when `openVoteRevisionsWithoutKeptFile` and `releasesWithUnreadableManifest` are both 0. Otherwise it is 1.
+
+### Vote bills verify
+
+This command proves that the stored vote links of each kept release equal the links that the rule gives over its manifest. Run it after `releases columns backfill` exits with 0. It writes nothing and takes no lock, so it is safe beside the worker. It needs the same three variables as the backfill.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases vote-bills verify
+```
+
+For each kept release, the command reads the manifest once and computes the expected links with `ReleaseBillLines`. This is the old rule of the grouped view applied to the entries of the release: the lowest-ID action entry of the bill. Then it compares them with the rows of `release_vote_bills` in both directions. The JSON result holds `passed`, `failed`, `retired`, `failedByReason`, and `failedReleases`. A failed release holds its number, its folder, a reason, and the first vote as `vote:<id>`. Reasons are `manifestInvalid`, `linkMissing`, `linkExtra`, and `linkChanged`. A release with no manifest folder is counted in `retired` and does not fail. The exit code is 0 only when `failed` is 0. Otherwise it is 1.
 
 ### Vote party tally verification
 

@@ -481,6 +481,7 @@ try
             : IssueIconConfiguration.None;
         var artifactRoot = ReleaseCommand.IsPublish(args) ? PublicationComposition.RequireArtifactRoot() : string.Empty;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, codeVersion);
+        var voteReviews = PostgresVoteReviewStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
         using var loggers = CreateLoggers();
         var (publish, _) = PublicationComposition.Create(connectionString, codeVersion, publications, releases, publishConfiguration, issueConfiguration,
@@ -491,11 +492,11 @@ try
             new ListBlockedPublished(publications, releases, blocked),
             new ActivatePublicationRelease(publications, releases, blocked, loggers.CreateLogger<ActivatePublicationRelease>()),
             new BackfillFirstPublished(publications, releases), new BackfillPublishedEntries(publications, releases),
-            new BackfillStoredColumns(publications, releases), new VerifyPublishedEntries(publications, releases),
+            new BackfillStoredColumns(publications, releases, voteReviews), new VerifyPublishedEntries(publications, releases),
             new VerifyCorrectionHistories(publications, releases), new BackfillCorrectionHistories(publications, releases),
             new BackfillReleaseBillCounts(publications, releases), new VerifyReleaseBillCounts(publications, releases),
             new BackfillReleasePartyLineUps(publications, releases), new VerifyReleasePartyLineUps(publications, releases),
-            new VerifyVotePartyTallies(publications, releases), owner,
+            new VerifyReleaseVoteBills(publications, releases, voteReviews), new VerifyVotePartyTallies(publications, releases), owner,
             Console.Out, Console.Error, cancellation.Token);
     }
 
