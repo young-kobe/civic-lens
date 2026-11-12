@@ -14,7 +14,7 @@ public sealed class BackfillReleaseBillCountsTests
         BillCountReleaseFixture.Add(scenario, 2);
         scenario.Publications.ExistingBillCounts.Add(2);
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, null);
 
         Assert.Equal((2, 1, 1, 0), (result.Examined, result.Added, result.AlreadyPresent, result.Failed));
         var committed = scenario.Publications.CommittedBillCounts.First(item => item.ReleaseNumber == 1);
@@ -28,14 +28,44 @@ public sealed class BackfillReleaseBillCountsTests
         foreach (var number in new[] { 1, 2, 3 }) BillCountReleaseFixture.Add(scenario, number);
         var backfill = Backfill(scenario);
 
-        var first = await backfill.ExecuteAsync(PublicationScenario.Owner, 2, 0);
-        var second = await backfill.ExecuteAsync(PublicationScenario.Owner, 2, first.NextCursor!.Value);
+        var first = await backfill.ExecuteAsync(PublicationScenario.Owner, 2, null);
+        var second = await backfill.ExecuteAsync(PublicationScenario.Owner, 2, ReleaseBillCountVerificationCursor.Parse(first.NextCursor));
 
         Assert.Equal(2, first.Examined);
-        Assert.Equal(2, first.NextCursor);
+        Assert.Equal(2, ReleaseBillCountVerificationCursor.Parse(first.NextCursor)!.ReleaseNumber);
         Assert.Equal(1, second.Examined);
         Assert.Null(second.NextCursor);
         Assert.Equal(new[] { 1, 2, 3 }, scenario.Publications.CommittedBillCounts.Select(item => item.ReleaseNumber));
+    }
+
+    [Fact]
+    public async Task ChangedRetainedSelectionMakesAResumedBackfillCursorStale()
+    {
+        var scenario = new PublicationScenario();
+        BillCountReleaseFixture.Add(scenario, 2);
+        BillCountReleaseFixture.Add(scenario, 3);
+        var backfill = Backfill(scenario);
+        var first = await backfill.ExecuteAsync(PublicationScenario.Owner, 1, null);
+        BillCountReleaseFixture.Add(scenario, 1);
+
+        var resumed = await backfill.ExecuteAsync(PublicationScenario.Owner, 5, ReleaseBillCountVerificationCursor.Parse(first.NextCursor));
+
+        Assert.True(resumed.StaleCursor);
+        Assert.Null(resumed.NextCursor);
+        Assert.DoesNotContain(scenario.Publications.CommittedBillCounts, item => item.ReleaseNumber == 1);
+    }
+
+    [Fact]
+    public async Task SelectionThatChangesDuringFileReadsIsStaleBeforeTheBackfillIsDeclaredComplete()
+    {
+        var scenario = new PublicationScenario();
+        BillCountReleaseFixture.Add(scenario, 1);
+        scenario.Publications.BeforeReadingVerificationFingerprint = () => BillCountReleaseFixture.Add(scenario, 2);
+
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 5, null);
+
+        Assert.True(result.StaleCursor);
+        Assert.Null(result.NextCursor);
     }
 
     [Fact]
@@ -44,7 +74,7 @@ public sealed class BackfillReleaseBillCountsTests
         var scenario = new PublicationScenario();
         BillCountReleaseFixture.Add(scenario, 1);
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, null);
 
         Assert.Null(result.NextCursor);
     }
@@ -57,7 +87,7 @@ public sealed class BackfillReleaseBillCountsTests
         scenario.Releases.Directories[broken.Release.DirectoryName].Remove(PublicationProtocol.OfficialsPath);
         BillCountReleaseFixture.Add(scenario, 2);
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, null);
 
         Assert.Equal((2, 1, 1), (result.Examined, result.Added, result.Failed));
         Assert.Equal((1, "recordMissing"), (Assert.Single(result.Failures).ReleaseNumber, result.Failures[0].Reason));
@@ -71,7 +101,7 @@ public sealed class BackfillReleaseBillCountsTests
         for (var number = 1; number <= 51; number++) scenario.Publications.BillCountReleases.Add(
             new(number, $"{number:D6}-{new string('a', 32)}", DateTimeOffset.UnixEpoch, 1));
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 51, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 51, null);
 
         Assert.Equal((51, 51, 50), (result.Examined, result.Failed, result.Failures.Count));
     }
@@ -83,7 +113,7 @@ public sealed class BackfillReleaseBillCountsTests
         var fixture = BillCountReleaseFixture.Add(scenario, 1);
         scenario.Releases.Directories[fixture.Release.DirectoryName][PublicationProtocol.RecordDataPath(fixture.Vote.RecordId)] = "not json"u8.ToArray();
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, null);
 
         Assert.Equal("recordInvalid", Assert.Single(result.Failures).Reason);
         Assert.Empty(scenario.Publications.CommittedBillCounts);
@@ -96,7 +126,7 @@ public sealed class BackfillReleaseBillCountsTests
         var fixture = BillCountReleaseFixture.Add(scenario, 1);
         scenario.Releases.Directories[fixture.Release.DirectoryName].Remove(PublicationProtocol.RecordDataPath(fixture.Action.RecordId));
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, null);
 
         Assert.Equal("recordMissing", Assert.Single(result.Failures).Reason);
         Assert.Empty(scenario.Publications.CommittedBillCounts);
@@ -112,7 +142,7 @@ public sealed class BackfillReleaseBillCountsTests
             Actions = [fixture.Source().Actions[0] with { CosponsorIds = ["o3"] }]
         };
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, null);
 
         Assert.Equal("recordInvalid", Assert.Single(result.Failures).Reason);
         Assert.Empty(scenario.Publications.CommittedBillCounts);
@@ -129,7 +159,7 @@ public sealed class BackfillReleaseBillCountsTests
         };
         scenario.Releases.Directories[fixture.Release.DirectoryName] = fixture.Files(withdrawn);
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, null);
 
         Assert.Equal("recordInvalid", Assert.Single(result.Failures).Reason);
     }
@@ -149,7 +179,7 @@ public sealed class BackfillReleaseBillCountsTests
         {
             scenario.Publications.BillCountSources[1] = fixture.Source() with { Actions = [changed] };
 
-            var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, 0);
+            var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, null);
 
             Assert.Equal("recordInvalid", Assert.Single(result.Failures).Reason);
         }
@@ -163,7 +193,7 @@ public sealed class BackfillReleaseBillCountsTests
         var fixture = BillCountReleaseFixture.Add(scenario, 1);
         scenario.Publications.BillCountSources[1] = fixture.Source() with { Votes = [new(fixture.Vote.RecordId, fixture.Vote.RevisionNumber, 118)] };
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, null);
 
         Assert.Equal("recordInvalid", Assert.Single(result.Failures).Reason);
     }
@@ -185,7 +215,7 @@ public sealed class BackfillReleaseBillCountsTests
         {
             scenario.Publications.BillCountSources[1] = changed;
 
-            var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, 0);
+            var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, null);
 
             Assert.Equal("recordInvalid", Assert.Single(result.Failures).Reason);
         }
@@ -201,7 +231,7 @@ public sealed class BackfillReleaseBillCountsTests
         var fixture = BillCountReleaseFixture.Add(scenario, 1);
         scenario.Releases.Directories[fixture.Release.DirectoryName] = fixture.Files(officials: difference == "extra" ? ["o1", "o2", "o3"] : ["o1"]);
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, null);
 
         Assert.Equal("recordInvalid", Assert.Single(result.Failures).Reason);
         Assert.Empty(scenario.Publications.CommittedBillCounts);
@@ -215,7 +245,7 @@ public sealed class BackfillReleaseBillCountsTests
         BillCountReleaseFixture.Add(scenario, 2);
         scenario.Publications.BillCountCommitFailures[1] = new InvalidDataException("The prepared release is no longer retained.");
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 2, null);
 
         Assert.Equal((1, 1), (result.Added, result.Failed));
         Assert.Equal(("recordInvalid", 1), (result.Failures[0].Reason, result.Failures[0].ReleaseNumber));
@@ -228,7 +258,7 @@ public sealed class BackfillReleaseBillCountsTests
         BillCountReleaseFixture.Add(scenario, 1);
         scenario.Publications.BillCountCommitFailures[1] = new BillCountRefusedException("Release 1 already has an incomplete or changed bill count snapshot.");
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, null);
 
         Assert.Equal((0, 1, "countsInvalid"), (result.Added, result.Failed, Assert.Single(result.Failures).Reason));
     }
@@ -240,7 +270,7 @@ public sealed class BackfillReleaseBillCountsTests
         BillCountReleaseFixture.Add(scenario, 1);
         scenario.Publications.BillCountCommitFailures[1] = new InvalidOperationException("The database connection closed.");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, 0));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, null));
     }
 
     [Theory]
@@ -254,7 +284,7 @@ public sealed class BackfillReleaseBillCountsTests
         var fixture = BillCountReleaseFixture.Add(scenario, 1);
         scenario.Releases.ReadFailures[PublicationProtocol.RecordDataPath(fixture.Vote.RecordId)] = (Exception)Activator.CreateInstance(failure, "Test failure")!;
 
-        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, 0);
+        var result = await Backfill(scenario).ExecuteAsync(PublicationScenario.Owner, 1, null);
 
         Assert.Equal(reason, Assert.Single(result.Failures).Reason);
     }
