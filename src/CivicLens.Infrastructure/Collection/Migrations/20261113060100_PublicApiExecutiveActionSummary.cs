@@ -17,7 +17,7 @@ public partial class PublicApiExecutiveActionSummary : Migration
         CREATE VIEW public_api.executive_action_summaries WITH (security_barrier = true) AS
         SELECT a.record_id, a.revision_number, r.summary_text_origin AS text_origin,
                CASE WHEN r.summary_text_origin = 'Model'
-                    THEN 'AI summary of the document text. An AI model wrote this. Code checked that each sentence quotes the text.' END AS label,
+                    THEN 'An AI model summarized the document text. Code checks each quote.' END AS label,
                r.summary_cut AS cut
           FROM public_api.active_records a
           JOIN public.executive_action_revisions r ON r.record_id = a.record_id AND r.revision_number = a.revision_number
