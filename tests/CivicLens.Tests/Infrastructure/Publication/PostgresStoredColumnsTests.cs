@@ -435,16 +435,11 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
     }
 
     [Fact]
-    public async Task TheTallyVerifierRebuildsTheGroupsFromTheStoredMemberListAndReportsAForgedMissingAndExtraRowWithoutWriting()
+    public async Task TheTallyVerifierComparesTheStoredGroupsWithTheKeptVoteFileWhoseFullRollHoldsUntrackedMembersAndReportsForgedMissingAndExtraRowsWithoutWriting()
     {
+        // The member list holds the tracked member only, while the file tallies the full roll, so the untracked Republican exists only in the file.
         var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat"))]);
         await SeedAsync(published, published.Vote.RevisionNumber, inRelease: true);
-        // The seed holds the tracked members only. A real list also holds each untracked member, whose party is the pinned party of the source letter.
-        await ExecuteAsync($"""
-            SET session_replication_role = replica;
-            INSERT INTO vote_member_list_entries (list_id, "position", person_id, bioguide_id, vote_cast, party, citation_extraction_id, citation_start, citation_length)
-            VALUES ('{new string('c', 64)}', 1, '{Second}', '{Second}', 'No', 'Republican', 'ext', 0, 1);
-            """);
         await new BackfillStoredColumns(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
         var verify = new VerifyVotePartyTallies(publications);
         const string snapshotSql = "SELECT coalesce(string_agg(t.party || t.yea || t.nay || t.present || t.not_voting || t.other, ',' ORDER BY t.party), '') || '/' || (SELECT coalesce(max(party_tally_count), -1) FROM vote_revisions) FROM vote_revision_party_tallies t";
