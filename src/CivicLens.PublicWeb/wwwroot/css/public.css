@@ -864,3 +864,10 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 @media (min-width: 1280px) {
     .official-layout:not(:has(> .official-rail)) { grid-template-columns: minmax(0, 1fr); }
 }
+.link-checker { color: var(--ink-2); font-size: .75rem; font-weight: 700; line-height: 1.4; }
+.vote-statements .official-rows > li { background: var(--raised); }
+.vote-note { margin-block: var(--s3); padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); }
+.vote-note p { margin: 0; }
+.vote-note-tag { color: var(--muted); font-size: var(--t-sm); font-weight: 700; }
+.vote-bill-status { margin: 0 0 var(--s2); }
+.vote-statements .official-row-title + .official-source-label { margin-inline-start: var(--s2); }

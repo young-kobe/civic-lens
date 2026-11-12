@@ -132,6 +132,10 @@
                                             {
                                                 <SharedVoteCast Side="@PublishedOfficialVote.SideOf(cast)"><CastWord Cast="@cast" /></SharedVoteCast>
                                             }
+                                            @if (PublishedRecordLabels.LinkChecker(statement.LinkApprover) is { } checker)
+                                            {
+                                                <span class="link-checker">@checker</span>
+                                            }
                                         </p>
                                     </div>
                                 </li>
