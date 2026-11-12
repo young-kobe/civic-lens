@@ -17,7 +17,8 @@ public sealed class PublishedEntriesInsertOnlyTests
         const string writer = "CivicLens.Infrastructure/Publication/PublishedEntries.cs";
         var writes = new Regex(@"\b(UPDATE|DELETE\s+FROM|TRUNCATE(\s+TABLE)?)\s+(ONLY\s+)?(public\.)?published_entr(ies|y_\w+)\b(\s+e\s+SET\s+\w+)?", RegexOptions.IgnoreCase);
         var found = files.SelectMany(file => writes.Matches(file.Value).Select(match => (file.Key, match.Value))).ToList();
-        Assert.Equal([(writer, "UPDATE published_entries e SET bill_line"), (writer, "UPDATE published_entries e SET congress"), (writer, "UPDATE published_entries e SET approved_by")], found);
+        Assert.Equal([(writer, "UPDATE published_entries e SET bill_line"), (writer, "UPDATE published_entries e SET congress"), (writer, "UPDATE published_entries e SET approved_by"),
+            (writer, "UPDATE published_entries e SET approved_at_utc_ticks")], found);
         var congress = Regex.Match(files[writer], "FillCongresses = \"\"\"(.*?)\"\"\"", RegexOptions.Singleline).Groups[1].Value;
         Assert.Contains("AND e.congress IS NULL", congress);
         Assert.Matches(@"SET congress = k\.congress\s+FROM unnest", congress);
@@ -26,6 +27,7 @@ public sealed class PublishedEntriesInsertOnlyTests
         Assert.Contains("WHERE e.bill_line IS NULL", fill);
         Assert.Matches(@"ORDER BY e\.kind, e\.record_id, e\.revision_number\s+FOR UPDATE OF e", fill);
         Assert.Matches(@"WHERE e\.approved_by IS NULL\s+ORDER BY e\.kind, e\.record_id, e\.revision_number FOR UPDATE OF e\)\s+UPDATE published_entries e SET approved_by = locked\.approved_by\s+FROM locked", files[writer]);
+        Assert.Matches(@"WHERE e\.approved_at_utc_ticks IS NULL\s+ORDER BY e\.kind, e\.record_id, e\.revision_number FOR UPDATE OF e\)\s+UPDATE published_entries e SET approved_at_utc_ticks = locked\.approved_at_utc_ticks\s+FROM locked", files[writer]);
         // History binding reads exact entry keys. Only the entry writer updates their facts.
         Assert.Equal(["CivicLens.Infrastructure/Publication/CorrectionHistoryCopies.cs", "CivicLens.Infrastructure/Publication/PublicApiGrants.cs", writer], files.Where(file => Regex.IsMatch(file.Value, @"\bpublished_entr(ies|y_\w+)\b")
             && !file.Key.Contains("/Persistence/", StringComparison.Ordinal)).Select(file => file.Key).Order(StringComparer.Ordinal));

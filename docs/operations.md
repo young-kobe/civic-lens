@@ -215,6 +215,8 @@ A release that holds the correction field `factsUnchanged` needs the same order.
 
 To stop the source, set `enabled` to `false` and restart the worker.
 
+The source `federal-register-text` reads the body text of each original document. It ships with `enabled: false`. Set it to `true` with `federal-register-documents` and restart the worker. Each new original then admits one text job at the `body_html_url` of its detail response. A document that was recorded earlier needs the [text backfill](#executive-action-text-backfill).
+
 The first run lists every document from `backfillFrom` 2024-10-29. It admits one job for each document, about 700 over two years. Each check after that runs every 6 hours and lists from 2 days before the newest stored publication date. Run `jobs list` and `jobs get` as in [managed collection jobs](#managed-collection-jobs) to see progress. A blocked job names its reason.
 
 To withdraw a record, open `/Review/ExecutiveActions/{id}` and use Take off site; see [take a record off the site](#take-a-record-off-the-site). Withdrawing approval alone does not change the public site.
@@ -266,6 +268,8 @@ What to watch:
 The first full run drafts every roll call that has a tracked senator. Code approves each draft after it checks the citations. A Senate vote from Voteview rests on Voteview data, and the record page names Voteview as the source.
 
 ## Postgres adapter and migrations
+
+`PublishedEntryApprovalTime` adds `published_entries.approved_at_utc_ticks`. Run `releases entries backfill` after this migration, and then `releases entries verify`. The backfill reads the kept record files. Until it runs, a publish of a revision that has an entry without a time stops with a conflict, and the correction commands report a stored time that differs. New manifests include `approvedAtUtc`; older images reject that field. Before rolling back an image, activate a kept release from before this field was written.
 
 `PublishedStatementApprover` adds `published_entries.approved_by`. Run `releases entries backfill` before starting public serving after this migration. It reads the kept statement files and reports unresolved open classifiers. Statements with unknown classifiers stay hidden. New manifests include `approvedBy`; older images reject that field. Before rolling back an image, use the newer image to activate a kept release from before this field was written.
 
@@ -762,6 +766,26 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ac
 
 Run order: `db migrate`, then `backfill`, then `verify`. Every action reader reads the columns and fails on a row with null columns. That includes the review pages, the queue, the relationship and brief readers, and the redraft skip. On production, `deploy` restarts the worker and the review host, so run `backfill` right after the deploy. For a manual run, start the new code only when `verify` exits 0, so `legacy` and `mismatched` are both 0.
 
+### Executive action text backfill
+
+Original documents that were recorded before the text source was enabled have no text. The command needs the variables of the other owner commands. It also needs `CIVIC_LENS_COLLECTION_CONFIG` for a configuration where `federal-register-text` has `enabled` set to `true`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions text backfill 100
+```
+
+The limit is 100 when you give none. The command admits one text job for each of the newest original documents that have a pinned body URL, no text row, and no text job, up to the limit. The job fetches that pinned URL. A rerun lists only the documents that still have no job, so it is safe to repeat. The jobs use the current configuration, not the configuration of the old document jobs. The worker fetches the bodies at the pacing of the origin. A text job uses no model budget. [Executive actions](architecture/executive-actions.md#text) holds the rules.
+
+If a job of `federal-register-documents` or `federal-register-text` is queued or leased, `pendingJobs` is above 0. The command then admits nothing and exits with code 1. Check `jobs list`, wait until those jobs end, and run the command again. So each run waits for the jobs of the run before it.
+
+A document recorded before the detail job pinned `body_html_url` has no pinned URL, about 700 in production. For each such original, up to the limit, the command admits one refetch job of its detail. The job key is `federal-register/{source}/document/{number}/body-url`. The refetch only fills the null URL. It changes no other column and never replaces a pinned URL. When it fills the URL, it admits the text job in the same transaction.
+
+Each list has its own limit. One run can admit up to the limit of text jobs and up to the limit of refetch jobs.
+
+The command prints `pendingJobs`, `examined`, `admitted`, `refetches`, and `noUrlWithRefetch`. `admitted` counts text jobs. `refetches` counts refetch jobs. `noUrlWithRefetch` counts the originals that have no body URL and already have a refetch job in any state. It is counted before the run admits its jobs.
+
+Run order: run the command and wait until its jobs end. Repeat until `examined` and `refetches` are both 0. Then read `noUrlWithRefetch`. A count above 0 after all jobs end means the origin gave no URL or a refetch job failed. Check `jobs list` for those jobs.
+
 ### Executive action revision backfill
 
 R-63 step 3 moves old executive action revisions into columns and child rows. A revision written by current code already has them. The migration `ExecutiveActionRevisionColumns` also moves each `notice_json` of a document into the notice columns, and drops `notice_json`. It sets the code author on each old revision. It fails and changes nothing when a notice differs from its row, when a revision names another author, or when a `notice_json` or `revision_json` is not valid JSON. The error names the row. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
@@ -1054,8 +1078,10 @@ The command prints JSON with these keys:
 - `openRangesWithoutRow`: the open ranges that still have no row.
 - `closedRangesWithoutKeptFolder`: the closed ranges that no kept folder lists. These ranges get no row, and this is expected.
 - `readyRangesWithoutRow`: the open or closed ranges that passed every check but got no row, because the limit stopped the run.
+- `openStatementsWithoutApprover`: the open statement ranges that still have no approver.
+- `openRangesWithoutApprovalTime`: the open ranges whose row still has no approval time. The run fills a null time from the oldest kept record file and never changes a stored time. The limit bounds only the new rows, not the fills. Like the approver fill, the run reads one record file for each range with no time.
 
-The exit code is 0 only when `skipped`, `openRangesWithoutRow`, and `readyRangesWithoutRow` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
+The exit code is 0 only when `skipped`, `openRangesWithoutRow`, `readyRangesWithoutRow`, `openStatementsWithoutApprover`, and `openRangesWithoutApprovalTime` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
 
 ### Correction history bootstrap
 
@@ -1190,7 +1216,7 @@ This command proves that the entry, state, first publication, and withdrawal tab
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases entries verify
 ```
 
-The command reads each kept manifest once. It writes the file again with no change, and it checks the bytes. Then it checks the records of the state table against the entries of the file. Last, it rebuilds the manifest from the tables and compares the bytes with the file. The rebuild takes the bill line from the table. It takes only the official names, the five other optional entry fields, `publishedAtUtc`, and some withdrawals from the file.
+The command reads each kept manifest once. It writes the file again with no change, and it checks the bytes. Then it checks the records of the state table against the entries of the file. Last, it rebuilds the manifest from the tables and compares the bytes with the file. The rebuild takes the bill line and the approval time from the table. A time that differs from the manifest fails the release with `bytesDiffer`. It takes only the official names, the five other optional entry fields, `publishedAtUtc`, and some withdrawals from the file.
 
 The command prints JSON with these keys:
 

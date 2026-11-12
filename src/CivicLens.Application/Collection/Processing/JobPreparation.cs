@@ -147,6 +147,7 @@ public sealed class JobPreparation(
             ApiResource.MemberPhoto => AdmitMemberPhotoAsync(job, artifactRoot, cancellationToken),
             ApiResource.FederalRegisterList => AdmitFederalRegisterListAsync(job, artifactRoot, cancellationToken),
             ApiResource.FederalRegisterDocument => AdmitFederalRegisterDocumentAsync(job, artifactRoot, cancellationToken),
+            ApiResource.FederalRegisterText => AdmitFederalRegisterTextAsync(job, artifactRoot, cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(job))
         };
 
@@ -305,11 +306,31 @@ public sealed class JobPreparation(
         var number = FederalRegisterUrl.ReadDocument(configured.SourceUrl, job.Definition.Url);
         var response = await responses.ReadAsync(job, artifactRoot, cancellationToken);
         var document = FederalRegisterDocumentParser.Parse(response.Body, number);
+        if (FederalRegisterJobKeys.IsBodyUrl(job.IdempotencyKey))
+        {
+            await federalRegisterAdmissions.AdmitBodyUrlAsync(configured, document, cancellationToken);
+            return JobPreparationResult.Prepared();
+        }
         var personId = ExecutiveActionSigner.PersonIdOf(configured.Revision.Configuration, document);
         var text = FederalRegisterRenderer.Render(document);
         var extractionId = await SaveExtractionAsync(response.Captured, FederalRegisterDocumentParser.ExtractionVersion, text, cancellationToken);
         return PreparedFrom(await federalRegisterAdmissions.AdmitDocumentAsync(configured, job.JobId,
             new FederalRegisterEvidence(document, extractionId, text, personId), cancellationToken));
+    }
+
+    private async Task<JobPreparationResult> AdmitFederalRegisterTextAsync(CollectionJobRecord job, string artifactRoot,
+        CancellationToken cancellationToken)
+    {
+        var configured = ConfiguredSourceOf(job);
+        var number = FederalRegisterTextUrl.ReadNumber(configured.SourceUrl, job.Definition.Url);
+        var capture = await responses.ReadCaptureAsync(job, cancellationToken);
+        var text = await textExtractor.ExtractAsync(capture.Captured, artifactRoot, FederalRegisterTextParser.Profile, cancellationToken);
+        var reading = FederalRegisterRenderer.RenderText(number, text);
+        var extractionId = await SaveExtractionAsync(capture.Captured, FederalRegisterTextParser.ExtractionVersion(textExtractor),
+            reading.Text, cancellationToken);
+        await federalRegisterAdmissions.AdmitTextAsync(configured, job.JobId,
+            new FederalRegisterTextEvidence(number, job.Definition.Url, reading, extractionId), cancellationToken);
+        return JobPreparationResult.Prepared();
     }
 
     private async Task<JobPreparationResult> AdmitVoteviewFollowOnsAsync(CollectionJobRecord job, CancellationToken cancellationToken)

@@ -97,7 +97,8 @@ public sealed class VerifyCorrectionHistories(IPublicationStore publications, IR
             throw new InvalidDataException("Record identity differs from stored release state.");
         var expected = ReleaseSplice.EntryOf(row, entry);
         if (!ReleaseEntryComparison.SameOutsideNewFields(entry, expected) ||
-            entry.ApprovedBy is { } approver && expected.ApprovedBy != approver)
+            entry.ApprovedBy is { } approver && expected.ApprovedBy != approver ||
+            entry.ApprovedAtUtc is { } approvedAt && expected.ApprovedAtUtc != approvedAt)
             throw new InvalidDataException("Record facts differ from stored release state.");
         var stored = candidate.StoredHistory ?? throw new InvalidDataException("Release correction history binding is missing.");
         if (stored.Binding.Record.Kind != row.Kind || stored.Binding.Record.RecordId != row.RecordId ||
