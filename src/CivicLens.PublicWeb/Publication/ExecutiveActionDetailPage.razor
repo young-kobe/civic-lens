@@ -19,6 +19,34 @@
                 <AiSummary TextOrigin="PublishedTextOrigin.Code">
                     <Check>@ExecutiveActionWords.Caveat <a href="#source">@SourceFold.Title</a></Check>
                 </AiSummary>
+                @if (Data.Targets.Length > 0)
+                {
+                    <section class="detail-section" aria-labelledby="executive-links-title">
+                        <h2 id="executive-links-title">@ExecutiveActionWords.LinksHeading</h2>
+                        <ul class="detail-list detail-targets">
+                            @foreach (var target in Data.Targets)
+                            {
+                                <li>
+                                    <p class="official-row-title">
+                                        <span>@ExecutiveActionWords.TargetRelation(target.Relation): </span>
+                                        @if (target.TargetRecordId is { } targetRecordId)
+                                        {
+                                            <a href="@(RootPath + PublicationProtocol.RecordPagePath(targetRecordId))">@PublishedRecordLabels.ExecutiveActionKind(target.Kind) @target.Number</a>
+                                        }
+                                        else
+                                        {
+                                            <span>@PublishedRecordLabels.ExecutiveActionKind(target.Kind) @target.Number</span>
+                                        }
+                                    </p>
+                                    @if (target.Reference is not null)
+                                    {
+                                        <p class="small muted detail-target-reference">@target.Reference</p>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </section>
+                }
             </div>
             <aside class="detail-rail">
                 <section class="detail-card detail-facts" aria-labelledby="executive-facts-title">
