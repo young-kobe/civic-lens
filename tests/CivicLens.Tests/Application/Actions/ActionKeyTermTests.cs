@@ -32,9 +32,11 @@ public sealed class ActionKeyTermTests
         Assert.Equal([Plain(SecretaryDefinition), Plain(TenantDefinition)], revision.KeyTerms.Select(term => term.Definition));
         Assert.All(revision.KeyTerms, term => Assert.DoesNotContain("``", term.Definition, StringComparison.Ordinal));
         Assert.Equal([SecretaryDefinition, TenantDefinition], revision.KeyTerms.Select(term => text.Text.Substring(term.Span.Start, term.Span.Length)));
+        Assert.All(revision.KeyTerms, term => Assert.False(term.Cut));
         var section = BillDefinitionsSection.Find(text.Body)!;
         Assert.All(revision.KeyTerms, term => Assert.True(section.Contains(term.Span.Start - text.BodyStart, term.Span.Length)));
         var request = Assert.Single(model.Requests);
+        Assert.Equal(("action-text-prompt-v7", "action-text-schema-v2"), (request.PromptVersion, request.SchemaVersion));
         Assert.Contains("\"keyTerms\"", request.SchemaJson, StringComparison.Ordinal);
         Assert.Contains("\"definitionsSection\"", request.UserPrompt, StringComparison.Ordinal);
         Assert.Contains("\"heading\": \"SEC. 2. DEFINITIONS.\"", request.UserPrompt, StringComparison.Ordinal);
@@ -42,15 +44,31 @@ public sealed class ActionKeyTermTests
     }
 
     [Fact]
-    public async Task AQuoteThatIsNotInTheDefinitionsSectionIsRejectedEvenWhenAnotherSectionHoldsTheWords()
+    public async Task AQuoteThatIsNotInTheDefinitionsSectionIsSentBackThenDroppedOnTheLastPassSoTheDraftKeepsItsCheckedSummary()
     {
         var outside = (Term: "tenants", Quote: FirstQuote);
-        var (store, _) = await RunAsync(On, [outside], outputsTwice: true);
+        var (store, model) = await RunAsync(On, [outside, Secretary], outputsTwice: true);
 
-        Assert.Empty(store.Revisions);
-        Assert.Equal(State.Failed, store.Entries[0].Status);
-        var result = Resolve(await ContextAsync(), [outside]);
-        Assert.Contains(result.Errors, error => error.Contains("not an exact quote of the definitions section", StringComparison.Ordinal));
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(State.Succeeded, store.Entries[0].Status);
+        Assert.Equal($"{FirstPlain} {SecondPlain}", revision.Summary);
+        Assert.Equal(["Secretary"], revision.KeyTerms.Select(term => term.Term));
+        Assert.Equal(2, model.Requests.Count);
+        Assert.Contains("not an exact quote of the definitions section", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+        var firstPass = Resolve(await ContextAsync(), [outside]);
+        Assert.Contains(firstPass.Errors, error => error.Contains("not an exact quote of the definitions section", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AQuoteThatStartsInTheDefinitionsSectionAndEndsPastTheNextHeadingIsRejected()
+    {
+        var context = await ContextAsync();
+        var across = (Term: "amendment", Quote: "means a change to this Act. SEC. 3. PAYMENTS. The Secretary shall pay");
+
+        var result = Resolve(context, [across]);
+
+        Assert.NotNull(new BillTextQuotes(context.Evidence.BillText!).Find(across.Quote));
+        Assert.Contains(result.Errors, error => error.Contains("\"amendment\" is not an exact quote of the definitions section", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -64,26 +82,60 @@ public sealed class ActionKeyTermTests
     }
 
     [Fact]
-    public async Task MoreThanFiveTermsAreRejectedAndFiveAreAccepted()
+    public async Task FiveDistinctTermsAreAllStoredAndSixAreRejected()
     {
-        var context = await ContextAsync();
-        (string Term, string Quote)[] five = [Secretary, Tenant, Landlord, ("amendment", Plain(AmendmentDefinition)), ("Secretary", Secretary.Quote)];
-        var six = five.Append(Secretary).ToArray();
+        var context = await ContextAsync(FiveDefinitionsBody);
+        (string Term, string Quote)[] five = [Secretary, Tenant, Landlord, ("rental home", Plain(RentalHomeDefinition)), ("area median", Plain(AreaMedianDefinition))];
+        var six = five.Append(("Secretary", Secretary.Quote)).ToArray();
 
         var refused = Resolve(context, six);
         var accepted = Resolve(context, five);
 
         Assert.Contains(refused.Errors, error => error.Contains("has 6 terms. Write at most 5.", StringComparison.Ordinal));
-        Assert.NotNull(accepted.Accepted);
-        Assert.Equal(3, accepted.Accepted.KeyTerms.Length);
+        Assert.Empty(accepted.Errors);
+        Assert.Equal(five.Select(item => item.Term), accepted.Accepted!.KeyTerms.Select(term => term.Term));
+    }
+
+    [Theory]
+    [InlineData("Treasurer")]
+    [InlineData("S")]
+    [InlineData("Housing")]
+    [InlineData("secretary")]
+    public async Task ATermThatIsNotExactlyTheTermThatTheQuoteMarksInQuotationMarksIsRejected(string term)
+    {
+        var result = Resolve(await ContextAsync(), [(term, Secretary.Quote)]);
+
+        Assert.Contains(result.Errors, error => error.Contains($"\"{term}\" is not the term that its quote defines in quotation marks", StringComparison.Ordinal));
     }
 
     [Fact]
-    public async Task ATermThatTheQuoteDoesNotHoldIsRejected()
+    public void ATermEqualsATermThatThePlainDefinitionMarksInQuotationMarks()
     {
-        var result = Resolve(await ContextAsync(), [("Treasurer", Secretary.Quote)]);
+        var term = new ActionKeyTerm("eligible tenant", new SourceSpan(ExtractionId, 0, 1), Plain(TenantDefinition), Cut: false);
 
-        Assert.Contains(result.Errors, error => error.Contains("\"Treasurer\" is not in its quote", StringComparison.Ordinal));
+        Assert.True(term.IsDefinedBy(term.Definition));
+        Assert.True(term.IsDefinedBy("The terms \"landlord\" and \"eligible tenant\" mean a party to a lease."));
+        Assert.False(term.IsDefinedBy("An eligible tenant is a tenant with low income."));
+        Assert.False(term.IsDefinedBy(TenantDefinition));
+    }
+
+    [Fact]
+    public async Task AQuoteThatEndsBeforeTheEndOfItsDefinitionParagraphIsMarkedCutAndAWholeOneIsNot()
+    {
+        var context = await ContextAsync();
+        var shortened = ("Secretary", "The term \"Secretary\" means the Secretary of Housing");
+
+        var cut = Resolve(context, [shortened, Tenant, ("landlord", "The term \"landlord\" means the owner")]).Accepted!.KeyTerms;
+
+        Assert.Equal([true, false, true], cut.Select(term => term.Cut));
+        var section = BillDefinitionsSection.Find(BodyWithDefinitions)!;
+        var amendmentEnd = BodyWithDefinitions.IndexOf(AmendmentDefinition, StringComparison.Ordinal) + AmendmentDefinition.Length;
+        Assert.False(section.Cuts(BodyWithDefinitions, amendmentEnd));
+        Assert.True(section.Cuts(BodyWithDefinitions, amendmentEnd - "to this Act.".Length));
+        const string Joined = "SEC. 2. DEFINITIONS. In this Act: (1) Rent.\u2014The term \"rent\" means a payment for a home; and (2) Home.\u2014The term \"home\" means a house.";
+        var joined = BillDefinitionsSection.Find(Joined)!;
+        Assert.False(joined.Cuts(Joined, Joined.IndexOf("; and", StringComparison.Ordinal)));
+        Assert.True(joined.Cuts(Joined, Joined.IndexOf(" for a home", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -103,7 +155,7 @@ public sealed class ActionKeyTermTests
     {
         var context = await ContextAsync();
         var glossary = ("amendment", Plain(AmendmentDefinition));
-        var repeated = ("SECRETARY", Secretary.Quote);
+        var repeated = ("Secretary", Secretary.Quote);
 
         var result = Resolve(context, [glossary, Secretary, repeated, Tenant]);
 
@@ -146,13 +198,14 @@ public sealed class ActionKeyTermTests
         var extractions = accepted.Citations.Select(span => span.ExtractionId).Distinct().ToDictionary(id => id, _ => Extraction(text));
         var term = accepted.KeyTerms[0];
         var paymentStart = text.Text.IndexOf(FirstQuote, StringComparison.Ordinal);
-        var outside = new ActionKeyTerm("tenants", new SourceSpan(ExtractionId, paymentStart, FirstQuote.Length), FirstQuote);
+        var outside = new ActionKeyTerm("tenants", new SourceSpan(ExtractionId, paymentStart, FirstQuote.Length), FirstQuote, Cut: false);
 
         accepted.ValidateAgainst(extractions);
 
         Assert.Throws<ArgumentException>(() => (accepted with { KeyTerms = [outside] }).ValidateAgainst(extractions));
         Assert.Throws<ArgumentException>(() => (accepted with { KeyTerms = [term with { Definition = SecretaryDefinition }] }).ValidateAgainst(extractions));
         Assert.Throws<ArgumentException>(() => (accepted with { KeyTerms = [term with { Definition = term.Definition.Replace("Secretary", "Treasurer", StringComparison.Ordinal) }] }).ValidateAgainst(extractions));
+        Assert.Throws<ArgumentException>(() => (accepted with { KeyTerms = [term with { Cut = true }] }).ValidateAgainst(extractions));
     }
 
     [Fact]
@@ -163,9 +216,13 @@ public sealed class ActionKeyTermTests
 
         Assert.Throws<ArgumentException>(() => (accepted with
         {
-            KeyTerms = [.. new[] { "The", "term", "Secretary", "means", "Housing", "Urban" }.Select(word => term with { Term = word })]
+            KeyTerms = [.. new[] { "one", "two", "three", "four", "five", "six" }.Select(word => term with { Term = word, Definition = $"The term \"{word}\" means it." })]
         }).ValidateShape());
-        Assert.Throws<ArgumentException>(() => (accepted with { KeyTerms = [term, term with { Term = "SECRETARY" }] }).ValidateShape());
+        (accepted with
+        {
+            KeyTerms = [.. new[] { "one", "two", "three", "four", "five" }.Select(word => term with { Term = word, Definition = $"The term \"{word}\" means it." })]
+        }).ValidateShape();
+        Assert.Throws<ArgumentException>(() => (accepted with { KeyTerms = [term, term with { Term = "SECRETARY", Definition = "The term \"SECRETARY\" means it." }] }).ValidateShape());
         Assert.Throws<ArgumentException>(() => (accepted with { TextPackageId = null, WhyItMatters = null, TextCitations = default }).ValidateShape());
     }
 
@@ -189,10 +246,17 @@ public sealed class ActionKeyTermTests
         new(ActionDraftResolver.ResolveBillText(Output(keyTerms: terms), context, "run", DateTimeOffset.UnixEpoch,
             ActionKeyTermScope.For(context.Evidence.BillText!, new HashSet<string>(GlossaryNames, StringComparer.OrdinalIgnoreCase))));
 
-    private static async Task<ActionDraftContext> ContextAsync()
+    private const string RentalHomeDefinition = "The term ``rental home'' means a home that a tenant rents.";
+    private const string AreaMedianDefinition = "The term ``area median'' means the median income of the area.";
+
+    private static readonly string FiveDefinitionsBody = "SEC. 2. DEFINITIONS. In this Act: " +
+        $"(1) Secretary.\u2014{SecretaryDefinition} (2) Eligible tenant.\u2014{TenantDefinition} (3) Landlord.\u2014{LandlordDefinition} " +
+        $"(4) Rental home.\u2014{RentalHomeDefinition} (5) Area median.\u2014{AreaMedianDefinition} SEC. 3. PAYMENTS. {FirstSummary} {SecondSummary} {WhyItMatters}";
+
+    private static async Task<ActionDraftContext> ContextAsync(string? body = null)
     {
         var world = ActionBillWorld.Create(summaries: []);
-        var evidence = world.Evidence() with { BillText = Of(BodyWithDefinitions) };
+        var evidence = world.Evidence() with { BillText = Of(body ?? BodyWithDefinitions) };
         var snapshot = (await world.Reader().ReadAsync(evidence, default)).Snapshot!;
         return new ActionDraftContext(evidence, snapshot, BillGateFixtures.HousingChoice(), "housing", BillGateFixtures.Revision().Id);
     }

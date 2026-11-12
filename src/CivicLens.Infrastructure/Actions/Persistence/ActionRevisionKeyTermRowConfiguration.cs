@@ -22,7 +22,9 @@ internal sealed class ActionRevisionKeyTermRowConfiguration : IEntityTypeConfigu
         builder.Property(row => row.Position).HasColumnName("position");
         builder.Property(row => row.Term).HasColumnName("term").HasMaxLength(ActionKeyTerm.MaximumTermLength);
         builder.Property(row => row.Definition).HasColumnName("definition").HasMaxLength(ActionDraftRevision.MaximumTextQuoteLength);
-        builder.HasIndex(row => new { row.RecordId, row.RevisionNumber, row.Term }).IsUnique().HasDatabaseName("ux_action_revision_key_terms_term");
+        builder.Property(row => row.Cut).HasColumnName("cut");
+        // The unique index ux_action_revision_key_terms_term on (record_id, revision_number, lower(term)) is SQL in the migration, because EF Core maps
+        // no expression index. It refuses a repeated term with case ignored, as the revision check does.
         SourceSpanColumns.Configure(builder, "action_revision_key_terms", "Citation", "citation", optional: false);
     }
 }

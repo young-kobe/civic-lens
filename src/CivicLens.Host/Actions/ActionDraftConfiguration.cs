@@ -31,6 +31,10 @@ internal sealed record ActionDraftConfiguration(ActionDraftSettings Settings, st
         return [.. Glossary.Groups.SelectMany(group => group.Terms).Select(term => term.Name)];
     }
 
+    /// <summary>The key term setting alone, for a command that reads drafts but sends no model call. It reads the same variables as the worker,
+    /// so the command and the worker agree on which drafts are stale.</summary>
+    public static bool ReadDraftsKeyTerms() => ReadKeyTermGlossary(ReadBillText()) is not null;
+
     private static bool ReadBillText()
     {
         var setting = Environment.GetEnvironmentVariable(BillTextVariable);

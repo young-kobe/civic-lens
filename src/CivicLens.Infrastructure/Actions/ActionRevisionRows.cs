@@ -222,7 +222,8 @@ internal static class ActionRevisionRows
         CitationExtractionId = term.Span.ExtractionId,
         CitationStart = term.Span.Start,
         CitationLength = term.Span.Length,
-        Definition = term.Definition
+        Definition = term.Definition,
+        Cut = term.Cut
     };
 
     private static ActionRevisionSponsorshipCitationRow CitationRow(ActionDraftRevision revision, short sponsorshipPosition, SourceSpan citation, int position) => new()

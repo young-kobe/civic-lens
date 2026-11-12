@@ -48,6 +48,8 @@ public sealed class BillStore(NpgsqlDataSource views)
                           WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position"),
                    ARRAY(SELECT k.definition FROM public_api.bill_key_terms k
                           WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position"),
+                   ARRAY(SELECT k.cut FROM public_api.bill_key_terms k
+                          WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position"),
                    (SELECT k.label FROM public_api.bill_key_terms k
                      WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number LIMIT 1)
               FROM public_api.bills b
@@ -60,16 +62,17 @@ public sealed class BillStore(NpgsqlDataSource views)
         return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(27), ReadLatestAction(reader), ReadHistory(reader, 25, 26),
             ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24), ReadKeyTerms(reader))
         {
-            KeyTermsLabel = ViewColumns.Text(reader, 33)
+            KeyTermsLabel = ViewColumns.Text(reader, 34)
         };
     }
 
-    /// <summary>The two arrays come from one view, ordered by the same position, so they pair by index.</summary>
+    /// <summary>The three arrays come from one view, ordered by the same position, so they pair by index.</summary>
     private static BillKeyTerm[] ReadKeyTerms(DbDataReader reader)
     {
         var terms = reader.GetFieldValue<string[]>(31);
         var definitions = reader.GetFieldValue<string[]>(32);
-        return [.. terms.Zip(definitions, (term, definition) => new BillKeyTerm(term, definition))];
+        var cuts = reader.GetFieldValue<bool[]>(33);
+        return [.. terms.Select((term, index) => new BillKeyTerm(term, definitions[index], cuts[index]))];
     }
 
     /// <summary>Reads one page of the sponsorships of a bill. Null means that no release is active or that the active release holds no such bill.</summary>

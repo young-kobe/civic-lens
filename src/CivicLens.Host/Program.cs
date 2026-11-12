@@ -320,7 +320,7 @@ try
         var requeue = new RequeueAnalyses<AnalysisRun>(PostgresDocumentChangeAnalysisStore.FromConnectionString(connectionString));
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var redraftStale = new RedraftStaleAnalyses([
-            new("actions", new PostgresActionDraftStore(contexts, codeVersion)),
+            new("actions", new PostgresActionDraftStore(contexts, codeVersion, ActionDraftConfiguration.ReadDraftsKeyTerms())),
             new("votes", new PostgresVoteDraftStore(contexts)),
             new("statements", new PostgresStatementDraftStore(contexts)),
             new("document-changes", new PostgresDocumentChangeAnalysisStore(contexts)),
@@ -359,7 +359,7 @@ try
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
-        var draftStore = new PostgresActionDraftStore(contexts, codeVersion);
+        var draftStore = new PostgresActionDraftStore(contexts, codeVersion, ActionDraftConfiguration.ReadDraftsKeyTerms());
         var draftCommands = new AnalysisQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
         var backfillStore = new PostgresActionRevisionBackfillStore(contexts);
@@ -426,7 +426,7 @@ try
         return await new BillBackfillCommand(new BackfillBillActions(jobs, jobs,
                 PostgresDocumentExtractionStore.FromConnectionString(connectionString), responses, artifactRoot),
             new BackfillBillSubjects(jobs, jobs, responses, artifactRoot),
-            new BackfillBillStatus(jobs, jobs, responses, artifactRoot), () => new BackfillBillText(jobs, new PostgresActionDraftStore(AnalysisDbContextFactory.Create(connectionString), codeVersion),
+            new BackfillBillStatus(jobs, jobs, responses, artifactRoot), () => new BackfillBillText(jobs, new PostgresActionDraftStore(AnalysisDbContextFactory.Create(connectionString), codeVersion, ActionDraftConfiguration.ReadDraftsKeyTerms()),
                 CollectionConfigurationRevision.Create(
                 ConfigurationFile.ReadCollectionFromEnvironment() ?? throw new ArgumentException("The text backfill requires CIVIC_LENS_COLLECTION_CONFIG."))),
             owner).ExecuteAsync(args, cancellation.Token);

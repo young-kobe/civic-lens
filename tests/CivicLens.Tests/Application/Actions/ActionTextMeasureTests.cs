@@ -56,9 +56,28 @@ public sealed class ActionTextMeasureTests
         var bill = Assert.Single(report.Bills);
         Assert.True(report.KeyTermsOn);
         Assert.Equal("SEC. 2. DEFINITIONS.", bill.DefinitionsHeading);
-        Assert.Equal([("Secretary", BillBodyQuote(SecretaryDefinition)), ("eligible tenant", BillBodyQuote(TenantDefinition))], bill.KeyTerms.Select(term => (term.Term, term.Definition)));
+        Assert.Equal([("Secretary", BillBodyQuote(SecretaryDefinition), false), ("eligible tenant", BillBodyQuote(TenantDefinition), false)],
+            bill.KeyTerms.Select(term => (term.Term, term.Definition, term.Cut)));
+        Assert.Equal([("amendment", BillBodyQuote(AmendmentDefinition))], bill.DroppedKeyTerms.Select(term => (term.Term, term.Quote)));
         Assert.Equal((1, 1, 2), (report.Totals.BillsWithDefinitions, report.Totals.BillsWithKeyTerms, report.Totals.KeyTerms));
+        Assert.Equal((ActionDraftTask.KeyTermTextPromptVersion, ActionDraftTask.KeyTermTextSchemaVersion), (report.PromptVersion, report.SchemaVersion));
         Assert.Contains("keyTerms", Assert.Single(model.Requests).SchemaJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AKeyTermThatFailsItsQuoteCheckOnTheLastPassIsDroppedAndTheReportListsItWithTheAcceptedSummary()
+    {
+        var terms = new[] { ("Secretary", BillBodyQuote(SecretaryDefinition)), ("tenants", FirstQuote) };
+        var model = new FakeHeadlineSummaryModel().Draft(Output(keyTerms: terms)).Draft(Output(keyTerms: terms));
+
+        var (report, _, _) = await MeasureAsync(Cap, model, text: Of(BodyWithDefinitions), settings: KeyTermsOn);
+
+        var bill = Assert.Single(report.Bills);
+        Assert.Equal(ActionTextMeasureOutcome.Accepted, bill.Outcome);
+        Assert.Equal(2, bill.Calls);
+        Assert.Equal(["Secretary"], bill.KeyTerms.Select(term => term.Term));
+        Assert.Equal([("tenants", FirstQuote)], bill.DroppedKeyTerms.Select(term => (term.Term, term.Quote)));
+        Assert.Contains(bill.Rejections, error => error.Contains("\"tenants\" is not an exact quote of the definitions section", StringComparison.Ordinal));
     }
 
     [Fact]

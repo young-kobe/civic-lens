@@ -726,13 +726,13 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
               VALUES (119, 'hr', 7, 'BILLS-119hr7ih', 'Introduced in House', '2025-01-03',
                       'https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm', 'x', 85000, 59987);
             UPDATE action_revisions SET text_package_id = 'BILLS-119hr7ih', why_it_matters = 'It pays landlords.' WHERE record_id IN ('A', 'M');
-            INSERT INTO action_revision_key_terms (record_id, revision_number, position, term, citation_extraction_id, citation_start, citation_length, definition)
-              SELECT record_id, revision_number, 1, 'grant', 'x', 100, 30, 'The term grant means a payment.' FROM action_revisions WHERE record_id IN ('A', 'M', 'C')
-              UNION ALL SELECT record_id, revision_number, 0, 'Secretary', 'x', 10, 30, 'The term Secretary means the Secretary.' FROM action_revisions WHERE record_id IN ('A', 'M', 'C');
+            INSERT INTO action_revision_key_terms (record_id, revision_number, position, term, citation_extraction_id, citation_start, citation_length, definition, cut)
+              SELECT record_id, revision_number, 1, 'grant', 'x', 100, 30, 'The term grant means a payment.', true FROM action_revisions WHERE record_id IN ('A', 'M', 'C')
+              UNION ALL SELECT record_id, revision_number, 0, 'Secretary', 'x', 10, 30, 'The term Secretary means the Secretary.', false FROM action_revisions WHERE record_id IN ('A', 'M', 'C');
             """);
 
-        Assert.Equal(["M|0|Secretary|The term Secretary means the Secretary.", "M|1|grant|The term grant means a payment."],
-            await PublicAsync("SELECT record_id || '|' || \"position\" || '|' || term || '|' || definition FROM public_api.bill_key_terms ORDER BY record_id, \"position\""));
+        Assert.Equal(["M|0|Secretary|The term Secretary means the Secretary.|false", "M|1|grant|The term grant means a payment.|true"],
+            await PublicAsync("SELECT record_id || '|' || \"position\" || '|' || term || '|' || definition || '|' || cut FROM public_api.bill_key_terms ORDER BY record_id, \"position\""));
         Assert.Equal(["Key terms chosen by an AI model. Each definition is an exact quote from the definitions section of the bill. Code checked the quotes, not the choice of terms."],
             await PublicAsync("SELECT DISTINCT label FROM public_api.bill_key_terms"));
     }

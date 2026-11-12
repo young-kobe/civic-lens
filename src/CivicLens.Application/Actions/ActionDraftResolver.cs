@@ -41,9 +41,10 @@ public static class ActionDraftResolver
     }
 
     /// <summary>Key terms are resolved only with a scope, which exists when the key term setting is on and the bill text has a definitions section.
-    /// With no scope the draft has no key terms, whatever the model wrote.</summary>
+    /// With no scope the draft has no key terms, whatever the model wrote. With <paramref name="dropFailingKeyTerms"/>, which the last pass sets,
+    /// a key term that fails a check is left out and its error is not sent, so the checked summary is kept.</summary>
     public static AnalysisResolution<ActionDraftRevision> ResolveBillText(string outputJson, ActionDraftContext context, string runId,
-        DateTimeOffset createdAtUtc, ActionKeyTermScope? keyTerms = null)
+        DateTimeOffset createdAtUtc, ActionKeyTermScope? keyTerms = null, bool dropFailingKeyTerms = false)
     {
         var billText = context.Evidence.BillText ?? throw new ArgumentException("Bill text drafting needs the bill text.", nameof(context));
         var output = ActionTextOutput.Parse(outputJson);
@@ -65,7 +66,9 @@ public static class ActionDraftResolver
         CheckSentences(summary, "summary", context.Snapshot, figures, errors);
         CheckSentences(why, "whyItMatters", context.Snapshot, figures, errors);
         if (PassageGradeError(output) is { } passageGrade) errors.Add(passageGrade);
-        var terms = keyTerms?.Resolve(output.KeyTerms, quotes, errors) ?? default;
+        var keyTermErrors = new List<string>();
+        var terms = keyTerms?.Resolve(output.KeyTerms, quotes, keyTermErrors) ?? default;
+        if (!dropFailingKeyTerms) errors.AddRange(keyTermErrors);
         var issueIds = context.Issues.Check(output.IssueIds, errors);
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
         var citations = summary.Concat(why).ToImmutableArray();

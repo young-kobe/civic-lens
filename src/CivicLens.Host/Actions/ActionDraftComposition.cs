@@ -30,7 +30,7 @@ internal static class ActionDraftComposition
         if (issues is null) throw new ArgumentException("Action drafting needs CIVIC_LENS_ISSUES_CONFIG.");
         var wakeup = PostgresAnalysisWakeup.FromConnectionString(connectionString, PostgresActionDraftStore.Table, ActionDraftTask.Task);
         var reader = new ActionBillReader(jobs, responses, textExtractor, artifactRoot);
-        var step = new ActionDraftStep(new PostgresActionDraftStore(contexts, codeVersion), reader,
+        var step = new ActionDraftStep(new PostgresActionDraftStore(contexts, codeVersion, configuration.Settings.DraftsKeyTerms), reader,
             new AnthropicActionDraftModel(configuration.ApiKey), configuration.Settings, issues);
         return new(status, configuration.Settings.DailyTokenLimit, new AnalysisWorker<ActionDraftRun>(step, status, TimeProvider.System, loggers.CreateLogger<AnalysisWorker<ActionDraftRun>>(), beat, wakeup), wakeup);
     }
@@ -44,9 +44,9 @@ internal static class ActionDraftComposition
         var reader = new ActionBillReader(PostgresCollectionJobStore.FromConnectionString(connectionString, codeVersion),
             new ApiResponseReader(PostgresCollectionAttemptStore.FromConnectionString(connectionString), new CaptureBodyReader()),
             new CaptureDocumentTextExtractor(), PublicationComposition.RequireArtifactRoot());
-        var store = new PostgresActionDraftStore(AnalysisDbContextFactory.Create(connectionString), codeVersion);
         var settings = new ActionDraftSettings(AnalysisSettings.DefaultCallTokenLimit, draftsFromBillText: true,
             keyTermGlossary: ActionDraftConfiguration.ReadKeyTermGlossary(billText: true));
+        var store = new PostgresActionDraftStore(AnalysisDbContextFactory.Create(connectionString), codeVersion, settings.DraftsKeyTerms);
         return new(store, new ActionDraftStep(store, reader, new AnthropicActionDraftModel(apiKey), settings, issues));
     }
 }

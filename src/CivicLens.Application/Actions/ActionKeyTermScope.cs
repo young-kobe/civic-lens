@@ -7,14 +7,17 @@ namespace CivicLens.Application.Actions;
 /// <summary>
 /// The key terms of one bill text draft: where the definitions section lies, and the checks of the terms that the model returns. Code locates the
 /// section, so a bill with no definitions section has no scope, and its draft asks for no key terms. The one owner of the key term checks is
-/// <see cref="Resolve"/>. A wrong quote is an error that the repair pass sends back. A glossary term or a repeated term is dropped, because it is no fault of the model.
+/// <see cref="Resolve"/>. A failed check is an error that the repair pass sends back. On the last pass the resolver drops the failing terms instead, so a
+/// key term never fails the draft. A glossary term or a repeated term is always dropped, because it is no fault of the model.
 /// </summary>
 public sealed class ActionKeyTermScope
 {
+    private readonly ActionDraftBillText billText;
     private readonly IReadOnlySet<string> glossary;
 
-    private ActionKeyTermScope(BillDefinitionsSection section, IReadOnlySet<string> glossary)
+    private ActionKeyTermScope(ActionDraftBillText billText, BillDefinitionsSection section, IReadOnlySet<string> glossary)
     {
+        this.billText = billText;
         Section = section;
         this.glossary = glossary;
     }
@@ -25,7 +28,7 @@ public sealed class ActionKeyTermScope
     {
         ArgumentNullException.ThrowIfNull(billText);
         ArgumentNullException.ThrowIfNull(glossary);
-        return BillDefinitionsSection.Find(billText.Body) is { } section ? new(section, glossary) : null;
+        return BillDefinitionsSection.Find(billText.Body) is { } section ? new(billText, section, glossary) : null;
     }
 
     internal ImmutableArray<ActionKeyTerm> Resolve(AnalysisOutputKeyTerm?[]? items, BillTextQuotes quotes, List<string> errors)
@@ -53,14 +56,14 @@ public sealed class ActionKeyTermScope
             errors.Add($"The quote of the key term \"{Shorten(term)}\" is not an exact quote of the definitions section. Copy it exactly from that section.");
         else if (span.Length > ActionDraftRevision.MaximumTextQuoteLength)
             errors.Add($"The quote of the key term \"{Shorten(term)}\" spans {span.Length} characters of the stored text. Quote at most {ActionDraftRevision.MaximumTextQuoteLength}.");
-        else return Defined(new ActionKeyTerm(term, span, quote), errors);
+        else return Defined(new ActionKeyTerm(term, span, quote, Section.Cuts(billText.Body, span.Start + span.Length - billText.BodyStart)), errors);
         return null;
     }
 
     private static ActionKeyTerm? Defined(ActionKeyTerm term, List<string> errors)
     {
         if (term.IsDefinedBy(term.Definition)) return term;
-        errors.Add($"The key term \"{Shorten(term.Term)}\" is not in its quote. Use a term that the quote defines, written as the quote writes it.");
+        errors.Add($"The key term \"{Shorten(term.Term)}\" is not the term that its quote defines in quotation marks. Write the term exactly as the quote marks it.");
         return null;
     }
 

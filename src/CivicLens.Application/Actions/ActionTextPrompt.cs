@@ -27,8 +27,8 @@ public static class ActionTextPrompt
 
     private static readonly string KeyTermInstructions = $"""
         Key terms. The facts name the definitions section of the bill text in definitionsSection: its heading, and the heading where it ends. Add the field keyTerms with at most {ActionKeyTerm.MaximumPerRevision} terms that a reader needs to understand the bill. Each term must be defined in that section. Each key term is an object with two fields:
-        - term: the term as the definitions section writes it, at most {ActionKeyTerm.MaximumTermLength} characters.
-        - quote: one exact quote of the definitions section that defines the term. Copy the characters exactly. It must contain the term. It has at least {ActionDraftRevision.MinimumTextQuoteWords} words and at most {ActionDraftRevision.MaximumTextQuoteLength} characters. When a definition is longer, quote its first part.
+        - term: the defined term exactly as the quote writes it inside quotation marks, at most {ActionKeyTerm.MaximumTermLength} characters.
+        - quote: one exact quote of the definitions section that defines the term. Copy the characters exactly. It must contain the term inside quotation marks. It has at least {ActionDraftRevision.MinimumTextQuoteWords} words and at most {ActionDraftRevision.MaximumTextQuoteLength} characters. When a definition is longer, quote its first part.
         Never write your own definition. Never choose a term that this section does not define. Write an empty list when the section has no term that a reader needs. Code rejects a quote that is not in the definitions section. Code ignores a key term that the Civic Lens glossary already explains. Code does not grade the key terms with the passage.
         """;
 
@@ -46,6 +46,7 @@ public static class ActionTextPrompt
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;
         return AnalysisModelRequest.Create(ActionDraftTask.Model, ActionDraftTask.MaximumTextOutputTokens, system, user, schema, bytes,
-            cacheSystemPrompt: true, promptVersion: ActionDraftTask.TextPromptVersion, schemaVersion: ActionDraftTask.TextSchemaVersion);
+            cacheSystemPrompt: true, promptVersion: keyTerms is null ? ActionDraftTask.TextPromptVersion : ActionDraftTask.KeyTermTextPromptVersion,
+            schemaVersion: keyTerms is null ? ActionDraftTask.TextSchemaVersion : ActionDraftTask.KeyTermTextSchemaVersion);
     }
 }

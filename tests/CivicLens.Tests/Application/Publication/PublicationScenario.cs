@@ -346,7 +346,7 @@ internal sealed class PublicationScenario
                 Cite(ActionTextPart.Summary, start, 16, "Two."),
                 Cite(ActionTextPart.WhyItMatters, start, 16, "Three.")
             ],
-            KeyTerms = withKeyTerm ? [new ActionKeyTerm("program", new(text.ExtractionId, start, 16), "The program ends")] : default
+            KeyTerms = withKeyTerm ? [new ActionKeyTerm("program", new(text.ExtractionId, start, 16), "The program ends", Cut: false)] : default
         };
         Actions.Publishable[recordId] = publishable with
         {

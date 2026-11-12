@@ -115,7 +115,8 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         ActionDraftContext context, ActionDraftBillText billText, ActionKeyTermScope? keyTerms, AnalysisModelRequest firstRequest) =>
         new(Wrap, attempt, AnalysisRunOutcome.Drafted, ActionDraftTask.MaximumValidationPasses,
             errors => errors.IsDefaultOrEmpty ? firstRequest : BuildBillTextRequest(context, billText, keyTerms, errors), model.DraftAsync,
-            (json, run) => ActionDraftResolver.ResolveBillText(json, context, run.RunId, run.FinishedAtUtc, keyTerms), ReadRunAsync);
+            (json, run) => ActionDraftResolver.ResolveBillText(json, context, run.RunId, run.FinishedAtUtc, keyTerms), ReadRunAsync,
+            (json, run) => ActionDraftResolver.ResolveBillText(json, context, run.RunId, run.FinishedAtUtc, keyTerms, dropFailingKeyTerms: true));
 
     private AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision> IssueLoop(IAnalysisAttempt<ActionDraftRun> attempt,
         ActionDraftContext context) =>

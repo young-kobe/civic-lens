@@ -9,7 +9,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
     {
         private const string ViewSql = """
             CREATE VIEW public_api.bill_key_terms WITH (security_barrier = true) AS
-            SELECT a.record_id, a.revision_number, k."position", k.term, k.definition,
+            SELECT a.record_id, a.revision_number, k."position", k.term, k.definition, k.cut,
                    'Key terms chosen by an AI model. Each definition is an exact quote from the definitions section of the bill. Code checked the quotes, not the choice of terms.' AS label
               FROM public_api.active_records a
               JOIN public.action_revisions r ON r.record_id = a.record_id AND r.revision_number = a.revision_number
@@ -34,7 +34,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     citation_extraction_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     citation_start = table.Column<int>(type: "integer", nullable: false),
                     citation_length = table.Column<int>(type: "integer", nullable: false),
-                    definition = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: false)
+                    definition = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: false),
+                    cut = table.Column<bool>(type: "boolean", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -62,11 +63,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                 table: "action_revision_key_terms",
                 column: "citation_extraction_id");
 
-            migrationBuilder.CreateIndex(
-                name: "ux_action_revision_key_terms_term",
-                table: "action_revision_key_terms",
-                columns: new[] { "record_id", "revision_number", "term" },
-                unique: true);
+            // The index compares terms with case ignored, as the revision check does. EF Core maps no expression index, so it is SQL here.
+            migrationBuilder.Sql("""
+                CREATE UNIQUE INDEX ux_action_revision_key_terms_term
+                    ON action_revision_key_terms (record_id, revision_number, lower(term));
+                """);
 
             // The view serves a term and its definition quote for the origin Model only, the origin that carries the AI label. A person edit of the
             // text changes the origin, and the terms then leave the view, as why_it_matters does in public_api.bills.

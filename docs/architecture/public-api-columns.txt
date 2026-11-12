@@ -23,6 +23,7 @@ bill_issues issue_id
 bill_issues position
 bill_issues record_id
 bill_issues revision_number
+bill_key_terms cut
 bill_key_terms definition
 bill_key_terms label
 bill_key_terms position

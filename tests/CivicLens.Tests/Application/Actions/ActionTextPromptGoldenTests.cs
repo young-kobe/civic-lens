@@ -21,10 +21,10 @@ public sealed class ActionTextPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(ActionDraftTask.TextPromptVersion)} ({ActionDraftTask.TextPromptVersion}) or " +
             $"{nameof(ActionDraftTask.TextSchemaVersion)} ({ActionDraftTask.TextSchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("action-text-prompt-v7", "action-text-schema-v2", "claude-haiku-5-5"),
+        Assert.Equal(("action-text-prompt-v6", "action-text-schema-v1", "claude-haiku-5-5"),
             (ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model));
         Assert.Equal((ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion), (request.PromptVersion, request.SchemaVersion));
-        Assert.Contains(ActionDraftTask.TextPromptVersion, ActionDraftTask.CurrentVersions.PromptVersions);
+        Assert.Contains(ActionDraftTask.TextPromptVersion, ActionDraftTask.CurrentVersions(draftsKeyTerms: false).PromptVersions);
         Assert.Equal("action-draft-prompt-v5", ActionDraftTask.PromptVersion);
         Assert.True(request.CacheSystemPrompt);
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");

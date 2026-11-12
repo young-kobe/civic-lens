@@ -47,7 +47,7 @@ internal sealed record ActionRevisionPage(IReadOnlyList<ActionRevisionRow> Rows,
     private ImmutableArray<ActionKeyTerm> KeyTermsOf(ActionRevisionRow row)
     {
         var terms = KeyTerms[(row.RecordId, row.RevisionNumber)].OrderBy(term => term.Position).Select(term =>
-            new ActionKeyTerm(term.Term, new SourceSpan(term.CitationExtractionId, term.CitationStart, term.CitationLength), term.Definition)).ToImmutableArray();
+            new ActionKeyTerm(term.Term, new SourceSpan(term.CitationExtractionId, term.CitationStart, term.CitationLength), term.Definition, term.Cut)).ToImmutableArray();
         return terms.IsEmpty ? default : terms;
     }
 

@@ -216,17 +216,20 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         RequireKeyTermsInTheDefinitions(extractions[extractionId], bodyStart);
     }
 
-    /// <summary>A key term defines itself by an exact quote of the definitions section. The section comes from the same code rule that the draft step used.</summary>
+    /// <summary>A key term defines itself by an exact quote of the definitions section. The section and the cut mark come from the same code rules that the draft step used.</summary>
     private void RequireKeyTermsInTheDefinitions(DocumentExtraction extraction, int bodyStart)
     {
         if (KeyTermList.IsEmpty) return;
-        var section = BillDefinitionsSection.Find(extraction.Text[bodyStart..]);
+        var body = extraction.Text[bodyStart..];
+        var section = BillDefinitionsSection.Find(body);
         foreach (var term in KeyTermList)
         {
             if (section is null || !section.Contains(term.Span.Start - bodyStart, term.Span.Length))
                 throw new ArgumentException("Each key term quotes the definitions section of the bill text.");
             if (term.Definition != GpoQuoteMarks.Normalize(new DocumentTextSpan(extraction, term.Span.Start, term.Span.Length).Quote))
                 throw new ArgumentException("Each key term definition is the plain form of the exact quote that its citation names.");
+            if (term.Cut != section.Cuts(body, term.Span.Start + term.Span.Length - bodyStart))
+                throw new ArgumentException("Each key term cut mark agrees with the definition paragraph of its quote.");
         }
     }
 

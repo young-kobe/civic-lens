@@ -602,6 +602,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("citation_start");
 
+                    b.Property<bool>("Cut")
+                        .HasColumnType("boolean")
+                        .HasColumnName("cut");
+
                     b.Property<string>("Definition")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -617,10 +621,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasKey("RecordId", "RevisionNumber", "Position");
 
                     b.HasIndex("CitationExtractionId");
-
-                    b.HasIndex("RecordId", "RevisionNumber", "Term")
-                        .IsUnique()
-                        .HasDatabaseName("ux_action_revision_key_terms_term");
 
                     b.ToTable("action_revision_key_terms", null, t =>
                         {

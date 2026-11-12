@@ -177,7 +177,7 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
     {
         var terms = new SeededBill('d', "2026-03-01")
         {
-            Text = new SeededBillText(59_987, 85_000, [("Secretary", "The term Secretary means the Secretary of Energy."), ("grant", "The term grant means a payment under section 3.")])
+            Text = new SeededBillText(59_987, 85_000, [("Secretary", "The term Secretary means the Secretary of Energy.", false), ("grant", "The term grant means a payment under section 3.", true)])
         };
         await using var host = await StartWithBillsAsync(terms, B);
 
@@ -188,6 +188,7 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
         Assert.Equal(["Secretary", "grant"], listed.Select(item => item.GetProperty("term").GetString()));
         Assert.Equal(["The term Secretary means the Secretary of Energy.", "The term grant means a payment under section 3."],
             listed.Select(item => item.GetProperty("definition").GetString()));
+        Assert.Equal([false, true], listed.Select(item => item.GetProperty("cut").GetBoolean()));
         Assert.Equal(BillTextWords.Label, withTerms.RootElement.GetProperty("bill").GetProperty("label").GetString());
         Assert.Equal("Key terms chosen by an AI model. Each definition is an exact quote from the definitions section of the bill. Code checked the quotes, not the choice of terms.",
             withTerms.RootElement.GetProperty("keyTermsLabel").GetString());
