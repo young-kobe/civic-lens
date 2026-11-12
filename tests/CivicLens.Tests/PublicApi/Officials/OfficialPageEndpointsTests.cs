@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.PublicWeb.Publication;
@@ -37,7 +38,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         new('d', "2026-02-06") { Casts = ["Nay", "Nay", "Yea"], PersonIds = ["p0", "p1", "p2"], RollCall = 4 }
     ];
 
-    private async Task<ApiHost> StartAsync()
+    private async Task<ApiHost> StartAsync(bool storeBillCounts = true)
     {
         var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
         var database = host.OperationalDatabase;
@@ -63,7 +64,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
             new SeededBill('1', "2026-03-02") { BillNumber = 1, Sponsorships = [new("p0", "Sponsor", "2026-01-10")] },
             new SeededBill('2', "2026-03-03") { BillNumber = 2, BillLine = "Pays landlords.", Sponsorships = [new("p0", "Sponsor", "2026-03-03"), new("p1", "Cosponsor", "2026-03-03")] },
             new SeededBill('3', "2026-03-04") { BillNumber = 3, Sponsorships = [new("p1", "Sponsor", "2026-03-04")] });
-        await StoredBillCounts.FillAsync(database, 1, 119);
+        if (storeBillCounts) await StoredBillCounts.FillAsync(database, 1, 119);
         return host;
     }
 
@@ -167,6 +168,29 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         Assert.Contains("Introduced 3 Mar 2026", rows[0].QuerySelector(".official-meta")!.TextContent);
         Assert.Contains("Introduced 10 Jan 2026", rows[1].QuerySelector(".official-meta")!.TextContent);
         Assert.Null(page.QuerySelector("#bills .official-more"));
+    }
+
+    [Fact]
+    public async Task KnownIssuesRemainVisibleWhenTheBillCountSnapshotIsUnavailable()
+    {
+        await using var host = await StartAsync(storeBillCounts: false);
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('4', "2026-03-05") { BillNumber = 4, Issues = ["housing"], Sponsorships = [new("p0", "Sponsor", "2026-03-05")] });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase,
+            "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'housing', 'Housing', 'Housing policy');");
+        using var detailResponse = await host.Client.GetAsync("/v1/officials/p0");
+        detailResponse.EnsureSuccessStatusCode();
+        using var detail = JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync());
+        Assert.Equal(JsonValueKind.Null, detail.RootElement.GetProperty("bills").ValueKind);
+        Assert.NotEmpty(detail.RootElement.GetProperty("issues").GetProperty("issues").EnumerateArray());
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        var issues = page.QuerySelector("#issues");
+        Assert.NotNull(issues);
+        Assert.Contains("119th Congress", issues.TextContent);
+        Assert.Equal("Housing 1", Assert.Single(issues.QuerySelectorAll(".official-chips a")).TextContent);
+        Assert.Empty(page.QuerySelectorAll("a[href='#bills']"));
     }
 
     [Fact]

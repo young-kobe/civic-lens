@@ -28,6 +28,7 @@ public sealed class OfficialProfilePageTests
         Attendance = [new(PublishedChamber.House, 119, 5, 675, new(2025, 1, 3), new(2026, 9, 16))],
         PartyLines = [new(PublishedChamber.House, 119, "Democrat", 248, 1, 249, new(2025, 1, 3), new(2026, 9, 16))],
         BillsCongress = 119,
+        IssuesCongress = 119,
         SponsoredBills = 43,
         Issues = [new("tax", "Federal taxes", 8)],
         Marks = [new(BreakId, new(2026, 9, 16), PublishedChamber.House, 309, false, "Democrat"),
@@ -429,7 +430,7 @@ public sealed class OfficialProfilePageTests
     [Fact]
     public async Task AnIssueSectionWithoutItsCongressIsHiddenAndAPageWithNoSectionHasNoJumpList()
     {
-        var noCongress = await RenderAsync<OfficialProfilePage>(Member() with { BillsCongress = null });
+        var noCongress = await RenderAsync<OfficialProfilePage>(Member() with { IssuesCongress = null });
         var nothing = await RenderAsync<OfficialProfilePage>(Member() with { Marks = [], Votes = [], Statements = [], Bills = [], Issues = [], HasLinkedStatements = true });
 
         Assert.Null(noCongress.QuerySelector("#issues"));

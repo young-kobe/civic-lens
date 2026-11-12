@@ -16,6 +16,7 @@ public sealed record OfficialPageData(
     public OfficialPartyLineData[] PartyLines { get; init; } = [];
     public int? BillsCongress { get; init; }
     public int SponsoredBills { get; init; }
+    public int? IssuesCongress { get; init; }
     public OfficialIssueData[] Issues { get; init; } = [];
     public OfficialMarkData[] Marks { get; init; } = [];
     /// <summary>How many marks the official has in all. <c>Marks</c> holds only the newest ones.</summary>
