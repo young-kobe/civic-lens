@@ -44,7 +44,8 @@ public sealed class BillStore(NpgsqlDataSource views)
                    b.history_observed_at_utc_ticks, b.history_action_count,
                    ARRAY(SELECT i.issue_id FROM public_api.bill_issues i
                           WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number ORDER BY i."position"),
-                   s.latest_action_text, s.latest_action_date, s.read_at_utc_ticks
+                   s.latest_action_text, s.latest_action_date, s.read_at_utc_ticks,
+                   b.checked_at_utc_ticks, b.first_published_at_utc_ticks, b.summary_from_crs
               FROM public_api.bills b
               LEFT JOIN public_api.bill_status s ON s.record_id = b.record_id AND s.revision_number = b.revision_number
              WHERE b.record_id = @id
@@ -53,7 +54,12 @@ public sealed class BillStore(NpgsqlDataSource views)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
         return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(27), ReadLatestAction(reader), ReadHistory(reader, 25, 26),
-            ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24));
+            ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24))
+        {
+            CheckedAtUtc = Utc(reader, 31),
+            FirstPublishedAtUtc = Utc(reader, 32),
+            SummaryFromCrs = reader.GetBoolean(33)
+        };
     }
 
     /// <summary>Reads one page of the sponsorships of a bill. Null means that no release is active or that the active release holds no such bill.</summary>
@@ -103,22 +109,17 @@ public sealed class BillStore(NpgsqlDataSource views)
         return new(active, history, page, next);
     }
 
-    /// <summary>Reads every sponsorship of a bill with the name of its official and the party that the official's term held on the sponsorship date, in one statement.
-    /// A day that no term holds, a blank term party, and terms of two parties on one day give no party. The rule is the one of the issue line-up in <c>ReleaseIssuePartyCounts</c>.
-    /// Null means that no release is active. The count is bounded by the officials that the release tracks.</summary>
+    /// <summary>Reads every sponsorship of a bill with the name of its official and the party from <c>public_api.bill_sponsorship_parties</c>, the one owner of the
+    /// term party on the sponsorship date, in one statement. Null means that no release is active. The count is bounded by the officials that the release tracks.</summary>
     public async Task<BillSponsors?> ListSponsorsAsync(string recordId, CancellationToken cancellationToken)
     {
         await using var command = views.CreateCommand("""
-            SELECT a.release_number, s."position", s.official_id, o.name, term.party, s.role, s.is_original, s.sponsored_on, s.withdrawn_on
+            SELECT a.release_number, s."position", s.official_id, o.name, p.party, s.role, s.is_original, s.sponsored_on, s.withdrawn_on
               FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
               LEFT JOIN public_api.bill_sponsorships s ON s.record_id = @id
               LEFT JOIN public_api.officials o ON o.official_id = s.official_id
-              LEFT JOIN LATERAL (
-                   SELECT CASE WHEN count(DISTINCT held.party) = 1 AND count(held.party) = count(*) THEN min(held.party) END AS party
-                     FROM (SELECT CASE WHEN btrim(t.party) <> '' THEN t.party END AS party
-                             FROM public_api.release_official_terms t
-                            WHERE t.official_id = s.official_id
-                              AND t.start_on <= s.sponsored_on AND (t.end_on IS NULL OR t.end_on >= s.sponsored_on)) held) term ON TRUE
+              LEFT JOIN public_api.bill_sponsorship_parties p
+                     ON p.record_id = s.record_id AND p.revision_number = s.revision_number AND p."position" = s."position"
              ORDER BY s."position"
             """);
         command.Parameters.AddWithValue("id", recordId);
@@ -241,6 +242,8 @@ public sealed class BillStore(NpgsqlDataSource views)
     private static BillHistory? ReadHistory(DbDataReader reader, int observedAtIndex, int actionCountIndex) => reader.IsDBNull(observedAtIndex) || reader.IsDBNull(actionCountIndex)
         ? null
         : new(new DateTimeOffset(reader.GetInt64(observedAtIndex), TimeSpan.Zero), reader.GetInt32(actionCountIndex));
+
+    private static DateTimeOffset? Utc(DbDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : new DateTimeOffset(reader.GetInt64(ordinal), TimeSpan.Zero);
 
     // Columns 28 to 30 hold the status. The view holds no row for a bill with no latest action.
     private static BillLatestAction? ReadLatestAction(DbDataReader reader) => reader.IsDBNull(28)

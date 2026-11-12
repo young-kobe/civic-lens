@@ -1,3 +1,4 @@
+using CivicLens.Publication.Contracts;
 using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.PublicWeb.Publication;
@@ -6,7 +7,7 @@ namespace CivicLens.PublicWeb.Publication;
 /// The tracked cosponsors of a bill who had not withdrawn on the release date. Original cosponsors joined on the day of introduction.
 /// The party of each one is the party that the term of the official held on the day that the official joined.
 /// </summary>
-public sealed record BillCosponsorsData(string Chamber, BillSponsorData[] Original, BillSponsorData[] Later)
+public sealed record BillCosponsorsData(PublishedChamber Chamber, BillSponsorData[] Original, BillSponsorData[] Later)
 {
     public const string NoParty = "No party listed";
 

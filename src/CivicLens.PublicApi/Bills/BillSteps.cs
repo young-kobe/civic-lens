@@ -16,9 +16,9 @@ public static partial class BillSteps
 
     public static BillStepData[] Of(BillRow bill, string? sponsorName, IReadOnlyList<BillActionRow> actions)
     {
-        var chamber = ChamberOf(bill.BillType);
+        var chamber = BillNumbers.ChamberOf(bill.BillType);
         var introducedBy = sponsorName is null ? "" : ", by " + sponsorName;
-        var steps = new List<BillStepData> { new($"Introduced in the {chamber}", Moment.Day(bill.EventDate) + introducedBy) { Chamber = Chamber(chamber) } };
+        var steps = new List<BillStepData> { new($"Introduced in the {chamber}", Moment.Day(bill.EventDate) + introducedBy) { Chamber = chamber } };
         var ordered = actions.OrderBy(action => action.ActionDate).ThenBy(action => action.ActionTime).ThenBy(action => action.Position).ToArray();
         steps.AddRange(Passages(ordered));
         steps.AddRange(AgreedChanges(ordered));
@@ -27,8 +27,11 @@ public static partial class BillSteps
         return [.. steps];
     }
 
-    private static string ChamberOf(string billType) => billType.StartsWith('h') ? "House" : "Senate";
+    /// <summary>True when a step after the introduction happened in the Senate: a passage, an agreement to changes, or another floor step.
+    /// The first step is always the introduction, so a bill that was only introduced in the Senate gives false.</summary>
+    public static bool SenateActedAfterIntroduction(IEnumerable<BillStepData> steps) => steps.Skip(1).Any(step => step.Chamber == PublishedChamber.Senate);
 
+    // The chamber group of a step regex holds only "House" or "Senate".
     private static PublishedChamber Chamber(string name) => Enum.Parse<PublishedChamber>(name);
 
     private static IEnumerable<BillStepData> Passages(BillActionRow[] ordered) => ordered

@@ -1,4 +1,4 @@
 namespace CivicLens.PublicApi.Votes;
 
-/// <summary>The casts of the asked officials in the active release, by the record ID of the vote.</summary>
-public sealed record MemberCastAnswer(int Release, Dictionary<string, SharedMemberVoteCast[]> ByVote);
+/// <summary>The recorded casts of the asked officials on the roll call votes that name one bill, in the active release, oldest first.</summary>
+public sealed record MemberCastAnswer(int Release, MemberBillCast[] Casts);

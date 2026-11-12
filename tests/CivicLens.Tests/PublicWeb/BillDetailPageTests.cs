@@ -17,11 +17,11 @@ public sealed class BillDetailPageTests
     private static readonly string RecordId = new('a', 64);
     private static readonly BillSponsorData Sponsor = new("p1", "Pat One", "Democrat", new(2025, 9, 11));
 
-    private static readonly BillPageData Bill = new(7, RecordId, 2, 119, "H.R. 5334", "The Example Act of 2026", "H.R. 5334 headline", "House",
+    private static readonly BillPageData Bill = new(7, RecordId, 2, 119, "H.R. 5334", "The Example Act of 2026", "H.R. 5334 headline", PublishedChamber.House,
         "The bill would add a tax credit.", PublishedTextOrigin.Model, "AI summary. Drafted by an AI model from reviewed records.", new(2025, 9, 11))
     {
         Sponsors = [Sponsor],
-        Cosponsors = new("House",
+        Cosponsors = new(PublishedChamber.House,
             [new("p2", "Ann Two", "Democrat", new(2025, 9, 11)), new("p3", "Bob Three", "Republican", new(2025, 9, 11))],
             [new("p4", "Cy Four", "Democrat", new(2025, 10, 2)), new("p5", "Di Five", null, new(2025, 10, 3))]),
         Steps = [new("Introduced in the House", "11 Sep 2025, by Pat One"), new("Became law", "18 Sep 2026, Public Law 119-111")],
@@ -126,7 +126,7 @@ public sealed class BillDetailPageTests
     [Fact]
     public async Task ABillWithNoTrackedCosponsorShowsNoPartyBar()
     {
-        var page = await RenderAsync(Bill with { Cosponsors = new("House", [], []) });
+        var page = await RenderAsync(Bill with { Cosponsors = new(PublishedChamber.House, [], []) });
 
         Assert.Null(page.QuerySelector(".party-bar"));
     }
@@ -257,6 +257,38 @@ public sealed class BillDetailPageTests
         Assert.Contains("Status read 5 Nov 2026, 09:57 UTC. The bill can change after this time.", text);
         Assert.Contains("Version 55", text);
         Assert.Equal("2", fold.QuerySelectorAll("dt").Single(term => term.TextContent == "Revision").NextElementSibling!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheStatusReadTimeShowsOnceAndOnlyInTheSourceFold()
+    {
+        const string statusRead = "Status read 5 Nov 2026, 09:57 UTC. The bill can change after this time.";
+        var page = await RenderAsync(Bill);
+
+        Assert.Single(page.QuerySelectorAll("dd, p"), element => element.TextContent.Contains(statusRead, StringComparison.Ordinal));
+        Assert.Contains(statusRead, page.QuerySelector("details#source")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheCheckedLineShowsTheApprovalAndFirstPublicationTimesOnlyWhenBothAreKnown()
+    {
+        var times = Bill with { CheckedAtUtc = new(2026, 11, 5, 10, 5, 0, TimeSpan.Zero), FirstPublishedAtUtc = new(2026, 11, 5, 10, 7, 0, TimeSpan.Zero) };
+
+        var shown = (await RenderAsync(times)).QuerySelector("details#source")!;
+        var hidden = (await RenderAsync(times with { CheckedAtUtc = null })).QuerySelector("details#source")!;
+
+        Assert.Equal("5 Nov 2026, 10:05 UTC. First published 5 Nov 2026, 10:07 UTC.",
+            shown.QuerySelectorAll("dt").Single(term => term.TextContent == "Checked").NextElementSibling!.TextContent);
+        Assert.DoesNotContain(hidden.QuerySelectorAll("dt"), term => term.TextContent == "Checked");
+    }
+
+    [Fact]
+    public async Task TheCrsLineShowsOnlyWhenTheStoredOriginSaysTheModelDraftedFromTheCrsSummary()
+    {
+        const string line = "The text above summarizes the Congressional Research Service summary.";
+
+        Assert.Contains(line, (await RenderAsync(Bill with { SummaryFromCrs = true })).QuerySelector(".ai-summary")!.TextContent);
+        Assert.DoesNotContain(line, (await RenderAsync(Bill with { SummaryFromCrs = false })).Body!.TextContent);
     }
 
     private static async Task<IDocument> RenderAsync(BillPageData data)

@@ -1,5 +1,6 @@
 using System.Net;
 using AngleSharp.Html.Parser;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
@@ -55,6 +56,25 @@ public sealed class BillMembersEndpointsTests(PostgresCollection postgres)
             ["Alice House cosponsored it on 5 Mar 2026.", "Alice House voted No (Nay) on the House vote of 3 Mar 2026.", "Sam Senator did not sponsor or cosponsor it."],
             page.QuerySelectorAll(".bill-members-list p").Select(item => item.TextContent));
         Assert.Equal(["Your senator has no Senate vote on this bill in this release."], page.QuerySelectorAll("p.muted").Select(item => item.TextContent));
+    }
+
+    [Fact]
+    public async Task CastsAndTheSenateVoteOlderThanTheFirstFiftyHouseVotesStillShow()
+    {
+        await using var host = await StartAsync(new SeededSponsorship("p9", "Sponsor", "2026-03-02"));
+        var newer = Enumerable.Range(1, PublicationProtocol.PageSize + 1)
+            .Select(index => new SeededVote('d', "2026-04-01") { BillNumber = 7, RollCall = 100 + index, RecordId = (100 + index).ToString("x64") });
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, [.. newer,
+            new SeededVote('c', "2026-03-01") { BillNumber = 7, RollCall = 99, RecordId = 1.ToString("x64"), Casts = ["Yea"], PersonIds = ["al2"] },
+            new SeededVote('b', "2026-02-01") { Chamber = "Senate", BillNumber = 7, RecordId = 2.ToString("x64"), Casts = ["Nay"], PersonIds = ["al-sen"] }]);
+
+        var page = new HtmlParser().ParseDocument(await host.Client.GetStringAsync($"/v1/zip-districts/36009/bills/{BillId}"));
+
+        Assert.Equal(
+            ["Alice House did not sponsor or cosponsor it.", "Alice House voted Yes (Yea) on the House vote of 1 Mar 2026.", "Alice House voted No (Nay) on the House vote of 3 Mar 2026.",
+             "Sam Senator did not sponsor or cosponsor it.", "Sam Senator voted No (Nay) on the Senate vote of 1 Feb 2026."],
+            page.QuerySelectorAll(".bill-members-list p").Select(item => item.TextContent));
+        Assert.Empty(page.QuerySelectorAll("p.muted"));
     }
 
     [Fact]

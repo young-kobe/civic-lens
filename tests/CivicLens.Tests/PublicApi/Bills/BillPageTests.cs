@@ -99,6 +99,106 @@ public sealed class BillPageTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AVoteRowShowsTheSplitBadgeFromTheStoredAlignment()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE vote_revisions SET alignment = 'Split', columns_written = true WHERE record_id = '{new string('e', 64)}';");
+
+        var page = await ReadPageAsync(host, BillId);
+
+        Assert.Equal(["Split vote"], page.QuerySelectorAll(".bill-votes .shared-vote-row .badge").Select(badge => badge.TextContent.Trim()));
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task ASenatePassageStepShowsTheGapNoteOnlyWhenNoSenateVoteNamesTheBill(bool senateVote, bool gapNote)
+    {
+        await using var host = await StartAsync();
+        await AddSenatePassageAsync(host.OperationalDatabase);
+        if (senateVote) await ViewsSeed.AddVotesAsync(host.OperationalDatabase, new SeededVote('c', "2026-03-08") { Chamber = "Senate", BillNumber = 7 });
+
+        var page = await ReadPageAsync(host, BillId);
+
+        Assert.Contains("Passed the Senate", page.QuerySelectorAll(".bill-stepper b").Select(step => step.TextContent));
+        Assert.Equal(gapNote, page.QuerySelector(".bill-votes")!.TextContent.Contains("This site has no Senate roll call vote on this bill.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ASenateVoteOlderThanTheFirstFiftyHouseVotesStillCountsSoTheGapNoteStaysHidden()
+    {
+        await using var host = await StartAsync();
+        await AddSenatePassageAsync(host.OperationalDatabase);
+        var houseVotes = Enumerable.Range(1, PublicationProtocol.PageSize + 1)
+            .Select(index => new SeededVote('d', "2026-04-01") { BillNumber = 7, RollCall = 100 + index, RecordId = (100 + index).ToString("x64") });
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, [.. houseVotes, new SeededVote('c', "2026-03-01") { Chamber = "Senate", BillNumber = 7, RecordId = 1.ToString("x64") }]);
+
+        var page = await ReadPageAsync(host, BillId);
+
+        Assert.Equal(PublicationProtocol.PageSize, page.QuerySelectorAll(".bill-votes .shared-vote-row").Length);
+        Assert.DoesNotContain("This site has no Senate roll call vote", page.QuerySelector(".bill-votes")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ABillOnlyIntroducedInTheSenateShowsNoGapNoteAndNoVotesSection()
+    {
+        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('b', "2026-03-02") { BillType = "s", BillNumber = 9, Sponsorships = [new("p1", "Sponsor", "2026-03-02")] });
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, Official("p1", "Pat One", "Democrat"));
+
+        var page = await ReadPageAsync(host, new string('b', 64));
+
+        Assert.Equal(["Introduced in the Senate"], page.QuerySelectorAll(".bill-stepper b").Select(step => step.TextContent));
+        Assert.Null(page.QuerySelector(".bill-votes"));
+    }
+
+    [Fact]
+    public async Task TheSourceFoldShowsTheApprovalAndFirstPublicationTimesFromTheBillView()
+    {
+        await using var host = await StartAsync();
+        var checkedAt = new DateTimeOffset(2026, 11, 5, 10, 5, 0, TimeSpan.Zero);
+        var firstPublished = new DateTimeOffset(2026, 11, 5, 10, 7, 0, TimeSpan.Zero);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            INSERT INTO action_review_decisions (decision_id, record_id, revision_number, review_state_version, kind, actor_subject, created_at_utc_ticks)
+            VALUES ('{new string('1', 32)}', '{BillId}', 1, 1, 'Approve', 'code', {checkedAt.AddHours(-1).UtcTicks}),
+                   ('{new string('2', 32)}', '{BillId}', 1, 2, 'WithdrawApproval', 'person', {checkedAt.AddHours(-1).UtcTicks}),
+                   ('{new string('3', 32)}', '{BillId}', 1, 3, 'Approve', 'code', {checkedAt.UtcTicks});
+            INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('action', '{BillId}', {firstPublished.UtcTicks});
+            RESET session_replication_role;
+            """);
+
+        var page = await ReadPageAsync(host, BillId);
+
+        var fold = page.QuerySelector("details#source dl")!;
+        var checkedTerm = fold.QuerySelectorAll("dt").Single(term => term.TextContent == "Checked");
+        Assert.Equal("5 Nov 2026, 10:05 UTC. First published 5 Nov 2026, 10:07 UTC.", checkedTerm.NextElementSibling!.TextContent);
+    }
+
+    [Theory]
+    [InlineData("Model", "1", true)]
+    [InlineData("Model", null, false)]
+    [InlineData("Person", "1", false)]
+    public async Task TheCrsLineShowsOnlyForModelTextDraftedFromTheCrsSummary(string origin, string? summaryVersion, bool shown)
+    {
+        await using var host = await StartAsync();
+        var version = summaryVersion is null ? "NULL" : $"'{summaryVersion}'";
+        var citation = summaryVersion is null ? "NULL, NULL, NULL" : "'ext', 0, 1";
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            UPDATE action_revisions SET text_origin = '{origin}', summary_version = {version}, crs_summary_text = CASE WHEN {version} IS NULL THEN NULL ELSE 'CRS text.' END,
+                   (summary_citation_extraction_id, summary_citation_start, summary_citation_length) = ({citation})
+             WHERE record_id = '{BillId}';
+            RESET session_replication_role;
+            """);
+
+        var page = await ReadPageAsync(host, BillId);
+
+        Assert.Equal(shown, page.Body!.TextContent.Contains("The text above summarizes the Congressional Research Service summary.", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task AnUnknownRecordAndAMalformedRecordIdGetTheNotFoundPage()
     {
         await using var host = await StartAsync();
@@ -123,6 +223,21 @@ public sealed class BillPageTests(PostgresCollection postgres)
 
         Assert.Equal(HttpStatusCode.NotModified, second.StatusCode);
     }
+
+    private static async Task<AngleSharp.Html.Dom.IHtmlDocument> ReadPageAsync(ApiHost host, string recordId)
+    {
+        var response = await host.Client.GetAsync($"{ServerPageEndpoints.Prefix}/records/{recordId}.html");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
+    }
+
+    private static Task AddSenatePassageAsync(string connectionString) => ViewsSeed.ExecuteAsync(connectionString, """
+        SET session_replication_role = replica;
+        UPDATE published_bill_histories SET action_count = 4 WHERE detail_job_id = 'history';
+        INSERT INTO published_bill_history_actions (detail_job_id, position, action_date, text, type)
+        VALUES ('history', 3, DATE '2026-03-05', 'Passed Senate without amendment by Unanimous Consent.', 'Floor');
+        RESET session_replication_role;
+        """);
 
     private static async Task SeedHistoryAsync(string connectionString)
     {

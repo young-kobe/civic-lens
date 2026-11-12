@@ -499,18 +499,22 @@
     };
 
     // The bill page card holds no ZIP or member data in the cached page. A remembered ZIP fills it from the private fragment of the browser API.
-    const initBillMembers = (remembered, card, api) => {
+    // A failed read shows the shared lookup failure text, because the reader already gave a ZIP. Only a reader with no ZIP sees the prompt.
+    const initBillMembers = (remembered, card, strip) => {
+        const api = strip?.dataset.membersApi;
         const body = card.querySelector("[data-bill-members-body]");
         const prompt = card.querySelector("[data-bill-members-prompt]");
         let request = 0;
         const clear = () => { request++; body.replaceChildren(); prompt.hidden = false; };
+        const fail = (zip, status) => { body.replaceChildren(memberFailure(zip, status, strip.dataset.officialsPage)); prompt.hidden = true; };
         const run = async () => {
             const zip = remembered.zip();
             if (!validZip(zip) || !api) { clear(); return; }
             const mine = ++request;
             try {
                 const response = await fetch(`${api}/v1/zip-districts/${zip}/bills/${encodeURIComponent(card.dataset.recordId)}`, { headers: { Accept: "text/html" } });
-                if (!response.ok || !/^text\/html(?:;|$)/i.test(response.headers.get("Content-Type") ?? "")) throw new TypeError("Invalid bill members answer.");
+                if (!response.ok) { if (mine === request) fail(zip, response.status); return; }
+                if (!/^text\/html(?:;|$)/i.test(response.headers.get("Content-Type") ?? "")) throw new TypeError("Invalid bill members answer.");
                 const template = document.createElement("template");
                 template.innerHTML = await response.text();
                 const fragment = template.content.firstElementChild;
@@ -521,7 +525,7 @@
                 body.replaceChildren(fragment);
                 prompt.hidden = true;
             } catch {
-                if (mine === request) clear();
+                if (mine === request) fail(zip, 0);
             }
         };
         remembered.onForget(clear);
@@ -969,6 +973,6 @@
     document.querySelectorAll("[data-zip-api]").forEach(form => initZipLookup(form, rememberedMembers));
     const membersStrip = document.querySelector("#members-strip");
     if (membersStrip) initMemberStrip(rememberedMembers, membersStrip);
-    document.querySelectorAll("[data-bill-members]").forEach(card => initBillMembers(rememberedMembers, card, membersStrip?.dataset.membersApi));
+    document.querySelectorAll("[data-bill-members]").forEach(card => initBillMembers(rememberedMembers, card, membersStrip));
     new Set(Array.from(document.querySelectorAll("th[data-sort]"), header => header.closest("table"))).forEach(initSortable);
 })();

@@ -18,10 +18,6 @@
                 <PublishedBillLineNote />
             }
             <p class="bill-lede">@Lede()</p>
-            @if (Data.Status is not null && Data.StatusReadAtUtc is { } statusRead)
-            {
-                <p class="small muted">Status read @Moment.Full(statusRead). The bill can change after this time.</p>
-            }
         </header>
         @if (Data.Steps.Length > 0)
         {
@@ -100,6 +96,11 @@
                             <dt>CRS summary</dt>
                             <dd>Version @Data.CrsVersion</dd>
                         }
+                        @if (Data.CheckedAtUtc is { } checkedAt && Data.FirstPublishedAtUtc is { } firstPublished)
+                        {
+                            <dt>Checked</dt>
+                            <dd>@Moment.Full(checkedAt). First published @Moment.Full(firstPublished).</dd>
+                        }
                         <dt>Official bill page</dt>
                         <dd><a href="@Data.CongressGovUrl" rel="noopener noreferrer">Bill on Congress.gov</a></dd>
                         <dt>Revision</dt>
@@ -118,13 +119,13 @@
     [Parameter, EditorRequired] public BillPageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
 
-    private RenderFragment? CrsCheck => Data.CrsText is null ? null
+    private RenderFragment? CrsCheck => !Data.SummaryFromCrs ? null
         : @<text>The text above summarizes the Congressional Research Service summary. <a href="#source">@SourceFold.Title</a></text>;
 
     protected override void OnParametersSet()
     {
         record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.Action, Data.Headline, Data.Number);
-        voteRows = new SharedVoteRowsData(Data.Chamber == "Senate" ? PublishedChamber.Senate : PublishedChamber.House, [], Data.Votes);
+        voteRows = new SharedVoteRowsData(Data.Chamber, [], Data.Votes);
     }
 
     private string Lede()

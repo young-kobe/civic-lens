@@ -29,4 +29,14 @@ public sealed class BillNumbersTests
     [InlineData("SJRES", "S.J.Res.")]
     public void ATypeLabelIsThePrintedTypeWithNoNumber(string type, string expected) =>
         Assert.Equal(expected, BillNumbers.TypeLabel(type));
+
+    [Theory]
+    [InlineData("hr", PublishedChamber.House)]
+    [InlineData("HJRES", PublishedChamber.House)]
+    [InlineData("hres", PublishedChamber.House)]
+    [InlineData("s", PublishedChamber.Senate)]
+    [InlineData("sconres", PublishedChamber.Senate)]
+    [InlineData("SRES", PublishedChamber.Senate)]
+    public void EachBillTypeStartsInTheChamberOfItsFirstLetter(string type, PublishedChamber expected) =>
+        Assert.Equal(expected, BillNumbers.ChamberOf(type));
 }

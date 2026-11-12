@@ -33,7 +33,10 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes)
         if (await ReadIssuesAsync(detail, cancellationToken) is not { } issues) return null;
         var voteRequest = new VoteRequest { Congress = bill.Congress, BillType = bill.BillType, BillNumber = bill.BillNumber, Limit = PublicationProtocol.PageSize };
         if (await votes.ListAsync(voteRequest, cancellationToken) is not { } voteRows || voteRows.Release != detail.Release) return null;
-        return Map(detail, actions, sponsors.Rows, issues, voteRows.Votes);
+        // The shown list stops at one page, so the gap note reads the chambers from a read that is complete for the bill.
+        var chambers = await votes.FindBillChambersAsync(bill.Congress, bill.BillType, bill.BillNumber, cancellationToken);
+        if (chambers is null || chambers.Release != detail.Release) return null;
+        return Map(detail, actions, sponsors.Rows, issues, voteRows.Votes, chambers.Chambers);
     }
 
     private async Task<BillActionRow[]?> ReadActionsAsync(string recordId, int release, CancellationToken cancellationToken)
@@ -58,14 +61,16 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes)
         return names is { } read && read.Release == detail.Release ? read.Issues : null;
     }
 
-    private static BillPageData Map(BillDetail detail, BillActionRow[] actions, BillSponsorRow[] sponsorships, BillIssueData[] issues, VoteRow[] voteRows)
+    private static BillPageData Map(BillDetail detail, BillActionRow[] actions, BillSponsorRow[] sponsorships, BillIssueData[] issues, VoteRow[] voteRows,
+        PublishedChamber[] votedChambers)
     {
         var bill = detail.Bill;
+        var chamber = BillNumbers.ChamberOf(bill.BillType);
         var sponsors = sponsorships.Where(row => row.Role == PublishedSponsorshipRole.Sponsor).Select(Person).ToArray();
         var cosponsors = sponsorships.Where(row => row.Role == PublishedSponsorshipRole.Cosponsor && row.WithdrawnOn is null).ToArray();
         var steps = BillSteps.Of(bill, sponsors.FirstOrDefault()?.Name, actions);
         return new(detail.Release, bill.RecordId, bill.RevisionNumber, bill.Congress, BillNumbers.Of(bill.BillType, bill.BillNumber), bill.BillTitle, bill.Headline,
-            bill.BillType.StartsWith('h') ? "House" : "Senate", bill.Summary, bill.TextOrigin, bill.Label, bill.EventDate)
+            chamber, bill.Summary, bill.TextOrigin, bill.Label, bill.EventDate)
         {
             BillLine = bill.BillLine,
             PolicyArea = bill.PolicyArea,
@@ -76,14 +81,16 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes)
             StatusDate = detail.LatestAction?.Date,
             StatusReadAtUtc = detail.LatestAction?.ReadAtUtc,
             Sponsors = sponsors,
-            Cosponsors = new(bill.BillType.StartsWith('h') ? "House" : "Senate",
-                [.. cosponsors.Where(row => row.IsOriginal).Select(Person)], [.. cosponsors.Where(row => !row.IsOriginal).Select(Person)]),
+            Cosponsors = new(chamber, [.. cosponsors.Where(row => row.IsOriginal).Select(Person)], [.. cosponsors.Where(row => !row.IsOriginal).Select(Person)]),
             Steps = steps,
             Votes = [.. voteRows.Select(VoteRowOf)],
-            SenateVoteGap = steps.Any(step => step.Chamber == PublishedChamber.Senate) && !voteRows.Any(vote => vote.Chamber == PublishedChamber.Senate),
+            SenateVoteGap = BillSteps.SenateActedAfterIntroduction(steps) && !votedChambers.Contains(PublishedChamber.Senate),
             Issues = issues,
             CrsText = detail.CrsSummaryText,
             CrsVersion = detail.CrsSummaryVersion,
+            SummaryFromCrs = detail.SummaryFromCrs,
+            CheckedAtUtc = detail.CheckedAtUtc,
+            FirstPublishedAtUtc = detail.FirstPublishedAtUtc,
             CongressGovUrl = CongressGovBillPage.Url(bill.Congress, bill.BillType, bill.BillNumber)
         };
     }

@@ -44,10 +44,10 @@ public sealed class PublicPageReadingGradeTests
     public async Task TheBillPageFixedProseReadsAtOrBelowTheSharedGradeLimit()
     {
         var sponsor = new BillSponsorData("p1", "Pat One", "Democrat", new(2025, 9, 11));
-        var data = new BillPageData(7, new string('a', 64), 1, 119, "H.R. 7", "Title", "Headline", "House", "Summary.", PublishedTextOrigin.Code, null, new(2025, 9, 11))
+        var data = new BillPageData(7, new string('a', 64), 1, 119, "H.R. 7", "Title", "Headline", PublishedChamber.House, "Summary.", PublishedTextOrigin.Code, null, new(2025, 9, 11))
         {
             Sponsors = [sponsor],
-            Cosponsors = new("House", [sponsor], [sponsor]),
+            Cosponsors = new(PublishedChamber.House, [sponsor], [sponsor]),
             Status = "Passed the House. Now in the Senate.",
             StatusLabel = "Passed the House",
             CongressGovUrl = "https://www.congress.gov/bill/119th-congress/house-bill/7",
