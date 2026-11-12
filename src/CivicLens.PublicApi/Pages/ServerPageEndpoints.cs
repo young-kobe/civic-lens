@@ -24,15 +24,15 @@ public static class ServerPageEndpoints
     /// <summary>The path prefix of the server pages. No live route uses it, so the static pages stay the production path until a route moves.</summary>
     public const string Prefix = "/web";
 
-    /// <summary>Maps the gated home, Compare, officials, boards, search, vote kind index, official, issue, and record previews and the not found page under the server-page prefix.</summary>
+    /// <summary>Maps the gated home, Compare, officials, boards, search, vote kind index, official, issue, and record previews, the vote map page, and the not found page under the server-page prefix.</summary>
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         routes.MapGet(Prefix, (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () => await home.ReadAsync(cancellationToken) is { } answer
                 ? await responder.RespondAsync<CivicLens.PublicWeb.Publication.HomePage>(context, StatusCodes.Status200OK, answer.Release,
-                    new Dictionary<string, object?>
+                    async () => new Dictionary<string, object?>
                     {
-                        [nameof(CivicLens.PublicWeb.Publication.HomePage.Data)] = answer,
+                        [nameof(CivicLens.PublicWeb.Publication.HomePage.Data)] = await home.WithDetailAsync(answer, cancellationToken),
                         [nameof(CivicLens.PublicWeb.Publication.HomePage.RootPath)] = baseUrl.Join(string.Empty),
                         [nameof(CivicLens.PublicWeb.Publication.HomePage.BrowserApiUrl)] = home.BrowserApiRoot
                     }, cancellationToken)
@@ -65,6 +65,7 @@ public static class ServerPageEndpoints
             ApiResults.GuardAsync(async () => PublicationProtocol.IsPathSegment(id) && await officials.ReadAsync(id, cancellationToken) is { } page
                 ? await RespondOfficialAsync(context, responder, page, baseUrl, cancellationToken)
                 : await NotFoundAsync(context, responder, baseUrl, cancellationToken)));
+        routes.MapGet(Prefix + "/" + PublicationProtocol.VoteMapPagePath("{recordId}"), VoteMapPageEndpoint.RespondAsync);
         routes.MapGet(RecordRoute("{recordId}"), (string recordId, HttpContext context, RecordKindStore kinds, VotePageReader votes, BillPageReader bills, StatementPageReader statements,
             ExecutiveActionPageReader actions, DocumentChangePageReader changes, BriefPageReader briefs, WithdrawalStore withdrawals, ServerPageResponder responder,
             CancellationToken cancellationToken) =>

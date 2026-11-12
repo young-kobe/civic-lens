@@ -8,17 +8,42 @@ public static class VoteMapWords
     public const string Heading = "Map of the vote";
     public const string LegendHeading = "What the colors count";
     public const string ViewGroup = "View";
+    public const string ColorGroup = "Color";
+    public const string ByVote = "By vote";
+    public const string ByParty = "By party";
+    public const string OpenFullMap = "Open the full map";
+    public const string BackToVote = "Back to the vote page";
+    public const string RecordedVotesOnly = "This map shows recorded votes only. It makes no predictions and gives no ratings.";
+    public const string SourceFold = "Where the data comes from";
+    public const string ShapesTerm = "Shapes";
+    public static readonly string ShapesSource = $"Census Bureau 2024 cartographic boundary file for the {CongressCalendar.Ordinal(VoteMapGeometry.Congress)} Congress, at 1:20,000,000 scale, simplified more for the web. Alaska and Hawaii sit in boxes. Use the shapes to see the pattern, not to find an address.";
     public const string TileView = "One tile per seat";
     public const string TileNote = "Each seat casts one vote, but large rural districts take up more room on a map. The tile view gives every seat the same size.";
     public const string TableFold = "See the table";
     public const string DelegatesHeading = "Delegates";
     public const string DelegatesNote = "Delegates show as circles. They are not in the map or the tiles. The counts include them.";
 
+    public const string NoMapTitle = "No map for this vote";
+    public const string NoMap = "The record does not hold the seats that a map needs. The vote page lists every tracked member.";
+
+    /// <summary>"How the House voted: roll call 308, H.R. 5334". The bill number comes from the one bill number owner.</summary>
+    public static string PageTitle(VotePageData vote) => vote.BillType is { } type && vote.BillNumber is { } number
+        ? $"How the {vote.Chamber} voted: roll call {vote.RollCall}, {BillNumbers.Of(type, number)}"
+        : $"How the {vote.Chamber} voted: roll call {vote.RollCall}";
+
     public static string ShapeView(PublishedChamber chamber) => chamber == PublishedChamber.Senate ? "Map of states" : "Map of districts";
 
     public static string Intro(PublishedChamber chamber) => chamber == PublishedChamber.Senate
         ? "Each state holds its two Senate seats, filled by how each senator voted. The first senator in the record takes the left half and the first tile."
         : "Each shape is one House seat, filled by how its member voted.";
+
+    /// <summary>The label of the shapes alone, as Home draws them: the intro, then the count of each mark in use.</summary>
+    public static string CompactDescription(PublishedChamber chamber, IEnumerable<(VoteMapMark Mark, int Count)> legend) =>
+        $"{Heading}. {Intro(chamber).TrimEnd('.')}: {string.Join(", ", legend.Select(entry => $"{entry.Count} {VoteMapMarks.Label(entry.Mark)}"))}.";
+
+    /// <summary>The note under the legend heading in the party color mode.</summary>
+    public static string PartyLegendNote(int total) =>
+        $"Color shows the member's party. A solid fill means Yes, stripes mean No, and dots mean the member did not vote. The counts add up to {total} seats.";
 
     public static string Description(PublishedChamber chamber) =>
         $"{Heading} of the {chamber} seats. The legend and the table below hold the same facts.";
