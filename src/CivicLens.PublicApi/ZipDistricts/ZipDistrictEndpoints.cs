@@ -1,3 +1,5 @@
+using CivicLens.Publication.Contracts;
+using CivicLens.PublicApi.Bills;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Pages;
 using CivicLens.PublicWeb.Publication;
@@ -25,6 +27,7 @@ public static class ZipDistrictEndpoints
             return ApiResults.Json(answer);
         }));
         v1.MapGet("/zip-districts/{zcta}/members", MembersAsync);
+        v1.MapGet("/zip-districts/{zcta}/bills/{recordId}", BillMembersAsync);
     }
 
     private static Task<IResult> MembersAsync(string zcta, HttpContext http, ZipDistrictStore zips, PageRenderer renderer, PublicApiOptions options,
@@ -71,6 +74,22 @@ public static class ZipDistrictEndpoints
                     ? null
                     : options.PublicBaseUrl?.Join("compare.html")
             });
+            return Results.Content(html, "text/html; charset=utf-8");
+        });
+    }
+
+    /// <summary>The private fragment of the bill page card "Your members and this bill". Like the member cards, it names the members of one ZIP area, so no cache keeps it.</summary>
+    private static Task<IResult> BillMembersAsync(string zcta, string recordId, HttpContext http, BillMembersReader reader, PageRenderer renderer, CancellationToken cancellationToken)
+    {
+        http.Response.Headers.CacheControl = "private, no-store";
+        return ApiResults.GuardAsync(async () =>
+        {
+            var request = ZipDistrictRequest.Parse(zcta, http.Request.Query);
+            if (!PublicationProtocol.IsAnyRecordId(recordId)) return ApiResults.RecordNotFound();
+            var answer = await reader.ReadAsync(request, recordId, cancellationToken);
+            if (answer.Miss is { } miss) return Miss(miss);
+            if (answer.Data is not { } data) return ApiResults.RecordNotFound();
+            var html = await renderer.RenderAsync<BillMembersFragment>(new Dictionary<string, object?> { [nameof(BillMembersFragment.Data)] = data });
             return Results.Content(html, "text/html; charset=utf-8");
         });
     }

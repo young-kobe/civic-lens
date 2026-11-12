@@ -62,6 +62,8 @@ public static class PublicApiApp
         builder.Services.AddSingleton(provider => new BoardStore(views, provider.GetRequiredService<PartyAgreementStore>()));
         builder.Services.AddSingleton(new MemberVoteStore(views));
         builder.Services.AddSingleton(new BillStore(views));
+        builder.Services.AddSingleton<BillPageReader>();
+        builder.Services.AddSingleton<BillMembersReader>();
         builder.Services.AddSingleton(new RecordKindStore(views));
         builder.Services.AddSingleton(new RecordSnapshot(views));
         builder.Services.AddSingleton(new StatementStore(views));
