@@ -2,7 +2,7 @@
 @using CivicLens.PublicWeb.Components.Evidence
 @using CivicLens.PublicWeb.Components.Ui
 
-<PublicPage Section="PublicSection.AllRecords" CanonicalPath="@PublicationProtocol.RecordPagePath(Withdrawal.RecordId)" Title="@Title" Description="@PublishedWithdrawalView.Banner(Withdrawal)" RootPath="@RootPath" TrailKind="Withdrawal.Kind" TrailName="@PublishedWithdrawalView.RecordTitle" NoIndex="true">
+<PublicPage Section="PublicSections.OfRecord(Withdrawal.Kind)" CanonicalPath="@PublicationProtocol.RecordPagePath(Withdrawal.RecordId)" Title="@Title" Description="@PublishedWithdrawalView.Banner(Withdrawal)" RootPath="@RootPath" TrailKind="Withdrawal.Kind" TrailName="@PublishedWithdrawalView.RecordTitle" NoIndex="true">
     <article class="detail">
         <Notice Tone="Tone.Neutral" Title="@PublishedWithdrawalView.RecordTitle"><b>@PublishedWithdrawalView.Banner(Withdrawal)</b> @PublishedWithdrawalView.DoNotRely</Notice>
         <header class="detail-head">

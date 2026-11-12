@@ -1301,6 +1301,19 @@ public sealed class PublishedOfficialPageTests
     }
 
     [Fact]
+    public void TheOfficialsFilterFillsTheNameFromTheNameQueryParameterBeforeItFirstFilters()
+    {
+        var script = System.Text.Encoding.UTF8.GetString(new ReleaseRenderer(null, null).Assets.Single(asset => asset.RelativePath == "assets/js/public.js").Content);
+        var start = script.IndexOf("const initOfficialsFilter", StringComparison.Ordinal);
+        var filter = script[start..script.IndexOf("\n    };", start, StringComparison.Ordinal)];
+
+        // The search page links to the officials page with ?name={text}. The first filter pass must use that name.
+        var read = filter.IndexOf("if (linkedName) name.value = linkedName;", StringComparison.Ordinal);
+        Assert.Contains("const linkedName = new URLSearchParams(location.search).get(\"name\");", filter, StringComparison.Ordinal);
+        Assert.InRange(read, 0, filter.LastIndexOf("apply();", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task TheFilterControlsAreHiddenInTheStaticPageSoAReaderWithoutScriptSeesEveryCardAndNoDeadControl()
     {
         var page = await ListAsync(new OfficialListing(Profile("a", "Ann Able", Term("sen", "MA", "Democratic")), 1));

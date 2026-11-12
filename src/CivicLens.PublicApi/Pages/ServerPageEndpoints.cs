@@ -1,4 +1,5 @@
 using CivicLens.PublicApi.Bills;
+using CivicLens.PublicApi.Boards;
 using CivicLens.PublicApi.Briefs;
 using CivicLens.PublicApi.DocumentChanges;
 using CivicLens.PublicApi.ExecutiveActions;
@@ -7,6 +8,7 @@ using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Issues;
 using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Records;
+using CivicLens.PublicApi.Search;
 using CivicLens.PublicApi.Statements;
 using CivicLens.PublicApi.Votes;
 using CivicLens.PublicWeb.Publication;
@@ -22,7 +24,7 @@ public static class ServerPageEndpoints
     /// <summary>The path prefix of the server pages. No live route uses it, so the static pages stay the production path until a route moves.</summary>
     public const string Prefix = "/web";
 
-    /// <summary>Maps the gated home, Compare, official, issue, vote kind index, and record previews and the not found page under the server-page prefix.</summary>
+    /// <summary>Maps the gated home, Compare, officials, boards, search, vote kind index, official, issue, and record previews and the not found page under the server-page prefix.</summary>
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         routes.MapGet(Prefix, (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
@@ -42,6 +44,9 @@ public static class ServerPageEndpoints
                     [nameof(ComparePage.RootPath)] = baseUrl.Join(string.Empty),
                     [nameof(ComparePage.BrowserApiUrl)] = home.BrowserApiRoot
                 }, cancellationToken)));
+        routes.MapGet(Prefix + "/officials", OfficialsPageEndpoint.RespondAsync);
+        routes.MapGet(Prefix + "/boards", BoardsPageEndpoint.RespondAsync);
+        routes.MapGet(Prefix + "/search", SearchPageEndpoint.RespondAsync);
         routes.MapGet(Prefix + "/issues/{issueId}", (string issueId, HttpContext context, IssuePageReader issues, HomePageReader home, ServerPageResponder responder,
             CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () => await issues.ReadAsync(issueId, cancellationToken) is { } data

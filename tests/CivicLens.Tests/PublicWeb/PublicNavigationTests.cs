@@ -35,6 +35,32 @@ public sealed class PublicNavigationTests
     }
 
     [Fact]
+    public async Task TheHeaderHasOneLinkForEachKindAndTheStaticPartyBoardUntilTheCutoverAndNoLinkForTheOldAllRecordsList()
+    {
+        var page = await RenderAsync(section: PublicSection.Boards, title: "Compare the parties", canonicalPath: PublicSections.StaticBoardsPath);
+        var nav = page.QuerySelector(".public-nav")!;
+
+        Assert.Equal(["Officials", "Issues", "Votes", "Bills", "Executive actions", "Compare parties"], nav.QuerySelectorAll("a").Select(link => link.TextContent));
+        Assert.Equal(
+            [PublicationProtocol.OfficialsPagePath, PublicationProtocol.FacetsPath,
+             PublicationProtocol.SearchByKindPath(PublishedRecordKind.Vote), PublicationProtocol.SearchByKindPath(PublishedRecordKind.Action),
+             PublicationProtocol.SearchByKindPath(PublishedRecordKind.ExecutiveAction), PublicSections.StaticBoardsPath],
+            nav.QuerySelectorAll("a").Select(link => link.GetAttribute("href")![Root.Length..]));
+        Assert.DoesNotContain(nav.QuerySelectorAll("a"), link => link.GetAttribute("href")!.Contains("all.html"));
+        Assert.Equal("Compare parties", Assert.Single(nav.QuerySelectorAll("[aria-current=page]")).TextContent);
+        Assert.Equal(["Home"], page.QuerySelectorAll("main nav[aria-label=Breadcrumb] a").Select(link => link.TextContent));
+    }
+
+    [Fact]
+    public async Task TheServerBoardsPageTrailEndsAtItsSectionWithNoLinkToTheStaticBoard()
+    {
+        var page = await RenderAsync(section: PublicSection.Boards, title: "Compare the parties", canonicalPath: PublicSections.BoardsPath);
+
+        Assert.Equal(["Home"], page.QuerySelectorAll("main nav[aria-label=Breadcrumb] a").Select(link => link.TextContent));
+        Assert.DoesNotContain(PublicSections.StaticBoardsPath, page.QuerySelector("main nav[aria-label=Breadcrumb]")!.InnerHtml);
+    }
+
+    [Fact]
     public async Task HeaderHasOneSearchFormUniqueIdsAndNativeClosedMenu()
     {
         var page = await RenderAsync();

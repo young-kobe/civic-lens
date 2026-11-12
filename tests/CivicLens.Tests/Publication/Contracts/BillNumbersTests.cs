@@ -31,6 +31,14 @@ public sealed class BillNumbersTests
         Assert.Equal(expected, BillNumbers.TypeLabel(type));
 
     [Theory]
+    [InlineData("hr", true)]
+    [InlineData("sconres", true)]
+    [InlineData("HR", false)]
+    [InlineData("hamdt", false)]
+    public void OnlyALowerCaseCodeInTheTableIsABillType(string type, bool expected) =>
+        Assert.Equal(expected, BillNumbers.IsType(type));
+
+    [Theory]
     [InlineData("hr", PublishedChamber.House)]
     [InlineData("HJRES", PublishedChamber.House)]
     [InlineData("hres", PublishedChamber.House)]

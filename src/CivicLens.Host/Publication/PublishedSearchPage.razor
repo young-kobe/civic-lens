@@ -27,7 +27,7 @@
                     <Field Label="Kind" For="search-kind">
                         <select id="search-kind" name="kind">
                             <option value="">Any</option>
-                            @foreach (var kind in Enum.GetValues<PublishedRecordKind>())
+                            @foreach (var kind in PublishedRecordLabels.FilterOrder)
                             {
                                 <option value="@PublicationProtocol.KindText(kind)">@PublishedRecordLabels.Kind(kind)</option>
                             }

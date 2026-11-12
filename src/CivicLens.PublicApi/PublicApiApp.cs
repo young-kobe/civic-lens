@@ -93,6 +93,9 @@ public static class PublicApiApp
             builder.Services.AddSingleton<ServerPageResponder>();
         }
         builder.Services.AddSingleton(new OfficialStore(views));
+        builder.Services.AddSingleton<OfficialsPageReader>();
+        builder.Services.AddSingleton<BoardsPageReader>();
+        builder.Services.AddSingleton<SearchPageReader>();
         builder.Services.AddSingleton(new OfficialPageReader(views));
         builder.Services.AddSingleton(new ReportStore(writer, options));
         if (options.Turnstile is { } turnstile)
