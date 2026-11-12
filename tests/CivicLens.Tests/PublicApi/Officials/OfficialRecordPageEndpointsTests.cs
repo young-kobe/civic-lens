@@ -39,10 +39,10 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
 
     private static string Id(int number) => number.ToString("x64", CultureInfo.InvariantCulture);
 
-    // Twenty-seven votes of p0 on 27 days, so the list needs a second page. The newest vote (index 26) comes first.
+    // Twenty-seven votes of p0 on one day, so the list needs a second page and the page break splits a day. Ties sort by record ID.
     private static async Task AddManyVotesAsync(ApiHost host) =>
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, [.. Enumerable.Range(0, 27).Select(number => new SeededVote("0123456789abcdef"[number % 16],
-            new DateOnly(2026, 1, 1).AddDays(number).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))
+            "2026-01-01")
         { Casts = ["Yea", "Nay"], PersonIds = ["p0", "p1"], RollCall = number + 1, RecordId = Id(number) })]);
 
     private static async Task<IDocument> GetPageAsync(ApiHost host, string path, HttpStatusCode expected = HttpStatusCode.OK)
@@ -92,8 +92,7 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
         Assert.Null(second.QuerySelector(".pager a[rel=next]"));
         var seen = first.QuerySelectorAll(".shared-vote-row h3 a").Concat(second.QuerySelectorAll(".shared-vote-row h3 a")).Select(link => link.GetAttribute("href")!).ToArray();
         Assert.Equal(27, seen.Distinct().Count());
-        Assert.Equal(BaseUrl.Join($"records/{Id(26)}.html"), seen[0]);
-        Assert.Equal(BaseUrl.Join($"records/{Id(0)}.html"), seen[^1]);
+        Assert.Equal(Enumerable.Range(0, 27).Select(number => BaseUrl.Join($"records/{Id(number)}.html")).ToArray(), seen);
     }
 
     [Fact]
