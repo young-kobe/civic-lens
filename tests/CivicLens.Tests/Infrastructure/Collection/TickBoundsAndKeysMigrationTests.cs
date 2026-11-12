@@ -141,6 +141,7 @@ public sealed class TickBoundsAndKeysMigrationTests(PostgresCollection postgres)
     [InlineData("action_analysis", "retry_of_run_id", "action_analysis_runs")]
     [InlineData("brief_analysis", "retry_of_run_id", "brief_analysis_runs")]
     [InlineData("document_change_analysis", "retry_of_run_id", "document_change_analysis_runs")]
+    [InlineData("exec_summary_analysis", "retry_of_run_id", "exec_summary_analysis_runs")]
     [InlineData("relationship_analysis", "retry_of_run_id", "relationship_analysis_runs")]
     [InlineData("statement_analysis", "retry_of_run_id", "statement_analysis_runs")]
     [InlineData("vote_analysis", "retry_of_run_id", "vote_analysis_runs")]
