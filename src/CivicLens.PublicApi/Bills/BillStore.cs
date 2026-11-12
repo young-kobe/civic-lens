@@ -1,13 +1,14 @@
+using CivicLens.PublicWeb.Publication;
 using System.Data.Common;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
-using CivicLens.PublicWeb.Publication;
 using Npgsql;
 using NpgsqlTypes;
 
 namespace CivicLens.PublicApi.Bills;
 
-/// <summary>Reads the views <c>public_api.bills</c>, <c>public_api.bill_sponsorships</c>, <c>public_api.bill_issues</c>, and <c>public_api.bill_key_terms</c>. Every answer takes its release from the query that reads its rows.</summary>
+/// <summary>Reads the views <c>public_api.bills</c>, <c>public_api.bill_sponsorships</c>, <c>public_api.bill_issues</c>, <c>public_api.bill_key_terms</c>, <c>public_api.officials</c>, <c>public_api.release_issues</c>,
+/// <c>public_api.record_entries</c> (the stored approval time), and <c>public_api.record_first_publications</c>. Every answer takes its release from the query that reads its rows.</summary>
 public sealed class BillStore(NpgsqlDataSource views)
 {
     private const string Columns = """
@@ -73,9 +74,12 @@ public sealed class BillStore(NpgsqlDataSource views)
                    ARRAY(SELECT k.cut FROM public_api.bill_key_terms k
                           WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position"),
                    (SELECT k.label FROM public_api.bill_key_terms k
-                     WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number LIMIT 1)
+                     WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number LIMIT 1),
+                   e.approved_at_utc_ticks, f.first_published_at_utc_ticks, b.summary_from_crs
               FROM public_api.bills b
               LEFT JOIN public_api.bill_status s ON s.record_id = b.record_id AND s.revision_number = b.revision_number
+              LEFT JOIN public_api.record_entries e ON e.kind = 'action' AND e.record_id = b.record_id AND e.revision_number = b.revision_number
+              LEFT JOIN public_api.record_first_publications f ON f.kind = 'action' AND f.record_id = b.record_id
              WHERE b.record_id = @id
             """);
         command.Parameters.AddWithValue("id", recordId);
@@ -84,7 +88,10 @@ public sealed class BillStore(NpgsqlDataSource views)
         return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(27), ReadLatestAction(reader), ReadHistory(reader, 25, 26),
             ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24), ReadKeyTerms(reader))
         {
-            KeyTermsLabel = ViewColumns.Text(reader, 34)
+            KeyTermsLabel = ViewColumns.Text(reader, 34),
+            CheckedAtUtc = Utc(reader, 35),
+            FirstPublishedAtUtc = Utc(reader, 36),
+            SummaryFromCrs = reader.GetBoolean(37)
         };
     }
 
@@ -159,6 +166,52 @@ public sealed class BillStore(NpgsqlDataSource views)
         var page = rows.Take(request.Limit).ToArray();
         var next = rows.Count > request.Limit ? ActionHistoryCursor.Of(active, page[^1]).Encode() : null;
         return new(active, history, page, next);
+    }
+
+    /// <summary>Reads every sponsorship of a bill with the name of its official and the party from <c>public_api.bill_sponsorship_parties</c>, the one owner of the
+    /// term party on the sponsorship date, in one statement. Null means that no release is active. The count is bounded by the officials that the release tracks.</summary>
+    public async Task<BillSponsors?> ListSponsorsAsync(string recordId, CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand("""
+            SELECT a.release_number, s."position", s.official_id, o.name, p.party, s.role, s.is_original, s.sponsored_on, s.withdrawn_on
+              FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+              LEFT JOIN public_api.bill_sponsorships s ON s.record_id = @id
+              LEFT JOIN public_api.officials o ON o.official_id = s.official_id
+              LEFT JOIN public_api.bill_sponsorship_parties p
+                     ON p.record_id = s.record_id AND p.revision_number = s.revision_number AND p."position" = s."position"
+             ORDER BY s."position"
+            """);
+        command.Parameters.AddWithValue("id", recordId);
+        var rows = new List<BillSponsorRow>();
+        int? release = null;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            release = reader.GetInt32(0);
+            if (!reader.IsDBNull(1) && !reader.IsDBNull(3)) rows.Add(ReadBillSponsor(reader));
+        }
+        return release is { } active ? new(active, [.. rows]) : null;
+    }
+
+    /// <summary>Reads the configured names of the given issue IDs. Null means that no release is active.</summary>
+    public async Task<BillIssueNames?> ListIssueNamesAsync(string[] issueIds, CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand("""
+            SELECT a.release_number, i.issue_id, i.name
+              FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+              LEFT JOIN public_api.release_issues i ON i.issue_id = ANY(@ids)
+             ORDER BY i.name, i.issue_id
+            """);
+        command.Parameters.AddWithValue("ids", issueIds);
+        var issues = new List<BillIssueData>();
+        int? release = null;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            release = reader.GetInt32(0);
+            if (!reader.IsDBNull(1)) issues.Add(new(reader.GetString(1), reader.GetString(2)));
+        }
+        return release is { } active ? new(active, [.. issues]) : null;
     }
 
     private static string ListSql(BillRequest request) => $"""
@@ -249,6 +302,8 @@ public sealed class BillStore(NpgsqlDataSource views)
         ? null
         : new(new DateTimeOffset(reader.GetInt64(observedAtIndex), TimeSpan.Zero), reader.GetInt32(actionCountIndex));
 
+    private static DateTimeOffset? Utc(DbDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : new DateTimeOffset(reader.GetInt64(ordinal), TimeSpan.Zero);
+
     // Columns 28 to 30 hold the status. The view holds no row for a bill with no latest action.
     private static BillLatestAction? ReadLatestAction(DbDataReader reader) => reader.IsDBNull(28)
         ? null
@@ -264,6 +319,11 @@ public sealed class BillStore(NpgsqlDataSource views)
         SponsoredOn = reader.GetFieldValue<DateOnly>(6),
         WithdrawnOn = ViewColumns.Date(reader, 7)
     };
+
+    // Column 0 holds the release. The row starts at column 1.
+    private static BillSponsorRow ReadBillSponsor(DbDataReader reader) => new(
+        reader.GetInt32(1), reader.GetString(2), reader.GetString(3), ViewColumns.Text(reader, 4), ViewColumns.Enum<PublishedSponsorshipRole>(reader, 5),
+        reader.GetBoolean(6), reader.GetFieldValue<DateOnly>(7), ViewColumns.Date(reader, 8));
 
     private static string ActionHistorySql(ActionHistoryRequest request) => $"""
         SELECT a.release_number, b.history_observed_at_utc_ticks, b.history_action_count,

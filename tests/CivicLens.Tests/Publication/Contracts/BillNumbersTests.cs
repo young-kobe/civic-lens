@@ -37,4 +37,21 @@ public sealed class BillNumbersTests
     [InlineData("hamdt", false)]
     public void OnlyALowerCaseCodeInTheTableIsABillType(string type, bool expected) =>
         Assert.Equal(expected, BillNumbers.IsType(type));
+
+    [Theory]
+    [InlineData("hr", PublishedChamber.House)]
+    [InlineData("HJRES", PublishedChamber.House)]
+    [InlineData("hres", PublishedChamber.House)]
+    [InlineData("s", PublishedChamber.Senate)]
+    [InlineData("sconres", PublishedChamber.Senate)]
+    [InlineData("SRES", PublishedChamber.Senate)]
+    public void EachBillTypeStartsInTheChamberOfItsTableRow(string type, PublishedChamber expected) =>
+        Assert.Equal(expected, BillNumbers.ChamberOf(type));
+
+    [Theory]
+    [InlineData("samdt")]
+    [InlineData("hamdt")]
+    [InlineData("x")]
+    public void ABillTypeOutsideTheTableHasNoChamber(string type) =>
+        Assert.Throws<KeyNotFoundException>(() => BillNumbers.ChamberOf(type));
 }

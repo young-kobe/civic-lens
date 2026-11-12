@@ -72,7 +72,7 @@ public sealed class VotePageReader(VoteStore votes, NpgsqlDataSource views)
             : null;
         var memberData = members.Select(member => new VoteMemberData(member.OfficialId,
             names.Officials.TryGetValue(member.OfficialId, out var name) ? name : throw new InvalidDataException("A member of a published vote has no official name."),
-            member.Cast, member.Party, member.Citation)).ToArray();
+            member.Cast, member.Party, member.Citation, member.State, member.District)).ToArray();
         return new(detail.Release, vote.RecordId, vote.RevisionNumber, vote.Chamber, vote.Congress, vote.Session, vote.RollCall, vote.VotedOn,
             vote.Kind, detail.Source, vote.Headline, vote.Summary, vote.TextOrigin, vote.Label, vote.Result, vote.Alignment, totals,
             detail.PartyTallies, detail.VotedOnCitation, detail.KindCitation, detail.Facts, detail.Sources, memberData,

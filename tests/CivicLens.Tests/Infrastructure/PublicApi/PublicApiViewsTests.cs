@@ -80,7 +80,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
-        foreach (var view in new[] { "active_records", "active_release", "votes", "vote_members", "vote_first_publications", "vote_party_tallies", "vote_evidence", "vote_sources", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_issue_party_lineups", "release_bill_counts", "release_official_bill_counts", "release_policy_areas",
+        foreach (var view in new[] { "active_records", "active_release", "votes", "vote_members", "vote_first_publications", "vote_party_tallies", "vote_evidence", "vote_sources", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_sponsorship_parties", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_issue_party_lineups", "release_bill_counts", "release_official_bill_counts", "release_policy_areas",
             "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "statement_speakers", "statement_approvers", "statements", "statement_sources", "statement_quotations", "document_changes", "document_change_officials", "document_change_sources", "document_change_hunks", "document_change_word_edits", "document_change_citations",
             "executive_actions", "executive_action_notices", "executive_action_targets", "withdrawals", "withdrawal_corrections",
             "action_sources", "executive_action_sources", "record_entries", "record_officials", "record_issues", "record_policy_areas", "record_first_publications" })
@@ -121,6 +121,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"bill_actions v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_key_terms v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"bill_sponsorship_parties v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_sponsorships v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_status v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bills v {Owner} {Role}:SELECT {{security_barrier=true}}",
@@ -636,6 +637,31 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         ], await PublicAsync("SELECT record_id || ' ' || text_origin || ' ' || coalesce(label, 'none') FROM public_api.briefs ORDER BY 1"));
         Assert.Equal(["1"], await PublicAsync("SELECT DISTINCT release_number::text FROM public_api.briefs"));
         Assert.Equal(["2026-05-04"], await PublicAsync("SELECT DISTINCT week_start::text FROM public_api.briefs"));
+    }
+
+    [Fact]
+    public async Task ABriefShowsItsCoverageItsCutoffItsPublishedApprovalTimeAndNotALaterApprovalAndItsFirstPublicationTime()
+    {
+        await ExecuteAsync("""
+            SET session_replication_role = replica;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+              VALUES (1, '000001-00000000000000000000000000000001', 'test', 1, 1, true);
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('brief', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 1, NULL);
+            INSERT INTO brief_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks,
+                week_start, window_start_utc_ticks, window_end_utc_ticks, first_release_number, cutoff_release_number, fingerprint, headline, text_origin,
+                coverage_considered, coverage_sent_to_model)
+              VALUES ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 'test', 'Person', NULL, '{}', 1, '2026-05-04', 0, 6048000000000, 1, 4, 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 'Headline', 'Person', 9, 6);
+            INSERT INTO brief_review_decisions (decision_id, record_id, revision_number, review_state_version, actor_subject, kind, created_at_utc_ticks) VALUES
+              ('00000000000000000000000000000001', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 1, 'test', 'Approve', 100),
+              ('00000000000000000000000000000002', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 2, 'test', 'Approve', 200),
+              ('00000000000000000000000000000003', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 3, 'test', 'RequestChanges', 300);
+            INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('brief', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 50);
+            INSERT INTO published_entries (kind, record_id, revision_number, brief_record_id, brief_revision_number, headline, approved_at_utc_ticks)
+              VALUES ('brief', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 'Headline', 100);
+            """);
+
+        Assert.Equal(["4|9|6|100|50"], await PublicAsync(
+            "SELECT cutoff_release_number || '|' || coverage_considered || '|' || coverage_sent_to_model || '|' || approved_at_utc_ticks || '|' || first_published_at_utc_ticks FROM public_api.briefs"));
     }
 
     [Fact]

@@ -10,6 +10,7 @@ public static class PlainVoteWords
     public const string No = "No";
     public const string Present = "Present";
     public const string NotVoting = "Not voting";
+    public const string OtherCast = "Other";
     public const string OtherKind = "Other question";
 
     /// <summary>The approved category term for the vote-kind index record column. Other has no single term.</summary>

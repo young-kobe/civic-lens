@@ -63,6 +63,36 @@ public sealed class PublicPageReadingGradeTests
     }
 
     [Fact]
+    public async Task TheBillPageFixedProseReadsAtOrBelowTheSharedGradeLimit()
+    {
+        var sponsor = new BillSponsorData("p1", "Pat One", "Democrat", new(2025, 9, 11));
+        var data = new BillPageData(7, new string('a', 64), 1, 119, "H.R. 7", "Title", "Headline", PublishedChamber.House, "Summary.", PublishedTextOrigin.Code, null, new(2025, 9, 11))
+        {
+            Sponsors = [sponsor],
+            Cosponsors = new(PublishedChamber.House, [sponsor], [sponsor]),
+            Status = "Passed the House. Now in the Senate.",
+            StatusLabel = "Passed the House",
+            CongressGovUrl = "https://www.congress.gov/bill/119th-congress/house-bill/7",
+            Votes = [new(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "Vote headline", null, "Vote to pass or agree to", "Passed", [])],
+            StatusReadAtUtc = new(2026, 11, 5, 9, 57, 0, TimeSpan.Zero)
+        };
+        var page = await RenderAsync<BillDetailPage>(new Dictionary<string, object?>
+        {
+            [nameof(BillDetailPage.Data)] = data,
+            [nameof(BillDetailPage.RootPath)] = Root
+        });
+
+        var grade = PassageGrade(page.QuerySelector(".bill-lede")!, page.QuerySelector(".bill-legend")!);
+        var backers = PassageGrade(page.QuerySelector("#bill-backers-title")!, page.QuerySelector("#bill-backers-title")!.ParentElement!.QuerySelector(".bill-lede")!);
+
+        var split = PassageGrade(page.QuerySelector("#bill-backers-title")!.ParentElement!.QuerySelector(".bill-lede")!, page.QuerySelector(".party-bar figcaption")!);
+        var votes = PassageGrade(page.QuerySelector("#bill-votes-title")!, page.QuerySelector("#bill-votes-title")!.ParentElement!.QuerySelector(".bill-lede")!);
+        var worst = new[] { grade, backers, split, votes }.Max();
+
+        Assert.True(worst <= ReadingGrade.MaximumGrade, $"The bill page prose reads at grade {ReadingGrade.Format(worst)}.");
+    }
+
+    [Fact]
     public async Task TheVoteKindIndexTextReadsAtOrBelowTheSharedGradeLimit()
     {
         var page = await RenderAsync<VoteKindsPage>(new Dictionary<string, object?> { [nameof(VoteKindsPage.RootPath)] = Root });
