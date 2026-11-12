@@ -12,7 +12,8 @@ public sealed class HomeStore(NpgsqlDataSource views)
     private const int VotesPerChamber = 2;
     private const string VoteColumns = """
         v.record_id, v.voted_on, v.chamber, v.congress, v.session_number, v.roll_call_number,
-        v.headline, v.label, v.result, v.yea, v.nay, v.bill_type, v.bill_number, v.summary, v.text_origin, v.alignment
+        v.headline, v.label, v.result, v.yea, v.nay, v.bill_type, v.bill_number, v.summary, v.text_origin, v.alignment,
+        v.bill_record_id
         """;
 
     private static readonly string Sql = $"""
@@ -41,8 +42,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
                SELECT v.is_featured, v.record_id, v.voted_on, v.chamber, v.congress, v.session_number, v.roll_call_number,
                       v.headline, v.label, v.result, v.yea, v.nay, v.bill_type, v.bill_number,
                       (SELECT l.bill_line FROM public_api.bills l
-                        WHERE l.congress = v.congress AND l.bill_type = v.bill_type AND l.bill_number = v.bill_number
-                        ORDER BY l.record_id LIMIT 1) AS bill_line,
+                        WHERE l.record_id = v.bill_record_id) AS bill_line,
                       v.summary, v.text_origin, v.alignment,
                       NULL::text AS action_kind, NULL::integer AS action_count, NULL::text AS newest_record_id,
                       NULL::text AS newest_title, NULL::date AS newest_signed_on
