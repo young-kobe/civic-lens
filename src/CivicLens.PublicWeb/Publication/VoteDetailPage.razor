@@ -57,6 +57,10 @@
                         </div>
                     </section>
                 }
+                @if (map is not null)
+                {
+                    <VoteMap Data="map" RollCall="Data.RollCall" RootPath="@RootPath" />
+                }
                 @if (breakers.Count > 0)
                 {
                     <section class="vote-breakers" aria-labelledby="vote-breakers-title">
@@ -135,9 +139,7 @@
                                 <TableCell Header>Source</TableCell>
                             </Head>
                             <Row Context="member">
-                                <TableCell Main Label="Member"><a href="@(RootPath + PublicationProtocol.OfficialPagePath(member.OfficialId))">@member.Name</a></TableCell>
-                                <TableCell Label="Party">@(member.Party ?? VoteWords.NoKnownParty)</TableCell>
-                                <TableCell Label="Vote"><SharedVoteCast Side="@PublishedOfficialVote.SideOf(member.Cast)"><CastWord Cast="@member.Cast" /></SharedVoteCast></TableCell>
+                                <VoteMemberCells Member="member" RootPath="@RootPath" MemberIsMain="true" />
                                 <TableCell Label="Source"><SourceLineLink Anchor="@anchors.Anchor(member.Citation)" Target="@($"{member.Name}, member line")" /></TableCell>
                             </Row>
                             <Empty><p class="small">No tracked member matches these filters.</p></Empty>
@@ -192,6 +194,7 @@
     private string? summaryLabel;
     private PartyBarData? chamberBar;
     private IReadOnlyList<PartyBarData> partyBars = [];
+    private VoteMapData? map;
     private IReadOnlyList<VoteBreakerGroup> breakers = [];
     private IReadOnlyList<VoteMemberData> rows = [];
     private IReadOnlyList<Fact> facts = [];
@@ -211,6 +214,7 @@
             ? PublishedRecordLabels.Wording(Data.TextOrigin).First().Value : null);
         chamberBar = VotePageView.ChamberBar(Data);
         partyBars = VotePageView.PartyBars(Data);
+        map = VoteMapData.Of(Data);
         breakers = VotePageView.Breakers(Data);
         rows = VotePageView.Filtered(Data, Filter);
         facts = VotePageView.Facts(Data, anchors);

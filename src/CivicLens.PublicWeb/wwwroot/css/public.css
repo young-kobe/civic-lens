@@ -745,6 +745,44 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .vote-result .party-bar { margin-top: var(--s4); }
 .vote-explain { background: var(--vote-surface); }
 .vote-party-bars { display: grid; gap: var(--s5); margin-top: var(--s4); }
+.vote-map-views[hidden] { display: none; }
+.vote-map-views { margin-block: var(--s4) var(--s3); }
+.vote-map-views-label { flex: 1 1 100%; color: var(--muted); font-size: var(--t-sm); font-weight: 650; }
+.vote-map-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.vote-map-frame svg { display: block; width: 100%; height: auto; }
+.vote-map-frame .vote-map-tiles, .vote-map-tile-note { display: none; }
+.vote-map-tile-note { margin-bottom: var(--s3); }
+.vote-map-tiles { max-width: 392px; }
+.vote-map[data-view="tile"] .vote-map-shapes { display: none; }
+.vote-map[data-view="tile"] :is(.vote-map-tiles, .vote-map-tile-note) { display: block; }
+.vote-map-paper { fill: var(--surface); }
+#vote-map-no .vote-map-ink { fill: var(--against); }
+#vote-map-present .vote-map-ink { fill: var(--muted); }
+.vote-map-ring { fill: none; stroke: var(--muted); stroke-width: 1px; }
+.vote-map-line { fill: none; stroke: var(--muted); stroke-width: 1px; }
+.vote-map-seat { stroke: var(--surface); stroke-width: .6px; }
+.vote-map-tiles .vote-map-seat, .vote-map-swatch .vote-map-seat, .vote-map-circle .vote-map-seat { stroke-width: 1.5px; }
+.vote-map-seat[data-mark="yes"] { fill: var(--ink); }
+.vote-map-seat[data-mark="no"] { fill: url(#vote-map-no); stroke: var(--against); }
+.vote-map-seat[data-mark="present"] { fill: url(#vote-map-present); stroke: var(--muted); }
+.vote-map-seat[data-mark="not-voting"] { fill: url(#vote-map-not-voting); stroke: var(--muted); }
+.vote-map-seat[data-mark="other"] { fill: url(#vote-map-other); stroke: var(--muted); }
+.vote-map-seat[data-mark="no-member"] { fill: var(--raised); stroke: var(--line-strong); stroke-dasharray: 3 2; }
+.vote-map-tiles .vote-map-seat[data-mark="yes"] { stroke: var(--ink); }
+.vote-map-split { stroke: var(--surface); stroke-width: 1.5px; }
+.vote-map-tile-label { fill: var(--muted); font-size: 13px; font-weight: 700; }
+.vote-map-legend, .vote-map-delegates { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin: 0; padding: 0; list-style: none; font-size: .875rem; }
+.vote-map-legend { margin-bottom: var(--s4); }
+.vote-map-legend li, .vote-map-delegates li { display: flex; align-items: center; gap: var(--s2); }
+.vote-map-legend b { font-variant-numeric: tabular-nums; }
+.vote-map-swatch { flex: none; width: 18px; height: 18px; }
+.vote-map-circle { flex: none; width: 24px; height: 24px; }
+.vote-map .vote-fold { margin-top: var(--s4); border: 1px solid var(--line); box-shadow: none; }
+.vote-map .vote-fold > :not(summary) { margin: var(--s4); }
+@media (max-width: 719px) {
+    .vote-map:not([data-view]) .vote-map-shapes { display: none; }
+    .vote-map:not([data-view]) :is(.vote-map-tiles, .vote-map-tile-note) { display: block; }
+}
 .vote-breaker-list { display: grid; gap: var(--s1); margin: 0; padding: 0; list-style: none; }
 .vote-bill p { margin: 0 0 var(--s2); }
 .vote-bill > p:first-of-type { font-weight: 700; }
