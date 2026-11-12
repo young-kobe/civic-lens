@@ -96,12 +96,15 @@ public sealed class BillDetailPageTests
     }
 
     [Fact]
-    public async Task OnlyAModelSummaryGetsTheAiStyle()
+    public async Task OnlyAModelSummaryWithALabelGetsTheAiStyleAndNoLabelColumnShowsPlainText()
     {
-        var page = await RenderAsync(Bill with { TextOrigin = PublishedTextOrigin.Code, Label = null });
+        var code = (await RenderAsync(Bill with { TextOrigin = PublishedTextOrigin.Code, Label = PublishedRecordLabels.CodeWording })).QuerySelector(".ai-summary")!;
+        var plain = (await RenderAsync(Bill with { Label = null })).QuerySelector(".ai-summary")!;
 
-        Assert.False(page.QuerySelector(".ai-summary")!.ClassList.Contains("ai-summary-ai"));
-        Assert.Equal(PublishedRecordLabels.CodeWording, page.QuerySelector(".ai-summary p.muted")!.TextContent);
+        Assert.False(code.ClassList.Contains("ai-summary-ai"));
+        Assert.Equal(PublishedRecordLabels.CodeWording, code.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.False(plain.ClassList.Contains("ai-summary-ai"));
+        Assert.Null(plain.QuerySelector(".ai-summary-label"));
     }
 
     [Fact]
@@ -194,7 +197,7 @@ public sealed class BillDetailPageTests
     }
 
     [Fact]
-    public async Task TheSourceFoldHoldsTheStatusTheCrsVersionTheRevisionAndTheWording()
+    public async Task TheSourceFoldHoldsTheStatusTheCrsVersionAndTheRevision()
     {
         var fold = (await RenderAsync(Bill)).QuerySelector("details#source")!;
         var text = fold.TextContent;
@@ -202,7 +205,6 @@ public sealed class BillDetailPageTests
         Assert.Contains("Became law: Public Law 119-111. Action date 18 Sep 2026.", text);
         Assert.Contains("Status read 5 Nov 2026, 09:57 UTC. The bill can change after this time.", text);
         Assert.Contains("Version 55", text);
-        Assert.Contains(Bill.Label!, text);
         Assert.Equal("2", fold.QuerySelectorAll("dt").Single(term => term.TextContent == "Revision").NextElementSibling!.TextContent);
     }
 

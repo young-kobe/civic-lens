@@ -33,12 +33,9 @@
             <div class="bill-main">
                 @if (!string.IsNullOrWhiteSpace(Data.Summary))
                 {
-                    <AiSummary Label="@(Data.TextOrigin == PublishedTextOrigin.Model ? SummaryLabel : null)" Check="CrsCheck">
-                        @if (Data.TextOrigin != PublishedTextOrigin.Model && SummaryLabel is not null)
-                        {
-                            <p class="small muted">@SummaryLabel</p>
-                        }
-                        <p>@Data.Summary</p>
+                    <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label">
+                        <ChildContent><p>@Data.Summary</p></ChildContent>
+                        <Check>@CrsCheck</Check>
                     </AiSummary>
                 }
                 @if (Data.CrsText is not null)
@@ -95,11 +92,6 @@
                         <dd><a href="@Data.CongressGovUrl" rel="noopener noreferrer">Bill on Congress.gov</a></dd>
                         <dt>Revision</dt>
                         <dd>@Data.RevisionNumber.ToString(CultureInfo.InvariantCulture)</dd>
-                        @if (SummaryLabel is not null)
-                        {
-                            <dt>Wording</dt>
-                            <dd>@SummaryLabel</dd>
-                        }
                     </dl>
                 </SourceFold>
             </aside>
@@ -113,9 +105,6 @@
 
     [Parameter, EditorRequired] public BillPageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
-
-    private string? SummaryLabel => Data.Label ?? (Data.TextOrigin is PublishedTextOrigin.Model or PublishedTextOrigin.Code
-        ? PublishedRecordLabels.Wording(Data.TextOrigin).First().Value : null);
 
     private RenderFragment? CrsCheck => Data.CrsText is null ? null
         : @<text>The text above summarizes the Congressional Research Service summary. <a href="#source">@SourceFold.Title</a></text>;
