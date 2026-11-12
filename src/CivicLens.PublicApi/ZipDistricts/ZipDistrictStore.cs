@@ -14,6 +14,8 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
 {
     private const int SenateSeatsPerState = 2;
 
+    private const string IssueCongressSql = "SELECT count_congress FROM public_api.release_issues WHERE issue_id = @issue";
+
     private const string CurrentTerm = "t.start_on <= current_date AND (t.end_on IS NULL OR t.end_on >= current_date)";
 
     private const string DistrictsSql = $"""
@@ -111,7 +113,7 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
                 [.. districts.Rows.Select(row => new ZipDistrict(row.State, row.District, row.Representative))],
                 [.. stateAnswers]);
             var bare = ZipLookup.Of(bareAnswer) with { NewVoteCount = newVoteCount };
-            return shape == LookupShape.Issue ? await WithSharedVotesAsync(connection, transaction, bare, holderIds, issue, cancellationToken) : bare;
+            return shape == LookupShape.Issue ? await WithSharedVotesAsync(connection, transaction, bare, shape, holderIds, issue, cancellationToken) : bare;
         }
         var figures = await ReadHolderFiguresAsync(connection, transaction, holderIds, cancellationToken);
         var partyLines = await ReadHolderPartyLinesAsync(connection, transaction, holderIds, figures, cancellationToken);
@@ -130,18 +132,27 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         if (shape == LookupShape.Figures) return lookup;
         var issueOptions = await IssueStore.ListOptionsAsync(connection, transaction, cancellationToken);
         lookup = lookup with { IssueOptions = issueOptions };
-        return await WithSharedVotesAsync(connection, transaction, lookup, holderIds, issue, cancellationToken);
+        return await WithSharedVotesAsync(connection, transaction, lookup, shape, holderIds, issue, cancellationToken);
     }
 
     private static async Task<ZipLookup> WithSharedVotesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, ZipLookup lookup,
-        string[] holderIds, string? issue, CancellationToken cancellationToken)
+        LookupShape shape, string[] holderIds, string? issue, CancellationToken cancellationToken)
     {
         if (holderIds.Length == 0) return lookup;
+        var congress = shape == LookupShape.Issue ? await ReadIssueCongressAsync(connection, transaction, issue!, cancellationToken) : null;
         var sharedVotes = await MemberVoteStore.ReadSharedAsync(connection, transaction,
-            new MemberVoteRequest { Officials = holderIds, Issue = issue }, cancellationToken);
+            new MemberVoteRequest { Officials = holderIds, Issue = issue, Congress = congress }, cancellationToken);
         if (sharedVotes is null || sharedVotes.Release != lookup.Answer!.Release)
             throw new InvalidDataException("The ZIP member votes do not match the active release snapshot.");
         return lookup with { SharedVotes = sharedVotes };
+    }
+
+    /// <summary>The Congress that the issue page counts for the issue, so the members section uses the same scope. Null when the release has no count Congress for the issue.</summary>
+    private static async Task<int?> ReadIssueCongressAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string issue, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(IssueCongressSql, connection, transaction);
+        command.Parameters.AddWithValue("issue", issue);
+        return await command.ExecuteScalarAsync(cancellationToken) is int congress ? congress : null;
     }
 
     private static async Task<long?> ReadNewVoteCountAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, int release,

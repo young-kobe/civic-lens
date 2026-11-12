@@ -290,6 +290,23 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task IssueViewKeepsOnlyTheVotesOfTheCongressThatTheIssuePageCountsAndAnIssueWithoutOneIsNotFiltered()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica; INSERT INTO release_issues (release_number, issue_id, name, definition, count_congress, substantive_votes, bills) VALUES (1, 'health', 'Health', 'd', 119, 1, 0), (1, 'tax', 'Tax', 'd', NULL, NULL, NULL);");
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('a', "2026-05-01") { RecordId = 1.ToString("x64"), Congress = 119, Casts = ["Yea"], PersonIds = ["al2"], Issues = ["health", "tax"] },
+            new SeededVote('b', "2024-05-02") { RecordId = 2.ToString("x64"), Congress = 118, Casts = ["Nay"], PersonIds = ["al2"], Issues = ["health", "tax"] });
+
+        var scoped = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?view=issue&issue=health");
+        var unscoped = await GetDocumentAsync(host, "/v1/zip-districts/36009/members?view=issue&issue=tax");
+
+        Assert.Single(scoped.QuerySelectorAll(".shared-vote-row"));
+        Assert.Contains("119th Congress", scoped.QuerySelector(".shared-vote-meta")!.TextContent);
+        Assert.Equal(2, unscoped.QuerySelectorAll(".shared-vote-row").Length);
+    }
+
+    [Fact]
     public async Task IssueViewWithNoMatchingVoteStatesThatNoVoteIsRecorded()
     {
         await using var host = await StartAsync();
