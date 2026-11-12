@@ -71,35 +71,55 @@ public sealed class WorkerLoopTests
     public async Task AHungRenewalCannotHoldOwnershipPastTheLeaseDeadline()
     {
         using var ownership = new CancellationTokenSource();
-        var started = Stopwatch.StartNew();
-
-        await WorkerLoop.RenewLeaseAsync(async token =>
+        var clock = new ManualClock();
+        var tick = TimeSpan.FromTicks(1);
+        var renewal = WorkerLoop.RenewLeaseAsync(async token =>
         {
             await Task.Delay(Timeout.Infinite, token);
             return true;
-        }, Lease, ownership).WaitAsync(HangGuard);
+        }, Lease, ownership, clock);
+
+        // Timer 1 is the wait before the renewal. Timer 2 is the attempt time limit, due at the lease deadline.
+        await clock.AdvanceAsync(Lease / 3, timersCreated: 1).WaitAsync(HangGuard);
+        await clock.AdvanceAsync(Lease - Lease / 3 - tick, timersCreated: 2).WaitAsync(HangGuard);
+        Assert.False(ownership.IsCancellationRequested);
+
+        await clock.AdvanceAsync(tick, timersCreated: 2).WaitAsync(HangGuard);
+        await renewal.WaitAsync(HangGuard);
 
         Assert.True(ownership.IsCancellationRequested);
-        Assert.InRange(started.Elapsed, Lease * 0.9, Lease * 2);
     }
 
     [Fact]
     public async Task ASlowSuccessfulRenewalExtendsTheLeaseFromWhenItWasSent()
     {
         using var ownership = new CancellationTokenSource();
-        var started = Stopwatch.StartNew();
-        var first = true;
-
-        await WorkerLoop.RenewLeaseAsync(async token =>
+        var clock = new ManualClock();
+        var tick = TimeSpan.FromTicks(1);
+        var interval = TimeSpan.FromTicks(SlowRenewalLease.Ticks / 3);
+        var calls = 0;
+        var renewal = WorkerLoop.RenewLeaseAsync(async token =>
         {
-            if (!first) await Task.Delay(Timeout.Infinite, token);
-            first = false;
-            await Task.Delay(SlowRenewalLease / 2, token);
+            if (++calls > 1) await Task.Delay(Timeout.Infinite, token);
+            await Task.Delay(SlowRenewalLease / 2, clock, token);
             return true;
-        }, SlowRenewalLease, ownership).WaitAsync(HangGuard);
+        }, SlowRenewalLease, ownership, clock);
 
-        var sentAt = SlowRenewalLease / 3;
-        Assert.InRange(started.Elapsed, sentAt + SlowRenewalLease * 0.9, sentAt + SlowRenewalLease + SlowRenewalLease / 2 - TimeSpan.FromMilliseconds(100));
+        // Renewal 1 is sent at one interval and takes half a lease. Its timers are 1 (wait), 2 (time limit), 3 (work).
+        await clock.AdvanceAsync(interval, timersCreated: 1).WaitAsync(HangGuard);
+        await clock.AdvanceAsync(SlowRenewalLease / 2, timersCreated: 3).WaitAsync(HangGuard);
+        // The new deadline is the send time plus one lease. Timer 4 is the wait before renewal 2, timer 5 its time limit.
+        await clock.AdvanceAsync(interval, timersCreated: 4).WaitAsync(HangGuard);
+        var deadline = interval + SlowRenewalLease;
+        var untilDeadline = deadline - (interval + SlowRenewalLease / 2 + interval);
+        await clock.AdvanceAsync(untilDeadline - tick, timersCreated: 5).WaitAsync(HangGuard);
+        Assert.False(ownership.IsCancellationRequested);
+
+        await clock.AdvanceAsync(tick, timersCreated: 5).WaitAsync(HangGuard);
+        await renewal.WaitAsync(HangGuard);
+
+        Assert.True(ownership.IsCancellationRequested);
+        Assert.Equal(2, calls);
     }
 
     private sealed class ManualClock : TimeProvider
