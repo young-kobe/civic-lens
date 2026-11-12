@@ -27,9 +27,12 @@ public sealed class WorkerLoopTests
     public async Task ARefusedRenewalCancelsOwnershipAtOnce()
     {
         using var ownership = new CancellationTokenSource();
+        var clock = new ManualClock();
         var calls = 0;
+        var renewal = WorkerLoop.RenewLeaseAsync(_ => { calls++; return Task.FromResult(false); }, Lease, ownership, clock);
 
-        await WorkerLoop.RenewLeaseAsync(_ => { calls++; return Task.FromResult(false); }, Lease, ownership);
+        await clock.AdvanceAsync(Lease / 3, timersCreated: 1).WaitAsync(HangGuard);
+        await renewal.WaitAsync(HangGuard);
 
         Assert.True(ownership.IsCancellationRequested);
         Assert.Equal(1, calls);
@@ -39,6 +42,7 @@ public sealed class WorkerLoopTests
     public async Task ARecoveredRenewalKeepsOwnership()
     {
         using var ownership = new CancellationTokenSource();
+        var clock = new ManualClock();
         var calls = 0;
         var recovered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var renewal = WorkerLoop.RenewLeaseAsync(_ =>
@@ -47,8 +51,14 @@ public sealed class WorkerLoopTests
             if (calls == 1) throw new InvalidOperationException("Brief outage.");
             if (calls == 3) recovered.TrySetResult();
             return Task.FromResult(true);
-        }, FailureTolerantLease, ownership);
+        }, FailureTolerantLease, ownership, clock);
+        var interval = FailureTolerantLease / 3;
 
+        // The loop creates its timers in a fixed order: wait 1, wait 2 (after the failure), wait 3 (after the recovery).
+        // The second renewal moves the deadline to the third interval, so the third renewal still runs at the old deadline.
+        await clock.AdvanceAsync(interval, timersCreated: 1).WaitAsync(HangGuard);
+        await clock.AdvanceAsync(interval, timersCreated: 3).WaitAsync(HangGuard);
+        await clock.AdvanceAsync(interval, timersCreated: 5).WaitAsync(HangGuard);
         await Task.WhenAny(recovered.Task, renewal).WaitAsync(HangGuard);
 
         Assert.True(recovered.Task.IsCompleted);
@@ -90,5 +100,90 @@ public sealed class WorkerLoopTests
 
         var sentAt = SlowRenewalLease / 3;
         Assert.InRange(started.Elapsed, sentAt + SlowRenewalLease * 0.9, sentAt + SlowRenewalLease + SlowRenewalLease / 2 - TimeSpan.FromMilliseconds(100));
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        private readonly object gate = new();
+        private readonly List<ManualTimer> timers = [];
+        private TaskCompletionSource created = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int timersCreated;
+        private TimeSpan now;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override long GetTimestamp()
+        {
+            lock (gate) return now.Ticks;
+        }
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = new ManualTimer(this, callback, state);
+            lock (gate)
+            {
+                timer.Schedule(now, dueTime);
+                timers.Add(timer);
+                timersCreated++;
+                created.TrySetResult();
+                created = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+            return timer;
+        }
+
+        public async Task AdvanceAsync(TimeSpan span, int timersCreated)
+        {
+            while (true)
+            {
+                Task changed;
+                lock (gate)
+                {
+                    if (this.timersCreated >= timersCreated) break;
+                    changed = created.Task;
+                }
+                await changed;
+            }
+            List<ManualTimer> due;
+            lock (gate)
+            {
+                now += span;
+                due = timers.Where(timer => timer.IsDue(now)).ToList();
+                foreach (var timer in due) timer.Fire();
+            }
+            foreach (var timer in due) timer.Callback();
+        }
+
+        private void Remove(ManualTimer timer)
+        {
+            lock (gate) timers.Remove(timer);
+        }
+
+        private sealed class ManualTimer(ManualClock owner, TimerCallback callback, object? state) : ITimer
+        {
+            private TimeSpan? dueAt;
+
+            public void Schedule(TimeSpan now, TimeSpan dueTime) =>
+                dueAt = dueTime == Timeout.InfiniteTimeSpan ? null : now + dueTime;
+
+            public bool IsDue(TimeSpan now) => dueAt <= now;
+
+            public void Fire() => dueAt = null;
+
+            public void Callback() => callback(state);
+
+            public bool Change(TimeSpan dueTime, TimeSpan period)
+            {
+                lock (owner.gate) Schedule(owner.now, dueTime);
+                return true;
+            }
+
+            public void Dispose() => owner.Remove(this);
+
+            public ValueTask DisposeAsync()
+            {
+                Dispose();
+                return ValueTask.CompletedTask;
+            }
+        }
     }
 }

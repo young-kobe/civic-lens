@@ -189,7 +189,7 @@ public sealed class StatementEndpointsTests(PostgresCollection postgres)
         }
     }
 
-    private static Task AddDetailEvidenceAsync(string database, string recordId, string extractionId, string text,
+    internal static Task AddDetailEvidenceAsync(string database, string recordId, string extractionId, string text,
         int quoteStart, int quoteLength, int dateStart, int dateLength) => ViewsSeed.ExecuteAsync(database, $"""
             SET session_replication_role = replica;
             INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks,

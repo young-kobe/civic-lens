@@ -447,7 +447,7 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
     {
         var output = new StringWriter();
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "entries", "verify"], null!, null!, null!, null!, null!, null!, null!,
-            new VerifyPublishedEntries(publications, releases), null!, null!, null!, null!, Owner, output, TextWriter.Null, CancellationToken.None);
+            new VerifyPublishedEntries(publications, releases), null!, null!, null!, null!, null!, null!, Owner, output, TextWriter.Null, CancellationToken.None);
         return (exit, JsonDocument.Parse(output.ToString()).RootElement);
     }
 
