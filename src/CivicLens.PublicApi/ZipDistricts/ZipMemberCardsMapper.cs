@@ -1,4 +1,5 @@
 using CivicLens.PublicWeb.Publication;
+using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Votes;
 using CivicLens.Publication.Contracts;
 
@@ -48,6 +49,7 @@ internal static class ZipMemberCardsMapper
                 figure.Party, figure.WithParty, figure.Cast, figure.FirstVotedOn, figure.LastVotedOn, figure.Scope))])
         {
             Bills = holder.Bills is { } bills ? new(bills.Congress, bills.Sponsored, bills.Scope) : null,
+            BillCountsAbsent = OfficialActivityFigures.BillCountsAbsent(holder.Bills, holder.Issues),
             Issues = holder.Issues is { } issues ? [.. issues.Issues.Select(issue => new ZipMemberIssueData(
                 string.IsNullOrWhiteSpace(issue.Name) ? issue.IssueId : issue.Name,
                 issues.Congress, issue.SponsoredBills, issue.VotesCast, issues.Scope,
