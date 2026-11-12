@@ -58,7 +58,7 @@ Complete these gates before closing R-68.
 - [ ] Deploy reviewed, green main builds with matching artifacts, a fresh backup, functional checks, worker health, and the final live check. Verify Cloudflare compression and caching with private fragments excluded from shared caches.
 - [ ] Move every public route to server rendering. Then retire static page rendering and the rewrite options at once, so publication writes data only. There is no rollback period. End the temporary merge exception at that retirement gate.
 - [ ] After retirement, remove all unused legacy code, tests, and references in one prune pass. Then squash the EF migrations into one baseline.
-- [ ] Move search ingestion from `release.json` and record files to typed published data before static retirement. Remove public `release.json` at that gate. Keep private snapshots while verification or recovery use them, and remove code after its last caller leaves. Future public MCP uses the public API in a separate deployment.
+- [ ] Move search ingestion from `release.json` and record files to typed published data before static retirement. The source and entry views exist. The reader switch and the removal of the release feed remain. Remove public `release.json` at that gate. Keep private snapshots while verification or recovery use them, and remove code after its last caller leaves. Future public MCP uses the public API in a separate deployment.
 - [ ] Complete the held AI work after that retirement gate.
 - [ ] Run the final source, data, privacy, reader-flow, and design audit. Remove unused code and temporary migration rules. Reconcile the roadmap.
 
