@@ -105,7 +105,7 @@ public sealed class PostgresReleaseVoteBillsTests(PostgresCollection postgres) :
         var backfill = new BackfillStoredColumns(publications, scenario.Releases, scenario.Votes);
 
         var result = await backfill.ExecuteAsync(PublicationScenario.Owner);
-        var exit = await ReleaseCommand.ExecuteAsync(["releases", "columns", "backfill"], null!, null!, null!, null!, null!, null!, backfill, null!, null!, null!, null!, null!, null!, null!, null!,
+        var exit = await ReleaseCommand.ExecuteAsync(["releases", "columns", "backfill"], null!, null!, null!, null!, null!, null!, backfill, null!, null!, null!, null!, null!, null!, null!, null!, null!,
             PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal((0, 1), (result.VoteBillLinksFilled, result.ReleasesWithUnreadableManifest));
@@ -174,7 +174,7 @@ public sealed class PostgresReleaseVoteBillsTests(PostgresCollection postgres) :
         new VerifyReleaseVoteBills(publications, scenario.Releases, scenario.Votes).ExecuteAsync(PublicationScenario.Owner);
 
     private Task<int> ExitOfVerifyAsync(PublicationScenario scenario) => ReleaseCommand.ExecuteAsync(["releases", "vote-bills", "verify"], null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
-        new VerifyReleaseVoteBills(publications, scenario.Releases, scenario.Votes), PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+        new VerifyReleaseVoteBills(publications, scenario.Releases, scenario.Votes), null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
     private Task CommitAsync(int number, int? baseNumber, string directory, ReleaseVoteBill[] voteBills) =>
         publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, directory, [], [])

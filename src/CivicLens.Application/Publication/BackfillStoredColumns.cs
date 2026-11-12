@@ -42,7 +42,7 @@ public sealed class BackfillStoredColumns(IPublicationStore publications, IRelea
             {
                 if (await ReadColumnsAsync(releaseRows, gap, cancellationToken) is not { } found)
                 {
-                    if (gap.IsOpen) openWithoutFile++;
+                    if (gap.Releases.IsOpen) openWithoutFile++;
                     else closedWithoutFile++;
                     continue;
                 }
@@ -55,28 +55,10 @@ public sealed class BackfillStoredColumns(IPublicationStore publications, IRelea
         return (gaps.Count, written, openWithoutFile, closedWithoutFile);
     }
 
-    private async Task<VoteStoredColumns?> ReadColumnsAsync(PublicationReleaseSummary[] releaseRows, VoteColumnGap gap, CancellationToken cancellationToken)
-    {
-        foreach (var release in releaseRows.Where(release => gap.Covers(release.ReleaseNumber)))
-        {
-            if (await ReadVoteAsync(release, gap, cancellationToken) is { } vote) return VoteStoredColumns.From(vote);
-        }
-        return null;
-    }
-
-    private async Task<PublishedVote?> ReadVoteAsync(PublicationReleaseSummary release, VoteColumnGap gap, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var vote = ReleaseRecordFiles.Deserialize<PublishedVote>(await ReleaseRecordFiles.ReadAsync(releases, release.DirectoryName, gap.RecordId, cancellationToken));
-            vote.Validate();
-            return vote.RecordId == gap.RecordId && vote.RevisionNumber == gap.RevisionNumber ? vote : null;
-        }
-        catch (Exception exception) when (exception is FileNotFoundException or InvalidDataException or JsonException)
-        {
-            return null;
-        }
-    }
+    private async Task<VoteStoredColumns?> ReadColumnsAsync(PublicationReleaseSummary[] releaseRows, VoteColumnGap gap, CancellationToken cancellationToken) =>
+        await KeptVoteFiles.ReadAsync(releases, releaseRows, gap.RecordId, gap.RevisionNumber, gap.Releases, cancellationToken) is { } vote
+            ? VoteStoredColumns.From(vote)
+            : null;
 
     private async Task<int> BackfillPhotoPathsAsync(PublicationReleaseSummary[] releaseRows, CancellationToken cancellationToken)
     {

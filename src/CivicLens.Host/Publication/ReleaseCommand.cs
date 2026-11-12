@@ -20,7 +20,8 @@ public static class ReleaseCommand
         ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, BackfillFirstPublished backfill, BackfillPublishedEntries entries,
         BackfillStoredColumns columns, VerifyPublishedEntries verify, VerifyCorrectionHistories verifyCorrections,
         BackfillCorrectionHistories corrections, BackfillReleaseBillCounts billCounts, VerifyReleaseBillCounts verifyBillCounts,
-        BackfillReleasePartyLineUps lineUps, VerifyReleasePartyLineUps verifyLineUps, VerifyReleaseVoteBills verifyVoteBills, ReviewActor owner, TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
+        BackfillReleasePartyLineUps lineUps, VerifyReleasePartyLineUps verifyLineUps, VerifyReleaseVoteBills verifyVoteBills, VerifyVotePartyTallies verifyTallies,
+        ReviewActor owner, TextWriter output, TextWriter error, CancellationToken cancellationToken) =>
         OwnerCommand.RunAsync(async () =>
         {
             try
@@ -80,6 +81,12 @@ public static class ReleaseCommand
                             ReleaseBillCountVerificationCursor.Parse(countVerifyCursor.FirstOrDefault()), cancellationToken);
                         CommandOutput.Write(output, countVerification);
                         return countVerification.Failed == 0 && !countVerification.StaleCursor ? 0 : 1;
+                    case ["releases", "tallies", "verify", var tallyLimit, .. var tallyCursor]
+                        when TryParsePositive(tallyLimit, out var tallyTotal) && tallyCursor.Length <= 1:
+                        var tallyVerification = await verifyTallies.ExecuteAsync(owner, tallyTotal,
+                            VotePartyTallyVerificationCursor.Parse(tallyCursor.FirstOrDefault()), cancellationToken);
+                        CommandOutput.Write(output, tallyVerification);
+                        return tallyVerification.Failed == 0 ? 0 : 1;
                     case ["releases", "lineups", "backfill", var lineUpLimit, .. var lineUpCursor]
                         when TryParsePositive(lineUpLimit, out var lineUpTotal) && TryParseBackfillCursor(lineUpCursor, out var lineUpAfter):
                         var lineUpResult = await lineUps.ExecuteAsync(owner, lineUpTotal, lineUpAfter, cancellationToken);
@@ -104,7 +111,7 @@ public static class ReleaseCommand
                         CommandOutput.Write(output, publishedVerification);
                         return publishedVerification.Failed == 0 ? 0 : 1;
                     default:
-                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases corrections verify <limit> [cursor], releases counts backfill <limit> [cursor], releases counts verify <limit> [cursor], releases lineups backfill <limit> [cursor], releases lineups verify <limit> [cursor], releases columns backfill, releases vote-bills verify, or releases entries verify.");
+                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases corrections verify <limit> [cursor], releases counts backfill <limit> [cursor], releases counts verify <limit> [cursor], releases lineups backfill <limit> [cursor], releases lineups verify <limit> [cursor], releases tallies verify <limit> [cursor], releases columns backfill, releases vote-bills verify, or releases entries verify.");
                         return 2;
                 }
             }

@@ -107,6 +107,9 @@ public interface IPublicationStore
     Task<BillCountStatus> VerifyPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
         Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
 
+    /// <summary>Reads, in one read-only transaction, the next vote revisions after <paramref name="after"/> with their stored tally groups and the release range of their record states.</summary>
+    Task<VotePartyTallyPage> ReadVotePartyTallyEvidenceAsync(VotePartyTallyVerificationCursor? after, int limit, CancellationToken cancellationToken);
+
     Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken);
 

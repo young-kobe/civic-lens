@@ -494,7 +494,7 @@ try
             new VerifyCorrectionHistories(publications, releases), new BackfillCorrectionHistories(publications, releases),
             new BackfillReleaseBillCounts(publications, releases), new VerifyReleaseBillCounts(publications, releases),
             new BackfillReleasePartyLineUps(publications, releases), new VerifyReleasePartyLineUps(publications, releases),
-            new VerifyReleaseVoteBills(publications, releases, PostgresVoteReviewStore.FromConnectionString(connectionString)), owner,
+            new VerifyReleaseVoteBills(publications, releases, PostgresVoteReviewStore.FromConnectionString(connectionString)), new VerifyVotePartyTallies(publications, releases), owner,
             Console.Out, Console.Error, cancellation.Token);
     }
 
