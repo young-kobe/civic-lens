@@ -73,6 +73,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new BriefStore(views));
         builder.Services.AddSingleton(new ZipDistrictStore(views));
         builder.Services.AddSingleton(new IssueStore(views));
+        builder.Services.AddSingleton<IssuePageReader>();
         builder.Services.AddSingleton(new HomeStore(views));
         builder.Services.AddSingleton(provider => new HomePageReader(provider.GetRequiredService<HomeStore>(), options.BrowserApiUrl));
         builder.Services.AddSingleton(new RelatedStore(views));

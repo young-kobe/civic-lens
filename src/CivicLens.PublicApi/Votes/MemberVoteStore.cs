@@ -46,6 +46,8 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
          ORDER BY {VoteStore.Order.Replace("v.", "selected.", StringComparison.Ordinal)}
         """;
 
+    private static string CongressFilter(MemberVoteRequest request) => request.Congress is null ? "" : " AND v.congress = @congress";
+
     private static string SharedSelection(MemberVoteRequest request) => request.Issue is null ? $"""
         SELECT v.record_id, v.voted_on, v.chamber, v.congress, v.session_number, v.roll_call_number, v.kind, v.bill_type, v.bill_number,
                v.headline, v.label, v.result
@@ -61,7 +63,7 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
                      v.headline, v.label, v.result
                 FROM public_api.votes v
                WHERE v.record_id = issue_keys.record_id AND v.revision_number = issue_keys.revision_number
-                 AND v.chamber = chambers.chamber AND v.kind = ANY(@kinds)
+                 AND v.chamber = chambers.chamber AND v.kind = ANY(@kinds){CongressFilter(request)}
                OFFSET 0) v
          ORDER BY {VoteStore.Order} LIMIT @take
         """;
@@ -164,6 +166,7 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
         command.Parameters.AddWithValue("kinds", PublishedVoteKindExtensions.SubstantiveNames());
         command.Parameters.AddWithValue("take", MaximumSharedVotesPerChamber);
         if (request.Issue is not null) command.Parameters.AddWithValue("issue", request.Issue);
+        if (request.Congress is { } congress) command.Parameters.AddWithValue("congress", congress);
         int? release = null;
         var votes = new List<SharedMemberVote>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
