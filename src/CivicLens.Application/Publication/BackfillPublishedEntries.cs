@@ -12,6 +12,7 @@ namespace CivicLens.Application.Publication;
 /// It also fills the bill line of action rows that hold none. The line is the one that the kept folders of the range hold. Folders from before the
 /// line hold none, and two folders that hold different lines fail the check. A row that holds a line is never changed.
 /// It also fills the approval time of rows that hold none, from the record file of the oldest kept folder. A row that holds a time is never changed.
+/// The time fill runs last. The bill line and approver fills send the entry without its time, so their compare skips the stored time, which is still null.
 /// It also pins the bill statuses of each kept release that lacks them, from the status file of its folder. A release from before the file pins none.
 /// A row that exists is never changed.
 /// The release list is read before the candidates, so a commit between the two reads leaves a range that no listed folder covers.
@@ -40,7 +41,7 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
         var filled = await FillBillLinesAsync([.. pending.Where(entry => !entry.WritesRow)], cancellationToken);
         foreach (var batch in pending.Where(entry => !entry.WritesRow && entry.IsReady && entry.Entry!.ApprovedBy is not null).Chunk(BatchSize))
         {
-            await publications.FillStatementApproversAsync([.. batch.Select(entry => entry.EntryToInsert!)], cancellationToken);
+            await publications.FillStatementApproversAsync([.. batch.Select(entry => entry.EntryBeforeTimeFill!)], cancellationToken);
             foreach (var entry in batch) entry.ApproverFilled = true;
         }
         foreach (var batch in pending.Where(entry => !entry.WritesRow && entry.IsReady && entry.Entry!.ApprovedAtUtc is not null && entry.Candidate.LacksApprovalTime).Chunk(BatchSize))
@@ -121,7 +122,7 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
         var ready = pending.Where(entry => entry.IsReady && entry.BillLine is not null).ToList();
         var filled = 0;
         foreach (var batch in ready.Chunk(BatchSize))
-            filled += await publications.FillBillLinesAsync([.. batch.Select(entry => entry.EntryToInsert!)], cancellationToken);
+            filled += await publications.FillBillLinesAsync([.. batch.Select(entry => entry.EntryBeforeTimeFill!)], cancellationToken);
         return filled;
     }
 

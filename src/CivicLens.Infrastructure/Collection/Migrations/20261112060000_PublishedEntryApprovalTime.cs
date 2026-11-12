@@ -23,7 +23,7 @@ public partial class PublishedEntryApprovalTime : Migration
         migrationBuilder.AddColumn<long>(name: "approved_at_utc_ticks", table: "published_entries", type: "bigint", nullable: true);
         migrationBuilder.AddCheckConstraint(name: "ck_published_entries_approved_at_utc_ticks", table: "published_entries",
             sql: "approved_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
-        // The new column goes last, so the view keeps its definition and its grants. The next db migrate grants the column to the view owner.
+        // The new column goes last, so the view keeps its definition and its grants. MigrateAsync then applies PublicApiGrants in the same run, which grants the column to the view owner.
         migrationBuilder.Sql($"""
             CREATE OR REPLACE VIEW public_api.record_entries WITH (security_barrier = true) AS
             {EntriesViewBody}, e.approved_at_utc_ticks

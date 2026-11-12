@@ -26,6 +26,9 @@ internal sealed class PendingPublishedEntry(PublishedEntryCandidate candidate)
 
     public PublishedRecordEntry? EntryToInsert => Entry is null ? null : Entry with { BillLine = BillLine };
 
+    /// <summary>The entry for the fills that run before the approval time fill. A null time makes the store compare skip the stored time, which is still null then.</summary>
+    public PublishedRecordEntry? EntryBeforeTimeFill => EntryToInsert is null ? null : EntryToInsert with { ApprovedAtUtc = null };
+
     public bool IsReady => Entry is not null && SkipReason is null;
 
     public bool IsBlocked => SkipReason is not null;

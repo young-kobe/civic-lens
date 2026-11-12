@@ -64,6 +64,13 @@ public sealed class PublicApiEntryApprovalTimeMigrationTests(PostgresCollection 
                     || has_column_privilege('civic_lens_public_owner', 'published_entries', 'headline', 'SELECT')::text
                 """));
             Assert.Equal([ActionId], await QueryAsPublicAsync(database, "SELECT record_id FROM public_api.record_entries"));
+            // The restored view must be the view that PublicApiSearchEntries created: its columns in order, its barrier, and its owner.
+            Assert.Equal(["record_id,kind,revision_number,headline,source_host,event_date,bill_line,bill_title,document_type,link_type," +
+                "statement_kind,statement_record_id,target_kind,target_record_id|{security_barrier=true}|civic_lens_public_owner"], await QueryAsync(database, """
+                SELECT (SELECT string_agg(a.attname, ',' ORDER BY a.attnum) FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped)
+                       || '|' || c.reloptions::text || '|' || pg_get_userbyid(c.relowner)
+                  FROM pg_class c WHERE c.oid = 'public_api.record_entries'::regclass
+                """));
 
             await db.GetService<IMigrator>().MigrateAsync();
             await ApplyGrantsAsync(database);

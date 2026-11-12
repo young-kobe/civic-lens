@@ -569,6 +569,44 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task AnActionRowWithNoBillLineAndNoTimeGetsBothBecauseTheBillLineCompareSkipsTheTimeThatIsStillNull()
+    {
+        var action = await SeedActionAsync('a');
+        await AddReleasesAsync(1);
+        await AddRangeAsync(action, 1, null);
+        await publications.AddEntriesAsync([action.ToEntry() with { BillLine = null, ApprovedAtUtc = null }], default);
+        Keep(1, Listed(action, action.ToEntry() with { BillLine = Line, ApprovedAtUtc = null }));
+
+        var result = await RunAsync(10);
+
+        Assert.Equal((1, 0, 0), (result.BillLinesFilled, result.Skipped, result.OpenRangesWithoutApprovalTime));
+        Assert.Equal([$"{Line}|{action.ApprovedAtUtc.UtcTicks}"], await ReadAsync("SELECT bill_line || '|' || approved_at_utc_ticks FROM published_entries"));
+    }
+
+    [Fact]
+    public async Task AStatementRowWithNoApproverAndNoTimeGetsBothBecauseTheApproverCompareSkipsTheTimeThatIsStillNull()
+    {
+        var statement = PublishedStatementTests.Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Code };
+        await AddReleasesAsync(1);
+        await AddRangeAsync(statement.RecordId, "statement", 1, null);
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            {PublicRecordPageRows.Headline("statement", statement.RecordId, statement.Headline, "Model")}
+            DELETE FROM published_entries WHERE kind = 'statement' AND record_id = '{statement.RecordId}';
+            """);
+        var oldEntry = statement.ToEntry() with { ApprovedBy = null, ApprovedAtUtc = null };
+        await publications.AddFirstPublishedAsync([new(PublishedRecordKind.Statement, statement.RecordId, statement.FirstPublishedAtUtc)], default);
+        await publications.AddEntriesAsync([oldEntry], default);
+        Keep(1, new FolderRecord(oldEntry, statement));
+
+        var result = await RunAsync(10);
+
+        Assert.Equal((0, 0, 0), (result.Skipped, result.OpenStatementsWithoutApprover, result.OpenRangesWithoutApprovalTime));
+        Assert.Equal([$"Code|{statement.ApprovedAtUtc.UtcTicks}"],
+            await ReadAsync("SELECT approved_by || '|' || approved_at_utc_ticks FROM published_entries WHERE kind = 'statement'"));
+    }
+
+    [Fact]
     public async Task ARecordFileWhoseApprovalTimeDiffersFromTheKeptManifestSkipsTheRangeBecauseTheTwoKeptFilesMustAgree()
     {
         var action = await SeedActionAsync('a');

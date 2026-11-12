@@ -1057,7 +1057,7 @@ The command prints JSON with these keys:
 - `closedRangesWithoutKeptFolder`: the closed ranges that no kept folder lists. These ranges get no row, and this is expected.
 - `readyRangesWithoutRow`: the open or closed ranges that passed every check but got no row, because the limit stopped the run.
 - `openStatementsWithoutApprover`: the open statement ranges that still have no approver.
-- `openRangesWithoutApprovalTime`: the open ranges whose row still has no approval time. The run fills a null time from the oldest kept record file and never changes a stored time.
+- `openRangesWithoutApprovalTime`: the open ranges whose row still has no approval time. The run fills a null time from the oldest kept record file and never changes a stored time. The limit bounds only the new rows, not the fills. Like the approver fill, the run reads one record file for each range with no time.
 
 The exit code is 0 only when `skipped`, `openRangesWithoutRow`, `readyRangesWithoutRow`, `openStatementsWithoutApprover`, and `openRangesWithoutApprovalTime` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
 
