@@ -46,12 +46,12 @@ public sealed partial class PostgresCollectionJobStore : IFederalRegisterAdmissi
         }, cancellationToken);
     }
 
-    /// <summary>An original document gets one text job in the transaction that records it. A correction gets none.</summary>
+    /// <summary>An original document with a pinned body URL gets one text job in the transaction that records it. A correction gets none.</summary>
     private static async Task<DiscoveryAdmissionResult> AdmitTextJobAsync(CollectionAttemptDbContext db, ConfiguredCollectionSource source,
         FederalRegisterDocument document, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        if (source.EnabledFederalRegisterTextSource() is not { } textSource) return NoAdmission;
-        var batch = textSource.CreateFederalRegisterTextBatch(document.DocumentNumber, document.PublishedOn, Today(now));
+        if (source.EnabledFederalRegisterTextSource() is not { } textSource || document.BodyHtmlUrl is not { } bodyUrl) return NoAdmission;
+        var batch = textSource.CreateFederalRegisterTextBatch(document.DocumentNumber, bodyUrl, document.PublishedOn, Today(now));
         var (result, _) = await AdmitApiJobsAsync(db, batch, ApiJobSaveBatchSize, now, cancellationToken);
         if (result.DeferredCount > 0)
             throw new InvalidDataException($"Source '{textSource.SourceId}' admission policy cannot hold the text job of a document.");
@@ -71,8 +71,8 @@ public sealed partial class PostgresCollectionJobStore : IFederalRegisterAdmissi
             var document = await db.Set<ExecutiveActionDocumentRow>().AsNoTracking().SingleOrDefaultAsync(row =>
                 row.SourceId == sourceId && row.DocumentNumber == evidence.DocumentNumber, cancellationToken)
                 ?? throw new InvalidDataException("Text job names a document that is not recorded.");
-            if (document.NoticeUrl is not null || document.PublishedOn != evidence.PublishedOn)
-                throw new InvalidDataException("Text job names a correction notice or another publication date than the document.");
+            if (document.NoticeUrl is not null || document.BodyHtmlUrl != evidence.BodyUrl)
+                throw new InvalidDataException("Text job names a correction notice or another URL than the pinned body URL of the document.");
             if (!await db.Set<ExecutiveActionTextRow>().AnyAsync(row => row.SourceId == sourceId &&
                     row.DocumentNumber == evidence.DocumentNumber, cancellationToken))
                 db.Add(new ExecutiveActionTextRow

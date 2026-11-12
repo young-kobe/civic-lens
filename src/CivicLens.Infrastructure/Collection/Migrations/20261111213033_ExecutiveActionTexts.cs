@@ -10,6 +10,13 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.AddColumn<string>(
+                name: "body_html_url",
+                table: "executive_action_documents",
+                type: "character varying(1000)",
+                maxLength: 1000,
+                nullable: true);
+
             migrationBuilder.CreateTable(
                 name: "executive_action_texts",
                 columns: table => new
@@ -49,6 +56,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
         {
             migrationBuilder.DropTable(
                 name: "executive_action_texts");
+
+            migrationBuilder.DropColumn(
+                name: "body_html_url",
+                table: "executive_action_documents");
         }
     }
 }

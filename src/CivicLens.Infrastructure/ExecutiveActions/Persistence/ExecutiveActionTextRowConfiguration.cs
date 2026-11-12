@@ -1,4 +1,4 @@
-using CivicLens.Application.Collection.Bills;
+using CivicLens.Application.Collection;
 using CivicLens.Infrastructure.Documents.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -11,8 +11,8 @@ internal sealed class ExecutiveActionTextRowConfiguration : IEntityTypeConfigura
     {
         builder.ToTable("executive_action_texts", table =>
             table.HasCheckConstraint("ck_executive_action_texts_chars",
-                $"chars_read >= 1 AND chars_read <= {CongressBillRenderer.TextWindowLength} AND chars_read <= chars_total AND " +
-                $"(chars_read = chars_total OR chars_total > {CongressBillRenderer.TextWindowLength})"));
+                $"chars_read >= 1 AND chars_read <= {TextWindow.Length} AND chars_read <= chars_total AND " +
+                $"(chars_read = chars_total OR chars_total > {TextWindow.Length})"));
         builder.HasKey(row => new { row.SourceId, row.DocumentNumber });
         builder.Property(row => row.SourceId).HasColumnName("source_id").HasMaxLength(128);
         builder.Property(row => row.DocumentNumber).HasColumnName("document_number").HasMaxLength(32);

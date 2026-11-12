@@ -15,13 +15,13 @@ public static class FederalRegisterRenderer
         return string.Join('\n', document.CorrectionOf is null ? lines : lines.Append(NoticeLine(document)));
     }
 
-    /// <summary>The header names the document and the characters read. The text keeps the first <see cref="Bills.CongressBillRenderer.TextWindowLength"/> characters.
+    /// <summary>The header names the document and the characters read. The text keeps the first <see cref="TextWindow.Length"/> characters.
     /// Empty text is invalid data.</summary>
     public static FederalRegisterTextReading RenderText(string documentNumber, string text)
     {
         ArgumentNullException.ThrowIfNull(text);
         if (text.Length == 0) throw new InvalidDataException("Document text is empty.");
-        var window = Bills.CongressBillRenderer.TextWindow(text);
+        var window = TextWindow.Of(text);
         var lines = new[]
         {
             ExecutiveActionFacts.Line(ExecutiveActionFacts.DocumentNumber, documentNumber),

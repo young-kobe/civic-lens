@@ -14,9 +14,9 @@ public static class FederalRegisterUrl
     private static readonly string[] DetailFields =
     [
         "document_number", "type", "subtype", "title", "signing_date", "publication_date", "citation", "president", "correction_of",
-        "presidential_document_number", "html_url", "disposition_notes"
+        "presidential_document_number", "html_url", "disposition_notes", "body_html_url"
     ];
-    private static readonly string[] LegacyDetailFields = DetailFields[..^1];
+    private static readonly string[][] EarlierDetailFields = [DetailFields[..^1], DetailFields[..^2]];
 
     public static string List(string sourceUrl, FederalRegisterWindow window)
     {
@@ -54,7 +54,9 @@ public static class FederalRegisterUrl
         if (end < 0) return null;
         var number = rest[..end];
         if (!FederalRegisterDocumentNumber.IsValid(number)) return null;
-        return Document(sourceUrl, number, DetailFields) == url || Document(sourceUrl, number, LegacyDetailFields) == url ? number : null;
+        return Document(sourceUrl, number, DetailFields) == url || EarlierDetailFields.Any(fields => Document(sourceUrl, number, fields) == url)
+            ? number
+            : null;
     }
 
     public static FederalRegisterWindow ReadList(string sourceUrl, string url) =>

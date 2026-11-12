@@ -380,8 +380,7 @@ public sealed class JobPreparationTests
         { ApiResource.FederalRegisterText, FederalRegisterTextUrlOfOrder, FederalRegisterFixtures.OrderBodyHtml }
     };
 
-    private static readonly string FederalRegisterTextUrlOfOrder = FederalRegisterTextUrl.Body(FederalRegisterFixtures.TextSourceUrl,
-        new DateOnly(2026, 10, 28), "2026-22051");
+    private const string FederalRegisterTextUrlOfOrder = FederalRegisterFixtures.OrderBodyUrl;
 
     private static readonly string FederalRegisterListUrl = FederalRegisterUrl.List(FederalRegisterFixtures.SourceUrl,
         new FederalRegisterWindow(FederalRegisterFixtures.Backfill, Backfill));
@@ -404,7 +403,7 @@ public sealed class JobPreparationTests
     public async Task AFederalRegisterDocumentIsExtractedOnceAndTheStoreGetsThatExtractionWithItsSigner(bool earlierRequest)
     {
         var requestUrl = earlierRequest
-            ? FederalRegisterDocumentUrl.Replace("&fields%5B%5D=disposition_notes", "", StringComparison.Ordinal)
+            ? FederalRegisterDocumentUrl.Replace("&fields%5B%5D=body_html_url", "", StringComparison.Ordinal)
             : FederalRegisterDocumentUrl;
         var result = await Prepare(ApiResource.FederalRegisterDocument, requestUrl, FederalRegisterFixtures.TrumpOrder, null);
 
@@ -443,10 +442,10 @@ public sealed class JobPreparationTests
         Assert.Equal(EvidenceStatus.Succeeded, result!.Status);
         var saved = Assert.Single(extractions.Saved);
         AssertPinned(saved, "federal-register-text-v1+fake-extraction", "FederalRegisterTextParser.ExtractionVersion",
-            saved.Text == "Federal Register document: 2026-22051\nCharacters read: 11 of 11\nText:\nOrder text.");
+            saved.Text == "Federal Register document: 2025-01953\nCharacters read: 11 of 11\nText:\nOrder text.");
         var call = Assert.Single(federalRegister.Texts);
-        Assert.Equal(("job", "2026-22051", new DateOnly(2026, 10, 28), saved.ExtractionId, 11, 11),
-            (call.JobId, call.Evidence.DocumentNumber, call.Evidence.PublishedOn, call.Evidence.ExtractionId,
+        Assert.Equal(("job", "2025-01953", FederalRegisterFixtures.OrderBodyUrl, saved.ExtractionId, 11, 11),
+            (call.JobId, call.Evidence.DocumentNumber, call.Evidence.BodyUrl, call.Evidence.ExtractionId,
                 call.Evidence.Reading.CharsRead, call.Evidence.Reading.CharsTotal));
     }
 

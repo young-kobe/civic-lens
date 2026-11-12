@@ -317,14 +317,14 @@ public sealed class JobPreparation(
         CancellationToken cancellationToken)
     {
         var configured = ConfiguredSourceOf(job);
-        var (number, publishedOn) = FederalRegisterTextUrl.Read(configured.SourceUrl, job.Definition.Url);
+        var number = FederalRegisterTextUrl.ReadNumber(configured.SourceUrl, job.Definition.Url);
         var capture = await responses.ReadCaptureAsync(job, cancellationToken);
         var text = await textExtractor.ExtractAsync(capture.Captured, artifactRoot, FederalRegisterTextParser.Profile, cancellationToken);
         var reading = FederalRegisterRenderer.RenderText(number, text);
         var extractionId = await SaveExtractionAsync(capture.Captured, FederalRegisterTextParser.ExtractionVersion(textExtractor),
             reading.Text, cancellationToken);
         await federalRegisterAdmissions.AdmitTextAsync(configured, job.JobId,
-            new FederalRegisterTextEvidence(number, publishedOn, reading, extractionId), cancellationToken);
+            new FederalRegisterTextEvidence(number, job.Definition.Url, reading, extractionId), cancellationToken);
         return JobPreparationResult.Prepared();
     }
 

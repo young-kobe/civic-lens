@@ -186,15 +186,18 @@ public sealed class ConfiguredCollectionSource
         Revision.Configuration.SourceOf(ApiParser.FederalRegisterDocuments)?.Id
             ?? throw new InvalidDataException("The configuration has no Federal Register documents source.");
 
-    public ApiJobBatch CreateFederalRegisterTextBatch(string documentNumber, DateOnly publishedOn, DateOnly currentDate)
+    /// <summary>The job fetches the pinned <paramref name="bodyUrl"/> as it is. A URL outside the source or of another document is invalid data.</summary>
+    public ApiJobBatch CreateFederalRegisterTextBatch(string documentNumber, string bodyUrl, DateOnly publishedOn, DateOnly currentDate)
     {
         var source = ReadFederalRegisterTextSource();
+        if (FederalRegisterTextUrl.TryReadNumber(source.Url, bodyUrl) != documentNumber)
+            throw new InvalidDataException("The body URL of a Federal Register document is outside the text source or names another document.");
         var template = PrepareDefinition(source, currentDate, null, article: false);
         var job = new ApiJob(FederalRegisterJobKeys.Text(SourceId, documentNumber),
             template with
             {
                 ApiResource = ApiResource.FederalRegisterText,
-                Url = FederalRegisterTextUrl.Body(source.Url, publishedOn, documentNumber),
+                Url = bodyUrl,
                 Priority = CollectionJobPriority.OfDay(publishedOn, currentDate)
             });
         return new ApiJobBatch(source.AdmissionPolicy ?? new DiscoveryAdmissionPolicy(), template, [job]);

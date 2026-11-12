@@ -1,7 +1,8 @@
+using System.Text.Json;
 using CivicLens.Application.Collection;
-using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection.FederalRegister;
 using CivicLens.Application.Collection.Jobs;
+using CivicLens.Application.Configuration;
 using CivicLens.Collection.Contracts;
 using CivicLens.Tests.Fixtures;
 
@@ -10,35 +11,67 @@ namespace CivicLens.Tests.Application.Collection.FederalRegister;
 public sealed class FederalRegisterTextTests
 {
     private static readonly DateOnly Today = new(2026, 11, 11);
-    private static readonly DateOnly Published = new(2026, 10, 28);
-    private static readonly string Url = FederalRegisterTextUrl.Body(FederalRegisterFixtures.TextSourceUrl, Published, "2026-22051");
+    private const string Url = FederalRegisterFixtures.OrderBodyUrl;
 
     [Fact]
-    public void TheBodyUrlHasTheFormOfBodyHtmlUrlAndReadsBackToItsNumberAndDate()
+    public void ThePinnedBodyUrlReadsBackToItsNumberWhateverDateItsPathHolds()
     {
-        Assert.Equal("https://www.federalregister.gov/documents/full_text/html/2026/10/28/2026-22051.html", Url);
-        Assert.Equal(("2026-22051", Published), FederalRegisterTextUrl.Read(FederalRegisterFixtures.TextSourceUrl, Url));
+        Assert.Equal("2025-01953", FederalRegisterTextUrl.ReadNumber(FederalRegisterFixtures.TextSourceUrl, Url));
+        Assert.Equal("2024-26714", FederalRegisterTextUrl.ReadNumber(FederalRegisterFixtures.TextSourceUrl, FederalRegisterFixtures.ProclamationBodyUrl));
+        Assert.Equal("2026-22051", FederalRegisterTextUrl.ReadNumber(FederalRegisterFixtures.TextSourceUrl,
+            "https://www.federalregister.gov/documents/full_text/html/2026/10/32/2026-22051.html"));
     }
 
     [Theory]
     [InlineData("https://www.federalregister.gov/documents/full_text/html/2026/10/28/2026-22051.html?x=1")]
+    [InlineData("https://www.federalregister.gov/documents/full_text/html/2026/10/28/2026-22051.html#x.html")]
     [InlineData("https://www.federalregister.gov/documents/full_text/xml/2026/10/28/2026-22051.xml")]
     [InlineData("https://www.federalregister.gov/documents/full_text/text/2026/10/28/2026-22051.txt")]
     [InlineData("https://www.federalregister.gov/documents/full_text/html/2026/10/28/2026-22051.json")]
     [InlineData("https://www.federalregister.gov/documents/full_text/html/2026/10/28/../2026-22051.html")]
-    [InlineData("https://www.federalregister.gov/documents/full_text/html/2026/10/32/2026-22051.html")]
-    [InlineData("https://www.federalregister.gov/documents/full_text/html/2026/1/28/2026-22051.html")]
+    [InlineData("https://www.federalregister.gov/documents/full_text/html-x/2026/10/28/2026-22051.html")]
+    [InlineData("https://www.federalregister.gov/documents/full_text/html2026-22051.html")]
     [InlineData("https://www.federalregister.gov/documents/full_text/html/2026/10/28/not a number.html")]
-    [InlineData("https://www.federalregister.gov/documents/full_text/html/2026/10/28/2026-22051/slug.html")]
     [InlineData("https://www.federalregister.gov/documents/2026/10/28/2026-22051/a-title")]
     [InlineData("https://www.federalregister.gov/api/v1/documents/2026-22051.json")]
     [InlineData("https://evil.example/documents/full_text/html/2026/10/28/2026-22051.html")]
-    public void AnyOtherUrlFormIsRefusedAsAJobOfTheTextSource(string url)
+    public void AUrlOutsideThePrefixOrWithoutANumberIsRefusedAsAJobOfTheTextSource(string url)
     {
         var source = new ConfiguredCollectionSource(FederalRegisterFixtures.Configuration(withTextSource: true), FederalRegisterFixtures.TextSourceId, Today);
 
-        Assert.Null(FederalRegisterTextUrl.TryRead(FederalRegisterFixtures.TextSourceUrl, url));
+        Assert.Null(FederalRegisterTextUrl.TryReadNumber(FederalRegisterFixtures.TextSourceUrl, url));
         Assert.Throws<ArgumentException>(() => source.CreateApiJobDefinition(ApiResource.FederalRegisterText, url, Today, CollectionJobPriority.Check));
+    }
+
+    [Theory]
+    [InlineData("https://www.federalregister.gov/documents/full_text/html-x/2025/01/29/2025-01953.html")]
+    [InlineData("https://www.federalregister.gov/documents/full_text/xml/2025/01/29/2025-01953.xml")]
+    [InlineData("https://www.federalregister.gov/documents/full_text/html/2024/11/14/2024-26714.html")]
+    public void APinnedBodyUrlOutsideThePrefixOrOfAnotherDocumentAdmitsNoTextJob(string bodyUrl)
+    {
+        var source = new ConfiguredCollectionSource(FederalRegisterFixtures.Configuration(withTextSource: true), FederalRegisterFixtures.TextSourceId, Today);
+
+        Assert.Throws<InvalidDataException>(() => source.CreateFederalRegisterTextBatch(FederalRegisterFixtures.OrderBodyNumber, bodyUrl,
+            FederalRegisterFixtures.OrderBodyPublishedOn, Today));
+    }
+
+    [Fact]
+    public void TheShippedTextSourceAdmitsTheRealPinnedUrlAndRefusesAPathThatOnlySharesThePrefixWithoutItsSlash()
+    {
+        var shipped = JsonSerializer.Deserialize<CollectionConfiguration>(
+            File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "config", "federal-coverage.json")), ConfigurationJson.Options)!;
+        var text = shipped.Sources.Single(candidate => candidate.ApiParser == ApiParser.FederalRegisterText);
+        var enabled = shipped with { Sources = [.. shipped.Sources.Select(item => item == text ? text with { Enabled = true } : item)] };
+        var source = new ConfiguredCollectionSource(enabled, text.Id, Today);
+        const string sibling = "https://www.federalregister.gov/documents/full_text/html-x/2025/01/29/2025-01953.html";
+
+        var job = Assert.Single(source.CreateFederalRegisterTextBatch(FederalRegisterFixtures.OrderBodyNumber, Url, FederalRegisterFixtures.OrderBodyPublishedOn,
+            Today).Jobs);
+
+        Assert.Equal(Url, job.Definition.Url);
+        Assert.Throws<InvalidDataException>(() => source.CreateFederalRegisterTextBatch(FederalRegisterFixtures.OrderBodyNumber, sibling,
+            FederalRegisterFixtures.OrderBodyPublishedOn, Today));
+        Assert.Throws<ArgumentException>(() => source.CreateApiJobDefinition(ApiResource.FederalRegisterText, sibling, Today, CollectionJobPriority.Check));
     }
 
     [Fact]
@@ -49,7 +82,7 @@ public sealed class FederalRegisterTextTests
 
         _ = text.CreateApiJobDefinition(ApiResource.FederalRegisterText, Url, Today, CollectionJobPriority.Check);
         Assert.Throws<ArgumentException>(() => text.CreateApiJobDefinition(ApiResource.FederalRegisterDocument,
-            FederalRegisterUrl.Document(FederalRegisterFixtures.SourceUrl, "2026-22051"), Today, CollectionJobPriority.Check));
+            FederalRegisterUrl.Document(FederalRegisterFixtures.SourceUrl, "2025-01953"), Today, CollectionJobPriority.Check));
         Assert.Throws<ArgumentException>(() => documents.CreateApiJobDefinition(ApiResource.FederalRegisterDocument, Url, Today, CollectionJobPriority.Check));
         Assert.Throws<ArgumentException>(() => documents.CreateApiJobDefinition(ApiResource.FederalRegisterText, Url, Today, CollectionJobPriority.Check));
     }
@@ -59,9 +92,10 @@ public sealed class FederalRegisterTextTests
     {
         var source = new ConfiguredCollectionSource(FederalRegisterFixtures.Configuration(withTextSource: true), FederalRegisterFixtures.TextSourceId, Today);
 
-        var job = Assert.Single(source.CreateFederalRegisterTextBatch("2026-22051", Published, Today).Jobs);
+        var job = Assert.Single(source.CreateFederalRegisterTextBatch(FederalRegisterFixtures.OrderBodyNumber, Url,
+            FederalRegisterFixtures.OrderBodyPublishedOn, Today).Jobs);
 
-        Assert.Equal("federal-register/federal-register-text/text/2026-22051", job.IdempotencyKey);
+        Assert.Equal("federal-register/federal-register-text/text/2025-01953", job.IdempotencyKey);
         Assert.Equal(Url, job.Definition.Url);
         Assert.Equal(2_000_000, job.Definition.MaxBytes);
         Assert.Null(job.Definition.Credential);
@@ -114,9 +148,9 @@ public sealed class FederalRegisterTextTests
 
         var reading = FederalRegisterRenderer.RenderText("2026-22051", text);
 
-        Assert.True(text.Length > CongressBillRenderer.TextWindowLength);
+        Assert.True(text.Length > TextWindow.Length);
         Assert.Equal(text.Length, reading.CharsTotal);
-        Assert.True(reading.CharsRead is > 0 and <= CongressBillRenderer.TextWindowLength && text[reading.CharsRead] == ' ');
+        Assert.True(reading.CharsRead is > 0 and <= TextWindow.Length && text[reading.CharsRead] == ' ');
         Assert.StartsWith($"Federal Register document: 2026-22051\nCharacters read: {reading.CharsRead} of {text.Length}\nText:\n", reading.Text);
         Assert.EndsWith(text[..reading.CharsRead], reading.Text);
     }
@@ -126,6 +160,6 @@ public sealed class FederalRegisterTextTests
     {
         Assert.Throws<InvalidDataException>(() => FederalRegisterRenderer.RenderText("2026-22051", ""));
         Assert.Throws<InvalidDataException>(() =>
-            FederalRegisterRenderer.RenderText("2026-22051", new string('x', CongressBillRenderer.TextWindowLength + 1)));
+            FederalRegisterRenderer.RenderText("2026-22051", new string('x', TextWindow.Length + 1)));
     }
 }

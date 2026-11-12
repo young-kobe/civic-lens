@@ -18,8 +18,9 @@ internal static class FederalRegisterFixtures
         {"document_number":"2025-01900","type":"Presidential Document","subtype":"Executive Order","title":"Ending the Weaponization of the Federal Government","signing_date":"2025-01-20","publication_date":"2025-01-28","citation":"90 FR 8235","president":{"identifier":"donald-trump","name":"Donald Trump"},"correction_of":null,"presidential_document_number":"14147","html_url":"https://www.federalregister.gov/documents/2025/01/28/2025-01900/ending-the-weaponization-of-the-federal-government"}
         """;
 
+    /// <summary>The fields of the 2026-10-29 fetch, plus the <c>body_html_url</c> of <see cref="ProclamationBodyUrl"/>.</summary>
     public const string BidenProclamation = """
-        {"document_number":"2024-26714","type":"Presidential Document","subtype":"Proclamation","title":"To Facilitate Positive Adjustment to Competition From Imports of Fine Denier Polyester Staple Fiber","signing_date":"2024-11-08","publication_date":"2024-11-13","citation":"89 FR 89591","president":{"identifier":"joe-biden","name":"Joseph R. Biden Jr."},"correction_of":null,"presidential_document_number":"10857","html_url":"https://www.federalregister.gov/documents/2024/11/13/2024-26714/to-facilitate-positive-adjustment-to-competition-from-imports-of-fine-denier-polyester-staple-fiber"}
+        {"document_number":"2024-26714","type":"Presidential Document","subtype":"Proclamation","title":"To Facilitate Positive Adjustment to Competition From Imports of Fine Denier Polyester Staple Fiber","signing_date":"2024-11-08","publication_date":"2024-11-13","citation":"89 FR 89591","president":{"identifier":"joe-biden","name":"Joseph R. Biden Jr."},"correction_of":null,"presidential_document_number":"10857","html_url":"https://www.federalregister.gov/documents/2024/11/13/2024-26714/to-facilitate-positive-adjustment-to-competition-from-imports-of-fine-denier-polyester-staple-fiber","body_html_url":"https://www.federalregister.gov/documents/full_text/html/2024/11/14/2024-26714.html"}
         """;
 
     public const string BidenProclamationCorrection = """
@@ -35,7 +36,17 @@ internal static class FederalRegisterFixtures
         """;
 
     public const string TextSourceId = "federal-register-text";
-    public const string TextSourceUrl = "https://www.federalregister.gov/documents/full_text/html";
+    public const string TextSourceUrl = "https://www.federalregister.gov/documents/full_text/html/";
+
+    /// <summary>Real <c>body_html_url</c> values that the owner session fetched from the API detail response on 2026-11-12. That fetch gave
+    /// 2024-26714 the publication_date 2024-11-14. <see cref="BidenProclamation"/> keeps the 2024-11-13 of its 2026-10-29 fetch, so its pinned
+    /// path date differs from its stored publication date.</summary>
+    public const string ProclamationBodyUrl = "https://www.federalregister.gov/documents/full_text/html/2024/11/14/2024-26714.html";
+
+    /// <summary>Document 2025-01953, publication_date 2025-01-29, from the same 2026-11-12 fetch.</summary>
+    public const string OrderBodyNumber = "2025-01953";
+    public static readonly DateOnly OrderBodyPublishedOn = new(2025, 1, 29);
+    public const string OrderBodyUrl = "https://www.federalregister.gov/documents/full_text/html/2025/01/29/2025-01953.html";
 
     /// <summary>The structure of the HTML body of an executive order at body_html_url, as the owner session measured it on 2026-11-11 for
     /// 2026-22051 (about 13,500 bytes, about 8,000 characters of text). The words are shortened and invented. The markup is the real shape: plain
@@ -65,6 +76,10 @@ internal static class FederalRegisterFixtures
 
     public static byte[] Bytes(string json) => Encoding.UTF8.GetBytes(json);
 
+    /// <summary>Adds a <c>body_html_url</c> to a fixture that has none. A test that needs more pinned documents than the real values uses it.</summary>
+    public static string WithBodyUrl(string json, string bodyUrl) =>
+        json.Replace("\"html_url\":", $"\"body_html_url\":\"{bodyUrl}\",\"html_url\":", StringComparison.Ordinal);
+
     public static FederalRegisterDocument Document(string json) =>
         FederalRegisterDocumentParser.Parse(Bytes(json), NumberOf(json));
 
@@ -86,7 +101,7 @@ internal static class FederalRegisterFixtures
         Id = TextSourceId,
         Url = TextSourceUrl,
         AllowedOrigin = "https://www.federalregister.gov",
-        AllowedPathPrefix = "/documents/full_text/html",
+        AllowedPathPrefix = "/documents/full_text/html/",
         Mode = CollectionMode.Api,
         ApiParser = ApiParser.FederalRegisterText,
         CheckIntervalSeconds = 86_400,

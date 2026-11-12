@@ -4077,6 +4077,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("document_number");
 
+                    b.Property<string>("BodyHtmlUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("body_html_url");
+
                     b.Property<string>("DocumentJobId")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -4547,6 +4552,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasKey("RecordId", "RevisionNumber");
 
                     b.HasIndex("DispositionNotesExtractionId");
+
+                    b.HasIndex("Kind", "PresidentialNumber");
 
                     b.ToTable("executive_action_revisions", null, t =>
                         {

@@ -27,11 +27,18 @@ internal sealed class ExecutiveActionCommand(BackfillRevisions backfill, VerifyR
                     return await OwnerCommand.VerifyRevisionsAsync(verifyTargets, owner, cancellationToken);
                 case ["executive-actions", "text", "backfill", ..] when args.Length <= 4:
                     var textLimit = args.Length == 4 ? OwnerCommand.ParseLimit(args[3], Usage) : DefaultTextLimit;
-                    CommandOutput.Write(await createText().ExecuteAsync(owner, textLimit, cancellationToken));
-                    return 0;
+                    return WriteText(await createText().ExecuteAsync(owner, textLimit, cancellationToken));
                 default:
                     Console.Error.WriteLine(Usage);
                     return 2;
             }
         });
+
+    private static int WriteText(FederalRegisterTextBackfillResult result)
+    {
+        CommandOutput.Write(result);
+        if (result.PendingJobs == 0) return 0;
+        Console.Error.WriteLine($"Federal Register collection has {result.PendingJobs} pending jobs. Nothing was admitted. Run this command again after they finish.");
+        return 1;
+    }
 }
