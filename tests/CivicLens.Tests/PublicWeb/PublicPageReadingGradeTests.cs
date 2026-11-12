@@ -252,7 +252,9 @@ public sealed class PublicPageReadingGradeTests
             StatusDate = new(2026, 9, 18),
             StatusReadAtUtc = new(2026, 11, 5, 9, 57, 0, TimeSpan.Zero),
             CheckedAtUtc = new(2026, 11, 6, 9, 0, 0, TimeSpan.Zero),
-            CrsText = "This bill imposes sanctions.", CrsVersion = "55", SummaryFromCrs = true,
+            CrsText = "This bill imposes sanctions.",
+            CrsVersion = "55",
+            SummaryFromCrs = true,
             Issues = [new("foreign-policy", "Foreign policy and war")],
             PolicyArea = "International Affairs",
             BillLine = "This bill imposes sanctions.",
@@ -261,7 +263,8 @@ public sealed class PublicPageReadingGradeTests
         var featured = new HomeFeaturedVoteData(new string('a', 64), new(2026, 3, 3), PublishedChamber.House, "Published headline", null, "Published summary",
             PublishedTextOrigin.Model, "Passed", 216, 214, "Current bill line.", PublishedWording.BillLineSource);
         var recent = Enumerable.Range(0, 4).Select(index => new HomeVoteData(new string((char)('a' + index), 64), new(2026, 3, 2), PublishedChamber.House,
-            "Published vote", "AI label", "Passed", 216, 214, "Current bill line.") { Alignment = PublishedVoteAlignment.Split }).ToArray();
+            "Published vote", "AI label", "Passed", 216, 214, "Current bill line.")
+        { Alignment = PublishedVoteAlignment.Split }).ToArray();
         var home = new HomePageData(7, featured, recent, new(new string('f', 64), "Published brief", PublishedWording.ModelBrief))
         {
             Issues = [new("health", "Health", 119, 3, 12)],
