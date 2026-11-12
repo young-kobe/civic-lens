@@ -104,7 +104,7 @@ public sealed class ZipMemberUpdatesStoreTests(PostgresCollection postgres)
             await SetUpDistrictAsync(database, 4);
             await ViewsSeed.AddVotesAsync(database,
                 new SeededVote('a', "2026-05-01") { Casts = ["Yea"], PersonIds = ["p0"], Issues = ["health"] });
-            await ViewsSeed.ExecuteAsync(database, "REVOKE SELECT ON public_api.officials, public_api.official_attendance, public_api.official_party_lines, public_api.official_bill_counts, public_api.official_issue_counts, public_api.release_issues FROM civic_lens_public");
+            await ViewsSeed.ExecuteAsync(database, "REVOKE SELECT ON public_api.officials, public_api.official_attendance, public_api.official_party_lines, public_api.official_issue_counts, public_api.release_issues FROM civic_lens_public");
 
             await using var views = OpenPublicViews(database);
             var lookup = await new ZipDistrictStore(views).FindIssueVotesAsync(new ZipDistrictRequest { Zcta = "36009" }, "health", default);
