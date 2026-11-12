@@ -3,6 +3,10 @@
 @code {
     public const string FullVersionText = "Show in the full version";
 
+    /// <summary>The hidden name of a quote link. It carries the quote number only when the record cites more than one quote.</summary>
+    public static string QuoteTarget(string subject, int index = 0, int count = 1) =>
+        count == 1 ? $"{subject}, quote" : $"{subject}, quote {index + 1}";
+
     [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
     [Parameter] public string Text { get; set; } = "Show this quote in the saved text";
     [Parameter, EditorRequired] public string Target { get; set; } = string.Empty;
