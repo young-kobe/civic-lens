@@ -1,0 +1,7 @@
+<span class="shared-vote-cast-value" data-side="@Side?.ToLowerInvariant()">@ChildContent</span>
+
+@code {
+    /// <summary>The side of the cast, Yea or Nay, or null when the cast takes no side.</summary>
+    [Parameter] public string? Side { get; set; }
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+}

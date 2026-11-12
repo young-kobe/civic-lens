@@ -45,7 +45,7 @@ public sealed class PublishedDocumentChangeTests
     public void ValidateContentAllowsTheMaximumWordEditCountPerChange()
     {
         var record = Record(new() { ExtractionId = AfterId, Start = 1, Length = 2, Quote = "\U0001F600" });
-        var edits = Enumerable.Repeat(new PublishedWordEdit { BeforeStart = 0, BeforeLength = 0, AfterStart = 0, AfterLength = 0 },
+        var edits = Enumerable.Repeat(new PublishedWordEdit { BeforeStart = 1, BeforeLength = 0, AfterStart = 1, AfterLength = 0 },
             PublishedDocumentChange.MaximumWordEditsPerChange).ToArray();
 
         PublishedDocumentChange.ValidateContent(record.Before, record.After, record.Citations,
@@ -56,11 +56,45 @@ public sealed class PublishedDocumentChangeTests
     public void ValidateContentRejectsOneMoreThanTheWordEditCountLimit()
     {
         var record = Record(new() { ExtractionId = AfterId, Start = 1, Length = 2, Quote = "\U0001F600" });
-        var edits = Enumerable.Repeat(new PublishedWordEdit { BeforeStart = 0, BeforeLength = 0, AfterStart = 0, AfterLength = 0 },
+        var edits = Enumerable.Repeat(new PublishedWordEdit { BeforeStart = 1, BeforeLength = 0, AfterStart = 1, AfterLength = 0 },
             PublishedDocumentChange.MaximumWordEditsPerChange + 1).ToArray();
 
         Assert.Throws<InvalidDataException>(() => PublishedDocumentChange.ValidateContent(record.Before, record.After,
             record.Citations, [record.Changes[0] with { WordEdits = edits }], null, null));
+    }
+
+    [Theory]
+    [InlineData("backwards-before")]
+    [InlineData("backwards-after")]
+    [InlineData("overlapping")]
+    [InlineData("outside-before")]
+    [InlineData("outside-after")]
+    public void RejectsWordEditsThatAreNotOrderedAndContainedWithinTheirChange(string corruption)
+    {
+        var record = Record(new() { ExtractionId = AfterId, Start = 0, Length = 1, Quote = "n" });
+        var first = new PublishedWordEdit { BeforeStart = 1, BeforeLength = 1, AfterStart = 1, AfterLength = 1 };
+        var edits = corruption switch
+        {
+            "backwards-before" => new[] { first with { BeforeStart = 2 }, first with { AfterStart = 2 } },
+            "backwards-after" => new[] { first with { AfterStart = 2 }, first with { BeforeStart = 2 } },
+            "overlapping" => new[] { first with { BeforeLength = 2, AfterLength = 2 }, first with { BeforeStart = 2, AfterStart = 2 } },
+            "outside-before" => new[] { first with { BeforeStart = 0 } },
+            "outside-after" => new[] { first with { AfterStart = 4 } },
+            _ => throw new ArgumentOutOfRangeException(nameof(corruption))
+        };
+        var change = record.Changes[0] with
+        {
+            BeforeStart = 1,
+            BeforeLength = 3,
+            AfterStart = 1,
+            AfterLength = 3,
+            BeforeContextLength = 5,
+            AfterContextLength = 5,
+            WordEdits = edits
+        };
+        record = record with { Before = record.Before with { Text = "oldxy" }, After = record.After with { Text = "newxy" }, Changes = [change] };
+
+        Assert.Throws<InvalidDataException>(record.Validate);
     }
 
     [Theory]

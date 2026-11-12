@@ -1,4 +1,5 @@
 using System.Reflection;
+using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -207,14 +208,14 @@ public sealed class PostgresReleaseIssuePartyCountsTests(PostgresCollection post
         Assert.Equal(["health|Republican|1"], await PartiesAsync(1));
 
         await ViewsSeed.ExecuteAsync(connectionString, "UPDATE release_issue_party_lineups SET unknown_bills = 0 WHERE release_number = 1 AND issue_id = 'health'");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => FillAsync(1, 119));
+        await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
         Assert.Equal(["health|0", "tax|0"], await UnknownAsync(1));
 
         await ViewsSeed.ExecuteAsync(connectionString, """
             UPDATE release_issue_party_lineups SET unknown_bills = 1 WHERE release_number = 1 AND issue_id = 'health';
             DELETE FROM release_issue_party_counts WHERE release_number = 1;
             """);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => FillAsync(1, 119));
+        await Assert.ThrowsAsync<BillCountRefusedException>(() => FillAsync(1, 119));
         Assert.Empty(await PartiesAsync(1));
     }
 
