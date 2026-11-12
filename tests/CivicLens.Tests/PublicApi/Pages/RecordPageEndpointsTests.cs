@@ -94,6 +94,26 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task ADocumentChangeWithBackwardsWordEditsFailsClosedInsteadOfRenderingMisleadingSourceText()
+    {
+        await using var host = await StartAsync();
+        var created = await DocumentChangeEndpointsTests.CreateDraftAsync(host, "backwards-edits", "Old same red policy.", "New same blue policy.");
+        var saved = await DocumentChangeEndpointsTests.SaveAsync(host, created, "Changed policy", created.Citations);
+        await DocumentChangeEndpointsTests.ApproveAsync(host, saved);
+        await DocumentChangeEndpointsTests.CommitAsync(host, 1, null, saved);
+        await using var connection = new Npgsql.NpgsqlConnection(host.OperationalDatabase);
+        await connection.OpenAsync();
+        await using var command = new Npgsql.NpgsqlCommand(
+            "UPDATE document_comparison_word_edits SET after_start = 0 WHERE comparison_id = @id AND position = 1", connection);
+        command.Parameters.AddWithValue("id", saved.ComparisonId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+
+        using var response = await host.Client.GetAsync(Path(saved.DraftId));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+    }
+
+    [Fact]
     public async Task OneRecordRouteReadsTheKindOnceAndServesEveryKindItHasAPageFor()
     {
         await using var host = await StartAsync();
