@@ -10,6 +10,7 @@ public sealed class BriefPageReader(BriefStore briefs)
     {
         if (await briefs.FindAsync(recordId, cancellationToken) is not { } detail) return null;
         var row = detail.Brief;
-        return new(detail.Release, row.RecordId, row.RevisionNumber, row.WeekStart, row.Headline, row.TextOrigin, row.Label, detail.Paragraphs, detail.Citations);
+        return new(detail.Release, row.RecordId, row.RevisionNumber, row.WeekStart, row.Headline, row.TextOrigin, row.Label, detail.Paragraphs, detail.Citations,
+            row.CutoffReleaseNumber, new() { Considered = row.CoverageConsidered, SentToModel = row.CoverageSentToModel, Cited = detail.Citations.Length }, row.ApprovedAtUtc, row.FirstPublishedAtUtc);
     }
 }

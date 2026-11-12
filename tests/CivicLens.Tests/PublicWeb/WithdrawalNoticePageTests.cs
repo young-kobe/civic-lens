@@ -43,6 +43,17 @@ public sealed class WithdrawalNoticePageTests
     }
 
     [Fact]
+    public async Task TheNoticeSaysThatCivicLensWithdrewTheRecordWithItsKindAndTimeAndNamesNoDeciderTheDataDoesNotHold()
+    {
+        var page = await RenderAsync(Notice);
+
+        Assert.Contains("Civic Lens withdrew this statement on 6 Nov 2026, 12:30 UTC.", page.QuerySelector("main")!.TextContent);
+        Assert.DoesNotContain("A person withdrew", page.DocumentElement.TextContent);
+        Assert.DoesNotContain("Who decided", page.DocumentElement.TextContent);
+        Assert.Contains("Civic Lens withdrew this vote on", (await RenderAsync(Notice with { Kind = PublishedRecordKind.Vote })).QuerySelector("main")!.TextContent);
+    }
+
+    [Fact]
     public async Task TheNoticeSaysWhatWasWithdrawnAndWhenWithTheExactRevisionAndDatesAndTheEscapedNote()
     {
         var page = await RenderAsync(Notice);
