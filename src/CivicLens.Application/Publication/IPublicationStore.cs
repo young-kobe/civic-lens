@@ -53,6 +53,7 @@ public interface IPublicationStore
     Task<int> FillEntryCongressesAsync(IReadOnlyCollection<PublishedEntryDay> entries, CancellationToken cancellationToken);
 
     Task<int> FillStatementApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken);
+    Task<int> FillApprovalTimesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken);
 
     Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses, CancellationToken cancellationToken);
 

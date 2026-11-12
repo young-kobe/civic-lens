@@ -757,6 +757,9 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Task<int> FillStatementApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
+    public Task<int> FillApprovalTimesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
     public Dictionary<string, PublishedBillStatus> BillStatuses { get; } = [];
     public Dictionary<string, BillHistoryCapture> BillHistories { get; } = [];
     public List<BillHistoryCapture> PreparedHistories { get; } = [];

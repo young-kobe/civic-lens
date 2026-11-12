@@ -34,4 +34,5 @@ internal sealed class PublishedEntryRow
     public string? BillLine { get; set; }
     public int? Congress { get; set; }
     public PublishedApprover? ApprovedBy { get; set; }
+    public long? ApprovedAtUtcTicks { get; set; }
 }

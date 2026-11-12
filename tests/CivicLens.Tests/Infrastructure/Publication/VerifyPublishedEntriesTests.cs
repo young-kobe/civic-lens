@@ -96,6 +96,26 @@ public sealed class VerifyPublishedEntriesTests(PostgresCollection postgres) : I
         Assert.Equal(1, json.GetProperty("failedByReason").GetProperty("bytesDiffer").GetInt32());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnApprovalTimeThatTheTableHoldsDifferentlyFromTheManifestFailsTheReleaseBecauseTheTableOwnsTheTime(bool differs)
+    {
+        var action = await SeedActionAsync('a');
+        await AddReleasesAsync(1);
+        await AddRangeAsync(action, 1, null);
+        Keep(1, action);
+        await FillRowsAsync();
+        Assert.Equal([action.ApprovedAtUtc.UtcTicks.ToString()], await ReadAsync("SELECT approved_at_utc_ticks FROM published_entries"));
+        if (differs) await ExecuteAsync($"UPDATE published_entries SET approved_at_utc_ticks = approved_at_utc_ticks + 1 WHERE record_id = '{action.RecordId}'");
+
+        var (exit, json) = await RunCommandAsync();
+
+        Assert.Equal(differs ? 1 : 0, exit);
+        Assert.Equal(differs ? 1 : 0, json.GetProperty("failedReleases").GetArrayLength());
+        if (differs) Assert.Equal(1, json.GetProperty("failedByReason").GetProperty("bytesDiffer").GetInt32());
+    }
+
     [Fact]
     public async Task ABillLineInTheTableIsNotAddedToAReleaseFileThatHoldsNoneBecauseAReleaseFromBeforeTheLineHasNone()
     {
