@@ -77,6 +77,26 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task TheExecutiveActionPageMapsTypedTargetsInPositionOrderAndLinksOnlyActiveReleaseMatches()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 3, 0, 0, 0, TimeSpan.Zero));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + ExecutiveActionTargetRows.Seed());
+
+        var page = await GetPageAsync(host, Path(ExecutiveActionTargetRows.Source));
+
+        var targets = page.QuerySelectorAll("#executive-links-title + ul > li");
+        Assert.Equal(5, targets.Length);
+        Assert.Contains("Amends: Executive order 14100", targets[0].TextContent);
+        Assert.Equal("EO 14100, January 3, 2025", targets[0].QuerySelector(".detail-target-reference")!.TextContent);
+        Assert.Equal(BaseUrl.Join("records/" + ExecutiveActionTargetRows.LinkedOrder + ".html"), targets[0].QuerySelector("a")!.GetAttribute("href"));
+        Assert.Contains("Amends: Executive order 14101", targets[1].TextContent);
+        Assert.Null(targets[1].QuerySelector("a"));
+        Assert.Contains("Revokes: Proclamation 10001", targets[3].TextContent);
+        Assert.Equal(BaseUrl.Join("records/" + ExecutiveActionTargetRows.LinkedProclamation + ".html"), targets[3].QuerySelector("a")!.GetAttribute("href"));
+    }
+
+    [Fact]
     public async Task TheDocumentChangeRouteRendersTheRedlineFromTheExactStoredOffsets()
     {
         await using var host = await StartAsync();
@@ -91,6 +111,26 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         Assert.Equal("seven", page.QuerySelector(".redline del")!.TextContent.Replace("Removed: ", ""));
         Assert.Equal("three", page.QuerySelector(".redline ins")!.TextContent.Replace("Added: ", ""));
         Assert.Equal(["Book a tour seven days before.", "Book a tour three days before."], page.QuerySelectorAll("#source .doc-text").Select(text => text.TextContent));
+    }
+
+    [Fact]
+    public async Task ADocumentChangeWithBackwardsWordEditsFailsClosedInsteadOfRenderingMisleadingSourceText()
+    {
+        await using var host = await StartAsync();
+        var created = await DocumentChangeEndpointsTests.CreateDraftAsync(host, "backwards-edits", "Old same red policy.", "New same blue policy.");
+        var saved = await DocumentChangeEndpointsTests.SaveAsync(host, created, "Changed policy", created.Citations);
+        await DocumentChangeEndpointsTests.ApproveAsync(host, saved);
+        await DocumentChangeEndpointsTests.CommitAsync(host, 1, null, saved);
+        await using var connection = new Npgsql.NpgsqlConnection(host.OperationalDatabase);
+        await connection.OpenAsync();
+        await using var command = new Npgsql.NpgsqlCommand(
+            "UPDATE document_comparison_word_edits SET after_start = 0 WHERE comparison_id = @id AND position = 1", connection);
+        command.Parameters.AddWithValue("id", saved.ComparisonId);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+
+        using var response = await host.Client.GetAsync(Path(saved.DraftId));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
     }
 
     [Fact]

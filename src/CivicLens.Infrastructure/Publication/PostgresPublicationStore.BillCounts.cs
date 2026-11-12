@@ -31,7 +31,7 @@ public sealed partial class PostgresPublicationStore
         return source;
     }
 
-    public async Task<bool> CommitBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+    public async Task<ReleaseSnapshotWrite> CommitBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
         Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(readServedDirectory);
@@ -43,7 +43,7 @@ public sealed partial class PostgresPublicationStore
         if (!await db.Set<ReleaseBillCountRow>().AnyAsync(row => row.ReleaseNumber == release.ReleaseNumber, cancellationToken))
             throw new BillCountRefusedException($"Release {release.ReleaseNumber} has no Congress to count bills for.");
         await transaction.CommitAsync(cancellationToken);
-        return added;
+        return added ? ReleaseSnapshotWrite.Added : ReleaseSnapshotWrite.AlreadyPresent;
     }
 
     public async Task<BillCountStatus> VerifyBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
@@ -55,6 +55,32 @@ public sealed partial class PostgresPublicationStore
         var current = await RequireRetainedReleaseAsync(db, release, readServedDirectory, cancellationToken);
         await ReleaseBillCountSources.RequireSameMembersAsync(db, release.ReleaseNumber, validatedMembers, cancellationToken);
         var status = await ReleaseBillCounts.VerifyAsync(db, release.ReleaseNumber, CongressOfRelease(current), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return status;
+    }
+
+    public async Task<ReleaseSnapshotWrite> CommitPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(readServedDirectory);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await PostgresAdvisoryLock.BeginWriteAsync(db, PostgresAdvisoryLock.ReviewKeysInOrder, cancellationToken);
+        var current = await RequireRetainedReleaseAsync(db, release, readServedDirectory, cancellationToken);
+        await ReleaseBillCountSources.RequireSameMembersAsync(db, release.ReleaseNumber, validatedMembers, cancellationToken);
+        var written = await ReleaseIssuePartyCounts.FillAsync(db, release.ReleaseNumber, CongressOfRelease(current), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return written;
+    }
+
+    public async Task<BillCountStatus> VerifyPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(readServedDirectory);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await BeginVerificationReadAsync(db, cancellationToken);
+        var current = await RequireRetainedReleaseAsync(db, release, readServedDirectory, cancellationToken);
+        await ReleaseBillCountSources.RequireSameMembersAsync(db, release.ReleaseNumber, validatedMembers, cancellationToken);
+        var status = await ReleaseIssuePartyCounts.VerifyAsync(db, release.ReleaseNumber, CongressOfRelease(current), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return status;
     }
