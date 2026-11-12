@@ -26,9 +26,7 @@ public sealed class HomePageReader(HomeStore home, PublicBaseUrl? browserApiUrl)
         return new(answer.Release, featured, votes, brief)
         {
             ExecutiveActions = executiveActions,
-            Issues = issues,
-            NewestHouseRollCall = answer.NewestHouseRollCall,
-            NewestSenateRollCall = answer.NewestSenateRollCall
+            Issues = issues
         };
     }
 }

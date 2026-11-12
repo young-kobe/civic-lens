@@ -87,7 +87,7 @@ public sealed class HomePageTests
     [Theory]
     [InlineData(12, 7, 4, "12 substantive votes", "7 bills", "4 records in this release")]
     [InlineData(1, 1, 1, "1 substantive vote", "1 bill", "1 record in this release")]
-    public async Task IssuesExecutiveGroupsAndFreshnessRenderTheirScopedPublishedFacts(
+    public async Task IssuesAndExecutiveGroupsRenderTheirScopedPublishedFacts(
         int substantiveVotes, int bills, int executiveRecords, string voteCount, string billCount, string executiveCount)
     {
         var issue = new HomeIssueData("health", "Health", 119, substantiveVotes, bills);
@@ -97,9 +97,7 @@ public sealed class HomePageTests
         var page = await RenderAsync(new(7, null, [], null)
         {
             Issues = [issue],
-            ExecutiveActions = [action],
-            NewestHouseRollCall = new(2026, 5, 31),
-            NewestSenateRollCall = new(2026, 5, 29)
+            ExecutiveActions = [action]
         });
 
         var issueCard = Assert.Single(page.QuerySelectorAll(".home-issue-list li"));
@@ -115,19 +113,6 @@ public sealed class HomePageTests
         Assert.Contains("Newest notice title", actionCard.TextContent);
         Assert.Contains(executiveCount, actionCard.TextContent);
         Assert.Contains("Signed 31 May 2026", actionCard.TextContent);
-
-        Assert.Same(page.QuerySelector(".home-freshness"), page.QuerySelector(".home-grid")!.FirstElementChild);
-        Assert.Contains("Newest published House roll call: 31 May 2026", page.QuerySelector(".home-freshness")!.TextContent);
-        Assert.Contains("Newest published Senate roll call: 29 May 2026", page.QuerySelector(".home-freshness")!.TextContent);
-    }
-
-    [Fact]
-    public async Task FreshnessOmitsAChamberWithoutPublishedRollCalls()
-    {
-        var page = await RenderAsync(new(7, null, [], null) { NewestHouseRollCall = new(2026, 5, 31) });
-
-        Assert.Contains("Newest published House roll call: 31 May 2026", page.QuerySelector(".home-freshness")!.TextContent);
-        Assert.DoesNotContain("Senate", page.QuerySelector(".home-freshness")!.TextContent);
     }
 
     [Fact]

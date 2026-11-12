@@ -307,7 +307,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     {
         await using var host = await StartWithBrowserApiAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
-        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "REVOKE SELECT ON public_api.votes FROM civic_lens_public");
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "REVOKE SELECT ON public_api.bills FROM civic_lens_public");
 
         using var response = await host.Client.GetAsync("/web/compare");
 
@@ -360,7 +360,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
         Assert.DoesNotContain(MembersStripSlot.ElementId, staticHtml);
         Assert.Contains($"id=\"{MembersStripSlot.ElementId}\"", served);
-        Assert.Equal(staticHtml, served.Replace(MembersStripHtml, string.Empty));
+        Assert.Equal(staticHtml, ServerShellOnly(served));
         Assert.Contains("id=\"site-search\"", served);
     }
 
@@ -430,6 +430,11 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     private static Task<HttpResponseMessage> Revalidate(ApiHost host, HttpResponseMessage fresh) => Send(host, fresh.Headers.ETag!.Tag);
+
+    /// <summary>The served page without the three things that only a server page adds: the members strip, the freshness line, and the preview Issues link.</summary>
+    private static string ServerShellOnly(string served) => System.Text.RegularExpressions.Regex.Replace(
+        served.Replace(MembersStripHtml, string.Empty).Replace(BaseUrl.Join(PublicSections.PreviewIssuesPath), BaseUrl.Join(PublicationProtocol.FacetsPath)),
+        "<p class=\"public-freshness\">.*?</p>", string.Empty, System.Text.RegularExpressions.RegexOptions.Singleline);
 
     private static AngleSharp.Dom.IDocument Parse(string html) => new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html);
 

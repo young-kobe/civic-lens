@@ -4,6 +4,4 @@ public sealed record HomePageData(int Release, HomeFeaturedVoteData? FeaturedVot
 {
     public HomeExecutiveGroupData[] ExecutiveActions { get; init; } = [];
     public HomeIssueData[] Issues { get; init; } = [];
-    public DateOnly? NewestHouseRollCall { get; init; }
-    public DateOnly? NewestSenateRollCall { get; init; }
 }

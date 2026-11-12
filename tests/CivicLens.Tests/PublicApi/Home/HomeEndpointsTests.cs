@@ -58,12 +58,6 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal("2026-05-31", answer.GetProperty("newestHouseRollCall").GetString());
         Assert.Equal(JsonValueKind.Null, answer.GetProperty("newestSenateRollCall").ValueKind);
         Assert.Equal(substantive.RecordId, answer.GetProperty("votes")[0].GetProperty("recordId").GetString());
-
-        await using var dataSource = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase!);
-        var page = await new HomePageReader(new HomeStore(dataSource), null).ReadAsync(CancellationToken.None);
-        Assert.NotNull(page);
-        Assert.Equal(new DateOnly(2026, 5, 31), page.NewestHouseRollCall);
-        Assert.Null(page.NewestSenateRollCall);
     }
 
     [Fact]

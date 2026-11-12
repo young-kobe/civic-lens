@@ -1,0 +1,9 @@
+<CascadingValue Value="Context" IsFixed="true">
+    <DynamicComponent Type="Page" Parameters="Parameters" />
+</CascadingValue>
+
+@code {
+    [Parameter, EditorRequired] public ServerPageContext Context { get; set; } = default!;
+    [Parameter, EditorRequired] public Type Page { get; set; } = default!;
+    [Parameter, EditorRequired] public IDictionary<string, object> Parameters { get; set; } = default!;
+}

@@ -1,3 +1,4 @@
+using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
@@ -11,15 +12,16 @@ public static class SearchPageEndpoint
 {
     public const string CacheControl = "private, no-store";
 
-    public static Task<IResult> RespondAsync(HttpContext context, SearchPageReader reader, PageRenderer renderer, PublicBaseUrl baseUrl,
+    public static Task<IResult> RespondAsync(HttpContext context, SearchPageReader reader, ActiveReleaseReader releases, PageRenderer renderer, PublicBaseUrl baseUrl,
         CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
     {
         if (await reader.ReadAsync(context.Request.Query, cancellationToken) is not { } data) return ApiResults.NoRelease();
-        var html = await renderer.RenderAsync<SearchResultsPage>(new Dictionary<string, object?>
+        if (await releases.FindFreshnessAsync(cancellationToken) is not { } freshness) return ApiResults.NoRelease();
+        var html = await renderer.RenderPageAsync<SearchResultsPage>(new Dictionary<string, object?>
         {
             [nameof(SearchResultsPage.Data)] = data,
             [nameof(SearchResultsPage.RootPath)] = baseUrl.Join(string.Empty)
-        });
+        }, freshness.PageContext);
         context.Response.Headers.CacheControl = CacheControl;
         return Results.Content(html, "text/html; charset=utf-8");
     });
