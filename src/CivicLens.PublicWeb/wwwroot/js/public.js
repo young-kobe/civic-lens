@@ -637,6 +637,9 @@
         for (const button of buttons) button.addEventListener("click", () => { office = button.dataset.filterValue; apply(); });
         state.addEventListener("change", apply);
         name.addEventListener("input", apply);
+        // The search page links here with ?name= so the list opens on the officials that match the typed name.
+        const linkedName = new URLSearchParams(location.search).get("name");
+        if (linkedName) name.value = linkedName;
         controls.hidden = false;
         apply();
     };

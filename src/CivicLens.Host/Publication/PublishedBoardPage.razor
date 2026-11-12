@@ -21,7 +21,7 @@
     @if (Agreement is { } agreement)
     {
         <Panel Title="@PublishedBoardView.AgreementTitle(agreement)" Padded="true">
-            <p>@PublishedBoardView.AgreementLead(agreement)</p>
+            <p>@BoardWords.AgreementLead(agreement.Chamber, agreement.Congress, agreement.Agreed, agreement.Total)</p>
             @if (agreement.Total > 0)
             {
                 <DataTable Roles="true" Items="PublishedBoardView.AgreementRows(agreement)" Caption="@PublishedBoardView.AgreementCaption">
@@ -31,17 +31,17 @@
                         <TableCell Label="@VoteWords.PartiesAgreedBadge">@row.Count</TableCell>
                     </Row>
                 </DataTable>
-                <p>@PublishedBoardView.AgreementSplit(agreement)</p>
+                <p>@BoardWords.AgreementSplit(agreement.Split, agreement.Total)</p>
                 @if (agreement.Mixed > 0)
                 {
-                    <p>@PublishedBoardView.AgreementMixed(agreement)</p>
+                    <p>@BoardWords.AgreementMixed(agreement.Mixed, agreement.Total)</p>
                 }
-                @if (PublishedBoardView.ShowsNominationNote(agreement))
+                @if (BoardWords.ShowsNominationNote(agreement.Nominations, agreement.Total))
                 {
-                    <p class="muted small">@PublishedBoardView.NominationNote(agreement)</p>
+                    <p class="muted small">@BoardWords.NominationNote(agreement.Total)</p>
                 }
             }
-            <p class="muted small">@VoteWords.PartiesAgreedMeaning @PublishedBoardView.AgreementCaution</p>
+            <p class="muted small">@VoteWords.PartiesAgreedMeaning @BoardWords.AgreementCaution</p>
             <p class="muted small"><a href="@(PublicationProtocol.MethodPagePath + PublishedBoardView.AgreementAnchor)">@PublishedBoardView.AgreementLinkText</a></p>
         </Panel>
     }

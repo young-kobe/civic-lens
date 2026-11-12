@@ -220,7 +220,7 @@ public static class Glossary
         "A party's majority is the side, yes or no, that more of its members took. Present and Not voting do not count.",
         "A party with equal yes and no counts has no majority on that vote.",
         "We use the member's party on the day of the vote, in the same chamber.",
-        "An independent who caucuses with a party counts with that party."
+        BoardWords.CaucusRule
     ];
 
     private static readonly IReadOnlyDictionary<string, GlossaryTerm> ByKey = Groups.SelectMany(group => group.Terms).ToDictionary(term => term.Key);

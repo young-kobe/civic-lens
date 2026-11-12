@@ -71,33 +71,33 @@
         <Panel Title="@($"When both parties agreed ({agreement.Chamber}, {CongressCalendar.Ordinal(agreement.Congress)} Congress)")" Padded="true" Class="board-agreement">
             @if (agreement.Total == 0)
             {
-                <p>This site has no substantive @agreement.Chamber roll call vote with both parties in the @CongressCalendar.Ordinal(agreement.Congress) Congress.</p>
+                <p>@BoardWords.AgreementLead(agreement.Chamber, agreement.Congress, agreement.Agreed, agreement.Total)</p>
             }
             else
             {
-                <p class="muted">Each line counts substantive @agreement.Chamber roll call votes of one kind. A vote counts as agreed when most Democrats and most Republicans who cast Yes or No voted the same way.</p>
+                <p class="muted">Each line counts substantive @agreement.Chamber roll call votes of one kind. @VoteWords.PartiesAgreedMeaning</p>
                 <dl class="board-kinds">
                     @foreach (var kind in agreement.Kinds)
                     {
                         <div class="board-kind"><dt>@PlainVoteWords.Kind(kind.Kind)</dt><dd>@kind.Agreed of @kind.Total</dd></div>
                     }
-                    <div class="board-kind"><dt>All substantive votes</dt><dd>@agreement.Agreed of @agreement.Total</dd></div>
+                    <div class="board-kind"><dt>@BoardWords.AgreementTotalLabel</dt><dd>@agreement.Agreed of @agreement.Total</dd></div>
                 </dl>
-                <p>On @agreement.Agreed of the @agreement.Total substantive @agreement.Chamber roll call votes on this site, most Democrats and most Republicans who cast Yes or No voted the same way. On @agreement.Split of the @agreement.Total, the two parties took opposite sides.</p>
+                <p>@BoardWords.AgreementLead(agreement.Chamber, agreement.Congress, agreement.Agreed, agreement.Total) @BoardWords.AgreementSplit(agreement.Split, agreement.Total)</p>
                 @if (agreement.Mixed > 0)
                 {
-                    <p>On @agreement.Mixed of the @agreement.Total, one party had no majority, as in a tie.</p>
+                    <p>@BoardWords.AgreementMixed(agreement.Mixed, agreement.Total)</p>
                 }
-                @if (agreement.Nominations * 2 > agreement.Total)
+                @if (BoardWords.ShowsNominationNote(agreement.Nominations, agreement.Total))
                 {
-                    <p>Most of these @agreement.Total votes are on nominations. Look at each kind of vote, not only the total.</p>
+                    <p>@BoardWords.NominationNote(agreement.Total)</p>
                 }
-                <p class="small muted">That the parties voted the same way is about the question of each vote. It does not show that they agree on an issue.</p>
+                <p class="small muted">@BoardWords.AgreementCaution</p>
             }
         </Panel>
     }
     <Panel Title="How these lists are made" Padded="true">
-        <p class="muted">A split vote is a substantive roll call vote where most Democrats and most Republicans who cast Yes or No voted on opposite sides. An independent who caucuses with a party counts with that party.</p>
+        <p class="muted">@VoteWords.SplitMeaning @BoardWords.CaucusRule</p>
         <p><a href="@(RootPath + PublicationProtocol.MethodPagePath)">Read the method note: how Civic Lens counts split votes and agreed votes</a></p>
     </Panel>
 </PublicPage>

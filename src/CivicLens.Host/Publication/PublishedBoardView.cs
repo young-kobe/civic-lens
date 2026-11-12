@@ -46,10 +46,6 @@ internal static class PublishedBoardView
 
     public const string AgreementKindHeader = "Kind of vote";
 
-    public const string AgreementTotalLabel = "All substantive votes";
-
-    public const string AgreementCaution = "That the parties voted the same way is about the question of each vote. It does not show that they agree on an issue.";
-
     public const string AgreementLinkText = "How this count works";
 
     public const string AgreementId = "parties-agreed";
@@ -59,24 +55,11 @@ internal static class PublishedBoardView
     public static string AgreementTitle(ChamberAgreement agreement) =>
         $"When both parties agreed ({CongressCalendar.Ordinal(agreement.Congress)} Congress, {agreement.Chamber})";
 
-    public static string AgreementLead(ChamberAgreement agreement) => agreement.Total == 0
-        ? $"This site has no substantive {agreement.Chamber} roll call vote with both parties in the {CongressCalendar.Ordinal(agreement.Congress)} Congress."
-        : $"On {agreement.Agreed} of the {agreement.Total} substantive {agreement.Chamber} roll call {PublishedOfficialView.Noun(agreement.Total, "vote")} on this site, {VoteWords.BothMajorities} voted the same way.";
-
     public static IReadOnlyList<AgreementRow> AgreementRows(ChamberAgreement agreement) =>
     [
         .. agreement.Kinds.Select(kind => new AgreementRow(PlainVoteWords.Kind(kind.Kind), $"{kind.Agreed} of {kind.Total}")),
-        new(AgreementTotalLabel, $"{agreement.Agreed} of {agreement.Total}")
+        new(BoardWords.AgreementTotalLabel, $"{agreement.Agreed} of {agreement.Total}")
     ];
-
-    public static string AgreementSplit(ChamberAgreement agreement) => $"On {agreement.Split} of the {agreement.Total}, the two parties took opposite sides.";
-
-    public static string AgreementMixed(ChamberAgreement agreement) => $"On {agreement.Mixed} of the {agreement.Total}, one party had no majority, as in a tie.";
-
-    public static bool ShowsNominationNote(ChamberAgreement agreement) => agreement.Nominations * 2 > agreement.Total;
-
-    public static string NominationNote(ChamberAgreement agreement) =>
-        $"Most of these {agreement.Total} votes are on nominations. Look at each kind of vote, not only the total.";
 
     public static string PartyOf(OfficialBoard board) => PublishedOfficialView.PartyOf(board.Chamber, board.Party);
 

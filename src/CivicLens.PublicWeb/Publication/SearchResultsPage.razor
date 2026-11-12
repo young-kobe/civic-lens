@@ -51,7 +51,7 @@
     {
         <EmptyState Title="@NoRecords" Text="Next steps:">
             <ul class="search-next">
-                @if (Data.Query.Text is not null)
+                @if (Data.Query.Text is not null && Data.Officials.Count == 0 && Data.Bill is null)
                 {
                     <li>Check the spelling, or type fewer words.</li>
                 }

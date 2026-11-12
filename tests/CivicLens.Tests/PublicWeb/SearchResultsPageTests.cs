@@ -164,6 +164,19 @@ public sealed class SearchResultsPageTests
     }
 
     [Fact]
+    public async Task AnOfficialMatchOrABillPinLeavesOutTheSpellingStepBecauseTheTextFoundAMatch()
+    {
+        var official = await RenderAsync(Data(Query("sen"), officials: [Official()], moreOfficials: true));
+        var pin = await RenderAsync(Data(Query("77"), bill: new(BillId, "S. 77, the Example Act", 119, "John Cornyn", null, null, null, [])));
+        var neither = await RenderAsync(Data(Query("zzqxv")));
+
+        Assert.DoesNotContain("spelling", official.QuerySelector(".empty")!.TextContent);
+        Assert.Equal(3, official.QuerySelectorAll(".search-next li").Length);
+        Assert.DoesNotContain("spelling", pin.QuerySelector(".empty")!.TextContent);
+        Assert.Contains("Check the spelling, or type fewer words.", neither.QuerySelector(".empty")!.TextContent);
+    }
+
+    [Fact]
     public async Task AFilterOnlySearchLeavesOutTheSpellingStep()
     {
         var page = await RenderAsync(Data(Query(null) with { Kind = "statement" }));
