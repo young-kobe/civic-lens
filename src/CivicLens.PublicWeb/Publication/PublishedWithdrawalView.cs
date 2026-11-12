@@ -7,6 +7,9 @@ namespace CivicLens.PublicWeb.Publication;
 
 internal static class PublishedWithdrawalView
 {
+    /// <summary>The banner title and the last crumb of the trail. The record ID is not a name that a reader knows.</summary>
+    public const string RecordTitle = "Withdrawn record";
+
     /// <summary>The one sentence that says what happened. The stored withdrawal holds no decider, so the sentence names none.</summary>
     public static string Banner(PublishedWithdrawal withdrawal) =>
         $"Civic Lens withdrew this {PublishedRecordLabels.Kind(withdrawal.Kind).ToLowerInvariant()} on {Moment.Full(withdrawal.WithdrawnAtUtc)}.";

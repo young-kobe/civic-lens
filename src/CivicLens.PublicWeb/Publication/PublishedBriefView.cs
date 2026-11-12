@@ -11,11 +11,11 @@ public static class PublishedBriefView
 
     public const string CitedRecordsTitle = "Records this brief used";
 
-    public const string Eyebrow = "Weekly brief";
+    private const string SampleNote = "This brief is a sample, not a full account of the week.";
 
-    public const string SampleNote = "This brief is a sample, not a full account of the week.";
+    public const string ReleaseTermKey = "release";
 
-    public static string WeekStartText(DateOnly weekStart) => $"Starts Monday {Moment.Day(weekStart)}, New York time";
+    private static string WeekStartText(DateOnly weekStart) => $"Starts Monday {Moment.Day(weekStart)}, New York time";
 
     public static string CitedRecordNote(PublishedBriefCitation citation) =>
         $"{PublishedRecordLabels.Kind(citation.Kind)}, revision {citation.RevisionNumber}";
@@ -30,7 +30,7 @@ public static class PublishedBriefView
         var facts = new List<Fact>
         {
             new("Week", WeekStartText(weekStart)),
-            new("Cutoff release", cutoffReleaseNumber.ToString(CultureInfo.InvariantCulture)),
+            new("Cutoff release", cutoffReleaseNumber.ToString(CultureInfo.InvariantCulture)) { TermKey = ReleaseTermKey },
             new("Records considered", coverage.Considered.ToString(CultureInfo.InvariantCulture)),
             new("Records sent to the drafting model", coverage.SentToModel.ToString(CultureInfo.InvariantCulture)),
             new("Records cited", coverage.Cited.ToString(CultureInfo.InvariantCulture))
@@ -52,8 +52,14 @@ public static class PublishedBriefView
     public static string Sample(PublishedBrief brief) => Sample(brief.Coverage, brief.CutoffReleaseNumber);
 
     public static string Sample(PublishedBriefCoverage coverage, int cutoffReleaseNumber) =>
+        $"{SampleBeforeRelease(coverage)}releases{SampleAfterRelease(cutoffReleaseNumber)}";
+
+    /// <summary>The text of the sample note before the word "releases". The server page puts the glossary term around that word.</summary>
+    public static string SampleBeforeRelease(PublishedBriefCoverage coverage) =>
         $"{SampleNote} It cites {coverage.Cited} of the {coverage.Considered} " +
-        $"new records that Civic Lens considered for the week. It reflects releases up to release {cutoffReleaseNumber}.";
+        "new records that Civic Lens considered for the week. It reflects ";
+
+    public static string SampleAfterRelease(int cutoffReleaseNumber) => $" up to release {cutoffReleaseNumber}.";
 
     public static string CitationAnchor(string citationId) => "citation-" + citationId;
 }

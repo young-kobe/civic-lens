@@ -49,8 +49,22 @@ public sealed class BriefDetailPageTests
         Assert.Contains("Records cited=2", facts);
         Assert.Contains("Approved=6 Nov 2026, 13:05 UTC", facts);
         Assert.Contains("First published=6 Nov 2026, 14:00 UTC", facts);
-        Assert.Contains("It cites 2 of the 12 new records that Civic Lens considered for the week. It reflects releases up to release 9.", page.QuerySelector(".ai-summary-check")!.TextContent);
+        var check = page.QuerySelector(".ai-summary-check")!.TextContent;
+        Assert.Contains("It cites 2 of the 12 new records that Civic Lens considered for the week. It reflects releases", check);
+        Assert.Contains(" up to release 9.", check);
         Assert.Equal("Records this brief used", page.QuerySelector("#brief-cited-title")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheCitedRecordsComeBeforeTheMethodFactsAndTheCheckLineExplainsReleaseWithTheGlossaryTerm()
+    {
+        var page = await RenderAsync<BriefDetailPage, BriefPageData>(Brief());
+        var term = Glossary.Term("release");
+
+        Assert.Equal(["cited", "coverage"], page.QuerySelectorAll(".detail-stack > .detail-section").Select(section => section.Id));
+        Assert.Equal("releases", page.QuerySelector(".ai-summary-check .term")!.TextContent);
+        Assert.Equal(term.Means + term.WhyItMatters, page.QuerySelector(".ai-summary-check .term-means")!.TextContent + page.QuerySelector(".ai-summary-check .term-why")!.TextContent);
+        Assert.Equal("release", PublishedBriefView.Facts(Brief().WeekStart, 1, 9, Brief().Coverage, null, null).Single(fact => fact.Label == "Cutoff release").TermKey);
     }
 
     [Fact]
@@ -69,7 +83,7 @@ public sealed class BriefDetailPageTests
         var page = await RenderAsync<BriefDetailPage, BriefPageData>(Brief());
 
         Assert.Equal(BriefLabel, page.QuerySelector(".ai-summary-label")!.TextContent);
-        Assert.Contains(PublishedBriefView.SampleNote, page.QuerySelector(".ai-summary-check")!.TextContent);
+        Assert.Contains("This brief is a sample, not a full account of the week.", page.QuerySelector(".ai-summary-check")!.TextContent);
         Assert.Equal("#cited", page.QuerySelector(".ai-summary-check a")!.GetAttribute("href"));
         Assert.Null(page.QuerySelector(".caveat"));
         Assert.Equal(1, page.QuerySelectorAll(".ai-summary-label").Length);

@@ -76,6 +76,15 @@ public sealed class WithdrawalNoticePageTests
     }
 
     [Fact]
+    public async Task TheTrailEndsWithTheShortNameAndNotWithTheRecordId()
+    {
+        var page = await RenderAsync(Notice);
+
+        Assert.Equal("Withdrawn record", page.QuerySelector(".public-breadcrumbs [aria-current]")!.TextContent.Trim());
+        Assert.DoesNotContain(Notice.RecordId[..12], page.QuerySelector(".public-breadcrumbs")!.TextContent);
+    }
+
+    [Fact]
     public async Task TheNoticeSaysWhatWasWithdrawnAndWhenWithTheExactRevisionAndDatesAndTheEscapedNote()
     {
         var page = await RenderAsync(Notice);

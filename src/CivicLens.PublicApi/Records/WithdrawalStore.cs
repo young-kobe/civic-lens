@@ -50,7 +50,7 @@ public sealed class WithdrawalStore(NpgsqlDataSource views)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            if (!RecordKinds.TryParse(reader.GetString(1), out var rowKind)) continue;
+            if (!RecordKinds.TryParse(reader.GetString(1), out var rowKind)) throw new InvalidDataException("The view holds an unknown record kind.");
             kind ??= rowKind;
             if (rowKind != kind) continue;
             release = reader.GetInt32(0);

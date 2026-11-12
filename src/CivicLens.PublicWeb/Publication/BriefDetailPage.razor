@@ -5,21 +5,21 @@
 <PublicPage Section="PublicSection.AllRecords" Title="@Data.Headline" Description="@Data.Headline" CanonicalPath="@PublicationProtocol.RecordPagePath(Data.RecordId)" IsArticle="true" RootPath="@RootPath" Record="record">
     <article class="detail">
         <header class="detail-head">
-            <p class="detail-eyebrow">@PublishedBriefView.Eyebrow | @PublishedBriefView.WeekRange(Data.WeekStart)</p>
+            <p class="detail-eyebrow">@PublishedRecordLabels.Kind(PublishedRecordKind.Brief) | @PublishedBriefView.WeekRange(Data.WeekStart)</p>
             <h1 class="detail-headline">@Data.Headline</h1>
         </header>
         <div class="detail-stack">
             <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label">
                 <ChildContent><PublishedBriefText Paragraphs="Data.Paragraphs" /></ChildContent>
-                <Check>@PublishedBriefView.Sample(Data.Coverage, Data.CutoffReleaseNumber) <a href="#cited">@PublishedBriefView.CitedRecordsTitle</a></Check>
+                <Check>@PublishedBriefView.SampleBeforeRelease(Data.Coverage)<Term Key="@PublishedBriefView.ReleaseTermKey">releases</Term>@PublishedBriefView.SampleAfterRelease(Data.CutoffReleaseNumber) <a href="#cited">@PublishedBriefView.CitedRecordsTitle</a></Check>
             </AiSummary>
-            <section class="detail-section" id="coverage" aria-labelledby="brief-coverage-title">
-                <h2 id="brief-coverage-title">How this brief was made</h2>
-                <Facts Items="PublishedBriefView.Facts(Data.WeekStart, Data.RevisionNumber, Data.CutoffReleaseNumber, Data.Coverage, Data.ApprovedAtUtc, Data.FirstPublishedAtUtc)" />
-            </section>
             <section class="detail-section" id="cited" aria-labelledby="brief-cited-title">
                 <h2 id="brief-cited-title">@PublishedBriefView.CitedRecordsTitle</h2>
                 <PublishedBriefCitations Citations="Data.Citations" ListClass="choices detail-cited" RecordHref="citedId => RootPath + PublicationProtocol.RecordPagePath(citedId)" />
+            </section>
+            <section class="detail-section" id="coverage" aria-labelledby="brief-coverage-title">
+                <h2 id="brief-coverage-title">How this brief was made</h2>
+                <Facts Items="PublishedBriefView.Facts(Data.WeekStart, Data.RevisionNumber, Data.CutoffReleaseNumber, Data.Coverage, Data.ApprovedAtUtc, Data.FirstPublishedAtUtc)" />
             </section>
         </div>
     </article>
