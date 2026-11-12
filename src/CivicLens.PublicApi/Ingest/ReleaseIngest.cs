@@ -11,13 +11,14 @@ public sealed class ReleaseIngest(IReleaseSource source, NpgsqlDataSource databa
 {
     public async Task<IngestResult> RunAsync(CancellationToken cancellationToken)
     {
-        var release = await source.ReadChangedAsync(cancellationToken);
-        if (release is null) return IngestResult.NotModified;
+        await using var read = await source.ReadChangedAsync(cancellationToken);
+        if (read is null) return IngestResult.NotModified;
 
+        var release = read.Release;
         await using var index = await IndexTransaction.BeginAsync(database, cancellationToken);
         var result = await index.HasReleaseAsync(release.ReleaseNumber, cancellationToken)
             ? await ActivateAsync(index, release.ReleaseNumber, cancellationToken)
-            : await IngestAsync(index, release, cancellationToken);
+            : await IngestAsync(index, read, cancellationToken);
         await index.CommitAsync(cancellationToken);
         source.Stored();
         return result;
@@ -30,22 +31,24 @@ public sealed class ReleaseIngest(IReleaseSource source, NpgsqlDataSource databa
         return new(moved ? IngestOutcome.Activated : IngestOutcome.AlreadyActive, number, 0, 0, []);
     }
 
-    private async Task<IngestResult> IngestAsync(IndexTransaction index, SourceRelease release, CancellationToken cancellationToken)
+    private static async Task<IngestResult> IngestAsync(IndexTransaction index, IReleaseRead read, CancellationToken cancellationToken)
     {
+        var release = read.Release;
         var previous = await index.LatestReleaseAsync(cancellationToken);
         if (previous > release.ReleaseNumber)
             throw new InvalidDataException($"Release {release.ReleaseNumber} is older than the newest stored release and was never stored.");
 
-        await index.AddReleaseAsync(release, cancellationToken);
+        // The records are read before the index writes, so the snapshot of the source stays open for as short a time as possible.
         var stored = await index.StoredRevisionsAsync(cancellationToken);
+        var missing = release.Records.Where(record => !stored.ContainsKey((record.RecordId, record.RevisionNumber))).ToArray();
+        var batch = await read.ReadRecordsAsync(missing, cancellationToken);
+
+        await index.AddReleaseAsync(release, cancellationToken);
         var listed = release.Records.Select(record => (record.RecordId, Revision: record.RevisionNumber)).ToHashSet();
         var returning = listed.Where(key => stored.TryGetValue(key, out var open) && !open).ToArray();
         var dropped = stored.Where(item => item.Value && !listed.Contains(item.Key)).Select(item => item.Key).ToArray();
         await index.ReturnAsync(returning, release.ReleaseNumber, cancellationToken);
         await index.CloseAsync(dropped, previous.GetValueOrDefault(), cancellationToken);
-
-        var missing = release.Records.Where(record => !stored.ContainsKey((record.RecordId, record.RevisionNumber))).ToArray();
-        var batch = await source.ReadRecordsAsync(release, missing, cancellationToken);
         foreach (var record in batch.Records) await index.InsertAsync(record, release.ReleaseNumber, cancellationToken);
         await index.SetActiveReleaseAsync(release.ReleaseNumber, cancellationToken);
         return new(IngestOutcome.Ingested, release.ReleaseNumber, batch.Records.Count, dropped.Length, batch.Failures);

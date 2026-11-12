@@ -9,7 +9,7 @@ namespace CivicLens.PublicApi.Ingest;
 /// The statement source and the relationship quote read the full text, because their offsets point into it.
 /// <see cref="RecordReader.Create"/> stays the one owner of the text bound rule. A record with no row in its anchor view has no entry in the result.
 /// </summary>
-public sealed class TypedTextReader(NpgsqlDataSource views)
+public sealed class TypedTextReader(NpgsqlTransaction snapshot)
 {
     private static readonly string StatementSummary = $"SELECT x.record_id, x.summary FROM public_api.statements x WHERE {RevisionKeys.Filter}";
     private static readonly string StatementSource = $"SELECT x.record_id, x.text FROM public_api.statement_sources x WHERE {RevisionKeys.Filter}";
@@ -119,7 +119,7 @@ public sealed class TypedTextReader(NpgsqlDataSource views)
     private async Task<Dictionary<string, RecordTexts>> ReadRelationshipsAsync(RevisionKeys keys, CancellationToken cancellationToken)
     {
         var texts = new Dictionary<string, RecordTexts>();
-        await using var command = keys.Command(views, RelationshipQuotes);
+        await using var command = keys.Command(snapshot, RelationshipQuotes);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -143,7 +143,7 @@ public sealed class TypedTextReader(NpgsqlDataSource views)
     private async Task<Dictionary<string, List<(int Start, int Length)>>> SpansAsync(RevisionKeys keys, CancellationToken cancellationToken)
     {
         var spans = new Dictionary<string, List<(int, int)>>();
-        await using var command = keys.Command(views, StatementQuotations);
+        await using var command = keys.Command(snapshot, StatementQuotations);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -158,7 +158,7 @@ public sealed class TypedTextReader(NpgsqlDataSource views)
     private async Task<Dictionary<string, List<string?[]>>> RowsAsync(RevisionKeys keys, string sql, CancellationToken cancellationToken)
     {
         var rows = new Dictionary<string, List<string?[]>>();
-        await using var command = keys.Command(views, sql);
+        await using var command = keys.Command(snapshot, sql);
         command.Parameters.AddWithValue("limit", IndexedRecord.SourceLimit);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))

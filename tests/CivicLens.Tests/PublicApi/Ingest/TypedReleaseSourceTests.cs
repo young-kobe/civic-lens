@@ -1,4 +1,5 @@
 using CivicLens.PublicApi.Ingest;
+using CivicLens.PublicApi.Records;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
@@ -81,18 +82,55 @@ public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
         {
             await TypedSearchSeed.WriteAsync(database, 1, records);
             await ViewsSeed.ExecuteAsync(database, "SET session_replication_role = replica; DELETE FROM statement_candidates");
-            await ViewsSeed.ExecuteAsync(database, "ALTER ROLE civic_lens_public LOGIN PASSWORD 'typed-test'");
-            await using var views = NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder(database) { Username = "civic_lens_public", Password = "typed-test" }.ConnectionString);
-            var source = new TypedReleaseSource(views);
-            var release = (await source.ReadChangedAsync(CancellationToken.None))!;
+            await using var views = await ViewsReaderAsync(database);
+            await using var read = (await new TypedReleaseSource(new RecordSnapshot(views)).ReadChangedAsync(CancellationToken.None))!;
 
-            var batch = await source.ReadRecordsAsync(release, release.Records.ToArray(), CancellationToken.None);
+            var batch = await read.ReadRecordsAsync(read.Release.Records.ToArray(), CancellationToken.None);
 
             // The relationship quote reads the source text of the statement, so it fails with the statement.
             Assert.Equal([new string('1', 64), new string('9', 64)], batch.Failures.Select(failure => failure.RecordId).Order(StringComparer.Ordinal));
             Assert.Equal(records.Length - 2, batch.Records.Count);
         }
         finally { await postgres.DropDatabaseAsync(database); }
+    }
+
+    [Fact]
+    public async Task AReleaseThatPublicationActivatesDuringTheReadDoesNotMixIntoTheReleaseThatTheReadListed()
+    {
+        var records = Records(Texts.Short);
+        var database = await postgres.CreateMigratedDatabaseAsync();
+        try
+        {
+            await TypedSearchSeed.WriteAsync(database, 1, records);
+            var expected = await ReadTypedAsync(database);
+            await using var views = await ViewsReaderAsync(database);
+            await using var read = (await new TypedReleaseSource(new RecordSnapshot(views)).ReadChangedAsync(CancellationToken.None))!;
+
+            // Publication activates release 2 after the list is read. The statement moves to a revision that the read did not list.
+            await ViewsSeed.ActivateReleaseAsync(database, 2, DateTimeOffset.UnixEpoch.AddDays(2), records.Length);
+            await ViewsSeed.ExecuteAsync(database, "UPDATE publication_record_states SET revision_number = revision_number + 1 WHERE kind = 'statement'");
+            var batch = await read.ReadRecordsAsync(read.Release.Records.ToArray(), CancellationToken.None);
+
+            Assert.Equal(1, read.Release.ReleaseNumber);
+            Assert.Empty(batch.Failures);
+            Assert.Equal(expected.Select(Project), batch.Records.OrderBy(Key, StringComparer.Ordinal).Select(Project));
+        }
+        finally { await postgres.DropDatabaseAsync(database); }
+    }
+
+    private static async Task<IndexedRecord[]> ReadTypedAsync(string database)
+    {
+        await using var views = await ViewsReaderAsync(database);
+        await using var read = (await new TypedReleaseSource(new RecordSnapshot(views)).ReadChangedAsync(CancellationToken.None))!;
+        var batch = await read.ReadRecordsAsync(read.Release.Records.ToArray(), CancellationToken.None);
+        Assert.Empty(batch.Failures);
+        return [.. batch.Records.OrderBy(Key, StringComparer.Ordinal)];
+    }
+
+    private static async Task<NpgsqlDataSource> ViewsReaderAsync(string database)
+    {
+        await ViewsSeed.ExecuteAsync(database, "ALTER ROLE civic_lens_public LOGIN PASSWORD 'typed-test'");
+        return NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder(database) { Username = "civic_lens_public", Password = "typed-test" }.ConnectionString);
     }
 
     private async Task<(IndexedRecord[] Typed, IndexedRecord[] Feed)> ReadBothAsync(Texts texts)
@@ -105,18 +143,16 @@ public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
             var site = new FakeReleaseSite();
             site.Publish(1, records);
             var feed = new FeedReleaseSource(new ReleaseFeed(new HttpClient(site) { BaseAddress = new Uri("http://release.test/") }));
-            var oracleRelease = (await feed.ReadChangedAsync(CancellationToken.None))!;
-            var oracle = await feed.ReadRecordsAsync(oracleRelease, oracleRelease.Records.ToArray(), CancellationToken.None);
+            await using var oracleRead = (await feed.ReadChangedAsync(CancellationToken.None))!;
+            var oracle = await oracleRead.ReadRecordsAsync(oracleRead.Release.Records.ToArray(), CancellationToken.None);
 
-            await ViewsSeed.ExecuteAsync(database, "ALTER ROLE civic_lens_public LOGIN PASSWORD 'typed-test'");
-            await using var views = NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder(database) { Username = "civic_lens_public", Password = "typed-test" }.ConnectionString);
-            var source = new TypedReleaseSource(views);
-            var release = (await source.ReadChangedAsync(CancellationToken.None))!;
-            var typed = await source.ReadRecordsAsync(release, release.Records.ToArray(), CancellationToken.None);
+            await using var views = await ViewsReaderAsync(database);
+            await using var read = (await new TypedReleaseSource(new RecordSnapshot(views)).ReadChangedAsync(CancellationToken.None))!;
+            var typed = await read.ReadRecordsAsync(read.Release.Records.ToArray(), CancellationToken.None);
 
             Assert.Empty(oracle.Failures);
             Assert.Empty(typed.Failures);
-            Assert.Equal(records.Length, release.Records.Count);
+            Assert.Equal(records.Length, read.Release.Records.Count);
             return ([.. typed.Records.OrderBy(Key, StringComparer.Ordinal)], [.. oracle.Records.OrderBy(Key, StringComparer.Ordinal)]);
         }
         finally { await postgres.DropDatabaseAsync(database); }

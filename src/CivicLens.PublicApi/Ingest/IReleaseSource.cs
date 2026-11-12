@@ -14,12 +14,18 @@ public sealed record RecordBatch(IReadOnlyList<IndexedRecord> Records, IReadOnly
 /// <summary>The boundary of the ingest to the published data. <see cref="TypedReleaseSource"/> reads the <c>public_api</c> views.</summary>
 public interface IReleaseSource
 {
-    /// <summary>Gives the release to ingest. Null means that nothing changed since the last stored release.</summary>
-    Task<SourceRelease?> ReadChangedAsync(CancellationToken cancellationToken);
-
-    /// <summary>Reads the index documents of the given revisions of the release.</summary>
-    Task<RecordBatch> ReadRecordsAsync(SourceRelease release, IReadOnlyCollection<ListedRecord> wanted, CancellationToken cancellationToken);
+    /// <summary>Opens one read of the release to ingest. Null means that nothing changed since the last stored release.</summary>
+    Task<IReleaseRead?> ReadChangedAsync(CancellationToken cancellationToken);
 
     /// <summary>Tells the source that the release is stored, so it may skip an unchanged release next time.</summary>
     void Stored();
+}
+
+/// <summary>One open read of a release. The release, its list and its records all come from the same published state, so a later release cannot mix into them.</summary>
+public interface IReleaseRead : IAsyncDisposable
+{
+    SourceRelease Release { get; }
+
+    /// <summary>Reads the index documents of the given revisions of the release.</summary>
+    Task<RecordBatch> ReadRecordsAsync(IReadOnlyCollection<ListedRecord> wanted, CancellationToken cancellationToken);
 }

@@ -10,9 +10,9 @@ public sealed class RevisionKeys(IReadOnlyCollection<ListedRecord> records)
     private readonly string[] ids = [.. records.Select(record => record.RecordId)];
     private readonly int[] revisions = [.. records.Select(record => record.RevisionNumber)];
 
-    public NpgsqlCommand Command(NpgsqlDataSource views, string sql)
+    public NpgsqlCommand Command(NpgsqlTransaction snapshot, string sql)
     {
-        var command = views.CreateCommand(sql);
+        var command = new NpgsqlCommand(sql, snapshot.Connection, snapshot);
         command.Parameters.AddWithValue("ids", ids);
         command.Parameters.AddWithValue("revisions", revisions);
         return command;

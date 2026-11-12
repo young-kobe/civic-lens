@@ -46,8 +46,9 @@ public static class PublicApiApp
         var views = NpgsqlDataSource.Create(options.PublicViewsReaderDatabase);
 
         builder.Services.AddSingleton(options);
+        var snapshot = new RecordSnapshot(views);
         builder.Services.AddSingleton(new SchemaMigrator(writer));
-        builder.Services.AddSingleton(new ReleaseIngest(releaseSource ?? new TypedReleaseSource(views), writer));
+        builder.Services.AddSingleton(new ReleaseIngest(releaseSource ?? new TypedReleaseSource(snapshot), writer));
         builder.Services.AddSingleton(new SearchIndex(reader));
         builder.Services.AddSingleton(new ActiveReleaseReader(views));
         builder.Services.AddSingleton(new VoteStore(views));
@@ -59,7 +60,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton<BillPageReader>();
         builder.Services.AddSingleton<BillMembersReader>();
         builder.Services.AddSingleton(new RecordKindStore(views));
-        builder.Services.AddSingleton(new RecordSnapshot(views));
+        builder.Services.AddSingleton(snapshot);
         builder.Services.AddSingleton(new StatementStore(views));
         builder.Services.AddSingleton(provider => new StatementPageReader(provider.GetRequiredService<StatementStore>(), provider.GetRequiredService<RecordSnapshot>()));
         builder.Services.AddSingleton(new DocumentChangeStore(views));

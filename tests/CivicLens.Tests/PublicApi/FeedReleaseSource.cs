@@ -8,16 +8,17 @@ internal sealed class FeedReleaseSource(ReleaseFeed feed) : IReleaseSource
 {
     private readonly Dictionary<(string RecordId, int Revision), PublishedRecordEntry> listed = [];
 
-    public async Task<SourceRelease?> ReadChangedAsync(CancellationToken cancellationToken)
+    public async Task<IReleaseRead?> ReadChangedAsync(CancellationToken cancellationToken)
     {
         var manifest = await feed.ReadChangedManifestAsync(cancellationToken);
         if (manifest is null) return null;
         listed.Clear();
         foreach (var entry in manifest.Records) listed[(entry.RecordId, entry.RevisionNumber)] = entry;
-        return new(manifest.ReleaseNumber, manifest.PublishedAtUtc, [.. manifest.Records.Select(entry => new ListedRecord(entry.Kind, entry.RecordId, entry.RevisionNumber))]);
+        return new Read(this, new(manifest.ReleaseNumber, manifest.PublishedAtUtc,
+            [.. manifest.Records.Select(entry => new ListedRecord(entry.Kind, entry.RecordId, entry.RevisionNumber))]));
     }
 
-    public async Task<RecordBatch> ReadRecordsAsync(SourceRelease release, IReadOnlyCollection<ListedRecord> wanted, CancellationToken cancellationToken)
+    private async Task<RecordBatch> ReadRecordsAsync(IReadOnlyCollection<ListedRecord> wanted, CancellationToken cancellationToken)
     {
         var records = new List<IndexedRecord>();
         var failures = new List<RecordFailure>();
@@ -37,4 +38,14 @@ internal sealed class FeedReleaseSource(ReleaseFeed feed) : IReleaseSource
     }
 
     public void Stored() => feed.KeepValidators();
+
+    // The feed holds no snapshot. Each record file is fetched when the ingest asks for it.
+    private sealed class Read(FeedReleaseSource source, SourceRelease release) : IReleaseRead
+    {
+        public SourceRelease Release => release;
+
+        public Task<RecordBatch> ReadRecordsAsync(IReadOnlyCollection<ListedRecord> wanted, CancellationToken cancellationToken) => source.ReadRecordsAsync(wanted, cancellationToken);
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
 }
