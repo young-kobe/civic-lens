@@ -200,6 +200,7 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
             new SeededBill('1', "2026-02-03") { Congress = 119, BillNumber = 7, Sponsorships = [new("outside", "Sponsor", "2026-02-03")] },
             new SeededBill('f', "2021-02-02") { Congress = 117, BillNumber = 6, Issues = ["tax"], Sponsorships = [new("p2", "Sponsor", "2021-02-02")] });
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (2, 'health', 'Health policy', 'Health'), (2, 'tax', 'Tax policy', 'Tax');");
+        await StoredBillCounts.FillAsync(host.OperationalDatabase, 2, 120, onlyStoredRevisions: true);
 
         var answer = await GetAsync(host, "/v1/zip-districts/36009");
         var p0 = answer.GetProperty("districts")[0].GetProperty("representative");
@@ -223,6 +224,45 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
         Assert.Empty(noAttendance.GetProperty("missedVotes").EnumerateArray());
         Assert.Empty(noAttendance.GetProperty("partyLines").EnumerateArray());
         Assert.Equal(119, answer.GetProperty("congress").GetInt32());
+    }
+
+    [Fact]
+    public async Task SeatHoldersCarryTheStoredBillRowsAndNotARecount()
+    {
+        await using var host = await StartWithBillsAsync(storeBillCounts: true);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
+            UPDATE release_bill_counts SET bills = 40 WHERE congress = 119;
+            UPDATE release_official_bill_counts SET sponsored = 9 WHERE official_id = 'al2' AND congress = 119;
+            """);
+
+        var answer = await GetAsync(host, "/v1/zip-districts/36009");
+        var bills = answer.GetProperty("districts")[0].GetProperty("representative").GetProperty("bills");
+
+        Assert.Equal([119, 9, 40], [bills.GetProperty("congress").GetInt32(), bills.GetProperty("sponsored").GetInt32(), bills.GetProperty("billsInCongress").GetInt32()]);
+    }
+
+    [Fact]
+    public async Task AReleaseWithNoStoredBillRowGivesSeatHoldersNoBillFigureAndNeverZero()
+    {
+        await using var host = await StartWithBillsAsync(storeBillCounts: false);
+
+        var answer = await GetAsync(host, "/v1/zip-districts/36009");
+        var holder = answer.GetProperty("districts")[0].GetProperty("representative");
+
+        Assert.Equal(JsonValueKind.Null, holder.GetProperty("bills").ValueKind);
+        Assert.Equal("Alice Two", holder.GetProperty("name").GetString());
+        var fragment = await host.Client.GetStringAsync("/v1/zip-districts/36009/members");
+        Assert.Contains(CivicLens.PublicWeb.Publication.OfficialPageText.BillCountsUnavailable, fragment, StringComparison.Ordinal);
+    }
+
+    private async Task<ApiHost> StartWithBillsAsync(bool storeBillCounts)
+    {
+        var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, new SeededVote('b', "2026-02-01") { Congress = 119, Casts = ["Yea"], PersonIds = ["al2"] });
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('e', "2026-02-02") { Congress = 119, BillNumber = 5, Sponsorships = [new("al2", "Sponsor", "2026-02-02")] });
+        if (storeBillCounts) await StoredBillCounts.FillAsync(host.OperationalDatabase, 1, 119, onlyStoredRevisions: true);
+        return host;
     }
 
     [Fact]

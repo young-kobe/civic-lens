@@ -36,6 +36,10 @@
                 </div>
             </div>
         }
+        else if (member.BillCountsAbsent)
+        {
+            <p class="small muted zip-member-bills">@OfficialPageText.BillCountsUnavailable</p>
+        }
         @if (member.Issues.Length > 0)
         {
             <div class="zip-member-issues">
