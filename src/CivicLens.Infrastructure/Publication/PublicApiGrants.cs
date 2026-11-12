@@ -115,7 +115,7 @@ internal static class PublicApiGrants
             public_api.bills, public_api.bill_actions, public_api.bill_sponsorships, public_api.briefs, public_api.brief_paragraphs, public_api.brief_citations, public_api.issue_votes, public_api.issue_sponsors, public_api.bill_issues, public_api.zip_districts,
             public_api.party_agreement, public_api.release_officials, public_api.release_official_terms, public_api.release_issues, public_api.release_issue_includes,
             public_api.release_issue_excludes, public_api.release_policy_areas, public_api.officials, public_api.official_attendance,
-            public_api.official_party_lines, public_api.official_bill_counts, public_api.official_issue_counts, public_api.official_executive_actions,
+            public_api.official_party_lines, public_api.official_issue_counts, public_api.official_executive_actions,
             public_api.bill_status, public_api.record_headlines, public_api.record_links, public_api.vote_facts,
             public_api.executive_actions, public_api.executive_action_notices, public_api.executive_action_targets, public_api.withdrawals, public_api.withdrawal_corrections,
             public_api.vote_first_publications, public_api.vote_party_tallies, public_api.vote_evidence, public_api.vote_sources, public_api.release_issue_party_lineups,

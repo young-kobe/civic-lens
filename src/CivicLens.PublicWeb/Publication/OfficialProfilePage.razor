@@ -24,7 +24,7 @@
                     <p class="official-lede">@OfficialPageText.Lede(Data)</p>
                 </div>
             </header>
-            @if (Data.Attendance.Length > 0 || party is not null || Data.BillsCongress is not null)
+            @if (Data.Attendance.Length > 0 || party is not null || Data.BillsCongress is not null || Data.BillCountsAbsent)
             {
                 <aside class="official-rail" aria-label="Figures for @Data.Name">
                     <ul class="official-figs" role="list">
@@ -39,6 +39,10 @@
                         @if (Data.BillsCongress is not null)
                         {
                             <li><b>@Data.SponsoredBills</b><span>@OfficialPageText.BillsSponsored(Data)</span></li>
+                        }
+                        else if (Data.BillCountsAbsent)
+                        {
+                            <li><span>@OfficialPageText.BillCountsUnavailable</span></li>
                         }
                     </ul>
                 </aside>

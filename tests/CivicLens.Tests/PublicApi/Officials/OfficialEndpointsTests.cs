@@ -53,21 +53,6 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
         return host;
     }
 
-    /// <summary>The numbers that the deleted live read gave: the live views of the same fixture, with zero for a missing member row.</summary>
-    private static async Task<string> LiveBillFigureAsync(string database, string officialId, int congress)
-    {
-        await using var connection = new Npgsql.NpgsqlConnection(database);
-        await connection.OpenAsync();
-        await using var command = new Npgsql.NpgsqlCommand("""
-            SELECT coalesce((SELECT sponsored FROM public_api.official_bill_counts WHERE official_id = @official AND congress = @congress), 0)
-                || ' ' || coalesce((SELECT cosponsored FROM public_api.official_bill_counts WHERE official_id = @official AND congress = @congress), 0)
-                || ' ' || (SELECT count(*) FROM public_api.bills WHERE congress = @congress)
-            """, connection);
-        command.Parameters.AddWithValue("official", officialId);
-        command.Parameters.AddWithValue("congress", congress);
-        return (string)(await command.ExecuteScalarAsync())!;
-    }
-
     private static async Task<JsonDocument> GetAsync(ApiHost host, string path, HttpStatusCode expected = HttpStatusCode.OK)
     {
         using var response = await host.Client.GetAsync(path);
@@ -405,18 +390,19 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
         Assert.Empty(other.RootElement.GetProperty("partyLines").EnumerateArray());
     }
 
-    [Fact]
-    public async Task StoredBillFiguresEqualTheLiveViewNumbersOfTheSameFixtureForEveryOfficialAndCongress()
+    [Theory]
+    [InlineData("p0", "2 0 2")]
+    [InlineData("p1", "0 2 2")]
+    [InlineData("p3", "0 0 2")]
+    public async Task StoredBillFiguresEqualTheCountsOfTheSeededBillsBecauseAWithdrawnCosponsorAndAMissingMemberRowCountZero(string official, string expected)
     {
         await using var host = await StartAsync(withVotesAndBills: true);
 
-        foreach (var official in new[] { "p0", "p1", "p3" })
-        {
-            using var detail = await GetAsync(host, $"/v1/officials/{official}");
-            var bills = detail.RootElement.GetProperty("bills");
-            var congress = bills.GetProperty("congress").GetInt32();
-            Assert.Equal(await LiveBillFigureAsync(host.OperationalDatabase, official, congress), $"{bills.GetProperty("sponsored").GetInt32()} {bills.GetProperty("cosponsored").GetInt32()} {bills.GetProperty("billsInCongress").GetInt32()}");
-        }
+        using var detail = await GetAsync(host, $"/v1/officials/{official}");
+        var bills = detail.RootElement.GetProperty("bills");
+
+        Assert.Equal(119, bills.GetProperty("congress").GetInt32());
+        Assert.Equal(expected, $"{bills.GetProperty("sponsored").GetInt32()} {bills.GetProperty("cosponsored").GetInt32()} {bills.GetProperty("billsInCongress").GetInt32()}");
     }
 
     [Fact]

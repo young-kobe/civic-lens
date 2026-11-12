@@ -78,7 +78,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
-        foreach (var view in new[] { "active_records", "active_release", "votes", "vote_members", "vote_first_publications", "vote_party_tallies", "vote_evidence", "vote_sources", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_issue_party_lineups", "release_bill_counts", "release_official_bill_counts", "release_policy_areas",
+        foreach (var view in new[] { "active_records", "active_release", "votes", "vote_members", "vote_first_publications", "vote_party_tallies", "vote_evidence", "vote_sources", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_issue_party_lineups", "release_bill_counts", "release_official_bill_counts", "release_policy_areas",
             "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "statement_speakers", "statement_approvers", "statements", "statement_sources", "statement_quotations", "document_changes", "document_change_officials", "document_change_sources", "document_change_hunks", "document_change_word_edits", "document_change_citations",
             "executive_actions", "executive_action_notices", "executive_action_targets", "withdrawals", "withdrawal_corrections" })
         {
@@ -135,7 +135,6 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"issue_votes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"member_votes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_attendance v {Owner} {Role}:SELECT {{security_barrier=true}}",
-            $"official_bill_counts v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_executive_actions v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_issue_counts v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_party_lines v {Owner} {Role}:SELECT {{security_barrier=true}}",

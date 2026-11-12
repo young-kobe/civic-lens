@@ -191,6 +191,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         Assert.Contains("119th Congress", issues.TextContent);
         Assert.Equal("Housing 1", Assert.Single(issues.QuerySelectorAll(".official-chips a")).TextContent);
         Assert.Empty(page.QuerySelectorAll("a[href='#bills']"));
+        Assert.Contains(OfficialPageText.BillCountsUnavailable, page.QuerySelector(".official-figs")!.TextContent);
     }
 
     [Fact]

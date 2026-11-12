@@ -251,6 +251,8 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
 
         Assert.Equal(JsonValueKind.Null, holder.GetProperty("bills").ValueKind);
         Assert.Equal("Alice Two", holder.GetProperty("name").GetString());
+        var fragment = await host.Client.GetStringAsync("/v1/zip-districts/36009/members");
+        Assert.Contains(CivicLens.PublicWeb.Publication.OfficialPageText.BillCountsUnavailable, fragment, StringComparison.Ordinal);
     }
 
     private async Task<ApiHost> StartWithBillsAsync(bool storeBillCounts)

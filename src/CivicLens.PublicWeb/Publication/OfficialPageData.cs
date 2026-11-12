@@ -16,6 +16,8 @@ public sealed record OfficialPageData(
     public OfficialPartyLineData[] PartyLines { get; init; } = [];
     public int? BillsCongress { get; init; }
     public int SponsoredBills { get; init; }
+    /// <summary>True when the release has no stored bill count for the Congress of the page, so the bill figure is absent and never zero.</summary>
+    public bool BillCountsAbsent { get; init; }
     public int? IssuesCongress { get; init; }
     public OfficialIssueData[] Issues { get; init; } = [];
     public OfficialMarkData[] Marks { get; init; } = [];
