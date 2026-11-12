@@ -1,10 +1,9 @@
-using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Migrations;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Npgsql;
+using static CivicLens.Tests.PublicApi.Votes.ViewsSeed;
 
 namespace CivicLens.Tests.Infrastructure.PublicApi;
 
@@ -52,9 +51,7 @@ public sealed class PublicApiVotePartyTalliesMigrationTests(PostgresCollection p
             await ApplyAsync(database, migration.DownOperations);
             Assert.Equal("false|false|true", await GrantStateAsync(database));
             await ApplyAsync(database, migration.UpOperations);
-            await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
-            var grants = typeof(PublicApiVotePartyTallies).Assembly.GetType("CivicLens.Infrastructure.Publication.PublicApiGrants")!;
-            await (Task)grants.GetMethod("ApplyAsync")!.Invoke(null, [db, CancellationToken.None])!;
+            await ApplyGrantsAsync(database);
             Assert.Equal("true|true|false", await GrantStateAsync(database));
             await connection.OpenAsync();
             await using (var role = new NpgsqlCommand("SET ROLE civic_lens_public", connection)) await role.ExecuteNonQueryAsync();
