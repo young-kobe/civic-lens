@@ -120,6 +120,7 @@ public sealed record CollectionJobDefinition
             ApiParser.CongressLegislatorsExecutive => resource == Collection.ApiResource.ExecutiveRoster && url == source.Url,
             ApiParser.CensusZctaDistricts => resource == Collection.ApiResource.ZctaDistricts && url == source.Url,
             ApiParser.FederalRegisterDocuments => MatchesFederalRegisterResource(resource, source.Url, url),
+            ApiParser.FederalRegisterText => resource == Collection.ApiResource.FederalRegisterText && FederalRegisterTextUrl.TryReadNumber(source.Url, url) is not null,
             ApiParser.MemberPhotos => resource == Collection.ApiResource.MemberPhoto && MemberPhotoUrl.TryReadBioguideId(source.Url, url) is not null,
             ApiParser.CongressBillText => resource == Collection.ApiResource.BillText && BillTextUrl.TryReadPackageId(source.Url, url) is not null,
             _ => false

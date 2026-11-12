@@ -87,6 +87,41 @@ public sealed class ExecutiveActionCommandTests(PostgresCollection postgres) : I
         await command.ExecuteNonQueryAsync();
     }
 
+    [Fact]
+    public async Task TheTextBackfillRefusesAConfigurationWithNoEnabledTextSourceAndTakesAnOptionalLimitOtherwise()
+    {
+        var shipped = Path.Combine(RepositoryRoot.FullName, "config", "federal-coverage.json");
+        var enabled = Path.Combine(captureRoot, "collection.json");
+        Directory.CreateDirectory(captureRoot);
+        File.WriteAllText(enabled, File.ReadAllText(shipped).Replace("\"apiParser\":\"federalRegisterText\",\"checkIntervalSeconds\":86400,\"enabled\":false",
+            "\"apiParser\":\"federalRegisterText\",\"checkIntervalSeconds\":86400,\"enabled\":true", StringComparison.Ordinal));
+
+        var refused = await RunWithConfigAsync(shipped, "executive-actions", "text", "backfill");
+        var byLimit = await RunWithConfigAsync(enabled, "executive-actions", "text", "backfill", "5");
+        var byDefault = await RunWithConfigAsync(enabled, "executive-actions", "text", "backfill");
+        var badLimit = await RunWithConfigAsync(enabled, "executive-actions", "text", "backfill", "-1");
+        var extra = await RunWithConfigAsync(enabled, "executive-actions", "text", "backfill", "5", "6");
+
+        Assert.Equal(2, refused.ExitCode);
+        Assert.Contains("no enabled Federal Register text source", refused.Error, StringComparison.Ordinal);
+        Assert.All(new[] { byLimit, byDefault }, result =>
+        {
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("\"examined\":0", result.Output, StringComparison.Ordinal);
+        });
+        Assert.Equal(2, badLimit.ExitCode);
+        Assert.Equal(2, extra.ExitCode);
+        Assert.Contains("executive-actions text backfill [limit]", extra.Error, StringComparison.Ordinal);
+    }
+
+    private Task<(int ExitCode, string Output, string Error)> RunWithConfigAsync(string collectionConfig, params string[] arguments) =>
+        HostProcess.RunWithEnvironmentAsync(connectionString, null, new Dictionary<string, string>
+        {
+            ["CIVIC_LENS_REVIEW_OWNER"] = "auth0|owner",
+            ["CIVIC_LENS_ARTIFACT_DIRECTORY"] = captureRoot,
+            ["CIVIC_LENS_COLLECTION_CONFIG"] = collectionConfig
+        }, arguments);
+
     private Task<(int ExitCode, string Output, string Error)> RunAsync(params string[] arguments) =>
         HostProcess.RunWithEnvironmentAsync(connectionString, null,
             new Dictionary<string, string> { ["CIVIC_LENS_REVIEW_OWNER"] = "auth0|owner" }, arguments);

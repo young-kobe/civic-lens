@@ -38,9 +38,66 @@ public sealed partial class PostgresCollectionJobStore : IFederalRegisterAdmissi
                 return NoAdmission with { DuplicateCount = 1 };
             await EnsureExtractionIsOfJobAsync(db, documentJobId, evidence.ExtractionId, cancellationToken);
             var revision = await executiveActions.AdmitAsync(db, source.SourceId, documentJobId, evidence, now, cancellationToken);
-            return revision is null && document.CorrectionOf is { } original
+            if (document.CorrectionOf is not { } original)
+                return await AdmitTextJobAsync(db, source, document, now, cancellationToken);
+            return revision is null
                 ? await AdmitOriginalJobAsync(db, source, original, document.PublishedOn, now, cancellationToken)
                 : NoAdmission;
+        }, cancellationToken);
+    }
+
+    /// <summary>An original document with a pinned body URL gets one text job in the transaction that records it. A correction gets none.</summary>
+    private static async Task<DiscoveryAdmissionResult> AdmitTextJobAsync(CollectionAttemptDbContext db, ConfiguredCollectionSource source,
+        FederalRegisterDocument document, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (source.EnabledFederalRegisterTextSource() is not { } textSource || document.BodyHtmlUrl is not { } bodyUrl) return NoAdmission;
+        var batch = textSource.CreateFederalRegisterTextBatch(document.DocumentNumber, bodyUrl, document.PublishedOn, Today(now));
+        var (result, _) = await AdmitApiJobsAsync(db, batch, ApiJobSaveBatchSize, now, cancellationToken);
+        if (result.DeferredCount > 0)
+            throw new InvalidDataException($"Source '{textSource.SourceId}' admission policy cannot hold the text job of a document.");
+        return result;
+    }
+
+    /// <summary>Fills a null body URL of a stored document and admits its text job in the same transaction. It never replaces a pinned URL.</summary>
+    public Task AdmitBodyUrlAsync(ConfiguredCollectionSource source, FederalRegisterDocument document, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(document);
+        return TransactionAsync(async (db, now) =>
+        {
+            var filled = await db.Set<ExecutiveActionDocumentRow>()
+                .Where(row => row.SourceId == source.SourceId && row.DocumentNumber == document.DocumentNumber && row.BodyHtmlUrl == null)
+                .ExecuteUpdateAsync(set => set.SetProperty(row => row.BodyHtmlUrl, document.BodyHtmlUrl), cancellationToken);
+            return filled == 1 ? await AdmitTextJobAsync(db, source, document, now, cancellationToken) : NoAdmission;
+        }, cancellationToken);
+    }
+
+    public Task AdmitTextAsync(ConfiguredCollectionSource textSource, string textJobId, FederalRegisterTextEvidence evidence,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(textSource);
+        ArgumentException.ThrowIfNullOrWhiteSpace(textJobId);
+        ArgumentNullException.ThrowIfNull(evidence);
+        return TransactionAsync(async (db, _) =>
+        {
+            await EnsureExtractionIsOfJobAsync(db, textJobId, evidence.ExtractionId, cancellationToken);
+            var sourceId = textSource.FederalRegisterDocumentsSourceId;
+            var document = await db.Set<ExecutiveActionDocumentRow>().AsNoTracking().SingleOrDefaultAsync(row =>
+                row.SourceId == sourceId && row.DocumentNumber == evidence.DocumentNumber, cancellationToken)
+                ?? throw new InvalidDataException("Text job names a document that is not recorded.");
+            if (document.NoticeUrl is not null || document.BodyHtmlUrl != evidence.BodyUrl)
+                throw new InvalidDataException("Text job names a correction notice or another URL than the pinned body URL of the document.");
+            if (!await db.Set<ExecutiveActionTextRow>().AnyAsync(row => row.SourceId == sourceId &&
+                    row.DocumentNumber == evidence.DocumentNumber, cancellationToken))
+                db.Add(new ExecutiveActionTextRow
+                {
+                    SourceId = sourceId,
+                    DocumentNumber = evidence.DocumentNumber,
+                    ExtractionId = evidence.ExtractionId,
+                    CharsTotal = evidence.Reading.CharsTotal,
+                    CharsRead = evidence.Reading.CharsRead
+                });
+            return 0;
         }, cancellationToken);
     }
 
