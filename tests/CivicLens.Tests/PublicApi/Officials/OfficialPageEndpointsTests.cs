@@ -26,7 +26,8 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         new("p0", "Ann Able", new SeededTerm("Representative", "Representative", "2025-01-03") { State = "MA", District = 7, Party = "Democrat", EndsOn = "2027-01-03" }),
         new("p1", "Ben Baker", new SeededTerm("Representative", "Representative", "2025-01-03") { State = "TX", District = 3, Party = "Republican" }),
         new("p2", "Cy Cole", new SeededTerm("Representative", "Representative", "2025-01-03") { State = "MA", District = 1, Party = "Democrat" }),
-        new("president", "Eve East", new SeededTerm("President", "Executive", "2025-01-20") { Party = "Republican" })
+        new("president", "Eve East", new SeededTerm("President", "Executive", "2025-01-20") { Party = "Republican" }),
+        new("justice", "Jo Judge", new SeededTerm("Associate Justice", "Judicial", "2020-10-27"))
     ];
 
     // p0 votes against the Democratic majority on a (split), misses b, votes with the party on c (split), and breaks on d, which is not a split vote.
@@ -192,6 +193,17 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         Assert.Equal("Housing 1", Assert.Single(issues.QuerySelectorAll(".official-chips a")).TextContent);
         Assert.Empty(page.QuerySelectorAll("a[href='#bills']"));
         Assert.Contains(OfficialPageText.BillCountsUnavailable, page.QuerySelector(".official-figs")!.TextContent);
+    }
+
+    [Fact]
+    public async Task AnOfficialWithNoCongressShowsNoBillCaptionEvenWhenTheReleaseHasNoBillCountSnapshot()
+    {
+        await using var host = await StartAsync(storeBillCounts: false);
+
+        var page = await GetPageAsync(host, "/web/officials/justice");
+
+        Assert.Equal("Jo Judge", page.QuerySelector("h1")!.TextContent);
+        Assert.DoesNotContain(OfficialPageText.BillCountsUnavailable, page.Body!.TextContent);
     }
 
     [Fact]

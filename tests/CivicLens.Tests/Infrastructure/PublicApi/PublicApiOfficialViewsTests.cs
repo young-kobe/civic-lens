@@ -129,8 +129,7 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
     public async Task ABillIssueCountIsInTheCongressOfItsBillNumberAndNotInTheCongressOfItsLastSponsorshipEvent()
     {
         await BillsSeed.AddBillsAsync(database,
-            new SeededBill('1', "2025-03-01") { BillNumber = 1, Congress = 118, Issues = ["health"], Sponsorships = [new("p0", "Sponsor", "2023-02-01"), new("p1", "Cosponsor", "2023-02-02"), new("p2", "Cosponsor", "2025-03-01")] },
-            new SeededBill('2', "2026-03-01") { BillNumber = 2, Congress = 119, Sponsorships = [new("p0", "Sponsor", "2026-01-10")] });
+            new SeededBill('1', "2025-03-01") { BillNumber = 1, Congress = 118, Issues = ["health"], Sponsorships = [new("p0", "Sponsor", "2023-02-01"), new("p1", "Cosponsor", "2023-02-02"), new("p2", "Cosponsor", "2025-03-01")] });
 
         Assert.Equal(["118 health 1"], await QueryAsync("SELECT congress || ' ' || issue_id || ' ' || records FROM public_api.official_issue_counts WHERE official_id = 'p0' AND source = 'bill'"));
     }

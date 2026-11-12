@@ -28,6 +28,11 @@ public sealed class DropPublicApiOfficialBillCountsMigrationTests(PostgresCollec
 
             await ApplyAsync(database, migration.DownOperations);
             Assert.Equal("official_id,congress,sponsored,cosponsored|civic_lens_public_owner|true", await ScalarAsync(database));
+            Assert.Equal("{security_barrier=true}", await ScalarAsync(database, "SELECT reloptions::text FROM pg_class WHERE oid = 'public_api.official_bill_counts'::regclass"));
+            var definition = await ScalarAsync(database, "SELECT pg_get_viewdef('public_api.official_bill_counts'::regclass)");
+            Assert.Contains("withdrawn_on IS NULL", definition);
+            Assert.Contains("'Sponsor'::text", definition);
+            Assert.Contains("active_records", definition);
 
             await ApplyAsync(database, migration.UpOperations);
             Assert.Equal("none|none|none", await ScalarAsync(database));
@@ -48,11 +53,11 @@ public sealed class DropPublicApiOfficialBillCountsMigrationTests(PostgresCollec
         await transaction.CommitAsync();
     }
 
-    private static async Task<string> ScalarAsync(string database)
+    private static async Task<string> ScalarAsync(string database, string sql = ViewStateSql)
     {
         await using var connection = new NpgsqlConnection(database);
         await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(ViewStateSql, connection);
+        await using var command = new NpgsqlCommand(sql, connection);
         return (string)(await command.ExecuteScalarAsync())!;
     }
 }

@@ -115,4 +115,11 @@ internal static class OfficialActivityReader
     }
 }
 
-internal sealed record OfficialActivityFigures(BillCountsFigure? Bills, IssueCountsFigures Issues);
+internal sealed record OfficialActivityFigures(BillCountsFigure? Bills, IssueCountsFigures Issues)
+{
+    /// <summary>
+    /// True when the reader selected a Congress for the official but the release holds no stored bill count for it. The issue figures exist exactly when a Congress
+    /// is selected, because <see cref="OfficialActivityReader"/> always builds them for one. An official with no Congress shows no bill figure and no caption.
+    /// </summary>
+    public static bool BillCountsAbsent(BillCountsFigure? bills, IssueCountsFigures? issues) => issues is not null && bills is null;
+}

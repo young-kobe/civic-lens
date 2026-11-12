@@ -60,7 +60,7 @@ public sealed class OfficialPageReader(NpgsqlDataSource views)
                 figure.AgainstParty, figure.Cast, figure.FirstVotedOn, figure.LastVotedOn))],
             BillsCongress = detail.Bills?.Congress,
             SponsoredBills = detail.Bills?.Sponsored ?? 0,
-            BillCountsAbsent = detail.Issues is not null && detail.Bills is null,
+            BillCountsAbsent = OfficialActivityFigures.BillCountsAbsent(detail.Bills, detail.Issues),
             IssuesCongress = detail.Issues?.Congress,
             Issues = [.. (detail.Issues?.Issues ?? []).Where(issue => issue.Name is not null)
                 .Select(issue => new OfficialIssueData(issue.IssueId, issue.Name!, issue.SponsoredBills + issue.VotesCast))]
