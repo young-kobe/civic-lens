@@ -29,7 +29,7 @@ public sealed class BoardsPageReader(BoardStore boards)
     {
         var term = member.Terms.LastOrDefault();
         var seat = term?.HouseOffice is { } office ? $"{office} for {term.State}" : null;
-        return new(member.OfficialId, member.Name, seat, member.Cast, member.Breaks);
+        return new(member.PagePath, member.Name, seat, member.Cast, member.Breaks);
     }
 
     private static BoardAgreementData Agreement(PartyAgreement.ChamberAgreementAnswer agreement) => new(agreement.Chamber, agreement.Congress,

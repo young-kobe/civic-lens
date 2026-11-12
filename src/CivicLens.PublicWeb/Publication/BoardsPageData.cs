@@ -14,7 +14,8 @@ public sealed record BoardPanelData(PublishedChamber Chamber, string Party, int?
     bool Ranked, IReadOnlyList<BoardRowData> Rows);
 
 /// <summary><see cref="Seat"/> names a delegate or resident commissioner, and is null for a voting member.</summary>
-public sealed record BoardRowData(string OfficialId, string Name, string? Seat, int Cast, int Breaks);
+/// <summary>One ranked member. <see cref="PagePath"/> is the official page of the Congress of the board, so the page figures match the count.</summary>
+public sealed record BoardRowData(string PagePath, string Name, string? Seat, int Cast, int Breaks);
 
 public sealed record BoardAgreementData(PublishedChamber Chamber, int Congress, IReadOnlyList<BoardAgreementKindData> Kinds,
     int Agreed, int Split, int Mixed, int Total, int Nominations);

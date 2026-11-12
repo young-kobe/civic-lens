@@ -35,7 +35,7 @@
                     {
                         <li class="list-row">
                             <div>
-                                <a class="list-row-title" href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(row.OfficialId)))">@row.Name</a>
+                                <a class="list-row-title" href="@(RootPath + row.PagePath)">@row.Name</a>
                                 <div class="list-row-meta">
                                     <span>@PublishedPartyNames.PartyOf(board.Chamber, board.Party)</span>
                                     @if (row.Seat is not null)

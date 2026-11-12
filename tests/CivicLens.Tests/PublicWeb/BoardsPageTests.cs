@@ -8,7 +8,7 @@ public sealed class BoardsPageTests
     private static BoardPanelData Panel(PublishedChamber chamber, string party, int? congress, params BoardRowData[] rows) =>
         new(chamber, party, congress, null, rows.Length == 0 ? null : new DateOnly(2026, 9, 16), rows.Length > 0, rows);
 
-    private static BoardRowData Row(string id, string name, string? seat, int cast, int breaks) => new(id, name, seat, cast, breaks);
+    private static BoardRowData Row(string id, string name, string? seat, int cast, int breaks) => new(PublicationProtocol.OfficialPagePath(id), name, seat, cast, breaks);
 
     private static BoardAgreementData Agreement(PublishedChamber chamber, int total = 450, int nominations = 0) =>
         new(chamber, 119, [new(PublishedVoteKind.Passage, 15, 201)], 196, total - 196, 0, total, nominations);
@@ -59,6 +59,15 @@ public sealed class BoardsPageTests
 
         Assert.Contains("The 119th Congress has no member with 25 split votes yet, so this list keeps the 118th Congress.", page.QuerySelector(".board-panel")!.TextContent);
         Assert.DoesNotContain("this page keeps", page.Body!.TextContent);
+    }
+
+    [Fact]
+    public async Task AMemberOfAnOlderCongressBoardLinksTheOfficialPageOfThatCongressSoItsFiguresMatchTheCount()
+    {
+        var older = new BoardRowData(PublicationProtocol.OfficialCongressPagePath("a", 118), "Ann", null, 30, 10);
+        var page = await RenderAsync(Data([Panel(PublishedChamber.House, "Democrat", 118, older) with { NewerCongress = 119 }]));
+
+        Assert.Equal(ListPageRender.Root + "officials/a/118.html", page.QuerySelector(".board-panel .list-row-title")!.GetAttribute("href"));
     }
 
     [Fact]
