@@ -29,7 +29,7 @@ public sealed class BackfillStoredColumnsTests
         Assert.Equal(otherId, wrongVote.RecordId);
         Assert.Equal(2, wrongVote.PartyTallies!.Length);
         expectedScenario.Releases.Directories[expectedRelease.DirectoryName][PublicationProtocol.RecordDataPath(expectedId)] = wrongRecordFile;
-        expectedScenario.Publications.VoteColumnGaps.Add(new(expectedId, expectedVote.RevisionNumber, new string('a', 64), 1, null));
+        expectedScenario.Publications.VoteColumnGaps.Add(new(expectedId, expectedVote.RevisionNumber, new string('a', 64), new(1, null)));
 
         var result = await new BackfillStoredColumns(expectedScenario.Publications, expectedScenario.Releases).ExecuteAsync(PublicationScenario.Owner);
 
